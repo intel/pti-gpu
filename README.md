@@ -21,7 +21,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 ## Tested Configurations
 - Ubuntu 19.10 with Intel(R) Iris(R) Plus Graphics 655
 
-## Intel(R) PTI Chapters
+## Profiling Chapters
 1. Runtime API Tracing
     - for [OpenCL(TM)](chapters/runtime_api_tracing/OpenCL.md)
     - for [oneAPI Level Zero (Level Zero)](chapters/runtime_api_tracing/LevelZero.md)
