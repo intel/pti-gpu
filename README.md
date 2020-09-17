@@ -135,4 +135,4 @@ python <pti_root>/tests/run.py -c
     ```
 
 ##
-**(*) Other names and brands my be claimed as property of others**
+**(*) Other names and brands may be claimed as property of others**
