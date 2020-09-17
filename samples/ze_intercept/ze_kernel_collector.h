@@ -147,6 +147,7 @@ class ZeKernelCollector {
 
     epilogue_callbacks.Kernel.pfnDestroyCb = OnExitKernelDestroy;
 
+    epilogue_callbacks.CommandQueue.pfnSynchronizeCb = OnExitCommandQueueSynchronize;
     epilogue_callbacks.CommandQueue.pfnDestroyCb = OnExitCommandQueueDestroy;
 
     ze_result_t status = ZE_RESULT_SUCCESS;
@@ -465,6 +466,17 @@ class ZeKernelCollector {
       ze_result_t result, void* global_data, void** instance_data) {
     PTI_ASSERT(*(params->phSignalEvent) != nullptr);
     OnExitKernelAppend(global_data, instance_data, result);
+  }
+
+  static void OnExitCommandQueueSynchronize(
+      ze_command_queue_synchronize_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeKernelCollector* collector =
+        reinterpret_cast<ZeKernelCollector*>(global_data);
+      PTI_ASSERT(collector != nullptr);
+      collector->ProcessInstances();
+    }
   }
 
   static void OnExitCommandQueueDestroy(
