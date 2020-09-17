@@ -1,0 +1,110 @@
+import importlib
+import os
+import re
+import shutil
+import sys
+
+import utils
+
+samples = [["cl_gemm", "gpu", "cpu"],
+           ["cl_gemm_inst", None],
+           ["cl_gemm_itt", "gpu", "cpu"],
+           ["cl_debug_info", None],
+           ["cl_gpu_metrics", None],
+           ["cl_hot_functions", "gpu", "cpu", "dpc", "omp"],
+           ["cl_hot_kernels", "gpu", "cpu",  "dpc", "omp"],
+           ["gpu_info", "-d", "-m"],
+           ["gpu_inst_count", "cl", "ze", "dpc"],
+           ["gpu_perfmon_read", "cl"],
+           ["gpu_perfmon_set", None],
+           ["ze_gemm", None],
+           ["ze_debug_info", None],
+           #["ze_hot_functions", "gpu", "dpc"],
+           ["ze_hot_functions", "gpu"],
+           #["ze_hot_kernels", "gpu", "dpc"],
+           ["ze_hot_kernels", "gpu"],
+           ["ze_metric_info", None],
+           #["ze_metric_query", "gpu", "dpc"],
+           ["ze_metric_query", "gpu"],
+           ["ze_metric_streamer", None],
+           ["ze_intercept", "-c", "-h"],
+           ["omp_gemm", "gpu", "cpu"],
+           ["omp_hot_regions", "gpu", "cpu"],
+           ["dpc_gemm", "gpu", "cpu", "host"]]
+
+def remove_python_cache(path):
+  files = os.listdir(path)
+  for file in files:
+    if file.endswith(".pyc"):
+      os.remove(os.path.join(path, file))
+  
+  path = os.path.join(path, "__pycache__")
+  if os.path.exists(path):
+    shutil.rmtree(path)
+
+def clean():
+  for sample in samples:
+    path = utils.get_sample_build_path(sample[0])
+    if os.path.exists(path):
+      shutil.rmtree(path)
+  
+  remove_python_cache(utils.get_build_utils_path())
+  remove_python_cache(utils.get_samples_utils_path())
+  remove_python_cache(utils.get_script_path())
+
+  for root, subdirs, files in os.walk(utils.get_root_path()):
+    for file in files:
+      if file.endswith(".log"):
+        os.remove(os.path.join(root, file))
+
+def test(f, sample, option):
+  if option:
+    sys.stdout.write("Running sample test for " + sample + " (" + option + ")...")
+  else:
+    sys.stdout.write("Running sample test for " + sample + "...")
+  sys.stdout.flush()
+  module = importlib.import_module(sample)
+  log = module.main(option)
+  if log:
+    sys.stdout.write("FAILED\n")
+    if option:
+      f.write("======= " + sample + " (" + option + ") =======\n")
+    else:
+      f.write("======= " + sample + " =======\n")
+    f.write(log)
+    return False
+  else:
+    sys.stdout.write("PASSED\n")
+    return True
+
+def main():
+  tmpl = ".+"
+  for i in range(1, len(sys.argv) - 1):
+    if sys.argv[i] == "-s":
+      tmpl = sys.argv[i + 1]
+
+  for i in range(1, len(sys.argv)):
+    if sys.argv[i] == "-c":
+      clean()
+      return
+
+  f = open("stderr.log", "wt")
+
+  tests_passed = 0
+  tests_failed = 0
+  for sample in samples:
+    name = sample[0]
+    if re.search(tmpl, name) == None:
+      continue
+    for i in range(1, len(sample)):
+      if test(f, name, sample[i]):
+        tests_passed += 1
+      else:
+        tests_failed += 1
+
+  f.close()
+
+  print("PASSED: " + str(tests_passed) + " / FAILED: " + str(tests_failed))
+
+if __name__ == "__main__":
+  main()

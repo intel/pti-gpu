@@ -1,0 +1,54 @@
+level-zero-loader:
+  deb:
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.0/level-zero_1.0.0+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.0/level-zero-devel_1.0.0+u18.04_amd64.deb
+compute-runtime:
+  deb:
+  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-gmmlib_20.2.4_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-igc-core_1.0.4756_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-igc-opencl_1.0.4756_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-opencl_20.35.17767_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-ocloc_20.35.17767_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-level-zero-gpu_1.0.17767_amd64.deb
+metrics-discovery:
+  github:
+    build_path: build
+    commands:
+    - cmake ..
+    - make -j$(nproc)
+    - sudo make install
+    - sudo make package
+    - sudo dpkg -i *.deb
+    commit: 6b1fe4d7886bbd0ad7ea38fc44004b3683c66eed
+    url: https://github.com/intel/metrics-discovery
+metrics-library:
+  github:
+    build_path: null
+    commands:
+    - cmake .
+    - make -j$(nproc)
+    - sudo make package
+    - sudo dpkg -i *.deb
+    commit: 7e0f5cf098bb434895f3a09e3b8ecff56a1fd276
+    url: https://github.com/intel/metrics-library
+gtpin:
+  archive:
+    commands:
+    - tar -xf {} -C {}
+    install_path: ~/
+    url: https://github.com/intel/pti-gpu/gtpin/external-gtpin-2.9.1-linux.tar.bz2
+oneapit-toolkits:
+  apt:
+    apt_key: https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
+    apt_repo: deb https://apt.repos.intel.com/oneapi all main
+    apt_source: /etc/apt/sources.list.d/oneAPI.list
+    packages:
+    - intel-basekit=2021.1-1970.beta08
+    - intel-hpckit=2021.1-1883.beta08
+finalize:
+  config:
+    commands:
+    - echo "source /opt/intel/oneapi/setvars.sh" >> ~/.bashrc
+    - '[ ! -d "/sys/module/i915/parameters" ] && sudo mkdir -p /sys/module/i915/parameters'
+    - '[ ! -d "/proc/sys/dev/i915" ] && sudo mkdir -p /proc/sys/dev/i915'
+    - sudo echo N> /sys/module/i915/parameters/enable_hangchecksudo echo 0 > /proc/sys/dev/i915/perf_stream_paranoid
