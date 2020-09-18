@@ -316,8 +316,8 @@ static void PrintResults(const MetricCollector* collector,
                 return l.start < r.start;
               });
 
-    const md::TTypedValue_1_0* report = calculated_reports.data();
     for (auto time : kernel.second) {
+      const md::TTypedValue_1_0* report = calculated_reports.data();
       while (report < calculated_reports.data() + calculated_reports.size()) {
         PTI_ASSERT(report[timestamp_id].ValueType == md::VALUE_TYPE_UINT64);
         uint64_t gpu_timestamp = report[timestamp_id].ValueUInt64;
@@ -331,6 +331,10 @@ static void PrintResults(const MetricCollector* collector,
           PTI_ASSERT(report[eu_stall_id].ValueType == md::VALUE_TYPE_FLOAT);
           stall_total += report[eu_stall_id].ValueFloat;
           ++sample_count;
+        }
+
+        if (cpu_timestamp > time.end) {
+          break;
         }
 
         report += calculated_report_size;
