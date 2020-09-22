@@ -48,15 +48,20 @@ def run(path, option):
     app_folder = utils.get_sample_build_path("dpc_gemm")
     app_file = os.path.join(app_folder, "dpc_gemm")
     option = "cpu"
+    p = subprocess.Popen(["./cl_hot_kernels", app_file, option, "1024", "1"],\
+      cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   elif option == "omp":
     app_folder = utils.get_sample_build_path("omp_gemm")
     app_file = os.path.join(app_folder, "omp_gemm")
     option = "gpu"
+    e = utils.add_env(None, "LIBOMPTARGET_PLUGIN", "OPENCL")
+    p = subprocess.Popen(["./cl_hot_kernels", app_file, option, "1024", "1"],\
+      env = e, cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   else:
     app_folder = utils.get_sample_build_path("cl_gemm")
     app_file = os.path.join(app_folder, "cl_gemm")
-  p = subprocess.Popen(["./cl_hot_kernels", app_file, option, "1024", "1"],\
-    cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+    p = subprocess.Popen(["./cl_hot_kernels", app_file, option, "1024", "1"],\
+      cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
   if stderr:
     return stderr

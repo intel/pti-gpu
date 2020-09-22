@@ -57,6 +57,8 @@ if __name__ == "__main__":
   option = "-c"
   if len(sys.argv) > 1 and sys.argv[1] == "-h":
     option = "-h"
+  if len(sys.argv) > 1 and sys.argv[1] == "-d":
+    option = "-d"
   log = main(option)
   if log:
     print(log)

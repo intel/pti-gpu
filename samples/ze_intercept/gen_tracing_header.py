@@ -55,6 +55,37 @@ def gen_result_converter(f, enum_map):
   f.write("}\n")
   f.write("\n")
 
+def gen_callback_body_args(f, func, param_map, enum_map):
+  params = param_map[func]
+  if len(params) > 0:
+    f.write("    std::cerr << \":\";\n")
+  for name, type in params:
+    if type == "ze_ipc_mem_handle_t" or type == "ze_ipc_event_pool_handle_t":
+      f.write("    std::cerr << \" " + name + " = \" << (params->p" + name + ")->data;\n")
+    else:
+      f.write("    std::cerr << \" " + name + " = \" << *(params->p" + name + ");\n")
+      if type in enum_map:
+        f.write("    std::cerr << \" (\";\n")
+        gen_enum_out(f, enum_map, type, "*(params->p" + name + ")")
+        f.write("    std::cerr << \")\";\n")
+      elif name.find("ph") == 0 or name.find("pptr") == 0:
+        f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+        if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
+          f.write("      std::cerr << \" (" + name[1:] + " = \" << (*(params->p" + name + "))->data << \")\";\n")
+        else:
+          f.write("      std::cerr << \" (" + name[1:] + " = \" << **(params->p" + name + ") << \")\";\n")
+        f.write("    }\n")
+      elif type.find("ze_command_queue_desc_t*") >= 0:
+        f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+        f.write("      std::cerr << \" {\" << (*(params->p" + name + "))->stype << \" \";\n")
+        f.write("      std::cerr << (*(params->p" + name + "))->pNext << \" \";\n")
+        f.write("      std::cerr << (*(params->p" + name + "))->ordinal << \" \";\n")
+        f.write("      std::cerr << (*(params->p" + name + "))->index << \" \";\n")
+        f.write("      std::cerr << (*(params->p" + name + "))->flags << \" \";\n")
+        f.write("      std::cerr << (*(params->p" + name + "))->mode << \" \";\n")
+        f.write("      std::cerr << (*(params->p" + name + "))->priority << \"}\";\n")
+        f.write("    }\n")
+
 def gen_callback_body_enter(f, func, param_map, enum_map):
   f.write("  ZeIntercept* intercept = reinterpret_cast<ZeIntercept*>(global_user_data);\n")
   f.write("  if (intercept->CheckOption(ZEI_CALL_LOGGING)) {\n")
@@ -62,20 +93,8 @@ def gen_callback_body_enter(f, func, param_map, enum_map):
   f.write("    if (intercept->CheckOption(ZEI_CALL_LOGGING_TIMESTAMPS)) {\n")
   f.write("      std::cerr << \"[\" << intercept->GetTimestamp() << \"] \";\n")
   f.write("    }\n")
-  f.write("    std::cerr << \"" + func + "\" << ")
-  params = param_map[func]
-  if len(params) > 0:
-    f.write("\":\"")
-  f.write(";\n")
-  for name, type in params:
-    if type == "ze_ipc_mem_handle_t" or type == "ze_ipc_event_pool_handle_t":
-      f.write("    std::cerr << \" " + name + " = \" << (params->p" + name + ");\n")
-    else:
-      f.write("    std::cerr << \" " + name + " = \" << *(params->p" + name + ");\n")
-      if type in enum_map:
-        f.write("    std::cerr << \" (\";\n")
-        gen_enum_out(f, enum_map, type, "*(params->p" + name + ")")
-        f.write("    std::cerr << \")\";\n")
+  f.write("    std::cerr << \"" + func + "\";\n")
+  gen_callback_body_args(f, func, param_map, enum_map)
   f.write("    std::cerr << std::endl;\n")
   f.write("  }\n")
   f.write("  if (intercept->CheckOption(ZEI_HOST_TIMING)) {\n")
@@ -85,8 +104,7 @@ def gen_callback_body_enter(f, func, param_map, enum_map):
   f.write("    *start = std::chrono::steady_clock::now();\n")
   f.write("  }\n")
 
-
-def gen_callback_body_exit(f, func):
+def gen_callback_body_exit(f, func, param_map, enum_map):
   f.write("  uint64_t duration = 0;\n")
   f.write("  ZeIntercept* intercept = reinterpret_cast<ZeIntercept*>(global_user_data);\n")
   f.write("  if (intercept->CheckOption(ZEI_HOST_TIMING)) {\n")
@@ -106,6 +124,7 @@ def gen_callback_body_exit(f, func):
   f.write("    if (intercept->CheckOption(ZEI_HOST_TIMING)) {\n")
   f.write("      std::cerr << \" [\" << duration << \" ns]\";\n")
   f.write("    }\n")
+  gen_callback_body_args(f, func, param_map, enum_map)
   f.write("    std::cerr << \" -> \" << GetResultString(result) << \n")
   f.write("      \" (\" << result << \")\" << std::endl;\n")
   f.write("  }\n")
@@ -131,7 +150,7 @@ def gen_callbacks(f, func_list, group_map, param_map, enum_map):
     f.write("    ze_result_t result,\n")
     f.write("    void* global_user_data,\n")
     f.write("    void** instance_user_data) {\n")
-    gen_callback_body_exit(f, func)
+    gen_callback_body_exit(f, func, param_map, enum_map)
     f.write("}\n")
     if callback_cond:
       f.write("#endif //" + callback_cond + "\n")

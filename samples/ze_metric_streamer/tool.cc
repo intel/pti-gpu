@@ -136,7 +136,7 @@ static void OnEnterEventPoolCreate(ze_event_pool_create_params_t *params,
   ze_event_pool_desc_t* profiling_desc = new ze_event_pool_desc_t;
   PTI_ASSERT(profiling_desc != nullptr);
   profiling_desc->stype = desc->stype;
-  PTI_ASSERT(profiling_desc->stype == ZE_STRUCTURE_TYPE_EVENT_POOL_DESC);
+  //PTI_ASSERT(profiling_desc->stype == ZE_STRUCTURE_TYPE_EVENT_POOL_DESC);
   profiling_desc->pNext = desc->pNext;
   profiling_desc->flags = (desc->flags | ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP);
   profiling_desc->count = desc->count;
@@ -387,19 +387,20 @@ static void Collect(
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (storage.size() > 0) {
+    size_t size =  state->metric_report_list.size();
     uint32_t value_count = 0;
     status = zetMetricGroupCalculateMetricValues(
         group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
         storage.size(), storage.data(), &value_count, nullptr);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    state->metric_report_list.resize(value_count);
+    state->metric_report_list.resize(size + value_count);
     status = zetMetricGroupCalculateMetricValues(
         group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
         storage.size(), storage.data(), &value_count,
-        state->metric_report_list.data());
+        state->metric_report_list.data() + size);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    state->metric_report_list.resize(value_count);
+    state->metric_report_list.resize(size + value_count);
   }
 }
 
@@ -559,6 +560,10 @@ static void PrintResults() {
           PTI_ASSERT(report[eu_stall_id].type == ZET_VALUE_TYPE_FLOAT32);
           stall_total += report[eu_stall_id].value.fp32;
           ++sample_count;
+        }
+
+        if (report_time > end) {
+          break;
         }
 
         report += state->group_metric_count;

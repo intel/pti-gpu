@@ -4,12 +4,12 @@ level-zero-loader:
   - https://github.com/oneapi-src/level-zero/releases/download/v1.0/level-zero-devel_1.0.0+u18.04_amd64.deb
 compute-runtime:
   deb:
-  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-gmmlib_20.2.4_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-igc-core_1.0.4756_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-igc-opencl_1.0.4756_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-opencl_20.35.17767_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-ocloc_20.35.17767_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/20.35.17767/intel-level-zero-gpu_1.0.17767_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.37.17906/intel-gmmlib_20.2.5_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.4944/intel-igc-core_1.0.4944_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.4944/intel-igc-opencl_1.0.4944_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.37.17906/intel-opencl_20.37.17906_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.37.17906/intel-ocloc_20.37.17906_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.37.17906/intel-level-zero-gpu_1.0.17906_amd64.deb
 metrics-discovery:
   github:
     build_path: build
@@ -19,7 +19,7 @@ metrics-discovery:
     - sudo make install
     - sudo make package
     - sudo dpkg -i *.deb
-    commit: 6b1fe4d7886bbd0ad7ea38fc44004b3683c66eed
+    commit: f69d861459c19a9e7bddef5a05df124e182a5af4
     url: https://github.com/intel/metrics-discovery
 metrics-library:
   github:
@@ -43,8 +43,8 @@ oneapit-toolkits:
     apt_repo: deb https://apt.repos.intel.com/oneapi all main
     apt_source: /etc/apt/sources.list.d/oneAPI.list
     packages:
-    - intel-basekit=2021.1-1970.beta08
-    - intel-hpckit=2021.1-1883.beta08
+    - intel-basekit=2021.1-2195.beta09
+    - intel-hpckit=2021.1-2205.beta09
 finalize:
   config:
     commands:

@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 import ze_gemm
+import dpc_gemm
 import utils
 
 def config(path):
@@ -39,8 +40,8 @@ def parse(output):
     eu_idle = float(items[6].strip())
     if not kernel_name or call_count <= 0:
       return False
-    #if eu_active <= 0:
-    #  return False
+    if eu_active <= 0:
+      return False
     if abs(eu_active + eu_stall + eu_idle - 100) >= 0.02:
         return False
     total_time += time
@@ -48,11 +49,17 @@ def parse(output):
     return False
   return True
 
-def run(path):
-  app_folder = utils.get_sample_build_path("ze_gemm")
-  app_file = os.path.join(app_folder, "ze_gemm")
-  p = subprocess.Popen(["./ze_metric_streamer", app_file, "1024", "1"],\
-    cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+def run(path, option):
+  if option == "dpc":
+    app_folder = utils.get_sample_build_path("dpc_gemm")
+    app_file = os.path.join(app_folder, "dpc_gemm")
+    p = subprocess.Popen(["./ze_metric_streamer", app_file, "gpu", "1024", "1"],\
+      cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+  else:
+    app_folder = utils.get_sample_build_path("ze_gemm")
+    app_file = os.path.join(app_folder, "ze_gemm")
+    p = subprocess.Popen(["./ze_metric_streamer", app_file, "1024", "1"],\
+      cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
   if stderr:
     return stderr
@@ -66,20 +73,28 @@ def run(path):
 
 def main(option):
   path = utils.get_sample_build_path("ze_metric_streamer")
-  log = ze_gemm.main(None)
-  if log:
-    return log
+  if option == "dpc":
+    log = dpc_gemm.main("gpu")
+    if log:
+      return log
+  else:
+    log = ze_gemm.main(None)
+    if log:
+      return log
   log = config(path)
   if log:
     return log
   log = build(path)
   if log:
     return log
-  log = run(path)
+  log = run(path, option)
   if log:
     return log
 
 if __name__ == "__main__":
-  log = main(None)
+  option = "gpu"
+  if len(sys.argv) > 1 and sys.argv[1] == "dpc":
+    option = "dpc"
+  log = main(option)
   if log:
     print(log)

@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/KhronosGroup/OpenCL-Headers.git"
-commit = "d7283be010f26e5b338d38f38ff136db120605e1"
+commit = "1b2a1850f410aaaaeaa56cead5a179b5aea4918e"
 
 def main():
   if len(sys.argv) < 3:

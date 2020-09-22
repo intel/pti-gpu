@@ -297,7 +297,7 @@ class ZeKernelCollector {
     ze_event_pool_desc_t* profiling_desc = new ze_event_pool_desc_t;
     PTI_ASSERT(profiling_desc != nullptr);
     profiling_desc->stype = desc->stype;
-    PTI_ASSERT(profiling_desc->stype == ZE_STRUCTURE_TYPE_EVENT_POOL_DESC);
+    // PTI_ASSERT(profiling_desc->stype == ZE_STRUCTURE_TYPE_EVENT_POOL_DESC);
     profiling_desc->pNext = desc->pNext;
     profiling_desc->flags = (desc->flags | ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP);
     profiling_desc->count = desc->count;

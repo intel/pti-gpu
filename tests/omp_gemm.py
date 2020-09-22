@@ -5,7 +5,7 @@ import sys
 import utils
 
 def config(path):
-  e = utils.add_env(None, "CXX", "icpc")
+  e = utils.add_env(None, "CXX", "icpx")
   p = subprocess.Popen(["cmake",\
     "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."], env = e,\
     cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)

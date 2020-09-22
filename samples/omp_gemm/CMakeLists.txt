@@ -11,7 +11,7 @@ CheckForIntelCompiler()
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Qnextgen /Qopenmp")
 else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -qnextgen -fiopenmp -fopenmp-targets=spir64")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fiopenmp -fopenmp-targets=spir64")
 endif()
 
 add_executable(omp_gemm main.cc)
