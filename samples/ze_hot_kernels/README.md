@@ -6,10 +6,10 @@ As a result, table like the following will be printed:
 ```
 === Device Timing Results: ===
 
-Total Exectuion Time (ns): 443466433
+Total Execution Time (ns): 443466433
 Total Device Time (ns): 244619426
 
-    Kernel,       Calls, SIMD,  Transfered (bytes),           Time (ns),  Time (%),        Average (ns)
+    Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns)
       GEMM,           4,   32,                   0,           239549786,     97.93,            59887446
  HtoD/DtoH,          12,    0,            50331648,             5069640,      2.07,              422470
 

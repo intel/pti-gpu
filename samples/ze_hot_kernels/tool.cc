@@ -14,7 +14,7 @@
 #define KERNEL_LENGTH 10
 #define CALLS_LENGTH 12
 #define SIMD_LENGTH 5
-#define TRANSFERED_LENGHT 20
+#define TRANSFERRED_LENGHT 20
 #define TIME_LENGTH 20
 #define PERCENT_LENGTH 10
 
@@ -85,7 +85,7 @@ static void PrintResults() {
   std::cerr << std::endl;
   std::cerr << "=== Device Timing Results: ===" << std::endl;
   std::cerr << std::endl;
-  std::cerr << "Total Exectuion Time (ns): " << time.count() << std::endl;
+  std::cerr << "Total Execution Time (ns): " << time.count() << std::endl;
   std::cerr << "Total Device Time (ns): " << total_duration << std::endl;
   std::cerr << std::endl;
   if (total_duration == 0) {
@@ -95,7 +95,7 @@ static void PrintResults() {
   std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
     std::setw(CALLS_LENGTH) << "Calls" << "," <<
     std::setw(SIMD_LENGTH) << "SIMD" << "," <<
-    std::setw(TRANSFERED_LENGHT) << "Transfered (bytes)" << "," <<
+    std::setw(TRANSFERRED_LENGHT) << "Transferred (bytes)" << "," <<
     std::setw(TIME_LENGTH) << "Time (ns)" << "," <<
     std::setw(PERCENT_LENGTH) << "Time (%)" << "," <<
     std::setw(TIME_LENGTH) << "Average (ns)" << std::endl;
@@ -111,7 +111,7 @@ static void PrintResults() {
     std::cerr << std::setw(max_name_length) << kernel << "," <<
       std::setw(CALLS_LENGTH) << call_count << "," <<
       std::setw(SIMD_LENGTH) << simd_width << "," <<
-      std::setw(TRANSFERED_LENGHT) << bytes_transfered << "," <<
+      std::setw(TRANSFERRED_LENGHT) << bytes_transfered << "," <<
       std::setw(TIME_LENGTH) << duration << "," <<
       std::setw(PERCENT_LENGTH) << std::setprecision(2) << std::fixed <<
           percent_duration << "," <<
