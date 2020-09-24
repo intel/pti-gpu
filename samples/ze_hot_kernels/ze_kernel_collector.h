@@ -219,7 +219,13 @@ class ZeKernelCollector {
 
       uint64_t start = timestamp.context.kernelStart;
       uint64_t end = timestamp.context.kernelEnd;
-      uint64_t time = (end - start) * timer_resolution_;
+      uint64_t time = 0;
+      if (start < end) {
+        time = (end - start) * timer_resolution_;
+      } else { // 32-bit timer overflow
+        PTI_ASSERT(start < (1ULL << 32));
+        time = ((1ULL << 32) - start + end) * timer_resolution_;
+      }
       AddKernelInfo(instance.name, time,
                     instance.simd_width,
                     instance.bytes_transfered);

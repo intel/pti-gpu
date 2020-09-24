@@ -11,6 +11,13 @@
 #include "utils.h"
 #include "ze_kernel_collector.h"
 
+#define KERNEL_LENGTH 10
+#define CALLS_LENGTH 12
+#define SIMD_LENGTH 5
+#define TRANSFERED_LENGHT 20
+#define TIME_LENGTH 20
+#define PERCENT_LENGTH 10
+
 const char* kLine =
   "+------------------------------------------------"
   "------------------------------------------------+";
@@ -21,6 +28,7 @@ const char* kHeader =
   " | Width |  Transfered  | Time, ms | Time, ms |";
 
 ZeKernelCollector* collector = nullptr;
+std::chrono::steady_clock::time_point start;
 
 // External Tool Interface ////////////////////////////////////////////////////
 
@@ -53,49 +61,65 @@ void SetToolEnv() {
 // Internal Tool Functionality ////////////////////////////////////////////////
 
 static void PrintResults() {
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  std::chrono::duration<uint64_t, std::nano> time = end - start;
+
   PTI_ASSERT(collector != nullptr);
   const KernelInfoMap& kernel_info_map = collector->GetKernelInfoMap();
   if (kernel_info_map.size() == 0) {
     return;
   }
 
-  std::cout << kLine << std::endl;
-  std::cout << kHeader << std::endl;
-  std::cout << kLine << std::endl;
-
   std::set<std::pair<std::string, KernelInfo>, utils::Comparator> set(
     kernel_info_map.begin(), kernel_info_map.end());
-  for (auto& pair : set) {
-    PTI_ASSERT(pair.second.call_count > 0);
-    float total_time = pair.second.total_time /
-      static_cast<float>(NSEC_IN_MSEC);
-    float avg_time = total_time / pair.second.call_count;
-    float mbytes_transfered = pair.second.bytes_transfered /
-      static_cast<float>(BYTES_IN_MBYTES);
 
-    std::string kernel_name = pair.first;
-    if (kernel_name.size() > 40) {
-      kernel_name = kernel_name.substr(0, 32) + "<...>";
+  uint64_t total_duration = 0;
+  size_t max_name_length = KERNEL_LENGTH;
+  for (auto& value : set) {
+    total_duration += value.second.total_time;
+    if (value.first.size() > max_name_length) {
+      max_name_length = value.first.size();
     }
-    std::cout << "| " << std::left << std::setw(41) << kernel_name << " | ";
-    std::cout << std::right << std::setw(5) << pair.second.call_count << " | ";
-    std::cout << std::setw(5);
-    if (pair.second.simd_width > 0) {
-      std::cout << pair.second.simd_width << " | ";
-    } else {
-      std::cout << "-" << " | ";
-    }
-    std::cout << std::setw(12) << std::fixed << std::setprecision(2);
-    if (mbytes_transfered > 0) {
-      std::cout << mbytes_transfered << " | ";
-    } else {
-      std::cout << "-" << " | ";
-    }
-    std::cout << std::setw(8) << avg_time << " | ";
-    std::cout << std::setw(8) << total_time << " |" << std::endl;
   }
 
-  std::cout << kLine << std::endl;
+  std::cerr << std::endl;
+  std::cerr << "=== Device Timing Results: ===" << std::endl;
+  std::cerr << std::endl;
+  std::cerr << "Total Exectuion Time (ns): " << time.count() << std::endl;
+  std::cerr << "Total Device Time (ns): " << total_duration << std::endl;
+  std::cerr << std::endl;
+  if (total_duration == 0) {
+    return;
+  }
+
+  std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
+    std::setw(CALLS_LENGTH) << "Calls" << "," <<
+    std::setw(SIMD_LENGTH) << "SIMD" << "," <<
+    std::setw(TRANSFERED_LENGHT) << "Transfered (bytes)" << "," <<
+    std::setw(TIME_LENGTH) << "Time (ns)" << "," <<
+    std::setw(PERCENT_LENGTH) << "Time (%)" << "," <<
+    std::setw(TIME_LENGTH) << "Average (ns)" << std::endl;
+
+  for (auto& value : set) {
+    const std::string& kernel = value.first;
+    uint64_t call_count = value.second.call_count;
+    size_t simd_width = value.second.simd_width;
+    size_t bytes_transfered = value.second.bytes_transfered;
+    uint64_t duration = value.second.total_time;
+    uint64_t avg_duration = duration / call_count;
+    float percent_duration = 100.0f * duration / total_duration;
+    std::cerr << std::setw(max_name_length) << kernel << "," <<
+      std::setw(CALLS_LENGTH) << call_count << "," <<
+      std::setw(SIMD_LENGTH) << simd_width << "," <<
+      std::setw(TRANSFERED_LENGHT) << bytes_transfered << "," <<
+      std::setw(TIME_LENGTH) << duration << "," <<
+      std::setw(PERCENT_LENGTH) << std::setprecision(2) << std::fixed <<
+          percent_duration << "," <<
+      std::setw(TIME_LENGTH) << avg_duration << std::endl;
+  }
+
+  std::cerr << std::endl;
+
   std::cout << "[INFO] Job is successfully completed" << std::endl;
 }
 
@@ -118,6 +142,7 @@ void EnableProfiling() {
   PTI_ASSERT(context != nullptr);
 
   collector = ZeKernelCollector::Create(context, device);
+  start = std::chrono::steady_clock::now();
 }
 
 void DisableProfiling() {

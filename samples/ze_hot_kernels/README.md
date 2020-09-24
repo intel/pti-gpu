@@ -2,15 +2,18 @@
 ## Overview
 This sample is a simple LD_PRELOAD based tool that allows to collect executed Level Zero kernels and buffer transfers within an application along with their total execution time and call count.
 
-As a result, table like the following will be printed.
+As a result, table like the following will be printed:
 ```
-+------------------------------------------------------------------------------------------------+
-|                                           | Call  | SIMD  | Total MBytes |   Avg    |  Total   |
-| Kernel                                    | Count | Width |  Transfered  | Time, ms | Time, ms |
-+------------------------------------------------------------------------------------------------+
-| GEMM                                      |     4 |    32 |            - |    42.90 |   171.61 |
-| HtoD/DtoH                                 |    12 |     - |        48.00 |     0.36 |     4.36 |
-+------------------------------------------------------------------------------------------------+
+=== Device Timing Results: ===
+
+Total Exectuion Time (ns): 443466433
+Total Device Time (ns): 244619426
+
+    Kernel,       Calls, SIMD,  Transfered (bytes),           Time (ns),  Time (%),        Average (ns)
+      GEMM,           4,   32,                   0,           239549786,     97.93,            59887446
+ HtoD/DtoH,          12,    0,            50331648,             5069640,      2.07,              422470
+
+[INFO] Job is successfully completed
 ```
 ## Supported OS
 - Linux
