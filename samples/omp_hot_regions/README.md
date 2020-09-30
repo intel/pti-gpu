@@ -14,7 +14,7 @@ As a result, table like the following will be printed.
 ```
 ## Supported OS
 - Linux
-- Windows
+- Windows (*under development*)
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)

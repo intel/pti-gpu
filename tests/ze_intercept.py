@@ -34,8 +34,6 @@ def run(path, option):
     return stdout
   if stdout.find(" CORRECT") == -1:
     return stdout
-  if stderr.find("Job is successfully completed") == -1:
-    return stderr
   return None
 
 def main(option):

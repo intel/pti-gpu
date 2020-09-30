@@ -12,31 +12,42 @@
 #include <string>
 #include <vector>
 
+#include "utils.h"
 #include "ze_utils.h"
+
+namespace ze_kernel_collector {
+  const uint32_t kKernelLength = 10;
+  const uint32_t kCallsLength = 12;
+  const uint32_t kSimdLength = 5;
+  const uint32_t kTransferredLength = 20;
+  const uint32_t kTimeLength = 20;
+  const uint32_t kPercentLength = 10;
+} // namespace ze_kernel_collector
 
 struct KernelInstance {
   std::string name;
   size_t simd_width;
-  size_t bytes_transfered;
+  size_t bytes_transferred;
   ze_event_pool_handle_t event_pool;
   ze_event_handle_t event;
-  bool is_user_event;
 };
 
-struct KernelInfo {
+struct Kernel {
   uint64_t total_time;
-  uint32_t call_count;
+  uint64_t min_time;
+  uint64_t max_time;
+  uint64_t call_count;
   size_t simd_width;
-  size_t bytes_transfered;
+  size_t bytes_transferred;
 
-  bool operator>(const KernelInfo& r) const {
+  bool operator>(const Kernel& r) const {
     if (total_time != r.total_time) {
       return total_time > r.total_time;
     }
     return call_count > r.call_count;
   }
 
-  bool operator!=(const KernelInfo& r) const {
+  bool operator!=(const Kernel& r) const {
     if (total_time == r.total_time) {
       return call_count != r.call_count;
     }
@@ -44,7 +55,7 @@ struct KernelInfo {
   }
 };
 
-using KernelInfoMap = std::map<std::string, KernelInfo>;
+using KernelInfoMap = std::map<std::string, Kernel>;
 using KernelNameMap = std::map<ze_kernel_handle_t, std::string>;
 
 class ZeKernelCollector {
@@ -64,7 +75,7 @@ class ZeKernelCollector {
     zet_tracer_exp_handle_t tracer = nullptr;
     status = zetTracerExpCreate(context, &tracer_desc, &tracer);
     if (status != ZE_RESULT_SUCCESS) {
-      std::cout <<
+      std::cerr <<
         "[WARNING] Unable to create Level Zero tracer for target context" <<
         std::endl;
       delete collector;
@@ -73,6 +84,59 @@ class ZeKernelCollector {
 
     collector->EnableTracing(tracer);
     return collector;
+  }
+
+  static void PrintKernelsTable(const KernelInfoMap& kernel_info_map) {
+    std::set< std::pair<std::string, Kernel>,
+              utils::Comparator > sorted_list(
+        kernel_info_map.begin(), kernel_info_map.end());
+
+    uint64_t total_duration = 0;
+    size_t max_name_length = ze_kernel_collector::kKernelLength;
+    for (auto& value : sorted_list) {
+      total_duration += value.second.total_time;
+      if (value.first.size() > max_name_length) {
+        max_name_length = value.first.size();
+      }
+    }
+
+    if (total_duration == 0) {
+      return;
+    }
+
+    std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
+      std::setw(ze_kernel_collector::kCallsLength) << "Calls" << "," <<
+      std::setw(ze_kernel_collector::kSimdLength) << "SIMD" << "," <<
+      std::setw(ze_kernel_collector::kTransferredLength) <<
+        "Transferred (bytes)" << "," <<
+      std::setw(ze_kernel_collector::kTimeLength) << "Time (ns)" << "," <<
+      std::setw(ze_kernel_collector::kPercentLength) << "Time (%)" << "," <<
+      std::setw(ze_kernel_collector::kTimeLength) << "Average (ns)" << "," <<
+      std::setw(ze_kernel_collector::kTimeLength) << "Min (ns)" << "," <<
+      std::setw(ze_kernel_collector::kTimeLength) << "Max (ns)" << std::endl;
+
+    for (auto& value : sorted_list) {
+      const std::string& function = value.first;
+      uint64_t call_count = value.second.call_count;
+      size_t simd_width = value.second.simd_width;
+      size_t bytes_transferred = value.second.bytes_transferred;
+      uint64_t duration = value.second.total_time;
+      uint64_t avg_duration = duration / call_count;
+      uint64_t min_duration = value.second.min_time;
+      uint64_t max_duration = value.second.max_time;
+      float percent_duration = 100.0f * duration / total_duration;
+      std::cerr << std::setw(max_name_length) << function << "," <<
+        std::setw(ze_kernel_collector::kCallsLength) << call_count << "," <<
+        std::setw(ze_kernel_collector::kSimdLength) << simd_width << "," <<
+        std::setw(ze_kernel_collector::kTransferredLength) <<
+          bytes_transferred << "," <<
+        std::setw(ze_kernel_collector::kTimeLength) << duration << "," <<
+        std::setw(ze_kernel_collector::kPercentLength) << std::setprecision(2) <<
+          std::fixed << percent_duration << "," <<
+        std::setw(ze_kernel_collector::kTimeLength) << avg_duration << "," <<
+        std::setw(ze_kernel_collector::kTimeLength) << min_duration << "," <<
+        std::setw(ze_kernel_collector::kTimeLength) << max_duration << std::endl;
+    }
   }
 
   ~ZeKernelCollector() {
@@ -217,8 +281,8 @@ class ZeKernelCollector {
       status = zeEventQueryKernelTimestamp(instance.event, &timestamp);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-      uint64_t start = timestamp.context.kernelStart;
-      uint64_t end = timestamp.context.kernelEnd;
+      uint64_t start = timestamp.global.kernelStart;
+      uint64_t end = timestamp.global.kernelEnd;
       uint64_t time = 0;
       if (start < end) {
         time = (end - start) * timer_resolution_;
@@ -228,10 +292,10 @@ class ZeKernelCollector {
       }
       AddKernelInfo(instance.name, time,
                     instance.simd_width,
-                    instance.bytes_transfered);
+                    instance.bytes_transferred);
     }
 
-    if (!instance.is_user_event) {
+    if (instance.event_pool != nullptr) {
       ze_result_t status = ZE_RESULT_SUCCESS;
       status = zeEventDestroy(instance.event);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -249,16 +313,23 @@ class ZeKernelCollector {
   }
 
   void AddKernelInfo(std::string name, uint64_t time,
-                     size_t simd_width, size_t bytes_transfered) {
+                     size_t simd_width, size_t bytes_transferred) {
     PTI_ASSERT(!name.empty());
     if (kernel_info_map_.count(name) == 0) {
-      kernel_info_map_[name] = {time, 1, simd_width, bytes_transfered};
+      kernel_info_map_[name] = {
+        time, time, time, 1, simd_width, bytes_transferred};
     } else {
-      KernelInfo& info = kernel_info_map_[name];
-      info.total_time += time;
-      info.call_count += 1;
-      info.bytes_transfered += bytes_transfered;
-      PTI_ASSERT(info.simd_width == simd_width);
+      Kernel& kernel = kernel_info_map_[name];
+      kernel.total_time += time;
+      if (time > kernel.max_time) {
+        kernel.max_time = time;
+      }
+      if (time < kernel.min_time) {
+        kernel.min_time = time;
+      }
+      kernel.call_count += 1;
+      kernel.bytes_transferred += bytes_transferred;
+      PTI_ASSERT(kernel.simd_width == simd_width);
     }
   }
 
@@ -387,16 +458,14 @@ class ZeKernelCollector {
     ze_result_t status = zeKernelGetProperties(*(params->phKernel), &props);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     instance->simd_width = props.maxSubgroupSize;
-    instance->bytes_transfered = 0;
+    instance->bytes_transferred = 0;
 
     if (*(params->phSignalEvent) == nullptr) {
       CreateEvent(collector->context_, instance->event_pool, instance->event);
-      instance->is_user_event = false;
       *(params->phSignalEvent) = instance->event;
     } else {
       instance->event_pool = nullptr;
       instance->event = *(params->phSignalEvent);
-      instance->is_user_event = true;
     }
 
     *instance_data = static_cast<void*>(instance);
@@ -410,18 +479,16 @@ class ZeKernelCollector {
     PTI_ASSERT(collector != nullptr);
 
     KernelInstance* instance = new KernelInstance;
-    instance->name = "HtoD/DtoH";
-    instance->bytes_transfered = *(params->psize);
+    instance->name = "zeCommandListAppendMemoryCopy";
+    instance->bytes_transferred = *(params->psize);
     instance->simd_width = 0;
 
     if (*(params->phSignalEvent) == nullptr) {
       CreateEvent(collector->context_, instance->event_pool, instance->event);
-      instance->is_user_event = false;
       *(params->phSignalEvent) = instance->event;
     } else {
       instance->event_pool = nullptr;
       instance->event = *(params->phSignalEvent);
-      instance->is_user_event = true;
     }
 
     *instance_data = static_cast<void*>(instance);
@@ -435,7 +502,7 @@ class ZeKernelCollector {
     }
 
     if (result != ZE_RESULT_SUCCESS) {
-      if (!instance->is_user_event) {
+      if (instance->event_pool != nullptr) {
         ze_result_t status = ZE_RESULT_SUCCESS;
         status = zeEventDestroy(instance->event);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);

@@ -28,10 +28,10 @@ def build(path):
 
 def parse(output):
   lines = output.split("\n")
-  total_time = 0.0
+  total_time = 0
   for line in lines:
     items = line.split(",")
-    if len(items) != 7 or line.find("Time (ns)") != -1:
+    if len(items) != 9 or line.find("Time (ns)") != -1:
       continue
     kernel_name = items[0].strip()
     call_count = int(items[1].strip())
@@ -61,8 +61,6 @@ def run(path, option):
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
   if stdout.find(" CORRECT") == -1:
-    return stdout
-  if stdout.find("Job is successfully completed") == -1:
     return stdout
   if not parse(stderr):
     return stderr

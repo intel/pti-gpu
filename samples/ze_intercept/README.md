@@ -7,8 +7,6 @@ Currently it has limited capabilities but expected to be fully functional eventu
 Usage: ./ze_intercept[.exe] [options] <application> <args>
 Options:
 --call-logging [-c]             Trace host API calls
---call-logging-timestamps [-t]  Show timestamps (in ns) for each host API call
-                                (this option should be used along with --call-logging (-c))
 --host-timing  [-h]             Report host API execution time
 --device-timing [-d]            Report kernels exectucion time
 ```
@@ -16,66 +14,44 @@ Options:
 **Call Logging** mode allows to grab full host API trace, e.g.:
 ```
 ...
->>>> zeDriverAllocDeviceMem: hDriver = 0x561d31a6fa20 device_desc = 0x7ffc2043467c size = 4194304 alignment = 64 hDevice = 0x561d31a6fb40 pptr = 0x7ffc20434638
-<<<< zeDriverAllocDeviceMem -> ZE_RESULT_SUCCESS (0)
->>>> zeKernelSetGroupSize: hKernel = 0x561d32791a90 groupSizeX = 256 groupSizeY = 1 groupSizeZ = 1
-<<<< zeKernelSetGroupSize -> ZE_RESULT_SUCCESS (0)
->>>> zeKernelSetArgumentValue: hKernel = 0x561d32791a90 argIndex = 0 argSize = 8 pArgValue = 0x7ffc20434628
-<<<< zeKernelSetArgumentValue -> ZE_RESULT_SUCCESS (0)
+>>>> [99194698] zeMemAllocDevice: hContext = 0x55c087b2ca80 device_desc = 0x7ffcd388ecc0 size = 4194304 alignment = 64 hDevice = 0x55c0878f3bd0 pptr = 0x7ffcd388ec08 (ptr = 0)
+<<<< [99259883] zeMemAllocDevice [65185 ns] ptr = 0xffffffffff3f0000 -> ZE_RESULT_SUCCESS (0)
+>>>> [99307794] zeKernelSetGroupSize: hKernel = 0x55c087b5a4d0 groupSizeX = 256 groupSizeY = 1 groupSizeZ = 1
+<<<< [99335067] zeKernelSetGroupSize [27273 ns] -> ZE_RESULT_SUCCESS (0)
+>>>> [99389764] zeKernelSetArgumentValue: hKernel = 0x55c087b5a4d0 argIndex = 0 argSize = 8 pArgValue = 0x7ffcd388ebf8
+<<<< [99435142] zeKernelSetArgumentValue [45378 ns] -> ZE_RESULT_SUCCESS (0)
 ...
 ```
-**Call Logging with Timestamps** adds timestamp for each API call (should be used along with **Call Logging**, each timestamp is a duration in ns from application start till the current moment), e.g.:
+**Host Timing** mode collects duration for each API call and provides the summary for the whole application:
 ```
-...
->>>> [108341534] zeDriverAllocDeviceMem: hDriver = 0x5639f5f04a20 device_desc = 0x7ffef9d7741c size = 4194304 alignment = 64 hDevice = 0x5639f5f04b40 pptr = 0x7ffef9d773d8
-<<<< [108383108] zeDriverAllocDeviceMem -> ZE_RESULT_SUCCESS (0)
->>>> [108403884] zeKernelSetGroupSize: hKernel = 0x5639f6c26a90 groupSizeX = 256 groupSizeY = 1 groupSizeZ = 1
-<<<< [108450932] zeKernelSetGroupSize -> ZE_RESULT_SUCCESS (0)
->>>> [108484644] zeKernelSetArgumentValue: hKernel = 0x5639f6c26a90 argIndex = 0 argSize = 8 pArgValue = 0x7ffef9d773c8
-<<<< [108534077] zeKernelSetArgumentValue -> ZE_RESULT_SUCCESS (0)
-...
-```
-**Host Timing** mode collects duration for each API call and provides the summary for the whole application (may be used separately):
-```
-=== Host Timing Results: ===
+=== API Timing Results: ===
 
-Total time (ns): 222081726
+Total Execution Time (ns): 418056422
+Total API Time (ns): 407283268
 
-                         Function,       Calls,       Time (ns),  Time (%),    Average (ns),        Min (ns),        Max (ns)
-                   zeModuleCreate,           1,        92975907,     41.87,        92975907,        92975907,        92975907
-zeCommandQueueExecuteCommandLists,           1,        84281391,     37.95,        84281391,        84281391,        84281391
-        zeCommandQueueSynchronize,           1,        43885685,     19.76,        43885685,        43885685,        43885685
-    zeCommandListAppendMemoryCopy,           3,          740759,      0.33,          246919,           54903,          628351
+                         Function,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+        zeCommandQueueSynchronize,           4,           182529847,     44.82,            45632461,            45271728,            46364532
+                   zeModuleCreate,           1,           111687828,     27.42,           111687828,           111687828,           111687828
+zeCommandQueueExecuteCommandLists,           4,           108593458,     26.66,            27148364,             1756304,           102803947
+    zeCommandListAppendMemoryCopy,          12,             2493748,      0.61,              207812,               62061,             1037087
 ...
 ```
-In case it is used along with **Call Logging**, duration in ns will be provided for each host API call, e.g.:
-```
-...
->>>> zeDriverAllocDeviceMem: hDriver = 0x55bb28938a20 device_desc = 0x7ffd76fd692c size = 4194304 alignment = 64 hDevice = 0x55bb28938b40 pptr = 0x7ffd76fd68e8
-<<<< zeDriverAllocDeviceMem [6844 ns] -> ZE_RESULT_SUCCESS (0)
->>>> zeKernelSetGroupSize: hKernel = 0x55bb2965af00 groupSizeX = 256 groupSizeY = 1 groupSizeZ = 1
-<<<< zeKernelSetGroupSize [1847 ns] -> ZE_RESULT_SUCCESS (0)
->>>> zeKernelSetArgumentValue: hKernel = 0x55bb2965af00 argIndex = 0 argSize = 8 pArgValue = 0x7ffd76fd68d8
-<<<< zeKernelSetArgumentValue [2769 ns] -> ZE_RESULT_SUCCESS (0)
-...
-```
-Note, that **Host Timing** duration will be more accurate comparing with similar duration one may calculate manualy based on **Call Logging Timestamps**.
-
-**Device Timing** mode collects duration for each kernel on the device and provides the summary for the whole application (may be used separately):
+**Device Timing** mode collects duration for each kernel on the device and provides the summary for the whole application:
 ```
 === Device Timing Results: ===
 
-Total time (ns): 244823025
+Total Execution Time (ns): 376807360
+Total Device Time (ns): 178294707
 
-                     Function,       Calls,       Time (ns),  Time (%),    Average (ns),        Min (ns),        Max (ns)
-                         GEMM,           4,       240085551,     98.06,        60021387,        42715867,       111690942
-zeCommandListAppendMemoryCopy,          12,         4737474,      1.94,          394789,          282283,          495593
+                       Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+                         GEMM,           4,   32,                   0,           173655671,     97.40,            43413917,            43343928,            43517564
+zeCommandListAppendMemoryCopy,          12,    0,            50331648,             4639036,      2.60,              386586,              271742,              553610
 ...
 ```
 
 ## Supported OS
 - Linux
-- Windows
+- Windows (*under development*)
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)

@@ -64,7 +64,7 @@ This application could be used as the test to check if Intel(R) Metrics Discover
     ```
 ## Supported OS
 - Linux
-- Windows
+- Windows (*under development*)
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)

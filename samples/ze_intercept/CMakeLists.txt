@@ -11,7 +11,9 @@ SetBuildType()
 add_library(zet_intercept SHARED "${PROJECT_SOURCE_DIR}/../loader/init.cc" tool.cc)
 target_include_directories(zet_intercept
   PRIVATE "${PROJECT_SOURCE_DIR}"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
+  PRIVATE "${PROJECT_SOURCE_DIR}/../ze_hot_functions"
+  PRIVATE "${PROJECT_SOURCE_DIR}/../ze_hot_kernels")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(zet_intercept
     PUBLIC "${CMAKE_INCLUDE_PATH}")
@@ -20,7 +22,7 @@ endif()
 FindL0Library(zet_intercept)
 FindL0Headers(zet_intercept)
 
-FindL0HeadersPath(zet_intercept "${PROJECT_SOURCE_DIR}/gen_tracing_header.py")
+FindL0HeadersPath(zet_intercept "${PROJECT_SOURCE_DIR}/../ze_hot_functions/gen_tracing_header.py")
 
 # Loader
 

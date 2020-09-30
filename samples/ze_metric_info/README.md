@@ -22,7 +22,7 @@ Metric Group 1: D3 / EBS / RenderBasic (Render Metrics Basic Gen9)
 ```
 ## Supported OS
 - Linux
-- Windows
+- Windows (*under development*)
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)

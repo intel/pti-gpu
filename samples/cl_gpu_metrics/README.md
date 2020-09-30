@@ -12,7 +12,7 @@ As a result, table like the following will be printed. For each kernel its call 
 ```
 ## Supported OS
 - Linux
-- Windows
+- Windows (*under development*)
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)

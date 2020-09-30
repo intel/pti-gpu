@@ -46,7 +46,6 @@ def clean():
       shutil.rmtree(path)
   
   remove_python_cache(utils.get_build_utils_path())
-  remove_python_cache(utils.get_samples_utils_path())
   remove_python_cache(utils.get_script_path())
 
   for root, subdirs, files in os.walk(utils.get_root_path()):

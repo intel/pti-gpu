@@ -6,18 +6,16 @@ As a result, table like the following will be printed:
 ```
 === Device Timing Results: ===
 
-Total Execution Time (ns): 443466433
-Total Device Time (ns): 244619426
+Total Execution Time (ns): 438707010
+Total Device Time (ns): 245970749
 
-    Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns)
-      GEMM,           4,   32,                   0,           239549786,     97.93,            59887446
- HtoD/DtoH,          12,    0,            50331648,             5069640,      2.07,              422470
-
-[INFO] Job is successfully completed
+                       Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+                         GEMM,           4,   32,                   0,           241043371,     98.00,            60260842,            42925608,           111744643
+zeCommandListAppendMemoryCopy,          12,    0,            50331648,             4927378,      2.00,              410614,              283611,              507628
 ```
 ## Supported OS
 - Linux
-- Windows
+- Windows (*under development*)
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)

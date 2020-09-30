@@ -4,49 +4,44 @@ This sample is a simple LD_PRELOAD based tool that allows to collect all called 
 
 As a result, table like the following will be printed.
 ```
-+------------------------------------------------------------------------------------------------+
-| Function                                          | Call Count | Avg Time, ms | Total Time, ms |
-+------------------------------------------------------------------------------------------------+
-| zeEventHostSynchronize                            |       1768 |         0.10 |         175.04 |
-| zeCommandListAppendMemoryCopy                     |         16 |         6.22 |          99.48 |
-| zeModuleCreate                                    |          1 |        88.09 |          88.09 |
-| zeCommandQueueExecuteCommandLists                 |          8 |         0.17 |           1.37 |
-| zeDriverAllocDeviceMem                            |         12 |         0.04 |           0.50 |
-| zeCommandListCreate                               |          8 |         0.03 |           0.22 |
-| zeCommandListDestroy                              |          8 |         0.02 |           0.20 |
-| zeDriverFreeMem                                   |         12 |         0.01 |           0.15 |
-| zeCommandListCreateImmediate                      |          2 |         0.03 |           0.05 |
-| zeEventCreate                                     |          8 |         0.01 |           0.05 |
-| zeCommandListAppendLaunchKernel                   |          4 |         0.01 |           0.04 |
-| zeKernelSetArgumentValue                          |         52 |         0.00 |           0.04 |
-| zeKernelSetGroupSize                              |          4 |         0.00 |           0.02 |
-| zeCommandQueueCreate                              |          1 |         0.01 |           0.01 |
-| zeCommandQueueDestroy                             |          1 |         0.01 |           0.01 |
-| zeKernelSuggestGroupSize                          |          4 |         0.00 |           0.01 |
-| zeCommandListClose                                |          8 |         0.00 |           0.01 |
-| zeKernelCreate                                    |          1 |         0.00 |           0.00 |
-| zeEventDestroy                                    |          8 |         0.00 |           0.00 |
-| zeCommandListAppendWaitOnEvents                   |          4 |         0.00 |           0.00 |
-| zeDeviceGetKernelProperties                       |          8 |         0.00 |           0.00 |
-| zeEventPoolCreate                                 |          1 |         0.00 |           0.00 |
-| zeDeviceGetCacheProperties                        |          8 |         0.00 |           0.00 |
-| zeEventGetTimestamp                               |          8 |         0.00 |           0.00 |
-| zeDeviceGetProperties                             |          2 |         0.00 |           0.00 |
-| zeDeviceGetMemoryProperties                       |         16 |         0.00 |           0.00 |
-| zeKernelSetAttribute                              |         12 |         0.00 |           0.00 |
-| zeDriverGetProperties                             |          1 |         0.00 |           0.00 |
-| zeDeviceGetImageProperties                        |          8 |         0.00 |           0.00 |
-| zeInit                                            |          2 |         0.00 |           0.00 |
-| zeDeviceGet                                       |          8 |         0.00 |           0.00 |
-| zeModuleBuildLogDestroy                           |          1 |         0.00 |           0.00 |
-| zeDriverGet                                       |          2 |         0.00 |           0.00 |
-| zeDeviceGetComputeProperties                      |          2 |         0.00 |           0.00 |
-| zeDriverGetApiVersion                             |          1 |         0.00 |           0.00 |
-+------------------------------------------------------------------------------------------------+
+=== API Timing Results: ===
+
+Total Execution Time (ns): 439529295
+Total API Time (ns): 430352157
+
+                         Function,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+        zeCommandQueueSynchronize,           4,           245208971,     56.98,            61302242,            44288933,           111719100
+                   zeModuleCreate,           1,            92922095,     21.59,            92922095,            92922095,            92922095
+zeCommandQueueExecuteCommandLists,           4,            89169473,     20.72,            22292368,             1628943,            84087179
+    zeCommandListAppendMemoryCopy,          12,             1753331,      0.41,              146110,               65386,              751061
+            zeCommandQueueDestroy,           4,              259572,      0.06,               64893,               62835,               68716
+             zeCommandListDestroy,           4,              219994,      0.05,               54998,               54714,               55321
+                 zeMemAllocDevice,          12,              219467,      0.05,               18288,                8452,               34876
+                        zeMemFree,          12,              187305,      0.04,               15608,               12315,               22998
+             zeCommandQueueCreate,           4,              118216,      0.03,               29554,               26468,               31023
+              zeCommandListCreate,           4,               99894,      0.02,               24973,               15703,               36353
+         zeKernelSetArgumentValue,          16,               46716,      0.01,                2919,                 195,               18653
+                zeEventPoolCreate,           4,               37682,      0.01,                9420,                8731,               10779
+             zeKernelSetGroupSize,           4,               28111,      0.01,                7027,                1052,               22665
+                  zeModuleDestroy,           1,               22883,      0.01,               22883,               22883,               22883
+            zeDeviceGetProperties,           6,               11408,      0.00,                1901,                 393,                2663
+  zeCommandListAppendLaunchKernel,           4,               10861,      0.00,                2715,                2520,                2894
+                    zeEventCreate,           4,                8327,      0.00,                2081,                 584,                3285
+         zeKernelSuggestGroupSize,           4,                8130,      0.00,                2032,                1200,                2439
+               zeCommandListClose,           4,                4831,      0.00,                1207,                1155,                1281
+                   zeKernelCreate,           1,                4598,      0.00,                4598,                4598,                4598
+      zeEventQueryKernelTimestamp,           4,                3494,      0.00,                 873,                 721,                1081
+                  zeKernelDestroy,           1,                2428,      0.00,                2428,                2428,                2428
+       zeCommandListAppendBarrier,           8,                1749,      0.00,                 218,                 125,                 345
+                   zeEventDestroy,           4,                1049,      0.00,                 262,                 237,                 282
+                  zeContextCreate,           1,                 763,      0.00,                 763,                 763,                 763
+                           zeInit,           1,                 303,      0.00,                 303,                 303,                 303
+                      zeDeviceGet,           2,                 285,      0.00,                 142,                  76,                 209
+                      zeDriverGet,           2,                 221,      0.00,                 110,                  66,                 155
 ```
 ## Supported OS
 - Linux
-- Windows
+- Windows (*under development*)
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)

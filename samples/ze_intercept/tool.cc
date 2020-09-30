@@ -6,12 +6,9 @@
 
 #include <iostream>
 
-#include "ze_kernel_collector.h"
-#include "ze_tracer.h"
+#include "ze_intercept.h"
 #include "ze_utils.h"
 
-static ZeKernelCollector* collector = nullptr;
-static ZeTracer* tracer = nullptr;
 static ZeIntercept* intercept = nullptr;
 
 extern "C"
@@ -25,10 +22,6 @@ void Usage() {
   std::cout << "Options:" << std::endl;
   std::cout <<
     "--call-logging [-c]             Trace host API calls" <<
-    std::endl;
-  std::cout <<
-    "--call-logging-timestamps [-t]  Show timestamps (in ns) for each host API call\n" <<
-    "                                (this option should be used along with --call-logging (-c))" <<
     std::endl;
   std::cout <<
     "--host-timing  [-h]             Report host API execution time" <<
@@ -48,10 +41,6 @@ int ParseArgs(int argc, char* argv[]) {
     if (strcmp(argv[i], "--call-logging") == 0 ||
         strcmp(argv[i], "-c") == 0) {
       utils::SetEnv("ZEI_CallLogging=1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--call-logging-timestamps") == 0 ||
-               strcmp(argv[i], "-t") == 0) {
-      utils::SetEnv("ZEI_CallLoggingTimestamps=1");
       ++app_index;
     } else if (strcmp(argv[i], "--host-timing") == 0 ||
                strcmp(argv[i], "-h") == 0) {
@@ -76,18 +65,13 @@ void SetToolEnv() {
   utils::SetEnv("ZET_ENABLE_API_TRACING_EXP=1");
 }
 
-static unsigned SetArgs() {
+static unsigned ReadArgs() {
   std::string value;
   unsigned options = 0;
 
   value = utils::GetEnv("ZEI_CallLogging");
   if (!value.empty() && value == "1") {
     options |= (1 << ZEI_CALL_LOGGING);
-  }
-
-  value = utils::GetEnv("ZEI_CallLoggingTimestamps");
-  if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_CALL_LOGGING_TIMESTAMPS);
   }
 
   value = utils::GetEnv("ZEI_HostTiming");
@@ -104,9 +88,6 @@ static unsigned SetArgs() {
 }
 
 void EnableProfiling() {
-  intercept = new ZeIntercept(SetArgs());
-  PTI_ASSERT(intercept != nullptr);
-  
   ze_result_t status = ZE_RESULT_SUCCESS;
   status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -124,40 +105,12 @@ void EnableProfiling() {
   ze_context_handle_t context = utils::ze::GetContext(driver);
   PTI_ASSERT(context != nullptr);
 
-  if (intercept->CheckOption(ZEI_CALL_LOGGING) ||
-      intercept->CheckOption(ZEI_HOST_TIMING)) {
-    tracer = new ZeTracer(context, intercept);
-    if (tracer == nullptr || !tracer->IsValid()) {
-      std::cout << "[WARNING] Unable to create Level Zero tracer for" <<
-        " target driver" << std::endl;
-      if (tracer != nullptr) {
-        delete tracer;
-        tracer = nullptr;
-      }
-    } else {
-      bool enabled = tracer->Enable();
-      PTI_ASSERT(enabled);
-    }
-  }
-
-  if (intercept->CheckOption(ZEI_DEVICE_TIMING)) {
-    collector = ZeKernelCollector::Create(context, device, intercept);
-  }
+  intercept = ZeIntercept::Create(context, device, ReadArgs());
 }
 
 void DisableProfiling() {
-  if (tracer != nullptr) {
-    bool disabled = tracer->Disable();
-    PTI_ASSERT(disabled);
-    delete tracer;
-  }
-  if (collector != nullptr) {
-    collector->DisableTracing();
-    delete collector;
-  }
   if (intercept != nullptr) {
     delete intercept;
     std::cerr << std::endl;
-    std::cerr << "[INFO] Job is successfully completed" << std::endl;
   }
 }

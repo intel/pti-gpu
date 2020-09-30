@@ -84,7 +84,7 @@ As a result, listing like the following will be printed for each kernel (once pe
 ```
 ## Supported OS
 - Linux
-- Windows
+- Windows (*under development*)
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)

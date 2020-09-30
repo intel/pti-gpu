@@ -11,24 +11,8 @@
 #include "utils.h"
 #include "ze_kernel_collector.h"
 
-#define KERNEL_LENGTH 10
-#define CALLS_LENGTH 12
-#define SIMD_LENGTH 5
-#define TRANSFERRED_LENGHT 20
-#define TIME_LENGTH 20
-#define PERCENT_LENGTH 10
-
-const char* kLine =
-  "+------------------------------------------------"
-  "------------------------------------------------+";
-const char* kHeader =
-  "|                                           | Call "
-  " | SIMD  | Total MBytes |   Avg    |  Total   |\n"
-  "| Kernel                                    | Count"
-  " | Width |  Transfered  | Time, ms | Time, ms |";
-
-ZeKernelCollector* collector = nullptr;
-std::chrono::steady_clock::time_point start;
+static ZeKernelCollector* collector = nullptr;
+static std::chrono::steady_clock::time_point start;
 
 // External Tool Interface ////////////////////////////////////////////////////
 
@@ -70,16 +54,9 @@ static void PrintResults() {
     return;
   }
 
-  std::set<std::pair<std::string, KernelInfo>, utils::Comparator> set(
-    kernel_info_map.begin(), kernel_info_map.end());
-
   uint64_t total_duration = 0;
-  size_t max_name_length = KERNEL_LENGTH;
-  for (auto& value : set) {
+  for (auto& value : kernel_info_map) {
     total_duration += value.second.total_time;
-    if (value.first.size() > max_name_length) {
-      max_name_length = value.first.size();
-    }
   }
 
   std::cerr << std::endl;
@@ -88,39 +65,12 @@ static void PrintResults() {
   std::cerr << "Total Execution Time (ns): " << time.count() << std::endl;
   std::cerr << "Total Device Time (ns): " << total_duration << std::endl;
   std::cerr << std::endl;
-  if (total_duration == 0) {
-    return;
-  }
 
-  std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
-    std::setw(CALLS_LENGTH) << "Calls" << "," <<
-    std::setw(SIMD_LENGTH) << "SIMD" << "," <<
-    std::setw(TRANSFERRED_LENGHT) << "Transferred (bytes)" << "," <<
-    std::setw(TIME_LENGTH) << "Time (ns)" << "," <<
-    std::setw(PERCENT_LENGTH) << "Time (%)" << "," <<
-    std::setw(TIME_LENGTH) << "Average (ns)" << std::endl;
-
-  for (auto& value : set) {
-    const std::string& kernel = value.first;
-    uint64_t call_count = value.second.call_count;
-    size_t simd_width = value.second.simd_width;
-    size_t bytes_transfered = value.second.bytes_transfered;
-    uint64_t duration = value.second.total_time;
-    uint64_t avg_duration = duration / call_count;
-    float percent_duration = 100.0f * duration / total_duration;
-    std::cerr << std::setw(max_name_length) << kernel << "," <<
-      std::setw(CALLS_LENGTH) << call_count << "," <<
-      std::setw(SIMD_LENGTH) << simd_width << "," <<
-      std::setw(TRANSFERRED_LENGHT) << bytes_transfered << "," <<
-      std::setw(TIME_LENGTH) << duration << "," <<
-      std::setw(PERCENT_LENGTH) << std::setprecision(2) << std::fixed <<
-          percent_duration << "," <<
-      std::setw(TIME_LENGTH) << avg_duration << std::endl;
+  if (total_duration > 0) {
+    ZeKernelCollector::PrintKernelsTable(kernel_info_map);
   }
 
   std::cerr << std::endl;
-
-  std::cout << "[INFO] Job is successfully completed" << std::endl;
 }
 
 // Internal Tool Interface ////////////////////////////////////////////////////

@@ -75,7 +75,7 @@ As a result, assembly listing annotated with dynamic instruction count for each 
 ```
 ## Supported OS
 - Linux
-- Windows
+- Windows (*under development*)
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)
