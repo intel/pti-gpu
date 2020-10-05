@@ -1,6 +1,6 @@
 # Binary Instrumentation with Graphics Technology Pin (GT Pin)
 ## Overview
-This chapter describes **Graphics Technology Pin (GT Pin)** -  the solution for binary code instrumentation on Intel(R) Processor Graphics. It is a [Pin](http://www.pintool.org/) like system that instruments Gen execution unit (EU) binaries and is used to build architectural and software tools to analyze shaders or compute kernels running on Gen EUs.
+This chapter describes **Graphics Technology Pin (GT Pin)** -  the solution for binary code instrumentation on Intel(R) Processor Graphics. It is a [Pin](http://pintool.intel.com/) like system that instruments Gen execution unit (EU) binaries and is used to build architectural and software tools to analyze shaders or compute kernels running on Gen EUs.
 
 Graphics Technology Pin (GT Pin) works based on three callbacks:
 - **on kernel build** - called for every GPU kernel while it is building, right place to add any instrumentation into kernel binary;
