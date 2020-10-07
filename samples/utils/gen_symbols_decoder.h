@@ -25,14 +25,14 @@ class GenSymbolsDecoder {
     return IsValidHeader();
   }
 
-  std::vector<std::string> GetFileNames(
+  std::vector<std::string> GetFileList(
       const std::string& kernel_name) const {
     if (!IsValid()) {
       return std::vector<std::string>();
     }
 
     ElfParser parser = GetSection(kernel_name);
-    return parser.GetFileNames();
+    return parser.GetFileList();
   }
 
   std::vector<LineInfo> GetLineInfo(

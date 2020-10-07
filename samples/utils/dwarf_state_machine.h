@@ -27,7 +27,7 @@ struct DwarfState {
 class DwarfStateMachine {
  public:
   DwarfStateMachine(const uint8_t* data, uint32_t size,
-                    const Dwarf32Header* header)
+                    const Dwarf32LineNumberProgramHeader* header)
       : data_(data), size_(size), header_(header) {
     PTI_ASSERT(data_ != nullptr);
     PTI_ASSERT(size_ > 0);
@@ -203,7 +203,7 @@ class DwarfStateMachine {
 private:
   const uint8_t* data_ = nullptr;
   uint32_t size_ = 0;    
-  const Dwarf32Header* header_ = nullptr;
+  const Dwarf32LineNumberProgramHeader* header_ = nullptr;
 
   DwarfState state_ = { 0, 0, 1, 1 };
   std::vector<DwarfLineInfo> line_info_;

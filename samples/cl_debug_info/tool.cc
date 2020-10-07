@@ -339,23 +339,23 @@ static void OnExitCreateKernel(cl_callback_data* data, void* user_data) {
   }
 
   GenSymbolsDecoder symbols_decoder(symbols);
-  std::vector<std::string> file_names =
-    symbols_decoder.GetFileNames(kernel_name);
-  if (file_names.size() == 0) {
+  std::vector<std::string> file_list =
+    symbols_decoder.GetFileList(kernel_name);
+  if (file_list.size() == 0) {
     std::cout << "[WARNING] Unable to find source files" << std::endl;
     return;
   }
 
-  size_t target_file_id = file_names.size();
-  for (size_t i = 0; i < file_names.size(); ++i) {
-    if (file_names[i].find_first_not_of("0123456789") ==
-        std::string::npos) {
+  size_t target_file_id = file_list.size();
+  for (size_t i = 0; i < file_list.size(); ++i) {
+    if (file_list[i].find_last_of("0123456789") ==
+        file_list[i].size() - 1) {
       target_file_id = i;
     }
   }
 
-  if (target_file_id == file_names.size()) {
-    std::cout << "[WARNING] Unable to find source files" << std::endl;
+  if (target_file_id == file_list.size()) {
+    std::cout << "[WARNING] Unable to find target source file" << std::endl;
     return;
   }
 

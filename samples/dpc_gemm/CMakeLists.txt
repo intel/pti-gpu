@@ -8,6 +8,8 @@ SetBuildType()
 
 CheckForDPCCompiler()
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gline-tables-only")
+
 add_executable(dpc_gemm main.cc)
 target_include_directories(dpc_gemm
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils")

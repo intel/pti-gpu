@@ -12,7 +12,9 @@
 #include <vector>
 
 #include "elf.h"
-#include "dwarf_parser.h"
+#include "debug_line_parser.h"
+#include "debug_info_parser.h"
+#include "debug_abbrev_parser.h"
 
 class ElfParser {
  public:
@@ -39,7 +41,7 @@ class ElfParser {
     return true;
   }
 
-  std::vector<std::string> GetFileNames() const {
+  std::vector<std::string> GetFileList() const {
     if (!IsValid()) {
       return std::vector<std::string>();
     }
@@ -52,12 +54,57 @@ class ElfParser {
     }
 
     PTI_ASSERT(section_size < (std::numeric_limits<uint32_t>::max)());
-    DwarfParser parser(section, static_cast<uint32_t>(section_size));
-    if (!parser.IsValid()) {
+    DebugLineParser line_parser(section, static_cast<uint32_t>(section_size));
+    if (!line_parser.IsValid()) {
       return std::vector<std::string>();
     }
 
-    return parser.GetFileNames();
+    GetSection(".debug_abbrev", &section, &section_size);
+    if (section == nullptr || section_size == 0) {
+      return std::vector<std::string>();
+    }
+
+    PTI_ASSERT(section_size < (std::numeric_limits<uint32_t>::max)());
+    DebugAbbrevParser abbrev_parser(section, static_cast<uint32_t>(section_size));
+    if (!abbrev_parser.IsValid()) {
+      return std::vector<std::string>();
+    }
+
+    DwarfCompUnitMap comp_unit_map = abbrev_parser.GetCompUnitMap();
+    if (comp_unit_map.size() == 0) {
+      return std::vector<std::string>();
+    }
+
+    GetSection(".debug_info", &section, &section_size);
+    if (section == nullptr || section_size == 0) {
+      return std::vector<std::string>();
+    }
+
+    PTI_ASSERT(section_size < (std::numeric_limits<uint32_t>::max)());
+    DebugInfoParser info_parser(section, static_cast<uint32_t>(section_size));
+    if (!info_parser.IsValid()) {
+      return std::vector<std::string>();
+    }
+
+    std::vector<std::string> file_path_list;
+    std::vector<FileInfo> file_list = line_parser.GetFileList();
+    std::vector<std::string> dir_list = line_parser.GetDirList();
+    for (size_t i = 0; i < file_list.size(); ++i) {
+      uint32_t path_index = file_list[i].path_index;
+      PTI_ASSERT(path_index <= dir_list.size());
+      if (path_index == 0) {
+        std::string comp_dir = info_parser.GetCompDir(comp_unit_map);
+        if (!comp_dir.empty()) {
+          file_path_list.push_back(comp_dir + "/" + file_list[i].name);
+        } else {
+          file_path_list.push_back(file_list[i].name);
+        }
+      } else {
+        file_path_list.push_back(dir_list[path_index - 1] + "/" + file_list[i].name);
+      }
+    }
+
+    return file_path_list;
   }
 
   std::vector<LineInfo> GetLineInfo(uint32_t file_id) const {
@@ -73,7 +120,7 @@ class ElfParser {
     }
 
     PTI_ASSERT(section_size < (std::numeric_limits<uint32_t>::max)());
-    DwarfParser parser(section, static_cast<uint32_t>(section_size));
+    DebugLineParser parser(section, static_cast<uint32_t>(section_size));
     if (!parser.IsValid()) {
       return std::vector<LineInfo>();
     }

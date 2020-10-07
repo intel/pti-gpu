@@ -4,7 +4,7 @@ This sample is a simple LD_PRELOAD based tool that allows to collect oneAPI Leve
 
 As a result, listing like the following will be printed for each kernel (once per kernel creation):
 ```
-======== GEMM ========
+=== Kernel: GEMM ===
                 [0x010] (W)      or (1|M0)                cr0.0<1>:ud   cr0.0<0;1,0>:ud   0x4C0:uw         {Switch}
                 [0x020] (W)      mul (1|M0)               r6.0<1>:d     r9.3<0;1,0>:d     r5.6<0;1,0>:d
                 [0x030] (W)      mul (1|M0)               r126.0<1>:d   r9.2<0;1,0>:d     r5.1<0;1,0>:d
@@ -80,8 +80,9 @@ As a result, listing like the following will be printed for each kernel (once pe
                 [0x2F0]          sends (16|M0)            null:w   r28     r116    0x8C        0x4025E02  //  wr:2+2, rd:0, Untyped Surface Write msc:30, to bti 2
                 [0x300]          sends (16|M16)           null:w   r105    r18     0x8C        0x4025E02  //  wr:2+2, rd:0, Untyped Surface Write msc:30, to bti 2
 [ 10] }
-======================
 ```
+**Note:** to collect debug information for DPC++ application one need to compile it with `-gline-tables-only` flag.
+
 ## Supported OS
 - Linux
 - Windows (*under development*)
