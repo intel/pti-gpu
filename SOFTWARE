@@ -51,4 +51,5 @@ finalize:
     - echo "source /opt/intel/oneapi/setvars.sh" >> ~/.bashrc
     - '[ ! -d "/sys/module/i915/parameters" ] && sudo mkdir -p /sys/module/i915/parameters'
     - '[ ! -d "/proc/sys/dev/i915" ] && sudo mkdir -p /proc/sys/dev/i915'
-    - sudo echo N> /sys/module/i915/parameters/enable_hangchecksudo echo 0 > /proc/sys/dev/i915/perf_stream_paranoid
+    - sudo echo N > /sys/module/i915/parameters/enable_hangcheck
+    - sudo echo 0 > /proc/sys/dev/i915/perf_stream_paranoid
