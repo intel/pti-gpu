@@ -29,6 +29,15 @@ void Usage() {
   std::cout <<
     "--device-timing [-d]            Report kernels execution time" <<
     std::endl;
+  std::cout <<
+    "--device-timeline [-t]          Trace device activities" <<
+    std::endl;
+  std::cout <<
+    "--chrome-device-timeline        Dump device activities to JSON file" <<
+    std::endl;
+  std::cout <<
+    "--chrome-call-logging           Dump host API calls to JSON file" <<
+    std::endl;
 }
 
 extern "C"
@@ -49,6 +58,16 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--device-timing") == 0 ||
                strcmp(argv[i], "-d") == 0) {
       utils::SetEnv("ZEI_DeviceTiming=1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--device-timeline") == 0 ||
+               strcmp(argv[i], "-t") == 0) {
+      utils::SetEnv("ZEI_DeviceTimeline=1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
+      utils::SetEnv("ZEI_ChromeDeviceTimeline=1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
+      utils::SetEnv("ZEI_ChromeCallLogging=1");
       ++app_index;
     } else {
       break;
@@ -84,6 +103,21 @@ static unsigned ReadArgs() {
     options |= (1 << ZEI_DEVICE_TIMING);
   }
 
+  value = utils::GetEnv("ZEI_DeviceTimeline");
+  if (!value.empty() && value == "1") {
+    options |= (1 << ZEI_DEVICE_TIMELINE);
+  }
+
+  value = utils::GetEnv("ZEI_ChromeDeviceTimeline");
+  if (!value.empty() && value == "1") {
+    options |= (1 << ZEI_CHROME_DEVICE_TIMELINE);
+  }
+
+  value = utils::GetEnv("ZEI_ChromeCallLogging");
+  if (!value.empty() && value == "1") {
+    options |= (1 << ZEI_CHROME_CALL_LOGGING);
+  }
+
   return options;
 }
 
@@ -102,15 +136,11 @@ void EnableProfiling() {
     return;
   }
 
-  ze_context_handle_t context = utils::ze::GetContext(driver);
-  PTI_ASSERT(context != nullptr);
-
-  intercept = ZeIntercept::Create(context, device, ReadArgs());
+  intercept = ZeIntercept::Create(driver, device, ReadArgs());
 }
 
 void DisableProfiling() {
   if (intercept != nullptr) {
     delete intercept;
-    std::cerr << std::endl;
   }
 }

@@ -78,6 +78,19 @@ inline std::string GetExecutablePath() {
   return path.substr(0, path.find_last_of("/\\") + 1);
 }
 
+inline std::string GetExecutableName() {
+  char buffer[MAX_STR_SIZE] = { 0 };
+#if defined(_WIN32)
+  DWORD status = GetModuleFileNameA(nullptr, buffer, MAX_STR_SIZE);
+  PTI_ASSERT(status > 0);
+#else
+  ssize_t status = readlink("/proc/self/exe", buffer, MAX_STR_SIZE);
+  PTI_ASSERT(status > 0);
+#endif
+  std::string path(buffer);
+  return path.substr(path.find_last_of("/\\") + 1);
+}
+
 inline std::vector<uint8_t> LoadBinaryFile(const std::string& path) {
   std::vector<uint8_t> binary;
   std::ifstream stream(path, std::ios::in | std::ios::binary);
@@ -126,6 +139,22 @@ inline std::string GetEnv(const char* name) {
     return std::string();
   }
   return std::string(value);
+#endif
+}
+
+inline uint32_t GetPid() {
+#if defined(_WIN32)
+  return GetCurrentProcessId();
+#else
+  return getpid();
+#endif
+}
+
+inline uint32_t GetTid() {
+#if defined(_WIN32)
+  return GetCurrentThreadId();
+#else
+  return gettid();
 #endif
 }
 

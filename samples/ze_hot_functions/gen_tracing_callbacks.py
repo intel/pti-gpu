@@ -347,6 +347,12 @@ def gen_exit_callback(f, func, params, enum_map):
   f.write("    std::cerr << \" -> \" << GetResultString(result) << \n")
   f.write("      \" (\" << result << \")\" << std::endl;\n")
   f.write("  }\n")
+  f.write("\n")
+  f.write("  if (collector->callback_ != nullptr) {\n")
+  f.write("    collector->callback_(collector->callback_data_,\n")
+  f.write("                         \"" + func + "\",\n")
+  f.write("                         start_time, end_time);\n")
+  f.write("  }\n")
 
 def gen_callbacks(f, func_list, group_map, param_map, enum_map):
   for func in func_list:

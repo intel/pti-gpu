@@ -48,14 +48,28 @@ struct Function {
 };
 
 using FunctionInfoMap = std::map<std::string, Function>;
+using FunctionTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+
+typedef void (*OnFunctionFinishCallback)(
+    void* data, const std::string& name,
+    uint64_t started, uint64_t ended);
 
 class ZeApiCollector {
  public: // User Interface
-  static ZeApiCollector* Create(ze_context_handle_t context,
-                                bool call_tracing = false) {
+  static ZeApiCollector* Create(
+      ze_driver_handle_t driver,
+      FunctionTimePoint base_time = std::chrono::steady_clock::now(),
+      bool call_tracing = false,
+      OnFunctionFinishCallback callback = nullptr,
+      void* callback_data = nullptr) {
+    PTI_ASSERT(driver != nullptr);
+
+    ze_context_handle_t context = utils::ze::GetContext(driver);
     PTI_ASSERT(context != nullptr);
 
-    ZeApiCollector* collector = new ZeApiCollector(call_tracing);
+    ZeApiCollector* collector =
+      new ZeApiCollector(context, base_time, call_tracing,
+                         callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
@@ -138,16 +152,22 @@ class ZeApiCollector {
   }
 
   ~ZeApiCollector() {
-    PTI_ASSERT(tracer_ != nullptr);
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zetTracerExpDestroy(tracer_);
+
+    if (tracer_ != nullptr) {
+      status = zetTracerExpDestroy(tracer_);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    }
+
+    PTI_ASSERT(context_ != nullptr);
+    status = zeContextDestroy(context_);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
  private: // Tracing Interface
   uint64_t GetTimestamp() const {
     std::chrono::duration<uint64_t, std::nano> timestamp =
-      std::chrono::steady_clock::now() - start_time_;
+      std::chrono::steady_clock::now() - base_time_;
     return timestamp.count();
   }
 
@@ -169,18 +189,33 @@ class ZeApiCollector {
   }
 
  private: // Implementation Details
-  ZeApiCollector(bool call_tracing) :
-      start_time_(std::chrono::steady_clock::now()),
-      call_tracing_(call_tracing) { }
+  ZeApiCollector(ze_context_handle_t context,
+                 FunctionTimePoint base_time,
+                 bool call_tracing,
+                 OnFunctionFinishCallback callback,
+                 void* callback_data)
+      : context_(context),
+        base_time_(base_time),
+        call_tracing_(call_tracing),
+        callback_(callback),
+        callback_data_(callback_data) {
+    PTI_ASSERT(context_ != nullptr);
+  }
 
   #include <tracing.gen> // Auto-generated callbacks
 
  private:
+  ze_context_handle_t context_ = nullptr;
   zet_tracer_exp_handle_t tracer_ = nullptr;
-  std::chrono::time_point<std::chrono::steady_clock> start_time_;
+
   FunctionInfoMap function_info_map_;
   std::mutex lock_;
+
+  FunctionTimePoint base_time_;
   bool call_tracing_ = false;
+
+  OnFunctionFinishCallback callback_ = nullptr;
+  void* callback_data_ = nullptr;
 };
 
 #endif // PTI_SAMPLES_ZE_HOT_FUNCTIONS_ZE_API_COLLECTOR_H_

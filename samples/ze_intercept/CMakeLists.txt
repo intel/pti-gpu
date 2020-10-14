@@ -22,7 +22,12 @@ endif()
 FindL0Library(zet_intercept)
 FindL0Headers(zet_intercept)
 
-FindL0HeadersPath(zet_intercept "${PROJECT_SOURCE_DIR}/../ze_hot_functions/gen_tracing_header.py")
+FindL0HeadersPath(zet_intercept "${PROJECT_SOURCE_DIR}/../ze_hot_functions/gen_tracing_callbacks.py")
+
+if(UNIX)
+  FindDRMLibrary(zet_intercept)
+  CheckDRMHeaders(zet_intercept)
+endif()
 
 # Loader
 

@@ -9,6 +9,9 @@ Options:
 --call-logging [-c]             Trace host API calls
 --host-timing  [-h]             Report host API execution time
 --device-timing [-d]            Report kernels exectucion time
+--device-timeline [-t]          Trace device activities
+--chrome-device-timeline        Dump device activities to JSON file
+--chrome-call-logging           Dump host API calls to JSON file
 ```
 
 **Call Logging** mode allows to grab full host API trace, e.g.:
@@ -22,6 +25,8 @@ Options:
 <<<< [99435142] zeKernelSetArgumentValue [45378 ns] -> ZE_RESULT_SUCCESS (0)
 ...
 ```
+**Chrome Call Logging** mode dumps API calls to JSON format that can be opened in [chrome://tracing](https://www.chromium.org/developers/how-tos/trace-event-profiling-tool) browser tool.
+
 **Host Timing** mode collects duration for each API call and provides the summary for the whole application:
 ```
 === API Timing Results: ===
@@ -48,6 +53,15 @@ Total Device Time (ns): 178294707
 zeCommandListAppendMemoryCopy,          12,    0,            50331648,             4639036,      2.60,              386586,              271742,              553610
 ...
 ```
+**Device Timeline** mode dumps four timestamps for each device activity - *append* to the command list, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
+```
+Device Timeline for zeCommandListAppendMemoryCopy [ns] = 319154868 (append) 320972649 (submit) 320021623 (start) 320440290 (end)
+Device Timeline for zeCommandListAppendMemoryCopy [ns] = 319281072 (append) 320972649 (submit) 320441707 (start) 320738290 (end)
+Device Timeline for GEMM [ns] = 319344934 (append) 320972649 (submit) 320740123 (start) 364337290 (end)
+Device Timeline for zeCommandListAppendMemoryCopy [ns] = 319348093 (append) 320972649 (submit) 364338873 (start) 364765123 (end)
+...
+```
+**Chrome Device Timeline** mode dumps timestamps for device activities to JSON format that can be opened in [chrome://tracing](https://www.chromium.org/developers/how-tos/trace-event-profiling-tool) browser tool.
 
 ## Supported OS
 - Linux
@@ -59,6 +73,7 @@ zeCommandListAppendMemoryCopy,          12,    0,            50331648,          
 - [Python](https://www.python.org/) (version 2.7 and above)
 - [oneAPI Level Zero loader](https://github.com/oneapi-src/level-zero)
 - [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime)
+- [libdrm](https://gitlab.freedesktop.org/mesa/drm)
 
 ## Build and Run
 ### Linux

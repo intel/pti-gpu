@@ -148,6 +148,15 @@ inline zet_metric_group_handle_t FindMetricGroup(
   return target;
 }
 
+inline uint64_t GetTimerResolution(ze_device_handle_t device) {
+  ze_device_properties_t props{};
+  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+  props.pNext = nullptr;
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  return props.timerResolution;
+}
+
 } // namespace ze
 } // namespace utils
 

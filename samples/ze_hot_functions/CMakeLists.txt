@@ -19,7 +19,7 @@ endif()
 FindL0Library(zet_hot_functions)
 FindL0Headers(zet_hot_functions)
 
-FindL0HeadersPath(zet_hot_functions "${PROJECT_SOURCE_DIR}/gen_tracing_header.py")
+FindL0HeadersPath(zet_hot_functions "${PROJECT_SOURCE_DIR}/gen_tracing_callbacks.py")
 
 # Loader
 

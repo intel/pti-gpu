@@ -73,6 +73,60 @@ There are two types of timestamps one may retrieve:
 
 The major difference between context and global timestamps is that global time will include time of activity preemption and context will not.
 
+## Time Correlation
+Common problem while kernel timestamps collection is to map these timestamps to general CPU timeline. Since Level Zero provides kernel timestamps in GPU clocks, one may need to convert them to some CPU time. Level Zero 1.0 doesn't have such a capability yet though it's planned for 1.1.
+
+To solve this problem with currently available software stack one need to work with i915 graphics driver directly. E.g. to get current GPU timestamp on Linux the following function may be employed ([libdrm](https://gitlab.freedesktop.org/mesa/drm) should be used as an interface layer):
+```cpp
+#define I915_TIMESTAMP_LOW_OFFSET 0x2358
+
+uint64_t GetGpuTimestamp() {
+  int fd = drmOpenWithType("i915", NULL, DRM_NODE_RENDER);
+  if (fd < 0) {
+    fd = drmOpenWithType("i915", NULL, DRM_NODE_PRIMARY);
+  }
+  assert(fd >= 0);
+
+  struct drm_i915_reg_read reg_read_params = {0, };
+  reg_read_params.offset = I915_TIMESTAMP_LOW_OFFSET | 1;
+
+  int ioctl_ret = drmIoctl(fd, DRM_IOCTL_I915_REG_READ, &reg_read_params);
+  assert(ioctl_ret == 0);
+
+  drmClose(fd);
+
+  return reg_read_params.val;
+}
+```
+Note that Level Zero currently use only low 32 bits for the timer, so for correlation purposes one should truncate return value:
+```cpp
+uint64_t gpu_timestamp = GetGpuTimestamp() & 0x0FFFFFFFF;
+```
+Similarly one can get precise timer frequency:
+```cpp
+uint64_t GetGpuTimerFrequency() {
+  int fd = drmOpenWithType("i915", NULL, DRM_NODE_RENDER);
+  if (fd < 0) {
+    fd = drmOpenWithType("i915", NULL, DRM_NODE_PRIMARY);
+  }
+  assert(fd >= 0);
+
+  int32_t frequency = 0;
+
+  drm_i915_getparam_t params = {0, };
+  params.param = I915_PARAM_CS_TIMESTAMP_FREQUENCY;
+  params.value = &frequency;
+
+  int ioctl_ret = drmIoctl(fd, DRM_IOCTL_I915_GETPARAM, &params);
+  assert(ioctl_ret == 0);
+  assert(frequency > 0);
+
+  drmClose(fd);
+
+  return static_cast<uint64_t>(frequency);
+}
+```
+
 ## Build and Run
 Event pool profiling does not require any additional environment variables to be set, simply run the application as is:
 ```

@@ -84,10 +84,7 @@ void EnableProfiling() {
     return;
   }
 
-  ze_context_handle_t context = utils::ze::GetContext(driver);
-  PTI_ASSERT(context != nullptr);
-
-  collector = ZeApiCollector::Create(context);
+  collector = ZeApiCollector::Create(driver);
   start = std::chrono::steady_clock::now();
 }
 

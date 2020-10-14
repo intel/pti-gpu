@@ -177,7 +177,7 @@ static float RunAndCheck(ze_kernel_handle_t kernel,
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   double time = static_cast<double>(
-      (timestamp.context.kernelEnd - timestamp.context.kernelStart) *
+      (timestamp.global.kernelEnd - timestamp.global.kernelStart) *
       props.timerResolution);
   time /= NSEC_IN_SEC;
   std::cout << "Matrix multiplication time: " << time <<
