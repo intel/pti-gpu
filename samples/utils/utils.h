@@ -11,6 +11,7 @@
 #include <windows.h>
 #else
 #include <unistd.h>
+#include <sys/syscall.h>
 #endif
 
 #include <stdint.h>
@@ -154,7 +155,11 @@ inline uint32_t GetTid() {
 #if defined(_WIN32)
   return GetCurrentThreadId();
 #else
-  return gettid();
+#ifdef SYS_gettid
+  return syscall(SYS_gettid);
+#else
+  #error "SYS_gettid is unavailable on this system"
+#endif
 #endif
 }
 
