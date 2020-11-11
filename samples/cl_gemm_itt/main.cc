@@ -37,7 +37,6 @@ __itt_domain* domain = nullptr;
 static inline void StartTask(const char* name) {
   PTI_ASSERT(domain != nullptr);
   __itt_string_handle* handle = __itt_string_handle_create(name);
-  PTI_ASSERT(handle != nullptr);
   __itt_task_begin(domain, __itt_null, __itt_null, handle);
 }
 

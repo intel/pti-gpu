@@ -1,15 +1,15 @@
 level-zero-loader:
   deb:
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.0/level-zero_1.0.0+u18.04_amd64.deb
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.0/level-zero-devel_1.0.0+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.0.16/level-zero_1.0.16+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.0.16/level-zero-devel_1.0.16+u18.04_amd64.deb
 compute-runtime:
   deb:
-  - https://github.com/intel/compute-runtime/releases/download/20.37.17906/intel-gmmlib_20.2.5_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.4944/intel-igc-core_1.0.4944_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.4944/intel-igc-opencl_1.0.4944_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/20.37.17906/intel-opencl_20.37.17906_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/20.37.17906/intel-ocloc_20.37.17906_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/20.37.17906/intel-level-zero-gpu_1.0.17906_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.44.18297/intel-gmmlib_20.3.2_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.5353/intel-igc-core_1.0.5353_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.5353/intel-igc-opencl_1.0.5353_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.44.18297/intel-opencl_20.44.18297_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.44.18297/intel-ocloc_20.44.18297_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/20.44.18297/intel-level-zero-gpu_1.0.18297_amd64.deb
 metrics-discovery:
   github:
     build_path: build
@@ -19,7 +19,7 @@ metrics-discovery:
     - sudo make install
     - sudo make package
     - sudo dpkg -i *.deb
-    commit: f69d861459c19a9e7bddef5a05df124e182a5af4
+    commit: 53613756a58d723b53b0e1d77f841bc465b36d06
     url: https://github.com/intel/metrics-discovery
 metrics-library:
   github:
@@ -29,7 +29,7 @@ metrics-library:
     - make -j$(nproc)
     - sudo make package
     - sudo dpkg -i *.deb
-    commit: 7e0f5cf098bb434895f3a09e3b8ecff56a1fd276
+    commit: b37ddc92c46e48540aa2dcb437906cc32f5020be
     url: https://github.com/intel/metrics-library
 gtpin:
   archive:
@@ -43,8 +43,8 @@ oneapit-toolkits:
     apt_repo: deb https://apt.repos.intel.com/oneapi all main
     apt_source: /etc/apt/sources.list.d/oneAPI.list
     packages:
-    - intel-basekit=2021.1-2195.beta09
-    - intel-hpckit=2021.1-2205.beta09
+    - intel-basekit=2021.1-2261.beta10
+    - intel-hpckit=2021.1-2477.beta10
 finalize:
   config:
     commands:

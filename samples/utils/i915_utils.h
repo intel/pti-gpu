@@ -46,9 +46,7 @@ inline uint64_t GetGpuTimestamp() {
 #endif
 }
 
-inline uint64_t GetGpuTimerFrequency() {
-#if defined(_WIN32)
-
+inline uint64_t GetGpuTimerFrequencyFromL0() {
   ze_driver_handle_t driver = nullptr;
   ze_device_handle_t device = nullptr;
   utils::ze::GetIntelDeviceAndDriver(ZE_DEVICE_TYPE_GPU, device, driver);
@@ -57,6 +55,12 @@ inline uint64_t GetGpuTimerFrequency() {
 
   return static_cast<uint64_t>(NSEC_IN_SEC) /
     utils::ze::GetTimerResolution(device);
+}
+
+inline uint64_t GetGpuTimerFrequency() {
+#if defined(_WIN32)
+
+  return GetGpuTimerFrequencyFromL0();
 
 #elif defined(__linux__)
 
@@ -73,11 +77,14 @@ inline uint64_t GetGpuTimerFrequency() {
   params.value = &frequency;
 
   int ioctl_ret = drmIoctl(fd, DRM_IOCTL_I915_GETPARAM, &params);
-  PTI_ASSERT(ioctl_ret == 0);
-  PTI_ASSERT(frequency > 0);
-
   drmClose(fd);
 
+  // May not work for old Linux kernels (5.0+ is required)
+  if (ioctl_ret != 0) {
+    return GetGpuTimerFrequencyFromL0();
+  }
+
+  PTI_ASSERT(frequency > 0);
   return static_cast<uint64_t>(frequency);
 
 #endif

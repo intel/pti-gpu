@@ -53,7 +53,7 @@ Total Device Time (ns): 178294707
 zeCommandListAppendMemoryCopy,          12,    0,            50331648,             4639036,      2.60,              386586,              271742,              553610
 ...
 ```
-**Device Timeline** mode dumps four timestamps for each device activity - *append* to the command list, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
+**Device Timeline** mode (***Linux kernel 5.0+ is required for accurate measurements***) dumps four timestamps for each device activity - *append* to the command list, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
 ```
 Device Timeline for zeCommandListAppendMemoryCopy [ns] = 319154868 (append) 320972649 (submit) 320021623 (start) 320440290 (end)
 Device Timeline for zeCommandListAppendMemoryCopy [ns] = 319281072 (append) 320972649 (submit) 320441707 (start) 320738290 (end)

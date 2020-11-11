@@ -42,7 +42,6 @@ int main() {
     // Annotate the first task
     __itt_string_handle* first_task_handle =
       __itt_string_handle_create("FirstTask");
-    assert(first_task_handle != nullptr);
     __itt_task_begin(domain, __itt_null, __itt_null, first_task_handle);
     {
       /* First Task Body */
@@ -52,7 +51,6 @@ int main() {
     // Annotate the second task
     __itt_string_handle* second_task_handle =
       __itt_string_handle_create("SecondTask");
-    assert(second_task_handle != nullptr);
     __itt_task_begin(domain, __itt_null, __itt_null, second_task_handle);
     {
       /* Second Task Body */

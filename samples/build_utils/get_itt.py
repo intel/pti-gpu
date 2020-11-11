@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/intel/ittapi.git"
-commit = "1189e8092966be58ecd844508f7a54bcfe0d9ca3"
+commit = "b59e826cc3feac1aa545542727c37ea0347e8230"
 
 def main():
   if len(sys.argv) < 3:
