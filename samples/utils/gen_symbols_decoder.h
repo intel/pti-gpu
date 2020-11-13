@@ -35,15 +35,13 @@ class GenSymbolsDecoder {
     return parser.GetFileList();
   }
 
-  std::vector<LineInfo> GetLineInfo(
-      const std::string& kernel_name,
-      uint32_t file_id) const {
+  std::vector<LineInfo> GetLineInfo(const std::string& kernel_name) const {
     if (!IsValid()) {
       return std::vector<LineInfo>();
     }
 
     ElfParser parser = GetSection(kernel_name);
-    return parser.GetLineInfo(file_id);
+    return parser.GetLineInfo();
   }
 
  private:

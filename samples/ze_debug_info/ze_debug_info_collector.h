@@ -26,10 +26,16 @@ struct SourceLine {
   std::string text;
 };
 
+struct SourceFileInfo {
+  uint32_t file_id;
+  std::string file_name;
+  std::vector<SourceLine> source_line_list;
+};
+
 struct KernelDebugInfo {
   std::vector<Instruction> instruction_list;
   std::vector<LineInfo> line_info_list;
-  std::vector<SourceLine> source_line_list;
+  std::vector<SourceFileInfo> source_info_list;
 };
 
 using KernelDebugInfoMap = std::map<std::string, KernelDebugInfo>;
@@ -71,61 +77,101 @@ class ZeDebugInfoCollector {
       void* callback_data = nullptr) {
     PTI_ASSERT(!kernel_name.empty());
 
-    std::cerr << "=== Kernel: " << kernel_name << " ===" << std::endl;
+    std::cerr << "===== Kernel: " << kernel_name << " =====" << std::endl;
 
     const std::vector<Instruction>& instruction_list =
       kernel_debug_info.instruction_list;
     PTI_ASSERT(instruction_list.size() > 0);
 
+    int last_instruction_address = instruction_list.back().offset;
+
     const std::vector<LineInfo>& line_info =
       kernel_debug_info.line_info_list;
     PTI_ASSERT(line_info.size() > 0);
 
-    const std::vector<SourceLine> line_list =
-      kernel_debug_info.source_line_list;
-    PTI_ASSERT(line_list.size() > 0);
+    const std::vector<SourceFileInfo>& source_info_list =
+      kernel_debug_info.source_info_list;
+    PTI_ASSERT(source_info_list.size() > 0);
 
-    int last_instruction_address = instruction_list.back().offset;
+    // Print instructions with no corresponding file
+    std::cerr << "=== File: Unknown ===" << std::endl;
+    for (auto& instruction : instruction_list) {
+      bool found = false;
 
-    // Print instructions with no corresponding source line
-    for (size_t i = 0; i < line_info.size(); ++i) {
-      if (line_info[i].line == 0) {
-        int start_address = line_info[i].address;
-        int end_address = (i + 1 < line_info.size()) ?
-          line_info[i + 1].address : last_instruction_address;
+      for (size_t l = 0; l < line_info.size(); ++l) {
+        int start_address = line_info[l].address;
+        int end_address = (l + 1 < line_info.size()) ?
+                          line_info[l + 1].address :
+                          last_instruction_address;
 
-        for (auto instruction : instruction_list) {
-          if (instruction.offset >= start_address &&
-              instruction.offset < end_address) {
-            std::cerr << "\t\t[" << "0x" << std::setw(3) <<
-              std::setfill('0') << std::hex << std::uppercase <<
-              instruction.offset << "] " << instruction.text;
-            callback(instruction.offset, callback_data);
-            std::cerr << std::endl;
-          }
+        if (instruction.offset >= start_address &&
+            instruction.offset < end_address) {
+          found = true;
+          break;
         }
+      }
+
+      if (!found) {
+        std::cerr << "\t\t[" << "0x" << std::setw(5) <<
+          std::setfill('0') << std::hex << std::uppercase <<
+          instruction.offset << "] " << instruction.text;
+        callback(instruction.offset, callback_data);
+        std::cerr << std::endl;
       }
     }
 
-    // Print instructions for corresponding source line
-    for (auto line : line_list) {
-      std::cerr << "[" << std::setw(3) << std::setfill(' ') << std::dec <<
-        line.number << "] " << line.text << std::endl;
+    // Print info per file
+    for (auto& source_info : source_info_list) {
+      std::cerr << "=== File: " << source_info.file_name.c_str() <<
+        " ===" << std::endl;
 
-      for (size_t i = 0; i < line_info.size(); ++i) {
-        if (line_info[i].line == line.number) {
-          int start_address = line_info[i].address;
-          int end_address = (i + 1 < line_info.size()) ?
-            line_info[i + 1].address : last_instruction_address;
+      const std::vector<SourceLine> line_list = source_info.source_line_list;
+      PTI_ASSERT(line_list.size() > 0);
+
+      // Print instructions with no corresponding source line
+      for (size_t l = 0; l < line_info.size(); ++l) {
+        if (line_info[l].line == 0) {
+          int start_address = line_info[l].address;
+          int end_address = (l + 1 < line_info.size()) ?
+                            line_info[l + 1].address :
+                            last_instruction_address;
 
           for (auto instruction : instruction_list) {
             if (instruction.offset >= start_address &&
-                instruction.offset < end_address) {
-              std::cerr << "\t\t[" << "0x" << std::setw(3) <<
+                instruction.offset < end_address &&
+                source_info.file_id == line_info[l].file) {
+              std::cerr << "\t\t[" << "0x" << std::setw(5) <<
                 std::setfill('0') << std::hex << std::uppercase <<
                 instruction.offset << "] " << instruction.text;
               callback(instruction.offset, callback_data);
               std::cerr << std::endl;
+            }
+          }
+        }
+      }
+
+      // Print instructions for corresponding source line
+      for (auto line : line_list) {
+        std::cerr << "[" << std::setw(5) << std::setfill(' ') << std::dec <<
+          line.number << "] " << line.text << std::endl;
+
+        for (size_t l = 0; l < line_info.size(); ++l) {
+          if (line_info[l].line == line.number) {
+            int start_address = line_info[l].address;
+            int end_address = (l + 1 < line_info.size()) ?
+                              line_info[l + 1].address :
+                              last_instruction_address;
+
+            for (auto instruction : instruction_list) {
+              if (instruction.offset >= start_address &&
+                  instruction.offset < end_address &&
+                  source_info.file_id == line_info[l].file) {
+                std::cerr << "\t\t[" << "0x" << std::setw(5) <<
+                  std::setfill('0') << std::hex << std::uppercase <<
+                  instruction.offset << "] " << instruction.text;
+                callback(instruction.offset, callback_data);
+                std::cerr << std::endl;
+              }
             }
           }
         }
@@ -179,16 +225,15 @@ class ZeDebugInfoCollector {
   void AddKernel(std::string name,
                  const std::vector<Instruction>& instruction_list,
                  const std::vector<LineInfo>& line_info_list,
-                 const std::vector<SourceLine>& source_line_list) {
+                 const std::vector<SourceFileInfo>& source_info_list) {
     PTI_ASSERT(!name.empty());
     PTI_ASSERT(instruction_list.size() > 0);
     PTI_ASSERT(line_info_list.size() > 0);
-    PTI_ASSERT(source_line_list.size() > 0);
+    PTI_ASSERT(source_info_list.size() > 0);
 
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(kernel_debug_info_map_.count(name) == 0);
-    kernel_debug_info_map_[name] =
-      {instruction_list, line_info_list, source_line_list};
+    kernel_debug_info_map_[name] = {instruction_list, line_info_list, source_info_list};
   }
 
   static std::vector<SourceLine> ReadSourceFile(const std::string& file_path) {
@@ -284,36 +329,37 @@ class ZeDebugInfoCollector {
       return;
     }
 
-    // Find source file with max line info size
-    size_t target_file_id = 0, max_line_info_size = 0;
-    for (size_t i = 0; i < file_list.size(); ++i) {
-      PTI_ASSERT(i < (std::numeric_limits<uint32_t>::max)());
-      std::vector<LineInfo> line_info = symbols_decoder.GetLineInfo(
-        kernel_name, static_cast<uint32_t>(i) + 1);
-      if (line_info.size() > max_line_info_size) {
-        max_line_info_size = line_info.size();
-        target_file_id = i;
-      }
-    }
-
-    PTI_ASSERT(target_file_id < (std::numeric_limits<uint32_t>::max)());
-    std::vector<LineInfo> line_info = symbols_decoder.GetLineInfo(
-        kernel_name, static_cast<uint32_t>(target_file_id) + 1);
-    if (line_info.size() == 0) {
-      std::cerr << "[WARNING] Unable to decode kernel symbols" << std::endl;
+    std::vector<LineInfo> line_info_list =
+      symbols_decoder.GetLineInfo(kernel_name);
+    if (line_info_list.size() == 0) {
+      std::cerr << "[WARNING] Unable to decode kernel line info" << std::endl;
       return;
     }
 
-    std::vector<SourceLine> line_list = ReadSourceFile(file_list[target_file_id]);
-    if (line_list.size() == 0) {
-      std::cerr << "[WARNING] Unable to find target source file" << std::endl;
+    std::vector<SourceFileInfo> source_info_list;
+    for (size_t i = 0; i < file_list.size(); ++i) {
+      std::vector<SourceLine> line_list = ReadSourceFile(file_list[i]);
+      if (line_list.size() == 0) {
+        std::cerr << "[WARNING] Unable to find target source file: " <<
+          file_list[i] << std::endl;
+        continue;
+      }
+
+      PTI_ASSERT(i + 1 < (std::numeric_limits<uint32_t>::max)());
+      uint32_t file_id = static_cast<uint32_t>(i) + 1;
+      source_info_list.push_back({file_id, file_list[i], line_list});
+    }
+
+    if (source_info_list.size() == 0) {
+      std::cerr << "[WARNING] Unable to find kernel source files" << std::endl;
       return;
     }
 
     ZeDebugInfoCollector* collector =
       reinterpret_cast<ZeDebugInfoCollector*>(global_user_data);
     PTI_ASSERT(collector != nullptr);
-    collector->AddKernel(kernel_name, instruction_list, line_info, line_list);
+    collector->AddKernel(kernel_name, instruction_list,
+                         line_info_list, source_info_list);
   }
 
  private:

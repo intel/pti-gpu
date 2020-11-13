@@ -359,9 +359,7 @@ static void OnExitCreateKernel(cl_callback_data* data, void* user_data) {
     return;
   }
 
-  PTI_ASSERT(target_file_id < (std::numeric_limits<uint32_t>::max)());
-  std::vector<LineInfo> line_info = symbols_decoder.GetLineInfo(
-      kernel_name, static_cast<uint32_t>(target_file_id) + 1);
+  std::vector<LineInfo> line_info = symbols_decoder.GetLineInfo(kernel_name);
   if (line_info.size() == 0) {
     std::cout << "[WARNING] Unable to find kernel symbols" << std::endl;
     return;

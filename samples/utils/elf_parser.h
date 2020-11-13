@@ -107,7 +107,7 @@ class ElfParser {
     return file_path_list;
   }
 
-  std::vector<LineInfo> GetLineInfo(uint32_t file_id) const {
+  std::vector<LineInfo> GetLineInfo() const {
     if (!IsValid()) {
       return std::vector<LineInfo>();    
     }
@@ -125,7 +125,7 @@ class ElfParser {
       return std::vector<LineInfo>();
     }
 
-    return parser.GetLineInfo(file_id);
+    return parser.GetLineInfo();
   }
 
   std::vector<uint8_t> GetGenBinary() const {

@@ -11,7 +11,7 @@
 #include "leb128.h"
 #include "pti_assert.h"
 
-struct DwarfLineInfo {
+struct LineInfo {
   uint64_t address;
   uint32_t file;
   uint32_t line;
@@ -34,7 +34,7 @@ class DwarfStateMachine {
     PTI_ASSERT(header_ != nullptr);
   }
 
-  std::vector<DwarfLineInfo> Run() {
+  std::vector<LineInfo> Run() {
     const uint8_t* ptr = data_;
     const uint8_t* end = ptr + size_;
 
@@ -206,7 +206,7 @@ private:
   const Dwarf32LineNumberProgramHeader* header_ = nullptr;
 
   DwarfState state_ = { 0, 0, 1, 1 };
-  std::vector<DwarfLineInfo> line_info_;
+  std::vector<LineInfo> line_info_;
 };
 
 #endif // PTI_SAMPLES_UTILS_DWARF_STATE_MACHINE_H_

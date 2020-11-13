@@ -14,11 +14,6 @@
 
 #include "dwarf_state_machine.h"
 
-struct LineInfo {
-  int32_t address;
-  uint32_t line;
-};
-
 struct FileInfo {
   std::string name;
   uint32_t path_index;
@@ -61,9 +56,7 @@ class DebugLineParser {
     return dir_list;
   }
 
-  std::vector<LineInfo> GetLineInfo(uint32_t file_id) const {
-    PTI_ASSERT(file_id > 0);
-
+  std::vector<LineInfo> GetLineInfo() const {
     if (!IsValid()) {
       return std::vector<LineInfo>();
     }
@@ -75,14 +68,14 @@ class DebugLineParser {
         (std::numeric_limits<uint32_t>::max)());
     uint32_t line_number_program_size =
       static_cast<uint32_t>(data_ + size_ - line_number_program);
-    std::vector<DwarfLineInfo> line_info = DwarfStateMachine(
+    std::vector<LineInfo> line_info = DwarfStateMachine(
         line_number_program, line_number_program_size,
         reinterpret_cast<const Dwarf32LineNumberProgramHeader*>(data_)).Run();
     if (line_info.size() == 0) {
       return std::vector<LineInfo>();
     }
 
-    return ProcessLineInfo(line_info, file_id);
+    return line_info;
   }
 
  private:
@@ -138,29 +131,6 @@ class DebugLineParser {
 
     ++ptr;
     return ptr;
-  }
-
-  std::vector<LineInfo> ProcessLineInfo(
-      const std::vector<DwarfLineInfo>& line_info, uint32_t file) const {
-    std::vector<LineInfo> result;
-
-    int32_t address = 0;
-    uint32_t line = 0;
-    for (auto item : line_info) {
-      PTI_ASSERT(address <= item.address);
-      if (item.file != file) {
-        continue;
-      }
-      if (item.line == line) {
-        continue;
-      }
-      PTI_ASSERT(item.address < (std::numeric_limits<int>::max)());
-      address = static_cast<int>(item.address);
-      line = item.line;
-      result.push_back({address, line});
-    }
-
-    return result;
   }
 
   const uint8_t* data_;
