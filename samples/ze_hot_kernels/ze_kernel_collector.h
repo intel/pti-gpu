@@ -36,7 +36,7 @@ struct KernelInstance {
   uint64_t submit_time;
 };
 
-struct Kernel {
+struct KernelInfo {
   uint64_t total_time;
   uint64_t min_time;
   uint64_t max_time;
@@ -44,14 +44,14 @@ struct Kernel {
   size_t simd_width;
   size_t bytes_transferred;
 
-  bool operator>(const Kernel& r) const {
+  bool operator>(const KernelInfo& r) const {
     if (total_time != r.total_time) {
       return total_time > r.total_time;
     }
     return call_count > r.call_count;
   }
 
-  bool operator!=(const Kernel& r) const {
+  bool operator!=(const KernelInfo& r) const {
     if (total_time == r.total_time) {
       return call_count != r.call_count;
     }
@@ -59,12 +59,19 @@ struct Kernel {
   }
 };
 
+struct KernelInterval {
+  std::string name;
+  uint64_t start;
+  uint64_t end;
+};
+
 struct CommandListInfo {
   std::vector<KernelInstance*> kernel_list;
   bool immediate;
 };
 
-using KernelInfoMap = std::map<std::string, Kernel>;
+using KernelInfoMap = std::map<std::string, KernelInfo>;
+using KernelIntervalList = std::vector<KernelInterval>;
 using KernelNameMap = std::map<ze_kernel_handle_t, std::string>;
 using KernelTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 using CommandListMap = std::map<ze_command_list_handle_t, CommandListInfo>;
@@ -109,7 +116,7 @@ class ZeKernelCollector {
   }
 
   static void PrintKernelsTable(const KernelInfoMap& kernel_info_map) {
-    std::set< std::pair<std::string, Kernel>,
+    std::set< std::pair<std::string, KernelInfo>,
               utils::Comparator > sorted_list(
         kernel_info_map.begin(), kernel_info_map.end());
 
@@ -126,7 +133,7 @@ class ZeKernelCollector {
       return;
     }
 
-    std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
+    std::cerr << std::setw(max_name_length) << "KernelInfo" << "," <<
       std::setw(ze_kernel_collector::kCallsLength) << "Calls" << "," <<
       std::setw(ze_kernel_collector::kSimdLength) << "SIMD" << "," <<
       std::setw(ze_kernel_collector::kTransferredLength) <<
@@ -184,6 +191,10 @@ class ZeKernelCollector {
 
   const KernelInfoMap& GetKernelInfoMap() const {
     return kernel_info_map_;
+  }
+
+  const KernelIntervalList& GetKernelIntervalList() const {
+    return kernel_interval_list_;
   }
 
  private: // Implementation
@@ -330,18 +341,27 @@ class ZeKernelCollector {
 
     uint64_t start = timestamp.global.kernelStart;
     uint64_t end = timestamp.global.kernelEnd;
-    uint64_t time = 0;
+    uint64_t time = 0, start_ns = 0, end_ns = 0;
+
+    start_ns = start *
+      static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
     if (start < end) {
-      time = (end - start) *
+      end_ns = end *
         static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
     } else { // 32-bit timer overflow
       PTI_ASSERT(start < (1ULL << 32));
-      time = ((1ULL << 32) - start + end) *
+      end_ns = ((1ULL << 32) + end) *
         static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
     }
+    time = end_ns - start_ns;
+
     AddKernelInfo(instance.name, time,
                   instance.simd_width,
                   instance.bytes_transferred);
+
+    if (instance.simd_width > 0) { // User kernels only
+      AddKernelInterval(instance.name, start_ns, end_ns);
+    }
 
     if (callback_ != nullptr) {
       PTI_ASSERT(instance.append_time > 0);
@@ -405,7 +425,7 @@ class ZeKernelCollector {
       kernel_info_map_[name] = {
         time, time, time, 1, simd_width, bytes_transferred};
     } else {
-      Kernel& kernel = kernel_info_map_[name];
+      KernelInfo& kernel = kernel_info_map_[name];
       kernel.total_time += time;
       if (time > kernel.max_time) {
         kernel.max_time = time;
@@ -417,6 +437,12 @@ class ZeKernelCollector {
       kernel.bytes_transferred += bytes_transferred;
       PTI_ASSERT(kernel.simd_width == simd_width);
     }
+  }
+
+  void AddKernelInterval(std::string name, uint64_t start, uint64_t end) {
+    PTI_ASSERT(!name.empty());
+    PTI_ASSERT(start < end);
+    kernel_interval_list_.push_back({name, start, end});
   }
 
   void AddCommandList(ze_command_list_handle_t command_list, bool immediate) {
@@ -772,6 +798,7 @@ class ZeKernelCollector {
 
   std::mutex lock_;
   KernelInfoMap kernel_info_map_;
+  KernelIntervalList kernel_interval_list_;
   KernelNameMap kernel_name_map_;
   std::list<KernelInstance> kernel_instance_list_;
   CommandListMap command_list_map_;

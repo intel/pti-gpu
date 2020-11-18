@@ -5,11 +5,13 @@ This sample is a simple LD_PRELOAD based tool that allows to collect such GPU ha
 
 As a result, table like the following will be printed. For each kernel its call count, total time and metric values will be shown.
 ```
-+------------------------------------------------------------------------------------------------------+
-| Kernel                       | Call Count | Total Time, ms | EU Active, % | EU Stall, % | EU Idle, % |
-+------------------------------------------------------------------------------------------------------+
-| GEMM                         |          4 |         181.06 |        64.78 |       35.06 |       0.16 |
-+------------------------------------------------------------------------------------------------------+
+=== Device Metrics: ===
+
+Total Execution Time (ns): 516360532
+Total Kernel Time (ns): 174056667
+
+    Kernel,       Calls,           Time (ns),        Time (%),        Average (ns),   EU Active (%),    EU Stall (%),     EU Idle (%)
+      GEMM,           4,           174056667,          100.00,            43514166,           73.24,           26.67,            0.09
 ```
 ## Supported OS
 - Linux
@@ -23,6 +25,7 @@ As a result, table like the following will be printed. For each kernel its call 
 - [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime)
 - [Intel(R) Metrics Discovery Application Programming Interface](https://github.com/intel/metrics-discovery)
 - [Metrics Library for Metrics Discovery API (Metrics Library for MD API)](https://github.com/intel/metrics-library)
+- [libdrm](https://gitlab.freedesktop.org/mesa/drm)
 
 ## Build and Run
 ### Linux

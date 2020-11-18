@@ -10,7 +10,8 @@ SetBuildType()
 
 add_library(zet_metric_streamer SHARED "${PROJECT_SOURCE_DIR}/../loader/init.cc" tool.cc)
 target_include_directories(zet_metric_streamer
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
+  PRIVATE "${PROJECT_SOURCE_DIR}/../ze_hot_kernels")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(zet_metric_streamer
     PUBLIC "${CMAKE_INCLUDE_PATH}")
@@ -24,10 +25,10 @@ endif()
 FindL0Library(zet_metric_streamer)
 FindL0Headers(zet_metric_streamer)
 
-GetMDHeaders(zet_metric_streamer)
-
-CheckForMDLibrary()
-CheckForMetricsLibrary()
+if(UNIX)
+  FindDRMLibrary(zet_metric_streamer)
+  CheckDRMHeaders(zet_metric_streamer)
+endif()
 
 # Loader
 
