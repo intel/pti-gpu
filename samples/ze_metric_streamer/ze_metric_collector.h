@@ -67,6 +67,7 @@ class ZeMetricCollector {
 
   ~ZeMetricCollector() {
     ze_result_t status = ZE_RESULT_SUCCESS;
+    PTI_ASSERT(collector_thread_ == nullptr);
     PTI_ASSERT(collector_state_ == COLLECTOR_STATE_IDLE);
 
     if (tracer_ != nullptr) {
@@ -81,16 +82,11 @@ class ZeMetricCollector {
 
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zetTracerExpSetEnabled(tracer_, false);
+    ze_result_t status = zetTracerExpSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    if (collector_thread_ != nullptr) {
-      DisableMetrics();
-    }
   }
 
-  std::vector<zet_typed_value_t> GetMetricReportList() const {
+  std::vector<zet_typed_value_t> GetReportList() const {
     ze_result_t status = ZE_RESULT_SUCCESS;
     std::vector<zet_typed_value_t> report_list;
     PTI_ASSERT(metric_group_ != nullptr);
@@ -123,7 +119,7 @@ class ZeMetricCollector {
     return utils::ze::GetMetricId(metric_group_, metric_name);
   }
 
-  uint32_t GetMetricGroupSize() const {
+  uint32_t GetReportSize() const {
     PTI_ASSERT(metric_group_ != nullptr);
     ze_result_t status = ZE_RESULT_SUCCESS;
 

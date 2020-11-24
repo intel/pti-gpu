@@ -233,7 +233,8 @@ class ZeDebugInfoCollector {
 
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(kernel_debug_info_map_.count(name) == 0);
-    kernel_debug_info_map_[name] = {instruction_list, line_info_list, source_info_list};
+    kernel_debug_info_map_[name] =
+      {instruction_list, line_info_list, source_info_list};
   }
 
   static std::vector<SourceLine> ReadSourceFile(const std::string& file_path) {

@@ -6,7 +6,7 @@
 
 #include "ze_debug_info_collector.h"
 
-ZeDebugInfoCollector* collector = nullptr;
+static ZeDebugInfoCollector* collector = nullptr;
 
 // External Tool Interface ////////////////////////////////////////////////////
 

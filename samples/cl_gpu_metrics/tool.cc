@@ -4,34 +4,45 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#include <algorithm>
 #include <iomanip>
 #include <iostream>
-#include <map>
-#include <mutex>
-#include <vector>
+#include <set>
 
-#include "cl_tracer.h"
-#include "cl_utils.h"
+#include "cl_metric_collector.h"
+#include "cl_kernel_collector.h"
 
-#include "metric_collector.h"
+struct Kernel {
+  uint64_t total_time;
+  uint64_t call_count;
+  float eu_active;
+  float eu_stall;
 
-struct TimeInterval {
-  uint64_t start;
-  uint64_t end;
+  bool operator>(const Kernel& r) const {
+    if (total_time != r.total_time) {
+      return total_time > r.total_time;
+    }
+    return call_count > r.call_count;
+  }
+
+  bool operator!=(const Kernel& r) const {
+    if (total_time == r.total_time) {
+      return call_count != r.call_count;
+    }
+    return true;
+  }
 };
 
-using KernelTimeMap = std::map< std::string, std::vector<TimeInterval> >;
+using KernelMap = std::map<std::string, Kernel>;
 
-const char* kLine =
-  "+---------------------------------------------------"
-  "---------------------------------------------------+";
-const char* kHeader =
-  "| Kernel                       | Call Count | "
-  "Total Time, ms | EU Active, % | EU Stall, % | EU Idle, % |";
+const uint32_t kKernelLength = 10;
+const uint32_t kCallsLength = 12;
+const uint32_t kTimeLength = 20;
+const uint32_t kPercentLength = 16;
 
-class ToolContext;
-static ToolContext* context = nullptr;
+static ClMetricCollector* metric_collector = nullptr;
+static ClKernelCollector* kernel_collector = nullptr;
+
+static std::chrono::steady_clock::time_point start;
 
 // External Tool Interface ////////////////////////////////////////////////////
 
@@ -61,370 +72,192 @@ void SetToolEnv() {}
 
 // Internal Tool Functionality ////////////////////////////////////////////////
 
-class ToolContext {
- public:
-  ToolContext(MetricCollector* collector, ClTracer* tracer) :
-      collector_(collector), tracer_(tracer) {
-    PTI_ASSERT(collector != nullptr && tracer != nullptr);
+static KernelMap GetKernelMap() {
+  PTI_ASSERT(kernel_collector != nullptr);
+  PTI_ASSERT(metric_collector != nullptr);
+
+  std::vector<md::TTypedValue_1_0> report_list =
+    metric_collector->GetReportList();
+  if (report_list.size() == 0) {
+    return KernelMap();
   }
 
-  MetricCollector* GetCollector() const {
-    return collector_;
+  const KernelIntervalList& kernel_interval_list =
+    kernel_collector->GetKernelIntervalList();
+  if (kernel_interval_list.size() == 0) {
+    return KernelMap();
   }
 
-  ClTracer* GetTracer() const {
-    return tracer_;
-  }
+  KernelMap kernel_map;
 
-  const KernelTimeMap& GetKernelTimeMap() const {
-    return kernel_time_map_;
-  }
+  int gpu_timestamp_id = metric_collector->GetMetricId("QueryBeginTime");
+  PTI_ASSERT(gpu_timestamp_id >= 0);
+  int eu_active_id = metric_collector->GetMetricId("EuActive");
+  PTI_ASSERT(eu_active_id >= 0);
+  int eu_stall_id = metric_collector->GetMetricId("EuStall");
+  PTI_ASSERT(eu_stall_id >= 0);
 
-  void AddKernelTime(const std::string& name, uint64_t start, uint64_t end) {
-    const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(!name.empty());
-    std::vector<TimeInterval>& kernel_time_list = kernel_time_map_[name];
-    kernel_time_list.push_back({start, end});
-  }
+  uint32_t report_size = metric_collector->GetReportSize();
+  PTI_ASSERT(report_size > 0);
 
-  void EnableMetricCollector() {
-    const std::lock_guard<std::mutex> lock(lock_);
-    if (call_count_ == 0) {
-      PTI_ASSERT(collector_ != nullptr);
-      bool enabled = collector_->Enable();
-      PTI_ASSERT(enabled);
-    }
-    ++call_count_;
-  }
+  for (auto& kernel : kernel_interval_list) {
+    uint32_t sample_count = 0;
+    float eu_active = 0.0f, eu_stall = 0.0f;
 
-  void DisableMetricCollector() {
-    const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(call_count_ > 0);
-    --call_count_;
-    if (call_count_ == 0) {
-      PTI_ASSERT(collector_ != nullptr);
-      bool disabled = collector_->Disable();
-      PTI_ASSERT(disabled);
-    }
-  }
+    const md::TTypedValue_1_0* report = report_list.data();
+    while (report < report_list.data() + report_list.size()) {
+      PTI_ASSERT(report[gpu_timestamp_id].ValueType == md::VALUE_TYPE_UINT64);
+      uint64_t report_timestamp =
+        metric_collector->GetKernelTimestamp(
+            report[gpu_timestamp_id].ValueUInt64);
 
- private:
-  MetricCollector* collector_ = nullptr;
-  uint32_t call_count_ = 0;
-  ClTracer* tracer_ = nullptr;
-  std::mutex lock_;
-  KernelTimeMap kernel_time_map_;
-};
-
-static void CL_CALLBACK KernelEventNotify(cl_event event, cl_int event_status,
-                                          void* user_data) {
-  PTI_ASSERT(event_status == CL_COMPLETE);
-
-  PTI_ASSERT(user_data != nullptr);
-  cl_kernel kernel = reinterpret_cast<cl_kernel>(user_data);
-  std::string name = utils::cl::GetKernelName(kernel);
-  PTI_ASSERT(!name.empty());
-
-  cl_int status = CL_SUCCESS;
-  cl_ulong start = 0, end = 0;
-  status = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START,
-                                    sizeof(cl_ulong), &start, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
-  status = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END,
-                                    sizeof(cl_ulong), &end, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
-
-  status = clReleaseEvent(event);
-  PTI_ASSERT(status == CL_SUCCESS);
-
-  PTI_ASSERT(context != nullptr);
-  context->AddKernelTime(name, start, end);
-}
-
-static void OnEnterCreateCommandQueue(cl_callback_data* data) {
-  PTI_ASSERT(data != nullptr);
-
-  const cl_params_clCreateCommandQueue* params =
-    reinterpret_cast<const cl_params_clCreateCommandQueue*>(
-        data->functionParams);
-  PTI_ASSERT(params != nullptr);
-  *(params->properties) |=
-    static_cast<unsigned long>(CL_QUEUE_PROFILING_ENABLE);
-}
-
-static void OnExitCreateCommandQueue(cl_callback_data* data) {
-  PTI_ASSERT(data != nullptr);
-
-  cl_command_queue* queue = reinterpret_cast<cl_command_queue*>(
-      data->functionReturnValue);
-  if (*queue != nullptr) {
-    PTI_ASSERT(context != nullptr);
-    context->EnableMetricCollector();
-  }
-}
-
-static void OnEnterCreateCommandQueueWithProperties(cl_callback_data* data) {
-  PTI_ASSERT(data != nullptr);
-
-  const cl_params_clCreateCommandQueueWithProperties* params =
-    reinterpret_cast<const cl_params_clCreateCommandQueueWithProperties*>(
-        data->functionParams);
-  PTI_ASSERT(params != nullptr);
-
-  cl_queue_properties* props =
-    utils::cl::EnableQueueProfiling(*(params->properties));
-  *(params->properties) = props;
-  data->correlationData[0] = reinterpret_cast<cl_ulong>(props);
-}
-
-static void OnExitCreateCommandQueueWithProperties(cl_callback_data* data) {
-  PTI_ASSERT(data != nullptr);
-
-  cl_queue_properties* props = reinterpret_cast<cl_queue_properties*>(
-      data->correlationData[0]);
-  PTI_ASSERT(props != nullptr);
-  delete[] props;
-
-  OnExitCreateCommandQueue(data);
-}
-
-static void OnExitReleaseCommandQueue(cl_callback_data* data) {
-  PTI_ASSERT(data != nullptr);
-
-  cl_int* status = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  if (*status == CL_SUCCESS) {
-    PTI_ASSERT(context != nullptr);
-    context->DisableMetricCollector();
-  }
-}
-
-static void OnEnterEnqueueNDRangeKernel(cl_callback_data* data) {
-  PTI_ASSERT(data != nullptr);
-
-  const cl_params_clEnqueueNDRangeKernel* params =
-    reinterpret_cast<const cl_params_clEnqueueNDRangeKernel*>(
-        data->functionParams);
-  PTI_ASSERT(params != nullptr);
-
-  if (*(params->event) == nullptr) {
-    *(params->event) = reinterpret_cast<cl_event*>(data->correlationData);
-  }
-}
-
-static void OnExitEnqueueNDRangeKernel(cl_callback_data* data) {
-  PTI_ASSERT(data != nullptr);
-
-  const cl_params_clEnqueueNDRangeKernel* params =
-    reinterpret_cast<const cl_params_clEnqueueNDRangeKernel*>(
-        data->functionParams);
-  PTI_ASSERT(params != nullptr);
-
-  cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
-  if (*return_value == CL_SUCCESS) {
-    PTI_ASSERT(*(params->event) != nullptr);
-    cl_int status = CL_SUCCESS;
-
-    if (*(params->event) !=
-        reinterpret_cast<cl_event*>(data->correlationData)) {
-      status = clRetainEvent(**(params->event));
-      PTI_ASSERT(status == CL_SUCCESS);
-    }
-
-    status = clSetEventCallback(**(params->event), CL_COMPLETE,
-                                KernelEventNotify, *(params->kernel));
-    PTI_ASSERT(status == CL_SUCCESS);
-  }
-}
-
-static void Callback(cl_function_id function,
-                     cl_callback_data* callback_data,
-                     void* user_data) {
-  if (function == CL_FUNCTION_clCreateCommandQueueWithProperties) {
-    if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-      OnEnterCreateCommandQueueWithProperties(callback_data);
-    } else {
-      OnExitCreateCommandQueueWithProperties(callback_data);
-    }
-  } else if (function == CL_FUNCTION_clCreateCommandQueue) {
-    if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-      OnEnterCreateCommandQueue(callback_data);
-    } else {
-      OnExitCreateCommandQueue(callback_data);
-    }
-  } else if (function == CL_FUNCTION_clReleaseCommandQueue) {
-    if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
-      OnExitReleaseCommandQueue(callback_data);
-    }
-  } else if (function == CL_FUNCTION_clEnqueueNDRangeKernel) {
-    if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-      OnEnterEnqueueNDRangeKernel(callback_data);
-    } else {
-      OnExitEnqueueNDRangeKernel(callback_data);
-    }
-  }
-}
-
-uint64_t CalculateSampleTime(uint64_t cpu_snap_point, uint64_t gpu_snap_point,
-                             uint64_t gpu_timestamp) {
-  uint64_t cpu_timestamp = cpu_snap_point - (gpu_snap_point - gpu_timestamp);
-#if defined(__gnu_linux__)
-  cpu_timestamp = utils::ConvertClockMonotonicToRaw(cpu_timestamp);
-#endif
-  return cpu_timestamp;
-}
-
-static void PrintResults(const MetricCollector* collector,
-                         const KernelTimeMap& kernel_time_map) {
-  PTI_ASSERT(collector != nullptr);
-  if (kernel_time_map.size() == 0) {
-    return;
-  }
-
-  uint32_t calculated_report_size = collector->GetCalculatedReportSize();
-  std::vector<md::TTypedValue_1_0> calculated_reports = collector->Calculate();
-  if (calculated_reports.size() == 0) {
-    return;
-  }
-
-  int eu_avtive_id = collector->GetMetricInfoId("EuActive");
-  PTI_ASSERT(eu_avtive_id != -1);
-  int eu_stall_id = collector->GetMetricInfoId("EuStall");
-  PTI_ASSERT(eu_stall_id != -1);
-  int timestamp_id = collector->GetMetricInfoId("QueryBeginTime");
-  PTI_ASSERT(timestamp_id != -1);
-
-  uint64_t cpu_snap_point = 0, gpu_snap_point = 0;
-  bool success = collector->GetGpuCpuTimestamps(&gpu_snap_point, &cpu_snap_point);
-  PTI_ASSERT(success);
-
-  std::cout << kLine << std::endl;
-  std::cout << kHeader << std::endl;
-  std::cout << kLine << std::endl;
-
-  for (auto kernel : kernel_time_map) {
-    float active_total = 0.0f, stall_total = 0.0f;
-    int sample_count = 0;
-
-    uint64_t time_total = 0;
-    int call_count = 0;
-    
-    std::cout << "| " << std::left << std::setw(28) << kernel.first << " | ";
-
-    std::sort(kernel.second.begin(), kernel.second.end(),
-              [](const TimeInterval& l,
-                 const TimeInterval& r) {
-                return l.start < r.start;
-              });
-
-    for (auto time : kernel.second) {
-      const md::TTypedValue_1_0* report = calculated_reports.data();
-      while (report < calculated_reports.data() + calculated_reports.size()) {
-        PTI_ASSERT(report[timestamp_id].ValueType == md::VALUE_TYPE_UINT64);
-        uint64_t gpu_timestamp = report[timestamp_id].ValueUInt64;
-        uint64_t cpu_timestamp = CalculateSampleTime(cpu_snap_point,
-                                                     gpu_snap_point,
-                                                     gpu_timestamp);
-
-        if (cpu_timestamp >= time.start && cpu_timestamp <= time.end) {
-          PTI_ASSERT(report[eu_avtive_id].ValueType == md::VALUE_TYPE_FLOAT);
-          active_total += report[eu_avtive_id].ValueFloat;
-          PTI_ASSERT(report[eu_stall_id].ValueType == md::VALUE_TYPE_FLOAT);
-          stall_total += report[eu_stall_id].ValueFloat;
-          ++sample_count;
-        }
-
-        if (cpu_timestamp > time.end) {
-          break;
-        }
-
-        report += calculated_report_size;
+      if (report_timestamp >= kernel.start && report_timestamp <= kernel.end) {
+        PTI_ASSERT(report[eu_active_id].ValueType == md::VALUE_TYPE_FLOAT);
+        eu_active += report[eu_active_id].ValueFloat;
+        PTI_ASSERT(report[eu_stall_id].ValueType == md::VALUE_TYPE_FLOAT);
+        eu_stall += report[eu_stall_id].ValueFloat;
+        ++sample_count;
       }
 
-      time_total += (time.end - time.start);
-      ++call_count;
+      if (report_timestamp > kernel.end) {
+        break;
+      }
+
+      report += report_size;
     }
 
-    float active = 0.0f, stall = 0.0f, idle = 100.0f;
     if (sample_count > 0) {
-      active = active_total / sample_count;
-      stall = stall_total / sample_count;
-      idle = idle - active - stall;
-      if (idle < 0.0f) idle = 0.0f;
+      eu_active /= sample_count;
+      eu_stall /= sample_count;
+    } else {
+      std::cerr << "[WARNING] No samples found for a kernel instance of " <<
+        kernel.name << ", results may be inaccurate" << std::endl;
     }
 
-    std::cout << std::right << std::setw(10) << call_count << " | ";
-    std::cout << std::right << std::setw(14) << std::setprecision(2) <<
-      std::fixed << time_total / static_cast<float>(NSEC_IN_MSEC) << " | ";
-    std::cout << std::right << std::setw(12) << std::setprecision(2) <<
-      std::fixed << active << " | ";
-    std::cout << std::right << std::setw(11) << std::setprecision(2) <<
-      std::fixed << stall << " | ";
-    std::cout << std::right << std::setw(10) << std::setprecision(2) <<
-      std::fixed << idle << " | " << std::endl;
+    if (kernel_map.count(kernel.name) == 0) {
+      kernel_map[kernel.name] =
+        {kernel.end - kernel.start, 1, eu_active, eu_stall};
+    } else {
+      Kernel& kernel_info = kernel_map[kernel.name];
+      kernel_info.total_time += (kernel.end - kernel.start);
+      kernel_info.eu_active =
+        (kernel_info.eu_active * kernel_info.call_count + eu_active) /
+        (kernel_info.call_count + 1);
+      kernel_info.eu_stall =
+        (kernel_info.eu_stall * kernel_info.call_count + eu_stall) /
+        (kernel_info.call_count + 1);
+      kernel_info.call_count += 1;
+    }
   }
 
-  std::cout << kLine << std::endl;
-  std::cout << "[INFO] Job is successfully completed" << std::endl;
+  return kernel_map;
+}
+
+static void PrintResults() {
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  std::chrono::duration<uint64_t, std::nano> time = end - start;
+
+  KernelMap kernel_map = GetKernelMap();
+  if (kernel_map.size() == 0) {
+    return;
+  }
+
+  std::set< std::pair<std::string, Kernel>,
+            utils::Comparator > sorted_list(
+      kernel_map.begin(), kernel_map.end());
+
+  uint64_t total_duration = 0;
+  size_t max_name_length = kKernelLength;
+  for (auto& value : sorted_list) {
+    total_duration += value.second.total_time;
+    if (value.first.size() > max_name_length) {
+      max_name_length = value.first.size();
+    }
+  }
+
+  if (total_duration == 0) {
+    return;
+  }
+
+  std::cerr << std::endl;
+  std::cerr << "=== Device Metrics: ===" << std::endl;
+  std::cerr << std::endl;
+  std::cerr << "Total Execution Time (ns): " << time.count() << std::endl;
+  std::cerr << "Total Kernel Time (ns): " << total_duration << std::endl;
+  std::cerr << std::endl;
+
+  std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
+    std::setw(kCallsLength) << "Calls" << "," <<
+    std::setw(kTimeLength) << "Time (ns)" << "," <<
+    std::setw(kPercentLength) << "Time (%)" << "," <<
+    std::setw(kTimeLength) << "Average (ns)" << "," <<
+    std::setw(kPercentLength) << "EU Active (%)" << "," <<
+    std::setw(kPercentLength) << "EU Stall (%)" << "," <<
+    std::setw(kPercentLength) << "EU Idle (%)" << std::endl;
+
+  for (auto& value : sorted_list) {
+    const std::string& kernel = value.first;
+    uint64_t call_count = value.second.call_count;
+    uint64_t duration = value.second.total_time;
+    uint64_t avg_duration = duration / call_count;
+    float percent_duration = 100.0f * duration / total_duration;
+    float eu_active = value.second.eu_active;
+    float eu_stall = value.second.eu_stall;
+    float eu_idle = 0.0f;
+    if (eu_active + eu_stall < 100.0f) {
+      eu_idle = 100.f - eu_active - eu_stall;
+    }
+    std::cerr << std::setw(max_name_length) << kernel << "," <<
+      std::setw(kCallsLength) << call_count << "," <<
+      std::setw(kTimeLength) << duration << "," <<
+      std::setw(kPercentLength) << std::setprecision(2) <<
+        std::fixed << percent_duration << "," <<
+      std::setw(kTimeLength) << avg_duration << "," <<
+      std::setw(kPercentLength) << std::setprecision(2) <<
+        std::fixed << eu_active << "," <<
+      std::setw(kPercentLength) << std::setprecision(2) <<
+        std::fixed << eu_stall << "," <<
+      std::setw(kPercentLength) << std::setprecision(2) <<
+        std::fixed << eu_idle << std::endl;
+  }
+
+  std::cerr << std::endl;
 }
 
 // Internal Tool Interface ////////////////////////////////////////////////////
 
 void EnableProfiling() {
-  PTI_ASSERT(context == nullptr);
-
   cl_device_id device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
   if (device == nullptr) {
-    std::cout << "[WARNING] Unable to find target GPU device for tracing" <<
+    std::cerr << "[WARNING] Unable to find target GPU device for tracing" <<
       std::endl;
     return;
   }
 
-  MetricCollector* collector = new MetricCollector("ComputeBasic");
-  PTI_ASSERT(collector != nullptr);
-  if (!collector->IsValid()) {
-    delete collector;
+  kernel_collector = ClKernelCollector::Create(device);
+  if (kernel_collector == nullptr) {
     return;
   }
 
-  ClTracer* tracer = new ClTracer(device, Callback, device);
-  if (tracer == nullptr || !tracer->IsValid()) {
-    std::cout << "[WARNING] Unable to create OpenCL tracer for " <<
-      "target GPU device" << std::endl;
-    if (tracer != nullptr) {
-      delete tracer;
-    }
-    delete collector;
+  metric_collector = ClMetricCollector::Create(device, "ComputeBasic");
+  if (metric_collector == nullptr) {
+    kernel_collector->DisableTracing();
+    delete kernel_collector;
+    kernel_collector = nullptr;
     return;
   }
 
-  bool set = true;
-  set = set && tracer->SetTracingFunction(
-      CL_FUNCTION_clCreateCommandQueueWithProperties);
-  set = set && tracer->SetTracingFunction(CL_FUNCTION_clCreateCommandQueue);
-  set = set && tracer->SetTracingFunction(CL_FUNCTION_clReleaseCommandQueue);
-  set = set && tracer->SetTracingFunction(CL_FUNCTION_clEnqueueNDRangeKernel);
-  PTI_ASSERT(set);
-
-  bool enabled = tracer->Enable();
-  PTI_ASSERT(enabled);
-
-  context = new ToolContext(collector, tracer);
-  PTI_ASSERT(context != nullptr);
+  start = std::chrono::steady_clock::now();
 }
 
 void DisableProfiling() {
-  if (context != nullptr) {
-    MetricCollector* collector = context->GetCollector();
-    PTI_ASSERT(collector != nullptr);
-    ClTracer* tracer = context->GetTracer();
-    PTI_ASSERT(tracer != nullptr);
-
-    bool disabled = tracer->Disable();
-    PTI_ASSERT(disabled);
-    PrintResults(collector, context->GetKernelTimeMap());
-
-    delete collector;
-    delete tracer;
-    delete context;
+  if (kernel_collector != nullptr || metric_collector != nullptr) {
+    PTI_ASSERT(kernel_collector != nullptr);
+    PTI_ASSERT(metric_collector != nullptr);
+    kernel_collector->DisableTracing();
+    metric_collector->DisableTracing();
+    PrintResults();
+    delete kernel_collector;
+    delete metric_collector;
   }
 }

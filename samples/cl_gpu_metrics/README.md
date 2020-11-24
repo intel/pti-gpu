@@ -4,11 +4,13 @@ This sample is a simple LD_PRELOAD based tool that allows to collect such GPU ha
 
 As a result, table like the following will be printed. For each kernel its call count, total time and metric values will be shown.
 ```
-+------------------------------------------------------------------------------------------------------+
-| Kernel                       | Call Count | Total Time, ms | EU Active, % | EU Stall, % | EU Idle, % |
-+------------------------------------------------------------------------------------------------------+
-| GEMM                         |          4 |         280.78 |        80.91 |       18.98 |       0.11 | 
-+------------------------------------------------------------------------------------------------------+
+=== Device Metrics: ===
+
+Total Execution Time (ns): 414222992
+Total Kernel Time (ns): 177950165
+
+    Kernel,       Calls,           Time (ns),        Time (%),        Average (ns),   EU Active (%),    EU Stall (%),     EU Idle (%)
+      GEMM,           4,           177950165,          100.00,            44487541,           61.59,           38.35,            0.06
 ```
 ## Supported OS
 - Linux

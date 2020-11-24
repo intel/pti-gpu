@@ -81,7 +81,7 @@ static KernelMap GetKernelMap() {
   PTI_ASSERT(metric_collector != nullptr);
 
   std::vector<zet_typed_value_t> report_list =
-    metric_collector->GetMetricReportList();
+    metric_collector->GetReportList();
   if (report_list.size() == 0) {
     return KernelMap();
   }
@@ -101,8 +101,8 @@ static KernelMap GetKernelMap() {
   int eu_stall_id = metric_collector->GetMetricId("EuStall");
   PTI_ASSERT(eu_stall_id >= 0);
 
-  uint32_t group_size = metric_collector->GetMetricGroupSize();
-  PTI_ASSERT(group_size > 0);
+  uint32_t report_size = metric_collector->GetReportSize();
+  PTI_ASSERT(report_size > 0);
 
   for (auto& kernel : kernel_interval_list) {
     uint32_t sample_count = 0;
@@ -125,7 +125,7 @@ static KernelMap GetKernelMap() {
         break;
       }
 
-      report += group_size;
+      report += report_size;
     }
 
     if (sample_count > 0) {
@@ -246,7 +246,8 @@ void EnableProfiling() {
     return;
   }
 
-  metric_collector = ZeMetricCollector::Create(driver, device, "ComputeBasic");
+  metric_collector =
+    ZeMetricCollector::Create(driver, device, "ComputeBasic");
   if (metric_collector == nullptr) {
     kernel_collector->DisableTracing();
     delete kernel_collector;

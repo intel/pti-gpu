@@ -4,30 +4,40 @@ This sample is a simple LD_PRELOAD based tool that allows to collect all called 
 
 As a result, table like the following will be printed.
 ```
-+----------------------------------------------------------------------------------------------+
-| Function                                        | Call Count | Avg Time, ms | Total Time, ms |
-+----------------------------------------------------------------------------------------------+
-| clFinish                                        |          4 |        43.86 |         175.46 |
-| clBuildProgram                                  |          1 |       171.89 |         171.89 |
-| clEnqueueWriteBuffer                            |          8 |         0.62 |           5.00 |
-| clEnqueueReadBuffer                             |          4 |         0.96 |           3.84 |
-| clEnqueueNDRangeKernel                          |          4 |         0.40 |           1.60 |
-| clReleaseMemObject                              |         12 |         0.01 |           0.08 |
-| clCreateBuffer                                  |         12 |         0.01 |           0.07 |
-| clSetKernelArg                                  |         16 |         0.00 |           0.03 |
-| clGetEventProfilingInfo                         |          8 |         0.00 |           0.01 |
-| clReleaseProgram                                |          1 |         0.01 |           0.01 |
-| clCreateContext                                 |          1 |         0.01 |           0.01 |
-| clCreateProgramWithSource                       |          1 |         0.00 |           0.00 |
-| clCreateKernel                                  |          1 |         0.00 |           0.00 |
-| clReleaseKernel                                 |          1 |         0.00 |           0.00 |
-| clGetKernelInfo                                 |          4 |         0.00 |           0.00 |
-| clCreateCommandQueueWithProperties              |          1 |         0.00 |           0.00 |
-| clGetDeviceIDs                                  |          2 |         0.00 |           0.00 |
-| clGetDeviceInfo                                 |          2 |         0.00 |           0.00 |
-| clReleaseCommandQueue                           |          1 |         0.00 |           0.00 |
-| clReleaseContext                                |          1 |         0.00 |           0.00 |
-+----------------------------------------------------------------------------------------------+
+=== API Timing Results: ===
+
+Total Execution Time (ns): 363687486
+Total API Time for CPU backend (ns): 524
+Total API Time for GPU backend (ns): 355355363
+
+== CPU Backend: ==
+
+      Function,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+clGetDeviceIDs,           1,                 524,    100.00,                 524,                 524,                 524
+
+== GPU Backend: ==
+
+                          Function,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+                    clBuildProgram,           1,           173888026,     48.93,           173888026,           173888026,           173888026
+                          clFinish,           4,           172908147,     48.66,            43227036,            42711785,            44318785
+              clEnqueueWriteBuffer,           8,             4636256,      1.30,              579532,              207825,             1864890
+               clEnqueueReadBuffer,           4,             2051244,      0.58,              512811,              498662,              542971
+            clEnqueueNDRangeKernel,           4,             1623139,      0.46,              405784,              236120,              609050
+                clReleaseMemObject,          12,               95182,      0.03,                7931,                3525,               16436
+                    clCreateBuffer,          12,               81056,      0.02,                6754,                2511,               16990
+                    clSetKernelArg,          16,               24515,      0.01,                1532,                 141,                7038
+           clGetEventProfilingInfo,           8,               13139,      0.00,                1642,                 103,                3288
+                   clCreateContext,           1,               12680,      0.00,               12680,               12680,               12680
+                  clReleaseProgram,           1,                9503,      0.00,                9503,                9503,                9503
+         clCreateProgramWithSource,           1,                3880,      0.00,                3880,                3880,                3880
+                    clCreateKernel,           1,                2941,      0.00,                2941,                2941,                2941
+                   clReleaseKernel,           1,                1679,      0.00,                1679,                1679,                1679
+                   clGetKernelInfo,           4,                1617,      0.00,                 404,                 190,                 552
+clCreateCommandQueueWithProperties,           1,                1388,      0.00,                1388,                1388,                1388
+                    clGetDeviceIDs,           2,                 311,      0.00,                 155,                 138,                 173
+             clReleaseCommandQueue,           1,                 270,      0.00,                 270,                 270,                 270
+                   clGetDeviceInfo,           2,                 227,      0.00,                 113,                 103,                 124
+                  clReleaseContext,           1,                 163,      0.00,                 163,                 163,                 163
 ```
 ## Supported OS
 - Linux

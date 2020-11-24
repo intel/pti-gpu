@@ -213,20 +213,28 @@ inline cl_device_id GetDevice(cl_command_queue queue) {
   return device;
 }
 
-inline cl_ulong GetEventTime(cl_event event) {
+inline cl_ulong GetEventStartTime(cl_event event) {
   PTI_ASSERT(event != nullptr);
 
   cl_int status = CL_SUCCESS;
-  cl_ulong start = 0, end = 0;
+  cl_ulong start = 0;
 
   status = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START,
                                    sizeof(cl_ulong), &start, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
+  return start;
+}
+
+inline cl_ulong GetEventEndTime(cl_event event) {
+  PTI_ASSERT(event != nullptr);
+
+  cl_int status = CL_SUCCESS;
+  cl_ulong end = 0;
+
   status = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END,
                                    sizeof(cl_ulong), &end, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
-
-  return end - start;
+  return end;
 }
 
 } // namespace cl

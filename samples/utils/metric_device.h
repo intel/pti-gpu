@@ -7,6 +7,8 @@
 #ifndef PTI_SAMPLES_UTILS_METRIC_DEVICE_H_
 #define PTI_SAMPLES_UTILS_METRIC_DEVICE_H_
 
+#include <string.h>
+
 #include "metric_utils.h"
 #include "pti_assert.h"
 #include "shared_library.h"
@@ -64,6 +66,50 @@ class MetricDevice {
 
   MetricDevice(const MetricDevice& copy) = delete;
   MetricDevice& operator=(const MetricDevice& copy) = delete;
+
+  md::IConcurrentGroup_1_5* FindMetricGroup(const char* set_name) {
+    PTI_ASSERT(set_name != nullptr);
+
+    uint32_t group_count = device_->GetParams()->ConcurrentGroupsCount;
+    for (uint32_t gid = 0; gid < group_count; ++gid) {
+      md::IConcurrentGroup_1_5* group = device_->GetConcurrentGroup(gid);
+      PTI_ASSERT(group != nullptr);
+
+      uint32_t set_count = group->GetParams()->MetricSetsCount;
+      for (uint32_t sid = 0; sid < set_count; ++sid) {
+        md::IMetricSet_1_5* set = group->GetMetricSet(sid);
+        PTI_ASSERT(set != nullptr);
+
+        if (strcmp(set_name, set->GetParams()->SymbolName) == 0) {
+          return group;
+        }
+      }
+    }
+
+    return nullptr;
+  }
+
+  md::IMetricSet_1_5* FindMetricSet(const char* set_name) {
+    PTI_ASSERT(set_name != nullptr);
+
+    uint32_t group_count = device_->GetParams()->ConcurrentGroupsCount;
+    for (uint32_t gid = 0; gid < group_count; ++gid) {
+      md::IConcurrentGroup_1_5* group = device_->GetConcurrentGroup(gid);
+      PTI_ASSERT(group != nullptr);
+
+      uint32_t set_count = group->GetParams()->MetricSetsCount;
+      for (uint32_t sid = 0; sid < set_count; ++sid) {
+        md::IMetricSet_1_5* set = group->GetMetricSet(sid);
+        PTI_ASSERT(set != nullptr);
+
+        if (strcmp(set_name, set->GetParams()->SymbolName) == 0) {
+          return set;
+        }
+      }
+    }
+
+    return nullptr;
+  }
 
 private:
   MetricDevice(md::IMetricsDevice_1_5* device, SharedLibrary* lib)

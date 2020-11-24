@@ -17,15 +17,6 @@
 #include "utils.h"
 #include "ze_utils.h"
 
-namespace ze_kernel_collector {
-  const uint32_t kKernelLength = 10;
-  const uint32_t kCallsLength = 12;
-  const uint32_t kSimdLength = 5;
-  const uint32_t kTransferredLength = 20;
-  const uint32_t kTimeLength = 20;
-  const uint32_t kPercentLength = 10;
-} // namespace ze_kernel_collector
-
 struct KernelInstance {
   std::string name;
   size_t simd_width;
@@ -121,7 +112,7 @@ class ZeKernelCollector {
         kernel_info_map.begin(), kernel_info_map.end());
 
     uint64_t total_duration = 0;
-    size_t max_name_length = ze_kernel_collector::kKernelLength;
+    size_t max_name_length = kKernelLength;
     for (auto& value : sorted_list) {
       total_duration += value.second.total_time;
       if (value.first.size() > max_name_length) {
@@ -133,16 +124,16 @@ class ZeKernelCollector {
       return;
     }
 
-    std::cerr << std::setw(max_name_length) << "KernelInfo" << "," <<
-      std::setw(ze_kernel_collector::kCallsLength) << "Calls" << "," <<
-      std::setw(ze_kernel_collector::kSimdLength) << "SIMD" << "," <<
-      std::setw(ze_kernel_collector::kTransferredLength) <<
+    std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
+      std::setw(kCallsLength) << "Calls" << "," <<
+      std::setw(kSimdLength) << "SIMD" << "," <<
+      std::setw(kTransferredLength) <<
         "Transferred (bytes)" << "," <<
-      std::setw(ze_kernel_collector::kTimeLength) << "Time (ns)" << "," <<
-      std::setw(ze_kernel_collector::kPercentLength) << "Time (%)" << "," <<
-      std::setw(ze_kernel_collector::kTimeLength) << "Average (ns)" << "," <<
-      std::setw(ze_kernel_collector::kTimeLength) << "Min (ns)" << "," <<
-      std::setw(ze_kernel_collector::kTimeLength) << "Max (ns)" << std::endl;
+      std::setw(kTimeLength) << "Time (ns)" << "," <<
+      std::setw(kPercentLength) << "Time (%)" << "," <<
+      std::setw(kTimeLength) << "Average (ns)" << "," <<
+      std::setw(kTimeLength) << "Min (ns)" << "," <<
+      std::setw(kTimeLength) << "Max (ns)" << std::endl;
 
     for (auto& value : sorted_list) {
       const std::string& function = value.first;
@@ -155,16 +146,16 @@ class ZeKernelCollector {
       uint64_t max_duration = value.second.max_time;
       float percent_duration = 100.0f * duration / total_duration;
       std::cerr << std::setw(max_name_length) << function << "," <<
-        std::setw(ze_kernel_collector::kCallsLength) << call_count << "," <<
-        std::setw(ze_kernel_collector::kSimdLength) << simd_width << "," <<
-        std::setw(ze_kernel_collector::kTransferredLength) <<
+        std::setw(kCallsLength) << call_count << "," <<
+        std::setw(kSimdLength) << simd_width << "," <<
+        std::setw(kTransferredLength) <<
           bytes_transferred << "," <<
-        std::setw(ze_kernel_collector::kTimeLength) << duration << "," <<
-        std::setw(ze_kernel_collector::kPercentLength) << std::setprecision(2) <<
+        std::setw(kTimeLength) << duration << "," <<
+        std::setw(kPercentLength) << std::setprecision(2) <<
           std::fixed << percent_duration << "," <<
-        std::setw(ze_kernel_collector::kTimeLength) << avg_duration << "," <<
-        std::setw(ze_kernel_collector::kTimeLength) << min_duration << "," <<
-        std::setw(ze_kernel_collector::kTimeLength) << max_duration << std::endl;
+        std::setw(kTimeLength) << avg_duration << "," <<
+        std::setw(kTimeLength) << min_duration << "," <<
+        std::setw(kTimeLength) << max_duration << std::endl;
     }
   }
 
@@ -418,8 +409,9 @@ class ZeKernelCollector {
     }
   }
 
-  void AddKernelInfo(std::string name, uint64_t time,
-                     size_t simd_width, size_t bytes_transferred) {
+  void AddKernelInfo(
+      std::string name, uint64_t time,
+      size_t simd_width, size_t bytes_transferred) {
     PTI_ASSERT(!name.empty());
     if (kernel_info_map_.count(name) == 0) {
       kernel_info_map_[name] = {
@@ -802,6 +794,13 @@ class ZeKernelCollector {
   KernelNameMap kernel_name_map_;
   std::list<KernelInstance> kernel_instance_list_;
   CommandListMap command_list_map_;
+
+  static const uint32_t kKernelLength = 10;
+  static const uint32_t kCallsLength = 12;
+  static const uint32_t kSimdLength = 5;
+  static const uint32_t kTransferredLength = 20;
+  static const uint32_t kTimeLength = 20;
+  static const uint32_t kPercentLength = 10;
 };
 
 #endif // PTI_SAMPLES_ZE_HOT_KERNELS_ZE_KERNEL_COLLECTOR_H_

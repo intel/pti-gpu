@@ -28,15 +28,15 @@ def build(path):
 
 def parse(output):
   lines = output.split("\n")
-  total_time = 0.0
+  total_time = 0
   for line in lines:
-    items = line.split("|")
-    if len(items) < 6 or line.find("Function") != -1:
+    items = line.split(",")
+    if len(items) != 7 or line.find("Time (ns)") != -1:
       continue
-    kernel_name = items[1].strip()
-    call_count = int(items[2].strip())
-    time = float(items[4].strip())
-    if not kernel_name or call_count <= 0:
+    function_name = items[0].strip()
+    call_count = int(items[1].strip())
+    time = int(items[2].strip())
+    if not function_name or call_count <= 0:
       return False
     total_time += time
   if total_time <= 0:
@@ -63,14 +63,12 @@ def run(path, option):
     p = subprocess.Popen(["./cl_hot_functions", app_file, option, "1024", "1"],\
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
-  if stderr:
+  if not stdout:
     return stderr
   if stdout.find(" CORRECT") == -1:
     return stdout
-  if stdout.find("Job is successfully completed") == -1:
-    return stdout
-  if not parse(stdout):
-    return stdout
+  if not parse(stderr):
+    return stderr
   return None
 
 def main(option):

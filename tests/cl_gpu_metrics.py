@@ -28,15 +28,15 @@ def parse(output):
   lines = output.split("\n")
   total_time = 0.0
   for line in lines:
-    items = line.split("|")
-    if len(items) < 8 or line.find("Kernel") != -1:
+    items = line.split(",")
+    if len(items) < 8 or line.find("Time (ns)") != -1:
       continue
-    kernel_name = items[1].strip()
-    call_count = int(items[2].strip())
-    time = float(items[3].strip())
-    eu_active = float(items[4].strip())
-    eu_stall = float(items[5].strip())
-    eu_idle = float(items[6].strip())
+    kernel_name = items[0].strip()
+    call_count = int(items[1].strip())
+    time = float(items[2].strip())
+    eu_active = float(items[5].strip())
+    eu_stall = float(items[6].strip())
+    eu_idle = float(items[7].strip())
     if not kernel_name or call_count <= 0:
       return False
     if eu_active <= 0:
@@ -54,14 +54,12 @@ def run(path):
   p = subprocess.Popen(["./cl_gpu_metrics", app_file, "gpu", "1024", "1"],\
     cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
-  if stderr:
+  if not stdout:
     return stderr
   if stdout.find(" CORRECT") == -1:
     return stdout
-  if stdout.find("Job is successfully completed") == -1:
-    return stdout
-  if not parse(stdout):
-    return stdout
+  if not parse(stderr):
+    return stderr
   return None
 
 def main(option):

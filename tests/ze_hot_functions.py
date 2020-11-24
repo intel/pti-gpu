@@ -60,6 +60,8 @@ def run(path, option):
     p = subprocess.Popen(["./ze_hot_functions", app_file, "1024", "1"],\
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
+  if not stdout:
+    return stderr
   if stdout.find(" CORRECT") == -1:
     return stdout
   if not parse(stderr):

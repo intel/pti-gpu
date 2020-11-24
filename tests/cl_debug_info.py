@@ -30,16 +30,14 @@ def run(path):
   p = subprocess.Popen(["./cl_debug_info", app_file, "gpu", "1024", "1"],
     cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
-  if stderr:
-    return stderr
+  if not stderr:
+    return stdout
   if stdout.find(" CORRECT") == -1:
     return stdout
-  if stdout.find("Job is successfully completed") == -1:
-    return stdout
-  if stdout.find("__kernel") == -1 or stdout.find("for") == -1:
-    return stdout
-  if stdout.find("add") == -1 or stdout.find("mov") == -1 or stdout.find("send") == -1:
-    return stdout
+  if stderr.find("__kernel") == -1 or stderr.find("for") == -1:
+    return stderr
+  if stderr.find("add") == -1 or stderr.find("mov") == -1 or stderr.find("send") == -1:
+    return stderr
   return None
 
 def main(option):
