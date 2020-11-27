@@ -4,14 +4,18 @@ This sample is a simple LD_PRELOAD based tool that allows to collect all execute
 
 As a result, table like the following will be printed.
 ```
-+------------------------------------------------------------------------------------------------+
-|                                           | Call  | SIMD  | Total MBytes |   Avg    |  Total   |
-| Kernel                                    | Count | Width |  Transfered  | Time, ms | Time, ms |
-+------------------------------------------------------------------------------------------------+
-| GEMM                                      |     4 |    32 |            - |    42.70 |   170.80 |
-| HtoD                                      |     8 |     - |        32.00 |     0.45 |     3.63 |
-| DtoH                                      |     4 |     - |        16.00 |     0.84 |     3.36 |
-+------------------------------------------------------------------------------------------------+
+=== Device Timing Results: ===
+
+Total Execution Time (ns): 387907073
+Total Device Time for CPU (ns): 0
+Total Device Time for GPU (ns): 175106295
+
+== GPU Backend: ==
+
+              Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+                GEMM,           4,   32,                   0,           172514582,     98.52,            43128645,            42925833,            43291333
+ clEnqueueReadBuffer,           4,    0,            16777216,             1353048,      0.77,              338262,              323979,              367465
+clEnqueueWriteBuffer,           8,    0,            33554432,             1238665,      0.71,              154833,              125833,              232500
 ```
 ## Supported OS
 - Linux

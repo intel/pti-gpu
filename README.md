@@ -42,6 +42,31 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 6. Code Annotation
     - based on [Instrumentation and Tracing Technology API (ITT API)](chapters/code_annotation/ITT.md)
 
+## Profiling Tools
+- for OpenCL(TM), DPC++ (with OpenCL(TM) backend) and OpenMP* (with OpenCL(TM) backend):
+    - [cl_hot_functions](samples/cl_hot_functions) - provides a list of hottest OpenCL(TM) API calls by backend (CPU and GPU);
+    - [cl_hot_kernels](samples/cl_hot_kernels) - provides a list of hottest OpenCL(TM) kernels by backend (CPU and GPU);
+    - [cl_debug_info](samples/cl_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
+    - [cl_gpu_metrics](samples/cl_gpu_metrics) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle;
+- for Level Zero, DPC++ (with Level Zero backend) and OpenMP* (with Level Zero backend):
+    - [ze_hot_functions](samples/ze_hot_functions) - provides a list of hottest Level Zero API calls;
+    - [ze_hot_kernels](samples/ze_hot_kernels) - provides a list of hottest Level Zero kernels;
+    - [ze_debug_info](samples/ze_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
+    - [ze_metric_query](samples/ze_metric_query) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *query* mode);
+    - [ze_metric_streamer](samples/ze_metric_query) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *streamer* mode);
+    - [ze_intercept](samples/ze_intercept) - "Swiss army knife" for Level Zero profiling;
+- for OpenMP* (with any backend):
+    - [omp_hot_regions](samples/omp_hot_regions) - provides a list of hottest parallel (for CPU) and target (for GPU) OpenMP* regions;
+- unified tools for binary instrumentation (for any GPU runtime):
+    - [gpu_inst_count](samples/gpu_inst_count) - prints GPU kernel assembly (GEN ISA) annotated by instruction execution count;
+    - [gpu_perfmon_read](samples/gpu_perfmon_read) - prints GPU kernel assembly (GEN ISA) annotated by specific HW metric, which is accumulated in EU PerfMon register;
+
+## Utilities
+- [gpu_info](samples/gpu_info) - provides basic information about the GPU installed in a system, and the list of HW metrics one can collect for it;
+- [ze_metric_info](samples/ze_metric_info) - prints the list of HW metrics one can collect with the help of Level Zero;
+- [gpu_perfmon_set](samples/gpu_perfmon_set) - allows to choose HW metric for collection in EU PerfMon register;
+- [dpc_info](samples/dpc_info) - prints information on avaialble platforms and devices in DPC++;
+
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)

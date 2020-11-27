@@ -18,7 +18,7 @@ def main():
   build_path = sys.argv[2]
   root_path = build_utils.get_root(sys.argv[2])
   gtpin_path = os.path.join(root_path, "gtpin")
-  arch_file = os.path.join(gtpin_path, "external-gtpin-2.9.1-linux.tar.bz2")
+  arch_file = os.path.join(gtpin_path, "external-gtpin-2.11.4-linux.tar.bz2")
   build_utils.unpack(arch_file, build_path)
 
   src_path = os.path.join(build_path, "Profilers")

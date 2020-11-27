@@ -15,7 +15,7 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["cl_hot_kernels", "gpu", "cpu",  "dpc", "omp"],
            ["gpu_info", "-d", "-m"],
            ["gpu_inst_count", "cl", "ze", "dpc"],
-           ["gpu_perfmon_read", "cl"],
+           ["gpu_perfmon_read", "cl", "ze", "dpc"],
            ["gpu_perfmon_set", None],
            ["ze_gemm", None],
            ["ze_debug_info", "gpu", "dpc"],
@@ -27,7 +27,8 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["ze_intercept", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging"],
            ["omp_gemm", "gpu", "cpu"],
            ["omp_hot_regions", "gpu", "cpu"],
-           ["dpc_gemm", "gpu", "cpu", "host"]]
+           ["dpc_gemm", "gpu", "cpu", "host"],
+           ["dpc_info", "-a", "-l"]]
 
 def remove_python_cache(path):
   files = os.listdir(path)

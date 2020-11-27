@@ -71,7 +71,6 @@ As a result, assembly listing annotated with dynamic instruction count for each 
 [     32768] 0x0388:          illegal
 [     32768] 0x0398:          illegal
 [     32768] 0x03A8:          illegal
-===========================
 ```
 ## Supported OS
 - Linux

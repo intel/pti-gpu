@@ -4,13 +4,15 @@ This sample is a simple tool that allows to collect specific OpenMP* regions wit
 
 As a result, table like the following will be printed.
 ```
-+------------------------------------------------------------------------------+
-| Region ID  |     Region Type    | Call Count | Avg Time, ms | Total Time, ms |
-+------------------------------------------------------------------------------+
-|     403291 |             Target |          4 |        0.074 |          0.297 |
-|     403292 |   TransferToDevice |         40 |        0.000 |          0.019 |
-|     403293 | TransferFromDevice |          4 |        0.001 |          0.002 |
-+------------------------------------------------------------------------------+
+=== OpenMP Timing Results: ===
+
+Total Execution Time (ns): 3243751492
+Total Region Time (ns): 186811670
+
+           Region ID,         Region Type,       Calls, Transferred (bytes),           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+             4203121,              Target,           4,                   0,           180761706,     96.76,            45190426,            44939097,            45505303
+             4203122,    TransferToDevice,           8,            33554432,             4119470,      2.21,              514933,              364952,              628467
+             4203123,  TransferFromDevice,           4,            16777216,             1930494,      1.03,              482623,              478523,              484546
 ```
 ## Supported OS
 - Linux

@@ -27,15 +27,15 @@ def build(path):
 
 def parse(output):
   lines = output.split("\n")
-  total_time = 0.0
+  total_time = 0
   for line in lines:
-    items = line.split("|")
-    if len(items) < 6 or line.find("Region") != -1:
+    items = line.split(",")
+    if len(items) < 9 or line.find("Region") != -1:
       continue
-    region_id = int(items[1].strip(), 16)
-    region_type = items[2].strip()
-    call_count = int(items[3].strip())
-    time = float(items[4].strip())
+    region_id = int(items[0].strip(), 16)
+    region_type = items[1].strip()
+    call_count = int(items[2].strip())
+    time = int(items[4].strip())
     if not region_id or not region_type or call_count <= 0:
       return False
     total_time += time
@@ -50,18 +50,16 @@ def run(path, option):
   p = subprocess.Popen([app_file, option, "1024", "1"], env = e,\
     cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
-  if stderr:
-    return stderr
+  if not stderr:
+    return stdout
   if stdout.find(" CORRECT") == -1:
     return stdout
-  if stdout.find("Job is successfully completed") == -1:
-    return stdout
-  if option == "gpu" and stdout.find("Target") == -1:
-    return stdout
-  if option == "cpu" and stdout.find("Parallel") == -1:
-    return stdout
-  if not parse(stdout):
-    return stdout
+  if stderr == "gpu" and stderr.find("Target") == -1:
+    return stderr
+  if stderr == "cpu" and stderr.find("Parallel") == -1:
+    return stderr
+  if not parse(stderr):
+    return stderr
   return None
 
 def main(option):

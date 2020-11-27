@@ -1,4 +1,4 @@
-# GPU Info
+# Level Zero Metrics Info
 ## Overview
 This sample application queries the information about the hardwre metrics for Intel(R) Processor Graphics, available to collect through Level Zero Metrics API.
 

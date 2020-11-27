@@ -102,6 +102,12 @@ static void OnKernelComplete(GTPinKernelExec kernelExec, void* v) {
 }
 ```
 
+**Note**, that to use GT-Pin tools with oneAPI Level Zero (Level Zero) one should set the following environment variables:
+```
+ZET_ENABLE_API_TRACING_EXP=1
+ZET_ENABLE_PROGRAM_INSTRUMENTATION=1
+```
+
 ## Usage Details
 - refer to [Graphics Technology Pin (GT Pin)](../../gtpin) project page to learn more on binary instrumentation techniques for Intel(R) Processor Graphics
 - refer to

@@ -69,7 +69,7 @@ float ComputeOnGPU(const std::vector<float>& a,
   int size2 = size * size;
 
   #pragma omp target teams distribute parallel for collapse(2)\
-    map(to: a_data[0:size2], b_data[0:size2]) map(tofrom: c_data[0:size2])
+    map(to: a_data[0:size2], b_data[0:size2]) map(from: c_data[0:size2])
   for (unsigned i = 0; i < size; ++i) {
     for (unsigned j = 0; j < size; ++j) {
       float sum = 0.0f;

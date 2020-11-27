@@ -62,16 +62,14 @@ def run(path, option):
     p = subprocess.Popen(["./gpu_inst_count", app_file, "gpu", "1024", "1"],\
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
-  if stderr:
-    return stderr
+  if not stderr:
+    return stdout
   if stdout.find(" CORRECT") == -1:
     return stdout
-  if stdout.find("Job is successfully completed") == -1:
-    return stdout
-  if stdout.find("add") == -1 or stdout.find("mov") == -1 or stdout.find("send") == -1:
-    return stdout
-  if not parse(stdout):
-    return stdout
+  if stderr.find("add") == -1 or stderr.find("mov") == -1 or stderr.find("send") == -1:
+    return stderr
+  if not parse(stderr):
+    return stderr
   return None
 
 def main(option):

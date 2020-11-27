@@ -76,7 +76,6 @@ As a result, assembly listing annotated with percentage of cycles PM register wa
 [       -] 0x0398:          illegal
 [       -] 0x03A8:          illegal
 Total PM percentage: 26.24%
-===========================
 ```
 ## Supported OS
 - Linux

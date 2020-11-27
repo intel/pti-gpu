@@ -5,165 +5,139 @@
 // =============================================================
 
 #include <chrono>
-#include <iomanip>
-#include <iostream>
-#include <map>
-#include <mutex>
 #include <stack>
-#include <thread>
 
 #include <omp-tools.h>
 
-#include "pti_assert.h"
-
-const char* kLine =
-  "+---------------------------------------"
-  "---------------------------------------+";
-const char* kHeader =
-  "| Region ID  |     Region Type    | Call"
-  " Count | Avg Time, ms | Total Time, ms |";
-
-enum RegionType {
-  REGION_TYPE_PARALLEL = 0,
-  REGION_TYPE_TARGET,
-  REGION_TYPE_TRANSFER_TO_DEVICE,
-  REGION_TYPE_TRANSFER_FROM_DEVICE
-};
-
-struct RegionInfo {
-  float time;
-  unsigned call_count;
-  RegionType type;
-};
+#include "omp_region_collector.h"
 
 using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
-using RegionMap = std::map<uint64_t, RegionInfo>;
-
-class ToolContext;
-static ToolContext* context = nullptr;
 static thread_local std::stack<TimePoint> time_point;
 
+static OmpRegionCollector* collector = nullptr;
+static std::chrono::steady_clock::time_point start;
+
 // Internal Tool Functionality ////////////////////////////////////////////////
-
-class ToolContext {
- public:
-  ToolContext() {}
-
-  void UpdateRegionMap(uint64_t id, RegionInfo region) {
-    const std::lock_guard<std::mutex> lock(lock_);
-
-    if (region_map_.count(id) == 0) {
-      region_map_[id] = region;
-    } else {
-      region_map_[id].time += region.time;
-      region_map_[id].call_count += region.call_count;
-      PTI_ASSERT(region_map_[id].type == region.type);
-    }
-  }
-
-  const RegionMap& GetRegionMap() const {
-    return region_map_;
-  }
-
- private:
-  RegionMap region_map_;
-  std::mutex lock_;
-};
 
 static void PushTimestamp() {
   time_point.push(std::chrono::steady_clock::now());
 }
 
-static float PopTimestamp() {
+static uint64_t PopTimestamp() {
+  TimePoint end = std::chrono::steady_clock::now();
+
   PTI_ASSERT(time_point.size() > 0);
   TimePoint start = time_point.top();
   time_point.pop();
-  TimePoint end = std::chrono::steady_clock::now();
-  std::chrono::duration<float> time = end - start;
+
+  std::chrono::duration<uint64_t, std::nano> time = end - start;
   return time.count();
 }
 
-static void RegionBegin() {
+static void ParallelBegin(
+    ompt_data_t* task_data, const ompt_frame_t* task_frame,
+    ompt_data_t* parallel_data, unsigned int requested_parallelism,
+    int flags, const void* codeptr_ra) {
   PushTimestamp();
 }
 
-static void RegionEnd(RegionType type, const void* codeptr_ra) {
-  PTI_ASSERT(context != nullptr);
-  float time = PopTimestamp();
-  uint64_t id = reinterpret_cast<uint64_t>(codeptr_ra);
-  id += type;
-  context->UpdateRegionMap(id, {time, 1, type});
+static void ParallelEnd(
+    ompt_data_t* parallel_data, ompt_data_t* task_data,
+    int flags, const void* codeptr_ra) {
+  uint64_t time = PopTimestamp();
+  PTI_ASSERT(collector != nullptr);
+  collector->AddRegion(
+      reinterpret_cast<uint64_t>(codeptr_ra),
+      REGION_TYPE_PARALLEL, time, 0);
 }
 
-static void ParallelBegin(ompt_data_t* task_data,
-                   const ompt_frame_t* task_frame,
-                   ompt_data_t* parallel_data,
-                   unsigned int requested_parallelism,
-                   int flags,
-                   const void* codeptr_ra) {
-  RegionBegin();
-}
-
-static void ParallelEnd(ompt_data_t* parallel_data,
-                 ompt_data_t* task_data,
-                 int flags,
-                 const void* codeptr_ra) {
-  RegionEnd(REGION_TYPE_PARALLEL, codeptr_ra);
-}
-
-static void Target(ompt_target_t kind,
-            ompt_scope_endpoint_t endpoint,
-            int device_num,
-            ompt_data_t* task_data,
-            ompt_id_t target_id,
-            const void* codeptr_ra) {
+static void Target(
+    ompt_target_t kind, ompt_scope_endpoint_t endpoint,
+    int device_num, ompt_data_t* task_data,
+    ompt_id_t target_id, const void* codeptr_ra) {
   if (kind != ompt_target) {
     return;
   }
 
   if (endpoint == ompt_scope_begin) {
-    RegionBegin();
+    PushTimestamp();
   } else {
-    RegionEnd(REGION_TYPE_TARGET, codeptr_ra);
+    uint64_t time = PopTimestamp();
+    PTI_ASSERT(collector != nullptr);
+    collector->AddRegion(
+        reinterpret_cast<uint64_t>(codeptr_ra),
+        REGION_TYPE_TARGET, time, 0);
   }
 }
 
-static void TargetDataOp(ompt_scope_endpoint_t endpoint,
-                  ompt_id_t target_id,
-                  ompt_id_t host_op_id,
-                  ompt_target_data_op_t optype,
-                  void *src_addr,
-                  int src_device_num,
-                  void *dest_addr,
-                  int dest_device_num,
-                  size_t bytes,
-                  const void *codeptr_ra) {
+static void TargetDataOp(
+    ompt_scope_endpoint_t endpoint, ompt_id_t target_id,
+    ompt_id_t host_op_id, ompt_target_data_op_t optype,
+    void *src_addr, int src_device_num,
+    void *dest_addr, int dest_device_num,
+    size_t bytes, const void *codeptr_ra) {
   if (optype == ompt_target_data_transfer_to_device ||
       optype == ompt_target_data_transfer_from_device) {
     if (endpoint == ompt_scope_begin) {
-      RegionBegin();
+      PushTimestamp();
     } else {
+      uint64_t time = PopTimestamp();
+      PTI_ASSERT(collector != nullptr);
       if (optype == ompt_target_data_transfer_to_device) {
-        RegionEnd(REGION_TYPE_TRANSFER_TO_DEVICE, codeptr_ra);
+        collector->AddRegion(
+            reinterpret_cast<uint64_t>(codeptr_ra),
+            REGION_TYPE_TRANSFER_TO_DEVICE, time, bytes);
       } else if (optype == ompt_target_data_transfer_from_device) {
-        RegionEnd(REGION_TYPE_TRANSFER_FROM_DEVICE, codeptr_ra);
+        collector->AddRegion(
+            reinterpret_cast<uint64_t>(codeptr_ra),
+            REGION_TYPE_TRANSFER_FROM_DEVICE, time, bytes);
       }
     }
   }
 }
 
-static int Initialize(ompt_function_lookup_t lookup,
-               int initial_device_num,
-               ompt_data_t* data) {
+static void PrintResults() {
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  std::chrono::duration<uint64_t, std::nano> time = end - start;
+
+  PTI_ASSERT(collector != nullptr);
+  const RegionMap& region_map = collector->GetRegionMap();
+  if (region_map.size() == 0) {
+    return;
+  }
+
+  uint64_t total_duration = 0;
+  for (auto& value : region_map) {
+    total_duration += value.second.total_time;
+  }
+
+  std::cerr << std::endl;
+  std::cerr << "=== OpenMP Timing Results: ===" << std::endl;
+  std::cerr << std::endl;
+  std::cerr << "Total Execution Time (ns): " << time.count() << std::endl;
+  std::cerr << "Total Region Time (ns): " << total_duration << std::endl;
+  std::cerr << std::endl;
+
+  if (total_duration > 0) {
+    OmpRegionCollector::PrintRegionTable(region_map);
+  }
+
+  std::cerr << std::endl;
+}
+
+static int Initialize(
+    ompt_function_lookup_t lookup,
+    int initial_device_num,
+    ompt_data_t* data) {
   ompt_set_callback_t ompt_set_callback =
     reinterpret_cast<ompt_set_callback_t>(lookup("ompt_set_callback"));
-  PTI_ASSERT(ompt_set_callback != nullptr);  
+  if (ompt_set_callback == nullptr) {
+    std::cerr << "[WARNING] Unable to create OpenMP region collector" <<
+      std::endl;
+    return 0;
+  }
 
   ompt_set_result_t result = ompt_set_error;
-
-  PTI_ASSERT(context == nullptr);
-  context = new ToolContext;
-  PTI_ASSERT(context != nullptr);
 
   result = ompt_set_callback(ompt_callback_parallel_begin,
     reinterpret_cast<ompt_callback_t>(ParallelBegin));
@@ -179,49 +153,13 @@ static int Initialize(ompt_function_lookup_t lookup,
     reinterpret_cast<ompt_callback_t>(TargetDataOp));
   PTI_ASSERT(result == ompt_set_always);
 
+  PTI_ASSERT(collector == nullptr);
+
+  collector = OmpRegionCollector::Create();
+  PTI_ASSERT(collector != nullptr);
+  start = std::chrono::steady_clock::now();
+
   return 1;
-}
-
-static const char* GetTypeString(RegionType type) {
-  switch(type) {
-    case REGION_TYPE_PARALLEL:
-      return "Parallel";
-    case REGION_TYPE_TARGET:
-      return "Target";
-    case REGION_TYPE_TRANSFER_FROM_DEVICE:
-      return "TransferFromDevice";
-    case REGION_TYPE_TRANSFER_TO_DEVICE:
-      return "TransferToDevice";
-    default:
-      break;
-  }
-  return "";
-}
-
-static void PrintResults() {
-  PTI_ASSERT(context != nullptr);
-
-  const RegionMap& region_map = context->GetRegionMap();
-  if (region_map.size() == 0) {
-    return;
-  }
-
-  std::cout << kLine << std::endl;
-  std::cout << kHeader << std::endl;
-  std::cout << kLine << std::endl;
-
-  for (auto region : region_map) {
-    PTI_ASSERT(region.second.call_count > 0);
-    std::cout << "| " << std::hex << std::setw(10) << region.first << " | " <<
-      std::setw(18) << GetTypeString(region.second.type) << " | " <<
-      std::setw(10) << std::dec << region.second.call_count << " | " <<
-      std::setw(12) << std::setprecision(3) << std::fixed <<
-      region.second.time / region.second.call_count << " | " <<
-      std::setw(14) << region.second.time << " |" << std::endl;
-  }
-
-  std::cout << kLine << std::endl;
-  std::cout << "[INFO] Job is successfully completed" << std::endl;
 }
 
 static void Finalize(ompt_data_t* data) {
@@ -231,17 +169,17 @@ static void Finalize(ompt_data_t* data) {
     delete result;
   }
 
-  PrintResults();
-
-  PTI_ASSERT(context != nullptr);
-  delete context;
+  if (collector != nullptr) {
+    PrintResults();
+    delete collector;
+  }
 }
 
 // Internal Tool Interface ////////////////////////////////////////////////////
 
 ompt_start_tool_result_t* ompt_start_tool(
     unsigned int omp_version, const char* runtime_version) {
-  std::cout << "[INFO] OMP Runtime Version: " << runtime_version << std::endl;
+  std::cerr << "[INFO] OMP Runtime Version: " << runtime_version << std::endl;
 
   ompt_start_tool_result_t* result = new ompt_start_tool_result_t;
   result->initialize = Initialize;
