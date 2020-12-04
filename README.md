@@ -62,10 +62,11 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - [gpu_perfmon_read](samples/gpu_perfmon_read) - prints GPU kernel assembly (GEN ISA) annotated by specific HW metric, which is accumulated in EU PerfMon register;
 
 ## Utilities
-- [gpu_info](samples/gpu_info) - provides basic information about the GPU installed in a system, and the list of HW metrics one can collect for it;
-- [ze_metric_info](samples/ze_metric_info) - prints the list of HW metrics one can collect with the help of Level Zero;
-- [gpu_perfmon_set](samples/gpu_perfmon_set) - allows to choose HW metric for collection in EU PerfMon register;
 - [dpc_info](samples/dpc_info) - prints information on avaialble platforms and devices in DPC++;
+- [ze_info](samples/ze_info) - prints information on avaialble platforms and devices in Level Zero;
+- [ze_metric_info](samples/ze_metric_info) - prints the list of HW metrics one can collect with the help of Level Zero;
+- [gpu_info](samples/gpu_info) - provides basic information about the GPU installed in a system, and the list of HW metrics one can collect for it;
+- [gpu_perfmon_set](samples/gpu_perfmon_set) - allows to choose HW metric for collection in EU PerfMon register;
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)
