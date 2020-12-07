@@ -320,6 +320,13 @@ def gen_enter_callback(f, func, params, enum_map):
         f.write("      std::cerr << (*(params->p" + name + "))->mode << \" \";\n")
         f.write("      std::cerr << (*(params->p" + name + "))->priority << \"}\";\n")
         f.write("    }\n")
+      elif type.find("ze_kernel_desc_t*") >= 0:
+        f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+        f.write("      std::cerr << \" {\" << (*(params->p" + name + "))->stype << \" \";\n")
+        f.write("      std::cerr << (*(params->p" + name + "))->pNext << \" \";\n")
+        f.write("      std::cerr << (*(params->p" + name + "))->flags << \" \";\n")
+        f.write("      std::cerr << (*(params->p" + name + "))->pKernelName << \"}\";\n")
+        f.write("    }\n")
   f.write("    std::cerr << std::endl;\n")
   f.write("  }\n")
 
