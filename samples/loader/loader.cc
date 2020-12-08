@@ -115,8 +115,8 @@ int main(int argc, char* argv[]) {
   int app_index = parse_args(argc, argv);
   if (app_index >= argc) {
     std::cout << "[ERROR] Invalid command line" << std::endl;
-    delete lib;
     usage();
+    delete lib;
     return 0;
   }
   std::vector<char*> app_args;
@@ -157,8 +157,8 @@ int main(int argc, char* argv[]) {
   if (!ok) {
     std::cout << "[ERROR] Failed to launch target application: " <<
       command_line.c_str() << std::endl;
-    delete lib;
     usage();
+    delete lib;
     return 0;
   }
 
