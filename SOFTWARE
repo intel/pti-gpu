@@ -19,7 +19,7 @@ metrics-discovery:
     - sudo make install
     - sudo make package
     - sudo dpkg -i *.deb
-    commit: 53613756a58d723b53b0e1d77f841bc465b36d06
+    commit: 17f4240027df2dd8981200f6d8cf5e20f8015fd3
     url: https://github.com/intel/metrics-discovery
 metrics-library:
   github:
@@ -43,8 +43,7 @@ oneapit-toolkits:
     apt_repo: deb https://apt.repos.intel.com/oneapi all main
     apt_source: /etc/apt/sources.list.d/oneAPI.list
     packages:
-    - intel-basekit=2021.1-2261.beta10
-    - intel-hpckit=2021.1-2477.beta10
+    - intel-basekit=2021.1.0-2659
 finalize:
   config:
     commands:

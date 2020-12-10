@@ -19,7 +19,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 *Some samples may have higher hardware requirements*
 
 ## Tested Configurations
-- Ubuntu 19.10 with Intel(R) Iris(R) Plus Graphics 655
+- Ubuntu 20.04 with Intel(R) Iris(R) Plus Graphics 655
 
 ## Profiling Chapters
 1. Runtime API Tracing
@@ -72,9 +72,11 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 - [CMake](https://cmake.org/) (version 2.8 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.8 and above)
-- One have to be a part of `video` user group to do any computations on Intel(R) Processor Graphics:
+- On Linux one have to be a part of `video` (Unbuntu 18 and below) or `render` (Ubuntu 19 and above) user group to do any computations on Intel(R) Processor Graphics:
     ```sh
     sudo usermod -a -G video <username>
+    # OR
+    sudo usermod -a -G render <username>
     ```
 - OpenCL(TM) [ICD Loader](https://github.com/KhronosGroup/OpenCL-ICD-Loader) and [Headers](https://github.com/KhronosGroup/OpenCL-Headers)
     - to use non-standard path to OpenCL ICD library one may add it into `LD_LIBRARY_PATH`:
@@ -91,7 +93,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
         ```
 - [Metrics Library for Metrics Discovery API (Metrics Library for MD API)](https://github.com/intel/metrics-library)
 - [Graphics Technology Pin (GT Pin)](./gtpin)
-- [Intel(R) oneAPI HPC Toolkit](https://software.intel.com/en-us/oneapi/hpc-kit)
+- [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html)
 - [libdrm](https://gitlab.freedesktop.org/mesa/drm)
     - on Ubuntu one may perform:
         ```
@@ -154,10 +156,6 @@ python <pti_root>/tests/run.py -c
     ```sh
     export PATH=/opt/gcc/7.4.0/bin/:$PATH
     export LD_LIBRARY_PATH=/opt/gcc/7.4.0/lib:/opt/gcc/7.4.0/lib64:$LD_LIBRARY_PATH
-    ```
-3. On Ubuntu 19.04 (Linux kernel 5.3) it may be needed to add user into "render" group to run GPU applications:
-    ```sh
-    sudo usermod -a -G render <username>
     ```
 
 ##

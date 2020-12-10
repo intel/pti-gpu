@@ -22,7 +22,7 @@ Total execution time: 5.37699 sec
 - [CMake](https://cmake.org/) (version 2.8 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
-- [Intel(R) oneAPI HPC Toolkit](https://software.intel.com/en-us/oneapi/hpc-kit)
+- [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html)
 
 ## Build and Run
 ### Linux
@@ -32,7 +32,7 @@ source <inteloneapi>/setvars.sh
 cd <pti>/samples/omp_gemm
 mkdir build
 cd build
-CXX=icpc cmake -DCMAKE_BUILD_TYPE=Release ..
+CXX=icpx cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 Use this command line to run the application:

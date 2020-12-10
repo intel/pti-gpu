@@ -22,7 +22,7 @@ Total Region Time (ns): 186811670
 - [CMake](https://cmake.org/) (version 2.8 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
-- [Intel(R) oneAPI HPC Toolkit](https://software.intel.com/en-us/oneapi/hpc-kit) (version beta05 and above)
+- [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html)
 
 ## Build and Run
 ### Linux
@@ -32,7 +32,7 @@ source <inteloneapi>/setvars.sh
 cd <pti>/samples/omp_hot_regions
 mkdir build
 cd build
-CXX=icpc cmake -DCMAKE_BUILD_TYPE=Release ..
+CXX=icpx cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 Use this command line to run the tool:
@@ -44,12 +44,13 @@ One may use [omp_gemm](../omp_gemm) as target application:
 OMP_TOOL_LIBRARIES=./libomp_hot_regions.so ../../omp_gemm/build/omp_gemm
 ```
 ### Windows
-Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample:
+Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you use Intel(R) C++ Compiler for building):
 ```sh
 <inteloneapi>\setvars.sh
 cd <pti>\samples\omp_hot_regions
 mkdir build
 cd build
+set CXX=icl
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release ..
 nmake
 ```
