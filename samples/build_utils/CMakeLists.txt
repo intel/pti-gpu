@@ -90,8 +90,8 @@ macro(FindOpenCLHeaders TARGET)
     set(CMAKE_EXTRA_INCLUDE_FILES)
   endif()
   if (NOT (OPENCL_INC_FOUND AND CL_KERNEL_SUB_GROUP_INFO_SIZE))
-    RequirePythonInterp()
     set(OPENCL_INC_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
 
     add_custom_target(cl_headers ALL
                       DEPENDS "${OPENCL_INC_PATH}/CL/cl.h"
@@ -209,6 +209,7 @@ endmacro()
 
 macro(GetIGAHeaders TARGET)
   set(IGA_INC_PATH "${CMAKE_BINARY_DIR}")
+  RequirePythonInterp()
 
   add_custom_target(iga_headers ALL
                     DEPENDS ${IGA_INC_PATH}/IGA/iga.h
