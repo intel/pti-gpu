@@ -71,7 +71,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 2.8 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
-- [Python](https://www.python.org/) (version 2.8 and above)
+- [Python](https://www.python.org/) (version 2.7 and above)
 - On Linux one have to be a part of `video` (Unbuntu 18 and below) or `render` (Ubuntu 19 and above) user group to do any computations on Intel(R) Processor Graphics:
     ```sh
     sudo usermod -a -G video <username>
