@@ -92,7 +92,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
         sudo echo 0 > /proc/sys/dev/i915/perf_stream_paranoid
         ```
 - [Metrics Library for Metrics Discovery API (Metrics Library for MD API)](https://github.com/intel/metrics-library)
-- [Graphics Technology Pin (GT Pin)](./gtpin)
+- [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html)
 - [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html)
 - [libdrm](https://gitlab.freedesktop.org/mesa/drm)
     - on Ubuntu one may perform:

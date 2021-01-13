@@ -85,7 +85,7 @@ Total PM percentage: 26.24%
 - [CMake](https://cmake.org/) (version 2.8 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
-- [Graphics Technology Pin (GT Pin)](../../gtpin)
+- [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html)
 
 ## Build and Run
 ### Linux

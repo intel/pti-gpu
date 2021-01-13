@@ -1,7 +1,7 @@
 level-zero-loader:
   deb:
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.0.16/level-zero_1.0.16+u18.04_amd64.deb
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.0.16/level-zero-devel_1.0.16+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.0.26/level-zero_1.0.26+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.0.26/level-zero-devel_1.0.26+u18.04_amd64.deb
 compute-runtime:
   deb:
   - https://github.com/intel/compute-runtime/releases/download/20.44.18297/intel-gmmlib_20.3.2_amd64.deb
@@ -36,7 +36,7 @@ gtpin:
     commands:
     - tar -xf {} -C {}
     install_path: ~/
-    url: https://github.com/intel/pti-gpu/blob/master/gtpin/external-gtpin-2.11.4-linux.tar.bz2
+    url: https://software.intel.com/content/dam/develop/public/us/en/protected/external-gtpin-2.11.4-linux.tar.bz2
 oneapit-toolkits:
   apt:
     apt_key: https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB
