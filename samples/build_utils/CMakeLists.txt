@@ -64,20 +64,20 @@ macro(FindOpenCLLibrary TARGET)
     string(REPLACE ":" ";" SEARCH_LIB_PATH $ENV{LD_LIBRARY_PATH})
   endif()
 
-  find_library(L0_LIB_PATH
+  find_library(OPENCL_LIB_PATH
     NAMES OpenCL
     PATHS ${SEARCH_LIB_PATH})
-  if(NOT L0_LIB_PATH)
+  if(NOT OPENCL_LIB_PATH)
     message(FATAL_ERROR
       "OpenCL library is not found. "
       "You may need to install OpenCL ICD Loader (e.g. by Khrono) to fix this issue.")
   else()
     message(STATUS
-      "OpenCL library is found at ${L0_LIB_PATH}")
+      "OpenCL library is found at ${OPENCL_LIB_PATH}")
   endif()
 
   target_link_libraries(${TARGET}
-    "${L0_LIB_PATH}")
+    "${OPENCL_LIB_PATH}")
 endmacro()
 
 macro(FindOpenCLHeaders TARGET)
@@ -444,7 +444,7 @@ macro(FindL0Library TARGET)
   if(NOT L0_LIB_PATH)
     message(FATAL_ERROR
       "Level Zero loader is not found. "
-      "You may need to install oneAPI Level Zero Driver to fix this issue.")
+      "You may need to install oneAPI Level Zero loader to fix this issue.")
   else()
     message(STATUS
       "Level Zero loader is found at ${L0_LIB_PATH}")
@@ -459,11 +459,13 @@ macro(FindL0Headers TARGET)
     set(CMAKE_REQUIRED_INCLUDES ${CMAKE_INCLUDE_PATH})
   endif()
   include(CheckIncludeFileCXX)
-  check_include_file_cxx(level_zero/ze_api.h LO_INC_FOUND)
-  if (NOT LO_INC_FOUND)
+  check_include_file_cxx(level_zero/ze_api.h LO_CORE_INC_FOUND)
+  check_include_file_cxx(level_zero/zet_api.h LO_TOOLS_INC_FOUND)
+  check_include_file_cxx(level_zero/layers/zel_tracing_api.h LO_LAYERS_INC_FOUND)
+  if ((NOT LO_CORE_INC_FOUND) OR (NOT LO_TOOLS_INC_FOUND) OR (NOT LO_LAYERS_INC_FOUND))
     message(FATAL_ERROR
       "Level Zero headers are not found. "
-      "You may need to install oneAPI Level Zero Driver to fix this issue.")
+      "You may need to install oneAPI Level Zero loader 1.0.26+ to fix this issue.")
   endif()
   set(CMAKE_REQUIRED_INCLUDES)
 endmacro()

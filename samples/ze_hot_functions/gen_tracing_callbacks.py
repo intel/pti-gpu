@@ -232,7 +232,7 @@ def get_enum_map(include_path):
 # Generate Callbacks ##########################################################
 
 def gen_api(f, func_list, group_map):
-  f.write("static void SetTracingAPIs(zet_tracer_exp_handle_t tracer) {\n")
+  f.write("static void SetTracingAPIs(zel_tracer_handle_t tracer) {\n")
   f.write("  zet_core_callbacks_t prologue = {};\n")
   f.write("  zet_core_callbacks_t epilogue = {};\n")
   f.write("\n")
@@ -252,9 +252,9 @@ def gen_api(f, func_list, group_map):
       f.write("#endif //" + callback_cond + "\n")
   f.write("\n")
   f.write("  ze_result_t status = ZE_RESULT_SUCCESS;\n")
-  f.write("  status = zetTracerExpSetPrologues(tracer, &prologue);\n")
+  f.write("  status = zelTracerSetPrologues(tracer, &prologue);\n")
   f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
-  f.write("  status = zetTracerExpSetEpilogues(tracer, &epilogue);\n")
+  f.write("  status = zelTracerSetEpilogues(tracer, &epilogue);\n")
   f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
   f.write("}\n")
   f.write("\n")

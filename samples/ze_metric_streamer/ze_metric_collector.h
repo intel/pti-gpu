@@ -15,6 +15,8 @@
 #include <thread>
 #include <vector>
 
+#include <level_zero/layers/zel_tracing_api.h>
+
 #include "ze_utils.h"
 
 enum CollectorState {
@@ -49,10 +51,10 @@ class ZeMetricCollector {
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    zet_tracer_exp_desc_t tracer_desc = {
-        ZET_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
-    zet_tracer_exp_handle_t tracer = nullptr;
-    status = zetTracerExpCreate(context, &tracer_desc, &tracer);
+    zel_tracer_desc_t tracer_desc = {
+        ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
+    zel_tracer_handle_t tracer = nullptr;
+    status = zelTracerCreate(&tracer_desc, &tracer);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr <<
         "[WARNING] Unable to create Level Zero tracer for target context" <<
@@ -71,7 +73,7 @@ class ZeMetricCollector {
     PTI_ASSERT(collector_state_ == COLLECTOR_STATE_IDLE);
 
     if (tracer_ != nullptr) {
-      status = zetTracerExpDestroy(tracer_);
+      status = zelTracerDestroy(tracer_);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
 
@@ -82,7 +84,7 @@ class ZeMetricCollector {
 
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
-    ze_result_t status = zetTracerExpSetEnabled(tracer_, false);
+    ze_result_t status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
@@ -140,7 +142,7 @@ class ZeMetricCollector {
     PTI_ASSERT(metric_group_ != nullptr);
   }
 
-  void EnableTracing(zet_tracer_exp_handle_t tracer) {
+  void EnableTracing(zel_tracer_handle_t tracer) {
     PTI_ASSERT(tracer != nullptr);
     tracer_ = tracer;
 
@@ -152,9 +154,9 @@ class ZeMetricCollector {
       OnExitCommandQueueDestroy;
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zetTracerExpSetEpilogues(tracer_, &epilogue_callbacks);
+    status = zelTracerSetEpilogues(tracer_, &epilogue_callbacks);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    status = zetTracerExpSetEnabled(tracer_, true);
+    status = zelTracerSetEnabled(tracer_, true);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
@@ -308,7 +310,7 @@ class ZeMetricCollector {
  private: // Data
   ze_device_handle_t device_ = nullptr;
   ze_context_handle_t context_ = nullptr;
-  zet_tracer_exp_handle_t tracer_ = nullptr;
+  zel_tracer_handle_t tracer_ = nullptr;
 
   std::thread* collector_thread_ = nullptr;
   std::atomic<CollectorState> collector_state_{COLLECTOR_STATE_IDLE};

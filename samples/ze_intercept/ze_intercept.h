@@ -53,11 +53,10 @@ class ZeIntercept {
 
       bool call_tracing = intercept->CheckOption(ZEI_CALL_LOGGING);
       api_collector = ZeApiCollector::Create(
-          driver, intercept->start_time_, call_tracing,
+          intercept->start_time_, call_tracing,
           callback, intercept);
       if (api_collector == nullptr) {
-        std::cerr << "[WARNING] Unable to create API collector" <<
-          " for target context" << std::endl;
+        std::cerr << "[WARNING] Unable to create API collector" << std::endl;
         delete intercept;
         return nullptr;
       }
@@ -80,10 +79,10 @@ class ZeIntercept {
       }
 
       kernel_collector = ZeKernelCollector::Create(
-          driver, intercept->start_time_, callback, intercept);
+          intercept->start_time_, callback, intercept);
       if (kernel_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create kernel collector" <<
-          " for target context" << std::endl;
+          std::endl;
         delete intercept;
         return nullptr;
       }

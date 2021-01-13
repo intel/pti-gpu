@@ -70,7 +70,7 @@ extern "C"
 __declspec(dllexport)
 #endif
 void SetToolEnv() {
-  utils::SetEnv("ZET_ENABLE_API_TRACING_EXP=1");
+  utils::SetEnv("ZE_ENABLE_TRACING_LAYER=1");
   utils::SetEnv("ZET_ENABLE_METRICS=1");
 }
 
@@ -241,7 +241,7 @@ void EnableProfiling() {
     return;
   }
 
-  kernel_collector = ZeKernelCollector::Create(driver);
+  kernel_collector = ZeKernelCollector::Create();
   if (kernel_collector == nullptr) {
     return;
   }

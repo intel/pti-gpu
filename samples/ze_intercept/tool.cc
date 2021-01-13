@@ -81,7 +81,7 @@ extern "C"
 __declspec(dllexport)
 #endif
 void SetToolEnv() {
-  utils::SetEnv("ZET_ENABLE_API_TRACING_EXP=1");
+  utils::SetEnv("ZE_ENABLE_TRACING_LAYER=1");
 }
 
 static unsigned ReadArgs() {

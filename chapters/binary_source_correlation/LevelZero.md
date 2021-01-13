@@ -13,7 +13,7 @@ This chapter describes the interfaces and solutions one can use to deal with one
 - Intel(R) Processor Graphics GEN9+
 
 **Needed Headers**:
-- [zet_api.h](https://github.com/oneapi-src/level-zero/blob/master/include/tools/zet_api.h)
+- [zet_api.h](https://github.com/oneapi-src/level-zero/blob/master/include/zet_api.h)
 - [patch_list.h](https://github.com/intel/intel-graphics-compiler/blob/master/IGC/AdaptorOCL/ocl_igc_shared/executable_format/patch_list.h)
 - [program_debug_data.h](https://github.com/intel/intel-graphics-compiler/blob/master/IGC/AdaptorOCL/ocl_igc_shared/executable_format/program_debug_data.h)
 - Intel(R) Processor Graphics Assembler (IGA) [headers](https://github.com/intel/intel-graphics-compiler/tree/master/visa/iga/IGALibrary/api)

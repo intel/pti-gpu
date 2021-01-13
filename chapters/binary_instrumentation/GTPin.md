@@ -17,10 +17,10 @@ Unlike Pin, Graphics Technology Pin (GT Pin) does not support arbitrary instrume
 - Intel(R) Processor Graphics GEN9+
 
 **Needed Headers**:
-- Graphics Technology Pin (GT Pin) headers from the [release package](../../gtpin)
+- [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html) headers
 
 **Needed Libraries**:
-- Graphics Technology Pin (GT Pin) libraries from the [release package](../../gtpin)
+- [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html) libraries
 
 ## How To Use
 To start using Graphics Technology Pin (GT Pin), one need to initialize it first. Note, that such an initialization should be performed ***before*** any work with GPU runtimes (like OpenCL) - otherwise some kernels may not be captured.

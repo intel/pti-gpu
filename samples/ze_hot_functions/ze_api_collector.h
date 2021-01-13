@@ -14,7 +14,7 @@
 #include <mutex>
 #include <set>
 
-#include <level_zero/zet_api.h>
+#include <level_zero/layers/zel_tracing_api.h>
 
 #include "utils.h"
 #include "ze_utils.h"
@@ -50,31 +50,23 @@ typedef void (*OnFunctionFinishCallback)(
 class ZeApiCollector {
  public: // User Interface
   static ZeApiCollector* Create(
-      ze_driver_handle_t driver,
       FunctionTimePoint base_time = std::chrono::steady_clock::now(),
       bool call_tracing = false,
       OnFunctionFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
-    PTI_ASSERT(driver != nullptr);
-
-    ze_context_handle_t context = utils::ze::GetContext(driver);
-    PTI_ASSERT(context != nullptr);
-
     ZeApiCollector* collector =
-      new ZeApiCollector(context, base_time, call_tracing,
+      new ZeApiCollector(base_time, call_tracing,
                          callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    zet_tracer_exp_desc_t tracer_desc = {
-      ZET_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
-    zet_tracer_exp_handle_t tracer = nullptr;
+    zel_tracer_desc_t tracer_desc = {
+      ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
+    zel_tracer_handle_t tracer = nullptr;
 
-    status = zetTracerExpCreate(context, &tracer_desc, &tracer);
+    status = zelTracerCreate(&tracer_desc, &tracer);
     if (status != ZE_RESULT_SUCCESS || tracer == nullptr) {
-      std::cerr <<
-        "[WARNING] Unable to create Level Zero tracer for target context" <<
-        std::endl;
+      std::cerr << "[WARNING] Unable to create Level Zero tracer" << std::endl;
       delete collector;
       return nullptr;
     }
@@ -82,7 +74,7 @@ class ZeApiCollector {
     collector->tracer_ = tracer;
     SetTracingAPIs(tracer);
 
-    status = zetTracerExpSetEnabled(tracer, true);
+    status = zelTracerSetEnabled(tracer, true);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     return collector;
@@ -91,7 +83,7 @@ class ZeApiCollector {
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zetTracerExpSetEnabled(tracer_, false);
+    status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
@@ -145,16 +137,10 @@ class ZeApiCollector {
   }
 
   ~ZeApiCollector() {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
     if (tracer_ != nullptr) {
-      status = zetTracerExpDestroy(tracer_);
+      ze_result_t status = zelTracerDestroy(tracer_);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
-
-    PTI_ASSERT(context_ != nullptr);
-    status = zeContextDestroy(context_);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
  private: // Tracing Interface
@@ -182,24 +168,19 @@ class ZeApiCollector {
   }
 
  private: // Implementation Details
-  ZeApiCollector(ze_context_handle_t context,
-                 FunctionTimePoint base_time,
+  ZeApiCollector(FunctionTimePoint base_time,
                  bool call_tracing,
                  OnFunctionFinishCallback callback,
                  void* callback_data)
-      : context_(context),
-        base_time_(base_time),
+      : base_time_(base_time),
         call_tracing_(call_tracing),
         callback_(callback),
-        callback_data_(callback_data) {
-    PTI_ASSERT(context_ != nullptr);
-  }
+        callback_data_(callback_data) {}
 
   #include <tracing.gen> // Auto-generated callbacks
 
  private: // Data
-  ze_context_handle_t context_ = nullptr;
-  zet_tracer_exp_handle_t tracer_ = nullptr;
+  zel_tracer_handle_t tracer_ = nullptr;
 
   FunctionInfoMap function_info_map_;
   std::mutex lock_;

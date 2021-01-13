@@ -24,7 +24,7 @@ Metric groups in their turn belongs to **metric domains**. Metric groups from di
 - Intel(R) Processor Graphics KBL+ (for Stream Markers)
 
 **Needed Headers**:
-- [zet_api.h](https://github.com/oneapi-src/level-zero/blob/master/include/tools/zet_api.h)
+- [zet_api.h](https://github.com/oneapi-src/level-zero/blob/master/include/zet_api.h)
 
 **Needed Libraries**:
 - oneAPI Level Zero (Level Zero) [libraries](https://github.com/intel/compute-runtime)

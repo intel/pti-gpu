@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include <level_zero/layers/zel_tracing_api.h>
+
 #include "i915_utils.h"
 #include "utils.h"
 #include "ze_utils.h"
@@ -57,6 +59,7 @@ struct KernelInterval {
 };
 
 struct CommandListInfo {
+  ze_context_handle_t context;
   std::vector<KernelInstance*> kernel_list;
   bool immediate;
 };
@@ -76,28 +79,20 @@ class ZeKernelCollector {
  public: // Interface
 
   static ZeKernelCollector* Create(
-      ze_driver_handle_t driver,
       KernelTimePoint base_time = std::chrono::steady_clock::now(),
       OnKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
-    PTI_ASSERT(driver != nullptr);
-
-    ze_context_handle_t context = utils::ze::GetContext(driver);
-    PTI_ASSERT(context != nullptr);
-
     ZeKernelCollector* collector = new ZeKernelCollector(
-        context, base_time, callback, callback_data);
+        base_time, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    zet_tracer_exp_desc_t tracer_desc = {
-        ZET_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
-    zet_tracer_exp_handle_t tracer = nullptr;
-    status = zetTracerExpCreate(context, &tracer_desc, &tracer);
+    zel_tracer_desc_t tracer_desc = {
+        ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
+    zel_tracer_handle_t tracer = nullptr;
+    status = zelTracerCreate(&tracer_desc, &tracer);
     if (status != ZE_RESULT_SUCCESS) {
-      std::cerr <<
-        "[WARNING] Unable to create Level Zero tracer for target context" <<
-        std::endl;
+      std::cerr << "[WARNING] Unable to create Level Zero tracer" << std::endl;
       delete collector;
       return nullptr;
     }
@@ -160,23 +155,16 @@ class ZeKernelCollector {
   }
 
   ~ZeKernelCollector() {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    PTI_ASSERT(kernel_instance_list_.size() == 0);
-
     if (tracer_ != nullptr) {
-      status = zetTracerExpDestroy(tracer_);
+      ze_result_t status = zelTracerDestroy(tracer_);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
-
-    PTI_ASSERT(context_ != nullptr);
-    status = zeContextDestroy(context_);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zetTracerExpSetEnabled(tracer_, false);
+    status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
@@ -190,14 +178,12 @@ class ZeKernelCollector {
 
  private: // Implementation
 
-  ZeKernelCollector(ze_context_handle_t context,
-                    KernelTimePoint base_time,
+  ZeKernelCollector(KernelTimePoint base_time,
                     OnKernelFinishCallback callback,
                     void* callback_data)
-      : context_(context), base_time_(base_time),
-        callback_(callback), callback_data_(callback_data),
+      : base_time_(base_time), callback_(callback),
+        callback_data_(callback_data),
         timer_frequency_(utils::i915::GetGpuTimerFrequency()) {
-    PTI_ASSERT(context_ != nullptr);
     PTI_ASSERT(timer_frequency_ > 0);
     if (callback_ != nullptr) {
       SetCpuGpuTimestamps();
@@ -210,7 +196,7 @@ class ZeKernelCollector {
     return timestamp.count();
   }
 
-  void EnableTracing(zet_tracer_exp_handle_t tracer) {
+  void EnableTracing(zel_tracer_handle_t tracer) {
     PTI_ASSERT(tracer != nullptr);
     tracer_ = tracer;
 
@@ -256,11 +242,11 @@ class ZeKernelCollector {
       OnExitCommandQueueDestroy;
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zetTracerExpSetPrologues(tracer_, &prologue_callbacks);
+    status = zelTracerSetPrologues(tracer_, &prologue_callbacks);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    status = zetTracerExpSetEpilogues(tracer_, &epilogue_callbacks);
+    status = zelTracerSetEpilogues(tracer_, &epilogue_callbacks);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    status = zetTracerExpSetEnabled(tracer_, true);
+    status = zelTracerSetEnabled(tracer_, true);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
@@ -437,11 +423,13 @@ class ZeKernelCollector {
     kernel_interval_list_.push_back({name, start, end});
   }
 
-  void AddCommandList(ze_command_list_handle_t command_list, bool immediate) {
+  void AddCommandList(ze_command_list_handle_t command_list,
+                      ze_context_handle_t context, bool immediate) {
     PTI_ASSERT(command_list != nullptr);
+    PTI_ASSERT(context != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(command_list_map_.count(command_list) == 0);
-    command_list_map_[command_list] = {std::vector<KernelInstance*>(), immediate};
+    command_list_map_[command_list] = {context, std::vector<KernelInstance*>(), immediate};
   }
 
   void RemoveCommandList(ze_command_list_handle_t command_list) {
@@ -471,6 +459,15 @@ class ZeKernelCollector {
         kernel_list[i]->submit_time = submit_time;
       }
     }
+  }
+
+  ze_context_handle_t GetCommandListContext(
+      ze_command_list_handle_t command_list) {
+    PTI_ASSERT(command_list != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    PTI_ASSERT(command_list_map_.count(command_list) == 1);
+    CommandListInfo& command_list_info = command_list_map_[command_list];
+    return command_list_info.context;
   }
 
   void SetCpuGpuTimestamps() {
@@ -590,7 +587,8 @@ class ZeKernelCollector {
         reinterpret_cast<ZeKernelCollector*>(global_data);
     PTI_ASSERT(collector != nullptr);
 
-    if (*(params->phKernel) ==  nullptr) {
+    if (*(params->phKernel) ==  nullptr ||
+        *(params->phCommandList) == nullptr) {
       return;
     }
 
@@ -608,7 +606,9 @@ class ZeKernelCollector {
     instance->submit_time = 0;
 
     if (*(params->phSignalEvent) == nullptr) {
-      CreateEvent(collector->context_, instance->event_pool, instance->event);
+      ze_context_handle_t context =
+        collector->GetCommandListContext(*(params->phCommandList));
+      CreateEvent(context, instance->event_pool, instance->event);
       *(params->phSignalEvent) = instance->event;
     } else {
       instance->event_pool = nullptr;
@@ -625,6 +625,10 @@ class ZeKernelCollector {
         reinterpret_cast<ZeKernelCollector*>(global_data);
     PTI_ASSERT(collector != nullptr);
 
+    if (*(params->phCommandList) == nullptr) {
+      return;
+    }
+
     KernelInstance* instance = new KernelInstance;
     instance->name = "zeCommandListAppendMemoryCopy";
     instance->bytes_transferred = *(params->psize);
@@ -633,7 +637,9 @@ class ZeKernelCollector {
     instance->submit_time = 0;
 
     if (*(params->phSignalEvent) == nullptr) {
-      CreateEvent(collector->context_, instance->event_pool, instance->event);
+      ze_context_handle_t context =
+        collector->GetCommandListContext(*(params->phCommandList));
+      CreateEvent(context, instance->event_pool, instance->event);
       *(params->phSignalEvent) = instance->event;
     } else {
       instance->event_pool = nullptr;
@@ -695,7 +701,8 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->AddCommandList(**params->pphCommandList, false);
+      collector->AddCommandList(
+          **(params->pphCommandList), *(params->phContext), false);
     }
   }
 
@@ -707,7 +714,8 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->AddCommandList(**params->pphCommandList, true);
+      collector->AddCommandList(
+          **(params->pphCommandList), *(params->phContext), true);
     }
   }
 
@@ -775,9 +783,7 @@ class ZeKernelCollector {
   }
 
  private: // Data
-
-  ze_context_handle_t context_ = nullptr;
-  zet_tracer_exp_handle_t tracer_ = nullptr;
+  zel_tracer_handle_t tracer_ = nullptr;
 
   uint64_t timer_frequency_ = 0;
   KernelTimePoint base_time_;

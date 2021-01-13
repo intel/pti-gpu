@@ -13,7 +13,7 @@
 #include <mutex>
 #include <vector>
 
-#include <level_zero/zet_api.h>
+#include <level_zero/layers/zel_tracing_api.h>
 
 #include "elf_parser.h"
 #include "gen_symbols_decoder.h"
@@ -42,24 +42,17 @@ using KernelDebugInfoMap = std::map<std::string, KernelDebugInfo>;
 
 class ZeDebugInfoCollector {
  public: // User Interface
-  static ZeDebugInfoCollector* Create(ze_driver_handle_t driver) {
-    PTI_ASSERT(driver != nullptr);
-
-    ze_context_handle_t context = utils::ze::GetContext(driver);
-    PTI_ASSERT(context != nullptr);
-
-    ZeDebugInfoCollector* collector = new ZeDebugInfoCollector(context);
+  static ZeDebugInfoCollector* Create() {
+    ZeDebugInfoCollector* collector = new ZeDebugInfoCollector();
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    zet_tracer_exp_desc_t tracer_desc = {
-        ZET_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
-    zet_tracer_exp_handle_t tracer = nullptr;
-    status = zetTracerExpCreate(context, &tracer_desc, &tracer);
+    zel_tracer_desc_t tracer_desc = {
+        ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
+    zel_tracer_handle_t tracer = nullptr;
+    status = zelTracerCreate(&tracer_desc, &tracer);
     if (status != ZE_RESULT_SUCCESS) {
-      std::cerr <<
-        "[WARNING] Unable to create Level Zero tracer for target context" <<
-        std::endl;
+      std::cerr << "[WARNING] Unable to create Level Zero tracer" << std::endl;
       delete collector;
       return nullptr;
     }
@@ -182,22 +175,16 @@ class ZeDebugInfoCollector {
   }
 
   ~ZeDebugInfoCollector() {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
     if (tracer_ != nullptr) {
-      status = zetTracerExpDestroy(tracer_);
+      ze_result_t status = zelTracerDestroy(tracer_);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
-
-    PTI_ASSERT(context_ != nullptr);
-    status = zeContextDestroy(context_);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zetTracerExpSetEnabled(tracer_, false);
+    status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
@@ -206,9 +193,9 @@ class ZeDebugInfoCollector {
   }
 
  private: // Implementation Details
-  ZeDebugInfoCollector(ze_context_handle_t context) : context_(context) {}
+  ZeDebugInfoCollector() {}
 
-  void EnableTracing(zet_tracer_exp_handle_t tracer) {
+  void EnableTracing(zel_tracer_handle_t tracer) {
     PTI_ASSERT(tracer != nullptr);
     tracer_ = tracer;
 
@@ -216,9 +203,9 @@ class ZeDebugInfoCollector {
     epilogue_callbacks.Kernel.pfnCreateCb = OnExitKernelCreate;
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zetTracerExpSetEpilogues(tracer_, &epilogue_callbacks);
+    status = zelTracerSetEpilogues(tracer_, &epilogue_callbacks);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    status = zetTracerExpSetEnabled(tracer_, true);
+    status = zelTracerSetEnabled(tracer_, true);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
@@ -364,8 +351,7 @@ class ZeDebugInfoCollector {
   }
 
  private:
-  zet_tracer_exp_handle_t tracer_ = nullptr;
-  ze_context_handle_t context_ = nullptr;
+  zel_tracer_handle_t tracer_ = nullptr;
 
   std::mutex lock_;
   KernelDebugInfoMap kernel_debug_info_map_;

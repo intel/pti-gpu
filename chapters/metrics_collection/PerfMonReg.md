@@ -16,12 +16,12 @@ Exact event list and filter options can be found in Programmer's Reference Manua
 - Intel(R) Processor Graphics GEN9+
 
 **Needed Headers**:
-- *i915_drm.h* and *xf86drm.h* from [libdrm](https://01.org/linuxgraphics/community/libdrm) to **set**
-- Graphics Technology Pin (GT Pin)  headers from the [release package](../../gtpin) to **read**
+- [i915_drm.h](https://gitlab.freedesktop.org/mesa/drm/-/blob/master/include/drm/i915_drm.h) and [xf86drm.h](https://gitlab.freedesktop.org/mesa/drm/-/blob/master/xf86drm.h) from *libdrm* to **set**
+- [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html) headers to **read**
 
 **Needed Libraries**:
-- [libdrm](https://01.org/linuxgraphics/community/libdrm) to **set**
-- Graphics Technology Pin (GT Pin) libraries from the [release package](../../gtpin) to **read**
+- [libdrm](https://gitlab.freedesktop.org/mesa/drm) to **set**
+- [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html) libraries to **read**
 
 ## How To Use
 ### Event Set

@@ -19,8 +19,8 @@ General approach for all the options is to find (or instrument with [Tracing API
 - Intel(R) Processor Graphics GEN9+
 
 **Needed Headers**:
-- [ze_api.h](https://github.com/oneapi-src/level-zero/blob/master/include/core/ze_api.h)
-- [zet_api.h](https://github.com/oneapi-src/level-zero/blob/master/include/tools/zet_api.h)
+- [ze_api.h](https://github.com/oneapi-src/level-zero/blob/master/include/ze_api.h)
+- [zet_api.h](https://github.com/oneapi-src/level-zero/blob/master/include/zet_api.h)
 
 **Needed Libraries**:
 - oneAPI Level Zero [libraries](https://github.com/intel/compute-runtime)
