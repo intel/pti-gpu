@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_ZE_INTERCEPT_ZE_INTERCEPT_H_
-#define PTI_SAMPLES_ZE_INTERCEPT_ZE_INTERCEPT_H_
+#ifndef PTI_SAMPLES_ZE_TRACER_ZE_TRACER_H_
+#define PTI_SAMPLES_ZE_TRACER_ZE_TRACER_H_
 
 #include <chrono>
 #include <cstdint>
@@ -22,77 +22,78 @@
 #include "ze_kernel_collector.h"
 #include "utils.h"
 
-#define ZEI_CALL_LOGGING           0
-#define ZEI_HOST_TIMING            1
-#define ZEI_DEVICE_TIMING          2
-#define ZEI_DEVICE_TIMELINE        3
-#define ZEI_CHROME_DEVICE_TIMELINE 4
-#define ZEI_CHROME_CALL_LOGGING    5
+#define ZET_CALL_LOGGING           0
+#define ZET_HOST_TIMING            1
+#define ZET_DEVICE_TIMING          2
+#define ZET_DEVICE_TIMELINE        3
+#define ZET_CHROME_DEVICE_TIMELINE 4
+#define ZET_CHROME_CALL_LOGGING    5
 
-const char* kChromeTraceFileName = "zei_trace.json";
+const char* kChromeTraceFileName = "zet_trace.json";
 
-class ZeIntercept {
+class ZeTracer {
  public:
-  static ZeIntercept* Create(ze_driver_handle_t driver,
-                             ze_device_handle_t device,
-                             unsigned options) {
+  static ZeTracer* Create(
+      ze_driver_handle_t driver,
+      ze_device_handle_t device,
+      unsigned options) {
     PTI_ASSERT(driver != nullptr);
     PTI_ASSERT(device != nullptr);
 
-    ZeIntercept* intercept = new ZeIntercept(options);
+    ZeTracer* tracer = new ZeTracer(options);
 
     ZeApiCollector* api_collector = nullptr;
-    if (intercept->CheckOption(ZEI_CALL_LOGGING) ||
-        intercept->CheckOption(ZEI_CHROME_CALL_LOGGING) ||
-        intercept->CheckOption(ZEI_HOST_TIMING)) {
+    if (tracer->CheckOption(ZET_CALL_LOGGING) ||
+        tracer->CheckOption(ZET_CHROME_CALL_LOGGING) ||
+        tracer->CheckOption(ZET_HOST_TIMING)) {
 
       OnFunctionFinishCallback callback = nullptr;
-      if (intercept->CheckOption(ZEI_CHROME_CALL_LOGGING)) {
+      if (tracer->CheckOption(ZET_CHROME_CALL_LOGGING)) {
         callback = ChromeLoggingCallback;
       }
 
-      bool call_tracing = intercept->CheckOption(ZEI_CALL_LOGGING);
+      bool call_tracing = tracer->CheckOption(ZET_CALL_LOGGING);
       api_collector = ZeApiCollector::Create(
-          intercept->start_time_, call_tracing,
-          callback, intercept);
+          tracer->start_time_, call_tracing,
+          callback, tracer);
       if (api_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create API collector" << std::endl;
-        delete intercept;
+        delete tracer;
         return nullptr;
       }
-      intercept->api_collector_ = api_collector;
+      tracer->api_collector_ = api_collector;
     }
 
     ZeKernelCollector* kernel_collector = nullptr;
-    if (intercept->CheckOption(ZEI_DEVICE_TIMELINE) ||
-        intercept->CheckOption(ZEI_CHROME_DEVICE_TIMELINE) ||
-        intercept->CheckOption(ZEI_DEVICE_TIMING)) {
+    if (tracer->CheckOption(ZET_DEVICE_TIMELINE) ||
+        tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
+        tracer->CheckOption(ZET_DEVICE_TIMING)) {
 
       OnKernelFinishCallback callback = nullptr;
-      if (intercept->CheckOption(ZEI_DEVICE_TIMELINE) &&
-          intercept->CheckOption(ZEI_CHROME_DEVICE_TIMELINE)) {
+      if (tracer->CheckOption(ZET_DEVICE_TIMELINE) &&
+          tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE)) {
         callback = DeviceAndChromeTimelineCallback;
-      } else if (intercept->CheckOption(ZEI_DEVICE_TIMELINE)) {
+      } else if (tracer->CheckOption(ZET_DEVICE_TIMELINE)) {
         callback = DeviceTimelineCallback;
-      } else if (intercept->CheckOption(ZEI_CHROME_DEVICE_TIMELINE)) {
+      } else if (tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE)) {
         callback = ChromeTimelineCallback;
       }
 
       kernel_collector = ZeKernelCollector::Create(
-          intercept->start_time_, callback, intercept);
+          tracer->start_time_, callback, tracer);
       if (kernel_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create kernel collector" <<
           std::endl;
-        delete intercept;
+        delete tracer;
         return nullptr;
       }
-      intercept->kernel_collector_ = kernel_collector;
+      tracer->kernel_collector_ = kernel_collector;
     }
 
-    return intercept;
+    return tracer;
   }
 
-  ~ZeIntercept() {
+  ~ZeTracer() {
     std::chrono::steady_clock::time_point end_time =
       std::chrono::steady_clock::now();
     std::chrono::duration<uint64_t, std::nano> duration =
@@ -124,15 +125,15 @@ class ZeIntercept {
     return (options_ & (1 << option));
   }
 
-  ZeIntercept(const ZeIntercept& copy) = delete;
-  ZeIntercept& operator=(const ZeIntercept& copy) = delete;
+  ZeTracer(const ZeTracer& copy) = delete;
+  ZeTracer& operator=(const ZeTracer& copy) = delete;
 
  private:
-  ZeIntercept(unsigned options) : options_(options) {
+  ZeTracer(unsigned options) : options_(options) {
     start_time_ = std::chrono::steady_clock::now();
 
-    if (CheckOption(ZEI_CHROME_DEVICE_TIMELINE) ||
-        CheckOption(ZEI_CHROME_CALL_LOGGING)) {
+    if (CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
+        CheckOption(ZET_CHROME_CALL_LOGGING)) {
       OpenTraceFile();
     }
   }
@@ -192,10 +193,10 @@ class ZeIntercept {
   }
   
   void Report() {
-    if (CheckOption(ZEI_HOST_TIMING)) {
+    if (CheckOption(ZET_HOST_TIMING)) {
       ReportHostTiming();
     }
-    if (CheckOption(ZEI_DEVICE_TIMING)) {
+    if (CheckOption(ZET_DEVICE_TIMING)) {
       ReportDeviceTiming();
     }
     std::cerr << std::endl;
@@ -233,9 +234,9 @@ class ZeIntercept {
       void* data, const std::string& name,
       uint64_t appended, uint64_t submitted,
       uint64_t started, uint64_t ended) {
-    ZeIntercept* intercept = reinterpret_cast<ZeIntercept*>(data);
-    PTI_ASSERT(intercept != nullptr);
-    intercept->chrome_trace_ << "{\"ph\":\"X\", \"pid\":" <<
+    ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+    tracer->chrome_trace_ << "{\"ph\":\"X\", \"pid\":" <<
       utils::GetPid() << ", \"tid\":0, \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
@@ -253,9 +254,9 @@ class ZeIntercept {
   static void ChromeLoggingCallback(
       void* data, const std::string& name,
       uint64_t started, uint64_t ended) {
-    ZeIntercept* intercept = reinterpret_cast<ZeIntercept*>(data);
-    PTI_ASSERT(intercept != nullptr);
-    intercept->chrome_trace_ << "{\"ph\":\"X\", \"pid\":" <<
+    ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+    tracer->chrome_trace_ << "{\"ph\":\"X\", \"pid\":" <<
       utils::GetPid() << ", \"tid\":" << utils::GetTid() <<
       ", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
@@ -275,4 +276,4 @@ class ZeIntercept {
   std::ofstream chrome_trace_;
 };
 
-#endif // PTI_SAMPLES_ZE_INTERCEPT_ZE_INTERCEPT_H_
+#endif // PTI_SAMPLES_ZE_TRACER_ZE_TRACER_H_

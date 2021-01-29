@@ -6,10 +6,10 @@
 
 #include <iostream>
 
-#include "ze_intercept.h"
+#include "ze_tracer.h"
 #include "ze_utils.h"
 
-static ZeIntercept* intercept = nullptr;
+static ZeTracer* tracer = nullptr;
 
 extern "C"
 #if defined(_WIN32)
@@ -17,7 +17,7 @@ __declspec(dllexport)
 #endif
 void Usage() {
   std::cout <<
-    "Usage: ./ze_intercept[.exe] [options] <application> <args>" <<
+    "Usage: ./ze_tracer[.exe] [options] <application> <args>" <<
     std::endl;
   std::cout << "Options:" << std::endl;
   std::cout <<
@@ -49,25 +49,25 @@ int ParseArgs(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--call-logging") == 0 ||
         strcmp(argv[i], "-c") == 0) {
-      utils::SetEnv("ZEI_CallLogging=1");
+      utils::SetEnv("ZET_CallLogging=1");
       ++app_index;
     } else if (strcmp(argv[i], "--host-timing") == 0 ||
                strcmp(argv[i], "-h") == 0) {
-      utils::SetEnv("ZEI_HostTiming=1");
+      utils::SetEnv("ZET_HostTiming=1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timing") == 0 ||
                strcmp(argv[i], "-d") == 0) {
-      utils::SetEnv("ZEI_DeviceTiming=1");
+      utils::SetEnv("ZET_DeviceTiming=1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timeline") == 0 ||
                strcmp(argv[i], "-t") == 0) {
-      utils::SetEnv("ZEI_DeviceTimeline=1");
+      utils::SetEnv("ZET_DeviceTimeline=1");
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
-      utils::SetEnv("ZEI_ChromeDeviceTimeline=1");
+      utils::SetEnv("ZET_ChromeDeviceTimeline=1");
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
-      utils::SetEnv("ZEI_ChromeCallLogging=1");
+      utils::SetEnv("ZET_ChromeCallLogging=1");
       ++app_index;
     } else {
       break;
@@ -88,34 +88,34 @@ static unsigned ReadArgs() {
   std::string value;
   unsigned options = 0;
 
-  value = utils::GetEnv("ZEI_CallLogging");
+  value = utils::GetEnv("ZET_CallLogging");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_CALL_LOGGING);
+    options |= (1 << ZET_CALL_LOGGING);
   }
 
-  value = utils::GetEnv("ZEI_HostTiming");
+  value = utils::GetEnv("ZET_HostTiming");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_HOST_TIMING);
+    options |= (1 << ZET_HOST_TIMING);
   }
 
-  value = utils::GetEnv("ZEI_DeviceTiming");
+  value = utils::GetEnv("ZET_DeviceTiming");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_DEVICE_TIMING);
+    options |= (1 << ZET_DEVICE_TIMING);
   }
 
-  value = utils::GetEnv("ZEI_DeviceTimeline");
+  value = utils::GetEnv("ZET_DeviceTimeline");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_DEVICE_TIMELINE);
+    options |= (1 << ZET_DEVICE_TIMELINE);
   }
 
-  value = utils::GetEnv("ZEI_ChromeDeviceTimeline");
+  value = utils::GetEnv("ZET_ChromeDeviceTimeline");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_CHROME_DEVICE_TIMELINE);
+    options |= (1 << ZET_CHROME_DEVICE_TIMELINE);
   }
 
-  value = utils::GetEnv("ZEI_ChromeCallLogging");
+  value = utils::GetEnv("ZET_ChromeCallLogging");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_CHROME_CALL_LOGGING);
+    options |= (1 << ZET_CHROME_CALL_LOGGING);
   }
 
   return options;
@@ -136,11 +136,11 @@ void EnableProfiling() {
     return;
   }
 
-  intercept = ZeIntercept::Create(driver, device, ReadArgs());
+  tracer = ZeTracer::Create(driver, device, ReadArgs());
 }
 
 void DisableProfiling() {
-  if (intercept != nullptr) {
-    delete intercept;
+  if (tracer != nullptr) {
+    delete tracer;
   }
 }

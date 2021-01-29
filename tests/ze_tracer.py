@@ -27,7 +27,7 @@ def build(path):
 def run(path, option):
   app_folder = utils.get_sample_build_path("ze_gemm")
   app_file = os.path.join(app_folder, "ze_gemm")
-  p = subprocess.Popen(["./ze_intercept", option, app_file, "1024", "1"],\
+  p = subprocess.Popen(["./ze_tracer", option, app_file, "1024", "1"],\
     cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
   if not stderr:
@@ -37,7 +37,7 @@ def run(path, option):
   return None
 
 def main(option):
-  path = utils.get_sample_build_path("ze_intercept")
+  path = utils.get_sample_build_path("ze_tracer")
   log = ze_gemm.main(None)
   if log:
     return log

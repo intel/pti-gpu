@@ -1,10 +1,10 @@
-# Level Zero Intercept
+# Level Zero Tracer
 ## Overview
 This tool is an analogue of [Intercept Layer for OpenCL(TM) Applications](https://github.com/intel/opencl-intercept-layer) designed to support Level Zero.
 
 Currently it has limited capabilities but expected to be fully functional eventually:
 ```
-Usage: ./ze_intercept[.exe] [options] <application> <args>
+Usage: ./ze_tracer[.exe] [options] <application> <args>
 Options:
 --call-logging [-c]             Trace host API calls
 --host-timing  [-h]             Report host API execution time
@@ -79,7 +79,7 @@ Device Timeline for zeCommandListAppendMemoryCopy [ns] = 319348093 (append) 3209
 ### Linux
 Run the following commands to build the sample:
 ```sh
-cd <pti>/samples/ze_intercept
+cd <pti>/samples/ze_tracer
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -87,17 +87,17 @@ make
 ```
 Use this command line to run the tool:
 ```sh
-./ze_intercept [options] <target_application>
+./ze_tracer [options] <target_application>
 ```
 One may use [ze_gemm](../ze_gemm) or [dpc_gemm](../dpc_gemm) as target application, e.g.:
 ```sh
-./ze_intercept -c -h ../../ze_gemm/build/ze_gemm
-./ze_intercept -c -h ../../dpc_gemm/build/dpc_gemm
+./ze_tracer -c -h ../../ze_gemm/build/ze_gemm
+./ze_tracer -c -h ../../dpc_gemm/build/dpc_gemm
 ```
 ### Windows
 Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample:
 ```sh
-cd <pti>\samples\ze_intercept
+cd <pti>\samples\ze_tracer
 mkdir build
 cd build
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_LIBRARY_PATH=<level_zero_loader>\lib -DCMAKE_INCLUDE_PATH=<level_zero_loader>\include ..
@@ -105,10 +105,10 @@ nmake
 ```
 Use this command line to run the tool:
 ```sh
-ze_intercept.exe [options] <target_application>
+ze_tracer.exe [options] <target_application>
 ```
 One may use [ze_gemm](../ze_gemm) or [dpc_gemm](../dpc_gemm) as target application, e.g.:
 ```sh
-ze_intercept.exe -c -h ..\..\ze_gemm\build\ze_gemm.exe
-ze_intercept.exe -c -h ..\..\dpc_gemm\build\dpc_gemm.exe
+ze_tracer.exe -c -h ..\..\ze_gemm\build\ze_gemm.exe
+ze_tracer.exe -c -h ..\..\dpc_gemm\build\dpc_gemm.exe
 ```
