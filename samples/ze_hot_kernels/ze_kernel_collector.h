@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -19,17 +19,18 @@
 #include "utils.h"
 #include "ze_utils.h"
 
-struct KernelInstance {
+struct ZeKernelInstance {
   std::string name;
   size_t simd_width;
   size_t bytes_transferred;
+  void* queue;
   ze_event_pool_handle_t event_pool;
   ze_event_handle_t event;
   uint64_t append_time;
   uint64_t submit_time;
 };
 
-struct KernelInfo {
+struct ZeKernelInfo {
   uint64_t total_time;
   uint64_t min_time;
   uint64_t max_time;
@@ -37,14 +38,14 @@ struct KernelInfo {
   size_t simd_width;
   size_t bytes_transferred;
 
-  bool operator>(const KernelInfo& r) const {
+  bool operator>(const ZeKernelInfo& r) const {
     if (total_time != r.total_time) {
       return total_time > r.total_time;
     }
     return call_count > r.call_count;
   }
 
-  bool operator!=(const KernelInfo& r) const {
+  bool operator!=(const ZeKernelInfo& r) const {
     if (total_time == r.total_time) {
       return call_count != r.call_count;
     }
@@ -52,26 +53,26 @@ struct KernelInfo {
   }
 };
 
-struct KernelInterval {
+struct ZeKernelInterval {
   std::string name;
   uint64_t start;
   uint64_t end;
 };
 
-struct CommandListInfo {
+struct ZeCommandListInfo {
   ze_context_handle_t context;
-  std::vector<KernelInstance*> kernel_list;
+  std::vector<ZeKernelInstance*> kernel_list;
   bool immediate;
 };
 
-using KernelInfoMap = std::map<std::string, KernelInfo>;
-using KernelIntervalList = std::vector<KernelInterval>;
-using KernelNameMap = std::map<ze_kernel_handle_t, std::string>;
-using KernelTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
-using CommandListMap = std::map<ze_command_list_handle_t, CommandListInfo>;
+using ZeKernelInfoMap = std::map<std::string, ZeKernelInfo>;
+using ZeKernelIntervalList = std::vector<ZeKernelInterval>;
+using ZeKernelNameMap = std::map<ze_kernel_handle_t, std::string>;
+using ZeKernelTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+using ZeCommandListMap = std::map<ze_command_list_handle_t, ZeCommandListInfo>;
 
-typedef void (*OnKernelFinishCallback)(
-    void* data, const std::string& name,
+typedef void (*OnZeKernelFinishCallback)(
+    void* data, void* queue, const std::string& name,
     uint64_t appended, uint64_t submitted,
     uint64_t started, uint64_t ended);
 
@@ -79,8 +80,8 @@ class ZeKernelCollector {
  public: // Interface
 
   static ZeKernelCollector* Create(
-      KernelTimePoint base_time = std::chrono::steady_clock::now(),
-      OnKernelFinishCallback callback = nullptr,
+      ZeKernelTimePoint base_time = std::chrono::steady_clock::now(),
+      OnZeKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     ZeKernelCollector* collector = new ZeKernelCollector(
         base_time, callback, callback_data);
@@ -101,8 +102,8 @@ class ZeKernelCollector {
     return collector;
   }
 
-  static void PrintKernelsTable(const KernelInfoMap& kernel_info_map) {
-    std::set< std::pair<std::string, KernelInfo>,
+  static void PrintKernelsTable(const ZeKernelInfoMap& kernel_info_map) {
+    std::set< std::pair<std::string, ZeKernelInfo>,
               utils::Comparator > sorted_list(
         kernel_info_map.begin(), kernel_info_map.end());
 
@@ -168,20 +169,22 @@ class ZeKernelCollector {
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
-  const KernelInfoMap& GetKernelInfoMap() const {
+  const ZeKernelInfoMap& GetKernelInfoMap() const {
     return kernel_info_map_;
   }
 
-  const KernelIntervalList& GetKernelIntervalList() const {
+  const ZeKernelIntervalList& GetKernelIntervalList() const {
     return kernel_interval_list_;
   }
 
  private: // Implementation
 
-  ZeKernelCollector(KernelTimePoint base_time,
-                    OnKernelFinishCallback callback,
-                    void* callback_data)
-      : base_time_(base_time), callback_(callback),
+  ZeKernelCollector(
+      ZeKernelTimePoint base_time,
+      OnZeKernelFinishCallback callback,
+      void* callback_data)
+      : base_time_(base_time),
+        callback_(callback),
         callback_data_(callback_data),
         timer_frequency_(utils::i915::GetGpuTimerFrequency()) {
     PTI_ASSERT(timer_frequency_ > 0);
@@ -226,7 +229,7 @@ class ZeKernelCollector {
     epilogue_callbacks.CommandList.pfnCreateCb =
       OnExitCommandListCreate;
     epilogue_callbacks.CommandList.pfnCreateImmediateCb =
-      OnExitCommandListImmediateCreate;
+      OnExitCommandListCreateImmediate;
     epilogue_callbacks.CommandList.pfnDestroyCb =
       OnExitCommandListDestroy;
     epilogue_callbacks.CommandList.pfnResetCb =
@@ -279,16 +282,17 @@ class ZeKernelCollector {
   }
 
   void AddKernelInstance(ze_command_list_handle_t command_list,
-                         const KernelInstance& instance) {
+                         const ZeKernelInstance& instance) {
     PTI_ASSERT(command_list != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     kernel_instance_list_.push_back(instance);
-    KernelInstance* kernel_instance = &kernel_instance_list_.back();
+    ZeKernelInstance* kernel_instance = &kernel_instance_list_.back();
 
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    CommandListInfo& command_list_info = command_list_map_[command_list];
+    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
     if (command_list_info.immediate) {
       kernel_instance->submit_time = kernel_instance->append_time;
+      kernel_instance->queue = command_list;
     }
     command_list_info.kernel_list.push_back(kernel_instance);
   }
@@ -307,7 +311,7 @@ class ZeKernelCollector {
     }
   }
 
-  void ProcessInstance(const KernelInstance& instance) {
+  void ProcessInstance(const ZeKernelInstance& instance) {
     ze_result_t status = ZE_RESULT_SUCCESS;
     status = zeEventQueryStatus(instance.event);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -362,7 +366,11 @@ class ZeKernelCollector {
         cpu_end = cpu_start + time;
       }
 
-      callback_(callback_data_, instance.name,
+      PTI_ASSERT(instance.queue != nullptr);
+      PTI_ASSERT(!instance.name.empty());
+      PTI_ASSERT(instance.append_time > 0);
+      PTI_ASSERT(instance.submit_time > 0);
+      callback_(callback_data_, instance.queue, instance.name,
                 instance.append_time, instance.submit_time,
                 cpu_start, cpu_end);
     }
@@ -403,7 +411,7 @@ class ZeKernelCollector {
       kernel_info_map_[name] = {
         time, time, time, 1, simd_width, bytes_transferred};
     } else {
-      KernelInfo& kernel = kernel_info_map_[name];
+      ZeKernelInfo& kernel = kernel_info_map_[name];
       kernel.total_time += time;
       if (time > kernel.max_time) {
         kernel.max_time = time;
@@ -429,7 +437,7 @@ class ZeKernelCollector {
     PTI_ASSERT(context != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(command_list_map_.count(command_list) == 0);
-    command_list_map_[command_list] = {context, std::vector<KernelInstance*>(), immediate};
+    command_list_map_[command_list] = {context, std::vector<ZeKernelInstance*>(), immediate};
   }
 
   void RemoveCommandList(ze_command_list_handle_t command_list) {
@@ -446,16 +454,18 @@ class ZeKernelCollector {
     command_list_map_[command_list].kernel_list.clear();
   }
 
-  void SetKernelInstanceSubmitTime(ze_command_list_handle_t command_list,
-                                   uint64_t submit_time) {
+  void UpdateKernelInstances(
+      ze_command_list_handle_t command_list,
+      ze_command_queue_handle_t queue, uint64_t submit_time) {
     PTI_ASSERT(command_list != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    CommandListInfo& command_list_info = command_list_map_[command_list];
+    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
     if (!command_list_info.immediate) {
-      std::vector<KernelInstance*>& kernel_list =
+      std::vector<ZeKernelInstance*>& kernel_list =
         command_list_info.kernel_list;
       for (size_t i = 0; i < kernel_list.size(); ++i) {
+        kernel_list[i]->queue = queue;
         kernel_list[i]->submit_time = submit_time;
       }
     }
@@ -466,7 +476,7 @@ class ZeKernelCollector {
     PTI_ASSERT(command_list != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    CommandListInfo& command_list_info = command_list_map_[command_list];
+    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
     return command_list_info.context;
   }
 
@@ -592,7 +602,7 @@ class ZeKernelCollector {
       return;
     }
 
-    KernelInstance* instance = new KernelInstance;
+    ZeKernelInstance* instance = new ZeKernelInstance;
     PTI_ASSERT(instance != nullptr);
     instance->name = collector->GetKernelName(*(params->phKernel));
     PTI_ASSERT(!instance->name.empty());
@@ -604,6 +614,7 @@ class ZeKernelCollector {
     instance->bytes_transferred = 0;
     instance->append_time = collector->GetTimestamp();
     instance->submit_time = 0;
+    instance->queue = nullptr;
 
     if (*(params->phSignalEvent) == nullptr) {
       ze_context_handle_t context =
@@ -629,7 +640,7 @@ class ZeKernelCollector {
       return;
     }
 
-    KernelInstance* instance = new KernelInstance;
+    ZeKernelInstance* instance = new ZeKernelInstance;
     instance->name = "zeCommandListAppendMemoryCopy";
     instance->bytes_transferred = *(params->psize);
     instance->simd_width = 0;
@@ -654,7 +665,7 @@ class ZeKernelCollector {
                                  ze_result_t result) {
     PTI_ASSERT(command_list != nullptr);
 
-    KernelInstance* instance = static_cast<KernelInstance*>(*instance_data);
+    ZeKernelInstance* instance = static_cast<ZeKernelInstance*>(*instance_data);
     if (instance == nullptr) {
       return;
     }
@@ -706,7 +717,7 @@ class ZeKernelCollector {
     }
   }
 
-  static void OnExitCommandListImmediateCreate(
+  static void OnExitCommandListCreateImmediate(
       ze_command_list_create_immediate_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
     if (result == ZE_RESULT_SUCCESS) {
@@ -756,7 +767,8 @@ class ZeKernelCollector {
     uint32_t command_list_count = *params->pnumCommandLists;
     ze_command_list_handle_t* command_lists = *params->pphCommandLists;
     for (uint32_t i = 0; i < command_list_count; ++i) {
-      collector->SetKernelInstanceSubmitTime(command_lists[i], submit_time);
+      collector->UpdateKernelInstances(
+          command_lists[i], *(params->phCommandQueue), submit_time);
     }
   }
 
@@ -786,20 +798,20 @@ class ZeKernelCollector {
   zel_tracer_handle_t tracer_ = nullptr;
 
   uint64_t timer_frequency_ = 0;
-  KernelTimePoint base_time_;
+  ZeKernelTimePoint base_time_;
 
-  OnKernelFinishCallback callback_ = nullptr;
+  OnZeKernelFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;
 
-  KernelTimePoint cpu_timestamp_;
+  ZeKernelTimePoint cpu_timestamp_;
   uint64_t gpu_timestamp_ = 0;
 
   std::mutex lock_;
-  KernelInfoMap kernel_info_map_;
-  KernelIntervalList kernel_interval_list_;
-  KernelNameMap kernel_name_map_;
-  std::list<KernelInstance> kernel_instance_list_;
-  CommandListMap command_list_map_;
+  ZeKernelInfoMap kernel_info_map_;
+  ZeKernelIntervalList kernel_interval_list_;
+  ZeKernelNameMap kernel_name_map_;
+  std::list<ZeKernelInstance> kernel_instance_list_;
+  ZeCommandListMap command_list_map_;
 
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;

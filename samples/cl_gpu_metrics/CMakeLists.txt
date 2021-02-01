@@ -8,7 +8,10 @@ SetBuildType()
 
 # Tool Library
 
-add_library(clt_gpu_metrics SHARED "${PROJECT_SOURCE_DIR}/../loader/init.cc" tool.cc)
+add_library(clt_gpu_metrics SHARED
+  "${PROJECT_SOURCE_DIR}/../utils/trace_guard.cc"
+  "${PROJECT_SOURCE_DIR}/../loader/init.cc"
+  tool.cc)
 target_include_directories(clt_gpu_metrics
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../cl_hot_kernels")

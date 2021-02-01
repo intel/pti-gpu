@@ -26,13 +26,13 @@ Total execution time: 5.37699 sec
 
 ## Build and Run
 ### Linux
-Run the following commands to build the sample (make sure you use Intel(R) C++ Compiler for building):
+Run the following commands to build the sample (make sure you have Intel(R) C++ Compiler in `PATH` for building):
 ```sh
 source <inteloneapi>/setvars.sh
 cd <pti>/samples/omp_gemm
 mkdir build
 cd build
-CXX=icpx cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 Use this command line to run the application:
@@ -40,13 +40,12 @@ Use this command line to run the application:
 ./omp_gemm [cpu|gpu] [matrix_size] [repeat_count]
 ```
 ### Windows
-Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample:
+Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you have Intel(R) C++ Compiler in `PATH` for building):
 ```sh
 <inteloneapi>\setvars.bat
 cd <pti>\samples\omp_gemm
 mkdir build
 cd build
-set CXX=icl
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release ..
 nmake
 ```

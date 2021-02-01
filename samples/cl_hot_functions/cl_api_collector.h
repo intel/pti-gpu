@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -14,23 +14,26 @@
 #include <mutex>
 #include <set>
 
-#include "cl_tracer.h"
+#include "cl_api_tracer.h"
 #include "cl_utils.h"
+#include "trace_guard.h"
 
-struct Function {
+#include "cl_api_callbacks.h"
+
+struct ClFunction {
   uint64_t total_time;
   uint64_t min_time;
   uint64_t max_time;
   uint64_t call_count;
 
-  bool operator>(const Function& r) const {
+  bool operator>(const ClFunction& r) const {
     if (total_time != r.total_time) {
       return total_time > r.total_time;
     }
     return call_count > r.call_count;
   }
 
-  bool operator!=(const Function& r) const {
+  bool operator!=(const ClFunction& r) const {
     if (total_time == r.total_time) {
       return call_count != r.call_count;
     }
@@ -38,20 +41,29 @@ struct Function {
   }
 };
 
-using FunctionInfoMap = std::map<std::string, Function>;
-using FunctionTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+using ClFunctionInfoMap = std::map<std::string, ClFunction>;
+using ClFunctionTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+
+typedef void (*OnClFunctionFinishCallback)(
+    void* data, const std::string& name,
+    uint64_t started, uint64_t ended);
 
 class ClApiCollector {
  public: // User Interface
   static ClApiCollector* Create(
       cl_device_id device,
-      FunctionTimePoint base_time = std::chrono::steady_clock::now()) {
+      ClFunctionTimePoint base_time = std::chrono::steady_clock::now(),
+      bool call_tracing = false,
+      OnClFunctionFinishCallback callback = nullptr,
+      void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
+    TraceGuard guard;
 
-    ClApiCollector* collector = new ClApiCollector(base_time);
+    ClApiCollector* collector = new ClApiCollector(
+        base_time, call_tracing, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
-    ClTracer* tracer = new ClTracer(device, Callback, collector);
+    ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
     if (tracer == nullptr || !tracer->IsValid()) {
       std::cerr << "[WARNING] Unable to create OpenCL tracer " <<
         "for target device" << std::endl;
@@ -78,15 +90,15 @@ class ClApiCollector {
     PTI_ASSERT(disabled);
   }
 
-  const FunctionInfoMap& GetFunctionInfoMap() const {
+  const ClFunctionInfoMap& GetFunctionInfoMap() const {
     return function_info_map_;
   }
 
   ClApiCollector(const ClApiCollector& copy) = delete;
   ClApiCollector& operator=(const ClApiCollector& copy) = delete;
 
-  static void PrintFunctionsTable(const FunctionInfoMap& function_info_map) {
-    std::set< std::pair<std::string, Function>,
+  static void PrintFunctionsTable(const ClFunctionInfoMap& function_info_map) {
+    std::set< std::pair<std::string, ClFunction>,
               utils::Comparator > sorted_list(
         function_info_map.begin(), function_info_map.end());
 
@@ -131,9 +143,13 @@ class ClApiCollector {
   }
 
  private: // Implementation Details
-  ClApiCollector(FunctionTimePoint base_time) : base_time_(base_time) {}
+  ClApiCollector(
+      ClFunctionTimePoint base_time, bool call_tracing,
+      OnClFunctionFinishCallback callback, void* callback_data)
+      : base_time_(base_time), call_tracing_(call_tracing),
+        callback_(callback), callback_data_(callback_data) {}
 
-  void EnableTracing(ClTracer* tracer) {
+  void EnableTracing(ClApiTracer* tracer) {
     PTI_ASSERT(tracer != nullptr);
     tracer_ = tracer;
 
@@ -157,7 +173,7 @@ class ClApiCollector {
     if (function_info_map_.count(name) == 0) {
       function_info_map_[name] = {time, time, time, 1};
     } else {
-      Function& function = function_info_map_[name];
+      ClFunction& function = function_info_map_[name];
       function.total_time += time;
       if (time < function.min_time) {
         function.min_time = time;
@@ -170,43 +186,56 @@ class ClApiCollector {
   }
 
  private: // Callbacks
-  static void OnFunctionEnter(cl_callback_data* data, void* user_data) {
-    ClApiCollector* collector = reinterpret_cast<ClApiCollector*>(user_data);
-    PTI_ASSERT(collector != nullptr);
-
-    PTI_ASSERT(data != nullptr);
-    uint64_t& start_time = *reinterpret_cast<uint64_t*>(data->correlationData);
-    start_time = collector->GetTimestamp();
-  }
-
-  static void OnFunctionExit(cl_callback_data* data, void* user_data) {
-    ClApiCollector* collector = reinterpret_cast<ClApiCollector*>(user_data);
-    PTI_ASSERT(collector != nullptr);
-    uint64_t end_time = collector->GetTimestamp();
-
-    PTI_ASSERT(data != nullptr);
-    uint64_t& start_time = *reinterpret_cast<uint64_t*>(data->correlationData);
-    collector->AddFunctionTime(data->functionName, end_time - start_time);
-  }
-
   static void Callback(
       cl_function_id function,
       cl_callback_data* callback_data,
       void* user_data) {
+    if (TraceGuard::Inactive()) return;
+
+    ClApiCollector* collector = reinterpret_cast<ClApiCollector*>(user_data);
+    PTI_ASSERT(collector != nullptr);
+    PTI_ASSERT(callback_data != nullptr);
+    PTI_ASSERT(callback_data->correlationData != nullptr);
+
     if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-      OnFunctionEnter(callback_data, user_data);
+      uint64_t& start_time = *reinterpret_cast<uint64_t*>(
+          callback_data->correlationData);
+      start_time = collector->GetTimestamp();
+
+      if (collector->call_tracing_) {
+        OnEnterFunction(function, callback_data, start_time);
+      }
     } else {
-      OnFunctionExit(callback_data, user_data);
+      uint64_t end_time = collector->GetTimestamp();
+
+      uint64_t& start_time = *reinterpret_cast<uint64_t*>(
+          callback_data->correlationData);
+      collector->AddFunctionTime(
+        callback_data->functionName, end_time - start_time);
+
+      if (collector->call_tracing_) {
+        OnExitFunction(function, callback_data, start_time, end_time);
+      }
+
+      if (collector->callback_ != nullptr) {
+        collector->callback_(
+            collector->callback_data_, callback_data->functionName,
+            start_time, end_time);
+      }
     }
   }
 
  private: // Data
-  ClTracer* tracer_ = nullptr;
+  ClApiTracer* tracer_ = nullptr;
 
-  FunctionTimePoint base_time_;
+  ClFunctionTimePoint base_time_;
+  bool call_tracing_ = false;
+
+  OnClFunctionFinishCallback callback_ = nullptr;
+  void* callback_data_ = nullptr;
 
   std::mutex lock_;
-  FunctionInfoMap function_info_map_;
+  ClFunctionInfoMap function_info_map_;
 
   static const uint32_t kFunctionLength = 10;
   static const uint32_t kCallsLength = 12;

@@ -2,7 +2,7 @@
 ## Overview
 This tool is an analogue of [Intercept Layer for OpenCL(TM) Applications](https://github.com/intel/opencl-intercept-layer) designed to support Level Zero.
 
-Currently it has limited capabilities but expected to be fully functional eventually:
+The following capabilities are available currently:
 ```
 Usage: ./ze_tracer[.exe] [options] <application> <args>
 Options:
@@ -31,8 +31,8 @@ Options:
 ```
 === API Timing Results: ===
 
-Total Execution Time (ns): 418056422
-Total API Time (ns): 407283268
+Total Execution Time (ns):    418056422
+      Total API Time (ns):    407283268
 
                          Function,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
         zeCommandQueueSynchronize,           4,           182529847,     44.82,            45632461,            45271728,            46364532
@@ -45,8 +45,8 @@ zeCommandQueueExecuteCommandLists,           4,           108593458,     26.66, 
 ```
 === Device Timing Results: ===
 
-Total Execution Time (ns): 376807360
-Total Device Time (ns): 178294707
+Total Execution Time (ns):    376807360
+   Total Device Time (ns):    178294707
 
                        Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
                          GEMM,           4,   32,                   0,           173655671,     97.40,            43413917,            43343928,            43517564
@@ -55,10 +55,10 @@ zeCommandListAppendMemoryCopy,          12,    0,            50331648,          
 ```
 **Device Timeline** mode (***Linux kernel 5.0+ is required for accurate measurements***) dumps four timestamps for each device activity - *append* to the command list, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
 ```
-Device Timeline for zeCommandListAppendMemoryCopy [ns] = 319154868 (append) 320972649 (submit) 320021623 (start) 320440290 (end)
-Device Timeline for zeCommandListAppendMemoryCopy [ns] = 319281072 (append) 320972649 (submit) 320441707 (start) 320738290 (end)
-Device Timeline for GEMM [ns] = 319344934 (append) 320972649 (submit) 320740123 (start) 364337290 (end)
-Device Timeline for zeCommandListAppendMemoryCopy [ns] = 319348093 (append) 320972649 (submit) 364338873 (start) 364765123 (end)
+Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 396835703 (append) 398002195 (submit) 399757026 (start) 400230526 (end)
+Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 397039340 (append) 398002195 (submit) 400231776 (start) 400547193 (end)
+Device Timeline (queue: 0x556fa2318fc0): GEMM [ns] = 397513563 (append) 398002195 (submit) 400548943 (start) 443632026 (end)
+Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 397632053 (append) 398002195 (submit) 443633526 (start) 444084943 (end)
 ...
 ```
 **Chrome Device Timeline** mode dumps timestamps for device activities to JSON format that can be opened in [chrome://tracing](https://www.chromium.org/developers/how-tos/trace-event-profiling-tool) browser tool.

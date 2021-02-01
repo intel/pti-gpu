@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2019-2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -51,7 +51,7 @@ static uint64_t CalculateTotalTime(ClApiCollector* collector) {
   PTI_ASSERT(collector != nullptr);
   uint64_t total_duration = 0;
 
-  const FunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
+  const ClFunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
   if (function_info_map.size() != 0) {
     for (auto& value : function_info_map) {
       total_duration += value.second.total_time;
@@ -72,7 +72,7 @@ static void PrintDeviceTable(
     std::cerr << "== " << device_type << " Backend: ==" << std::endl;
     std::cerr << std::endl;
 
-    const FunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
+    const ClFunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
     PTI_ASSERT(function_info_map.size() > 0);
     ClApiCollector::PrintFunctionsTable(function_info_map);
   }

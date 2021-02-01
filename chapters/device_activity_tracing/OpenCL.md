@@ -10,6 +10,8 @@ The same event could be used to get additional profiling information for the dev
  - time counter in nanoseconds when the command identified by event starts execution on the device (`CL_PROFILING_COMMAND_START`);
  - time counter in nanoseconds when the command identified by event has finished execution on the device (`CL_PROFILING_COMMAND_END`).
 
+Intel(R) Xeon(R) Processor / Intel(R) Core(TM) Processor (CPU) Runtimes use `QueryPerformanceCounter` on Windows and `CLOCK_MONOTONIC` on Linux as time sources for the counters described above. Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver also uses `QueryPerformanceCounter` on Windows but `CLOCK_MONOTONIC_RAW` on Linux.
+
 **Supported Runtimes**:
 - any OpenCL(TM) 1.0 and above
 
@@ -75,3 +77,4 @@ void CL_CALLBACK EventNotify(cl_event event,
 - [OpenCL(TM) GEMM](../../samples/cl_gemm)
 - [OpenCL(TM) Hot Kernels](../../samples/cl_hot_kernels)
 - [OpenCL(TM) GPU Metrics](../../samples/cl_gpu_metrics)
+- [OpenCL(TM) Tracer](../../samples/cl_tracer)

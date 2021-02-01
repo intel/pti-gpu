@@ -6,9 +6,8 @@ import omp_gemm
 import utils
 
 def config(path):
-  e = utils.add_env(None, "CXX", "icpx")
   p = subprocess.Popen(["cmake",\
-    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."], env = e,\
+    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."],\
     cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   p.wait()
   stdout, stderr = utils.run_process(p)

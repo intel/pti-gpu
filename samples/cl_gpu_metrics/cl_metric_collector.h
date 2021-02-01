@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -14,7 +14,7 @@
 #include <thread>
 #include <vector>
 
-#include "cl_tracer.h"
+#include "cl_api_tracer.h"
 #include "cl_utils.h"
 #include "metric_device.h"
 
@@ -51,7 +51,7 @@ class ClMetricCollector {
       new ClMetricCollector(metric_device, group, set);
     PTI_ASSERT(collector != nullptr);
 
-    ClTracer* tracer = new ClTracer(device, Callback, collector);
+    ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
     if (tracer == nullptr || !tracer->IsValid()) {
       std::cerr << "[WARNING] Unable to create OpenCL tracer " <<
         "for target device" << std::endl;
@@ -182,7 +182,7 @@ class ClMetricCollector {
     PTI_ASSERT(set_ != nullptr);
   }
 
-  void EnableTracing(ClTracer* tracer) {
+  void EnableTracing(ClApiTracer* tracer) {
     PTI_ASSERT(tracer != nullptr);
     tracer_ = tracer;
 
@@ -326,7 +326,7 @@ class ClMetricCollector {
   }
 
  private: // Data
-  ClTracer* tracer_ = nullptr;
+  ClApiTracer* tracer_ = nullptr;
 
   MetricDevice* device_ = nullptr;
   md::IConcurrentGroup_1_5* group_ = nullptr;

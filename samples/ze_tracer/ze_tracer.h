@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -12,10 +12,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <limits>
-#include <map>
-#include <mutex>
-#include <set>
+#include <sstream>
 #include <string>
 
 #include "ze_api_collector.h"
@@ -47,15 +44,14 @@ class ZeTracer {
         tracer->CheckOption(ZET_CHROME_CALL_LOGGING) ||
         tracer->CheckOption(ZET_HOST_TIMING)) {
 
-      OnFunctionFinishCallback callback = nullptr;
+      OnZeFunctionFinishCallback callback = nullptr;
       if (tracer->CheckOption(ZET_CHROME_CALL_LOGGING)) {
         callback = ChromeLoggingCallback;
       }
 
       bool call_tracing = tracer->CheckOption(ZET_CALL_LOGGING);
       api_collector = ZeApiCollector::Create(
-          tracer->start_time_, call_tracing,
-          callback, tracer);
+          tracer->start_time_, call_tracing, callback, tracer);
       if (api_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create API collector" << std::endl;
         delete tracer;
@@ -69,7 +65,7 @@ class ZeTracer {
         tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
         tracer->CheckOption(ZET_DEVICE_TIMING)) {
 
-      OnKernelFinishCallback callback = nullptr;
+      OnZeKernelFinishCallback callback = nullptr;
       if (tracer->CheckOption(ZET_DEVICE_TIMELINE) &&
           tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE)) {
         callback = DeviceAndChromeTimelineCallback;
@@ -141,7 +137,7 @@ class ZeTracer {
   void ReportHostTiming() {
     PTI_ASSERT(api_collector_ != nullptr);
 
-    const FunctionInfoMap& function_info_map =
+    const ZeFunctionInfoMap& function_info_map =
       api_collector_->GetFunctionInfoMap();
     if (function_info_map.size() == 0) {
       return;
@@ -152,12 +148,17 @@ class ZeTracer {
       total_duration += value.second.total_time;
     }
 
+    std::string title = "Total Execution Time (ns): ";
+    const size_t title_width = title.size();
+    const size_t time_width = 20;
+
     std::cerr << std::endl;
     std::cerr << "=== API Timing Results: ===" << std::endl;
     std::cerr << std::endl;
-    std::cerr << "Total Execution Time (ns): " <<
-      total_execution_time_ << std::endl;
-    std::cerr << "Total API Time (ns): " << total_duration << std::endl;
+    std::cerr << std::setw(title_width) << title <<
+      std::setw(time_width) << total_execution_time_ << std::endl;
+    std::cerr << std::setw(title_width) << "Total API Time (ns): " <<
+      std::setw(time_width) << total_duration << std::endl;
     std::cerr << std::endl;
 
     if (total_duration > 0) {
@@ -168,7 +169,7 @@ class ZeTracer {
   void ReportDeviceTiming() {
     PTI_ASSERT(kernel_collector_ != nullptr);
 
-    const KernelInfoMap& kernel_info_map =
+    const ZeKernelInfoMap& kernel_info_map =
       kernel_collector_->GetKernelInfoMap();
     if (kernel_info_map.size() == 0) {
       return;
@@ -179,12 +180,17 @@ class ZeTracer {
       total_duration += value.second.total_time;
     }
 
+    std::string title = "Total Execution Time (ns): ";
+    const size_t title_width = title.size();
+    const size_t time_width = 20;
+
     std::cerr << std::endl;
     std::cerr << "=== Device Timing Results: ===" << std::endl;
     std::cerr << std::endl;
-    std::cerr << "Total Execution Time (ns): " <<
-      total_execution_time_ << std::endl;
-    std::cerr << "Total Device Time (ns): " << total_duration << std::endl;
+    std::cerr << std::setw(title_width) << title <<
+      std::setw(time_width) << total_execution_time_ << std::endl;
+    std::cerr << std::setw(title_width) << "Total Device Time (ns): " <<
+      std::setw(time_width) << total_duration << std::endl;
     std::cerr << std::endl;
 
     if (total_duration > 0) {
@@ -203,14 +209,17 @@ class ZeTracer {
   }
 
   static void DeviceTimelineCallback(
-      void* data, const std::string& name,
+      void* data, void* queue, const std::string& name,
       uint64_t appended, uint64_t submitted,
       uint64_t started, uint64_t ended) {
-    std::cerr << "Device Timeline for " << name << " [ns] = " <<
+    std::stringstream stream;
+    stream << "Device Timeline (queue: " << queue <<
+      "): " << name << " [ns] = " <<
       appended << " (append) " <<
       submitted << " (submit) " <<
       started << " (start) " <<
       ended << " (end)" << std::endl;
+    std::cerr << stream.str();
   }
 
   void OpenTraceFile() {
@@ -231,24 +240,27 @@ class ZeTracer {
   }
 
   static void ChromeTimelineCallback(
-      void* data, const std::string& name,
+      void* data, void* queue, const std::string& name,
       uint64_t appended, uint64_t submitted,
       uint64_t started, uint64_t ended) {
     ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
-    tracer->chrome_trace_ << "{\"ph\":\"X\", \"pid\":" <<
-      utils::GetPid() << ", \"tid\":0, \"name\":\"" << name <<
+    std::stringstream stream;
+    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
+      ", \"tid\":" << reinterpret_cast<uint64_t>(queue) <<
+      ", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
   }
 
   static void DeviceAndChromeTimelineCallback(
-      void* data, const std::string& name,
+      void* data, void* queue, const std::string& name,
       uint64_t appended, uint64_t submitted,
       uint64_t started, uint64_t ended) {
-    DeviceTimelineCallback(data, name, appended, submitted, started, ended);
-    ChromeTimelineCallback(data, name, appended, submitted, started, ended);
+    DeviceTimelineCallback(data, queue, name, appended, submitted, started, ended);
+    ChromeTimelineCallback(data, queue, name, appended, submitted, started, ended);
   }
 
   static void ChromeLoggingCallback(
@@ -256,12 +268,14 @@ class ZeTracer {
       uint64_t started, uint64_t ended) {
     ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
-    tracer->chrome_trace_ << "{\"ph\":\"X\", \"pid\":" <<
+    std::stringstream stream;
+    stream << "{\"ph\":\"X\", \"pid\":" <<
       utils::GetPid() << ", \"tid\":" << utils::GetTid() <<
       ", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
   }
 
  private:

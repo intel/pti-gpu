@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -86,7 +86,7 @@ static KernelMap GetKernelMap() {
     return KernelMap();
   }
 
-  const KernelIntervalList& kernel_interval_list =
+  const ZeKernelIntervalList& kernel_interval_list =
     kernel_collector->GetKernelIntervalList();
   if (kernel_interval_list.size() == 0) {
     return KernelMap();

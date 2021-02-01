@@ -2,11 +2,15 @@ include("../build_utils/CMakeLists.txt")
 SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
+if(WIN32)
+  set(CMAKE_CXX_COMPILER "icl.exe")
+else()
+  set(CMAKE_CXX_COMPILER "icpx")
+endif()
+
 project(PTI_Samples_OpenMP_GEMM CXX)
 SetCompilerFlags()
 SetBuildType()
-
-CheckForIntelCompiler()
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Qnextgen /Qopenmp")

@@ -1,3 +1,5 @@
+set(PTI_CMAKE_MACRO_DIR ${CMAKE_CURRENT_LIST_DIR} CACHE INTERNAL "")
+
 macro(SetRequiredCMakeVersion)
   set(REQUIRED_CMAKE_VERSION 2.8)
 endmacro()
@@ -24,38 +26,6 @@ macro(SetBuildType)
     message(STATUS "Bitness: 64 bits")
   else()
     message(FATAL_ERROR "32-bit mode is not supported")
-  endif()
-endmacro()
-
-macro(CheckForIntelCompiler)
-  if(WIN32)
-    set(INTEL_COMPILER_NAME "icl.exe")
-  else()
-    set(INTEL_COMPILER_NAME "icpx")
-  endif()
-  get_filename_component(COMPILER_NAME ${CMAKE_CXX_COMPILER} NAME)
-  if(COMPILER_NAME STREQUAL ${INTEL_COMPILER_NAME})
-    message(STATUS "Intel(R) C++ Compiler is used")
-  else()
-    message(FATAL_ERROR
-      "Intel(R) C++ Compiler is required. "
-      "Use \"CXX=${INTEL_COMPILER_NAME} cmake ..\" command to configure the sample.")
-  endif()
-endmacro()
-
-macro(CheckForDPCCompiler)
-  if(WIN32)
-    set(INTEL_COMPILER_NAME "dpcpp.exe")
-  else()
-    set(INTEL_COMPILER_NAME "dpcpp")
-  endif()
-  get_filename_component(COMPILER_NAME ${CMAKE_CXX_COMPILER} NAME)
-  if(COMPILER_NAME STREQUAL ${INTEL_COMPILER_NAME})
-    message(STATUS "Intel(R) oneAPI DPC++ Compiler is used")
-  else()
-    message(FATAL_ERROR
-      "Intel(R) oneAPI DPC++ Compiler is required. "
-      "Use \"CXX=${INTEL_COMPILER_NAME} cmake ..\" command to configure the sample.")
   endif()
 endmacro()
 
@@ -102,7 +72,7 @@ macro(FindOpenCLHeaders TARGET)
                               "${OPENCL_INC_PATH}/CL/cl_gl.h"
                               "${OPENCL_INC_PATH}/CL/cl_version.h"
                               "${OPENCL_INC_PATH}/CL/cl_platform.h"
-                      COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/../build_utils/get_cl_headers.py" "${OPENCL_INC_PATH}" "${CMAKE_BINARY_DIR}")
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_cl_headers.py" "${OPENCL_INC_PATH}" "${CMAKE_BINARY_DIR}")
 
     target_include_directories(${TARGET}
       PUBLIC "${OPENCL_INC_PATH}")
@@ -122,7 +92,7 @@ macro(GetOpenCLTracingHeaders TARGET)
                             ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h)
   add_custom_command(OUTPUT ${OPENCL_TRACING_INC_PATH}/CL/tracing_api.h
                             ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/../build_utils/get_cl_tracing_headers.py" ${OPENCL_TRACING_INC_PATH} ${CMAKE_BINARY_DIR})
+                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_cl_tracing_headers.py" ${OPENCL_TRACING_INC_PATH} ${CMAKE_BINARY_DIR})
 
   target_include_directories(${TARGET}
     PUBLIC "${OPENCL_TRACING_INC_PATH}")
@@ -149,7 +119,7 @@ macro(GetITT TARGET)
                             ${ITT_INC_PATH}/ITT/ittnotify_types.h
                             ${ITT_INC_PATH}/ITT/ittnotify.h
                             ${ITT_INC_PATH}/ITT/legacy/ittnotify.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/../build_utils/get_itt.py" ${ITT_INC_PATH} ${CMAKE_BINARY_DIR})
+                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_itt.py" ${ITT_INC_PATH} ${CMAKE_BINARY_DIR})
   
   target_include_directories(${TARGET}
     PUBLIC "${ITT_INC_PATH}")
@@ -226,7 +196,7 @@ macro(GetIGAHeaders TARGET)
                             ${IGA_INC_PATH}/IGA/iga_bxml_enums.hpp
                             ${IGA_INC_PATH}/IGA/kv.h
                             ${IGA_INC_PATH}/IGA/kv.hpp
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/../build_utils/get_iga_headers.py" ${IGA_INC_PATH} ${CMAKE_BINARY_DIR})
+                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_iga_headers.py" ${IGA_INC_PATH} ${CMAKE_BINARY_DIR})
 
   target_include_directories(${TARGET}
     PUBLIC "${IGA_INC_PATH}")
@@ -243,7 +213,7 @@ macro(GetIGCHeaders TARGET)
                             ${IGC_INC_PATH}/IGC/patch_list.h)
   add_custom_command(OUTPUT ${IGC_INC_PATH}/IGC/program_debug_data.h
                             ${IGC_INC_PATH}/IGC/patch_list.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/../build_utils/get_igc_headers.py" ${IGC_INC_PATH} ${CMAKE_BINARY_DIR})
+                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_igc_headers.py" ${IGC_INC_PATH} ${CMAKE_BINARY_DIR})
 
   target_include_directories(${TARGET}
     PUBLIC "${IGC_INC_PATH}")
@@ -324,7 +294,7 @@ macro(GetMDHeaders TARGET)
                             ${MD_INC_PATH}/MD/metrics_discovery_internal_api.h)
   add_custom_command(OUTPUT ${MD_INC_PATH}/MD/metrics_discovery_api.h
                             ${MD_INC_PATH}/MD/metrics_discovery_internal_api.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/../build_utils/get_md_headers.py" ${MD_INC_PATH} ${CMAKE_BINARY_DIR})
+                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_md_headers.py" ${MD_INC_PATH} ${CMAKE_BINARY_DIR})
 
   target_include_directories(${TARGET}
     PUBLIC "${MD_INC_PATH}")
@@ -363,7 +333,7 @@ macro(FindGTPinLibrary TARGET)
                                 ${GTPIN_LIB_PATH}/GTPIN/libgtpin_core.so
                                 ${GTPIN_LIB_PATH}/GTPIN/libiga_wrapper.so
                                 ${GTPIN_LIB_PATH}/GTPIN/libstdc++.so.6
-                        COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/../build_utils/get_gtpin_libs.py" ${GTPIN_LIB_PATH} ${CMAKE_BINARY_DIR})
+                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_libs.py" ${GTPIN_LIB_PATH} ${CMAKE_BINARY_DIR})
 
       target_link_libraries(${TARGET}
         "${GTPIN_LIB_PATH}/GTPIN/libgtpin.so")
@@ -420,7 +390,7 @@ macro(GetGTPinHeaders TARGET)
                                 ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enum_types.h
                                 ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged.h
                                 ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_ins_field.h
-                        COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/../build_utils/get_gtpin_headers.py" ${GTPIN_INC_PATH} ${CMAKE_BINARY_DIR})
+                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_headers.py" ${GTPIN_INC_PATH} ${CMAKE_BINARY_DIR})
 
       target_include_directories(${TARGET}
         PUBLIC "${GTPIN_INC_PATH}/GTPIN"
@@ -486,7 +456,7 @@ macro(FindL0HeadersPath TARGET L0_GEN_SCRIPT)
   add_custom_target(ze_gen_headers ALL
                     DEPENDS ${L0_GEN_INC_PATH}/tracing.gen)
   add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/tracing.gen
-                     COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH="${PROJECT_SOURCE_DIR}/../utils" "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero")
+                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero")
   target_include_directories(${TARGET}
     PUBLIC "${L0_GEN_INC_PATH}")
   add_dependencies(${TARGET}

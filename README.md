@@ -42,22 +42,25 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 6. Code Annotation
     - based on [Instrumentation and Tracing Technology API (ITT API)](chapters/code_annotation/ITT.md)
 
-## Profiling Tools
-- for OpenCL(TM), DPC++ (with OpenCL(TM) backend) and OpenMP* (with OpenCL(TM) backend):
+## Profiling & Debug Tools
+- unified tools:
+    - [onetrace](tools/onetrace) - host and device tracing tool for OpenCL(TM) and Level Zero backends with support of DPC++ (both for CPU and GPU) and OpenMP* GPU offload;
+- tools for OpenCL(TM), DPC++ (with OpenCL(TM) backend) and OpenMP* GPU offload (with OpenCL(TM) backend):
     - [cl_hot_functions](samples/cl_hot_functions) - provides a list of hottest OpenCL(TM) API calls by backend (CPU and GPU);
     - [cl_hot_kernels](samples/cl_hot_kernels) - provides a list of hottest OpenCL(TM) kernels by backend (CPU and GPU);
     - [cl_debug_info](samples/cl_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
     - [cl_gpu_metrics](samples/cl_gpu_metrics) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle;
-- for Level Zero, DPC++ (with Level Zero backend) and OpenMP* (with Level Zero backend):
+    - [cl_tracer](samples/cl_tracer) - "Swiss army knife" for OpenCL(TM) API call tracing and profiling;
+- tools for Level Zero, DPC++ (with Level Zero backend) and OpenMP* GPU offload (with Level Zero backend):
     - [ze_hot_functions](samples/ze_hot_functions) - provides a list of hottest Level Zero API calls;
     - [ze_hot_kernels](samples/ze_hot_kernels) - provides a list of hottest Level Zero kernels;
     - [ze_debug_info](samples/ze_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
     - [ze_metric_query](samples/ze_metric_query) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *query* mode);
     - [ze_metric_streamer](samples/ze_metric_query) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *streamer* mode);
-    - [ze_tracer](samples/ze_tracer) - "Swiss army knife" for Level Zero profiling (former ze_intercept);
-- for OpenMP* (with any backend):
+    - [ze_tracer](samples/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);
+- tools for OpenMP*:
     - [omp_hot_regions](samples/omp_hot_regions) - provides a list of hottest parallel (for CPU) and target (for GPU) OpenMP* regions;
-- unified tools for binary instrumentation (for any GPU runtime):
+- tools for binary instrumentation:
     - [gpu_inst_count](samples/gpu_inst_count) - prints GPU kernel assembly (GEN ISA) annotated by instruction execution count;
     - [gpu_perfmon_read](samples/gpu_perfmon_read) - prints GPU kernel assembly (GEN ISA) annotated by specific HW metric, which is accumulated in EU PerfMon register;
 

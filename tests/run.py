@@ -13,6 +13,7 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["cl_gpu_metrics", None],
            ["cl_hot_functions", "gpu", "cpu", "dpc", "omp"],
            ["cl_hot_kernels", "gpu", "cpu",  "dpc", "omp"],
+           ["cl_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging"],
            ["gpu_info", "-d", "-m"],
            ["gpu_inst_count", "cl", "ze", "dpc"],
            ["gpu_perfmon_read", "cl", "ze", "dpc"],
@@ -31,6 +32,8 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["dpc_gemm", "gpu", "cpu", "host"],
            ["dpc_info", "-a", "-l"]]
 
+tools = [["onetrace", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging"]]
+
 def remove_python_cache(path):
   files = os.listdir(path)
   for file in files:
@@ -46,7 +49,12 @@ def clean():
     path = utils.get_sample_build_path(sample[0])
     if os.path.exists(path):
       shutil.rmtree(path)
-  
+
+  for tool in tools:
+    path = utils.get_tool_build_path(tool[0])
+    if os.path.exists(path):
+      shutil.rmtree(path)
+
   remove_python_cache(utils.get_build_utils_path())
   remove_python_cache(utils.get_script_path())
 
@@ -55,20 +63,26 @@ def clean():
       if file.endswith(".log"):
         os.remove(os.path.join(root, file))
 
-def test(f, sample, option):
-  if option:
-    sys.stdout.write("Running sample test for " + sample + " (" + option + ")...")
+def test(f, name, option, istool = False):
+  if istool:
+    if option:
+      sys.stdout.write("Running tool test for " + name + " (" + option + ")...")
+    else:
+      sys.stdout.write("Running tool test for " + name + "...")
   else:
-    sys.stdout.write("Running sample test for " + sample + "...")
+    if option:
+      sys.stdout.write("Running sample test for " + name + " (" + option + ")...")
+    else:
+      sys.stdout.write("Running sample test for " + name + "...")
   sys.stdout.flush()
-  module = importlib.import_module(sample)
+  module = importlib.import_module(name)
   log = module.main(option)
   if log:
     sys.stdout.write("FAILED\n")
     if option:
-      f.write("======= " + sample + " (" + option + ") =======\n")
+      f.write("======= " + name + " (" + option + ") =======\n")
     else:
-      f.write("======= " + sample + " =======\n")
+      f.write("======= " + name + " =======\n")
     f.write(log)
     return False
   else:
@@ -96,6 +110,16 @@ def main():
       continue
     for i in range(1, len(sample)):
       if test(f, name, sample[i]):
+        tests_passed += 1
+      else:
+        tests_failed += 1
+
+  for tool in tools:
+    name = tool[0]
+    if re.search(tmpl, name) == None:
+      continue
+    for i in range(1, len(tool)):
+      if test(f, name, tool[i], True):
         tests_passed += 1
       else:
         tests_failed += 1

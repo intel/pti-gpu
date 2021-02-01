@@ -2,11 +2,15 @@ include("../build_utils/CMakeLists.txt")
 SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
+if(WIN32)
+  set(CMAKE_CXX_COMPILER "dpcpp.exe")
+else()
+  set(CMAKE_CXX_COMPILER "dpcpp")
+endif()
+
 project(PTI_Samples_DPC_GEMM CXX)
 SetCompilerFlags()
 SetBuildType()
-
-CheckForDPCCompiler()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gline-tables-only")
 

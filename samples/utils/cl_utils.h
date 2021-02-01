@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2019-2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -54,6 +54,10 @@ inline cl_device_id GetIntelDevice(cl_device_type type) {
             break;
         }
     }
+
+    if (target != nullptr) {
+      break;
+    }
   }
 
   return target;
@@ -76,11 +80,23 @@ inline std::string GetDeviceName(cl_device_id device) {
   PTI_ASSERT(device != nullptr);
 
   char name[MAX_STR_SIZE] = { 0 };
-  cl_int status = clGetDeviceInfo(device, CL_DEVICE_NAME,
-                                  MAX_STR_SIZE, name, nullptr);
+  cl_int status = clGetDeviceInfo(
+      device, CL_DEVICE_NAME, MAX_STR_SIZE, name, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
 
   return name;
+}
+
+inline cl_device_type GetDeviceType(cl_device_id device) {
+  PTI_ASSERT(device != nullptr);
+
+  cl_device_type type = CL_DEVICE_TYPE_ALL;
+  cl_int status = clGetDeviceInfo(
+      device, CL_DEVICE_TYPE, sizeof(type), &type, nullptr);
+  PTI_ASSERT(status == CL_SUCCESS);
+  PTI_ASSERT(type != CL_DEVICE_TYPE_ALL);
+
+  return type;
 }
 
 inline cl_program GetProgram(cl_kernel kernel) {
@@ -213,28 +229,44 @@ inline cl_device_id GetDevice(cl_command_queue queue) {
   return device;
 }
 
-inline cl_ulong GetEventStartTime(cl_event event) {
+inline cl_ulong GetEventTimestamp(cl_event event, cl_profiling_info info) {
   PTI_ASSERT(event != nullptr);
 
   cl_int status = CL_SUCCESS;
   cl_ulong start = 0;
 
-  status = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START,
-                                   sizeof(cl_ulong), &start, nullptr);
+  status = clGetEventProfilingInfo(
+      event, info, sizeof(cl_ulong), &start, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
   return start;
 }
 
-inline cl_ulong GetEventEndTime(cl_event event) {
-  PTI_ASSERT(event != nullptr);
+inline cl_ulong GetGpuTimestamp() {
+  cl_ulong timestamp = 0;
+#if defined(_WIN32)
+  BOOL success = QueryPerformanceCounter(&timestamp);
+  PTI_ASSERT(success);
+#else
+  timespec tp{0, 0};
+  int status = clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
+  PTI_ASSERT(status == 0);
+  timestamp = NSEC_IN_SEC * tp.tv_sec + tp.tv_nsec;
+#endif
+  return timestamp;
+}
 
-  cl_int status = CL_SUCCESS;
-  cl_ulong end = 0;
-
-  status = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END,
-                                   sizeof(cl_ulong), &end, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
-  return end;
+inline cl_ulong GetCpuTimestamp() {
+  cl_ulong timestamp = 0;
+#if defined(_WIN32)
+  BOOL success = QueryPerformanceCounter(&timestamp);
+  PTI_ASSERT(success);
+#else
+  timespec tp{0, 0};
+  int status = clock_gettime(CLOCK_MONOTONIC, &tp);
+  PTI_ASSERT(status == 0);
+  timestamp = NSEC_IN_SEC * tp.tv_sec + tp.tv_nsec;
+#endif
+  return timestamp;
 }
 
 } // namespace cl

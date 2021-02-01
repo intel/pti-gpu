@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -13,27 +13,28 @@
 #include <string>
 #include <vector>
 
-#include "cl_tracer.h"
+#include "cl_api_tracer.h"
 #include "cl_utils.h"
+#include "trace_guard.h"
 
 class ClKernelCollector;
 
-enum KernelType {
+enum ClKernelType {
   KERNEL_TYPE_USER,
   KERNEL_TYPE_TRANSFER
 };
 
-struct EventData {
+struct ClEventData {
   ClKernelCollector* collector;
   std::string kernel_name;
-  KernelType kernel_type;
+  ClKernelType kernel_type;
   union {
     cl_kernel kernel;
     size_t bytes_transferred;
   };
 };
 
-struct KernelInfo {
+struct ClKernelInfo {
   uint64_t total_time;
   uint64_t min_time;
   uint64_t max_time;
@@ -41,14 +42,14 @@ struct KernelInfo {
   size_t simd_width;
   size_t bytes_transferred;
 
-  bool operator>(const KernelInfo& r) const {
+  bool operator>(const ClKernelInfo& r) const {
     if (total_time != r.total_time) {
       return total_time > r.total_time;
     }
     return call_count > r.call_count;
   }
 
-  bool operator!=(const KernelInfo& r) const {
+  bool operator!=(const ClKernelInfo& r) const {
     if (total_time == r.total_time) {
       return call_count != r.call_count;
     }
@@ -56,24 +57,36 @@ struct KernelInfo {
   }
 };
 
-struct KernelInterval {
+struct ClKernelInterval {
   std::string name;
   uint64_t start;
   uint64_t end;
 };
 
-using KernelInfoMap = std::map<std::string, KernelInfo>;
-using KernelIntervalList = std::vector<KernelInterval>;
+using ClKernelInfoMap = std::map<std::string, ClKernelInfo>;
+using ClKernelIntervalList = std::vector<ClKernelInterval>;
+using ClKernelTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+
+typedef void (*OnClKernelFinishCallback)(
+    void* data, void* queue, const std::string& name,
+    uint64_t queued, uint64_t submitted,
+    uint64_t started, uint64_t ended);
 
 class ClKernelCollector {
- public: // User Interface
-  static ClKernelCollector* Create(cl_device_id device) {
+ public: // Interface
+  static ClKernelCollector* Create(
+      cl_device_id device,
+      ClKernelTimePoint base_time = std::chrono::steady_clock::now(),
+      OnClKernelFinishCallback callback = nullptr,
+      void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
+    TraceGuard guard;
 
-    ClKernelCollector* collector = new ClKernelCollector();
+    ClKernelCollector* collector = new ClKernelCollector(
+        device, base_time, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
-    ClTracer* tracer = new ClTracer(device, Callback, collector);
+    ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
     if (tracer == nullptr || !tracer->IsValid()) {
       std::cerr << "[WARNING] Unable to create OpenCL tracer " <<
         "for target device" << std::endl;
@@ -100,19 +113,19 @@ class ClKernelCollector {
     PTI_ASSERT(disabled);
   }
 
-  const KernelInfoMap& GetKernelInfoMap() const {
+  const ClKernelInfoMap& GetKernelInfoMap() const {
     return kernel_info_map_;
   }
 
-  const KernelIntervalList& GetKernelIntervalList() const {
+  const ClKernelIntervalList& GetKernelIntervalList() const {
     return kernel_interval_list_;
   }
 
   ClKernelCollector(const ClKernelCollector& copy) = delete;
   ClKernelCollector& operator=(const ClKernelCollector& copy) = delete;
 
-  static void PrintKernelsTable(const KernelInfoMap& kernel_info_map) {
-    std::set< std::pair<std::string, KernelInfo>,
+  static void PrintKernelsTable(const ClKernelInfoMap& kernel_info_map) {
+    std::set< std::pair<std::string, ClKernelInfo>,
               utils::Comparator > sorted_list(
         kernel_info_map.begin(), kernel_info_map.end());
 
@@ -165,9 +178,27 @@ class ClKernelCollector {
   }
 
  private: // Implementation Details
-  ClKernelCollector() {}
+  ClKernelCollector(
+      cl_device_id device,
+      ClKernelTimePoint base_time,
+      OnClKernelFinishCallback callback,
+      void* callback_data)
+      : base_time_(base_time),
+        callback_(callback),
+        callback_data_(callback_data) {
+    if (callback_ != nullptr) {
+      cl_device_type device_type = utils::cl::GetDeviceType(device);
+      if (device_type == CL_DEVICE_TYPE_GPU) {
+        dev_timestamp_ = utils::cl::GetGpuTimestamp();
+      } else {
+        PTI_ASSERT(device_type == CL_DEVICE_TYPE_CPU);
+        dev_timestamp_ = utils::cl::GetCpuTimestamp();
+      }
+      cpu_timestamp_ = std::chrono::steady_clock::now();
+    }
+  }
 
-  void EnableTracing(ClTracer* tracer) {
+  void EnableTracing(ClApiTracer* tracer) {
     PTI_ASSERT(tracer != nullptr);
     tracer_ = tracer;
 
@@ -192,7 +223,7 @@ class ClKernelCollector {
       kernel_info_map_[name] = {
         time, time, time, 1, simd_width, bytes_transferred};
     } else {
-      KernelInfo& kernel = kernel_info_map_[name];
+      ClKernelInfo& kernel = kernel_info_map_[name];
       kernel.total_time += time;
       if (time > kernel.max_time) {
         kernel.max_time = time;
@@ -216,16 +247,29 @@ class ClKernelCollector {
   static void CL_CALLBACK EventNotify(
       cl_event event, cl_int event_status, void* user_data) {
     PTI_ASSERT(event_status == CL_COMPLETE);
+    TraceGuard guard;
 
     PTI_ASSERT(user_data != nullptr);
-    EventData* event_data = reinterpret_cast<EventData*>(user_data);
+    ClEventData* event_data = reinterpret_cast<ClEventData*>(user_data);
+
+    ClKernelCollector* collector = event_data->collector;
+    PTI_ASSERT(collector != nullptr);
+
+    cl_command_queue queue = utils::cl::GetCommandQueue(event);
+    PTI_ASSERT(queue != nullptr);
+
+    std::string name = event_data->kernel_name;
+    PTI_ASSERT(!name.empty());
+
+    cl_ulong started =
+      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_START);
+    cl_ulong ended =
+      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_END);
+    cl_ulong time = ended - started;
+    PTI_ASSERT(time > 0);
 
     if (event_data->kernel_type == KERNEL_TYPE_USER) {
       cl_kernel kernel = event_data->kernel;
-      std::string name = event_data->kernel_name;
-
-      cl_command_queue queue = utils::cl::GetCommandQueue(event);
-      PTI_ASSERT(queue != nullptr);
 
       cl_device_id device = utils::cl::GetDevice(queue);
       PTI_ASSERT(device != nullptr);
@@ -233,39 +277,53 @@ class ClKernelCollector {
       size_t simd_width = utils::cl::GetSimdWidth(device, kernel);
       PTI_ASSERT(simd_width > 0);
 
-      cl_ulong start = utils::cl::GetEventStartTime(event);
-      cl_ulong end = utils::cl::GetEventEndTime(event);
-      cl_ulong time = end - start;
-      PTI_ASSERT(time > 0);
-
       cl_int status = clReleaseKernel(kernel);
       PTI_ASSERT(status == CL_SUCCESS);
 
-      status = clReleaseEvent(event);
-      PTI_ASSERT(status == CL_SUCCESS);
-
-      PTI_ASSERT(event_data->collector != nullptr);
-      event_data->collector->AddKernelInfo(name, time, simd_width, 0);
-      event_data->collector->AddKernelInterval(name, start, end);
+      collector->AddKernelInfo(name, time, simd_width, 0);
+      collector->AddKernelInterval(name, started, ended);
 
     } else {
       PTI_ASSERT(event_data->kernel_type == KERNEL_TYPE_TRANSFER);
 
-      std::string name = event_data->kernel_name;
       size_t bytes_transferred = event_data->bytes_transferred;
       PTI_ASSERT(bytes_transferred > 0);
 
-      cl_ulong start = utils::cl::GetEventStartTime(event);
-      cl_ulong end = utils::cl::GetEventEndTime(event);
-      cl_ulong time = end - start;
-      PTI_ASSERT(time > 0);
-
-      cl_int status = clReleaseEvent(event);
-      PTI_ASSERT(status == CL_SUCCESS);
-
-      PTI_ASSERT(event_data->collector != nullptr);
-      event_data->collector->AddKernelInfo(name, time, 0, bytes_transferred);
+      collector->AddKernelInfo(name, time, 0, bytes_transferred);
     }
+
+    if (collector->callback_ != nullptr) {
+      cl_ulong queued =
+        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_QUEUED);
+      PTI_ASSERT(queued > 0);
+      cl_ulong submitted =
+        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_SUBMIT);
+      PTI_ASSERT(submitted > 0);
+
+      std::chrono::duration<uint64_t, std::nano> time_shift =
+        collector->cpu_timestamp_ - collector->base_time_;
+
+      PTI_ASSERT(collector->dev_timestamp_ < queued);
+      PTI_ASSERT(queued < submitted);
+      PTI_ASSERT(submitted < started);
+      PTI_ASSERT(started < ended);
+
+      uint64_t cpu_queued =
+        (queued - collector->dev_timestamp_) + time_shift.count();
+      uint64_t cpu_submitted =
+        (submitted - collector->dev_timestamp_) + time_shift.count();
+      uint64_t cpu_started =
+        (started - collector->dev_timestamp_) + time_shift.count();
+      uint64_t cpu_ended =
+        (ended - collector->dev_timestamp_) + time_shift.count();
+
+      collector->callback_(
+          collector->callback_data_, queue, name,
+          cpu_queued, cpu_submitted, cpu_started, cpu_ended);
+    }
+
+    cl_int status = clReleaseEvent(event);
+    PTI_ASSERT(status == CL_SUCCESS);
 
     delete event_data;
   }
@@ -338,7 +396,7 @@ class ClKernelCollector {
         PTI_ASSERT(status == CL_SUCCESS);
       }
 
-      EventData* event_data = new EventData;
+      ClEventData* event_data = new ClEventData;
       PTI_ASSERT(event_data != nullptr);
       cl_kernel kernel = *(params->kernel);
       event_data->collector = collector;
@@ -388,7 +446,7 @@ class ClKernelCollector {
         PTI_ASSERT(status == CL_SUCCESS);
       }
 
-      EventData* event_data = new EventData;
+      ClEventData* event_data = new ClEventData;
       PTI_ASSERT(event_data != nullptr);
       event_data->collector = collector;
       event_data->kernel_name = "clEnqueueReadBuffer";
@@ -435,7 +493,7 @@ class ClKernelCollector {
         PTI_ASSERT(status == CL_SUCCESS);
       }
 
-      EventData* event_data = new EventData;
+      ClEventData* event_data = new ClEventData;
       PTI_ASSERT(event_data != nullptr);
       event_data->collector = collector;
       event_data->kernel_name = "clEnqueueWriteBuffer";
@@ -451,6 +509,9 @@ class ClKernelCollector {
   static void Callback(cl_function_id function,
                       cl_callback_data* callback_data,
                       void* user_data) {
+    if (TraceGuard::Inactive()) return;
+    TraceGuard guard;
+
     ClKernelCollector* collector =
       reinterpret_cast<ClKernelCollector*>(user_data);
     PTI_ASSERT(collector != nullptr);
@@ -487,11 +548,18 @@ class ClKernelCollector {
   }
 
  private: // Data
-  ClTracer* tracer_ = nullptr;
+  ClApiTracer* tracer_ = nullptr;
+  ClKernelTimePoint base_time_;
+
+  OnClKernelFinishCallback callback_ = nullptr;
+  void* callback_data_ = nullptr;
+
+  ClKernelTimePoint cpu_timestamp_;
+  uint64_t dev_timestamp_ = 0;
 
   std::mutex lock_;
-  KernelInfoMap kernel_info_map_;
-  KernelIntervalList kernel_interval_list_;
+  ClKernelInfoMap kernel_info_map_;
+  ClKernelIntervalList kernel_interval_list_;
 
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;
