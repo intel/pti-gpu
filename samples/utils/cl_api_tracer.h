@@ -1,20 +1,20 @@
 //==============================================================
-// Copyright © 2019-2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_UTILS_CL_TRACER_H_
-#define PTI_SAMPLES_UTILS_CL_TRACER_H_
+#ifndef PTI_SAMPLES_UTILS_CL_API_TRACER_H_
+#define PTI_SAMPLES_UTILS_CL_API_TRACER_H_
 
 #include <CL/tracing_api.h>
 
 #include "pti_assert.h"
 
-class ClTracer {
+class ClApiTracer {
  public:
-  ClTracer(cl_device_id device, cl_tracing_callback callback,
-           void* user_data) {
+  ClApiTracer(
+      cl_device_id device, cl_tracing_callback callback, void* user_data) {
     PTI_ASSERT(device != nullptr);
 
     bool loaded = LoadTracingFunctions(device);
@@ -29,7 +29,7 @@ class ClTracer {
     }
   }
 
-  ~ClTracer() {
+  ~ClApiTracer() {
     if (handle_ != nullptr) {
       cl_int status = CL_SUCCESS;
       status = clDestroyTracingHandle_(handle_);
@@ -141,4 +141,4 @@ class ClTracer {
   decltype(clGetTracingStateINTEL)* clGetTracingState_ = nullptr;
 };
 
-#endif // PTI_SAMPLES_UTILS_CL_TRACER_H_
+#endif // PTI_SAMPLES_UTILS_CL_API_TRACER_H_

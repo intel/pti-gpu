@@ -231,7 +231,7 @@ The problem is that metrics timestamp one can get with Intel(R) Metrics Discover
 
 In Intel(R) Metrics Discovery Application Programming Interface library there is a function `GetGpuCpuTimestamps` that allows to bind GPU metrics timestamp to some CPU timestamp (which is based on `CLOCK_MONOTONIC` on Linux and `QueryPerformanceCounter` on Windows).
 
-So e.g. to convert GPU metrics timestamp (`gpuTimestamp`) to OpenCL timestamp (`cpu_timestamp`), which is based on `CLOCK_MONOTONIC_RAW` on Linux, one should perform the following steps:
+So e.g. to convert GPU metrics timestamp (`gpuTimestamp`) to OpenCL GPU timestamp (`cpu_timestamp`), which is based on `CLOCK_MONOTONIC_RAW` on Linux, one should perform the following steps:
 1. Get "time snap point" to correlate GPU and `CLOCK_MONOTONIC` time:
 ```cpp
 uint64_t cpu_snap_point = 0, gpu_snap_point = 0;

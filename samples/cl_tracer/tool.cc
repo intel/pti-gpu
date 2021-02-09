@@ -1,15 +1,15 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
 
 #include <iostream>
 
-#include "ze_intercept.h"
-#include "ze_utils.h"
+#include "cl_tracer.h"
+#include "cl_utils.h"
 
-static ZeIntercept* intercept = nullptr;
+static ClTracer* tracer = nullptr;
 
 extern "C"
 #if defined(_WIN32)
@@ -17,7 +17,7 @@ __declspec(dllexport)
 #endif
 void Usage() {
   std::cout <<
-    "Usage: ./ze_intercept[.exe] [options] <application> <args>" <<
+    "Usage: ./cl_tracer[.exe] [options] <application> <args>" <<
     std::endl;
   std::cout << "Options:" << std::endl;
   std::cout <<
@@ -49,25 +49,25 @@ int ParseArgs(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--call-logging") == 0 ||
         strcmp(argv[i], "-c") == 0) {
-      utils::SetEnv("ZEI_CallLogging=1");
+      utils::SetEnv("CLT_CallLogging=1");
       ++app_index;
     } else if (strcmp(argv[i], "--host-timing") == 0 ||
                strcmp(argv[i], "-h") == 0) {
-      utils::SetEnv("ZEI_HostTiming=1");
+      utils::SetEnv("CLT_HostTiming=1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timing") == 0 ||
                strcmp(argv[i], "-d") == 0) {
-      utils::SetEnv("ZEI_DeviceTiming=1");
+      utils::SetEnv("CLT_DeviceTiming=1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timeline") == 0 ||
                strcmp(argv[i], "-t") == 0) {
-      utils::SetEnv("ZEI_DeviceTimeline=1");
+      utils::SetEnv("CLT_DeviceTimeline=1");
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
-      utils::SetEnv("ZEI_ChromeDeviceTimeline=1");
+      utils::SetEnv("CLT_ChromeDeviceTimeline=1");
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
-      utils::SetEnv("ZEI_ChromeCallLogging=1");
+      utils::SetEnv("CLT_ChromeCallLogging=1");
       ++app_index;
     } else {
       break;
@@ -80,67 +80,51 @@ extern "C"
 #if defined(_WIN32)
 __declspec(dllexport)
 #endif
-void SetToolEnv() {
-  utils::SetEnv("ZE_ENABLE_TRACING_LAYER=1");
-}
+void SetToolEnv() {}
 
 static unsigned ReadArgs() {
   std::string value;
   unsigned options = 0;
 
-  value = utils::GetEnv("ZEI_CallLogging");
+  value = utils::GetEnv("CLT_CallLogging");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_CALL_LOGGING);
+    options |= (1 << CLT_CALL_LOGGING);
   }
 
-  value = utils::GetEnv("ZEI_HostTiming");
+  value = utils::GetEnv("CLT_HostTiming");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_HOST_TIMING);
+    options |= (1 << CLT_HOST_TIMING);
   }
 
-  value = utils::GetEnv("ZEI_DeviceTiming");
+  value = utils::GetEnv("CLT_DeviceTiming");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_DEVICE_TIMING);
+    options |= (1 << CLT_DEVICE_TIMING);
   }
 
-  value = utils::GetEnv("ZEI_DeviceTimeline");
+  value = utils::GetEnv("CLT_DeviceTimeline");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_DEVICE_TIMELINE);
+    options |= (1 << CLT_DEVICE_TIMELINE);
   }
 
-  value = utils::GetEnv("ZEI_ChromeDeviceTimeline");
+  value = utils::GetEnv("CLT_ChromeDeviceTimeline");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_CHROME_DEVICE_TIMELINE);
+    options |= (1 << CLT_CHROME_DEVICE_TIMELINE);
   }
 
-  value = utils::GetEnv("ZEI_ChromeCallLogging");
+  value = utils::GetEnv("CLT_ChromeCallLogging");
   if (!value.empty() && value == "1") {
-    options |= (1 << ZEI_CHROME_CALL_LOGGING);
+    options |= (1 << CLT_CHROME_CALL_LOGGING);
   }
 
   return options;
 }
 
 void EnableProfiling() {
-  ze_result_t status = ZE_RESULT_SUCCESS;
-  status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-  ze_device_handle_t device = nullptr;
-  ze_driver_handle_t driver = nullptr;
-
-  utils::ze::GetIntelDeviceAndDriver(ZE_DEVICE_TYPE_GPU, device, driver);
-  if (device == nullptr || driver == nullptr) {
-    std::cout << "[WARNING] Unable to find target" <<
-      " device for tracing" << std::endl;
-    return;
-  }
-
-  intercept = ZeIntercept::Create(driver, device, ReadArgs());
+  tracer = ClTracer::Create(ReadArgs());
 }
 
 void DisableProfiling() {
-  if (intercept != nullptr) {
-    delete intercept;
+  if (tracer != nullptr) {
+    delete tracer;
   }
 }

@@ -26,13 +26,13 @@ Total Region Time (ns): 186811670
 
 ## Build and Run
 ### Linux
-Run the following commands to build the sample (make sure you use Intel(R) C++ Compiler for building):
+Run the following commands to build the sample (make sure you have Intel(R) C++ Compiler in `PATH` for building):
 ```sh
 source <inteloneapi>/setvars.sh
 cd <pti>/samples/omp_hot_regions
 mkdir build
 cd build
-CXX=icpx cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 Use this command line to run the tool:
@@ -44,13 +44,12 @@ One may use [omp_gemm](../omp_gemm) as target application:
 OMP_TOOL_LIBRARIES=./libomp_hot_regions.so ../../omp_gemm/build/omp_gemm
 ```
 ### Windows
-Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you use Intel(R) C++ Compiler for building):
+Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you have Intel(R) C++ Compiler in `PATH` for building):
 ```sh
 <inteloneapi>\setvars.sh
 cd <pti>\samples\omp_hot_regions
 mkdir build
 cd build
-set CXX=icl
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release ..
 nmake
 ```

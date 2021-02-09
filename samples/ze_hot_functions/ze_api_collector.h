@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -19,20 +19,20 @@
 #include "utils.h"
 #include "ze_utils.h"
 
-struct Function {
+struct ZeFunction {
   uint64_t total_time;
   uint64_t min_time;
   uint64_t max_time;
   uint64_t call_count;
 
-  bool operator>(const Function& r) const {
+  bool operator>(const ZeFunction& r) const {
     if (total_time != r.total_time) {
       return total_time > r.total_time;
     }
     return call_count > r.call_count;
   }
 
-  bool operator!=(const Function& r) const {
+  bool operator!=(const ZeFunction& r) const {
     if (total_time == r.total_time) {
       return call_count != r.call_count;
     }
@@ -40,19 +40,19 @@ struct Function {
   }
 };
 
-using FunctionInfoMap = std::map<std::string, Function>;
-using FunctionTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+using ZeFunctionInfoMap = std::map<std::string, ZeFunction>;
+using ZeFunctionTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 
-typedef void (*OnFunctionFinishCallback)(
+typedef void (*OnZeFunctionFinishCallback)(
     void* data, const std::string& name,
     uint64_t started, uint64_t ended);
 
 class ZeApiCollector {
  public: // User Interface
   static ZeApiCollector* Create(
-      FunctionTimePoint base_time = std::chrono::steady_clock::now(),
+      ZeFunctionTimePoint base_time = std::chrono::steady_clock::now(),
       bool call_tracing = false,
-      OnFunctionFinishCallback callback = nullptr,
+      OnZeFunctionFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     ZeApiCollector* collector =
       new ZeApiCollector(base_time, call_tracing,
@@ -66,7 +66,7 @@ class ZeApiCollector {
 
     status = zelTracerCreate(&tracer_desc, &tracer);
     if (status != ZE_RESULT_SUCCESS || tracer == nullptr) {
-      std::cerr << "[WARNING] Unable to create Level Zero tracer" << std::endl;
+      std::cerr << "[WARNING] Unable to create L0 tracer" << std::endl;
       delete collector;
       return nullptr;
     }
@@ -87,12 +87,12 @@ class ZeApiCollector {
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
-  const FunctionInfoMap& GetFunctionInfoMap() const {
+  const ZeFunctionInfoMap& GetFunctionInfoMap() const {
     return function_info_map_;
   }
 
-  static void PrintFunctionsTable(const FunctionInfoMap& function_info_map) {
-    std::set< std::pair<std::string, Function>,
+  static void PrintFunctionsTable(const ZeFunctionInfoMap& function_info_map) {
+    std::set< std::pair<std::string, ZeFunction>,
               utils::Comparator > sorted_list(
         function_info_map.begin(), function_info_map.end());
 
@@ -155,7 +155,7 @@ class ZeApiCollector {
     if (function_info_map_.count(name) == 0) {
       function_info_map_[name] = {time, time, time, 1};
     } else {
-      Function& function = function_info_map_[name];
+      ZeFunction& function = function_info_map_[name];
       function.total_time += time;
       if (time < function.min_time) {
         function.min_time = time;
@@ -168,27 +168,24 @@ class ZeApiCollector {
   }
 
  private: // Implementation Details
-  ZeApiCollector(FunctionTimePoint base_time,
-                 bool call_tracing,
-                 OnFunctionFinishCallback callback,
-                 void* callback_data)
-      : base_time_(base_time),
-        call_tracing_(call_tracing),
-        callback_(callback),
-        callback_data_(callback_data) {}
+  ZeApiCollector(
+      ZeFunctionTimePoint base_time, bool call_tracing,
+      OnZeFunctionFinishCallback callback, void* callback_data)
+      : base_time_(base_time), call_tracing_(call_tracing),
+        callback_(callback), callback_data_(callback_data) {}
 
   #include <tracing.gen> // Auto-generated callbacks
 
  private: // Data
   zel_tracer_handle_t tracer_ = nullptr;
 
-  FunctionInfoMap function_info_map_;
+  ZeFunctionInfoMap function_info_map_;
   std::mutex lock_;
 
-  FunctionTimePoint base_time_;
+  ZeFunctionTimePoint base_time_;
   bool call_tracing_ = false;
 
-  OnFunctionFinishCallback callback_ = nullptr;
+  OnZeFunctionFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;
 
   static const uint32_t kFunctionLength = 10;

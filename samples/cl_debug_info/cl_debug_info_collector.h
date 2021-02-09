@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -15,7 +15,7 @@
 #include <mutex>
 #include <vector>
 
-#include "cl_tracer.h"
+#include "cl_api_tracer.h"
 #include "cl_utils.h"
 #include "igc_binary_decoder.h"
 #include "gen_symbols_decoder.h"
@@ -52,7 +52,7 @@ class ClDebugInfoCollector {
     ClDebugInfoCollector* collector = new ClDebugInfoCollector(device);
     PTI_ASSERT(collector != nullptr);
 
-    ClTracer* tracer = new ClTracer(device, Callback, collector);
+    ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
     if (tracer == nullptr || !tracer->IsValid()) {
       std::cerr << "[WARNING] Unable to create OpenCL tracer " <<
         "for target device" << std::endl;
@@ -204,7 +204,7 @@ class ClDebugInfoCollector {
     PTI_ASSERT(device_ != nullptr);
   }
 
-  void EnableTracing(ClTracer* tracer) {
+  void EnableTracing(ClApiTracer* tracer) {
     PTI_ASSERT(tracer != nullptr);
     tracer_ = tracer;
 
@@ -523,7 +523,7 @@ class ClDebugInfoCollector {
   }
 
  private: // Data
-  ClTracer* tracer_ = nullptr;
+  ClApiTracer* tracer_ = nullptr;
   cl_device_id device_ = nullptr;
 
   std::mutex lock_;

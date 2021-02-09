@@ -1,3 +1,9 @@
+#==============================================================
+# Copyright (C) Intel Corporation
+#
+# SPDX-License-Identifier: MIT
+# =============================================================
+
 import os
 import sys
 import re
@@ -259,17 +265,39 @@ def gen_api(f, func_list, group_map):
   f.write("}\n")
   f.write("\n")
 
-def gen_result_converter(f, enum_map):
-  assert "ze_result_t" in enum_map
-  f.write("static const char* GetResultString(unsigned result) {\n")
-  f.write("  switch (result) {\n")
-  for name, value in enum_map["ze_result_t"].items():
-    f.write("    case " + value + ":\n")
+def gen_structure_type_converter(f, enum_map):
+  struct_type_enum = {}
+  for name in enum_map["ze_structure_type_t"]:
+    struct_type_enum[name] = int(enum_map["ze_structure_type_t"][name])
+  struct_type_enum = sorted(struct_type_enum.items(), key=lambda x:x[1])
+  assert "ze_structure_type_t" in enum_map
+  f.write("static const char* GetStructureTypeString(unsigned structure_type) {\n")
+  f.write("  switch (structure_type) {\n")
+  for name, value in struct_type_enum:
+    f.write("    case " + name + ":\n")
     f.write("      return \"" + name + "\";\n")
   f.write("    default:\n")
   f.write("      break;\n")
   f.write("  }\n")
-  f.write("  return \"<UNKNOWN>\";\n")
+  f.write("  return \"UNKNOWN\";\n")
+  f.write("}\n")
+  f.write("\n")
+
+def gen_result_converter(f, enum_map):
+  result_enum = {}
+  for name in enum_map["ze_result_t"]:
+    result_enum[name] = int(enum_map["ze_result_t"][name])
+  result_enum = sorted(result_enum.items(), key=lambda x:x[1])
+  assert "ze_result_t" in enum_map
+  f.write("static const char* GetResultString(unsigned result) {\n")
+  f.write("  switch (result) {\n")
+  for name, value in result_enum:
+    f.write("    case " + name + ":\n")
+    f.write("      return \"" + name + "\";\n")
+  f.write("    default:\n")
+  f.write("      break;\n")
+  f.write("  }\n")
+  f.write("  return \"UNKNOWN\";\n")
   f.write("}\n")
   f.write("\n")
 
@@ -278,61 +306,195 @@ def gen_enum(f, enum_map, enum_name, param_name):
   f.write("    switch (" + param_name + ") {\n")
   for name, value in enum_map[enum_name].items():
     f.write("      case " + value + ":\n")
-    f.write("        std::cerr << \"" + name + "\";\n")
+    f.write("        stream << \"" + name + "\";\n")
     f.write("        break;\n")
   f.write("      default:\n")
-  f.write("        std::cerr << \"<UNKNOWN>\";\n")
+  f.write("        stream << \"<UNKNOWN>\";\n")
   f.write("        break;\n")
   f.write("    }\n")
 
 def gen_enter_callback(f, func, params, enum_map):
   f.write("  PTI_ASSERT(global_user_data != nullptr);\n")
-  f.write("  ZeApiCollector* collector = reinterpret_cast<ZeApiCollector*>(global_user_data);\n")
+  f.write("  ZeApiCollector* collector =\n")
+  f.write("    reinterpret_cast<ZeApiCollector*>(global_user_data);\n")
   f.write("\n")
   f.write("  uint64_t& start_time = *reinterpret_cast<uint64_t*>(instance_user_data);\n")
   f.write("  start_time = collector->GetTimestamp();\n")
   f.write("  if (collector->call_tracing_) {\n")
-  f.write("    std::cerr << \">>>> [\" << start_time << \"] \";\n")
-  f.write("    std::cerr << \"" + func + "\" << \":\";\n")
+  f.write("    std::stringstream stream;\n")
+  f.write("    stream << \">>>> [\" << start_time << \"] \";\n")
+  f.write("    stream << \"" + func + "\" << \":\";\n")
   for name, type in params:
     if type == "ze_ipc_mem_handle_t" or type == "ze_ipc_event_pool_handle_t":
-      f.write("    std::cerr << \" " + name + " = \" << (params->p" + name + ")->data;\n")
+      f.write("    stream << \" " + name + " = \" << (params->p" + name + ")->data;\n")
     else:
-      f.write("    std::cerr << \" " + name + " = \" << *(params->p" + name + ");\n")
-      if type in enum_map:
-        f.write("    std::cerr << \" (\";\n")
-        gen_enum(f, enum_map, type, "*(params->p" + name + ")")
-        f.write("    std::cerr << \")\";\n")
-      elif name.find("ph") == 0 or name.find("pptr") == 0 or name.find("pCount") == 0:
-        f.write("    if (*(params->p" + name + ") != nullptr) {\n")
-        if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
-          f.write("      std::cerr << \" (" + name[1:] + " = \" << (*(params->p" + name + "))->data << \")\";\n")
-        else:
-          f.write("      std::cerr << \" (" + name[1:] + " = \" << **(params->p" + name + ") << \")\";\n")
+      if type.find("char*") >= 0 and type.find("char*") == len(type) - len("char*"):
+        f.write("    if (*(params->p" + name + ") == nullptr) {\n")
+        f.write("      stream << \" " + name + " = \" << \"0\";\n")
+        f.write("    } else if (strlen(*(params->p" + name +")) == 0) {\n")
+        f.write("      stream << \" " + name + " = \\\"\\\"\";\n")
+        f.write("    } else {\n")
+        f.write("      stream << \" " + name + " = \\\"\" << *(params->p" + name + ") << \"\\\"\";\n")
         f.write("    }\n")
-      elif type.find("ze_command_queue_desc_t*") >= 0:
-        f.write("    if (*(params->p" + name + ") != nullptr) {\n")
-        f.write("      std::cerr << \" {\" << (*(params->p" + name + "))->stype << \" \";\n")
-        f.write("      std::cerr << (*(params->p" + name + "))->pNext << \" \";\n")
-        f.write("      std::cerr << (*(params->p" + name + "))->ordinal << \" \";\n")
-        f.write("      std::cerr << (*(params->p" + name + "))->index << \" \";\n")
-        f.write("      std::cerr << (*(params->p" + name + "))->flags << \" \";\n")
-        f.write("      std::cerr << (*(params->p" + name + "))->mode << \" \";\n")
-        f.write("      std::cerr << (*(params->p" + name + "))->priority << \"}\";\n")
-        f.write("    }\n")
-      elif type.find("ze_kernel_desc_t*") >= 0:
-        f.write("    if (*(params->p" + name + ") != nullptr) {\n")
-        f.write("      std::cerr << \" {\" << (*(params->p" + name + "))->stype << \" \";\n")
-        f.write("      std::cerr << (*(params->p" + name + "))->pNext << \" \";\n")
-        f.write("      std::cerr << (*(params->p" + name + "))->flags << \" \";\n")
-        f.write("      std::cerr << (*(params->p" + name + "))->pKernelName << \"}\";\n")
-        f.write("    }\n")
-  f.write("    std::cerr << std::endl;\n")
+      else:
+        f.write("    stream << \" " + name + " = \" << *(params->p" + name + ");\n")
+        if name.find("ph") == 0 or name.find("pptr") == 0 or name.find("pCount") == 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
+            f.write("      stream << \" (" + name[1:] + " = \" << (*(params->p" + name + "))->data << \")\";\n")
+          else:
+            f.write("      stream << \" (" + name[1:] + " = \" << **(params->p" + name + ") << \")\";\n")
+          f.write("    }\n")
+        elif type.find("ze_event_pool_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->count << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_command_queue_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->ordinal << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->index << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->mode << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->priority << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_kernel_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \" \";\n")
+          f.write("      if ((*(params->p" + name + "))->pKernelName == nullptr) {\n")
+          f.write("        stream << \"0\";\n")
+          f.write("      } else if (strlen((*(params->p" + name + "))->pKernelName) == 0) {\n")
+          f.write("        stream << \" " + name + " = \\\"\\\"\";\n")
+          f.write("      } else {\n")
+          f.write("        stream << (*(params->p" + name + "))->pKernelName << \"}\";\n")
+          f.write("      }\n")
+          f.write("    }\n")
+        elif type.find("ze_device_mem_alloc_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->ordinal << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_context_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_command_list_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->commandQueueGroupOrdinal << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_event_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->index << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->signal << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->wait << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_fence_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_image_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->type << \" \";\n")
+          f.write("      stream << \"{\" << (*(params->p" + name +"))->format.layout << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->format.type << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->format.x << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->format.y << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->format.z << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->format.w << \"}\" << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->width << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->height << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->depth << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->arraylevels << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->miplevels << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_host_mem_alloc_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_external_memory_export_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_module_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->format << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->inputSize << \" \";\n")
+          f.write("      stream << static_cast<const void*>((*(params->p" + name + "))->pInputModule) << \" \";\n")
+          f.write("      if ((*(params->p" + name + ")) -> pBuildFlags != nullptr) \n")
+          f.write("        stream << (*(params->p" + name + "))->pBuildFlags << \" \";\n")
+          f.write("      else stream << 0 << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pConstants << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_sampler_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->addressMode << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->filterMode << \" \";\n")
+          f.write("      stream << static_cast<int>((*(params->p" + name + "))->isNormalized) << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_physical_mem_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->size << \"}\";\n")
+          f.write("    }\n")
+        elif type.find("ze_raytracing_mem_alloc_ext_desc_t*") >= 0:
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      stream << \" {\" << GetStructureTypeString((*(params->p" + name + "))->stype)\n")
+          f.write("        << \"(0x\" << std::hex << (*(params->p" + name + "))->stype << std::dec << \") \";\n")
+          f.write("      stream << (*(params->p" + name + "))->pNext << \" \";\n")
+          f.write("      stream << (*(params->p" + name + "))->flags << \"}\";\n")
+          f.write("    }\n")
+  f.write("    stream << std::endl;\n")
+  f.write("    std::cerr << stream.str();\n")
   f.write("  }\n")
 
 def gen_exit_callback(f, func, params, enum_map):
   f.write("  PTI_ASSERT(global_user_data != nullptr);\n")
-  f.write("  ZeApiCollector* collector = reinterpret_cast<ZeApiCollector*>(global_user_data);\n")
+  f.write("  ZeApiCollector* collector =\n")
+  f.write("    reinterpret_cast<ZeApiCollector*>(global_user_data);\n")
   f.write("  uint64_t end_time = collector->GetTimestamp();\n")
   f.write("\n")
   f.write("  uint64_t& start_time = *reinterpret_cast<uint64_t*>(instance_user_data);\n")
@@ -341,24 +503,26 @@ def gen_exit_callback(f, func, params, enum_map):
   f.write("  uint64_t time = end_time - start_time;\n")
   f.write("  collector->AddFunctionTime(\"" + func + "\", time);\n")
   f.write("  if (collector->call_tracing_) {\n")
-  f.write("    std::cerr << \"<<<< [\" << end_time << \"] \";\n")
-  f.write("    std::cerr << \"" + func + "\" << \" [\" << time << \" ns]\";\n")
+  f.write("    std::stringstream stream;\n")
+  f.write("    stream << \"<<<< [\" << end_time << \"] \";\n")
+  f.write("    stream << \"" + func + "\" << \" [\" << time << \" ns]\";\n")
   for name, type in params:
     if name.find("ph") == 0 or name.find("pptr") == 0 or name.find("pCount") == 0:
       f.write("    if (*(params->p" + name + ") != nullptr) {\n")
       if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
-        f.write("      std::cerr << \" " + name[1:] + " = \" << (*(params->p" + name + "))->data << \"\";\n")
+        f.write("      stream << \" " + name[1:] + " = \" << (*(params->p" + name + "))->data << \"\";\n")
       else:
-        f.write("      std::cerr << \" " + name[1:] + " = \" << **(params->p" + name + ") << \"\";\n")
+        f.write("      stream << \" " + name[1:] + " = \" << **(params->p" + name + ") << \"\";\n")
       f.write("    }\n")
-  f.write("    std::cerr << \" -> \" << GetResultString(result) << \n")
-  f.write("      \" (\" << result << \")\" << std::endl;\n")
+  f.write("    stream << \" -> \" << GetResultString(result) << \n")
+  f.write("      \"(0x\" << result << \")\" << std::endl;\n")
+  f.write("    std::cerr << stream.str();\n")
   f.write("  }\n")
   f.write("\n")
   f.write("  if (collector->callback_ != nullptr) {\n")
-  f.write("    collector->callback_(collector->callback_data_,\n")
-  f.write("                         \"" + func + "\",\n")
-  f.write("                         start_time, end_time);\n")
+  f.write("    collector->callback_(\n")
+  f.write("        collector->callback_data_, \"" + func + "\",\n")
+  f.write("        start_time, end_time);\n")
   f.write("  }\n")
 
 def gen_callbacks(f, func_list, group_map, param_map, enum_map):
@@ -414,6 +578,7 @@ def main():
   enum_map = get_enum_map(l0_path)
 
   gen_result_converter(dst_file, enum_map)
+  gen_structure_type_converter(dst_file, enum_map)
   gen_callbacks(dst_file, func_list, group_map, param_map, enum_map)
   gen_api(dst_file, func_list, group_map)
 

@@ -26,13 +26,13 @@ Total execution time: 0.373728 sec
 
 ## Build and Run
 ### Linux
-Run the following commands to build the sample (make sure you use Intel(R) oneAPI DPC++ Compiler for building):
+Run the following commands to build the sample ((make sure you have oneAPI DPC++ Compiler in `PATH` for building)):
 ```sh
 source <inteloneapi>/setvars.sh
 cd <pti>/samples/dpc_gemm
 mkdir build
 cd build
-CXX=dpcpp cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 Use this command line to run the application:
@@ -40,7 +40,7 @@ Use this command line to run the application:
 ./dpc_gemm [cpu|gpu|host] [matrix_size] [repeat_count]
 ```
 ### Windows (manual build)
-Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample:
+Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you have oneAPI DPC++ Compiler in `PATH` for building):
 ```sh
 <inteloneapi>\setvars.bat
 cd <pti>\samples\dpc_gemm

@@ -1,5 +1,5 @@
 //==============================================================
-// Copyright © 2020 Intel Corporation
+// Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
@@ -44,7 +44,7 @@ static void PrintResults() {
   std::chrono::duration<uint64_t, std::nano> time = end - start;
 
   PTI_ASSERT(collector != nullptr);
-  const FunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
+  const ZeFunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
   if (function_info_map.size() == 0) {
     return;
   }

@@ -19,6 +19,16 @@ def get_sample_build_path(name):
     os.mkdir(path)
   return path
 
+def get_tool_build_path(name):
+  head, tail = os.path.split(get_script_path())
+  path = os.path.join(head, "tools")
+  path = os.path.join(path, name)
+  assert os.path.exists(path)
+  path = os.path.join(path, "build")
+  if not os.path.exists(path):
+    os.mkdir(path)
+  return path
+
 def get_build_utils_path():
   head, tail = os.path.split(get_script_path())
   path = os.path.join(head, "samples")

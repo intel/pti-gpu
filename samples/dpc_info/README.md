@@ -52,13 +52,13 @@ The following modes are implemented:
 
 ## Build and Run
 ### Linux
-Run the following commands to build the sample:
+Run the following commands to build the sample (make sure you have oneAPI DPC++ Compiler in `PATH` for building):
 ```sh
 source <inteloneapi>/setvars.sh
 cd <pti>/samples/dpc_info
 mkdir build
 cd build
-CXX=dpcpp cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 Use this command line to run the utility:
@@ -66,7 +66,7 @@ Use this command line to run the utility:
 ./dpc_info [-l|-a]
 ```
 ### Windows (manual build)
-Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample:
+Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you have oneAPI DPC++ Compiler in `PATH` for building):
 ```sh
 <inteloneapi>\setvars.bat
 cd <pti>\samples\dpc_info
