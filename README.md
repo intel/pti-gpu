@@ -56,7 +56,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - [ze_hot_kernels](samples/ze_hot_kernels) - provides a list of hottest Level Zero kernels;
     - [ze_debug_info](samples/ze_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
     - [ze_metric_query](samples/ze_metric_query) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *query* mode);
-    - [ze_metric_streamer](samples/ze_metric_query) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *streamer* mode);
+    - [ze_metric_streamer](samples/ze_metric_streamer) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *streamer* mode);
     - [ze_tracer](samples/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);
 - tools for OpenMP*:
     - [omp_hot_regions](samples/omp_hot_regions) - provides a list of hottest parallel (for CPU) and target (for GPU) OpenMP* regions;
