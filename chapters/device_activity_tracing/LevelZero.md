@@ -34,7 +34,7 @@ To use it one should create an event pool with timestamps support and an event f
 // Create an event pool
 ze_event_pool_desc_t event_pool_desc = {
     ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
-    ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP, // all events in pool contain profiling information
+    ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP | ZE_EVENT_POOL_FLAG_HOST_VISIBLE, // all events in pool contain profiling information
     1}; // number of events in pool
 ze_event_pool_handle_t event_pool = nullptr;
 zeEventPoolCreate(context, &event_pool_desc, 0, nullptr, &event_pool);

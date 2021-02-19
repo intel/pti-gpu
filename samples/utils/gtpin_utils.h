@@ -8,7 +8,7 @@
 #define PTI_SAMPLES_UTILS_GTPIN_UTILS_H_
 
 #include <gtpin.h>
-#include <IGA/kv.hpp>
+#include <iga/kv.hpp>
 
 #include "pti_assert.h"
 

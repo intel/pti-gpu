@@ -35,6 +35,10 @@ static void PrintDeviceInfo(const MetricDevice& device) {
   PTI_ASSERT(device->GetParams()->GlobalSymbolsCount > 0);
   for (uint32_t i = 0; i < device->GetParams()->GlobalSymbolsCount; ++i) {
     md::TGlobalSymbol_1_0* symbol = device->GetGlobalSymbol(i);
+    if (symbol->SymbolTypedValue.ValueType == md::VALUE_TYPE_LAST) {
+      continue;
+    }
+
     std::cout << "\t" << symbol->SymbolName << ": ";
     switch (symbol->SymbolTypedValue.ValueType) {
       case md::VALUE_TYPE_UINT32: {

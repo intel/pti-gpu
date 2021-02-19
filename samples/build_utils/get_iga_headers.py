@@ -14,7 +14,7 @@ def main():
   dst_path = sys.argv[1]
   if (not os.path.exists(dst_path)):
     os.mkdir(dst_path)
-  dst_path = os.path.join(dst_path, "IGA")
+  dst_path = os.path.join(dst_path, "iga")
   if (not os.path.exists(dst_path)):
     os.mkdir(dst_path)
 

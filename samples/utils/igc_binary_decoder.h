@@ -8,7 +8,7 @@
 
 #include <memory.h>
 
-#include <IGC/patch_list.h>
+#include <igc/ocl_igc_shared/executable_format/patch_list.h>
 #include <MD/metrics_discovery_internal_api.h>
 
 #include "gen_binary_decoder.h"

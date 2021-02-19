@@ -10,7 +10,7 @@
 #include <vector>
 #include <string>
 
-#include <IGA/kv.hpp>
+#include <iga/kv.hpp>
 
 #include "utils.h"
 

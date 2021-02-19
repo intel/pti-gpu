@@ -34,6 +34,7 @@ macro(FindOpenCLLibrary TARGET)
     string(REPLACE ":" ";" SEARCH_LIB_PATH $ENV{LD_LIBRARY_PATH})
   endif()
 
+  list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES .so.1)
   find_library(OPENCL_LIB_PATH
     NAMES OpenCL
     PATHS ${SEARCH_LIB_PATH})
@@ -178,47 +179,72 @@ macro(FindIGALibrary TARGET)
 endmacro()
 
 macro(GetIGAHeaders TARGET)
-  set(IGA_INC_PATH "${CMAKE_BINARY_DIR}")
-  RequirePythonInterp()
+  include(CheckIncludeFileCXX)
+  CHECK_INCLUDE_FILE_CXX(iga/iga.h IGA_H_INC_FOUND)
+  CHECK_INCLUDE_FILE_CXX(iga/iga_types_ext.hpp IGA_TYPES_EXT_HPP_INC_FOUND)
+  CHECK_INCLUDE_FILE_CXX(iga/iga_types_swsb.hpp IGA_TYPES_SWSB_HPP_INC_FOUND)
+  CHECK_INCLUDE_FILE_CXX(iga/iga_bxml_ops.hpp IGA_BXML_OPS_HPP_INC_FOUND)
+  CHECK_INCLUDE_FILE_CXX(iga/iga_bxml_enums.hpp IGA_BXML_ENUMS_HPP_INC_FOUND)
+  CHECK_INCLUDE_FILE_CXX(iga/kv.h KV_H_INC_FOUND)
+  CHECK_INCLUDE_FILE_CXX(iga/kv.hpp KV_HPP_INC_FOUND)
+  if (NOT (IGA_H_INC_FOUND AND
+           IGA_TYPES_EXT_HPP_INC_FOUND AND
+           IGA_TYPES_SWSB_HPP_INC_FOUND AND
+           IGA_BXML_OPS_HPP_INC_FOUND AND
+           IGA_BXML_ENUMS_HPP_INC_FOUND AND
+           KV_H_INC_FOUND AND
+           KV_HPP_INC_FOUND))
 
-  add_custom_target(iga_headers ALL
-                    DEPENDS ${IGA_INC_PATH}/IGA/iga.h
-                            ${IGA_INC_PATH}/IGA/iga_types_ext.hpp
-                            ${IGA_INC_PATH}/IGA/iga_types_swsb.hpp
-                            ${IGA_INC_PATH}/IGA/iga_bxml_ops.hpp
-                            ${IGA_INC_PATH}/IGA/iga_bxml_enums.hpp
-                            ${IGA_INC_PATH}/IGA/kv.h
-                            ${IGA_INC_PATH}/IGA/kv.hpp)
-  add_custom_command(OUTPUT ${IGA_INC_PATH}/IGA/iga.h
-                            ${IGA_INC_PATH}/IGA/iga_types_ext.hpp
-                            ${IGA_INC_PATH}/IGA/iga_types_swsb.hpp
-                            ${IGA_INC_PATH}/IGA/iga_bxml_ops.hpp
-                            ${IGA_INC_PATH}/IGA/iga_bxml_enums.hpp
-                            ${IGA_INC_PATH}/IGA/kv.h
-                            ${IGA_INC_PATH}/IGA/kv.hpp
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_iga_headers.py" ${IGA_INC_PATH} ${CMAKE_BINARY_DIR})
+    set(IGA_INC_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
 
-  target_include_directories(${TARGET}
-    PUBLIC "${IGA_INC_PATH}")
-  add_dependencies(${TARGET}
-    iga_headers)
+    add_custom_target(iga_headers ALL
+                      DEPENDS ${IGA_INC_PATH}/iga/iga.h
+                              ${IGA_INC_PATH}/iga/iga_types_ext.hpp
+                              ${IGA_INC_PATH}/iga/iga_types_swsb.hpp
+                              ${IGA_INC_PATH}/iga/iga_bxml_ops.hpp
+                              ${IGA_INC_PATH}/iga/iga_bxml_enums.hpp
+                              ${IGA_INC_PATH}/iga/kv.h
+                              ${IGA_INC_PATH}/iga/kv.hpp)
+    add_custom_command(OUTPUT ${IGA_INC_PATH}/iga/iga.h
+                              ${IGA_INC_PATH}/iga/iga_types_ext.hpp
+                              ${IGA_INC_PATH}/iga/iga_types_swsb.hpp
+                              ${IGA_INC_PATH}/iga/iga_bxml_ops.hpp
+                              ${IGA_INC_PATH}/iga/iga_bxml_enums.hpp
+                              ${IGA_INC_PATH}/iga/kv.h
+                              ${IGA_INC_PATH}/iga/kv.hpp
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_iga_headers.py" ${IGA_INC_PATH} ${CMAKE_BINARY_DIR})
+
+    target_include_directories(${TARGET}
+      PUBLIC "${IGA_INC_PATH}")
+    add_dependencies(${TARGET}
+      iga_headers)
+
+  endif()
 endmacro()
 
 macro(GetIGCHeaders TARGET)
-  set(IGC_INC_PATH "${CMAKE_BINARY_DIR}")
-  RequirePythonInterp()
+  include(CheckIncludeFileCXX)
+  CHECK_INCLUDE_FILE_CXX(igc/ocl_igc_shared/executable_format/program_debug_data.h PROGRAM_DEBUG_DATA_H_INC_FOUND)
+  CHECK_INCLUDE_FILE_CXX(igc/ocl_igc_shared/executable_format/patch_list.h PATCH_LIST_H_INC_FOUND)
+  if (NOT (PROGRAM_DEBUG_DATA_H_INC_FOUND AND PATCH_LIST_H_INC_FOUND))
 
-  add_custom_target(igc_headers ALL
-                    DEPENDS ${IGC_INC_PATH}/IGC/program_debug_data.h
-                            ${IGC_INC_PATH}/IGC/patch_list.h)
-  add_custom_command(OUTPUT ${IGC_INC_PATH}/IGC/program_debug_data.h
-                            ${IGC_INC_PATH}/IGC/patch_list.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_igc_headers.py" ${IGC_INC_PATH} ${CMAKE_BINARY_DIR})
+    set(IGC_INC_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
 
-  target_include_directories(${TARGET}
-    PUBLIC "${IGC_INC_PATH}")
-  add_dependencies(${TARGET}
-    igc_headers)
+    add_custom_target(igc_headers ALL
+                      DEPENDS ${IGC_INC_PATH}/igc/ocl_igc_shared/executable_format/program_debug_data.h
+                              ${IGC_INC_PATH}/igc/ocl_igc_shared/executable_format/patch_list.h)
+    add_custom_command(OUTPUT ${IGC_INC_PATH}/igc/ocl_igc_shared/executable_format/program_debug_data.h
+                              ${IGC_INC_PATH}/igc/ocl_igc_shared/executable_format/patch_list.h
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_igc_headers.py" ${IGC_INC_PATH} ${CMAKE_BINARY_DIR})
+
+    target_include_directories(${TARGET}
+      PUBLIC "${IGC_INC_PATH}")
+    add_dependencies(${TARGET}
+      igc_headers)
+
+  endif()
 endmacro()
 
 macro(CheckForMDLibrary)
@@ -254,7 +280,7 @@ macro(CheckForMDLibrary)
         "Intel(R) Metrics Discovery Application Programming Interface library is found at ${MD_LIB_PATH}")
     endif()
   endif()
-  
+
 endmacro()
 
 macro(CheckForMetricsLibrary)

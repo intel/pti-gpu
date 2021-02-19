@@ -107,7 +107,8 @@ static float RunAndCheck(ze_kernel_handle_t kernel,
 
   ze_event_pool_desc_t event_pool_desc = {
       ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
-      ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP, 1};
+      ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP | ZE_EVENT_POOL_FLAG_HOST_VISIBLE,
+      1};
   ze_event_pool_handle_t event_pool = nullptr;
   status = zeEventPoolCreate(context, &event_pool_desc,
                              0, nullptr, &event_pool);

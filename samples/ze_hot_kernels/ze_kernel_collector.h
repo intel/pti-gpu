@@ -529,6 +529,7 @@ class ZeKernelCollector {
     // PTI_ASSERT(profiling_desc->stype == ZE_STRUCTURE_TYPE_EVENT_POOL_DESC);
     profiling_desc->pNext = desc->pNext;
     profiling_desc->flags = (desc->flags | ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP);
+    profiling_desc->flags = (desc->flags | ZE_EVENT_POOL_FLAG_HOST_VISIBLE);
     profiling_desc->count = desc->count;
 
     *(params->pdesc) = profiling_desc;
@@ -578,7 +579,8 @@ class ZeKernelCollector {
 
     ze_event_pool_desc_t event_pool_desc = {
         ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
-        ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP, 1};
+        ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP | ZE_EVENT_POOL_FLAG_HOST_VISIBLE,
+        1};
     status = zeEventPoolCreate(
         context, &event_pool_desc, 0, nullptr, &event_pool);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);

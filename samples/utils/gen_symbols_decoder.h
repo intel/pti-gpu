@@ -9,7 +9,7 @@
 
 #include <vector>
 
-#include <IGC/program_debug_data.h>
+#include <igc/ocl_igc_shared/executable_format/program_debug_data.h>
 
 #include "elf_parser.h"
 
