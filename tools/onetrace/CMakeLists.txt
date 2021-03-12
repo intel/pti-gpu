@@ -9,16 +9,15 @@ SetBuildType()
 # Tool Library
 
 add_library(onetrace_tool SHARED
-  "${PROJECT_SOURCE_DIR}/../../samples/utils/trace_guard.cc"
   "${PROJECT_SOURCE_DIR}/../../samples/loader/init.cc"
+  "${PROJECT_SOURCE_DIR}/../cl_tracer/trace_guard.cc"
+  "${PROJECT_SOURCE_DIR}/../ze_tracer/ze_correlator.cc"
   tool.cc)
 target_include_directories(onetrace_tool
   PRIVATE "${PROJECT_SOURCE_DIR}"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../samples/utils"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../../samples/cl_hot_functions"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../../samples/cl_hot_kernels"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../../samples/ze_hot_functions"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../../samples/ze_hot_kernels")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../cl_tracer"
+  PRIVATE "${PROJECT_SOURCE_DIR}/../ze_tracer")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(onetrace_tool
     PUBLIC "${CMAKE_INCLUDE_PATH}")

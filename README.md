@@ -50,14 +50,14 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - [cl_hot_kernels](samples/cl_hot_kernels) - provides a list of hottest OpenCL(TM) kernels by backend (CPU and GPU);
     - [cl_debug_info](samples/cl_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
     - [cl_gpu_metrics](samples/cl_gpu_metrics) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle;
-    - [cl_tracer](samples/cl_tracer) - "Swiss army knife" for OpenCL(TM) API call tracing and profiling;
+    - [cl_tracer](tools/cl_tracer) - "Swiss army knife" for OpenCL(TM) API call tracing and profiling;
 - tools for Level Zero, DPC++ (with Level Zero backend) and OpenMP* GPU offload (with Level Zero backend):
     - [ze_hot_functions](samples/ze_hot_functions) - provides a list of hottest Level Zero API calls;
     - [ze_hot_kernels](samples/ze_hot_kernels) - provides a list of hottest Level Zero kernels;
     - [ze_debug_info](samples/ze_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
     - [ze_metric_query](samples/ze_metric_query) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *query* mode);
     - [ze_metric_streamer](samples/ze_metric_streamer) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *streamer* mode);
-    - [ze_tracer](samples/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);
+    - [ze_tracer](tools/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);
 - tools for OpenMP*:
     - [omp_hot_regions](samples/omp_hot_regions) - provides a list of hottest parallel (for CPU) and target (for GPU) OpenMP* regions;
 - tools for binary instrumentation:

@@ -42,6 +42,69 @@ class UnifiedTracer {
 
     UnifiedTracer* tracer = new UnifiedTracer(options);
 
+    if (tracer->CheckOption(ONETRACE_DEVICE_TIMELINE) ||
+        tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE) ||
+        tracer->CheckOption(ONETRACE_DEVICE_TIMING)) {
+
+      ZeKernelCollector* ze_kernel_collector = nullptr;
+      ClKernelCollector* cl_cpu_kernel_collector = nullptr;
+      ClKernelCollector* cl_gpu_kernel_collector = nullptr;
+
+      OnZeKernelFinishCallback ze_callback = nullptr;
+      OnClKernelFinishCallback cl_callback = nullptr;
+      if (tracer->CheckOption(ONETRACE_DEVICE_TIMELINE) &&
+          tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE)) {
+        ze_callback = ZeDeviceAndChromeTimelineCallback;
+        cl_callback = ClDeviceAndChromeTimelineCallback;
+      } else if (tracer->CheckOption(ONETRACE_DEVICE_TIMELINE)) {
+        ze_callback = ZeDeviceTimelineCallback;
+        cl_callback = ClDeviceTimelineCallback;
+      } else if (tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE)) {
+        ze_callback = ZeChromeTimelineCallback;
+        cl_callback = ClChromeTimelineCallback;
+      }
+
+      ze_kernel_collector = ZeKernelCollector::Create(
+          &(tracer->correlator_), ze_callback, tracer);
+      if (ze_kernel_collector == nullptr) {
+        std::cerr <<
+          "[WARNING] Unable to create kernel collector for L0 backend" <<
+          std::endl;
+      }
+      tracer->ze_kernel_collector_ = ze_kernel_collector;
+
+      if (cl_cpu_device != nullptr) {
+        cl_cpu_kernel_collector = ClKernelCollector::Create(
+            cl_cpu_device, tracer->correlator_.GetTimepoint(),
+            cl_callback, tracer);
+        if (cl_cpu_kernel_collector == nullptr) {
+          std::cerr <<
+            "[WARNING] Unable to create kernel collector for CL CPU backend" <<
+            std::endl;
+        }
+        tracer->cl_cpu_kernel_collector_ = cl_cpu_kernel_collector;
+      }
+
+      if (cl_gpu_device != nullptr) {
+        cl_gpu_kernel_collector = ClKernelCollector::Create(
+            cl_gpu_device, tracer->correlator_.GetTimepoint(),
+            cl_callback, tracer);
+        if (cl_gpu_kernel_collector == nullptr) {
+          std::cerr <<
+            "[WARNING] Unable to create kernel collector for CL GPU backend" <<
+            std::endl;
+        }
+        tracer->cl_gpu_kernel_collector_ = cl_gpu_kernel_collector;
+      }
+
+      if (ze_kernel_collector == nullptr &&
+          cl_cpu_kernel_collector == nullptr &&
+          cl_gpu_kernel_collector == nullptr) {
+        delete tracer;
+        return nullptr;
+      }
+    }
+
     if (tracer->CheckOption(ONETRACE_CALL_LOGGING) ||
         tracer->CheckOption(ONETRACE_CHROME_CALL_LOGGING) ||
         tracer->CheckOption(ONETRACE_HOST_TIMING)) {
@@ -53,14 +116,14 @@ class UnifiedTracer {
       OnZeFunctionFinishCallback ze_callback = nullptr;
       OnClFunctionFinishCallback cl_callback = nullptr;
       if (tracer->CheckOption(ONETRACE_CHROME_CALL_LOGGING)) {
-        ze_callback = ChromeLoggingCallback;
-        cl_callback = ChromeLoggingCallback;
+        ze_callback = ZeChromeLoggingCallback;
+        cl_callback = ClChromeLoggingCallback;
       }
 
       bool call_tracing = tracer->CheckOption(ONETRACE_CALL_LOGGING);
 
       ze_api_collector = ZeApiCollector::Create(
-          tracer->start_time_, call_tracing, ze_callback, tracer);
+          &(tracer->correlator_), call_tracing, ze_callback, tracer);
       if (ze_api_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create L0 API collector" <<
           std::endl;
@@ -69,7 +132,7 @@ class UnifiedTracer {
 
       if (cl_cpu_device != nullptr) {
         cl_cpu_api_collector = ClApiCollector::Create(
-            cl_cpu_device, tracer->start_time_,
+            cl_cpu_device, tracer->correlator_.GetTimepoint(),
             call_tracing, cl_callback, tracer);
         if (cl_cpu_api_collector == nullptr) {
           std::cerr <<
@@ -81,7 +144,7 @@ class UnifiedTracer {
 
       if (cl_gpu_device != nullptr) {
         cl_gpu_api_collector = ClApiCollector::Create(
-            cl_gpu_device, tracer->start_time_,
+            cl_gpu_device, tracer->correlator_.GetTimepoint(),
             call_tracing, cl_callback, tracer);
         if (cl_gpu_api_collector == nullptr) {
           std::cerr <<
@@ -99,76 +162,11 @@ class UnifiedTracer {
       }
     }
 
-    if (tracer->CheckOption(ONETRACE_DEVICE_TIMELINE) ||
-        tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE) ||
-        tracer->CheckOption(ONETRACE_DEVICE_TIMING)) {
-
-      ZeKernelCollector* ze_kernel_collector = nullptr;
-      ClKernelCollector* cl_cpu_kernel_collector = nullptr;
-      ClKernelCollector* cl_gpu_kernel_collector = nullptr;
-
-      OnZeKernelFinishCallback ze_callback = nullptr;
-      OnClKernelFinishCallback cl_callback = nullptr;
-      if (tracer->CheckOption(ONETRACE_DEVICE_TIMELINE) &&
-          tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE)) {
-        ze_callback = DeviceAndChromeTimelineCallback;
-        cl_callback = DeviceAndChromeTimelineCallback;
-      } else if (tracer->CheckOption(ONETRACE_DEVICE_TIMELINE)) {
-        ze_callback = DeviceTimelineCallback;
-        cl_callback = DeviceTimelineCallback;
-      } else if (tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE)) {
-        ze_callback = ChromeTimelineCallback;
-        cl_callback = ChromeTimelineCallback;
-      }
-
-      ze_kernel_collector = ZeKernelCollector::Create(
-        tracer->start_time_, ze_callback, tracer);
-      if (ze_kernel_collector == nullptr) {
-        std::cerr <<
-          "[WARNING] Unable to create kernel collector for L0 backend" <<
-          std::endl;
-      }
-      tracer->ze_kernel_collector_ = ze_kernel_collector;
-
-      if (cl_cpu_device != nullptr) {
-        cl_cpu_kernel_collector = ClKernelCollector::Create(
-            cl_cpu_device, tracer->start_time_, cl_callback, tracer);
-        if (cl_cpu_kernel_collector == nullptr) {
-          std::cerr <<
-            "[WARNING] Unable to create kernel collector for CL CPU backend" <<
-            std::endl;
-        }
-        tracer->cl_cpu_kernel_collector_ = cl_cpu_kernel_collector;
-      }
-
-      if (cl_gpu_device != nullptr) {
-        cl_gpu_kernel_collector = ClKernelCollector::Create(
-            cl_gpu_device, tracer->start_time_, cl_callback, tracer);
-        if (cl_gpu_kernel_collector == nullptr) {
-          std::cerr <<
-            "[WARNING] Unable to create kernel collector for CL GPU backend" <<
-            std::endl;
-        }
-        tracer->cl_gpu_kernel_collector_ = cl_gpu_kernel_collector;
-      }
-
-      if (ze_kernel_collector == nullptr &&
-          cl_cpu_kernel_collector == nullptr &&
-          cl_gpu_kernel_collector == nullptr) {
-        delete tracer;
-        return nullptr;
-      }
-    }
-
     return tracer;
   }
 
   ~UnifiedTracer() {
-    std::chrono::steady_clock::time_point end_time =
-      std::chrono::steady_clock::now();
-    std::chrono::duration<uint64_t, std::nano> duration =
-      end_time - start_time_;
-    total_execution_time_ = duration.count();
+    total_execution_time_ = correlator_.GetTimestamp();
 
     if (cl_cpu_api_collector_ != nullptr) {
       cl_cpu_api_collector_->DisableTracing();
@@ -219,10 +217,7 @@ class UnifiedTracer {
   UnifiedTracer& operator=(const UnifiedTracer& copy) = delete;
 
  private:
-  UnifiedTracer(unsigned options)
-      : options_(options) {
-    start_time_ = std::chrono::steady_clock::now();
-
+  UnifiedTracer(unsigned options) : options_(options) {
     if (CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE) ||
         CheckOption(ONETRACE_CHROME_CALL_LOGGING)) {
       OpenTraceFile();
@@ -436,7 +431,22 @@ class UnifiedTracer {
     std::cerr << std::endl;
   }
 
-  static void DeviceTimelineCallback(
+  static void ZeDeviceTimelineCallback(
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    std::stringstream stream;
+    stream << "Device Timeline (queue: " << queue <<
+      "): " << name << " [ns] = " <<
+      queued << " (append) " <<
+      submitted << " (submit) " <<
+      started << " (start) " <<
+      ended << " (end)" << std::endl;
+    std::cerr << stream.str();
+  }
+
+  static void ClDeviceTimelineCallback(
       void* data, void* queue, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
@@ -467,7 +477,26 @@ class UnifiedTracer {
       kChromeTraceFileName << std::endl;
   }
 
-  static void ChromeTimelineCallback(
+  static void ZeChromeTimelineCallback(
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    UnifiedTracer* tracer = reinterpret_cast<UnifiedTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+
+    std::stringstream stream;
+    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
+      ", \"tid\":" << reinterpret_cast<uint64_t>(queue) <<
+      ", \"name\":\"" << name <<
+      "\", \"ts\": " << started / NSEC_IN_USEC <<
+      ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
+  }
+
+  static void ClChromeTimelineCallback(
       void* data, void* queue, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
@@ -484,15 +513,45 @@ class UnifiedTracer {
     tracer->chrome_trace_ << stream.str();
   }
 
-  static void DeviceAndChromeTimelineCallback(
+  static void ZeDeviceAndChromeTimelineCallback(
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    ZeDeviceTimelineCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+    ZeChromeTimelineCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+  }
+
+  static void ClDeviceAndChromeTimelineCallback(
       void* data, void* queue, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
-    DeviceTimelineCallback(data, queue, name, queued, submitted, started, ended);
-    ChromeTimelineCallback(data, queue, name, queued, submitted, started, ended);
+    ClDeviceTimelineCallback(
+        data, queue, name, queued, submitted, started, ended);
+    ClChromeTimelineCallback(
+        data, queue, name, queued, submitted, started, ended);
   }
 
-  static void ChromeLoggingCallback(
+  static void ZeChromeLoggingCallback(
+      void* data, const std::string& id, const std::string& name,
+      uint64_t started, uint64_t ended) {
+    UnifiedTracer* tracer = reinterpret_cast<UnifiedTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+
+    std::stringstream stream;
+    stream << "{\"ph\":\"X\", \"pid\":" <<
+      utils::GetPid() << ", \"tid\":" << utils::GetTid() <<
+      ", \"name\":\"" << name <<
+      "\", \"ts\": " << started / NSEC_IN_USEC <<
+      ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
+  }
+
+  static void ClChromeLoggingCallback(
       void* data, const std::string& name,
       uint64_t started, uint64_t ended) {
     UnifiedTracer* tracer = reinterpret_cast<UnifiedTracer*>(data);
@@ -511,7 +570,7 @@ class UnifiedTracer {
  private:
   unsigned options_;
 
-  std::chrono::time_point<std::chrono::steady_clock> start_time_;
+  ZeCorrelator correlator_;
   uint64_t total_execution_time_ = 0;
 
   ZeApiCollector* ze_api_collector_ = nullptr;

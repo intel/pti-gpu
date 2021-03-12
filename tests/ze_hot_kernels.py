@@ -31,11 +31,11 @@ def parse(output):
   total_time = 0
   for line in lines:
     items = line.split(",")
-    if len(items) != 9 or line.find("Time (ns)") != -1:
+    if len(items) != 8 or line.find("Time (ns)") != -1:
       continue
     kernel_name = items[0].strip()
     call_count = int(items[1].strip())
-    time = int(items[4].strip())
+    time = int(items[3].strip())
     if not kernel_name or call_count <= 0:
       return False
     total_time += time

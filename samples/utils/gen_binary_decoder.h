@@ -22,8 +22,7 @@ struct Instruction {
 class GenBinaryDecoder {
  public:
   GenBinaryDecoder(const std::vector<uint8_t>& binary, iga_gen_t arch)
-      : kernel_view_(arch, binary.data(), binary.size(),
-                     iga::SWSB_ENCODE_MODE::SingleDistPipe) {}
+      : kernel_view_(arch, binary.data(), binary.size()) {}
 
   bool IsValid() const {
     return kernel_view_.decodeSucceeded();

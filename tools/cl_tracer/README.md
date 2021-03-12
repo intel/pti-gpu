@@ -94,7 +94,7 @@ Device Timeline (queue: 0x55a9c7e51e70): clEnqueueReadBuffer [ns] = 361479600 (q
 ### Linux
 Run the following commands to build the sample:
 ```sh
-cd <pti>/samples/cl_tracer
+cd <pti>/tools/cl_tracer
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -104,15 +104,15 @@ Use this command line to run the tool:
 ```sh
 ./cl_tracer [options] <target_application>
 ```
-One may use [cl_gemm](../cl_gemm) or [dpc_gemm](../dpc_gemm) as target application, e.g.:
+One may use [cl_gemm](../../samples/cl_gemm) or [dpc_gemm](../../samples/dpc_gemm) as target application, e.g.:
 ```sh
-./cl_tracer -c -h ../../cl_gemm/build/cl_gemm
-./cl_tracer -c -h ../../dpc_gemm/build/dpc_gemm cpu
+./cl_tracer -c -h ../../../samples/cl_gemm/build/cl_gemm
+./cl_tracer -c -h ../../../samples/dpc_gemm/build/dpc_gemm cpu
 ```
 ### Windows
 Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample:
 ```sh
-cd <pti>\samples\cl_tracer
+cd <pti>\tools\cl_tracer
 mkdir build
 cd build
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_LIBRARY_PATH=<opencl_icd_lib_path> ..
@@ -122,8 +122,8 @@ Use this command line to run the tool:
 ```sh
 cl_tracer.exe [options] <target_application>
 ```
-One may use [cl_gemm](../cl_gemm) or [dpc_gemm](../dpc_gemm) as target application, e.g.:
+One may use [cl_gemm](../../samples/cl_gemm) or [dpc_gemm](../../samples/dpc_gemm) as target application, e.g.:
 ```sh
-cl_tracer.exe -c -h ..\..\cl_gemm\build\cl_gemm.exe
-cl_tracer.exe -c -h ..\..\dpc_gemm\build\dpc_gemm.exe cpu
+cl_tracer.exe -c -h ..\..\..\samples\cl_gemm\build\cl_gemm.exe
+cl_tracer.exe -c -h ..\..\..\samples\dpc_gemm\build\dpc_gemm.exe cpu
 ```

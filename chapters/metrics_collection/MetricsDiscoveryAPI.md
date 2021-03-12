@@ -46,22 +46,31 @@ const char* name = "libmd.so";
 void* handle = dlopen(name, RTLD_NOW);
 assert(handle != nullptr);
 
-md::OpenMetricsDevice_fn OpenMetricsDevice =
-  (md::OpenMetricsDevice_fn)dlsym(handle, "OpenMetricsDevice");
-assert(OpenMetricsDevice != nullptr);
+md::OpenAdapterGroup_fn OpenAdapterGroup =
+  (md::OpenAdapterGroup_fn)dlsym(handle, "OpenAdapterGroup");
+assert(OpenAdapterGroup != nullptr);
 
-md::IMetricsDevice_1_5* device = nullptr;
-md::TCompletionCode status = OpenMetricsDevice(&device);
-assert(status == md::CC_OK || status == md::CC_ALREADY_INITIALIZED);
+md::IAdapterGroup_1_9* adapter_group = nullptr;
+status = OpenAdapterGroup(&adapter_group);
+PTI_ASSERT(status == md::CC_OK);
+
+md::IAdapter_1_9* adapter = adapter_group->GetAdapter(0 /* device id*/);
+PTI_ASSERT(adapter != nullptr);
+
+uint32_t sub_devices_count = adapter->GetParams()->SubDevicesCount;
+if (sub_devices_count == 0) {
+  status = adapter->OpenMetricsDevice(&device);
+} else {
+  status = adapter->OpenMetricsSubDevice(0 /* sub-device id*/, &device);
+}
+PTI_ASSERT(status == md::CC_OK || status == md::CC_ALREADY_INITIALIZED);
 
 // Enumerate and/or collect metrics
 
-md::CloseMetricsDevice_fn CloseMetricsDevice =
-    (md::CloseMetricsDevice_fn)dlsym(handle, "CloseMetricsDevice");
-assert(CloseMetricsDevice != nullptr);
-
-status = CloseMetricsDevice(device);
-assert(status == md::CC_OK);
+status = adapter_->CloseMetricsDevice(device_);
+PTI_ASSERT(status == md::CC_OK);
+status = adapter_group_->Close();
+PTI_ASSERT(status == md::CC_OK);
 
 dlclose(handle);
 ```

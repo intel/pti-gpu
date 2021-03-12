@@ -6,12 +6,11 @@ As a result, table like the following will be printed:
 ```
 === Device Timing Results: ===
 
-Total Execution Time (ns): 438707010
-Total Device Time (ns): 245970749
+Total Execution Time (ns): 368598201
+Total Device Time (ns): 172440915
 
-                       Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
-                         GEMM,           4,   32,                   0,           241043371,     98.00,            60260842,            42925608,           111744643
-zeCommandListAppendMemoryCopy,          12,    0,            50331648,             4927378,      2.00,              410614,              283611,              507628
+    Kernel,       Calls, SIMD,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+      GEMM,           4,   32,           172440915,    100.00,            43110228,            42880167,            43415416
 ```
 ## Supported OS
 - Linux

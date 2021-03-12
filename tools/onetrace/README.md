@@ -106,7 +106,7 @@ Device Timeline (queue: 0x55a9c7e51e70): clEnqueueReadBuffer [ns] = 361479600 (q
 ### Linux
 Run the following commands to build the sample:
 ```sh
-cd <pti>/samples/onetrace
+cd <pti>/tools/onetrace
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -118,13 +118,13 @@ Use this command line to run the tool:
 ```
 One may use e.g. [dpc_gemm](../../samples/dpc_gemm) as target application, e.g.:
 ```sh
-./onetrace -c -h ../../dpc_gemm/build/dpc_gemm cpu
-./onetrace -c -h ../../dpc_gemm/build/dpc_gemm gpu
+./onetrace -c -h ../../../samples/dpc_gemm/build/dpc_gemm cpu
+./onetrace -c -h ../../../samples/dpc_gemm/build/dpc_gemm gpu
 ```
 ### Windows
 Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample:
 ```sh
-cd <pti>\samples\onetrace
+cd <pti>\tools\onetrace
 mkdir build
 cd build
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_LIBRARY_PATH=<opencl_icd_lib_path> ..
@@ -136,6 +136,6 @@ onetrace.exe [options] <target_application>
 ```
 One may use e.g. [dpc_gemm](../../samples/dpc_gemm) as target application, e.g.:
 ```sh
-onetrace.exe -c -h ..\..\dpc_gemm\build\dpc_gemm.exe cpu
-onetrace.exe -c -h ..\..\dpc_gemm\build\dpc_gemm.exe gpu
+onetrace.exe -c -h ..\..\..\samples\dpc_gemm\build\dpc_gemm.exe cpu
+onetrace.exe -c -h ..\..\..\samples\dpc_gemm\build\dpc_gemm.exe gpu
 ```

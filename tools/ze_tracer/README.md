@@ -79,7 +79,7 @@ Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 39
 ### Linux
 Run the following commands to build the sample:
 ```sh
-cd <pti>/samples/ze_tracer
+cd <pti>/tools/ze_tracer
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -89,15 +89,15 @@ Use this command line to run the tool:
 ```sh
 ./ze_tracer [options] <target_application>
 ```
-One may use [ze_gemm](../ze_gemm) or [dpc_gemm](../dpc_gemm) as target application, e.g.:
+One may use [ze_gemm](../../samples/ze_gemm) or [dpc_gemm](../../samples/dpc_gemm) as target application, e.g.:
 ```sh
-./ze_tracer -c -h ../../ze_gemm/build/ze_gemm
-./ze_tracer -c -h ../../dpc_gemm/build/dpc_gemm
+./ze_tracer -c -h ../../../samples/ze_gemm/build/ze_gemm
+./ze_tracer -c -h ../../../samples/dpc_gemm/build/dpc_gemm
 ```
 ### Windows
 Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample:
 ```sh
-cd <pti>\samples\ze_tracer
+cd <pti>\tools\ze_tracer
 mkdir build
 cd build
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_LIBRARY_PATH=<level_zero_loader>\lib -DCMAKE_INCLUDE_PATH=<level_zero_loader>\include ..
@@ -107,8 +107,8 @@ Use this command line to run the tool:
 ```sh
 ze_tracer.exe [options] <target_application>
 ```
-One may use [ze_gemm](../ze_gemm) or [dpc_gemm](../dpc_gemm) as target application, e.g.:
+One may use [ze_gemm](../../samples/ze_gemm) or [dpc_gemm](../../samples/dpc_gemm) as target application, e.g.:
 ```sh
-ze_tracer.exe -c -h ..\..\ze_gemm\build\ze_gemm.exe
-ze_tracer.exe -c -h ..\..\dpc_gemm\build\dpc_gemm.exe
+ze_tracer.exe -c -h ..\..\..\samples\ze_gemm\build\ze_gemm.exe
+ze_tracer.exe -c -h ..\..\..\samples\dpc_gemm\build\dpc_gemm.exe
 ```

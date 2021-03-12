@@ -16,6 +16,7 @@
 #include <level_zero/zet_api.h>
 
 #include "pti_assert.h"
+#include "utils.h"
 
 namespace utils {
 namespace ze {
@@ -46,18 +47,13 @@ inline void GetIntelDeviceAndDriver(ze_device_type_t type,
     status = zeDeviceGet(driver_list[i], &device_count, device_list.data());
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    for (uint32_t j = 0; j < device_count; ++j) {
-      ze_device_properties_t props{};
-      props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
-      status = zeDeviceGetProperties(device_list[j], &props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    std::string device_string = utils::GetEnv("PTI_DEVICE_ID");
+    uint32_t device_id = device_string.empty() ? 0 : std::stoul(device_string);
+    PTI_ASSERT(device_id < device_count);
 
-      if (props.type == type && strstr(props.name, "Intel") != nullptr) {
-        device = device_list[j];
-        driver = driver_list[i];
-        break;
-      }
-    }
+    driver = driver_list[i];
+    device = device_list[device_id];
+    break;
   }
 }
 
@@ -155,6 +151,30 @@ inline uint64_t GetTimerResolution(ze_device_handle_t device) {
   ze_result_t status = zeDeviceGetProperties(device, &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return props.timerResolution;
+}
+
+inline size_t GetKernelMaxSubgroupSize(ze_kernel_handle_t kernel) {
+  PTI_ASSERT(kernel != nullptr);
+  ze_kernel_properties_t props{};
+  ze_result_t status = zeKernelGetProperties(kernel, &props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  return props.maxSubgroupSize;
+}
+
+inline std::string GetKernelName(ze_kernel_handle_t kernel) {
+  PTI_ASSERT(kernel != nullptr);
+
+  size_t size = 0;
+  ze_result_t status = zeKernelGetName(kernel, &size, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  PTI_ASSERT(size > 0);
+
+  std::vector<char> name(size);
+  status = zeKernelGetName(kernel, &size, name.data());
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  PTI_ASSERT(name[size - 1] == '\0');
+  return std::string(name.begin(), name.end() - 1);
 }
 
 } // namespace ze

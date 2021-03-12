@@ -37,7 +37,7 @@ def run(path, option):
   return None
 
 def main(option):
-  path = utils.get_sample_build_path("cl_tracer")
+  path = utils.get_tool_build_path("cl_tracer")
   log = cl_gemm.main("cpu")
   if log:
     return log

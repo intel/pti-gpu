@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_CL_HOT_FUNCTIONS_CL_API_COLLECTOR_H_
-#define PTI_SAMPLES_CL_HOT_FUNCTIONS_CL_API_COLLECTOR_H_
+#ifndef PTI_SAMPLES_ZE_HOT_FUNCTIONS_ZE_API_COLLECTOR_H_
+#define PTI_SAMPLES_ZE_HOT_FUNCTIONS_ZE_API_COLLECTOR_H_
 
 #include <chrono>
 #include <iomanip>
@@ -14,23 +14,26 @@
 #include <mutex>
 #include <set>
 
-#include "cl_api_tracer.h"
-#include "cl_utils.h"
+#include <level_zero/layers/zel_tracing_api.h>
 
-struct ClFunction {
+#include "utils.h"
+#include "ze_correlator.h"
+#include "ze_utils.h"
+
+struct ZeFunction {
   uint64_t total_time;
   uint64_t min_time;
   uint64_t max_time;
   uint64_t call_count;
 
-  bool operator>(const ClFunction& r) const {
+  bool operator>(const ZeFunction& r) const {
     if (total_time != r.total_time) {
       return total_time > r.total_time;
     }
     return call_count > r.call_count;
   }
 
-  bool operator!=(const ClFunction& r) const {
+  bool operator!=(const ZeFunction& r) const {
     if (total_time == r.total_time) {
       return call_count != r.call_count;
     }
@@ -38,52 +41,58 @@ struct ClFunction {
   }
 };
 
-using ClFunctionInfoMap = std::map<std::string, ClFunction>;
+using ZeFunctionInfoMap = std::map<std::string, ZeFunction>;
 
-class ClApiCollector {
+typedef void (*OnZeFunctionFinishCallback)(
+    void* data, const std::string& id, const std::string& name,
+    uint64_t started, uint64_t ended);
+
+class ZeApiCollector {
  public: // User Interface
-  static ClApiCollector* Create(cl_device_id device) {
-    PTI_ASSERT(device != nullptr);
-
-    ClApiCollector* collector = new ClApiCollector();
+  static ZeApiCollector* Create(
+      ZeCorrelator* correlator,
+      bool call_tracing = false,
+      OnZeFunctionFinishCallback callback = nullptr,
+      void* callback_data = nullptr) {
+    PTI_ASSERT(correlator != nullptr);
+    ZeApiCollector* collector = new ZeApiCollector(
+        correlator, call_tracing, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
-    ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
-    if (tracer == nullptr || !tracer->IsValid()) {
-      std::cerr << "[WARNING] Unable to create OpenCL tracer " <<
-        "for target device" << std::endl;
-      if (tracer != nullptr) {
-        delete tracer;
-        delete collector;
-      }
+    ze_result_t status = ZE_RESULT_SUCCESS;
+    zel_tracer_desc_t tracer_desc = {
+      ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
+    zel_tracer_handle_t tracer = nullptr;
+
+    status = zelTracerCreate(&tracer_desc, &tracer);
+    if (status != ZE_RESULT_SUCCESS || tracer == nullptr) {
+      std::cerr << "[WARNING] Unable to create L0 tracer" << std::endl;
+      delete collector;
       return nullptr;
     }
 
-    collector->EnableTracing(tracer);
-    return collector;
-  }
+    collector->tracer_ = tracer;
+    SetTracingAPIs(tracer);
 
-  ~ClApiCollector() {
-    if (tracer_ != nullptr) {
-      delete tracer_;
-    }
+    status = zelTracerSetEnabled(tracer, true);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    return collector;
   }
 
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
-    bool disabled = tracer_->Disable();
-    PTI_ASSERT(disabled);
+    ze_result_t status = ZE_RESULT_SUCCESS;
+    status = zelTracerSetEnabled(tracer_, false);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
-  const ClFunctionInfoMap& GetFunctionInfoMap() const {
+  const ZeFunctionInfoMap& GetFunctionInfoMap() const {
     return function_info_map_;
   }
 
-  ClApiCollector(const ClApiCollector& copy) = delete;
-  ClApiCollector& operator=(const ClApiCollector& copy) = delete;
-
-  static void PrintFunctionsTable(const ClFunctionInfoMap& function_info_map) {
-    std::set< std::pair<std::string, ClFunction>,
+  static void PrintFunctionsTable(const ZeFunctionInfoMap& function_info_map) {
+    std::set< std::pair<std::string, ZeFunction>,
               utils::Comparator > sorted_list(
         function_info_map.begin(), function_info_map.end());
 
@@ -127,26 +136,17 @@ class ClApiCollector {
     }
   }
 
- private: // Implementation Details
-  ClApiCollector() {}
-
-  void EnableTracing(ClApiTracer* tracer) {
-    PTI_ASSERT(tracer != nullptr);
-    tracer_ = tracer;
-
-    for (int id = 0; id < CL_FUNCTION_COUNT; ++id) {
-      bool set = tracer_->SetTracingFunction(static_cast<cl_function_id>(id));
-      PTI_ASSERT(set);
+  ~ZeApiCollector() {
+    if (tracer_ != nullptr) {
+      ze_result_t status = zelTracerDestroy(tracer_);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
-
-    bool enabled = tracer_->Enable();
-    PTI_ASSERT(enabled);
   }
 
+ private: // Tracing Interface
   uint64_t GetTimestamp() const {
-    std::chrono::duration<uint64_t, std::nano> timestamp =
-      std::chrono::steady_clock::now() - base_time_;
-    return timestamp.count();
+    PTI_ASSERT(correlator_ != nullptr);
+    return correlator_->GetTimestamp();
   }
 
   void AddFunctionTime(const std::string& name, uint64_t time) {
@@ -154,7 +154,7 @@ class ClApiCollector {
     if (function_info_map_.count(name) == 0) {
       function_info_map_[name] = {time, time, time, 1};
     } else {
-      ClFunction& function = function_info_map_[name];
+      ZeFunction& function = function_info_map_[name];
       function.total_time += time;
       if (time < function.min_time) {
         function.min_time = time;
@@ -166,35 +166,28 @@ class ClApiCollector {
     }
   }
 
- private: // Callbacks
-  static void Callback(
-      cl_function_id function,
-      cl_callback_data* callback_data,
-      void* user_data) {
-    ClApiCollector* collector = reinterpret_cast<ClApiCollector*>(user_data);
-    PTI_ASSERT(collector != nullptr);
-    PTI_ASSERT(callback_data != nullptr);
-    PTI_ASSERT(callback_data->correlationData != nullptr);
-
-    if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-      uint64_t& start_time = *reinterpret_cast<uint64_t*>(
-          callback_data->correlationData);
-      start_time = collector->GetTimestamp();
-    } else {
-      uint64_t end_time = collector->GetTimestamp();
-      uint64_t& start_time = *reinterpret_cast<uint64_t*>(
-          callback_data->correlationData);
-      collector->AddFunctionTime(
-        callback_data->functionName, end_time - start_time);
-    }
+ private: // Implementation Details
+  ZeApiCollector(
+      ZeCorrelator* correlator, bool call_tracing,
+      OnZeFunctionFinishCallback callback, void* callback_data)
+      : correlator_(correlator), call_tracing_(call_tracing),
+        callback_(callback), callback_data_(callback_data) {
+    PTI_ASSERT(correlator_ != nullptr);
   }
 
- private: // Data
-  ClApiTracer* tracer_ = nullptr;
-  std::chrono::time_point<std::chrono::steady_clock> base_time_;
+  #include <tracing.gen> // Auto-generated callbacks
 
+ private: // Data
+  zel_tracer_handle_t tracer_ = nullptr;
+
+  ZeFunctionInfoMap function_info_map_;
   std::mutex lock_;
-  ClFunctionInfoMap function_info_map_;
+
+  ZeCorrelator* correlator_ = nullptr;
+  bool call_tracing_ = false;
+
+  OnZeFunctionFinishCallback callback_ = nullptr;
+  void* callback_data_ = nullptr;
 
   static const uint32_t kFunctionLength = 10;
   static const uint32_t kCallsLength = 12;
@@ -202,4 +195,4 @@ class ClApiCollector {
   static const uint32_t kPercentLength = 10;
 };
 
-#endif // PTI_SAMPLES_CL_HOT_FUNCTIONS_CL_API_COLLECTOR_H_
+#endif // PTI_SAMPLES_ZE_HOT_FUNCTIONS_ZE_API_COLLECTOR_H_

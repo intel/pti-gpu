@@ -8,7 +8,9 @@ SetBuildType()
 
 # Tool Library
 
-add_library(zet_hot_functions SHARED "${PROJECT_SOURCE_DIR}/../loader/init.cc" tool.cc)
+add_library(zet_hot_functions SHARED
+  "${PROJECT_SOURCE_DIR}/../loader/init.cc"
+  tool.cc)
 target_include_directories(zet_hot_functions
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils")
 if(CMAKE_INCLUDE_PATH)

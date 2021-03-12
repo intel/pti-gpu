@@ -16,6 +16,7 @@
 #include <string>
 
 #include "ze_api_collector.h"
+#include "ze_correlator.h"
 #include "ze_kernel_collector.h"
 #include "utils.h"
 
@@ -39,27 +40,6 @@ class ZeTracer {
 
     ZeTracer* tracer = new ZeTracer(options);
 
-    ZeApiCollector* api_collector = nullptr;
-    if (tracer->CheckOption(ZET_CALL_LOGGING) ||
-        tracer->CheckOption(ZET_CHROME_CALL_LOGGING) ||
-        tracer->CheckOption(ZET_HOST_TIMING)) {
-
-      OnZeFunctionFinishCallback callback = nullptr;
-      if (tracer->CheckOption(ZET_CHROME_CALL_LOGGING)) {
-        callback = ChromeLoggingCallback;
-      }
-
-      bool call_tracing = tracer->CheckOption(ZET_CALL_LOGGING);
-      api_collector = ZeApiCollector::Create(
-          tracer->start_time_, call_tracing, callback, tracer);
-      if (api_collector == nullptr) {
-        std::cerr << "[WARNING] Unable to create API collector" << std::endl;
-        delete tracer;
-        return nullptr;
-      }
-      tracer->api_collector_ = api_collector;
-    }
-
     ZeKernelCollector* kernel_collector = nullptr;
     if (tracer->CheckOption(ZET_DEVICE_TIMELINE) ||
         tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
@@ -76,7 +56,7 @@ class ZeTracer {
       }
 
       kernel_collector = ZeKernelCollector::Create(
-          tracer->start_time_, callback, tracer);
+          &(tracer->correlator_), callback, tracer);
       if (kernel_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create kernel collector" <<
           std::endl;
@@ -86,15 +66,32 @@ class ZeTracer {
       tracer->kernel_collector_ = kernel_collector;
     }
 
+    ZeApiCollector* api_collector = nullptr;
+    if (tracer->CheckOption(ZET_CALL_LOGGING) ||
+        tracer->CheckOption(ZET_CHROME_CALL_LOGGING) ||
+        tracer->CheckOption(ZET_HOST_TIMING)) {
+
+      OnZeFunctionFinishCallback callback = nullptr;
+      if (tracer->CheckOption(ZET_CHROME_CALL_LOGGING)) {
+        callback = ChromeLoggingCallback;
+      }
+
+      bool call_tracing = tracer->CheckOption(ZET_CALL_LOGGING);
+      api_collector = ZeApiCollector::Create(
+          &(tracer->correlator_), call_tracing, callback, tracer);
+      if (api_collector == nullptr) {
+        std::cerr << "[WARNING] Unable to create API collector" << std::endl;
+        delete tracer;
+        return nullptr;
+      }
+      tracer->api_collector_ = api_collector;
+    }
+
     return tracer;
   }
 
   ~ZeTracer() {
-    std::chrono::steady_clock::time_point end_time =
-      std::chrono::steady_clock::now();
-    std::chrono::duration<uint64_t, std::nano> duration =
-      end_time - start_time_;
-    total_execution_time_ = duration.count();
+    total_execution_time_ = correlator_.GetTimestamp();
 
     if (api_collector_ != nullptr) {
       api_collector_->DisableTracing();
@@ -126,8 +123,6 @@ class ZeTracer {
 
  private:
   ZeTracer(unsigned options) : options_(options) {
-    start_time_ = std::chrono::steady_clock::now();
-
     if (CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
         CheckOption(ZET_CHROME_CALL_LOGGING)) {
       OpenTraceFile();
@@ -209,7 +204,8 @@ class ZeTracer {
   }
 
   static void DeviceTimelineCallback(
-      void* data, void* queue, const std::string& name,
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
       uint64_t appended, uint64_t submitted,
       uint64_t started, uint64_t ended) {
     std::stringstream stream;
@@ -240,7 +236,8 @@ class ZeTracer {
   }
 
   static void ChromeTimelineCallback(
-      void* data, void* queue, const std::string& name,
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
       uint64_t appended, uint64_t submitted,
       uint64_t started, uint64_t ended) {
     ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
@@ -251,20 +248,24 @@ class ZeTracer {
       ", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
     tracer->chrome_trace_ << stream.str();
   }
 
   static void DeviceAndChromeTimelineCallback(
-      void* data, void* queue, const std::string& name,
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
       uint64_t appended, uint64_t submitted,
       uint64_t started, uint64_t ended) {
-    DeviceTimelineCallback(data, queue, name, appended, submitted, started, ended);
-    ChromeTimelineCallback(data, queue, name, appended, submitted, started, ended);
+    DeviceTimelineCallback(
+        data, queue, id, name, appended, submitted, started, ended);
+    ChromeTimelineCallback(
+        data, queue, id, name, appended, submitted, started, ended);
   }
 
   static void ChromeLoggingCallback(
-      void* data, const std::string& name,
+      void* data, const std::string& id, const std::string& name,
       uint64_t started, uint64_t ended) {
     ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
@@ -274,6 +275,7 @@ class ZeTracer {
       ", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
     tracer->chrome_trace_ << stream.str();
   }
@@ -281,7 +283,7 @@ class ZeTracer {
  private:
   unsigned options_;
 
-  std::chrono::time_point<std::chrono::steady_clock> start_time_;
+  ZeCorrelator correlator_;
   uint64_t total_execution_time_ = 0;
 
   ZeApiCollector* api_collector_ = nullptr;

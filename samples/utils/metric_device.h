@@ -12,6 +12,7 @@
 #include "metric_utils.h"
 #include "pti_assert.h"
 #include "shared_library.h"
+#include "utils.h"
 
 namespace md = MetricsDiscovery;
 
@@ -27,34 +28,58 @@ class MetricDevice {
       }
     }
 
-    if (lib != nullptr) {
-      md::IMetricsDevice_1_5* device = nullptr;
-
-      md::OpenMetricsDevice_fn OpenMetricsDevice =
-        lib->GetSym<md::OpenMetricsDevice_fn>("OpenMetricsDevice");
-      PTI_ASSERT(OpenMetricsDevice != nullptr);
-      md::TCompletionCode status = OpenMetricsDevice(&device);
-        PTI_ASSERT(status == md::CC_OK ||
-               status == md::CC_ALREADY_INITIALIZED);
-
-      if (device != nullptr) {
-        return new MetricDevice(device, lib);
-      } else {
-        delete lib;	
-      }
+    if (lib == nullptr) {
+      return nullptr;
     }
 
-    return nullptr;
+    md::IMetricsDevice_1_5* device = nullptr;
+    md::TCompletionCode status = md::CC_OK;
+
+    md::OpenAdapterGroup_fn OpenAdapterGroup =
+      lib->GetSym<md::OpenAdapterGroup_fn>("OpenAdapterGroup");
+    PTI_ASSERT(OpenAdapterGroup != nullptr);
+
+    md::IAdapterGroup_1_9* adapter_group = nullptr;
+    status = OpenAdapterGroup(&adapter_group);
+    PTI_ASSERT(status == md::CC_OK);
+
+    if (adapter_group == nullptr ||
+        adapter_group->GetParams()->AdapterCount == 0) {
+      delete lib;
+      return nullptr;
+    }
+
+    std::string device_string = utils::GetEnv("PTI_DEVICE_ID");
+    uint32_t device_id = device_string.empty() ? 0 : std::stoul(device_string);
+    PTI_ASSERT(device_id < adapter_group->GetParams()->AdapterCount);
+    md::IAdapter_1_9* adapter = adapter_group->GetAdapter(device_id);
+    PTI_ASSERT(adapter != nullptr);
+
+    uint32_t sub_devices_count = adapter->GetParams()->SubDevicesCount;
+    if (sub_devices_count == 0) {
+      status = adapter->OpenMetricsDevice(&device);
+    } else {
+      std::string sub_device_string = utils::GetEnv("PTI_SUB_DEVICE_ID");
+      uint32_t sub_device_id = sub_device_string.empty() ? 0 : std::stoul(sub_device_string);
+      PTI_ASSERT(sub_device_id < sub_devices_count);
+      status = adapter->OpenMetricsSubDevice(sub_device_id, &device);
+    }
+    PTI_ASSERT(status == md::CC_OK || status == md::CC_ALREADY_INITIALIZED);
+
+    return new MetricDevice(adapter_group, adapter, device, lib);
   }
 
   ~MetricDevice() {
+    PTI_ASSERT(adapter_group_ != nullptr);
+    PTI_ASSERT(adapter_ != nullptr);
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(lib_ != nullptr);
 
-    md::CloseMetricsDevice_fn CloseMetricsDevice =
-      lib_->GetSym<md::CloseMetricsDevice_fn>("CloseMetricsDevice");
-    PTI_ASSERT(CloseMetricsDevice != nullptr);
-    md::TCompletionCode status = CloseMetricsDevice(device_);
+    md::TCompletionCode status = md::CC_OK;
+
+    status = adapter_->CloseMetricsDevice(device_);
+    PTI_ASSERT(status == md::CC_OK);
+    status = adapter_group_->Close();
     PTI_ASSERT(status == md::CC_OK);
 
     delete lib_;
@@ -112,9 +137,14 @@ class MetricDevice {
   }
 
 private:
-  MetricDevice(md::IMetricsDevice_1_5* device, SharedLibrary* lib)
-      : device_(device), lib_(lib) {}
+  MetricDevice(
+      md::IAdapterGroup_1_9* adapter_group, md::IAdapter_1_9* adapter,
+      md::IMetricsDevice_1_5* device, SharedLibrary* lib)
+      : adapter_group_(adapter_group), adapter_(adapter),
+        device_(device), lib_(lib) {}
 
+  md::IAdapterGroup_1_9* adapter_group_ = nullptr;
+  md::IAdapter_1_9* adapter_ = nullptr;
   md::IMetricsDevice_1_5* device_ = nullptr;
   SharedLibrary* lib_ = nullptr;
 };

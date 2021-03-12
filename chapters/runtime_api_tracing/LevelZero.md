@@ -98,4 +98,3 @@ ZE_ENABLE_TRACING_LAYER=1 ./<application>
 - [Level Zero Hot Kernels](../../samples/ze_hot_kernels)
 - [Level Zero Debug Info](../../samples/ze_debug_info)
 - [Level Zero Metric Query](../../samples/ze_metric_query)
-- [Level Zero Tracer](../../samples/ze_tracer)

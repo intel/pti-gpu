@@ -77,4 +77,3 @@ void CL_CALLBACK EventNotify(cl_event event,
 - [OpenCL(TM) GEMM](../../samples/cl_gemm)
 - [OpenCL(TM) Hot Kernels](../../samples/cl_hot_kernels)
 - [OpenCL(TM) GPU Metrics](../../samples/cl_gpu_metrics)
-- [OpenCL(TM) Tracer](../../samples/cl_tracer)

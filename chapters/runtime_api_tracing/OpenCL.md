@@ -116,4 +116,3 @@ void Callback(cl_function_id fid,
 - [OpenCL(TM) Hot Kernels](../../samples/cl_hot_kernels)
 - [OpenCL(TM) Debug Info](../../samples/cl_debug_info)
 - [OpenCL(TM) GPU Metrics](../../samples/cl_gpu_metrics)
-- [OpenCL(TM) Tracer](../../samples/cl_tracer)
