@@ -354,7 +354,10 @@ class UnifiedTracer {
       const ClCollector* cl_cpu_collector,
       const ClCollector* cl_gpu_collector,
       const char* type) {
-    PTI_ASSERT (cl_cpu_collector != nullptr || cl_gpu_collector != nullptr);
+    PTI_ASSERT(
+        ze_collector != nullptr ||
+        cl_cpu_collector != nullptr ||
+        cl_gpu_collector != nullptr);
 
     std::string ze_title =
       std::string("Total ") + std::string(type) +
