@@ -113,7 +113,7 @@ int main(int argc, char* argv[]) {
   }
 
   int app_index = parse_args(argc, argv);
-  if (app_index >= argc) {
+  if (app_index <= 0 || app_index >= argc) {
     std::cout << "[ERROR] Invalid command line" << std::endl;
     usage();
     delete lib;

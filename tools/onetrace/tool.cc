@@ -32,10 +32,13 @@ void Usage() {
     "--device-timeline [-t]          Trace device activities" <<
     std::endl;
   std::cout <<
+    "--chrome-call-logging           Dump host API calls to JSON file" <<
+    std::endl;
+  std::cout <<
     "--chrome-device-timeline        Dump device activities to JSON file" <<
     std::endl;
   std::cout <<
-    "--chrome-call-logging           Dump host API calls to JSON file" <<
+    "--chrome-device-stages          Dump device activities by stages to JSON file" <<
     std::endl;
 }
 
@@ -62,16 +65,28 @@ int ParseArgs(int argc, char* argv[]) {
                strcmp(argv[i], "-t") == 0) {
       utils::SetEnv("ONETRACE_DeviceTimeline=1");
       ++app_index;
+    } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
+      utils::SetEnv("ONETRACE_ChromeCallLogging=1");
+      ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
       utils::SetEnv("ONETRACE_ChromeDeviceTimeline=1");
       ++app_index;
-    } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
-      utils::SetEnv("ONETRACE_ChromeCallLogging=1");
+    } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
+      utils::SetEnv("ONETRACE_ChromeDeviceStages=1");
       ++app_index;
     } else {
       break;
     }
   }
+
+  if (utils::GetEnv("ONETRACE_ChromeDeviceTimeline") == "1" &&
+      utils::GetEnv("ONETRACE_ChromeDeviceStages") == "1") {
+    std::cout <<
+      "[ERROR] Options --chrome-device-timeline and --chrome-device-stages" <<
+      " can't be used together, choose one of them" << std::endl;
+    return -1;
+  }
+
   return app_index;
 }
 
@@ -107,14 +122,19 @@ static unsigned ReadArgs() {
     options |= (1 << ONETRACE_DEVICE_TIMELINE);
   }
 
+  value = utils::GetEnv("ONETRACE_ChromeCallLogging");
+  if (!value.empty() && value == "1") {
+    options |= (1 << ONETRACE_CHROME_CALL_LOGGING);
+  }
+
   value = utils::GetEnv("ONETRACE_ChromeDeviceTimeline");
   if (!value.empty() && value == "1") {
     options |= (1 << ONETRACE_CHROME_DEVICE_TIMELINE);
   }
 
-  value = utils::GetEnv("ONETRACE_ChromeCallLogging");
+  value = utils::GetEnv("ONETRACE_ChromeDeviceStages");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_CHROME_CALL_LOGGING);
+    options |= (1 << ONETRACE_CHROME_DEVICE_STAGES);
   }
 
   return options;

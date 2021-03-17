@@ -59,10 +59,12 @@ if __name__ == "__main__":
     option = "-d"
   if len(sys.argv) > 1 and sys.argv[1] == "-t":
     option = "-t"
-  if len(sys.argv) > 1 and sys.argv[1] == "--chrome-device-timeline":
-    option = "--chrome-device-timeline"
   if len(sys.argv) > 1 and sys.argv[1] == "--chrome-call-logging":
     option = "--chrome-call-logging"
+  if len(sys.argv) > 1 and sys.argv[1] == "--chrome-device-timeline":
+    option = "--chrome-device-timeline"
+  if len(sys.argv) > 1 and sys.argv[1] == "--chrome-device-stages":
+    option = "--chrome-device-stages"
   log = main(option)
   if log:
     print(log)

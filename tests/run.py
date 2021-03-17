@@ -30,9 +30,9 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["dpc_gemm", "gpu", "cpu", "host"],
            ["dpc_info", "-a", "-l"]]
 
-tools = [["onetrace", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging"],
-         ["cl_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging"],
-         ["ze_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging"]]
+tools = [["onetrace", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"],
+         ["cl_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"],
+         ["ze_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"]]
 
 def remove_python_cache(path):
   files = os.listdir(path)

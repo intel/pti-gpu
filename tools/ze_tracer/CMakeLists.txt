@@ -10,10 +10,11 @@ SetBuildType()
 
 add_library(zet_tracer SHARED
   "${PROJECT_SOURCE_DIR}/../../samples/loader/init.cc"
-  ze_correlator.cc
+  "${PROJECT_SOURCE_DIR}/../utils/correlator.cc"
   tool.cc)
 target_include_directories(zet_tracer
   PRIVATE "${PROJECT_SOURCE_DIR}"
+  PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../samples/utils")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(zet_tracer

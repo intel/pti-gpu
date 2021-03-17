@@ -15,8 +15,8 @@
 #include <sstream>
 #include <string>
 
+#include "correlator.h"
 #include "ze_api_collector.h"
-#include "ze_correlator.h"
 #include "ze_kernel_collector.h"
 #include "utils.h"
 
@@ -24,8 +24,9 @@
 #define ZET_HOST_TIMING            1
 #define ZET_DEVICE_TIMING          2
 #define ZET_DEVICE_TIMELINE        3
-#define ZET_CHROME_DEVICE_TIMELINE 4
-#define ZET_CHROME_CALL_LOGGING    5
+#define ZET_CHROME_CALL_LOGGING    4
+#define ZET_CHROME_DEVICE_TIMELINE 5
+#define ZET_CHROME_DEVICE_STAGES   6
 
 const char* kChromeTraceFileName = "zet_trace.json";
 
@@ -41,18 +42,27 @@ class ZeTracer {
     ZeTracer* tracer = new ZeTracer(options);
 
     ZeKernelCollector* kernel_collector = nullptr;
-    if (tracer->CheckOption(ZET_DEVICE_TIMELINE) ||
+    if (tracer->CheckOption(ZET_DEVICE_TIMING) ||
+        tracer->CheckOption(ZET_DEVICE_TIMELINE) ||
         tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
-        tracer->CheckOption(ZET_DEVICE_TIMING)) {
+        tracer->CheckOption(ZET_CHROME_DEVICE_STAGES)) {
+
+      PTI_ASSERT(!(tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE) &&
+                   tracer->CheckOption(ZET_CHROME_DEVICE_STAGES)));
 
       OnZeKernelFinishCallback callback = nullptr;
       if (tracer->CheckOption(ZET_DEVICE_TIMELINE) &&
           tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE)) {
         callback = DeviceAndChromeTimelineCallback;
+      } else if (tracer->CheckOption(ZET_DEVICE_TIMELINE) &&
+                 tracer->CheckOption(ZET_CHROME_DEVICE_STAGES)) {
+        callback = DeviceAndChromeStagesCallback;
       } else if (tracer->CheckOption(ZET_DEVICE_TIMELINE)) {
         callback = DeviceTimelineCallback;
       } else if (tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE)) {
         callback = ChromeTimelineCallback;
+      } else if (tracer->CheckOption(ZET_CHROME_DEVICE_STAGES)) {
+        callback = ChromeStagesCallback;
       }
 
       kernel_collector = ZeKernelCollector::Create(
@@ -123,8 +133,9 @@ class ZeTracer {
 
  private:
   ZeTracer(unsigned options) : options_(options) {
-    if (CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
-        CheckOption(ZET_CHROME_CALL_LOGGING)) {
+    if (CheckOption(ZET_CHROME_CALL_LOGGING) ||
+        CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
+        CheckOption(ZET_CHROME_DEVICE_STAGES) ) {
       OpenTraceFile();
     }
   }
@@ -253,6 +264,54 @@ class ZeTracer {
     tracer->chrome_trace_ << stream.str();
   }
 
+  static void ChromeStagesCallback(
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
+      uint64_t appended, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+    std::stringstream stream;
+
+    std::string tid = id + "." +
+      std::to_string(reinterpret_cast<uint64_t>(queue));
+
+    PTI_ASSERT(submitted > appended);
+    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
+      ", \"tid\":" << tid <<
+      ", \"name\":\"" << name << " (Appended)" <<
+      "\", \"ts\": " << appended / NSEC_IN_USEC <<
+      ", \"dur\":" << (submitted - appended) / NSEC_IN_USEC <<
+      ", \"cname\":\"thread_state_runnable\"" <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
+    stream.str(std::string());
+
+    PTI_ASSERT(started > submitted);
+    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
+      ", \"tid\":" << tid <<
+      ", \"name\":\"" << name << " (Submitted)" <<
+      "\", \"ts\": " << submitted / NSEC_IN_USEC <<
+      ", \"dur\":" << (started - submitted) / NSEC_IN_USEC <<
+      ", \"cname\":\"cq_build_running\"" <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
+    stream.str(std::string());
+
+    PTI_ASSERT(ended > started);
+    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
+      ", \"tid\":" << tid <<
+      ", \"name\":\"" << name << " (Execution)" <<
+      "\", \"ts\": " << started / NSEC_IN_USEC <<
+      ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"cname\":\"thread_state_iowait\"" <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
+  }
+
   static void DeviceAndChromeTimelineCallback(
       void* data, void* queue,
       const std::string& id, const std::string& name,
@@ -261,6 +320,17 @@ class ZeTracer {
     DeviceTimelineCallback(
         data, queue, id, name, appended, submitted, started, ended);
     ChromeTimelineCallback(
+        data, queue, id, name, appended, submitted, started, ended);
+  }
+
+  static void DeviceAndChromeStagesCallback(
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
+      uint64_t appended, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    DeviceTimelineCallback(
+        data, queue, id, name, appended, submitted, started, ended);
+    ChromeStagesCallback(
         data, queue, id, name, appended, submitted, started, ended);
   }
 
@@ -283,7 +353,7 @@ class ZeTracer {
  private:
   unsigned options_;
 
-  ZeCorrelator correlator_;
+  Correlator correlator_;
   uint64_t total_execution_time_ = 0;
 
   ZeApiCollector* api_collector_ = nullptr;

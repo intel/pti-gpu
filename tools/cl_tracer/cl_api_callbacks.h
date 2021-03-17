@@ -2624,8 +2624,29 @@ static void clEnqueueNDRangeKernelOnEnter(
   stream << " kernel = " << *(params->kernel);
   stream << " workDim = " << *(params->workDim);
   stream << " globalWorkOffset = " << *(params->globalWorkOffset);
+  if (*(params->globalWorkOffset) != nullptr && *(params->workDim) > 0) {
+    stream << " {" << (*(params->globalWorkOffset))[0];
+    for (cl_uint i = 1; i < *(params->workDim); ++i) {
+      stream << ", " << (*(params->globalWorkOffset))[i];
+    }
+    stream << "}";
+  }
   stream << " globalWorkSize = " << *(params->globalWorkSize);
+  if (*(params->globalWorkSize) != nullptr && *(params->workDim) > 0) {
+    stream << " {" << (*(params->globalWorkSize))[0];
+    for (cl_uint i = 1; i < *(params->workDim); ++i) {
+      stream << ", " << (*(params->globalWorkSize))[i];
+    }
+    stream << "}";
+  }
   stream << " localWorkSize = " << *(params->localWorkSize);
+  if (*(params->localWorkSize) != nullptr && *(params->workDim) > 0) {
+    stream << " {" << (*(params->localWorkSize))[0];
+    for (cl_uint i = 1; i < *(params->workDim); ++i) {
+      stream << ", " << (*(params->localWorkSize))[i];
+    }
+    stream << "}";
+  }
   stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
   stream << " eventWaitList = " << *(params->eventWaitList);
   stream << " event = " << *(params->event);

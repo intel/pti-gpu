@@ -16,9 +16,9 @@
 
 #include <level_zero/layers/zel_tracing_api.h>
 
+#include "correlator.h"
 #include "i915_utils.h"
 #include "utils.h"
-#include "ze_correlator.h"
 #include "ze_utils.h"
 
 struct ZeKernelInstance {
@@ -83,7 +83,7 @@ class ZeKernelCollector {
  public: // Interface
 
   static ZeKernelCollector* Create(
-      ZeCorrelator* correlator,
+      Correlator* correlator,
       OnZeKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(correlator != nullptr);
@@ -184,7 +184,7 @@ class ZeKernelCollector {
  private: // Implementation
 
   ZeKernelCollector(
-      ZeCorrelator* correlator,
+      Correlator* correlator,
       OnZeKernelFinishCallback callback,
       void* callback_data)
       : correlator_(correlator),
@@ -285,6 +285,8 @@ class ZeKernelCollector {
 
     prologue_callbacks.CommandQueue.pfnExecuteCommandListsCb =
       OnEnterCommandQueueExecuteCommandLists;
+    epilogue_callbacks.CommandQueue.pfnExecuteCommandListsCb =
+      OnExitCommandQueueExecuteCommandLists;
 
     epilogue_callbacks.CommandList.pfnCreateCb =
       OnExitCommandListCreate;
@@ -322,6 +324,7 @@ class ZeKernelCollector {
 
     ZeKernelInstance* kernel_instance = &kernel_instance_list_.back();
     kernel_instance->kernel_id = kernel_id_.fetch_add(1, std::memory_order::memory_order_relaxed);
+    kernel_instance->append_time = (kernel_instance->append_time + GetTimestamp()) / 2;
 
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
     ZeCommandListInfo& command_list_info = command_list_map_[command_list];
@@ -386,6 +389,7 @@ class ZeKernelCollector {
     if (callback_ != nullptr) {
       PTI_ASSERT(instance.append_time > 0);
       PTI_ASSERT(instance.submit_time > 0);
+      PTI_ASSERT(instance.append_time < instance.submit_time);
 
       uint64_t cpu_start = 0, cpu_end = 0;
       uint64_t time_shift = correlator_->GetTimeDiff(cpu_timestamp_);
@@ -405,8 +409,7 @@ class ZeKernelCollector {
 
       PTI_ASSERT(instance.queue != nullptr);
       PTI_ASSERT(!instance.name.empty());
-      PTI_ASSERT(instance.append_time > 0);
-      PTI_ASSERT(instance.submit_time > 0);
+      PTI_ASSERT(cpu_start > instance.append_time);
       callback_(
           callback_data_, instance.queue,
           std::to_string(instance.kernel_id), instance.name,
@@ -515,6 +518,7 @@ class ZeKernelCollector {
       for (size_t i = 0; i < kernel_list.size(); ++i) {
         kernel_list[i]->queue = queue;
         kernel_list[i]->submit_time = submit_time;
+        PTI_ASSERT(kernel_list[i]->append_time < kernel_list[i]->submit_time);
       }
     }
   }
@@ -1061,7 +1065,27 @@ class ZeKernelCollector {
       reinterpret_cast<ZeKernelCollector*>(global_data);
     PTI_ASSERT(collector != nullptr);
 
-    uint64_t submit_time = collector->GetTimestamp();
+    uint64_t& start_time = *reinterpret_cast<uint64_t*>(instance_data);
+    start_time = collector->GetTimestamp();
+  }
+
+  static void OnExitCommandQueueExecuteCommandLists(
+      ze_command_queue_execute_command_lists_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    if (result != ZE_RESULT_SUCCESS) {
+      return;
+    }
+
+    ZeKernelCollector* collector =
+      reinterpret_cast<ZeKernelCollector*>(global_data);
+    PTI_ASSERT(collector != nullptr);
+
+    uint64_t end_time = collector->GetTimestamp();
+    uint64_t& start_time = *reinterpret_cast<uint64_t*>(instance_data);
+    PTI_ASSERT(start_time > 0);
+    PTI_ASSERT(start_time < end_time);
+
+    uint64_t submit_time = (start_time + end_time) / 2;
     uint32_t command_list_count = *params->pnumCommandLists;
     ze_command_list_handle_t* command_lists = *params->pphCommandLists;
     for (uint32_t i = 0; i < command_list_count; ++i) {
@@ -1096,13 +1120,13 @@ class ZeKernelCollector {
   zel_tracer_handle_t tracer_ = nullptr;
 
   uint64_t timer_frequency_ = 0;
-  ZeCorrelator* correlator_ = nullptr;
+  Correlator* correlator_ = nullptr;
   std::atomic<uint64_t> kernel_id_;
 
   OnZeKernelFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;
 
-  ZeTimePoint cpu_timestamp_;
+  TimePoint cpu_timestamp_;
   uint64_t gpu_timestamp_ = 0;
 
   std::mutex lock_;

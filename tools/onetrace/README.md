@@ -10,8 +10,9 @@ Options:
 --host-timing  [-h]             Report host API execution time
 --device-timing [-d]            Report kernels exectucion time
 --device-timeline [-t]          Trace device activities
---chrome-device-timeline        Dump device activities to JSON file
 --chrome-call-logging           Dump host API calls to JSON file
+--chrome-device-timeline        Dump device activities to JSON file
+--chrome-device-stages          Dump device activities by stages to JSON file
 ```
 
 **Call Logging** mode allows to grab full host API trace, e.g.:
@@ -87,6 +88,8 @@ Device Timeline (queue: 0x55a9c7e51e70): clEnqueueReadBuffer [ns] = 361479600 (q
 ...
 ```
 **Chrome Device Timeline** mode dumps timestamps for device activities to JSON format that can be opened in [chrome://tracing](https://www.chromium.org/developers/how-tos/trace-event-profiling-tool) browser tool.
+
+**Chrome Device Stages** mode provides alternative view for device queue where each kernel invocation is divided into stages: "queued" or "appended", "sumbitted" and "execution". Can't be used in pair with **Chrome Device Timeline**.
 
 ## Supported OS
 - Linux

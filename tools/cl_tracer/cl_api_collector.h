@@ -16,6 +16,7 @@
 
 #include "cl_api_tracer.h"
 #include "cl_utils.h"
+#include "correlator.h"
 #include "trace_guard.h"
 
 #include "cl_api_callbacks.h"
@@ -42,25 +43,25 @@ struct ClFunction {
 };
 
 using ClFunctionInfoMap = std::map<std::string, ClFunction>;
-using ClFunctionTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 
 typedef void (*OnClFunctionFinishCallback)(
-    void* data, const std::string& name,
+    void* data, uint64_t id, const std::string& name,
     uint64_t started, uint64_t ended);
 
 class ClApiCollector {
  public: // User Interface
   static ClApiCollector* Create(
       cl_device_id device,
-      ClFunctionTimePoint base_time = std::chrono::steady_clock::now(),
+      Correlator* correlator,
       bool call_tracing = false,
       OnClFunctionFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
+    PTI_ASSERT(correlator != nullptr);
     TraceGuard guard;
 
     ClApiCollector* collector = new ClApiCollector(
-        base_time, call_tracing, callback, callback_data);
+        correlator, call_tracing, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
@@ -144,10 +145,12 @@ class ClApiCollector {
 
  private: // Implementation Details
   ClApiCollector(
-      ClFunctionTimePoint base_time, bool call_tracing,
+      Correlator* correlator, bool call_tracing,
       OnClFunctionFinishCallback callback, void* callback_data)
-      : base_time_(base_time), call_tracing_(call_tracing),
-        callback_(callback), callback_data_(callback_data) {}
+      : correlator_(correlator), call_tracing_(call_tracing),
+        callback_(callback), callback_data_(callback_data) {
+    PTI_ASSERT(correlator_ != nullptr);
+  }
 
   void EnableTracing(ClApiTracer* tracer) {
     PTI_ASSERT(tracer != nullptr);
@@ -163,9 +166,8 @@ class ClApiCollector {
   }
 
   uint64_t GetTimestamp() const {
-    std::chrono::duration<uint64_t, std::nano> timestamp =
-      std::chrono::steady_clock::now() - base_time_;
-    return timestamp.count();
+    PTI_ASSERT(correlator_ != nullptr);
+    return correlator_->GetTimestamp();
   }
 
   void AddFunctionTime(const std::string& name, uint64_t time) {
@@ -218,9 +220,17 @@ class ClApiCollector {
       }
 
       if (collector->callback_ != nullptr) {
+        uint64_t kernel_id = 0;
+        if (function == CL_FUNCTION_clEnqueueNDRangeKernel ||
+            function == CL_FUNCTION_clEnqueueReadBuffer ||
+            function == CL_FUNCTION_clEnqueueWriteBuffer) {
+          PTI_ASSERT(collector->correlator_ != nullptr);
+          kernel_id = collector->correlator_->GetKernelId();
+        }
+
         collector->callback_(
-            collector->callback_data_, callback_data->functionName,
-            start_time, end_time);
+            collector->callback_data_, kernel_id,
+            callback_data->functionName, start_time, end_time);
       }
     }
   }
@@ -228,7 +238,7 @@ class ClApiCollector {
  private: // Data
   ClApiTracer* tracer_ = nullptr;
 
-  ClFunctionTimePoint base_time_;
+  Correlator* correlator_ = nullptr;
   bool call_tracing_ = false;
 
   OnClFunctionFinishCallback callback_ = nullptr;

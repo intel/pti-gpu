@@ -10,10 +10,12 @@ SetBuildType()
 
 add_library(clt_tracer SHARED
   "${PROJECT_SOURCE_DIR}/../../samples/loader/init.cc"
+  "${PROJECT_SOURCE_DIR}/../utils/correlator.cc"
   trace_guard.cc
   tool.cc)
 target_include_directories(clt_tracer
   PRIVATE "${PROJECT_SOURCE_DIR}"
+  PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../samples/utils")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(clt_tracer

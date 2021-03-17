@@ -16,8 +16,8 @@
 
 #include <level_zero/layers/zel_tracing_api.h>
 
+#include "correlator.h"
 #include "utils.h"
-#include "ze_correlator.h"
 #include "ze_utils.h"
 
 struct ZeFunction {
@@ -50,7 +50,7 @@ typedef void (*OnZeFunctionFinishCallback)(
 class ZeApiCollector {
  public: // User Interface
   static ZeApiCollector* Create(
-      ZeCorrelator* correlator,
+      Correlator* correlator,
       bool call_tracing = false,
       OnZeFunctionFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
@@ -168,7 +168,7 @@ class ZeApiCollector {
 
  private: // Implementation Details
   ZeApiCollector(
-      ZeCorrelator* correlator, bool call_tracing,
+      Correlator* correlator, bool call_tracing,
       OnZeFunctionFinishCallback callback, void* callback_data)
       : correlator_(correlator), call_tracing_(call_tracing),
         callback_(callback), callback_data_(callback_data) {
@@ -183,7 +183,7 @@ class ZeApiCollector {
   ZeFunctionInfoMap function_info_map_;
   std::mutex lock_;
 
-  ZeCorrelator* correlator_ = nullptr;
+  Correlator* correlator_ = nullptr;
   bool call_tracing_ = false;
 
   OnZeFunctionFinishCallback callback_ = nullptr;

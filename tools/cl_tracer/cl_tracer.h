@@ -23,8 +23,9 @@
 #define CLT_HOST_TIMING            1
 #define CLT_DEVICE_TIMING          2
 #define CLT_DEVICE_TIMELINE        3
-#define CLT_CHROME_DEVICE_TIMELINE 4
-#define CLT_CHROME_CALL_LOGGING    5
+#define CLT_CHROME_CALL_LOGGING    4
+#define CLT_CHROME_DEVICE_TIMELINE 5
+#define CLT_CHROME_DEVICE_STAGES   6
 
 const char* kChromeTraceFileName = "cli_trace.json";
 
@@ -39,6 +40,60 @@ class ClTracer {
     }
 
     ClTracer* tracer = new ClTracer(options);
+
+    if (tracer->CheckOption(CLT_DEVICE_TIMING) ||
+        tracer->CheckOption(CLT_DEVICE_TIMELINE) ||
+        tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE) ||
+        tracer->CheckOption(CLT_CHROME_DEVICE_STAGES)) {
+
+      PTI_ASSERT(!(tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE) &&
+                   tracer->CheckOption(CLT_CHROME_DEVICE_STAGES)));
+
+      ClKernelCollector* cpu_kernel_collector = nullptr;
+      ClKernelCollector* gpu_kernel_collector = nullptr;
+
+      OnClKernelFinishCallback callback = nullptr;
+      if (tracer->CheckOption(CLT_DEVICE_TIMELINE) &&
+          tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE)) {
+        callback = DeviceAndChromeTimelineCallback;
+      } else if (tracer->CheckOption(CLT_DEVICE_TIMELINE) &&
+                 tracer->CheckOption(CLT_CHROME_DEVICE_STAGES)) {
+        callback = DeviceAndChromeStagesCallback;
+      } else if (tracer->CheckOption(CLT_DEVICE_TIMELINE)) {
+        callback = DeviceTimelineCallback;
+      } else if (tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE)) {
+        callback = ChromeTimelineCallback;
+      } else if (tracer->CheckOption(CLT_CHROME_DEVICE_STAGES)) {
+        callback = ChromeStagesCallback;
+      }
+
+      if (cpu_device != nullptr) {
+        cpu_kernel_collector = ClKernelCollector::Create(
+            cpu_device, &tracer->correlator_, callback, tracer);
+        if (cpu_kernel_collector == nullptr) {
+          std::cerr <<
+            "[WARNING] Unable to create kernel collector for CPU backend" <<
+            std::endl;
+        }
+        tracer->cpu_kernel_collector_ = cpu_kernel_collector;
+      }
+
+      if (gpu_device != nullptr) {
+        gpu_kernel_collector = ClKernelCollector::Create(
+            gpu_device, &tracer->correlator_, callback, tracer);
+        if (gpu_kernel_collector == nullptr) {
+          std::cerr <<
+            "[WARNING] Unable to create kernel collector for GPU backend" <<
+            std::endl;
+        }
+        tracer->gpu_kernel_collector_ = gpu_kernel_collector;
+      }
+
+      if (cpu_kernel_collector == nullptr && gpu_kernel_collector == nullptr) {
+        delete tracer;
+        return nullptr;
+      }
+    }
 
     if (tracer->CheckOption(CLT_CALL_LOGGING) ||
         tracer->CheckOption(CLT_CHROME_CALL_LOGGING) ||
@@ -56,7 +111,7 @@ class ClTracer {
 
       if (cpu_device != nullptr) {
         cpu_api_collector = ClApiCollector::Create(
-            cpu_device, tracer->start_time_,
+            cpu_device, &tracer->correlator_,
             call_tracing, callback, tracer);
         if (cpu_api_collector == nullptr) {
           std::cerr <<
@@ -68,7 +123,7 @@ class ClTracer {
 
       if (gpu_device != nullptr) {
         gpu_api_collector = ClApiCollector::Create(
-            gpu_device, tracer->start_time_,
+            gpu_device, &tracer->correlator_,
             call_tracing, callback, tracer);
         if (gpu_api_collector == nullptr) {
           std::cerr <<
@@ -84,60 +139,11 @@ class ClTracer {
       }
     }
 
-    if (tracer->CheckOption(CLT_DEVICE_TIMELINE) ||
-        tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE) ||
-        tracer->CheckOption(CLT_DEVICE_TIMING)) {
-
-      ClKernelCollector* cpu_kernel_collector = nullptr;
-      ClKernelCollector* gpu_kernel_collector = nullptr;
-
-      OnClKernelFinishCallback callback = nullptr;
-      if (tracer->CheckOption(CLT_DEVICE_TIMELINE) &&
-          tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE)) {
-        callback = DeviceAndChromeTimelineCallback;
-      } else if (tracer->CheckOption(CLT_DEVICE_TIMELINE)) {
-        callback = DeviceTimelineCallback;
-      } else if (tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE)) {
-        callback = ChromeTimelineCallback;
-      }
-
-      if (cpu_device != nullptr) {
-        cpu_kernel_collector = ClKernelCollector::Create(
-            cpu_device, tracer->start_time_, callback, tracer);
-        if (cpu_kernel_collector == nullptr) {
-          std::cerr <<
-            "[WARNING] Unable to create kernel collector for CPU backend" <<
-            std::endl;
-        }
-        tracer->cpu_kernel_collector_ = cpu_kernel_collector;
-      }
-
-      if (gpu_device != nullptr) {
-        gpu_kernel_collector = ClKernelCollector::Create(
-            gpu_device, tracer->start_time_, callback, tracer);
-        if (gpu_kernel_collector == nullptr) {
-          std::cerr <<
-            "[WARNING] Unable to create kernel collector for GPU backend" <<
-            std::endl;
-        }
-        tracer->gpu_kernel_collector_ = gpu_kernel_collector;
-      }
-
-      if (cpu_kernel_collector == nullptr && gpu_kernel_collector == nullptr) {
-        delete tracer;
-        return nullptr;
-      }
-    }
-
     return tracer;
   }
 
   ~ClTracer() {
-    std::chrono::steady_clock::time_point end_time =
-      std::chrono::steady_clock::now();
-    std::chrono::duration<uint64_t, std::nano> duration =
-      end_time - start_time_;
-    total_execution_time_ = duration.count();
+    total_execution_time_ = correlator_.GetTimestamp();
 
     if (cpu_api_collector_ != nullptr) {
       cpu_api_collector_->DisableTracing();
@@ -184,10 +190,9 @@ class ClTracer {
  private:
   ClTracer(unsigned options)
       : options_(options) {
-    start_time_ = std::chrono::steady_clock::now();
-
-    if (CheckOption(CLT_CHROME_DEVICE_TIMELINE) ||
-        CheckOption(CLT_CHROME_CALL_LOGGING)) {
+    if (CheckOption(CLT_CHROME_CALL_LOGGING) ||
+        CheckOption(CLT_CHROME_DEVICE_TIMELINE) ||
+        CheckOption(CLT_CHROME_DEVICE_STAGES)) {
       OpenTraceFile();
     }
   }
@@ -308,7 +313,8 @@ class ClTracer {
   }
 
   static void DeviceTimelineCallback(
-      void* data, void* queue, const std::string& name,
+      void* data, void* queue,
+      uint64_t id, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
     std::stringstream stream;
@@ -339,7 +345,8 @@ class ClTracer {
   }
 
   static void ChromeTimelineCallback(
-      void* data, void* queue, const std::string& name,
+      void* data, void* queue,
+      uint64_t id, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
     ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
@@ -351,20 +358,84 @@ class ClTracer {
       ", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
+  }
+
+  static void ChromeStagesCallback(
+      void* data, void* queue,
+      uint64_t id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+    std::stringstream stream;
+
+    std::string tid =
+      std::to_string(id) +
+      "." + std::to_string(reinterpret_cast<uint64_t>(queue));
+
+    PTI_ASSERT(submitted > queued);
+    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
+      ", \"tid\":" << tid <<
+      ", \"name\":\"" << name << " (Queued)" <<
+      "\", \"ts\": " << queued / NSEC_IN_USEC <<
+      ", \"dur\":" << (submitted - queued) / NSEC_IN_USEC <<
+      ", \"cname\":\"thread_state_runnable\"" <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
+    stream.str(std::string());
+
+    PTI_ASSERT(started > submitted);
+    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
+      ", \"tid\":" << tid <<
+      ", \"name\":\"" << name << " (Submitted)" <<
+      "\", \"ts\": " << submitted / NSEC_IN_USEC <<
+      ", \"dur\":" << (started - submitted) / NSEC_IN_USEC <<
+      ", \"cname\":\"cq_build_running\"" <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_trace_ << stream.str();
+    stream.str(std::string());
+
+    PTI_ASSERT(ended > started);
+    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
+      ", \"tid\":" << tid <<
+      ", \"name\":\"" << name << " (Execution)" <<
+      "\", \"ts\": " << started / NSEC_IN_USEC <<
+      ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"cname\":\"thread_state_iowait\"" <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
     tracer->chrome_trace_ << stream.str();
   }
 
   static void DeviceAndChromeTimelineCallback(
-      void* data, void* queue, const std::string& name,
+      void* data, void* queue,
+      uint64_t id, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
-    DeviceTimelineCallback(data, queue, name, queued, submitted, started, ended);
-    ChromeTimelineCallback(data, queue, name, queued, submitted, started, ended);
+    DeviceTimelineCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+    ChromeTimelineCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+  }
+
+  static void DeviceAndChromeStagesCallback(
+      void* data, void* queue,
+      uint64_t id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    DeviceTimelineCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+    ChromeStagesCallback(
+        data, queue, id, name, queued, submitted, started, ended);
   }
 
   static void ChromeLoggingCallback(
-      void* data, const std::string& name,
+      void* data, uint64_t id, const std::string& name,
       uint64_t started, uint64_t ended) {
     ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
@@ -375,6 +446,7 @@ class ClTracer {
       ", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
     tracer->chrome_trace_ << stream.str();
   }
@@ -382,7 +454,7 @@ class ClTracer {
  private:
   unsigned options_;
 
-  std::chrono::time_point<std::chrono::steady_clock> start_time_;
+  Correlator correlator_;
   uint64_t total_execution_time_ = 0;
 
   ClApiCollector* cpu_api_collector_ = nullptr;

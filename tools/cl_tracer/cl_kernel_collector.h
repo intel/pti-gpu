@@ -7,6 +7,7 @@
 #ifndef PTI_SAMPLES_CL_HOT_KERNELS_CL_KERNEL_COLLECTOR_H_
 #define PTI_SAMPLES_CL_HOT_KERNELS_CL_KERNEL_COLLECTOR_H_
 
+#include <atomic>
 #include <list>
 #include <map>
 #include <mutex>
@@ -15,6 +16,7 @@
 
 #include "cl_api_tracer.h"
 #include "cl_utils.h"
+#include "correlator.h"
 #include "trace_guard.h"
 
 class ClKernelCollector;
@@ -28,6 +30,7 @@ struct ClEventData {
   ClKernelCollector* collector;
   std::string kernel_name;
   ClKernelType kernel_type;
+  uint64_t kernel_id;
   union {
     cl_kernel kernel;
     size_t bytes_transferred;
@@ -65,10 +68,10 @@ struct ClKernelInterval {
 
 using ClKernelInfoMap = std::map<std::string, ClKernelInfo>;
 using ClKernelIntervalList = std::vector<ClKernelInterval>;
-using ClKernelTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 
 typedef void (*OnClKernelFinishCallback)(
-    void* data, void* queue, const std::string& name,
+    void* data, void* queue,
+    uint64_t id, const std::string& name,
     uint64_t queued, uint64_t submitted,
     uint64_t started, uint64_t ended);
 
@@ -76,14 +79,15 @@ class ClKernelCollector {
  public: // Interface
   static ClKernelCollector* Create(
       cl_device_id device,
-      ClKernelTimePoint base_time = std::chrono::steady_clock::now(),
+      Correlator* correlator,
       OnClKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
+    PTI_ASSERT(correlator != nullptr);
     TraceGuard guard;
 
     ClKernelCollector* collector = new ClKernelCollector(
-        device, base_time, callback, callback_data);
+        device, correlator, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
@@ -180,12 +184,14 @@ class ClKernelCollector {
  private: // Implementation Details
   ClKernelCollector(
       cl_device_id device,
-      ClKernelTimePoint base_time,
+      Correlator* correlator,
       OnClKernelFinishCallback callback,
       void* callback_data)
-      : base_time_(base_time),
+      : correlator_(correlator),
         callback_(callback),
-        callback_data_(callback_data) {
+        callback_data_(callback_data),
+        kernel_id_(1) {
+    PTI_ASSERT(correlator_ != nullptr);
     if (callback_ != nullptr) {
       cl_device_type device_type = utils::cl::GetDeviceType(device);
       if (device_type == CL_DEVICE_TYPE_GPU) {
@@ -300,8 +306,9 @@ class ClKernelCollector {
         utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_SUBMIT);
       PTI_ASSERT(submitted > 0);
 
-      std::chrono::duration<uint64_t, std::nano> time_shift =
-        collector->cpu_timestamp_ - collector->base_time_;
+      PTI_ASSERT(collector->correlator_ != nullptr);
+      uint64_t time_shift =
+        collector->correlator_->GetTimeDiff(collector->cpu_timestamp_);
 
       PTI_ASSERT(collector->dev_timestamp_ < queued);
       PTI_ASSERT(queued < submitted);
@@ -309,16 +316,17 @@ class ClKernelCollector {
       PTI_ASSERT(started < ended);
 
       uint64_t cpu_queued =
-        (queued - collector->dev_timestamp_) + time_shift.count();
+        (queued - collector->dev_timestamp_) + time_shift;
       uint64_t cpu_submitted =
-        (submitted - collector->dev_timestamp_) + time_shift.count();
+        (submitted - collector->dev_timestamp_) + time_shift;
       uint64_t cpu_started =
-        (started - collector->dev_timestamp_) + time_shift.count();
+        (started - collector->dev_timestamp_) + time_shift;
       uint64_t cpu_ended =
-        (ended - collector->dev_timestamp_) + time_shift.count();
+        (ended - collector->dev_timestamp_) + time_shift;
 
       collector->callback_(
-          collector->callback_data_, queue, name,
+          collector->callback_data_, queue,
+          event_data->kernel_id, name,
           cpu_queued, cpu_submitted, cpu_started, cpu_ended);
     }
 
@@ -404,6 +412,11 @@ class ClKernelCollector {
       event_data->kernel_type = KERNEL_TYPE_USER;
       event_data->kernel = kernel;
 
+      event_data->kernel_id =
+        collector->kernel_id_.fetch_add(1, std::memory_order::memory_order_relaxed);
+      PTI_ASSERT(collector->correlator_ != nullptr);
+      collector->correlator_->SetKernelId(event_data->kernel_id);
+
       status = clRetainKernel(kernel);
       PTI_ASSERT(status == CL_SUCCESS);
       status = clSetEventCallback(
@@ -453,6 +466,11 @@ class ClKernelCollector {
       event_data->kernel_type = KERNEL_TYPE_TRANSFER;
       event_data->bytes_transferred = *(params->cb);
 
+      event_data->kernel_id =
+        collector->kernel_id_.fetch_add(1, std::memory_order::memory_order_relaxed);
+      PTI_ASSERT(collector->correlator_ != nullptr);
+      collector->correlator_->SetKernelId(event_data->kernel_id);
+
       status = clSetEventCallback(
           **(params->event), CL_COMPLETE, EventNotify, event_data);
       PTI_ASSERT(status == CL_SUCCESS);
@@ -499,6 +517,11 @@ class ClKernelCollector {
       event_data->kernel_name = "clEnqueueWriteBuffer";
       event_data->kernel_type = KERNEL_TYPE_TRANSFER;
       event_data->bytes_transferred = *(params->cb);
+
+      event_data->kernel_id =
+        collector->kernel_id_.fetch_add(1, std::memory_order::memory_order_relaxed);
+      PTI_ASSERT(collector->correlator_ != nullptr);
+      collector->correlator_->SetKernelId(event_data->kernel_id);
 
       status = clSetEventCallback(
           **(params->event), CL_COMPLETE, EventNotify, event_data);
@@ -549,12 +572,14 @@ class ClKernelCollector {
 
  private: // Data
   ClApiTracer* tracer_ = nullptr;
-  ClKernelTimePoint base_time_;
+  Correlator* correlator_ = nullptr;
+
+  std::atomic<uint64_t> kernel_id_;
 
   OnClKernelFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;
 
-  ClKernelTimePoint cpu_timestamp_;
+  TimePoint cpu_timestamp_;
   uint64_t dev_timestamp_ = 0;
 
   std::mutex lock_;

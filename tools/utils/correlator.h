@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_UTILS_ZE_CORRELATOR_H_
-#define PTI_SAMPLES_UTILS_ZE_CORRELATOR_H_
+#ifndef PTI_TOOLS_UTILS_CORRELATOR_H_
+#define PTI_TOOLS_UTILS_CORRELATOR_H_
 
 #include <chrono>
 #include <map>
@@ -15,15 +15,11 @@
 
 #include "pti_assert.h"
 
-using ZeTimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 
-class ZeCorrelator {
+class Correlator {
  public:
-  ZeCorrelator() : base_time_(std::chrono::steady_clock::now()) {}
-
-  ZeTimePoint GetTimepoint() const {
-    return base_time_;
-  }
+  Correlator() : base_time_(std::chrono::steady_clock::now()) {}
 
   uint64_t GetTimestamp() const {
     std::chrono::duration<uint64_t, std::nano> timestamp =
@@ -31,7 +27,7 @@ class ZeCorrelator {
     return timestamp.count();
   }
 
-  uint64_t GetTimeDiff(const ZeTimePoint& time_point) {
+  uint64_t GetTimeDiff(const TimePoint& time_point) {
     std::chrono::duration<uint64_t, std::nano> duration =
       time_point - base_time_;
     return duration.count();
@@ -76,10 +72,10 @@ class ZeCorrelator {
   }
 
  private:
-  ZeTimePoint base_time_;
+  TimePoint base_time_;
   std::map<ze_command_list_handle_t, std::vector<uint64_t> > kernel_id_map_;
 
   static thread_local uint64_t kernel_id_;
 };
 
-#endif // PTI_SAMPLES_ZE_TRACER_ZE_CORRELATOR_H_
+#endif // PTI_TOOLS_UTILS_CORRELATOR_H_
