@@ -463,7 +463,7 @@ class ZeKernelCollector {
       }
       kernel.call_count += 1;
       kernel.bytes_transferred += bytes_transferred;
-      PTI_ASSERT(kernel.simd_width == simd_width);
+      kernel.simd_width = std::max(kernel.simd_width, simd_width);
     }
   }
 

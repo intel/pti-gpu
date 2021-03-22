@@ -16,6 +16,8 @@
 
 #include "utils.h"
 
+#define CL_KERNEL_MAX_SUB_GROUP_SIZE_FOR_NDRANGE_KHR 0x2033
+
 namespace utils {
 namespace cl {
 
@@ -191,15 +193,73 @@ inline cl_queue_properties* EnableQueueProfiling(
   return props_with_prof;
 }
 
-inline size_t GetSimdWidth(cl_device_id device, cl_kernel kernel) {
+inline bool CheckExtension(cl_device_id device, const char* extension) {
+  cl_int status = CL_SUCCESS;
+
+  size_t size = 0;
+  status = clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, 0, nullptr, &size);
+  PTI_ASSERT(status == CL_SUCCESS);
+
+  if (size == 0) {
+    return false;
+  }
+
+  std::vector<char> buffer(size);
+  status = clGetDeviceInfo(
+      device, CL_DEVICE_EXTENSIONS, size, buffer.data(), nullptr);
+  PTI_ASSERT(status == CL_SUCCESS);
+
+  std::string extensions(buffer.begin(), buffer.end());
+  if (extensions.find(extension) != std::string::npos) {
+    return true;
+  }
+
+  return false;
+}
+
+inline size_t GetKernelLocalSize(cl_device_id device, cl_kernel kernel) {
   PTI_ASSERT(device != nullptr && kernel != nullptr);
 
+  size_t local_size = 0;
+  cl_int status = clGetKernelWorkGroupInfo(
+      kernel, device, CL_KERNEL_WORK_GROUP_SIZE,
+      sizeof(size_t), &local_size, nullptr);
+  PTI_ASSERT(status == CL_SUCCESS);
+
+  return local_size;
+}
+
+inline size_t GetSimdWidth(
+    cl_device_id device, cl_kernel kernel, size_t local_size[3]) {
+  PTI_ASSERT(device != nullptr && kernel != nullptr);
   cl_int status = CL_SUCCESS;
+
+  if (!CheckExtension(device, "cl_intel_subgroups")) {
+    return 0;
+  }
+
+  typedef cl_int (*clGetKernelSubGroupInfoKHR)(
+      cl_kernel kernel, cl_device_id device,
+      cl_kernel_sub_group_info param_name, size_t input_value_size,
+      const void* input_value, size_t param_value_size,
+      void* param_value, size_t* param_value_size_ret);
+
+  cl_platform_id platform = nullptr;
+  status = clGetDeviceInfo(
+      device, CL_DEVICE_PLATFORM, sizeof(cl_platform_id), &platform, nullptr);
+  PTI_ASSERT(status == CL_SUCCESS);
+  PTI_ASSERT(platform != nullptr);
+
+  clGetKernelSubGroupInfoKHR func =
+    reinterpret_cast<clGetKernelSubGroupInfoKHR>(
+        clGetExtensionFunctionAddressForPlatform(
+            platform, "clGetKernelSubGroupInfoKHR"));
+  PTI_ASSERT(func != nullptr);
+
   size_t simd_width = 0;
-  status =
-    clGetKernelWorkGroupInfo(kernel, device,
-                             CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
-                             sizeof(size_t), &simd_width, nullptr);
+  status = func(
+      kernel, device, CL_KERNEL_MAX_SUB_GROUP_SIZE_FOR_NDRANGE_KHR,
+      sizeof(size_t[3]), local_size, sizeof(size_t), &simd_width, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
 
   return simd_width;

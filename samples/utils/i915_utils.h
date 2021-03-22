@@ -12,6 +12,11 @@
 #include <xf86drm.h>
 
 #define I915_TIMESTAMP_LOW_OFFSET 0x2358
+
+#ifndef I915_PARAM_CS_TIMESTAMP_FREQUENCY
+#define I915_PARAM_CS_TIMESTAMP_FREQUENCY 51
+#endif
+
 #endif
 
 #include "utils.h"

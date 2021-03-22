@@ -22,6 +22,7 @@ struct ClEventData {
   ClKernelCollector* collector;
   std::string kernel_name;
   cl_kernel kernel;
+  size_t local_size[3];
 };
 
 struct ClKernelInfo {
@@ -183,7 +184,7 @@ class ClKernelCollector {
         kernel.min_time = time;
       }
       kernel.call_count += 1;
-      PTI_ASSERT(kernel.simd_width == simd_width);
+      kernel.simd_width = std::max(kernel.simd_width, simd_width);
     }
   }
 
@@ -221,7 +222,8 @@ class ClKernelCollector {
     cl_device_id device = utils::cl::GetDevice(queue);
     PTI_ASSERT(device != nullptr);
 
-    size_t simd_width = utils::cl::GetSimdWidth(device, kernel);
+    size_t simd_width = utils::cl::GetSimdWidth(
+        device, kernel, event_data->local_size);
     PTI_ASSERT(simd_width > 0);
 
     cl_int status = clReleaseKernel(kernel);
@@ -310,6 +312,23 @@ class ClKernelCollector {
       event_data->collector = collector;
       event_data->kernel_name = utils::cl::GetKernelName(kernel);
       event_data->kernel = kernel;
+
+      event_data->local_size[0] = 1;
+      event_data->local_size[1] = 1;
+      event_data->local_size[2] = 1;
+
+      if (*(params->localWorkSize) == nullptr) {
+        PTI_ASSERT(*(params->commandQueue) != nullptr);
+        cl_device_id device = utils::cl::GetDevice(*(params->commandQueue));
+        PTI_ASSERT(device != nullptr);
+        event_data->local_size[0] =
+          utils::cl::GetKernelLocalSize(device, kernel);
+      } else {
+        PTI_ASSERT(*(params->workDim) <= 3);
+        for (cl_uint i = 0; i < *(params->workDim); ++i) {
+          event_data->local_size[i] = (*(params->localWorkSize))[i];
+        }
+      }
 
       status = clRetainKernel(kernel);
       PTI_ASSERT(status == CL_SUCCESS);

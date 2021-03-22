@@ -196,7 +196,9 @@ static float RunAndCheck(cl_device_id device, cl_kernel kernel,
   PTI_ASSERT(b.size() == size * size);
   PTI_ASSERT(c.size() == size * size);
 
-  int simd_width = utils::cl::GetSimdWidth(device, kernel);
+  size_t local_size[3] = {
+    utils::cl::GetKernelLocalSize(device, kernel), 1, 1 };
+  int simd_width = utils::cl::GetSimdWidth(device, kernel, local_size);
   PTI_ASSERT(simd_width >= 1 && simd_width <= 32);
 
   int hardware_thread_count = (size * size + simd_width - 1) / simd_width;
