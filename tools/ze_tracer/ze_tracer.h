@@ -16,6 +16,7 @@
 #include <string>
 
 #include "correlator.h"
+#include "logger.h"
 #include "ze_api_collector.h"
 #include "ze_kernel_collector.h"
 #include "utils.h"
@@ -27,6 +28,8 @@
 #define ZET_CHROME_CALL_LOGGING    4
 #define ZET_CHROME_DEVICE_TIMELINE 5
 #define ZET_CHROME_DEVICE_STAGES   6
+#define ZET_TID                    7
+#define ZET_PID                    8
 
 const char* kChromeTraceFileName = "zet_trace.json";
 
@@ -86,9 +89,13 @@ class ZeTracer {
         callback = ChromeLoggingCallback;
       }
 
-      bool call_tracing = tracer->CheckOption(ZET_CALL_LOGGING);
+      ApiCollectorOptions options{false, false, false};
+      options.call_tracing = tracer->CheckOption(ZET_CALL_LOGGING);
+      options.need_tid = tracer->CheckOption(ZET_TID);
+      options.need_pid = tracer->CheckOption(ZET_PID);
+
       api_collector = ZeApiCollector::Create(
-          &(tracer->correlator_), call_tracing, callback, tracer);
+          &(tracer->correlator_), options, callback, tracer);
       if (api_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create API collector" << std::endl;
         delete tracer;
@@ -119,8 +126,10 @@ class ZeTracer {
       delete kernel_collector_;
     }
 
-    if (chrome_trace_.is_open()) {
-      CloseTraceFile();
+    if (chrome_logger_ != nullptr) {
+      delete chrome_logger_;
+      std::cerr << "Timeline was stored to " <<
+        kChromeTraceFileName << std::endl;
     }
   }
 
@@ -136,7 +145,16 @@ class ZeTracer {
     if (CheckOption(ZET_CHROME_CALL_LOGGING) ||
         CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
         CheckOption(ZET_CHROME_DEVICE_STAGES) ) {
-      OpenTraceFile();
+      chrome_logger_ = new Logger(kChromeTraceFileName);
+      PTI_ASSERT(chrome_logger_ != nullptr);
+
+      std::stringstream stream;
+      stream << "[" << std::endl;
+      stream << "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
+        utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
+        utils::GetExecutableName() << "\"}}," << std::endl;
+
+      chrome_logger_->Log(stream.str().c_str());
     }
   }
 
@@ -219,31 +237,19 @@ class ZeTracer {
       const std::string& id, const std::string& name,
       uint64_t appended, uint64_t submitted,
       uint64_t started, uint64_t ended) {
+    ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
     std::stringstream stream;
+    if (tracer->CheckOption(ZET_PID)) {
+      stream << "<PID:" << utils::GetPid() << "> ";
+    }
     stream << "Device Timeline (queue: " << queue <<
-      "): " << name << " [ns] = " <<
+      "): " << name << "(" << id << ") [ns] = " <<
       appended << " (append) " <<
       submitted << " (submit) " <<
       started << " (start) " <<
       ended << " (end)" << std::endl;
-    std::cerr << stream.str();
-  }
-
-  void OpenTraceFile() {
-    chrome_trace_.open(kChromeTraceFileName);
-    PTI_ASSERT(chrome_trace_.is_open());
-    chrome_trace_ << "[" << std::endl;
-    chrome_trace_ <<
-      "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
-      utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
-      utils::GetExecutableName() << "\"}}," << std::endl;
-  }
-
-  void CloseTraceFile() {
-    PTI_ASSERT(chrome_trace_.is_open());
-    chrome_trace_.close();
-    std::cerr << "Timeline was stored to " <<
-      kChromeTraceFileName << std::endl;
+    tracer->logger_.Log(stream.str().c_str());
   }
 
   static void ChromeTimelineCallback(
@@ -253,6 +259,7 @@ class ZeTracer {
       uint64_t started, uint64_t ended) {
     ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
+
     std::stringstream stream;
     stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
       ", \"tid\":" << reinterpret_cast<uint64_t>(queue) <<
@@ -261,7 +268,9 @@ class ZeTracer {
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
   static void ChromeStagesCallback(
@@ -271,6 +280,7 @@ class ZeTracer {
       uint64_t started, uint64_t ended) {
     ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
     std::stringstream stream;
 
     std::string tid = id + "." +
@@ -285,7 +295,7 @@ class ZeTracer {
       ", \"cname\":\"thread_state_runnable\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
     stream.str(std::string());
 
     PTI_ASSERT(started > submitted);
@@ -297,7 +307,7 @@ class ZeTracer {
       ", \"cname\":\"cq_build_running\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
     stream.str(std::string());
 
     PTI_ASSERT(ended > started);
@@ -309,7 +319,7 @@ class ZeTracer {
       ", \"cname\":\"thread_state_iowait\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
   static void DeviceAndChromeTimelineCallback(
@@ -347,19 +357,21 @@ class ZeTracer {
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
  private:
   unsigned options_;
+
+  Logger* chrome_logger_ = nullptr;
+  Logger logger_;
 
   Correlator correlator_;
   uint64_t total_execution_time_ = 0;
 
   ZeApiCollector* api_collector_ = nullptr;
   ZeKernelCollector* kernel_collector_ = nullptr;
-
-  std::ofstream chrome_trace_;
 };
 
 #endif // PTI_SAMPLES_ZE_TRACER_ZE_TRACER_H_

@@ -13,7 +13,6 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["cl_gpu_metrics", None],
            ["cl_hot_functions", "gpu", "cpu", "dpc", "omp"],
            ["cl_hot_kernels", "gpu", "cpu",  "dpc", "omp"],
-           ["gpu_info", "-d", "-m"],
            ["gpu_inst_count", "cl", "ze", "dpc"],
            ["gpu_perfmon_read", "cl", "ze", "dpc"],
            ["gpu_perfmon_set", None],
@@ -30,7 +29,8 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["dpc_gemm", "gpu", "cpu", "host"],
            ["dpc_info", "-a", "-l"]]
 
-tools = [["onetrace", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"],
+tools = [["gpu_info", "-l", "-i", "-m"],
+         ["onetrace", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"],
          ["cl_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"],
          ["ze_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"]]
 

@@ -6,13 +6,15 @@ The following capabilities are available currently:
 ```
 Usage: ./ze_tracer[.exe] [options] <application> <args>
 Options:
---call-logging [-c]             Trace host API calls
---host-timing  [-h]             Report host API execution time
---device-timing [-d]            Report kernels exectucion time
---device-timeline [-t]          Trace device activities
---chrome-call-logging           Dump host API calls to JSON file
---chrome-device-timeline        Dump device activities to JSON file
---chrome-device-stages          Dump device activities by stages to JSON file
+--call-logging [-c]       Trace host API calls
+--host-timing  [-h]       Report host API execution time
+--device-timing [-d]      Report kernels execution time
+--device-timeline [-t]    Trace device activities
+--chrome-call-logging     Dump host API calls to JSON file
+--chrome-device-timeline  Dump device activities to JSON file
+--chrome-device-stages    Dump device activities by stages to JSON file
+--tid                     Print thread ID into host API trace
+--pid                     Print process ID into host API and device activity trace
 ```
 
 **Call Logging** mode allows to grab full host API trace, e.g.:
@@ -71,7 +73,7 @@ Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 39
 - Windows (*under development*)
 
 ## Prerequisites
-- [CMake](https://cmake.org/) (version 2.8 and above)
+- [CMake](https://cmake.org/) (version 3.12 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
 - [oneAPI Level Zero loader](https://github.com/oneapi-src/level-zero)

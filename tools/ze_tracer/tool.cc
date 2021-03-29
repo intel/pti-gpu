@@ -21,25 +21,31 @@ void Usage() {
     std::endl;
   std::cout << "Options:" << std::endl;
   std::cout <<
-    "--call-logging [-c]             Trace host API calls" <<
+    "--call-logging [-c]       Trace host API calls" <<
     std::endl;
   std::cout <<
-    "--host-timing  [-h]             Report host API execution time" <<
+    "--host-timing  [-h]       Report host API execution time" <<
     std::endl;
   std::cout <<
-    "--device-timing [-d]            Report kernels execution time" <<
+    "--device-timing [-d]      Report kernels execution time" <<
     std::endl;
   std::cout <<
-    "--device-timeline [-t]          Trace device activities" <<
+    "--device-timeline [-t]    Trace device activities" <<
     std::endl;
   std::cout <<
-    "--chrome-call-logging           Dump host API calls to JSON file" <<
+    "--chrome-call-logging     Dump host API calls to JSON file" <<
     std::endl;
   std::cout <<
-    "--chrome-device-timeline        Dump device activities to JSON file" <<
+    "--chrome-device-timeline  Dump device activities to JSON file" <<
     std::endl;
   std::cout <<
-    "--chrome-device-stages          Dump device activities by stages to JSON file" <<
+    "--chrome-device-stages    Dump device activities by stages to JSON file" <<
+    std::endl;
+  std::cout <<
+    "--tid                     Print thread ID into host API trace" <<
+    std::endl;
+  std::cout <<
+    "--pid                     Print process ID into host API and device activity trace" <<
     std::endl;
 }
 
@@ -74,6 +80,12 @@ int ParseArgs(int argc, char* argv[]) {
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
       utils::SetEnv("ZET_ChromeDeviceStages=1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--tid") == 0) {
+      utils::SetEnv("ZET_Tid=1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--pid") == 0) {
+      utils::SetEnv("ZET_Pid=1");
       ++app_index;
     } else {
       break;
@@ -136,6 +148,16 @@ static unsigned ReadArgs() {
   value = utils::GetEnv("ZET_ChromeDeviceStages");
   if (!value.empty() && value == "1") {
     options |= (1 << ZET_CHROME_DEVICE_STAGES);
+  }
+
+  value = utils::GetEnv("ZET_Tid");
+  if (!value.empty() && value == "1") {
+    options |= (1 << ZET_TID);
+  }
+
+  value = utils::GetEnv("ZET_Pid");
+  if (!value.empty() && value == "1") {
+    options |= (1 << ZET_PID);
   }
 
   return options;

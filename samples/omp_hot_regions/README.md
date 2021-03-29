@@ -19,7 +19,7 @@ Total Region Time (ns): 186811670
 - Windows (*under development*)
 
 ## Prerequisites
-- [CMake](https://cmake.org/) (version 2.8 and above)
+- [CMake](https://cmake.org/) (version 3.12 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
 - [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html)

@@ -43,36 +43,36 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - based on [Instrumentation and Tracing Technology API (ITT API)](chapters/code_annotation/ITT.md)
 
 ## Profiling & Debug Tools
-- unified tools:
-    - [onetrace](tools/onetrace) - host and device tracing tool for OpenCL(TM) and Level Zero backends with support of DPC++ (both for CPU and GPU) and OpenMP* GPU offload;
+ - [onetrace](tools/onetrace) - host and device tracing tool for OpenCL(TM) and Level Zero backends with support of DPC++ (both for CPU and GPU) and OpenMP* GPU offload;
+ - [ze_tracer](tools/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);
+ - [cl_tracer](tools/cl_tracer) - "Swiss army knife" for OpenCL(TM) API call tracing and profiling;
+ - [gpu_info](tools/gpu_info) - provides basic information about the GPUs installed in a system, and the list of HW metrics one can collect for it;
+
+## Sample Tools & Utilities
 - tools for OpenCL(TM), DPC++ (with OpenCL(TM) backend) and OpenMP* GPU offload (with OpenCL(TM) backend):
     - [cl_hot_functions](samples/cl_hot_functions) - provides a list of hottest OpenCL(TM) API calls by backend (CPU and GPU);
     - [cl_hot_kernels](samples/cl_hot_kernels) - provides a list of hottest OpenCL(TM) kernels by backend (CPU and GPU);
     - [cl_debug_info](samples/cl_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
     - [cl_gpu_metrics](samples/cl_gpu_metrics) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle;
-    - [cl_tracer](tools/cl_tracer) - "Swiss army knife" for OpenCL(TM) API call tracing and profiling;
 - tools for Level Zero, DPC++ (with Level Zero backend) and OpenMP* GPU offload (with Level Zero backend):
     - [ze_hot_functions](samples/ze_hot_functions) - provides a list of hottest Level Zero API calls;
     - [ze_hot_kernels](samples/ze_hot_kernels) - provides a list of hottest Level Zero kernels;
     - [ze_debug_info](samples/ze_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
     - [ze_metric_query](samples/ze_metric_query) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *query* mode);
     - [ze_metric_streamer](samples/ze_metric_streamer) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *streamer* mode);
-    - [ze_tracer](tools/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);
 - tools for OpenMP*:
     - [omp_hot_regions](samples/omp_hot_regions) - provides a list of hottest parallel (for CPU) and target (for GPU) OpenMP* regions;
 - tools for binary instrumentation:
     - [gpu_inst_count](samples/gpu_inst_count) - prints GPU kernel assembly (GEN ISA) annotated by instruction execution count;
     - [gpu_perfmon_read](samples/gpu_perfmon_read) - prints GPU kernel assembly (GEN ISA) annotated by specific HW metric, which is accumulated in EU PerfMon register;
-
-## Utilities
-- [dpc_info](samples/dpc_info) - prints information on avaialble platforms and devices in DPC++;
-- [ze_info](samples/ze_info) - prints information on avaialble platforms and devices in Level Zero;
-- [ze_metric_info](samples/ze_metric_info) - prints the list of HW metrics one can collect with the help of Level Zero;
-- [gpu_info](samples/gpu_info) - provides basic information about the GPU installed in a system, and the list of HW metrics one can collect for it;
-- [gpu_perfmon_set](samples/gpu_perfmon_set) - allows to choose HW metric for collection in EU PerfMon register;
+- utilities:
+    - [dpc_info](samples/dpc_info) - prints information on avaialble platforms and devices in DPC++;
+    - [ze_info](samples/ze_info) - prints information on avaialble platforms and devices in Level Zero;
+    - [ze_metric_info](samples/ze_metric_info) - prints the list of HW metrics one can collect with the help of Level Zero;
+    - [gpu_perfmon_set](samples/gpu_perfmon_set) - allows to choose HW metric for collection in EU PerfMon register;
 
 ## Prerequisites
-- [CMake](https://cmake.org/) (version 2.8 and above)
+- [CMake](https://cmake.org/) (version 3.12 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
 - On Linux one have to be a part of `video` (Unbuntu 18 and below) or `render` (Ubuntu 19 and above) user group to do any computations on Intel(R) Processor Graphics:

@@ -18,7 +18,7 @@ To read the collected values for the event one should use binary instrumentation
 - Linux
 
 ## Prerequisites
-- [CMake](https://cmake.org/) (version 2.8 and above)
+- [CMake](https://cmake.org/) (version 3.12 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
 - [libdrm](https://gitlab.freedesktop.org/mesa/drm)

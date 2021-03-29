@@ -18,16 +18,54 @@ namespace md = MetricsDiscovery;
 
 class MetricDevice {
  public:
-  static MetricDevice* Create() {
-    SharedLibrary* lib = nullptr;
-
-    for (auto& path : utils::metrics::GetMDLibraryPossiblePaths()) {
-      lib = SharedLibrary::Create(path);
-      if (lib != nullptr) {
-        break;
-      }
+  static uint32_t GetDeviceCount() {
+    SharedLibrary* lib = OpenMetricsLibrary();
+    if (lib == nullptr) {
+      return 0;
     }
 
+    md::OpenAdapterGroup_fn OpenAdapterGroup =
+      lib->GetSym<md::OpenAdapterGroup_fn>("OpenAdapterGroup");
+    PTI_ASSERT(OpenAdapterGroup != nullptr);
+
+    md::IAdapterGroup_1_9* adapter_group = nullptr;
+    md::TCompletionCode status = OpenAdapterGroup(&adapter_group);
+    PTI_ASSERT(status == md::CC_OK);
+    PTI_ASSERT(adapter_group != nullptr);
+
+    uint32_t device_count = adapter_group->GetParams()->AdapterCount;
+    delete lib;
+    return device_count;
+  }
+
+  static uint32_t GetSubDeviceCount(uint32_t device_id) {
+    SharedLibrary* lib = OpenMetricsLibrary();
+    if (lib == nullptr) {
+      return 0;
+    }
+
+    md::OpenAdapterGroup_fn OpenAdapterGroup =
+      lib->GetSym<md::OpenAdapterGroup_fn>("OpenAdapterGroup");
+    PTI_ASSERT(OpenAdapterGroup != nullptr);
+
+    md::IAdapterGroup_1_9* adapter_group = nullptr;
+    md::TCompletionCode status = OpenAdapterGroup(&adapter_group);
+    PTI_ASSERT(status == md::CC_OK);
+    PTI_ASSERT(adapter_group != nullptr);
+
+    uint32_t sub_device_count = 0;
+    if (device_id < adapter_group->GetParams()->AdapterCount) {
+      md::IAdapter_1_9* adapter = adapter_group->GetAdapter(device_id);
+      PTI_ASSERT(adapter != nullptr);
+      sub_device_count = adapter->GetParams()->SubDevicesCount;
+    }
+
+    delete lib;
+    return sub_device_count;
+  }
+
+  static MetricDevice* Create(uint32_t device_id, uint32_t sub_device_id) {
+    SharedLibrary* lib = OpenMetricsLibrary();
     if (lib == nullptr) {
       return nullptr;
     }
@@ -42,26 +80,22 @@ class MetricDevice {
     md::IAdapterGroup_1_9* adapter_group = nullptr;
     status = OpenAdapterGroup(&adapter_group);
     PTI_ASSERT(status == md::CC_OK);
+    PTI_ASSERT(adapter_group != nullptr);
 
-    if (adapter_group == nullptr ||
-        adapter_group->GetParams()->AdapterCount == 0) {
+    if (adapter_group->GetParams()->AdapterCount == 0) {
       delete lib;
       return nullptr;
     }
 
-    std::string device_string = utils::GetEnv("PTI_DEVICE_ID");
-    uint32_t device_id = device_string.empty() ? 0 : std::stoul(device_string);
     PTI_ASSERT(device_id < adapter_group->GetParams()->AdapterCount);
     md::IAdapter_1_9* adapter = adapter_group->GetAdapter(device_id);
     PTI_ASSERT(adapter != nullptr);
 
-    uint32_t sub_devices_count = adapter->GetParams()->SubDevicesCount;
-    if (sub_devices_count == 0) {
+    uint32_t sub_device_count = adapter->GetParams()->SubDevicesCount;
+    if (sub_device_count == 0) {
       status = adapter->OpenMetricsDevice(&device);
     } else {
-      std::string sub_device_string = utils::GetEnv("PTI_SUB_DEVICE_ID");
-      uint32_t sub_device_id = sub_device_string.empty() ? 0 : std::stoul(sub_device_string);
-      PTI_ASSERT(sub_device_id < sub_devices_count);
+      PTI_ASSERT(sub_device_id < sub_device_count);
       status = adapter->OpenMetricsSubDevice(sub_device_id, &device);
     }
     PTI_ASSERT(status == md::CC_OK || status == md::CC_ALREADY_INITIALIZED);
@@ -137,6 +171,17 @@ class MetricDevice {
   }
 
 private:
+  static SharedLibrary* OpenMetricsLibrary() {
+    SharedLibrary* lib = nullptr;
+    for (auto& path : utils::metrics::GetMDLibraryPossiblePaths()) {
+      lib = SharedLibrary::Create(path);
+      if (lib != nullptr) {
+        break;
+      }
+    }
+    return lib;
+  }
+
   MetricDevice(
       md::IAdapterGroup_1_9* adapter_group, md::IAdapter_1_9* adapter,
       md::IMetricsDevice_1_5* device, SharedLibrary* lib)

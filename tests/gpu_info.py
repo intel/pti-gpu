@@ -24,7 +24,15 @@ def build(path):
   return None
 
 def parse(output, option):
-  if option == "-d":
+  if option == "-l":
+    lines = output.split("\n")
+    total_devices = 0
+    for line in lines:
+      if line.find("Device") != -1:
+        total_devices += 1
+    if total_devices < 1:
+      return False
+  elif option == "-i":
     lines = output.split("\n")
     total_values = 0
     for line in lines:
@@ -76,14 +84,12 @@ def run(path, option):
   stdout, stderr = utils.run_process(p)
   if stderr:
     return stdout
-  if stdout.find("Job is successfully completed") == -1:
-    return stdout
   if not parse(stdout, option):
     return stdout
   return None
 
 def main(option):
-  path = utils.get_sample_build_path("gpu_info")
+  path = utils.get_tool_build_path("gpu_info")
   log = config(path)
   if log:
     return log
@@ -95,7 +101,9 @@ def main(option):
     return log
 
 if __name__ == "__main__":
-  option = "-d"
+  option = "-l"
+  if len(sys.argv) > 1 and sys.argv[1] == "-i":
+    option = "-i"
   if len(sys.argv) > 1 and sys.argv[1] == "-m":
     option = "-m"
   log = main(option)

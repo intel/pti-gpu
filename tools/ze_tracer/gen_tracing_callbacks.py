@@ -320,9 +320,15 @@ def gen_enter_callback(f, func, params, enum_map):
   f.write("\n")
   f.write("  uint64_t& start_time = *reinterpret_cast<uint64_t*>(instance_user_data);\n")
   f.write("  start_time = collector->GetTimestamp();\n")
-  f.write("  if (collector->call_tracing_) {\n")
+  f.write("  if (collector->options_.call_tracing) {\n")
   f.write("    std::stringstream stream;\n")
   f.write("    stream << \">>>> [\" << start_time << \"] \";\n")
+  f.write("    if (collector->options_.need_pid) {\n")
+  f.write("      stream << \"<PID:\" << utils::GetPid() << \"> \";\n")
+  f.write("    }\n")
+  f.write("    if (collector->options_.need_tid) {\n")
+  f.write("      stream << \"<TID:\" << utils::GetTid() << \"> \";\n")
+  f.write("    }\n")
   f.write("    stream << \"" + func + "\" << \":\";\n")
   for name, type in params:
     if type == "ze_ipc_mem_handle_t" or type == "ze_ipc_event_pool_handle_t":
@@ -494,7 +500,7 @@ def gen_enter_callback(f, func, params, enum_map):
           f.write("      stream << (*(params->p" + name + "))->flags << \"}\";\n")
           f.write("    }\n")
   f.write("    stream << std::endl;\n")
-  f.write("    std::cerr << stream.str();\n")
+  f.write("    collector->logger_.Log(stream.str().c_str());\n")
   f.write("  }\n")
 
 def gen_exit_callback(f, func, params, enum_map):
@@ -508,10 +514,54 @@ def gen_exit_callback(f, func, params, enum_map):
   f.write("  PTI_ASSERT(start_time < end_time);\n")
   f.write("  uint64_t time = end_time - start_time;\n")
   f.write("  collector->AddFunctionTime(\"" + func + "\", time);\n")
-  f.write("  if (collector->call_tracing_) {\n")
+  f.write("  if (collector->options_.call_tracing) {\n")
   f.write("    std::stringstream stream;\n")
   f.write("    stream << \"<<<< [\" << end_time << \"] \";\n")
-  f.write("    stream << \"" + func + "\" << \" [\" << time << \" ns]\";\n")
+  f.write("    if (collector->options_.need_pid) {\n")
+  f.write("      stream << \"<PID:\" << utils::GetPid() << \"> \";\n")
+  f.write("    }\n")
+  f.write("    if (collector->options_.need_tid) {\n")
+  f.write("      stream << \"<TID:\" << utils::GetTid() << \"> \";\n")
+  f.write("    }\n")
+  f.write("    stream << \"" + func + "\";\n")
+  if func == "zeCommandListAppendLaunchKernel" or\
+     func == "zeCommandListAppendLaunchCooperativeKernel" or\
+     func == "zeCommandListAppendLaunchKernelIndirect" or\
+     func == "zeCommandListAppendMemoryCopy" or\
+     func == "zeCommandListAppendMemoryFill" or\
+     func == "zeCommandListAppendBarrier" or\
+     func == "zeCommandListAppendMemoryRangesBarrier" or\
+     func == "zeCommandListAppendMemoryCopyRegion" or\
+     func == "zeCommandListAppendMemoryCopyFromContext" or\
+     func == "zeCommandListAppendImageCopy" or\
+     func == "zeCommandListAppendImageCopyRegion" or\
+     func == "zeCommandListAppendImageCopyToMemory" or\
+     func == "zeCommandListAppendImageCopyFromMemory":
+    f.write("    PTI_ASSERT(collector->correlator_ != nullptr);\n")
+    f.write("    uint64_t kernel_id = collector->correlator_->GetKernelId();\n")
+    f.write("    if (kernel_id > 0) {\n")
+    f.write("      stream << \"(\" << kernel_id << \")\";\n")
+    f.write("    }\n")
+  elif func == "zeCommandQueueExecuteCommandLists":
+    f.write("    PTI_ASSERT(collector->correlator_ != nullptr);\n")
+    f.write("    uint32_t command_list_count = *(params->pnumCommandLists);\n")
+    f.write("    ze_command_list_handle_t* command_lists = *(params->pphCommandLists);\n")
+    f.write("    std::string kernel_id;\n")
+    f.write("    if (command_lists != nullptr) {\n")
+    f.write("      for (uint32_t i = 0; i < command_list_count; ++i) {\n")
+    f.write("        std::vector<uint64_t> kernel_id_list =\n")
+    f.write("          collector->correlator_->GetKernelId(command_lists[i]);\n")
+    f.write("        for (size_t j = 0; j < kernel_id_list.size(); ++j) {\n")
+    f.write("          kernel_id += std::to_string(kernel_id_list[j]) + \",\";\n")
+    f.write("        }\n")
+    f.write("      }\n")
+    f.write("    }\n")
+    f.write("    \n")
+    f.write("    if (!kernel_id.empty()) {\n")
+    f.write("      kernel_id = kernel_id.substr(0, kernel_id.size() - 1);\n")
+    f.write("      stream << \"(\" << kernel_id << \")\";\n")
+    f.write("    }\n")
+  f.write("    stream << \" [\" << time << \" ns]\";\n")
   for name, type in params:
     if name.find("ph") == 0 or name.find("pptr") == 0 or name.find("pCount") == 0:
       f.write("    if (*(params->p" + name + ") != nullptr) {\n")
@@ -526,7 +576,7 @@ def gen_exit_callback(f, func, params, enum_map):
       f.write("    }\n")
   f.write("    stream << \" -> \" << GetResultString(result) << \n")
   f.write("      \"(0x\" << result << \")\" << std::endl;\n")
-  f.write("    std::cerr << stream.str();\n")
+  f.write("    collector->logger_.Log(stream.str().c_str());\n")
   f.write("  }\n")
   f.write("\n")
   f.write("  if (collector->callback_ != nullptr) {\n")
@@ -574,7 +624,6 @@ def gen_exit_callback(f, func, params, enum_map):
     f.write("        \"" + func + "\",\n")
     f.write("        start_time, end_time);\n")
   else:
-    f.write("    PTI_ASSERT(collector->correlator_ != nullptr);\n")
     f.write("    collector->callback_(\n")
     f.write("        collector->callback_data_, \"0\",\n")
     f.write("        \"" + func + "\",\n")

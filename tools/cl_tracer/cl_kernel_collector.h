@@ -26,11 +26,19 @@ enum ClKernelType {
   KERNEL_TYPE_TRANSFER
 };
 
+struct ClEnqueueData {
+  cl_event event;
+  cl_ulong host_sync;
+  cl_ulong device_sync;
+};
+
 struct ClEventData {
   ClKernelCollector* collector;
   std::string kernel_name;
   ClKernelType kernel_type;
   uint64_t kernel_id;
+  cl_ulong host_sync;
+  cl_ulong device_sync;
   union {
     struct {
       cl_kernel kernel;
@@ -195,16 +203,10 @@ class ClKernelCollector {
         callback_data_(callback_data),
         kernel_id_(1) {
     PTI_ASSERT(correlator_ != nullptr);
-    if (callback_ != nullptr) {
-      cl_device_type device_type = utils::cl::GetDeviceType(device);
-      if (device_type == CL_DEVICE_TYPE_GPU) {
-        dev_timestamp_ = utils::cl::GetGpuTimestamp();
-      } else {
-        PTI_ASSERT(device_type == CL_DEVICE_TYPE_CPU);
-        dev_timestamp_ = utils::cl::GetCpuTimestamp();
-      }
-      cpu_timestamp_ = std::chrono::steady_clock::now();
-    }
+    device_type_ = utils::cl::GetDeviceType(device);
+    PTI_ASSERT(
+        device_type_ == CL_DEVICE_TYPE_CPU ||
+        device_type_ == CL_DEVICE_TYPE_GPU);
   }
 
   void EnableTracing(ClApiTracer* tracer) {
@@ -310,28 +312,21 @@ class ClKernelCollector {
         utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_SUBMIT);
       PTI_ASSERT(submitted > 0);
 
-      PTI_ASSERT(collector->correlator_ != nullptr);
-      uint64_t time_shift =
-        collector->correlator_->GetTimeDiff(collector->cpu_timestamp_);
+      PTI_ASSERT(event_data->device_sync <= queued);
+      uint64_t time_shift = queued - event_data->device_sync;
 
-      PTI_ASSERT(collector->dev_timestamp_ < queued);
-      PTI_ASSERT(queued < submitted);
-      PTI_ASSERT(submitted < started);
-      PTI_ASSERT(started < ended);
-
-      uint64_t cpu_queued =
-        (queued - collector->dev_timestamp_) + time_shift;
-      uint64_t cpu_submitted =
-        (submitted - collector->dev_timestamp_) + time_shift;
-      uint64_t cpu_started =
-        (started - collector->dev_timestamp_) + time_shift;
-      uint64_t cpu_ended =
-        (ended - collector->dev_timestamp_) + time_shift;
+      uint64_t host_queued = event_data->host_sync + time_shift;
+      PTI_ASSERT(queued <= submitted);
+      uint64_t host_submitted = host_queued + (submitted - queued);
+      PTI_ASSERT(submitted <= started);
+      uint64_t host_started = host_submitted + (started - submitted);
+      PTI_ASSERT(started <= ended);
+      uint64_t host_ended = host_started + (ended - started);
 
       collector->callback_(
           collector->callback_data_, queue,
           event_data->kernel_id, name,
-          cpu_queued, cpu_submitted, cpu_started, cpu_ended);
+          host_queued, host_submitted, host_started, host_ended);
     }
 
     cl_int status = clReleaseEvent(event);
@@ -374,22 +369,34 @@ class ClKernelCollector {
       static_cast<unsigned long>(CL_QUEUE_PROFILING_ENABLE);
   }
 
-  static void OnEnterEnqueueNDRangeKernel(cl_callback_data* data) {
+  template <typename T>
+  static void OnEnterEnqueueKernel(
+      cl_callback_data* data, ClKernelCollector* collector) {
     PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
 
-    const cl_params_clEnqueueNDRangeKernel* params =
-      reinterpret_cast<const cl_params_clEnqueueNDRangeKernel*>(
-          data->functionParams);
+    ClEnqueueData* enqueue_data = new ClEnqueueData;
+    enqueue_data->event = nullptr;
+    enqueue_data->device_sync =
+      (collector->device_type_ == CL_DEVICE_TYPE_GPU) ?
+      utils::cl::GetGpuTimestamp() :
+      utils::cl::GetCpuTimestamp();
+    enqueue_data->host_sync = collector->correlator_->GetTimestamp();
+
+    const T* params = reinterpret_cast<const T*>(data->functionParams);
     PTI_ASSERT(params != nullptr);
 
     if (*(params->event) == nullptr) {
-      *(params->event) = reinterpret_cast<cl_event*>(data->correlationData);
+      *(params->event) = &(enqueue_data->event);
     }
+
+    data->correlationData[0] = reinterpret_cast<cl_ulong>(enqueue_data);
   }
 
   static void OnExitEnqueueNDRangeKernel(
       cl_callback_data* data, ClKernelCollector* collector) {
     PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
 
     const cl_params_clEnqueueNDRangeKernel* params =
       reinterpret_cast<const cl_params_clEnqueueNDRangeKernel*>(
@@ -438,24 +445,18 @@ class ClKernelCollector {
       PTI_ASSERT(collector->correlator_ != nullptr);
       collector->correlator_->SetKernelId(event_data->kernel_id);
 
+      ClEnqueueData* enqueue_data = reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
+      PTI_ASSERT(enqueue_data != nullptr);
+      event_data->device_sync = enqueue_data->device_sync;
+      event_data->host_sync = enqueue_data->host_sync;
+
       status = clRetainKernel(kernel);
       PTI_ASSERT(status == CL_SUCCESS);
       status = clSetEventCallback(
           **(params->event), CL_COMPLETE, EventNotify, event_data);
       PTI_ASSERT(status == CL_SUCCESS);
-    }
-  }
 
-  static void OnEnterEnqueueReadBuffer(cl_callback_data* data) {
-    PTI_ASSERT(data != nullptr);
-
-    const cl_params_clEnqueueReadBuffer* params =
-      reinterpret_cast<const cl_params_clEnqueueReadBuffer*>(
-          data->functionParams);
-    PTI_ASSERT(params != nullptr);
-
-    if (*(params->event) == nullptr) {
-      *(params->event) = reinterpret_cast<cl_event*>(data->correlationData);
+      delete enqueue_data;
     }
   }
 
@@ -492,22 +493,16 @@ class ClKernelCollector {
       PTI_ASSERT(collector->correlator_ != nullptr);
       collector->correlator_->SetKernelId(event_data->kernel_id);
 
+      ClEnqueueData* enqueue_data = reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
+      PTI_ASSERT(enqueue_data != nullptr);
+      event_data->device_sync = enqueue_data->device_sync;
+      event_data->host_sync = enqueue_data->host_sync;
+
       status = clSetEventCallback(
           **(params->event), CL_COMPLETE, EventNotify, event_data);
       PTI_ASSERT(status == CL_SUCCESS);
-    }
-  }
 
-  static void OnEnterEnqueueWriteBuffer(cl_callback_data* data) {
-    PTI_ASSERT(data != nullptr);
-
-    const cl_params_clEnqueueWriteBuffer* params =
-      reinterpret_cast<const cl_params_clEnqueueWriteBuffer*>(
-          data->functionParams);
-    PTI_ASSERT(params != nullptr);
-
-    if (*(params->event) == nullptr) {
-      *(params->event) = reinterpret_cast<cl_event*>(data->correlationData);
+      delete enqueue_data;
     }
   }
 
@@ -544,9 +539,16 @@ class ClKernelCollector {
       PTI_ASSERT(collector->correlator_ != nullptr);
       collector->correlator_->SetKernelId(event_data->kernel_id);
 
+      ClEnqueueData* enqueue_data = reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
+      PTI_ASSERT(enqueue_data != nullptr);
+      event_data->device_sync = enqueue_data->device_sync;
+      event_data->host_sync = enqueue_data->host_sync;
+
       status = clSetEventCallback(
           **(params->event), CL_COMPLETE, EventNotify, event_data);
       PTI_ASSERT(status == CL_SUCCESS);
+
+      delete enqueue_data;
     }
   }
 
@@ -572,19 +574,22 @@ class ClKernelCollector {
       }
     } else if (function == CL_FUNCTION_clEnqueueNDRangeKernel) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueNDRangeKernel(callback_data);
+        OnEnterEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(
+            callback_data, collector);
       } else {
         OnExitEnqueueNDRangeKernel(callback_data, collector);
       }
     } else if (function == CL_FUNCTION_clEnqueueReadBuffer) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueReadBuffer(callback_data);
+        OnEnterEnqueueKernel<cl_params_clEnqueueReadBuffer>(
+            callback_data, collector);
       } else {
         OnExitEnqueueReadBuffer(callback_data, collector);
       }
     } else if (function == CL_FUNCTION_clEnqueueWriteBuffer) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueWriteBuffer(callback_data);
+        OnEnterEnqueueKernel<cl_params_clEnqueueWriteBuffer>(
+            callback_data, collector);
       } else {
         OnExitEnqueueWriteBuffer(callback_data, collector);
       }
@@ -596,12 +601,10 @@ class ClKernelCollector {
   Correlator* correlator_ = nullptr;
 
   std::atomic<uint64_t> kernel_id_;
+  cl_device_type device_type_ = CL_DEVICE_TYPE_ALL;
 
   OnClKernelFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;
-
-  TimePoint cpu_timestamp_;
-  uint64_t dev_timestamp_ = 0;
 
   std::mutex lock_;
   ClKernelInfoMap kernel_info_map_;

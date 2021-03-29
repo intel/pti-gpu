@@ -16,7 +16,9 @@
 #include <string>
 
 #include "cl_api_collector.h"
+#include "cl_api_callbacks.h"
 #include "cl_kernel_collector.h"
+#include "logger.h"
 #include "utils.h"
 
 #define CLT_CALL_LOGGING           0
@@ -26,8 +28,10 @@
 #define CLT_CHROME_CALL_LOGGING    4
 #define CLT_CHROME_DEVICE_TIMELINE 5
 #define CLT_CHROME_DEVICE_STAGES   6
+#define CLT_TID                    7
+#define CLT_PID                    8
 
-const char* kChromeTraceFileName = "cli_trace.json";
+const char* kChromeTraceFileName = "clt_trace.json";
 
 class ClTracer {
  public:
@@ -107,12 +111,15 @@ class ClTracer {
         callback = ChromeLoggingCallback;
       }
 
-      bool call_tracing = tracer->CheckOption(CLT_CALL_LOGGING);
+      ApiCollectorOptions cl_api_options{false, false, false};
+      cl_api_options.call_tracing = tracer->CheckOption(CLT_CALL_LOGGING);
+      cl_api_options.need_tid = tracer->CheckOption(CLT_TID);
+      cl_api_options.need_pid = tracer->CheckOption(CLT_PID);
 
       if (cpu_device != nullptr) {
         cpu_api_collector = ClApiCollector::Create(
             cpu_device, &tracer->correlator_,
-            call_tracing, callback, tracer);
+            cl_api_options, callback, tracer);
         if (cpu_api_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create API collector for CPU backend" <<
@@ -124,7 +131,7 @@ class ClTracer {
       if (gpu_device != nullptr) {
         gpu_api_collector = ClApiCollector::Create(
             gpu_device, &tracer->correlator_,
-            call_tracing, callback, tracer);
+            cl_api_options, callback, tracer);
         if (gpu_api_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create API collector for GPU backend" <<
@@ -175,8 +182,10 @@ class ClTracer {
       delete gpu_kernel_collector_;
     }
 
-    if (chrome_trace_.is_open()) {
-      CloseTraceFile();
+    if (chrome_logger_ != nullptr) {
+      delete chrome_logger_;
+      std::cerr << "Timeline was stored to " <<
+        kChromeTraceFileName << std::endl;
     }
   }
 
@@ -193,7 +202,16 @@ class ClTracer {
     if (CheckOption(CLT_CHROME_CALL_LOGGING) ||
         CheckOption(CLT_CHROME_DEVICE_TIMELINE) ||
         CheckOption(CLT_CHROME_DEVICE_STAGES)) {
-      OpenTraceFile();
+      chrome_logger_ = new Logger(kChromeTraceFileName);
+      PTI_ASSERT(chrome_logger_ != nullptr);
+
+      std::stringstream stream;
+      stream << "[" << std::endl;
+      stream << "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
+        utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
+        utils::GetExecutableName() << "\"}}," << std::endl;
+
+      chrome_logger_->Log(stream.str().c_str());
     }
   }
 
@@ -317,31 +335,20 @@ class ClTracer {
       uint64_t id, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
+    ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+
     std::stringstream stream;
+    if (tracer->CheckOption(CLT_PID)) {
+      stream << "<PID:" << utils::GetPid() << "> ";
+    }
     stream << "Device Timeline (queue: " << queue <<
-      "): " << name << " [ns] = " <<
+      "): " << name << "(" << id << ") [ns] = " <<
       queued << " (queued) " <<
       submitted << " (submit) " <<
       started << " (start) " <<
       ended << " (end)" << std::endl;
-    std::cerr << stream.str();
-  }
-
-  void OpenTraceFile() {
-    chrome_trace_.open(kChromeTraceFileName);
-    PTI_ASSERT(chrome_trace_.is_open());
-    chrome_trace_ << "[" << std::endl;
-    chrome_trace_ <<
-      "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
-      utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
-      utils::GetExecutableName() << "\"}}," << std::endl;
-  }
-
-  void CloseTraceFile() {
-    PTI_ASSERT(chrome_trace_.is_open());
-    chrome_trace_.close();
-    std::cerr << "Timeline was stored to " <<
-      kChromeTraceFileName << std::endl;
+    tracer->logger_.Log(stream.str().c_str());
   }
 
   static void ChromeTimelineCallback(
@@ -360,7 +367,9 @@ class ClTracer {
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
   static void ChromeStagesCallback(
@@ -370,6 +379,7 @@ class ClTracer {
       uint64_t started, uint64_t ended) {
     ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
     std::stringstream stream;
 
     std::string tid =
@@ -385,7 +395,7 @@ class ClTracer {
       ", \"cname\":\"thread_state_runnable\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
     stream.str(std::string());
 
     PTI_ASSERT(started > submitted);
@@ -397,7 +407,7 @@ class ClTracer {
       ", \"cname\":\"cq_build_running\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
     stream.str(std::string());
 
     PTI_ASSERT(ended > started);
@@ -409,7 +419,7 @@ class ClTracer {
       ", \"cname\":\"thread_state_iowait\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
   static void DeviceAndChromeTimelineCallback(
@@ -448,7 +458,8 @@ class ClTracer {
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
  private:
@@ -463,7 +474,8 @@ class ClTracer {
   ClKernelCollector* cpu_kernel_collector_ = nullptr;
   ClKernelCollector* gpu_kernel_collector_ = nullptr;
 
-  std::ofstream chrome_trace_;
+  Logger* chrome_logger_ = nullptr;
+  Logger logger_;
 };
 
 #endif // PTI_SAMPLES_CL_TRACER_CL_TRACER_H_

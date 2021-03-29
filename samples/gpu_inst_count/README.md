@@ -77,7 +77,7 @@ As a result, assembly listing annotated with dynamic instruction count for each 
 - Windows (*under development*)
 
 ## Prerequisites
-- [CMake](https://cmake.org/) (version 2.8 and above)
+- [CMake](https://cmake.org/) (version 3.12 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
 - [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html)

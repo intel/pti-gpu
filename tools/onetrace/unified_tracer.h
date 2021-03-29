@@ -16,7 +16,9 @@
 #include <string>
 
 #include "cl_api_collector.h"
+#include "cl_api_callbacks.h"
 #include "cl_kernel_collector.h"
+#include "logger.h"
 #include "utils.h"
 #include "ze_api_collector.h"
 #include "ze_kernel_collector.h"
@@ -28,6 +30,8 @@
 #define ONETRACE_CHROME_CALL_LOGGING    4
 #define ONETRACE_CHROME_DEVICE_TIMELINE 5
 #define ONETRACE_CHROME_DEVICE_STAGES   6
+#define ONETRACE_TID                    7
+#define ONETRACE_PID                    8
 
 const char* kChromeTraceFileName = "onetrace.json";
 
@@ -130,10 +134,13 @@ class UnifiedTracer {
         cl_callback = ClChromeLoggingCallback;
       }
 
-      bool call_tracing = tracer->CheckOption(ONETRACE_CALL_LOGGING);
+      ApiCollectorOptions options{false, false, false};
+      options.call_tracing = tracer->CheckOption(ONETRACE_CALL_LOGGING);
+      options.need_tid = tracer->CheckOption(ONETRACE_TID);
+      options.need_pid = tracer->CheckOption(ONETRACE_PID);
 
       ze_api_collector = ZeApiCollector::Create(
-          &tracer->correlator_, call_tracing, ze_callback, tracer);
+          &tracer->correlator_, options, ze_callback, tracer);
       if (ze_api_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create L0 API collector" <<
           std::endl;
@@ -143,7 +150,7 @@ class UnifiedTracer {
       if (cl_cpu_device != nullptr) {
         cl_cpu_api_collector = ClApiCollector::Create(
             cl_cpu_device, &tracer->correlator_,
-            call_tracing, cl_callback, tracer);
+            options, cl_callback, tracer);
         if (cl_cpu_api_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create CL API collector for CPU backend" <<
@@ -155,7 +162,7 @@ class UnifiedTracer {
       if (cl_gpu_device != nullptr) {
         cl_gpu_api_collector = ClApiCollector::Create(
             cl_gpu_device, &tracer->correlator_,
-            call_tracing, cl_callback, tracer);
+            options, cl_callback, tracer);
         if (cl_gpu_api_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create CL API collector for GPU backend" <<
@@ -214,8 +221,10 @@ class UnifiedTracer {
       delete cl_gpu_kernel_collector_;
     }
 
-    if (chrome_trace_.is_open()) {
-      CloseTraceFile();
+    if (chrome_logger_ != nullptr) {
+      delete chrome_logger_;
+      std::cerr << "Timeline was stored to " <<
+        kChromeTraceFileName << std::endl;
     }
   }
 
@@ -231,7 +240,16 @@ class UnifiedTracer {
     if (CheckOption(ONETRACE_CHROME_CALL_LOGGING) ||
         CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE) ||
         CheckOption(ONETRACE_CHROME_DEVICE_STAGES)) {
-      OpenTraceFile();
+      chrome_logger_ = new Logger(kChromeTraceFileName);
+      PTI_ASSERT(chrome_logger_ != nullptr);
+
+      std::stringstream stream;
+      stream << "[" << std::endl;
+      stream << "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
+        utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
+        utils::GetExecutableName() << "\"}}," << std::endl;
+
+      chrome_logger_->Log(stream.str().c_str());
     }
   }
 
@@ -450,14 +468,21 @@ class UnifiedTracer {
       const std::string& id, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
+    UnifiedTracer* tracer = reinterpret_cast<UnifiedTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+
     std::stringstream stream;
+    if (tracer->CheckOption(ONETRACE_PID)) {
+      stream << "<PID:" << utils::GetPid() << "> ";
+    }
     stream << "Device Timeline (queue: " << queue <<
       "): " << name << " [ns] = " <<
       queued << " (append) " <<
       submitted << " (submit) " <<
       started << " (start) " <<
       ended << " (end)" << std::endl;
-    std::cerr << stream.str();
+
+    tracer->logger_.Log(stream.str().c_str());
   }
 
   static void ClDeviceTimelineCallback(
@@ -465,31 +490,21 @@ class UnifiedTracer {
       uint64_t id, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
+    UnifiedTracer* tracer = reinterpret_cast<UnifiedTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+
     std::stringstream stream;
+    if (tracer->CheckOption(ONETRACE_PID)) {
+      stream << "<PID:" << utils::GetPid() << "> ";
+    }
     stream << "Device Timeline (queue: " << queue <<
       "): " << name << " [ns] = " <<
       queued << " (queued) " <<
       submitted << " (submit) " <<
       started << " (start) " <<
       ended << " (end)" << std::endl;
-    std::cerr << stream.str();
-  }
 
-  void OpenTraceFile() {
-    chrome_trace_.open(kChromeTraceFileName);
-    PTI_ASSERT(chrome_trace_.is_open());
-    chrome_trace_ << "[" << std::endl;
-    chrome_trace_ <<
-      "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
-      utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
-      utils::GetExecutableName() << "\"}}," << std::endl;
-  }
-
-  void CloseTraceFile() {
-    PTI_ASSERT(chrome_trace_.is_open());
-    chrome_trace_.close();
-    std::cerr << "Timeline was stored to " <<
-      kChromeTraceFileName << std::endl;
+    tracer->logger_.Log(stream.str().c_str());
   }
 
   static void ZeChromeTimelineCallback(
@@ -508,7 +523,9 @@ class UnifiedTracer {
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
   static void ClChromeTimelineCallback(
@@ -527,7 +544,9 @@ class UnifiedTracer {
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
   static void ZeChromeStagesCallback(
@@ -537,6 +556,7 @@ class UnifiedTracer {
       uint64_t started, uint64_t ended) {
     UnifiedTracer* tracer = reinterpret_cast<UnifiedTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
     std::stringstream stream;
 
     std::string tid = id + "." +
@@ -551,7 +571,7 @@ class UnifiedTracer {
       ", \"cname\":\"thread_state_runnable\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
     stream.str(std::string());
 
     PTI_ASSERT(started > submitted);
@@ -563,7 +583,7 @@ class UnifiedTracer {
       ", \"cname\":\"cq_build_running\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
     stream.str(std::string());
 
     PTI_ASSERT(ended > started);
@@ -575,7 +595,7 @@ class UnifiedTracer {
       ", \"cname\":\"thread_state_iowait\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
   static void ClChromeStagesCallback(
@@ -585,6 +605,7 @@ class UnifiedTracer {
       uint64_t started, uint64_t ended) {
     UnifiedTracer* tracer = reinterpret_cast<UnifiedTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
     std::stringstream stream;
 
     std::string tid =
@@ -600,7 +621,7 @@ class UnifiedTracer {
       ", \"cname\":\"thread_state_runnable\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
     stream.str(std::string());
 
     PTI_ASSERT(started > submitted);
@@ -612,7 +633,7 @@ class UnifiedTracer {
       ", \"cname\":\"cq_build_running\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
     stream.str(std::string());
 
     PTI_ASSERT(ended > started);
@@ -624,7 +645,7 @@ class UnifiedTracer {
       ", \"cname\":\"thread_state_iowait\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
   static void ZeDeviceAndChromeTimelineCallback(
@@ -685,7 +706,9 @@ class UnifiedTracer {
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
   static void ClChromeLoggingCallback(
@@ -702,7 +725,9 @@ class UnifiedTracer {
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_trace_ << stream.str();
+
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str().c_str());
   }
 
  private:
@@ -719,7 +744,8 @@ class UnifiedTracer {
   ClKernelCollector* cl_cpu_kernel_collector_ = nullptr;
   ClKernelCollector* cl_gpu_kernel_collector_ = nullptr;
 
-  std::ofstream chrome_trace_;
+  Logger* chrome_logger_ = nullptr;
+  Logger logger_;
 };
 
 #endif // PTI_SAMPLES_ONETRACE_UNIFIED_TRACER_H_

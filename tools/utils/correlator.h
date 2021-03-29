@@ -17,6 +17,12 @@
 
 using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 
+struct ApiCollectorOptions {
+  bool call_tracing;
+  bool need_tid;
+  bool need_pid;
+};
+
 class Correlator {
  public:
   Correlator() : base_time_(std::chrono::steady_clock::now()) {}
@@ -25,12 +31,6 @@ class Correlator {
     std::chrono::duration<uint64_t, std::nano> timestamp =
       std::chrono::steady_clock::now() - base_time_;
     return timestamp.count();
-  }
-
-  uint64_t GetTimeDiff(const TimePoint& time_point) {
-    std::chrono::duration<uint64_t, std::nano> duration =
-      time_point - base_time_;
-    return duration.count();
   }
 
   uint64_t GetKernelId() const {

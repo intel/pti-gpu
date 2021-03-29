@@ -18,6 +18,10 @@ if(CMAKE_INCLUDE_PATH)
   target_include_directories(clt_gpu_metrics
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
+if(UNIX)
+  target_link_libraries(clt_gpu_metrics
+    pthread)
+endif()
 
 FindOpenCLLibrary(clt_gpu_metrics)
 FindOpenCLHeaders(clt_gpu_metrics)

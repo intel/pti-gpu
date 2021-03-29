@@ -176,7 +176,8 @@ class ZeMetricCollector {
     PTI_ASSERT(metric_query_pool_ != nullptr);
 
     ze_event_pool_desc_t event_pool_desc = {
-        ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr, 0, max_kernel_count_};
+        ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
+        ZE_EVENT_POOL_FLAG_HOST_VISIBLE, max_kernel_count_};
     status = zeEventPoolCreate(context_, &event_pool_desc,
                                0, nullptr, &event_pool_);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);

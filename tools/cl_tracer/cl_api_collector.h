@@ -17,9 +17,8 @@
 #include "cl_api_tracer.h"
 #include "cl_utils.h"
 #include "correlator.h"
+#include "logger.h"
 #include "trace_guard.h"
-
-#include "cl_api_callbacks.h"
 
 struct ClFunction {
   uint64_t total_time;
@@ -48,12 +47,21 @@ typedef void (*OnClFunctionFinishCallback)(
     void* data, uint64_t id, const std::string& name,
     uint64_t started, uint64_t ended);
 
+class ClApiCollector;
+
+static void OnEnterFunction(
+    cl_function_id function, cl_callback_data* data,
+    uint64_t start, ClApiCollector* collector);
+static void OnExitFunction(
+    cl_function_id function, cl_callback_data* data,
+    uint64_t start, uint64_t end, ClApiCollector* collector);
+
 class ClApiCollector {
  public: // User Interface
   static ClApiCollector* Create(
       cl_device_id device,
       Correlator* correlator,
-      bool call_tracing = false,
+      ApiCollectorOptions options = {false, false, false},
       OnClFunctionFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
@@ -61,7 +69,7 @@ class ClApiCollector {
     TraceGuard guard;
 
     ClApiCollector* collector = new ClApiCollector(
-        correlator, call_tracing, callback, callback_data);
+        correlator, options, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
@@ -93,6 +101,23 @@ class ClApiCollector {
 
   const ClFunctionInfoMap& GetFunctionInfoMap() const {
     return function_info_map_;
+  }
+
+  uint64_t GetKernelId() const {
+    PTI_ASSERT(correlator_ != nullptr);
+    return correlator_->GetKernelId();
+  }
+
+  bool NeedTid() const {
+    return options_.need_tid;
+  }
+
+  bool NeedPid() const {
+    return options_.need_pid;
+  }
+
+  void Log(const std::string& text) {
+    logger_.Log(text.c_str());
   }
 
   ClApiCollector(const ClApiCollector& copy) = delete;
@@ -145,9 +170,9 @@ class ClApiCollector {
 
  private: // Implementation Details
   ClApiCollector(
-      Correlator* correlator, bool call_tracing,
+      Correlator* correlator, ApiCollectorOptions options,
       OnClFunctionFinishCallback callback, void* callback_data)
-      : correlator_(correlator), call_tracing_(call_tracing),
+      : correlator_(correlator), options_(options),
         callback_(callback), callback_data_(callback_data) {
     PTI_ASSERT(correlator_ != nullptr);
   }
@@ -204,8 +229,8 @@ class ClApiCollector {
           callback_data->correlationData);
       start_time = collector->GetTimestamp();
 
-      if (collector->call_tracing_) {
-        OnEnterFunction(function, callback_data, start_time);
+      if (collector->options_.call_tracing) {
+        OnEnterFunction(function, callback_data, start_time, collector);
       }
     } else {
       uint64_t end_time = collector->GetTimestamp();
@@ -215,8 +240,9 @@ class ClApiCollector {
       collector->AddFunctionTime(
         callback_data->functionName, end_time - start_time);
 
-      if (collector->call_tracing_) {
-        OnExitFunction(function, callback_data, start_time, end_time);
+      if (collector->options_.call_tracing) {
+        OnExitFunction(
+            function, callback_data, start_time, end_time, collector);
       }
 
       if (collector->callback_ != nullptr) {
@@ -237,9 +263,10 @@ class ClApiCollector {
 
  private: // Data
   ClApiTracer* tracer_ = nullptr;
+  Logger logger_;
 
   Correlator* correlator_ = nullptr;
-  bool call_tracing_ = false;
+  ApiCollectorOptions options_ = {false, false, false};
 
   OnClFunctionFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;

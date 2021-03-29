@@ -1,16 +1,12 @@
 set(PTI_CMAKE_MACRO_DIR ${CMAKE_CURRENT_LIST_DIR} CACHE INTERNAL "")
 
 macro(SetRequiredCMakeVersion)
-  set(REQUIRED_CMAKE_VERSION 2.8)
+  set(REQUIRED_CMAKE_VERSION 3.12)
 endmacro()
 
 macro(RequirePythonInterp)
-  if(${CMAKE_VERSION} VERSION_LESS "3.12.0")
-    find_package(PythonInterp REQUIRED)
-  else()
-    find_package(Python COMPONENTS Interpreter REQUIRED)
-    set(PYTHON_EXECUTABLE "${Python_EXECUTABLE}")
-  endif()
+  find_package(Python COMPONENTS Interpreter REQUIRED)
+  set(PYTHON_EXECUTABLE "${Python_EXECUTABLE}")
 endmacro()
 
 macro(SetCompilerFlags)

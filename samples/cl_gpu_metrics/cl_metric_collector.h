@@ -31,7 +31,15 @@ class ClMetricCollector {
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(set_name != nullptr);
 
-    MetricDevice* metric_device = MetricDevice::Create();
+    std::string device_string = utils::GetEnv("PTI_DEVICE_ID");
+    uint32_t device_id =
+      device_string.empty() ? 0 : std::stoul(device_string);
+    std::string sub_device_string = utils::GetEnv("PTI_SUB_DEVICE_ID");
+    uint32_t sub_device_id =
+      sub_device_string.empty() ? 0 : std::stoul(sub_device_string);
+
+    MetricDevice* metric_device =
+      MetricDevice::Create(device_id, sub_device_id);
     if (metric_device == nullptr) {
       std::cerr << "[WARNING] Unable to find MD library" << std::endl;
       return nullptr;

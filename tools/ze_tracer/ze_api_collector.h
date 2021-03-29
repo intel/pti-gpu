@@ -17,6 +17,7 @@
 #include <level_zero/layers/zel_tracing_api.h>
 
 #include "correlator.h"
+#include "logger.h"
 #include "utils.h"
 #include "ze_utils.h"
 
@@ -51,12 +52,12 @@ class ZeApiCollector {
  public: // User Interface
   static ZeApiCollector* Create(
       Correlator* correlator,
-      bool call_tracing = false,
+      ApiCollectorOptions options = {false, false, false},
       OnZeFunctionFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(correlator != nullptr);
     ZeApiCollector* collector = new ZeApiCollector(
-        correlator, call_tracing, callback, callback_data);
+        correlator, options, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
@@ -168,9 +169,9 @@ class ZeApiCollector {
 
  private: // Implementation Details
   ZeApiCollector(
-      Correlator* correlator, bool call_tracing,
+      Correlator* correlator, ApiCollectorOptions options,
       OnZeFunctionFinishCallback callback, void* callback_data)
-      : correlator_(correlator), call_tracing_(call_tracing),
+      : correlator_(correlator), options_(options),
         callback_(callback), callback_data_(callback_data) {
     PTI_ASSERT(correlator_ != nullptr);
   }
@@ -179,12 +180,13 @@ class ZeApiCollector {
 
  private: // Data
   zel_tracer_handle_t tracer_ = nullptr;
+  Logger logger_;
 
   ZeFunctionInfoMap function_info_map_;
   std::mutex lock_;
 
   Correlator* correlator_ = nullptr;
-  bool call_tracing_ = false;
+  ApiCollectorOptions options_{false, false, false};
 
   OnZeFunctionFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;
