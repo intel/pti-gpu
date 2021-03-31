@@ -51,8 +51,29 @@ inline void GetIntelDeviceAndDriver(ze_device_type_t type,
     uint32_t device_id = device_string.empty() ? 0 : std::stoul(device_string);
     PTI_ASSERT(device_id < device_count);
 
+    uint32_t sub_device_count = 0;
+    status = zeDeviceGetSubDevices(
+        device_list[device_id], &sub_device_count, nullptr);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    if (sub_device_count == 0) {
+      driver = driver_list[i];
+      device = device_list[device_id];
+      break;
+    }
+
+    std::vector<ze_device_handle_t> sub_device_list(sub_device_count, nullptr);
+    status = zeDeviceGetSubDevices(
+        device_list[device_id], &sub_device_count, sub_device_list.data());
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    std::string sub_device_string = utils::GetEnv("PTI_SUB_DEVICE_ID");
+    uint32_t sub_device_id =
+      sub_device_string.empty() ? 0 : std::stoul(sub_device_string);
+    PTI_ASSERT(sub_device_id < sub_device_count);
+
     driver = driver_list[i];
-    device = device_list[device_id];
+    device = sub_device_list[sub_device_id];
     break;
   }
 }

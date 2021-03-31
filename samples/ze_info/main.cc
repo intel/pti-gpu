@@ -104,6 +104,26 @@ int main(int argc, char *argv[]) {
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         std::cout << "-- Device #" << j << ": " <<
           device_properties.name << std::endl;
+
+        uint32_t sub_device_count = 0;
+        status = zeDeviceGetSubDevices(
+            device_list[j], &sub_device_count, nullptr);
+        if (status != ZE_RESULT_SUCCESS || sub_device_count == 0) {
+          continue;
+        }
+
+        std::vector<ze_device_handle_t> sub_device_list(sub_device_count, nullptr);
+        status = zeDeviceGetSubDevices(
+            device_list[j], &sub_device_count, sub_device_list.data());
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+        for (uint32_t k = 0; k < sub_device_count; ++k) {
+          ze_device_properties_t sub_device_properties;
+          status = zeDeviceGetProperties(sub_device_list[k], &sub_device_properties);
+          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          std::cout << "---- Subdevice #" << k << ": " <<
+            sub_device_properties.name << std::endl;
+        }
       }
     }
   } else {

@@ -54,8 +54,6 @@ def run(path):
   stdout, stderr = utils.run_process(p)
   if stderr:
     return stderr
-  if stdout.find("Job is successfully completed") == -1:
-    return stdout
   if not parse(stdout):
     return stdout
   return None

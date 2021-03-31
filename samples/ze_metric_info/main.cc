@@ -88,8 +88,6 @@ static void PrintMetricsInfo(ze_device_handle_t device) {
         GetResultType(metric_props.resultType) << "]" << std::endl;
     }
   }
-  
-  std::cout << "[INFO] Job is successfully completed" << std::endl;
 }
 
 int main(int argc, char* argv[]) {

@@ -14,6 +14,8 @@ Matrix multiplication time: 0.0723689 sec
 Results are CORRECT with accuracy: 4.90573e-06
 Total execution time: 0.357162 sec
 ```
+To run application on target device and sub-device one can specify `PTI_DEVICE_ID` and `PTI_SUB_DEVICE_ID` environment variables.
+
 ## Supported OS
 - Linux
 - Windows (*under development*)

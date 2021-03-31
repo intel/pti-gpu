@@ -13,7 +13,7 @@ Total Kernel Time (ns): 174056667
     Kernel,       Calls,           Time (ns),        Time (%),        Average (ns),   EU Active (%),    EU Stall (%),     EU Idle (%)
       GEMM,           4,           174056667,          100.00,            43514166,           73.24,           26.67,            0.09
 ```
-To set target device to collect metrics from one can specify `PTI_DEVICE_ID` environment variable.
+To set target device and sub-device to collect metrics from one can specify `PTI_DEVICE_ID` and `PTI_SUB_DEVICE_ID` environment variables.
 
 ## Supported OS
 - Linux
