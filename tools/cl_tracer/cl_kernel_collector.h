@@ -489,11 +489,13 @@ class ClKernelCollector {
       event_data->bytes_transferred = *(params->cb);
 
       event_data->kernel_id =
-        collector->kernel_id_.fetch_add(1, std::memory_order::memory_order_relaxed);
+        collector->kernel_id_.fetch_add(
+            1, std::memory_order::memory_order_relaxed);
       PTI_ASSERT(collector->correlator_ != nullptr);
       collector->correlator_->SetKernelId(event_data->kernel_id);
 
-      ClEnqueueData* enqueue_data = reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
+      ClEnqueueData* enqueue_data =
+        reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
       PTI_ASSERT(enqueue_data != nullptr);
       event_data->device_sync = enqueue_data->device_sync;
       event_data->host_sync = enqueue_data->host_sync;
@@ -535,11 +537,13 @@ class ClKernelCollector {
       event_data->bytes_transferred = *(params->cb);
 
       event_data->kernel_id =
-        collector->kernel_id_.fetch_add(1, std::memory_order::memory_order_relaxed);
+        collector->kernel_id_.fetch_add(
+            1, std::memory_order::memory_order_relaxed);
       PTI_ASSERT(collector->correlator_ != nullptr);
       collector->correlator_->SetKernelId(event_data->kernel_id);
 
-      ClEnqueueData* enqueue_data = reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
+      ClEnqueueData* enqueue_data =
+        reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
       PTI_ASSERT(enqueue_data != nullptr);
       event_data->device_sync = enqueue_data->device_sync;
       event_data->host_sync = enqueue_data->host_sync;
