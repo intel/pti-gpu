@@ -216,10 +216,40 @@ class ClKernelCollector {
     bool set = true;
     set = set && tracer->SetTracingFunction(
         CL_FUNCTION_clCreateCommandQueueWithProperties);
-    set = set && tracer->SetTracingFunction(CL_FUNCTION_clCreateCommandQueue);
-    set = set && tracer->SetTracingFunction(CL_FUNCTION_clEnqueueNDRangeKernel);
-    set = set && tracer->SetTracingFunction(CL_FUNCTION_clEnqueueReadBuffer);
-    set = set && tracer->SetTracingFunction(CL_FUNCTION_clEnqueueWriteBuffer);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clCreateCommandQueue);
+
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueNDRangeKernel);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueTask);
+
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueReadBuffer);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueWriteBuffer);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueReadBufferRect);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueWriteBufferRect);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueCopyBuffer);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueCopyBufferRect);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueFillBuffer);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueReadImage);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueWriteImage);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueCopyImage);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueFillImage);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueCopyImageToBuffer);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clEnqueueCopyBufferToImage);
     PTI_ASSERT(set);
 
     bool enabled = tracer_->Enable();
@@ -252,6 +282,39 @@ class ClKernelCollector {
     PTI_ASSERT(!name.empty());
     PTI_ASSERT(start < end);
     kernel_interval_list_.push_back({name, start, end});
+  }
+
+  void CalculateKernelLocalSize(
+      const cl_params_clEnqueueNDRangeKernel* params,
+      cl_kernel kernel, ClEventData* event_data) {
+    PTI_ASSERT(params != nullptr);
+    PTI_ASSERT(event_data != nullptr);
+    PTI_ASSERT(kernel != nullptr);
+
+    event_data->local_size[0] = 1;
+    event_data->local_size[1] = 1;
+    event_data->local_size[2] = 1;
+    if (*(params->localWorkSize) == nullptr) {
+      PTI_ASSERT(*(params->commandQueue) != nullptr);
+      cl_device_id device = utils::cl::GetDevice(*(params->commandQueue));
+      PTI_ASSERT(device != nullptr);
+      event_data->local_size[0] =
+        utils::cl::GetKernelLocalSize(device, kernel);
+    } else {
+      PTI_ASSERT(*(params->workDim) <= 3);
+      for (cl_uint i = 0; i < *(params->workDim); ++i) {
+        event_data->local_size[i] = (*(params->localWorkSize))[i];
+      }
+    }
+  }
+
+  void CalculateKernelLocalSize(
+      const cl_params_clEnqueueTask* params,
+      cl_kernel kernel, ClEventData* event_data) {
+    PTI_ASSERT(event_data != nullptr);
+    event_data->local_size[0] = 1;
+    event_data->local_size[1] = 1;
+    event_data->local_size[2] = 1;
   }
 
  private: // Callbacks
@@ -393,19 +456,18 @@ class ClKernelCollector {
     data->correlationData[0] = reinterpret_cast<cl_ulong>(enqueue_data);
   }
 
-  static void OnExitEnqueueNDRangeKernel(
+  template<typename T>
+  static void OnExitEnqueueKernel(
       cl_callback_data* data, ClKernelCollector* collector) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    const cl_params_clEnqueueNDRangeKernel* params =
-      reinterpret_cast<const cl_params_clEnqueueNDRangeKernel*>(
-          data->functionParams);
-    PTI_ASSERT(params != nullptr);
-
     cl_int* return_value =
       reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
+      const T* params = reinterpret_cast<const T*>(data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
       PTI_ASSERT(*(params->event) != nullptr);
       cl_int status = CL_SUCCESS;
 
@@ -423,29 +485,16 @@ class ClKernelCollector {
       event_data->kernel_type = KERNEL_TYPE_USER;
       event_data->kernel = kernel;
 
-      event_data->local_size[0] = 1;
-      event_data->local_size[1] = 1;
-      event_data->local_size[2] = 1;
-
-      if (*(params->localWorkSize) == nullptr) {
-        PTI_ASSERT(*(params->commandQueue) != nullptr);
-        cl_device_id device = utils::cl::GetDevice(*(params->commandQueue));
-        PTI_ASSERT(device != nullptr);
-        event_data->local_size[0] =
-          utils::cl::GetKernelLocalSize(device, kernel);
-      } else {
-        PTI_ASSERT(*(params->workDim) <= 3);
-        for (cl_uint i = 0; i < *(params->workDim); ++i) {
-          event_data->local_size[i] = (*(params->localWorkSize))[i];
-        }
-      }
+      collector->CalculateKernelLocalSize(params, kernel, event_data);
 
       event_data->kernel_id =
-        collector->kernel_id_.fetch_add(1, std::memory_order::memory_order_relaxed);
+        collector->kernel_id_.fetch_add(
+            1, std::memory_order::memory_order_relaxed);
       PTI_ASSERT(collector->correlator_ != nullptr);
       collector->correlator_->SetKernelId(event_data->kernel_id);
 
-      ClEnqueueData* enqueue_data = reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
+      ClEnqueueData* enqueue_data =
+        reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
       PTI_ASSERT(enqueue_data != nullptr);
       event_data->device_sync = enqueue_data->device_sync;
       event_data->host_sync = enqueue_data->host_sync;
@@ -460,99 +509,363 @@ class ClKernelCollector {
     }
   }
 
+  static void OnExitEnqueueTransfer(
+      std::string name, size_t bytes_transferred, cl_event* event,
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(event != nullptr);
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    if (event != reinterpret_cast<cl_event*>(data->correlationData)) {
+      cl_int status = clRetainEvent(*event);
+      PTI_ASSERT(status == CL_SUCCESS);
+    }
+
+    ClEventData* event_data = new ClEventData;
+    PTI_ASSERT(event_data != nullptr);
+    event_data->collector = collector;
+    event_data->kernel_name = name;
+    event_data->kernel_type = KERNEL_TYPE_TRANSFER;
+    event_data->bytes_transferred = bytes_transferred;
+
+    event_data->kernel_id =
+      collector->kernel_id_.fetch_add(
+          1, std::memory_order::memory_order_relaxed);
+    PTI_ASSERT(collector->correlator_ != nullptr);
+    collector->correlator_->SetKernelId(event_data->kernel_id);
+
+    ClEnqueueData* enqueue_data =
+      reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
+    PTI_ASSERT(enqueue_data != nullptr);
+    event_data->device_sync = enqueue_data->device_sync;
+    event_data->host_sync = enqueue_data->host_sync;
+
+    cl_int status = clSetEventCallback(
+        *event, CL_COMPLETE, EventNotify, event_data);
+    PTI_ASSERT(status == CL_SUCCESS);
+  }
+
   static void OnExitEnqueueReadBuffer(
       cl_callback_data* data, ClKernelCollector* collector) {
     PTI_ASSERT(data != nullptr);
-
-    const cl_params_clEnqueueReadBuffer* params =
-      reinterpret_cast<const cl_params_clEnqueueReadBuffer*>(
-          data->functionParams);
-    PTI_ASSERT(params != nullptr);
+    PTI_ASSERT(collector != nullptr);
 
     cl_int* return_value = reinterpret_cast<cl_int*>(
         data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      PTI_ASSERT(*(params->event) != nullptr);
-      cl_int status = CL_SUCCESS;
+      const cl_params_clEnqueueReadBuffer* params =
+        reinterpret_cast<const cl_params_clEnqueueReadBuffer*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
 
-      if (*(params->event) !=
-          reinterpret_cast<cl_event*>(data->correlationData)) {
-        status = clRetainEvent(**(params->event));
-        PTI_ASSERT(status == CL_SUCCESS);
-      }
-
-      ClEventData* event_data = new ClEventData;
-      PTI_ASSERT(event_data != nullptr);
-      event_data->collector = collector;
-      event_data->kernel_name = "clEnqueueReadBuffer";
-      event_data->kernel_type = KERNEL_TYPE_TRANSFER;
-      event_data->bytes_transferred = *(params->cb);
-
-      event_data->kernel_id =
-        collector->kernel_id_.fetch_add(
-            1, std::memory_order::memory_order_relaxed);
-      PTI_ASSERT(collector->correlator_ != nullptr);
-      collector->correlator_->SetKernelId(event_data->kernel_id);
-
-      ClEnqueueData* enqueue_data =
-        reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
-      PTI_ASSERT(enqueue_data != nullptr);
-      event_data->device_sync = enqueue_data->device_sync;
-      event_data->host_sync = enqueue_data->host_sync;
-
-      status = clSetEventCallback(
-          **(params->event), CL_COMPLETE, EventNotify, event_data);
-      PTI_ASSERT(status == CL_SUCCESS);
-
-      delete enqueue_data;
+      OnExitEnqueueTransfer(
+          "clEnqueueReadBuffer", *(params->cb),
+          *(params->event), data, collector);
     }
   }
 
   static void OnExitEnqueueWriteBuffer(
       cl_callback_data* data, ClKernelCollector* collector) {
     PTI_ASSERT(data != nullptr);
-
-    const cl_params_clEnqueueWriteBuffer* params =
-      reinterpret_cast<const cl_params_clEnqueueWriteBuffer*>(
-          data->functionParams);
-    PTI_ASSERT(params != nullptr);
+    PTI_ASSERT(collector != nullptr);
 
     cl_int* return_value = reinterpret_cast<cl_int*>(
         data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      PTI_ASSERT(*(params->event) != nullptr);
-      cl_int status = CL_SUCCESS;
+      const cl_params_clEnqueueWriteBuffer* params =
+        reinterpret_cast<const cl_params_clEnqueueWriteBuffer*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
 
-      if (*(params->event) !=
-          reinterpret_cast<cl_event*>(data->correlationData)) {
-        status = clRetainEvent(**(params->event));
-        PTI_ASSERT(status == CL_SUCCESS);
-      }
+      OnExitEnqueueTransfer(
+          "clEnqueueWriteBuffer", *(params->cb),
+          *(params->event), data, collector);
+    }
+  }
 
-      ClEventData* event_data = new ClEventData;
-      PTI_ASSERT(event_data != nullptr);
-      event_data->collector = collector;
-      event_data->kernel_name = "clEnqueueWriteBuffer";
-      event_data->kernel_type = KERNEL_TYPE_TRANSFER;
-      event_data->bytes_transferred = *(params->cb);
+  static void OnExitEnqueueCopyBuffer(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
 
-      event_data->kernel_id =
-        collector->kernel_id_.fetch_add(
-            1, std::memory_order::memory_order_relaxed);
-      PTI_ASSERT(collector->correlator_ != nullptr);
-      collector->correlator_->SetKernelId(event_data->kernel_id);
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueCopyBuffer* params =
+        reinterpret_cast<const cl_params_clEnqueueCopyBuffer*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
 
-      ClEnqueueData* enqueue_data =
-        reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
-      PTI_ASSERT(enqueue_data != nullptr);
-      event_data->device_sync = enqueue_data->device_sync;
-      event_data->host_sync = enqueue_data->host_sync;
+      OnExitEnqueueTransfer(
+          "clEnqueueCopyBuffer", *(params->cb),
+          *(params->event), data, collector);
+    }
+  }
 
-      status = clSetEventCallback(
-          **(params->event), CL_COMPLETE, EventNotify, event_data);
+  static void OnExitEnqueueFillBuffer(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueFillBuffer* params =
+        reinterpret_cast<const cl_params_clEnqueueFillBuffer*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      OnExitEnqueueTransfer(
+          "clEnqueueFillBuffer", *(params->size),
+          *(params->event), data, collector);
+    }
+  }
+
+  static void OnExitEnqueueReadBufferRect(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueReadBufferRect* params =
+        reinterpret_cast<const cl_params_clEnqueueReadBufferRect*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const size_t* region = *params->region;
+      PTI_ASSERT(region != nullptr);
+      size_t bytes_transferred = region[0] * region[1] * region[2];
+
+      OnExitEnqueueTransfer(
+          "clEnqueueReadBufferRect", bytes_transferred,
+          *(params->event), data, collector);
+    }
+  }
+
+  static void OnExitEnqueueWriteBufferRect(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueWriteBufferRect* params =
+        reinterpret_cast<const cl_params_clEnqueueWriteBufferRect*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const size_t* region = *params->region;
+      PTI_ASSERT(region != nullptr);
+      size_t bytes_transferred = region[0] * region[1] * region[2];
+
+      OnExitEnqueueTransfer(
+          "clEnqueueWriteBufferRect", bytes_transferred,
+          *(params->event), data, collector);
+    }
+  }
+
+  static void OnExitEnqueueCopyBufferRect(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueCopyBufferRect* params =
+        reinterpret_cast<const cl_params_clEnqueueCopyBufferRect*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const size_t* region = *params->region;
+      PTI_ASSERT(region != nullptr);
+      size_t bytes_transferred = region[0] * region[1] * region[2];
+
+      OnExitEnqueueTransfer(
+          "clEnqueueCopyBufferRect", bytes_transferred,
+          *(params->event), data, collector);
+    }
+  }
+
+  static void OnExitEnqueueReadImage(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueReadImage* params =
+        reinterpret_cast<const cl_params_clEnqueueReadImage*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const size_t* region = *(params->region);
+      PTI_ASSERT(region != nullptr);
+
+      size_t element_size = 0;
+      cl_int status = clGetImageInfo(
+          *(params->image), CL_IMAGE_ELEMENT_SIZE,
+          sizeof(size_t), &element_size, nullptr);
       PTI_ASSERT(status == CL_SUCCESS);
 
-      delete enqueue_data;
+      size_t bytes_transferred =
+        region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer(
+          "clEnqueueReadImage", bytes_transferred,
+          *(params->event), data, collector);
+    }
+  }
+
+  static void OnExitEnqueueWriteImage(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueWriteImage* params =
+        reinterpret_cast<const cl_params_clEnqueueWriteImage*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const size_t* region = *(params->region);
+      PTI_ASSERT(region != nullptr);
+
+      size_t element_size = 0;
+      cl_int status = clGetImageInfo(
+          *(params->image), CL_IMAGE_ELEMENT_SIZE,
+          sizeof(size_t), &element_size, nullptr);
+      PTI_ASSERT(status == CL_SUCCESS);
+
+      size_t bytes_transferred =
+        region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer(
+          "clEnqueueWriteImage", bytes_transferred,
+          *(params->event), data, collector);
+    }
+  }
+
+  static void OnExitEnqueueCopyImage(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueCopyImage* params =
+        reinterpret_cast<const cl_params_clEnqueueCopyImage*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const size_t* region = *(params->region);
+      PTI_ASSERT(region != nullptr);
+
+      size_t element_size = 0;
+      cl_int status = clGetImageInfo(
+          *(params->srcImage), CL_IMAGE_ELEMENT_SIZE,
+          sizeof(size_t), &element_size, nullptr);
+      PTI_ASSERT(status == CL_SUCCESS);
+
+      size_t bytes_transferred =
+        region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer("clEnqueueCopyImage", bytes_transferred,
+                            *(params->event), data, collector);
+    }
+  }
+
+  static void OnExitEnqueueFillImage(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueFillImage* params =
+        reinterpret_cast<const cl_params_clEnqueueFillImage*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const size_t* region = *(params->region);
+      PTI_ASSERT(region != nullptr);
+
+      size_t element_size = 0;
+      cl_int status = clGetImageInfo(
+          *(params->image), CL_IMAGE_ELEMENT_SIZE,
+          sizeof(size_t), &element_size, nullptr);
+      PTI_ASSERT(status == CL_SUCCESS);
+
+      size_t bytes_transferred =
+        region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer(
+          "clEnqueueFillImage", bytes_transferred,
+          *(params->event), data, collector);
+    }
+  }
+
+  static void OnExitEnqueueCopyImageToBuffer(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueCopyImageToBuffer* params =
+        reinterpret_cast<const cl_params_clEnqueueCopyImageToBuffer*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const size_t* region = *(params->region);
+      PTI_ASSERT(region != nullptr);
+
+      size_t element_size = 0;
+      cl_int status = clGetImageInfo(
+          *(params->srcImage), CL_IMAGE_ELEMENT_SIZE,
+          sizeof(size_t), &element_size, nullptr);
+      PTI_ASSERT(status == CL_SUCCESS);
+
+      size_t bytes_transferred =
+        region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer(
+          "clEnqueueCopyImageToBuffer", bytes_transferred,
+          *(params->event), data, collector);
+    }
+  }
+
+  static void OnExitEnqueueCopyBufferToImage(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clEnqueueCopyBufferToImage* params =
+        reinterpret_cast<const cl_params_clEnqueueCopyBufferToImage*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const size_t* region = *(params->region);
+      PTI_ASSERT(region != nullptr);
+
+      size_t element_size = 0;
+      cl_int status = clGetImageInfo(
+          *(params->dstImage), CL_IMAGE_ELEMENT_SIZE,
+          sizeof(size_t), &element_size, nullptr);
+      PTI_ASSERT(status == CL_SUCCESS);
+
+      size_t bytes_transferred =
+        region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer(
+          "clEnqueueCopyBufferToImage", bytes_transferred,
+          *(params->event), data, collector);
     }
   }
 
@@ -581,7 +894,16 @@ class ClKernelCollector {
         OnEnterEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(
             callback_data, collector);
       } else {
-        OnExitEnqueueNDRangeKernel(callback_data, collector);
+        OnExitEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(
+            callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueTask) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueTask>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueKernel<cl_params_clEnqueueTask>(
+            callback_data, collector);
       }
     } else if (function == CL_FUNCTION_clEnqueueReadBuffer) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
@@ -596,6 +918,83 @@ class ClKernelCollector {
             callback_data, collector);
       } else {
         OnExitEnqueueWriteBuffer(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueCopyBuffer) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBuffer>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueCopyBuffer(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueFillBuffer) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueFillBuffer>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueFillBuffer(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueReadBufferRect) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueReadBufferRect>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueReadBufferRect(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueWriteBufferRect) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueWriteBufferRect>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueWriteBufferRect(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueCopyBuffer) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBuffer>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueCopyBuffer(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueReadImage) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueReadImage>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueReadImage(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueWriteImage) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueWriteImage>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueWriteImage(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueCopyImage) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyImage>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueCopyImage(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueFillImage) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueFillImage>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueFillImage(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueCopyImageToBuffer) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyImageToBuffer>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueCopyImageToBuffer(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clEnqueueCopyBufferToImage) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBufferToImage>(
+            callback_data, collector);
+      } else {
+        OnExitEnqueueCopyBufferToImage(callback_data, collector);
       }
     }
   }

@@ -338,7 +338,7 @@ macro(FindGTPinLibrary TARGET)
     endif()
   else()
     if(UNIX)
-      message(WARNING "Graphics Technology Pin (GT Pin) library path was not defined - it will be downloaded automatically on build")
+      message(STATUS "Graphics Technology Pin (GT Pin) path was not defined - it will be downloaded automatically on build")
       set(GTPIN_LIB_PATH "${CMAKE_BINARY_DIR}")
       RequirePythonInterp()
 
@@ -375,7 +375,7 @@ macro(GetGTPinHeaders TARGET)
       PUBLIC "${GTPIN_PATH}/Include/ged/intel64")
   else()
     if(UNIX)
-      message(WARNING "Graphics Technology Pin (GT Pin) include path was not defined - it will be downloaded automatically on build")
+      message(STATUS "Graphics Technology Pin (GT Pin) path was not defined - it will be downloaded automatically on build")
       set(GTPIN_INC_PATH "${CMAKE_BINARY_DIR}")
       RequirePythonInterp()
 
@@ -391,6 +391,7 @@ macro(GetGTPinHeaders TARGET)
                                 ${GTPIN_INC_PATH}/GTPIN/kernel.h
                                 ${GTPIN_INC_PATH}/GTPIN/knob.h
                                 ${GTPIN_INC_PATH}/GTPIN/knob_defs.h
+                                ${GTPIN_INC_PATH}/GTPIN/send_exec_semantics.h
                                 ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_basic_types.h
                                 ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enumerations.h
                                 ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enum_types.h
@@ -407,6 +408,7 @@ macro(GetGTPinHeaders TARGET)
                                 ${GTPIN_INC_PATH}/GTPIN/kernel.h
                                 ${GTPIN_INC_PATH}/GTPIN/knob.h
                                 ${GTPIN_INC_PATH}/GTPIN/knob_defs.h
+                                ${GTPIN_INC_PATH}/GTPIN/send_exec_semantics.h
                                 ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_basic_types.h
                                 ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enumerations.h
                                 ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enum_types.h

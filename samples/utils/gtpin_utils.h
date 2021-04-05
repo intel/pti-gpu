@@ -25,7 +25,7 @@ inline iga_gen_t GetArch(GED_MODEL arch) {
     return IGA_GEN10;
   case GED_MODEL_GEN_11:
     return IGA_GEN11;
-  case GED_MODEL_GEN_12_1:
+  case GED_MODEL_GEN_TGL:
     return IGA_GEN12p1;
   default:
     break;
