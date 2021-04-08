@@ -31,7 +31,8 @@
 #define ZET_TID                    7
 #define ZET_PID                    8
 
-const char* kChromeTraceFileName = "zet_trace.json";
+const char* kChromeTraceFileName = "zet_trace";
+const char* kChromeTraceFileExt = "json";
 
 class ZeTracer {
  public:
@@ -129,7 +130,7 @@ class ZeTracer {
     if (chrome_logger_ != nullptr) {
       delete chrome_logger_;
       std::cerr << "Timeline was stored to " <<
-        kChromeTraceFileName << std::endl;
+        chrome_trace_file_name_ << std::endl;
     }
   }
 
@@ -145,7 +146,11 @@ class ZeTracer {
     if (CheckOption(ZET_CHROME_CALL_LOGGING) ||
         CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
         CheckOption(ZET_CHROME_DEVICE_STAGES) ) {
-      chrome_logger_ = new Logger(kChromeTraceFileName);
+      chrome_trace_file_name_ =
+        std::string(kChromeTraceFileName) +
+          "." + std::to_string(utils::GetPid()) +
+          "." + kChromeTraceFileExt;
+      chrome_logger_ = new Logger(chrome_trace_file_name_.c_str());
       PTI_ASSERT(chrome_logger_ != nullptr);
 
       std::stringstream stream;
@@ -153,6 +158,9 @@ class ZeTracer {
       stream << "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
         utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
         utils::GetExecutableName() << "\"}}," << std::endl;
+      stream << "{\"ph\":\"M\", \"name\":\"ze_tracer_start_time\", \"pid\":" <<
+        utils::GetPid() << ", \"tid\":0, \"args\":{\"start_time\":\"" <<
+        correlator_.GetStartPoint() << "\"}}," << std::endl;
 
       chrome_logger_->Log(stream.str().c_str());
     }
@@ -364,7 +372,9 @@ class ZeTracer {
  private:
   unsigned options_;
 
+  std::string chrome_trace_file_name_;
   Logger* chrome_logger_ = nullptr;
+
   Logger logger_;
 
   Correlator correlator_;

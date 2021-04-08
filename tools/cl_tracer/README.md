@@ -83,6 +83,11 @@ Device Timeline (queue: 0x55a9c7e51e70): clEnqueueReadBuffer [ns] = 361479600 (q
 
 **Chrome Device Stages** mode provides alternative view for device queue where each kernel invocation is divided into stages: "queued", "sumbitted" and "execution". Can't be used in pair with **Chrome Device Timeline**.
 
+To enable `high_resolution_clock` timestamps instead of `steady_clock` used by default, one may set `CLOCK_HIGH_RESOLUTION` variable for CMake:
+```sh
+cmake -DCLOCK_HIGH_RESOLUTION=1 ..
+```
+
 ## Supported OS
 - Linux
 - Windows (*under development*)

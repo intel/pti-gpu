@@ -33,7 +33,8 @@
 #define ONETRACE_TID                    7
 #define ONETRACE_PID                    8
 
-const char* kChromeTraceFileName = "onetrace.json";
+const char* kChromeTraceFileName = "onetrace";
+const char* kChromeTraceFileExt = "json";
 
 class UnifiedTracer {
  public:
@@ -224,7 +225,7 @@ class UnifiedTracer {
     if (chrome_logger_ != nullptr) {
       delete chrome_logger_;
       std::cerr << "Timeline was stored to " <<
-        kChromeTraceFileName << std::endl;
+        chrome_trace_file_name_ << std::endl;
     }
   }
 
@@ -240,7 +241,11 @@ class UnifiedTracer {
     if (CheckOption(ONETRACE_CHROME_CALL_LOGGING) ||
         CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE) ||
         CheckOption(ONETRACE_CHROME_DEVICE_STAGES)) {
-      chrome_logger_ = new Logger(kChromeTraceFileName);
+      chrome_trace_file_name_ =
+        std::string(kChromeTraceFileName) +
+          "." + std::to_string(utils::GetPid()) +
+          "." + kChromeTraceFileExt;
+      chrome_logger_ = new Logger(chrome_trace_file_name_.c_str());
       PTI_ASSERT(chrome_logger_ != nullptr);
 
       std::stringstream stream;
@@ -248,6 +253,9 @@ class UnifiedTracer {
       stream << "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
         utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
         utils::GetExecutableName() << "\"}}," << std::endl;
+      stream << "{\"ph\":\"M\", \"name\":\"onetrace_start_time\", \"pid\":" <<
+        utils::GetPid() << ", \"tid\":0, \"args\":{\"start_time\":\"" <<
+        correlator_.GetStartPoint() << "\"}}," << std::endl;
 
       chrome_logger_->Log(stream.str().c_str());
     }
@@ -744,7 +752,9 @@ class UnifiedTracer {
   ClKernelCollector* cl_cpu_kernel_collector_ = nullptr;
   ClKernelCollector* cl_gpu_kernel_collector_ = nullptr;
 
+  std::string chrome_trace_file_name_;
   Logger* chrome_logger_ = nullptr;
+
   Logger logger_;
 };
 

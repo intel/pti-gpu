@@ -21,3 +21,5 @@ endif()
 
 GetMDHeaders(gpu_info)
 CheckForMDLibrary()
+
+install(TARGETS gpu_info DESTINATION bin)

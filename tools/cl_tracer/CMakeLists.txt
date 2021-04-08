@@ -23,6 +23,12 @@ if(CMAKE_INCLUDE_PATH)
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
 
+if(DEFINED CLOCK_HIGH_RESOLUTION)
+  message(STATUS "High resolution clock will be used")
+  target_compile_definitions(clt_tracer
+    PUBLIC CLOCK_HIGH_RESOLUTION=${CLOCK_HIGH_RESOLUTION})
+endif()
+
 FindOpenCLLibrary(clt_tracer)
 FindOpenCLHeaders(clt_tracer)
 
@@ -38,3 +44,7 @@ if(UNIX)
   target_link_libraries(cl_tracer
     dl)
 endif()
+
+# Installation
+
+install(TARGETS cl_tracer clt_tracer DESTINATION bin)

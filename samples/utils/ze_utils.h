@@ -78,6 +78,41 @@ inline void GetIntelDeviceAndDriver(ze_device_type_t type,
   }
 }
 
+inline ze_device_handle_t GetGpuDevice() {
+  ze_result_t status = ZE_RESULT_SUCCESS;
+
+  uint32_t driver_count = 0;
+  status = zeDriverGet(&driver_count, nullptr);
+  if (status != ZE_RESULT_SUCCESS || driver_count < 1) {
+    return nullptr;
+  }
+
+  ze_driver_handle_t driver = nullptr;
+  status = zeDriverGet(&driver_count, &driver);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  uint32_t device_count = 0;
+  status = zeDeviceGet(driver, &device_count, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  PTI_ASSERT(device_count > 0);
+
+  std::vector<ze_device_handle_t> device_list(device_count);
+  status = zeDeviceGet(driver, &device_count, device_list.data());
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  for (uint32_t i = 0; i < device_count; ++i) {
+    ze_device_properties_t device_properties{
+        ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+    status = zeDeviceGetProperties(device_list[i], &device_properties);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (device_properties.type == ZE_DEVICE_TYPE_GPU) {
+      return device_list[i];
+    }
+  }
+
+  return nullptr;
+}
+
 inline ze_context_handle_t GetContext(ze_driver_handle_t driver) {
   PTI_ASSERT(driver != nullptr);
 

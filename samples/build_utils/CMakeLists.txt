@@ -455,8 +455,9 @@ macro(FindL0Headers TARGET)
   include(CheckIncludeFileCXX)
   check_include_file_cxx(level_zero/ze_api.h LO_CORE_INC_FOUND)
   check_include_file_cxx(level_zero/zet_api.h LO_TOOLS_INC_FOUND)
+  check_include_file_cxx(level_zero/zes_api.h LO_SYSMAN_INC_FOUND)
   check_include_file_cxx(level_zero/layers/zel_tracing_api.h LO_LAYERS_INC_FOUND)
-  if ((NOT LO_CORE_INC_FOUND) OR (NOT LO_TOOLS_INC_FOUND) OR (NOT LO_LAYERS_INC_FOUND))
+  if ((NOT LO_CORE_INC_FOUND) OR (NOT LO_TOOLS_INC_FOUND) OR (NOT LO_LAYERS_INC_FOUND) OR (NOT LO_SYSMAN_INC_FOUND))
     message(FATAL_ERROR
       "Level Zero headers are not found. "
       "You may need to install oneAPI Level Zero loader 1.0.26+ to fix this issue.")

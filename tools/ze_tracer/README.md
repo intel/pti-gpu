@@ -68,6 +68,11 @@ Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 39
 
 **Chrome Device Stages** mode provides alternative view for device queue where each kernel invocation is divided into stages: "appended", "sumbitted" and "execution". Can't be used in pair with **Chrome Device Timeline**.
 
+To enable `high_resolution_clock` timestamps instead of `steady_clock` used by default, one may set `CLOCK_HIGH_RESOLUTION` variable for CMake:
+```sh
+cmake -DCLOCK_HIGH_RESOLUTION=1 ..
+```
+
 ## Supported OS
 - Linux
 - Windows (*under development*)

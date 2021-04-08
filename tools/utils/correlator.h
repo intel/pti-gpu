@@ -15,7 +15,13 @@
 
 #include "pti_assert.h"
 
-using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+#ifdef CLOCK_HIGH_RESOLUTION
+#define PTI_CLOCK std::chrono::high_resolution_clock
+#else
+#define PTI_CLOCK std::chrono::steady_clock
+#endif
+
+using TimePoint = std::chrono::time_point<PTI_CLOCK>;
 
 struct ApiCollectorOptions {
   bool call_tracing;
@@ -25,12 +31,18 @@ struct ApiCollectorOptions {
 
 class Correlator {
  public:
-  Correlator() : base_time_(std::chrono::steady_clock::now()) {}
+  Correlator() : base_time_(PTI_CLOCK::now()) {}
 
   uint64_t GetTimestamp() const {
     std::chrono::duration<uint64_t, std::nano> timestamp =
-      std::chrono::steady_clock::now() - base_time_;
+      PTI_CLOCK::now() - base_time_;
     return timestamp.count();
+  }
+
+  uint64_t GetStartPoint() const {
+    std::chrono::duration<uint64_t, std::nano> start_point =
+      base_time_.time_since_epoch();
+    return start_point.count();
   }
 
   uint64_t GetKernelId() const {

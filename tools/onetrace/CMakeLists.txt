@@ -25,6 +25,12 @@ if(CMAKE_INCLUDE_PATH)
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
 
+if(DEFINED CLOCK_HIGH_RESOLUTION)
+  message(STATUS "High resolution clock will be used")
+  target_compile_definitions(onetrace_tool
+    PUBLIC CLOCK_HIGH_RESOLUTION=${CLOCK_HIGH_RESOLUTION})
+endif()
+
 FindOpenCLLibrary(onetrace_tool)
 FindOpenCLHeaders(onetrace_tool)
 
@@ -50,3 +56,7 @@ if(UNIX)
   target_link_libraries(onetrace
     dl)
 endif()
+
+# Installation
+
+install(TARGETS onetrace onetrace_tool DESTINATION bin)

@@ -41,6 +41,8 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - based on [OpenCL(TM) built-in intrinsics](chapters/binary_instrumentation/OpenCLBuiltIn.md)
 6. Code Annotation
     - based on [Instrumentation and Tracing Technology API (ITT API)](chapters/code_annotation/ITT.md)
+7. System Management
+    - for [oneAPI Level Zero (Level Zero)](chapters/system_management/LevelZero.md)
 
 ## Profiling & Debug Tools
  - [onetrace](tools/onetrace) - host and device tracing tool for OpenCL(TM) and Level Zero backends with support of DPC++ (both for CPU and GPU) and OpenMP* GPU offload;

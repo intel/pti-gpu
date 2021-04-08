@@ -31,7 +31,8 @@
 #define CLT_TID                    7
 #define CLT_PID                    8
 
-const char* kChromeTraceFileName = "clt_trace.json";
+const char* kChromeTraceFileName = "clt_trace";
+const char* kChromeTraceFileExt = "json";
 
 class ClTracer {
  public:
@@ -185,7 +186,7 @@ class ClTracer {
     if (chrome_logger_ != nullptr) {
       delete chrome_logger_;
       std::cerr << "Timeline was stored to " <<
-        kChromeTraceFileName << std::endl;
+        chrome_trace_file_name_ << std::endl;
     }
   }
 
@@ -202,7 +203,11 @@ class ClTracer {
     if (CheckOption(CLT_CHROME_CALL_LOGGING) ||
         CheckOption(CLT_CHROME_DEVICE_TIMELINE) ||
         CheckOption(CLT_CHROME_DEVICE_STAGES)) {
-      chrome_logger_ = new Logger(kChromeTraceFileName);
+      chrome_trace_file_name_ =
+        std::string(kChromeTraceFileName) +
+          "." + std::to_string(utils::GetPid()) +
+          "." + kChromeTraceFileExt;
+      chrome_logger_ = new Logger(chrome_trace_file_name_.c_str());
       PTI_ASSERT(chrome_logger_ != nullptr);
 
       std::stringstream stream;
@@ -210,6 +215,9 @@ class ClTracer {
       stream << "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
         utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
         utils::GetExecutableName() << "\"}}," << std::endl;
+      stream << "{\"ph\":\"M\", \"name\":\"cl_tracer_start_time\", \"pid\":" <<
+        utils::GetPid() << ", \"tid\":0, \"args\":{\"start_time\":\"" <<
+        correlator_.GetStartPoint() << "\"}}," << std::endl;
 
       chrome_logger_->Log(stream.str().c_str());
     }
@@ -474,7 +482,9 @@ class ClTracer {
   ClKernelCollector* cpu_kernel_collector_ = nullptr;
   ClKernelCollector* gpu_kernel_collector_ = nullptr;
 
+  std::string chrome_trace_file_name_;
   Logger* chrome_logger_ = nullptr;
+
   Logger logger_;
 };
 
