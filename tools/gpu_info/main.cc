@@ -7,7 +7,7 @@
 #include <iostream>
 #include <string>
 
-#include <MD/metrics_discovery_api.h>
+#include <metrics_discovery_api.h>
 
 #include "metric_device.h"
 

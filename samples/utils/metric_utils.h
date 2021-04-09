@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-#include <MD/metrics_discovery_api.h>
+#include <metrics_discovery_api.h>
 
 namespace utils {
 namespace metrics {

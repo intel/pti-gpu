@@ -23,7 +23,7 @@ FindIGALibrary(zet_debug_info)
 GetIGAHeaders(zet_debug_info)
 
 GetIGCHeaders(zet_debug_info)
-GetMDHeaders(zet_debug_info)
+GetArchHeader(zet_debug_info)
 
 # Loader
 

@@ -243,6 +243,27 @@ macro(GetIGCHeaders TARGET)
   endif()
 endmacro()
 
+macro(GetArchHeader TARGET)
+  include(CheckIncludeFileCXX)
+  CHECK_INCLUDE_FILE_CXX(igc/igfxfmid.h IGFXFMID_H_INC_FOUND)
+  if (NOT (IGFXFMID_H_INC_FOUND))
+
+    set(IGC_INC_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
+
+    add_custom_target(arch_header ALL
+                      DEPENDS ${IGC_INC_PATH}/igc/igfxfmid.h)
+    add_custom_command(OUTPUT ${IGC_INC_PATH}/igc/igfxfmid.h
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_arch_header.py" ${IGC_INC_PATH} ${CMAKE_BINARY_DIR})
+
+    target_include_directories(${TARGET}
+      PUBLIC "${IGC_INC_PATH}")
+    add_dependencies(${TARGET}
+      arch_header)
+
+  endif()
+endmacro()
+
 macro(CheckForMDLibrary)
   if(WIN32)
     foreach(VALUE IN ITEMS $ENV{PATH})
@@ -308,20 +329,22 @@ macro(CheckForMetricsLibrary)
 endmacro()
 
 macro(GetMDHeaders TARGET)
-  set(MD_INC_PATH "${CMAKE_BINARY_DIR}")
-  RequirePythonInterp()
+  include(CheckIncludeFileCXX)
+  CHECK_INCLUDE_FILE_CXX(metrics_discovery_api.h MDAPI_H_INC_FOUND)
+  if (NOT (MDAPI_H_INC_FOUND))
+    set(MD_INC_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
 
-  add_custom_target(md_headers ALL
-                    DEPENDS ${MD_INC_PATH}/MD/metrics_discovery_api.h
-                            ${MD_INC_PATH}/MD/metrics_discovery_internal_api.h)
-  add_custom_command(OUTPUT ${MD_INC_PATH}/MD/metrics_discovery_api.h
-                            ${MD_INC_PATH}/MD/metrics_discovery_internal_api.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_md_headers.py" ${MD_INC_PATH} ${CMAKE_BINARY_DIR})
+    add_custom_target(md_headers ALL
+                      DEPENDS ${MD_INC_PATH}/metrics_discovery_api.h)
+    add_custom_command(OUTPUT ${MD_INC_PATH}/metrics_discovery_api.h
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_md_headers.py" ${MD_INC_PATH} ${CMAKE_BINARY_DIR})
 
-  target_include_directories(${TARGET}
-    PUBLIC "${MD_INC_PATH}")
-  add_dependencies(${TARGET}
-    md_headers)
+    target_include_directories(${TARGET}
+      PUBLIC "${MD_INC_PATH}")
+    add_dependencies(${TARGET}
+      md_headers)
+  endif()
 endmacro()
 
 macro(FindGTPinLibrary TARGET)

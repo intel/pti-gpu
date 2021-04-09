@@ -14,9 +14,6 @@ def main():
   dst_path = sys.argv[1]
   if (not os.path.exists(dst_path)):
     os.mkdir(dst_path)
-  dst_path = os.path.join(dst_path, "MD")
-  if (not os.path.exists(dst_path)):
-    os.mkdir(dst_path)
 
   clone_path = sys.argv[2]
   clone_path = os.path.join(clone_path, "metrics-discovery")
@@ -27,7 +24,7 @@ def main():
   src_path = os.path.join(src_path, "instrumentation")
   src_path = os.path.join(src_path, "api")
 
-  build_utils.copy(src_path, dst_path, ["metrics_discovery_api.h", "metrics_discovery_internal_api.h"])
+  build_utils.copy(src_path, dst_path, ["metrics_discovery_api.h"])
 
 if __name__ == "__main__":
   main()

@@ -9,7 +9,7 @@
 #include <memory.h>
 
 #include <igc/ocl_igc_shared/executable_format/patch_list.h>
-#include <MD/metrics_discovery_internal_api.h>
+#include <igc/igfxfmid.h>
 
 #include "gen_binary_decoder.h"
 
@@ -75,18 +75,16 @@ class IgcBinaryDecoder {
   }
 
   static iga_gen_t GetArch(uint32_t device) {
-    switch (1 << device) {
-      case MetricsDiscovery::PLATFORM_BDW:
+    switch (device) {
+      case IGFX_GEN8_CORE:
         return IGA_GEN8;
-      case MetricsDiscovery::PLATFORM_SKL:
-        return IGA_GEN9;
-      case MetricsDiscovery::PLATFORM_KBL:
-      case MetricsDiscovery::PLATFORM_CFL:
+      case IGFX_GEN9_CORE:
         return IGA_GEN9p5;
-      case MetricsDiscovery::PLATFORM_ICL:
+      case IGFX_GEN11_CORE:
+      case IGFX_GEN11LP_CORE:
         return IGA_GEN11;
-      case MetricsDiscovery::PLATFORM_TGL:
-      case MetricsDiscovery::PLATFORM_DG1:
+      case IGFX_GEN12_CORE:
+      case IGFX_GEN12LP_CORE:
         return IGA_GEN12p1;
       default:
         break;
