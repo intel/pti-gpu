@@ -9,7 +9,7 @@
 #include <memory.h>
 
 #include <igc/ocl_igc_shared/executable_format/patch_list.h>
-#include <igc/igfxfmid.h>
+#include <igdgmm/inc/common/igfxfmid.h>
 
 #include "gen_binary_decoder.h"
 

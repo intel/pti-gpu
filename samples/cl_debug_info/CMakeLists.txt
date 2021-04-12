@@ -25,7 +25,7 @@ FindIGALibrary(clt_debug_info)
 GetIGAHeaders(clt_debug_info)
 
 GetIGCHeaders(clt_debug_info)
-GetArchHeader(clt_debug_info)
+GetGmmHeaders(clt_debug_info)
 
 # Loader
 

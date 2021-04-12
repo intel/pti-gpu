@@ -243,21 +243,21 @@ macro(GetIGCHeaders TARGET)
   endif()
 endmacro()
 
-macro(GetArchHeader TARGET)
+macro(GetGmmHeaders TARGET)
   include(CheckIncludeFileCXX)
-  CHECK_INCLUDE_FILE_CXX(igc/igfxfmid.h IGFXFMID_H_INC_FOUND)
+  CHECK_INCLUDE_FILE_CXX(igdgmm/inc/common/igfxfmid.h IGFXFMID_H_INC_FOUND)
   if (NOT (IGFXFMID_H_INC_FOUND))
 
-    set(IGC_INC_PATH "${CMAKE_BINARY_DIR}")
+    set(GMM_INC_PATH "${CMAKE_BINARY_DIR}")
     RequirePythonInterp()
 
     add_custom_target(arch_header ALL
-                      DEPENDS ${IGC_INC_PATH}/igc/igfxfmid.h)
-    add_custom_command(OUTPUT ${IGC_INC_PATH}/igc/igfxfmid.h
-                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_arch_header.py" ${IGC_INC_PATH} ${CMAKE_BINARY_DIR})
+                      DEPENDS ${GMM_INC_PATH}/igdgmm/inc/common/igfxfmid.h)
+    add_custom_command(OUTPUT ${GMM_INC_PATH}/igdgmm/inc/common/igfxfmid.h
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gmm_headers.py" ${GMM_INC_PATH} ${CMAKE_BINARY_DIR})
 
     target_include_directories(${TARGET}
-      PUBLIC "${IGC_INC_PATH}")
+      PUBLIC "${GMM_INC_PATH}")
     add_dependencies(${TARGET}
       arch_header)
 
