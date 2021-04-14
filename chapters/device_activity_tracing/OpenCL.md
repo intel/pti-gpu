@@ -20,7 +20,7 @@ Intel(R) Xeon(R) Processor / Intel(R) Core(TM) Processor (CPU) Runtimes use `Que
 - Windows
 
 **Supported HW**:
-- Intel(R) Processor Graphics GEN9+
+- Any
 
 **Needed Headers**:
 - OpenCL(TM) [headers](https://github.com/KhronosGroup/OpenCL-Headers)

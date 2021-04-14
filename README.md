@@ -48,7 +48,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
  - [onetrace](tools/onetrace) - host and device tracing tool for OpenCL(TM) and Level Zero backends with support of DPC++ (both for CPU and GPU) and OpenMP* GPU offload;
  - [ze_tracer](tools/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);
  - [cl_tracer](tools/cl_tracer) - "Swiss army knife" for OpenCL(TM) API call tracing and profiling;
- - [gpu_info](tools/gpu_info) - provides basic information about the GPUs installed in a system, and the list of HW metrics one can collect for it;
+ - [gpuinfo](tools/gpuinfo) - provides basic information about the GPUs installed in a system, and the list of HW metrics one can collect for it;
 
 ## Sample Tools & Utilities
 - tools for OpenCL(TM), DPC++ (with OpenCL(TM) backend) and OpenMP* GPU offload (with OpenCL(TM) backend):

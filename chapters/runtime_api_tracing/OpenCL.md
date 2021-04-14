@@ -49,7 +49,7 @@ cl_int CL_API_CALL clGetTracingStateINTEL(
 - Windows
 
 **Supported HW**:
-- Any
+- Intel(R) Processor Graphics, Intel(R) Xeon(R) Processor and Intel(R) Core(TM) Processor
 
 **Needed Headers**:
 - OpenCL(TM) [headers](https://github.com/KhronosGroup/OpenCL-Headers)
@@ -116,3 +116,7 @@ void Callback(cl_function_id fid,
 - [OpenCL(TM) Hot Kernels](../../samples/cl_hot_kernels)
 - [OpenCL(TM) Debug Info](../../samples/cl_debug_info)
 - [OpenCL(TM) GPU Metrics](../../samples/cl_gpu_metrics)
+
+## Tools
+- [OpenCL(TM) Tracer](../../tools/cl_tracer)
+- [Tracing and Profiling Tool for Data Parallel C++ (DPC++)](../../tools/onetrace)

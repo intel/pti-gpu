@@ -36,7 +36,7 @@ def parse(output, option):
     lines = output.split("\n")
     total_values = 0
     for line in lines:
-      if line.find("Device Information") != -1:
+      if line.find("Device") == 0:
         continue
       items = line.strip().split(":")
       if len(items) == 2:
@@ -71,7 +71,7 @@ def parse(output, option):
       return False
     if total_sets <= total_groups:
       return False
-    if total_metrics <=  total_sets:
+    if total_metrics <= total_sets:
       return False
   else:
     return False
@@ -79,7 +79,7 @@ def parse(output, option):
   return True
 
 def run(path, option):
-  p = subprocess.Popen(["./gpu_info", option],\
+  p = subprocess.Popen(["./gpuinfo", option],\
     cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = utils.run_process(p)
   if stderr:
@@ -89,7 +89,7 @@ def run(path, option):
   return None
 
 def main(option):
-  path = utils.get_tool_build_path("gpu_info")
+  path = utils.get_tool_build_path("gpuinfo")
   log = config(path)
   if log:
     return log

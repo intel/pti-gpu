@@ -295,5 +295,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path_to_libmd.so> ./<application>
 [Compute Architecture Manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides) to learn more on Intel(R) Processor Graphics architecture
 
 ## Samples
-- [GPU Info](../../tools/gpu_info)
 - [GPU Metrics for OpenCL(TM)](../../samples/cl_gpu_metrics)
+
+## Tools
+- [GPU Info](../../tools/gpuinfo)

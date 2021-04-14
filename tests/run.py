@@ -11,7 +11,7 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["cl_gemm_itt", "gpu", "cpu"],
            ["cl_debug_info", None],
            ["cl_gpu_metrics", None],
-           ["cl_hot_functions", "gpu", "cpu", "dpc", "omp"],
+           ["cl_hot_functions", None],
            ["cl_hot_kernels", "gpu", "cpu",  "dpc", "omp"],
            ["gpu_inst_count", "cl", "ze", "dpc"],
            ["gpu_perfmon_read", "cl", "ze", "dpc"],
@@ -30,10 +30,10 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["dpc_gemm", "gpu", "cpu", "host"],
            ["dpc_info", "-a", "-l"]]
 
-tools = [["gpu_info", "-l", "-i", "-m"],
-         ["onetrace", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"],
-         ["cl_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"],
-         ["ze_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages"]]
+tools = [["gpuinfo", "-l", "-i", "-m"],
+         ["onetrace", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "cl", "ze", "omp"],
+         ["cl_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "gpu", "dpc"],
+         ["ze_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "dpc", "omp"]]
 
 def remove_python_cache(path):
   files = os.listdir(path)
