@@ -1,4 +1,4 @@
-include("../build_utils/CMakeLists.txt")
+include("../../build_utils/CMakeLists.txt")
 SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 

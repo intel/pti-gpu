@@ -1,4 +1,4 @@
-include("../build_utils/CMakeLists.txt")
+include("../../build_utils/CMakeLists.txt")
 SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
@@ -20,7 +20,7 @@ endif()
 
 add_executable(omp_gemm main.cc)
 target_include_directories(omp_gemm
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(omp_gemm
     PUBLIC "${CMAKE_INCLUDE_PATH}")

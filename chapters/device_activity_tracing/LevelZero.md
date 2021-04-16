@@ -139,3 +139,7 @@ Event pool profiling does not require any additional environment variables to be
 ## Samples
 - [Level Zero GEMM](../../samples/ze_gemm)
 - [Level Zero Hot Kernels](../../samples/ze_hot_kernels)
+
+## Tools
+- [Level Zero Tracer](../../tools/ze_tracer)
+- [Tracing and Profiling Tool for Data Parallel C++ (DPC++)](../../tools/onetrace)

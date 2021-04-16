@@ -1,4 +1,4 @@
-include("../../samples/build_utils/CMakeLists.txt")
+include("../../build_utils/CMakeLists.txt")
 SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
@@ -8,7 +8,7 @@ SetBuildType()
 
 add_executable(gpuinfo main.cc)
 target_include_directories(gpuinfo
-  PRIVATE "${PROJECT_SOURCE_DIR}/../../samples/utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(gpuinfo
     PUBLIC "${CMAKE_INCLUDE_PATH}")

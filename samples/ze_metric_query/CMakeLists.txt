@@ -1,4 +1,4 @@
-include("../build_utils/CMakeLists.txt")
+include("../../build_utils/CMakeLists.txt")
 SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
@@ -8,9 +8,9 @@ SetBuildType()
 
 # Tool Library
 
-add_library(zet_metric_query SHARED "${PROJECT_SOURCE_DIR}/../loader/init.cc" tool.cc)
+add_library(zet_metric_query SHARED "${PROJECT_SOURCE_DIR}/../../loader/init.cc" tool.cc)
 target_include_directories(zet_metric_query
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(zet_metric_query
     PUBLIC "${CMAKE_INCLUDE_PATH}")
@@ -25,9 +25,9 @@ CheckForMetricsLibrary()
 # Loader
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTOOL_NAME=zet_metric_query")
-add_executable(ze_metric_query "${PROJECT_SOURCE_DIR}/../loader/loader.cc")
+add_executable(ze_metric_query "${PROJECT_SOURCE_DIR}/../../loader/loader.cc")
 target_include_directories(ze_metric_query
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(UNIX)
   target_link_libraries(ze_metric_query
     dl)

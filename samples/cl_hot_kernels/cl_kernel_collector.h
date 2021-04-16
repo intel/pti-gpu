@@ -172,6 +172,9 @@ class ClKernelCollector {
 
   void AddKernelInfo(std::string name, uint64_t time, size_t simd_width) {
     PTI_ASSERT(!name.empty());
+    PTI_ASSERT(time > 0);
+
+    const std::lock_guard<std::mutex> lock(lock_);
     if (kernel_info_map_.count(name) == 0) {
       kernel_info_map_[name] = {time, time, time, 1, simd_width};
     } else {
@@ -191,6 +194,7 @@ class ClKernelCollector {
   void AddKernelInterval(std::string name, uint64_t start, uint64_t end) {
     PTI_ASSERT(!name.empty());
     PTI_ASSERT(start < end);
+    const std::lock_guard<std::mutex> lock(lock_);
     kernel_interval_list_.push_back({name, start, end});
   }
 

@@ -98,3 +98,7 @@ ZE_ENABLE_TRACING_LAYER=1 ./<application>
 - [Level Zero Hot Kernels](../../samples/ze_hot_kernels)
 - [Level Zero Debug Info](../../samples/ze_debug_info)
 - [Level Zero Metric Query](../../samples/ze_metric_query)
+
+## Tools
+- [Level Zero Tracer](../../tools/ze_tracer)
+- [Tracing and Profiling Tool for Data Parallel C++ (DPC++)](../../tools/onetrace)

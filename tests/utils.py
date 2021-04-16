@@ -31,14 +31,7 @@ def get_tool_build_path(name):
 
 def get_build_utils_path():
   head, tail = os.path.split(get_script_path())
-  path = os.path.join(head, "samples")
-  path = os.path.join(path, "build_utils")
-  return path
-
-def get_samples_utils_path():
-  head, tail = os.path.split(get_script_path())
-  path = os.path.join(head, "samples")
-  path = os.path.join(path, "utils")
+  path = os.path.join(head, "build_utils")
   return path
 
 def get_build_flag():

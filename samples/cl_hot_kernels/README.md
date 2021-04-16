@@ -1,6 +1,6 @@
 # OpenCL(TM) Hot Functions
 ## Overview
-This sample is a simple LD_PRELOAD based tool that allows to collect OpenCL(TM) kernels within an application along with their total execution time and call count.
+This is a simple LD_PRELOAD based tool that allows to collect OpenCL(TM) kernels within an application along with their total execution time and call count.
 
 As a result, table like the following will be printed.
 ```

@@ -13,25 +13,11 @@
 #include <mutex>
 #include <set>
 
-#include <CL/tracing_api.h>
+#include "cl_api_collector.h"
 
-#include "cl_utils.h"
-#include "pti_assert.h"
-
-// Pointers to tracing functions
-static decltype(clCreateTracingHandleINTEL)*  clCreateTracingHandle  = nullptr;
-static decltype(clSetTracingPointINTEL)*      clSetTracingPoint      = nullptr;
-static decltype(clDestroyTracingHandleINTEL)* clDestroyTracingHandle = nullptr;
-static decltype(clEnableTracingINTEL)*        clEnableTracing        = nullptr;
-static decltype(clDisableTracingINTEL)*       clDisableTracing       = nullptr;
-
-// Tracing handle
-static cl_tracing_handle tracer = nullptr;
-
-// Function maps & mutex
-static std::map<std::string, uint64_t> function_time_map;
-static std::map<std::string, uint64_t> function_count_map;
-std::mutex lock;
+static ClApiCollector* cpu_collector = nullptr;
+static ClApiCollector* gpu_collector = nullptr;
+static std::chrono::steady_clock::time_point start;
 
 // External Tool Interface ////////////////////////////////////////////////////
 
@@ -61,172 +47,110 @@ void SetToolEnv() {}
 
 // Internal Tool Functionality ////////////////////////////////////////////////
 
-static bool LoadTracingFunctions(cl_device_id device) {
-  PTI_ASSERT(device != nullptr);
+static uint64_t CalculateTotalTime(ClApiCollector* collector) {
+  PTI_ASSERT(collector != nullptr);
+  uint64_t total_duration = 0;
 
-  cl_int status = CL_SUCCESS;
-
-  cl_platform_id platform = nullptr;
-  status = clGetDeviceInfo(
-      device, CL_DEVICE_PLATFORM, sizeof(platform), &platform, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
-
-  clCreateTracingHandle =
-    reinterpret_cast<decltype(clCreateTracingHandleINTEL)*>(
-      clGetExtensionFunctionAddressForPlatform(
-        platform, "clCreateTracingHandleINTEL"));
-  clSetTracingPoint =
-    reinterpret_cast<decltype(clSetTracingPointINTEL)*>(
-      clGetExtensionFunctionAddressForPlatform(
-        platform, "clSetTracingPointINTEL"));
-  clDestroyTracingHandle =
-    reinterpret_cast<decltype(clDestroyTracingHandleINTEL)*>(
-      clGetExtensionFunctionAddressForPlatform(
-        platform, "clDestroyTracingHandleINTEL"));
-  clEnableTracing =
-    reinterpret_cast<decltype(clEnableTracingINTEL)*>(
-      clGetExtensionFunctionAddressForPlatform(
-        platform, "clEnableTracingINTEL"));
-  clDisableTracing =
-    reinterpret_cast<decltype(clDisableTracingINTEL)*>(
-      clGetExtensionFunctionAddressForPlatform(
-        platform, "clDisableTracingINTEL"));
-
-  if (clCreateTracingHandle == nullptr ||
-      clSetTracingPoint == nullptr ||
-      clDestroyTracingHandle == nullptr ||
-      clEnableTracing == nullptr ||
-      clDisableTracing == nullptr) {
-    return false;
+  const ClFunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
+  if (function_info_map.size() != 0) {
+    for (auto& value : function_info_map) {
+      total_duration += value.second.total_time;
+    }
   }
 
-  return true;
+  return total_duration;
 }
 
-static void Callback(
-    cl_function_id function,
-    cl_callback_data* callback_data,
-    void* user_data) {
-  PTI_ASSERT(callback_data != nullptr);
-  PTI_ASSERT(callback_data->correlationData != nullptr);
+static void PrintDeviceTable(
+    ClApiCollector* collector, const char* device_type) {
+  PTI_ASSERT(collector != nullptr);
+  PTI_ASSERT(device_type != nullptr);
 
-  // Get current time point
-  std::chrono::duration<uint64_t, std::nano> time =
-    std::chrono::steady_clock::now().time_since_epoch();
+  uint64_t total_duration = CalculateTotalTime(collector);
+  if (total_duration > 0) {
+    std::cerr << std::endl;
+    std::cerr << "== " << device_type << " Backend: ==" << std::endl;
+    std::cerr << std::endl;
 
-  if (callback_data->site == CL_CALLBACK_SITE_ENTER) { // Before the function
-    uint64_t& start_time = *reinterpret_cast<uint64_t*>(
-        callback_data->correlationData);
-    start_time = time.count();
-  } else { // After the function
-    uint64_t end_time = time.count();
-    uint64_t& start_time = *reinterpret_cast<uint64_t*>(
-        callback_data->correlationData);
-
-    {
-      const std::lock_guard<std::mutex> guard(lock);
-
-      if (function_time_map.count(callback_data->functionName) == 0) {
-        function_time_map[callback_data->functionName] =
-          end_time - start_time;
-      } else {
-        function_time_map[callback_data->functionName] +=
-          end_time - start_time;
-      }
-
-      if (function_count_map.count(callback_data->functionName) == 0) {
-        function_count_map[callback_data->functionName] = 1;
-      } else {
-        function_count_map[callback_data->functionName] += 1;
-      }
-    }
+    const ClFunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
+    PTI_ASSERT(function_info_map.size() > 0);
+    ClApiCollector::PrintFunctionsTable(function_info_map);
   }
 }
 
 static void PrintResults() {
-  if (function_time_map.empty()) {
+  if (cpu_collector == nullptr && gpu_collector == nullptr) {
     return;
   }
 
-  size_t function_length = 0;
-  for (auto& item : function_time_map) {
-    auto& name = item.first;
-    if (name.size() > function_length) {
-      function_length = name.size();
-    }
-  }
-  PTI_ASSERT(function_length > 0);
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  std::chrono::duration<uint64_t, std::nano> time = end - start;
 
   std::cerr << std::endl;
-  std::cerr << std::setw(function_length) << "Function" << "," <<
-      std::setw(12) << "Calls" << "," <<
-      std::setw(20) << "Time (ns)" << "," <<
-      std::setw(20) << "Average (ns)" << std::endl;
+  std::cerr << "=== API Timing Results: ===" << std::endl;
+  std::cerr << std::endl;
+  std::cerr << "Total Execution Time (ns): " << time.count() << std::endl;
 
-  for (auto& item : function_time_map) {
-    auto& name = item.first;
-    uint64_t time = item.second;
-    PTI_ASSERT(function_count_map.count(name) == 1);
-    uint64_t count = function_count_map[name];
-    std::cerr << std::setw(function_length) << name << "," <<
-      std::setw(12) << count << "," <<
-      std::setw(20) << time << "," <<
-      std::setw(20) << time / count << std::endl;
+  if (cpu_collector != nullptr) {
+    std::cerr << "Total API Time for CPU backend (ns): " <<
+      CalculateTotalTime(cpu_collector) << std::endl;
   }
+  if (gpu_collector != nullptr) {
+    std::cerr << "Total API Time for GPU backend (ns): " <<
+      CalculateTotalTime(gpu_collector) << std::endl;
+  }
+
+  if (cpu_collector != nullptr) {
+    PrintDeviceTable(cpu_collector, "CPU");
+  }
+  if (gpu_collector != nullptr) {
+    PrintDeviceTable(gpu_collector, "GPU");
+  }
+
   std::cerr << std::endl;
 }
 
 // Internal Tool Interface ////////////////////////////////////////////////////
 
 void EnableProfiling() {
-  cl_int status = CL_SUCCESS;
-
-  // Get GPU device
-  cl_device_id device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
-  if (device == nullptr) {
-    std::cerr <<
-      "[WARNING] Unable to find GPU device for tracing" << std::endl;
+  cl_device_id cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
+  cl_device_id gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
+  if (cpu_device == nullptr && gpu_device == nullptr) {
+    std::cerr << "[WARNING] Unable to find device for tracing" << std::endl;
     return;
   }
 
-  // Get pointers for tracing functions
-  bool loaded = LoadTracingFunctions(device);
-  if (!loaded) {
-    std::cerr <<
-      "[WARNING] Unable to load pointers for tracing functions" << std::endl;
-    return;
+  if (gpu_device == nullptr) {
+    std::cerr << "[WARNING] Unable to find GPU device for tracing" <<
+      std::endl;
+  }
+  if (cpu_device == nullptr) {
+    std::cerr << "[WARNING] Unable to find CPU device for tracing" <<
+      std::endl;
   }
 
-  // Create tracing handle
-  status = clCreateTracingHandle(device, Callback, nullptr, &tracer);
-  PTI_ASSERT(status == CL_SUCCESS);
-
-  // Switch on tracing for all of the functions
-  for (int fid = 0; fid < CL_FUNCTION_COUNT; ++fid) {
-    status = clSetTracingPoint(
-        tracer, static_cast<cl_function_id>(fid), CL_TRUE);
-    PTI_ASSERT(status == CL_SUCCESS);
+  if (cpu_device != nullptr) {
+    cpu_collector = ClApiCollector::Create(cpu_device);
+  }
+  if (gpu_device != nullptr) {
+    gpu_collector = ClApiCollector::Create(gpu_device);
   }
 
-  // Enable tracing
-  status = clEnableTracing(tracer);
-  PTI_ASSERT(status == CL_SUCCESS);
+  start = std::chrono::steady_clock::now();
 }
 
 void DisableProfiling() {
-  if (tracer == nullptr) {
-    return;
+  if (cpu_collector != nullptr) {
+    cpu_collector->DisableTracing();
   }
-
-  cl_int status = CL_SUCCESS;
-
-  // Disable tracing
-  status = clDisableTracing(tracer);
-  PTI_ASSERT(status == CL_SUCCESS);
-
-  // Destroy tracing handle
-  status = clDestroyTracingHandle(tracer);
-  PTI_ASSERT(status == CL_SUCCESS);
-
+  if (gpu_collector != nullptr) {
+    gpu_collector->DisableTracing();
+  }
   PrintResults();
+  if (cpu_collector != nullptr) {
+    delete cpu_collector;
+  }
+  if (gpu_collector != nullptr) {
+    delete gpu_collector;
+  }
 }

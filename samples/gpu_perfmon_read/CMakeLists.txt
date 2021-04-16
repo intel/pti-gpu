@@ -1,4 +1,4 @@
-include("../build_utils/CMakeLists.txt")
+include("../../build_utils/CMakeLists.txt")
 SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
@@ -8,9 +8,9 @@ SetBuildType()
 
 # Tool Library
 
-add_library(gput_perfmon_read SHARED "${PROJECT_SOURCE_DIR}/../loader/init.cc" tool.cc)
+add_library(gput_perfmon_read SHARED "${PROJECT_SOURCE_DIR}/../../loader/init.cc" tool.cc)
 target_include_directories(gput_perfmon_read
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(gput_perfmon_read
     PUBLIC "${CMAKE_INCLUDE_PATH}")
@@ -25,9 +25,9 @@ GetGTPinHeaders(gput_perfmon_read)
 # Loader
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTOOL_NAME=gput_perfmon_read")
-add_executable(gpu_perfmon_read "${PROJECT_SOURCE_DIR}/../loader/loader.cc")
+add_executable(gpu_perfmon_read "${PROJECT_SOURCE_DIR}/../../loader/loader.cc")
 target_include_directories(gpu_perfmon_read
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(UNIX)
   target_link_libraries(gpu_perfmon_read
     dl)

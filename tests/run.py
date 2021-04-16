@@ -11,8 +11,8 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["cl_gemm_itt", "gpu", "cpu"],
            ["cl_debug_info", None],
            ["cl_gpu_metrics", None],
-           ["cl_hot_functions", None],
-           ["cl_hot_kernels", "gpu", "cpu",  "dpc", "omp"],
+           ["cl_hot_functions", "cpu", "gpu", "dpc", "omp"],
+           ["cl_hot_kernels", "cpu", "gpu", "dpc", "omp"],
            ["gpu_inst_count", "cl", "ze", "dpc"],
            ["gpu_perfmon_read", "cl", "ze", "dpc"],
            ["gpu_perfmon_set", None],
@@ -32,7 +32,7 @@ samples = [["cl_gemm", "gpu", "cpu"],
 
 tools = [["gpuinfo", "-l", "-i", "-m"],
          ["onetrace", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "cl", "ze", "omp"],
-         ["cl_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "gpu", "dpc"],
+         ["cl_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "gpu", "dpc", "omp"],
          ["ze_tracer", "-c", "-h", "-d", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "dpc", "omp"]]
 
 def remove_python_cache(path):
@@ -58,6 +58,8 @@ def clean():
 
   remove_python_cache(utils.get_build_utils_path())
   remove_python_cache(utils.get_script_path())
+  remove_python_cache(os.path.join(utils.get_script_path(), "samples"))
+  remove_python_cache(os.path.join(utils.get_script_path(), "tools"))
 
   for root, subdirs, files in os.walk(utils.get_root_path()):
     for file in files:
@@ -76,8 +78,13 @@ def test(f, name, option, istool = False):
     else:
       sys.stdout.write("Running sample test for " + name + "...")
   sys.stdout.flush()
-  module = importlib.import_module(name)
+
+  if istool:
+    module = importlib.import_module("tools." + name)
+  else:
+    module = importlib.import_module("samples." + name)
   log = module.main(option)
+
   if log:
     sys.stdout.write("FAILED\n")
     if option:

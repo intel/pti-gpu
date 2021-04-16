@@ -1,4 +1,4 @@
-include("../build_utils/CMakeLists.txt")
+include("../../build_utils/CMakeLists.txt")
 SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
@@ -16,7 +16,7 @@ CheckForOMPTHeaders()
 
 add_library(omp_hot_regions SHARED tool.cc)
 target_include_directories(omp_hot_regions
-  PRIVATE "${PROJECT_SOURCE_DIR}/../utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(omp_hot_regions
     PUBLIC "${CMAKE_INCLUDE_PATH}")
