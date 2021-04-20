@@ -6,15 +6,16 @@ The following capabilities are available currently:
 ```
 Usage: ./ze_tracer[.exe] [options] <application> <args>
 Options:
---call-logging [-c]       Trace host API calls
---host-timing  [-h]       Report host API execution time
---device-timing [-d]      Report kernels execution time
---device-timeline [-t]    Trace device activities
---chrome-call-logging     Dump host API calls to JSON file
---chrome-device-timeline  Dump device activities to JSON file
---chrome-device-stages    Dump device activities by stages to JSON file
---tid                     Print thread ID into host API trace
---pid                     Print process ID into host API and device activity trace
+--call-logging [-c]            Trace host API calls
+--host-timing  [-h]            Report host API execution time
+--device-timing [-d]           Report kernels execution time
+--device-timing-verbose [-v]   Report kernels execution time with SIMD width and global/local sizes
+--device-timeline [-t]         Trace device activities
+--chrome-call-logging          Dump host API calls to JSON file
+--chrome-device-timeline       Dump device activities to JSON file
+--chrome-device-stages         Dump device activities by stages to JSON file
+--tid                          Print thread ID into host API trace
+--pid                          Print process ID into host API and device activity trace
 ```
 
 **Call Logging** mode allows to grab full host API trace, e.g.:
@@ -48,14 +49,29 @@ zeCommandQueueExecuteCommandLists,           4,           108593458,     26.66, 
 ```
 === Device Timing Results: ===
 
-Total Execution Time (ns):    376807360
-   Total Device Time (ns):    178294707
+Total Execution Time (ns):             95693944
+   Total Device Time (ns):              2470823
 
-                       Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
-                         GEMM,           4,   32,                   0,           173655671,     97.40,            43413917,            43343928,            43517564
-zeCommandListAppendMemoryCopy,          12,    0,            50331648,             4639036,      2.60,              386586,              271742,              553610
+                       Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+                         GEMM,           4,             2202998,     89.16,              550749,              509666,              578833
+zeCommandListAppendMemoryCopy,          12,              257495,     10.42,               21457,               12666,               50166
+   zeCommandListAppendBarrier,           8,               10330,      0.42,                1291,                1166,                1500
 ...
 ```
+**Device Timing Verbose** mode provides additional information per kernel (SIMD width, group count and group size) and per transfer (bytes transferred):
+```
+=== Device Timing Results: ===
+
+Total Execution Time (ns):             95831439
+   Total Device Time (ns):              2414157
+
+                                     Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+     GEMM[SIMD32, {1, 256, 1}, {256, 1, 1}],           4,             2155831,     89.30,              538957,              508666,              606166
+zeCommandListAppendMemoryCopy[262144 bytes],           8,              213831,      8.86,               26728,               12500,               49833
+zeCommandListAppendMemoryCopy[131072 bytes],           4,               34499,      1.43,                8624,                8000,               10000
+                 zeCommandListAppendBarrier,           8,                9996,      0.41,                1249,                1166,                1333
+```
+
 **Device Timeline** mode (***Linux kernel 5.0+ is required for accurate measurements***) dumps four timestamps for each device activity - *append* to the command list, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
 ```
 Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 396835703 (append) 398002195 (submit) 399757026 (start) 400230526 (end)

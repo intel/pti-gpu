@@ -111,7 +111,7 @@ ZET_ENABLE_PROGRAM_INSTRUMENTATION=1
 ## Usage Details
 - refer to [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html) project page to learn more on binary instrumentation techniques for Intel(R) Processor Graphics
 - refer to
-[Compute Architecture Manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides) to learn more on Intel(R) Processor Graphics architecture
+[Compute Architecture Manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides) to learn more on Intel(R) Processor Graphics Architecture
 - refer to the paper [Introduction to GEN Assembly](https://software.intel.com/en-us/articles/introduction-to-gen-assembly) to learn more on Intel(R) Processor Graphics instruction set
 
 ## Samples

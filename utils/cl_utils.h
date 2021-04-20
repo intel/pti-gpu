@@ -217,20 +217,7 @@ inline bool CheckExtension(cl_device_id device, const char* extension) {
   return false;
 }
 
-inline size_t GetKernelLocalSize(cl_device_id device, cl_kernel kernel) {
-  PTI_ASSERT(device != nullptr && kernel != nullptr);
-
-  size_t local_size = 0;
-  cl_int status = clGetKernelWorkGroupInfo(
-      kernel, device, CL_KERNEL_WORK_GROUP_SIZE,
-      sizeof(size_t), &local_size, nullptr);
-  PTI_ASSERT(status == CL_SUCCESS);
-
-  return local_size;
-}
-
-inline size_t GetSimdWidth(
-    cl_device_id device, cl_kernel kernel, size_t local_size[3]) {
+inline size_t GetKernelSimdWidth(cl_device_id device, cl_kernel kernel) {
   PTI_ASSERT(device != nullptr && kernel != nullptr);
   cl_int status = CL_SUCCESS;
 
@@ -255,6 +242,8 @@ inline size_t GetSimdWidth(
         clGetExtensionFunctionAddressForPlatform(
             platform, "clGetKernelSubGroupInfoKHR"));
   PTI_ASSERT(func != nullptr);
+
+  size_t local_size[3]{0, 0, 0};
 
   size_t simd_width = 0;
   status = func(

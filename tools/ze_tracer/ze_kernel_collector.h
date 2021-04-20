@@ -26,17 +26,29 @@ struct ZeSubmitData {
   uint64_t device_sync;
 };
 
+struct ZeKernelGroupSize {
+  uint32_t x;
+  uint32_t y;
+  uint32_t z;
+};
+
+struct ZeKernelProps {
+  size_t simd_width;
+  size_t bytes_transferred;
+  uint32_t group_count[3];
+  uint32_t group_size[3];
+};
+
 struct ZeKernelInstance {
   std::string name;
   uint64_t kernel_id;
-  size_t simd_width;
-  size_t bytes_transferred;
   void* queue;
   ze_event_pool_handle_t event_pool;
   ze_event_handle_t event;
   uint64_t append_time;
   uint64_t submit_time;
   uint64_t device_submit_time;
+  ZeKernelProps props;
 };
 
 struct ZeKernelInfo {
@@ -44,8 +56,6 @@ struct ZeKernelInfo {
   uint64_t min_time;
   uint64_t max_time;
   uint64_t call_count;
-  size_t simd_width;
-  size_t bytes_transferred;
 
   bool operator>(const ZeKernelInfo& r) const {
     if (total_time != r.total_time) {
@@ -74,6 +84,7 @@ struct ZeCommandListInfo {
   bool immediate;
 };
 
+using ZeKernelGroupSizeMap = std::map<ze_kernel_handle_t, ZeKernelGroupSize>;
 using ZeKernelInfoMap = std::map<std::string, ZeKernelInfo>;
 using ZeKernelIntervalList = std::vector<ZeKernelInterval>;
 using ZeCommandListMap = std::map<ze_command_list_handle_t, ZeCommandListInfo>;
@@ -90,11 +101,12 @@ class ZeKernelCollector {
 
   static ZeKernelCollector* Create(
       Correlator* correlator,
+      bool verbose,
       OnZeKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(correlator != nullptr);
     ZeKernelCollector* collector = new ZeKernelCollector(
-        correlator, callback, callback_data);
+        correlator, verbose, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
@@ -132,9 +144,6 @@ class ZeKernelCollector {
 
     std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
       std::setw(kCallsLength) << "Calls" << "," <<
-      std::setw(kSimdLength) << "SIMD" << "," <<
-      std::setw(kTransferredLength) <<
-        "Transferred (bytes)" << "," <<
       std::setw(kTimeLength) << "Time (ns)" << "," <<
       std::setw(kPercentLength) << "Time (%)" << "," <<
       std::setw(kTimeLength) << "Average (ns)" << "," <<
@@ -144,8 +153,6 @@ class ZeKernelCollector {
     for (auto& value : sorted_list) {
       const std::string& function = value.first;
       uint64_t call_count = value.second.call_count;
-      size_t simd_width = value.second.simd_width;
-      size_t bytes_transferred = value.second.bytes_transferred;
       uint64_t duration = value.second.total_time;
       uint64_t avg_duration = duration / call_count;
       uint64_t min_duration = value.second.min_time;
@@ -153,9 +160,6 @@ class ZeKernelCollector {
       float percent_duration = 100.0f * duration / total_duration;
       std::cerr << std::setw(max_name_length) << function << "," <<
         std::setw(kCallsLength) << call_count << "," <<
-        std::setw(kSimdLength) << simd_width << "," <<
-        std::setw(kTransferredLength) <<
-          bytes_transferred << "," <<
         std::setw(kTimeLength) << duration << "," <<
         std::setw(kPercentLength) << std::setprecision(2) <<
           std::fixed << percent_duration << "," <<
@@ -191,9 +195,11 @@ class ZeKernelCollector {
 
   ZeKernelCollector(
       Correlator* correlator,
+      bool verbose,
       OnZeKernelFinishCallback callback,
       void* callback_data)
       : correlator_(correlator),
+        verbose_(verbose),
         callback_(callback),
         callback_data_(callback_data),
         timer_frequency_(utils::i915::GetGpuTimerFrequency()),
@@ -314,6 +320,11 @@ class ZeKernelCollector {
     epilogue_callbacks.Image.pfnDestroyCb =
       OnExitImageDestroy;
 
+    epilogue_callbacks.Kernel.pfnSetGroupSizeCb =
+      OnExitKernelSetGroupSize;
+    epilogue_callbacks.Kernel.pfnDestroyCb =
+      OnExitKernelDestroy;
+
     epilogue_callbacks.Event.pfnHostSynchronizeCb =
       OnExitEventHostSynchronize;
 
@@ -394,11 +405,9 @@ class ZeKernelCollector {
     uint64_t host_start = instance.submit_time + time_shift;
     uint64_t host_end = host_start + duration;
 
-    AddKernelInfo(instance.name, host_end - host_start,
-                  instance.simd_width,
-                  instance.bytes_transferred);
+    AddKernelInfo(instance.name, host_end - host_start, &instance.props);
 
-    if (instance.simd_width > 0) { // User kernels only
+    if (instance.props.simd_width > 0) { // User kernels only
       uint64_t start_ns = start *
         static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
       uint64_t end_ns = start_ns + duration;
@@ -447,12 +456,29 @@ class ZeKernelCollector {
   }
 
   void AddKernelInfo(
-      std::string name, uint64_t time,
-      size_t simd_width, size_t bytes_transferred) {
+      std::string name, uint64_t time, const ZeKernelProps* props) {
     PTI_ASSERT(!name.empty());
+    PTI_ASSERT(props != nullptr);
+
+    if (verbose_) {
+      if (props->simd_width > 0) {
+        std::stringstream sstream;
+        sstream << name << "[SIMD" << props->simd_width << ", {" <<
+          props->group_count[0] << ", " <<
+          props->group_count[1] << ", " <<
+          props->group_count[2] << "}, {" <<
+          props->group_size[0] << ", " <<
+          props->group_size[1] << ", " <<
+          props->group_size[2] << "}]";
+        name = sstream.str();
+      } else if (props->bytes_transferred > 0) {
+        name = name + "[" +
+          std::to_string(props->bytes_transferred) + " bytes]";
+      }
+    }
+
     if (kernel_info_map_.count(name) == 0) {
-      kernel_info_map_[name] = {
-        time, time, time, 1, simd_width, bytes_transferred};
+      kernel_info_map_[name] = {time, time, time, 1};
     } else {
       ZeKernelInfo& kernel = kernel_info_map_[name];
       kernel.total_time += time;
@@ -463,8 +489,6 @@ class ZeKernelCollector {
         kernel.min_time = time;
       }
       kernel.call_count += 1;
-      kernel.bytes_transferred += bytes_transferred;
-      kernel.simd_width = std::max(kernel.simd_width, simd_width);
     }
   }
 
@@ -563,6 +587,28 @@ class ZeKernelCollector {
       return image_size_map_[image];
     }
     return 0;
+  }
+
+  void AddKernelGroupSize(
+      ze_kernel_handle_t kernel, const ZeKernelGroupSize& group_size) {
+    PTI_ASSERT(kernel != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    kernel_group_size_map_[kernel] = group_size;
+  }
+
+  void RemoveKernelGroupSize(ze_kernel_handle_t kernel) {
+    PTI_ASSERT(kernel != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    kernel_group_size_map_.erase(kernel);
+  }
+
+  ZeKernelGroupSize GetKernelGroupSize(ze_kernel_handle_t kernel) {
+    PTI_ASSERT(kernel != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    if (kernel_group_size_map_.count(kernel) == 0) {
+      return {0, 0, 0};
+    }
+    return kernel_group_size_map_[kernel];
   }
 
  private: // Callbacks
@@ -709,9 +755,12 @@ class ZeKernelCollector {
   }
 
   static void OnEnterKernelAppend(
-      std::string name, size_t simd_width, size_t bytes_transferred,
-      ze_event_handle_t& signal_event, ze_command_list_handle_t command_list,
-      void* global_data, void** instance_data) {
+      std::string name,
+      const ZeKernelProps& props,
+      ze_event_handle_t& signal_event,
+      ze_command_list_handle_t command_list,
+      void* global_data,
+      void** instance_data) {
     PTI_ASSERT(!name.empty());
 
     ZeKernelCollector* collector =
@@ -724,12 +773,11 @@ class ZeKernelCollector {
 
     ZeKernelInstance* instance = new ZeKernelInstance;
     instance->name = name;
-    instance->bytes_transferred = bytes_transferred;
-    instance->simd_width = simd_width;
+    instance->props = props;
     instance->append_time = collector->GetTimestamp();
 
     if (collector->IsCommandListImmediate(command_list)) {
-      instance->submit_time = collector->GetTimestamp();
+      instance->submit_time = instance->append_time;
       instance->device_submit_time = collector->GetDeviceTimestamp();
       instance->queue = command_list;
     } else {
@@ -751,14 +799,55 @@ class ZeKernelCollector {
     *instance_data = static_cast<void*>(instance);
   }
 
+  static ZeKernelProps GetKernelProps(
+      ze_kernel_handle_t kernel,
+      const ze_group_count_t* group_count,
+      void* global_data) {
+    PTI_ASSERT(kernel != nullptr);
+
+    ZeKernelProps props{0};
+
+    props.simd_width =
+      utils::ze::GetKernelMaxSubgroupSize(kernel);
+    props.bytes_transferred = 0;
+
+    ZeKernelCollector* collector =
+        reinterpret_cast<ZeKernelCollector*>(global_data);
+    PTI_ASSERT(collector != nullptr);
+    ZeKernelGroupSize group_size = collector->GetKernelGroupSize(kernel);
+
+    props.group_size[0] = group_size.x;
+    props.group_size[1] = group_size.y;
+    props.group_size[2] = group_size.z;
+
+    if (group_count != nullptr) {
+      props.group_count[0] = group_count->groupCountX;
+      props.group_count[1] = group_count->groupCountY;
+      props.group_count[2] = group_count->groupCountZ;
+    }
+
+    return props;
+  }
+
+  static ZeKernelProps GetTransferProps(size_t bytes_transferred) {
+    ZeKernelProps props{0};
+    props.bytes_transferred = bytes_transferred;
+    return props;
+  }
+
   static void OnEnterCommandListAppendLaunchKernel(
       ze_command_list_append_launch_kernel_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
     OnEnterKernelAppend(
         utils::ze::GetKernelName(*(params->phKernel)),
-        utils::ze::GetKernelMaxSubgroupSize(*(params->phKernel)),
-        0, *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        GetKernelProps(
+            *(params->phKernel),
+            *(params->ppLaunchFuncArgs),
+            global_data),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnEnterCommandListAppendLaunchCooperativeKernel(
@@ -766,9 +855,14 @@ class ZeKernelCollector {
       ze_result_t result, void* global_data, void** instance_data) {
     OnEnterKernelAppend(
         utils::ze::GetKernelName(*(params->phKernel)),
-        utils::ze::GetKernelMaxSubgroupSize(*(params->phKernel)),
-        0, *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        GetKernelProps(
+            *(params->phKernel),
+            *(params->ppLaunchFuncArgs),
+            global_data),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnEnterCommandListAppendLaunchKernelIndirect(
@@ -776,69 +870,97 @@ class ZeKernelCollector {
       ze_result_t result, void* global_data, void** instance_data) {
     OnEnterKernelAppend(
         utils::ze::GetKernelName(*(params->phKernel)),
-        utils::ze::GetKernelMaxSubgroupSize(*(params->phKernel)),
-        0, *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        GetKernelProps(
+            *(params->phKernel),
+            *(params->ppLaunchArgumentsBuffer),
+            global_data),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnEnterCommandListAppendMemoryCopy(
       ze_command_list_append_memory_copy_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
     OnEnterKernelAppend(
-        "zeCommandListAppendMemoryCopy", 0, *(params->psize),
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        "zeCommandListAppendMemoryCopy",
+        GetTransferProps(*(params->psize)),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnEnterCommandListAppendMemoryFill(
       ze_command_list_append_memory_fill_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
     OnEnterKernelAppend(
-        "zeCommandListAppendMemoryFill", 0, *(params->psize),
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
-  }
-
-  static void OnEnterCommandListAppendBarrier(
-      ze_command_list_append_barrier_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
-    OnEnterKernelAppend(
-        "zeCommandListAppendBarrier", 0, 0,
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
-  }
-
-  static void OnEnterCommandListAppendMemoryRangesBarrier(
-      ze_command_list_append_memory_ranges_barrier_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
-    OnEnterKernelAppend(
-        "zeCommandListAppendMemoryRangesBarrier", 0, 0,
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
-  }
-
-  static void OnEnterCommandListAppendMemoryCopyRegion(
-      ze_command_list_append_memory_copy_region_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
-    ze_copy_region_t region = **(params->psrcRegion);
-    size_t bytes_transferred =
-      region.width * region.height * (*(params->psrcPitch));
-    if (region.depth != 0) {
-      bytes_transferred *= region.depth;
-    }
-    OnEnterKernelAppend(
-        "zeCommandListAppendMemoryCopyRegion", 0, bytes_transferred,
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        "zeCommandListAppendMemoryFill",
+        GetTransferProps(*(params->psize)),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnEnterCommandListAppendMemoryCopyFromContext(
       ze_command_list_append_memory_copy_from_context_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
     OnEnterKernelAppend(
-        "zeCommandListAppendMemoryCopyFromContext", 0, *(params->psize),
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        "zeCommandListAppendMemoryCopyFromContext",
+        GetTransferProps(*(params->psize)),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
+  }
+
+  static void OnEnterCommandListAppendBarrier(
+      ze_command_list_append_barrier_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    OnEnterKernelAppend(
+        "zeCommandListAppendBarrier",
+        GetTransferProps(0),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
+  }
+
+  static void OnEnterCommandListAppendMemoryRangesBarrier(
+      ze_command_list_append_memory_ranges_barrier_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    OnEnterKernelAppend(
+        "zeCommandListAppendMemoryRangesBarrier",
+        GetTransferProps(0),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
+  }
+
+  static void OnEnterCommandListAppendMemoryCopyRegion(
+      ze_command_list_append_memory_copy_region_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    size_t bytes_transferred = 0;
+    const ze_copy_region_t* region = *(params->psrcRegion);
+
+    if (region != nullptr) {
+      size_t bytes_transferred =
+        region->width * region->height * (*(params->psrcPitch));
+      if (region->depth != 0) {
+        bytes_transferred *= region->depth;
+      }
+    }
+
+    OnEnterKernelAppend(
+        "zeCommandListAppendMemoryCopyRegion",
+        GetTransferProps(bytes_transferred),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnEnterCommandListAppendImageCopy(
@@ -847,11 +969,15 @@ class ZeKernelCollector {
     ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
     PTI_ASSERT(collector != nullptr);
+    size_t bytes_transferred = collector->GetImageSize(*(params->phSrcImage));
+
     OnEnterKernelAppend(
         "zeCommandListAppendImageCopy",
-        0, collector->GetImageSize(*(params->phSrcImage)),
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        GetTransferProps(bytes_transferred),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnEnterCommandListAppendImageCopyRegion(
@@ -860,11 +986,15 @@ class ZeKernelCollector {
     ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
     PTI_ASSERT(collector != nullptr);
+    size_t bytes_transferred = collector->GetImageSize(*(params->phSrcImage));
+
     OnEnterKernelAppend(
         "zeCommandListAppendImageCopyRegion",
-        0, collector->GetImageSize(*(params->phSrcImage)),
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        GetTransferProps(bytes_transferred),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnEnterCommandListAppendImageCopyToMemory(
@@ -873,26 +1003,37 @@ class ZeKernelCollector {
     ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
     PTI_ASSERT(collector != nullptr);
+    size_t bytes_transferred = collector->GetImageSize(*(params->phSrcImage));
+
     OnEnterKernelAppend(
         "zeCommandListAppendImageCopyToMemory",
-        0, collector->GetImageSize(*(params->phSrcImage)),
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        GetTransferProps(bytes_transferred),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnEnterCommandListAppendImageCopyFromMemory(
       ze_command_list_append_image_copy_from_memory_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
-    ze_image_region_t region_desc = **(params->ppDstRegion);
-    size_t bytes_transferred =
-      region_desc.width * region_desc.height;
-    if (region_desc.depth != 0) {
-      bytes_transferred *= region_desc.depth;
+    size_t bytes_transferred = 0;
+    const ze_image_region_t* region = *(params->ppDstRegion);
+
+    if (region != nullptr) {
+      bytes_transferred = region->width * region->height;
+      if (region->depth != 0) {
+        bytes_transferred *= region->depth;
+      }
     }
+
     OnEnterKernelAppend(
-        "zeCommandListAppendImageCopyFromMemory", 0, bytes_transferred,
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
+        "zeCommandListAppendImageCopyFromMemory",
+        GetTransferProps(bytes_transferred),
+        *(params->phSignalEvent),
+        *(params->phCommandList),
+        global_data,
+        instance_data);
   }
 
   static void OnExitKernelAppend(
@@ -1141,8 +1282,36 @@ class ZeKernelCollector {
     }
   }
 
+  static void OnExitKernelSetGroupSize(
+      ze_kernel_set_group_size_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeKernelCollector* collector =
+        reinterpret_cast<ZeKernelCollector*>(global_data);
+      PTI_ASSERT(collector != nullptr);
+      ZeKernelGroupSize group_size{
+          *(params->pgroupSizeX),
+          *(params->pgroupSizeY),
+          *(params->pgroupSizeZ)};
+      collector->AddKernelGroupSize(*(params->phKernel), group_size);
+    }
+  }
+
+  static void OnExitKernelDestroy(
+      ze_kernel_destroy_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeKernelCollector* collector =
+        reinterpret_cast<ZeKernelCollector*>(global_data);
+      PTI_ASSERT(collector != nullptr);
+      collector->RemoveKernelGroupSize(*(params->phKernel));
+    }
+  }
+
  private: // Data
   zel_tracer_handle_t tracer_ = nullptr;
+
+  bool verbose_ = false;
 
   uint64_t timer_frequency_ = 0;
   Correlator* correlator_ = nullptr;
@@ -1157,11 +1326,10 @@ class ZeKernelCollector {
   std::list<ZeKernelInstance> kernel_instance_list_;
   ZeCommandListMap command_list_map_;
   ZeImageSizeMap image_size_map_;
+  ZeKernelGroupSizeMap kernel_group_size_map_;
 
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;
-  static const uint32_t kSimdLength = 5;
-  static const uint32_t kTransferredLength = 20;
   static const uint32_t kTimeLength = 20;
   static const uint32_t kPercentLength = 10;
 };

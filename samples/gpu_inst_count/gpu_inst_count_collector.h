@@ -97,11 +97,6 @@ class GpuInstCountCollector {
   GpuInstCountCollector() {
     utils::gtpin::KnobAddBool("silent_warnings", false);
 
-    if (!utils::GetEnv("PTI_GEN12").empty()) {
-      std::cerr << "[INFO] Experimental GTPin mode: GEN12" << std::endl;
-      utils::gtpin::KnobAddBool("gen12_1", true);
-    }
-
     GTPin_OnKernelBuild(OnKernelBuild, this);
     GTPin_OnKernelRun(OnKernelRun, this);
     GTPin_OnKernelComplete(OnKernelComplete, this);

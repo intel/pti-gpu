@@ -4,7 +4,7 @@ oneAPI Level Zero runtime provides a set of API to collect hardware metrics for 
 
 Each **metric** represents one aspect of GPU performance behaviour and has a unique name, e.g. "EuActive" metric shows the percentage of time GPU execution units were active, "L3Misses" gives the number of L3 cache misses, and "GtiReadThroughput" collects an average throughput while reading data through GTI.
 
-To learn more on Intel(R) Processor Graphics architecture one may refer to [compute architecture manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides).
+To learn more on Intel(R) Processor Graphics Architecture one may refer to [compute architecture manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides).
 
 There are two types of metrics - one should be used for continuous collection and another for query-based.
 

@@ -6,15 +6,16 @@ The following capabilities are available:
 ```
 Usage: ./onetrace[.exe] [options] <application> <args>
 Options:
---call-logging [-c]       Trace host API calls
---host-timing  [-h]       Report host API execution time
---device-timing [-d]      Report kernels execution time
---device-timeline [-t]    Trace device activities
---chrome-call-logging     Dump host API calls to JSON file
---chrome-device-timeline  Dump device activities to JSON file
---chrome-device-stages    Dump device activities by stages to JSON file
---tid                     Print thread ID into host API trace
---pid                     Print process ID into host API and device activity trace
+--call-logging [-c]            Trace host API calls
+--host-timing  [-h]            Report host API execution time
+--device-timing [-d]           Report kernels execution time
+--device-timing-verbose [-v]   Report kernels execution time with SIMD width and global/local sizes
+--device-timeline [-t]         Trace device activities
+--chrome-call-logging          Dump host API calls to JSON file
+--chrome-device-timeline       Dump device activities to JSON file
+--chrome-device-stages         Dump device activities by stages to JSON file
+--tid                          Print thread ID into host API trace
+--pid                          Print process ID into host API and device activity trace
 ```
 
 **Call Logging** mode allows to grab full host API trace, e.g.:
@@ -69,17 +70,32 @@ clGetPlatformInfo,           2,                1452,     20.40,                 
 ```
 === Device Timing Results: ===
 
-                Total Execution Time (ns):    362771691
-Total Device Time for CL GPU backend (ns):    176849013
+                Total Execution Time (ns):            377704260
+Total Device Time for CL GPU backend (ns):            177959198
 
 == CL GPU Backend: ==
 
-              Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
-                GEMM,           4,   32,                   0,           171239582,     96.83,            42809895,            42567333,            43121083
-clEnqueueWriteBuffer,           8,    0,            33554432,             3362082,      1.90,              420260,              298500,              532500
- clEnqueueReadBuffer,           4,    0,            16777216,             2247349,      1.27,              561837,              556520,              565134
+              Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+                GEMM,           4,           172599165,     96.99,            43149791,            43075500,            43236833
+clEnqueueWriteBuffer,           8,             3117997,      1.75,              389749,              298666,              506916
+ clEnqueueReadBuffer,           4,             2242036,      1.26,              560509,              554136,              563793
 ...
 ```
+**Device Timing Verbose** mode provides additional information per kernel (SIMD width, group count and group size for oneAPI Level Zero (Level Zero) and SIMD width, global and local size for OpenCL(TM)) and per transfer (bytes transferred):
+```
+=== Device Timing Results: ===
+
+                Total Execution Time (ns):            392681085
+Total Device Time for CL GPU backend (ns):            177544981
+
+== CL GPU Backend: ==
+
+                                  Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+GEMM[SIMD32, {1024, 1024, 1}, {0, 0, 0}],           4,           172101915,     96.93,            43025478,            42804333,            43375416
+     clEnqueueWriteBuffer[4194304 bytes],           8,             3217914,      1.81,              402239,              277416,              483750
+      clEnqueueReadBuffer[4194304 bytes],           4,             2225152,      1.25,              556288,              527122,              570898
+```
+
 **Device Timeline** mode dumps four timestamps for each device activity - *queued* to the host command queue for OpenCL(TM) or "append" to the command list for Level Zero, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
 ```
 ...

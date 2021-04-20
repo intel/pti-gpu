@@ -132,10 +132,5 @@ set PATH=%PATH%;<gtpin>\Profilers\Lib\intel64
 set PATH=%PATH%;<iga_dll_path>
 gpu_perfmon_read.exe ..\..\cl_gemm\build\cl_gemm.exe
 ```
-### Additional Notes
-GEN12 is currently supported in an experimental mode. To enable it, use the environment variable `PTI_GEN12`:
-```sh
-PTI_GEN12=1 ./gpu_perfmon_read[.exe] <target_application>
-```
 
 One may use [gpu_perfmon_set](../gpu_perfmon_set) utility to tune PM register on some particular event collection prior to run this tool, two terminals opened at the same time may be required (**not supported on Windows currently**).

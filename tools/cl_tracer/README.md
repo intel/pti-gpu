@@ -6,15 +6,16 @@ The following capabilities are available currently:
 ```
 Usage: ./cl_tracer[.exe] [options] <application> <args>
 Options:
---call-logging [-c]       Trace host API calls
---host-timing  [-h]       Report host API execution time
---device-timing [-d]      Report kernels execution time
---device-timeline [-t]    Trace device activities
---chrome-call-logging     Dump host API calls to JSON file
---chrome-device-timeline  Dump device activities to JSON file
---chrome-device-stages    Dump device activities by stages to JSON file
---tid                     Print thread ID into host API trace
---pid                     Print process ID into host API and device activity trace
+--call-logging [-c]            Trace host API calls
+--host-timing  [-h]            Report host API execution time
+--device-timing [-d]           Report kernels execution time
+--device-timing-verbose [-v]   Report kernels execution time with SIMD width and global/local sizes
+--device-timeline [-t]         Trace device activities
+--chrome-call-logging          Dump host API calls to JSON file
+--chrome-device-timeline       Dump device activities to JSON file
+--chrome-device-stages         Dump device activities by stages to JSON file
+--tid                          Print thread ID into host API trace
+--pid                          Print process ID into host API and device activity trace
 ```
 
 **Call Logging** mode allows to grab full host API trace, e.g.:
@@ -58,18 +59,34 @@ clGetDeviceIDs,           1,               16851,    100.00,               16851
 ```
 === Device Timing Results: ===
 
-             Total Execution Time (ns):    366500174
-Total Device Time for CPU backend (ns):            0
-Total Device Time for GPU backend (ns):    180543441
+             Total Execution Time (ns):            375937416
+Total Device Time for CPU backend (ns):                    0
+Total Device Time for GPU backend (ns):            176740729
 
 == GPU Backend: ==
 
-              Kernel,       Calls, SIMD, Transferred (bytes),           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
-                GEMM,           4,   32,                   0,           174210248,     96.49,            43552562,            42764416,            43851333
-clEnqueueWriteBuffer,           8,    0,            33554432,             3683507,      2.04,              460438,              355983,              584325
- clEnqueueReadBuffer,           4,    0,            16777216,             2649686,      1.47,              662421,              607215,              702940
+              Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+                GEMM,           4,           171231415,     96.88,            42807853,            42778416,            42843666
+clEnqueueWriteBuffer,           8,             3256330,      1.84,              407041,              287916,              548416
+ clEnqueueReadBuffer,           4,             2252984,      1.27,              563246,              558973,              567022
 ...
 ```
+**Device Timing Verbose** mode provides additional information per kernel (SIMD width, global and local size) and per transfer (bytes transferred):
+```
+=== Device Timing Results: ===
+
+             Total Execution Time (ns):            377460265
+Total Device Time for CPU backend (ns):                    0
+Total Device Time for GPU backend (ns):            177372573
+
+== GPU Backend: ==
+
+                                  Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
+GEMM[SIMD32, {1024, 1024, 1}, {0, 0, 0}],           4,           171844666,     96.88,            42961166,            42911500,            43056666
+     clEnqueueWriteBuffer[4194304 bytes],           8,             3166997,      1.79,              395874,              308666,              551833
+      clEnqueueReadBuffer[4194304 bytes],           4,             2360910,      1.33,              590227,              568817,              617947
+```
+
 **Device Timeline** mode dumps four timestamps for each device activity - *queued* to the host command queue, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
 ```
 ...

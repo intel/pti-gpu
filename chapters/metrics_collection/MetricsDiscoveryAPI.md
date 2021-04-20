@@ -292,7 +292,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path_to_libmd.so> ./<application>
 ## Usage Details
 - refer to the Intel(R) Metrics Discovery Application Programming Interface project [page](https://github.com/intel/metrics-discovery) to learn more on metrics collection for Intel(R) Processor Graphics
 - refer to
-[Compute Architecture Manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides) to learn more on Intel(R) Processor Graphics architecture
+[Compute Architecture Manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides) to learn more on Intel(R) Processor Graphics Architecture
 
 ## Samples
 - [GPU Metrics for OpenCL(TM)](../../samples/cl_gpu_metrics)

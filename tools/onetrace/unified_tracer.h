@@ -26,12 +26,13 @@
 #define ONETRACE_CALL_LOGGING           0
 #define ONETRACE_HOST_TIMING            1
 #define ONETRACE_DEVICE_TIMING          2
-#define ONETRACE_DEVICE_TIMELINE        3
-#define ONETRACE_CHROME_CALL_LOGGING    4
-#define ONETRACE_CHROME_DEVICE_TIMELINE 5
-#define ONETRACE_CHROME_DEVICE_STAGES   6
-#define ONETRACE_TID                    7
-#define ONETRACE_PID                    8
+#define ONETRACE_DEVICE_TIMING_VERBOSE  3
+#define ONETRACE_DEVICE_TIMELINE        4
+#define ONETRACE_CHROME_CALL_LOGGING    5
+#define ONETRACE_CHROME_DEVICE_TIMELINE 6
+#define ONETRACE_CHROME_DEVICE_STAGES   7
+#define ONETRACE_TID                    8
+#define ONETRACE_PID                    9
 
 const char* kChromeTraceFileName = "onetrace";
 const char* kChromeTraceFileExt = "json";
@@ -49,6 +50,7 @@ class UnifiedTracer {
     UnifiedTracer* tracer = new UnifiedTracer(options);
 
     if (tracer->CheckOption(ONETRACE_DEVICE_TIMING) ||
+        tracer->CheckOption(ONETRACE_DEVICE_TIMING_VERBOSE) ||
         tracer->CheckOption(ONETRACE_DEVICE_TIMELINE) ||
         tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE) ||
         tracer->CheckOption(ONETRACE_CHROME_DEVICE_STAGES)) {
@@ -81,8 +83,10 @@ class UnifiedTracer {
         cl_callback = ClChromeStagesCallback;
       }
 
+      bool verbose = tracer->CheckOption(ONETRACE_DEVICE_TIMING_VERBOSE);
+
       ze_kernel_collector = ZeKernelCollector::Create(
-          &tracer->correlator_, ze_callback, tracer);
+          &tracer->correlator_, verbose, ze_callback, tracer);
       if (ze_kernel_collector == nullptr) {
         std::cerr <<
           "[WARNING] Unable to create kernel collector for L0 backend" <<
@@ -92,7 +96,7 @@ class UnifiedTracer {
 
       if (cl_cpu_device != nullptr) {
         cl_cpu_kernel_collector = ClKernelCollector::Create(
-            cl_cpu_device, &tracer->correlator_, cl_callback, tracer);
+            cl_cpu_device, &tracer->correlator_, verbose, cl_callback, tracer);
         if (cl_cpu_kernel_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create kernel collector for CL CPU backend" <<
@@ -103,7 +107,7 @@ class UnifiedTracer {
 
       if (cl_gpu_device != nullptr) {
         cl_gpu_kernel_collector = ClKernelCollector::Create(
-            cl_gpu_device, &tracer->correlator_, cl_callback, tracer);
+            cl_gpu_device, &tracer->correlator_, verbose, cl_callback, tracer);
         if (cl_gpu_kernel_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create kernel collector for CL GPU backend" <<
@@ -461,7 +465,8 @@ class UnifiedTracer {
           cl_gpu_api_collector_,
           "API");
     }
-    if (CheckOption(ONETRACE_DEVICE_TIMING)) {
+    if (CheckOption(ONETRACE_DEVICE_TIMING) ||
+        CheckOption(ONETRACE_DEVICE_TIMING_VERBOSE)) {
       ReportTiming(
           ze_kernel_collector_,
           cl_cpu_kernel_collector_,

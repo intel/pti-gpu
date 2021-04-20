@@ -24,12 +24,13 @@
 #define CLT_CALL_LOGGING           0
 #define CLT_HOST_TIMING            1
 #define CLT_DEVICE_TIMING          2
-#define CLT_DEVICE_TIMELINE        3
-#define CLT_CHROME_CALL_LOGGING    4
-#define CLT_CHROME_DEVICE_TIMELINE 5
-#define CLT_CHROME_DEVICE_STAGES   6
-#define CLT_TID                    7
-#define CLT_PID                    8
+#define CLT_DEVICE_TIMING_VERBOSE  3
+#define CLT_DEVICE_TIMELINE        4
+#define CLT_CHROME_CALL_LOGGING    5
+#define CLT_CHROME_DEVICE_TIMELINE 6
+#define CLT_CHROME_DEVICE_STAGES   7
+#define CLT_TID                    8
+#define CLT_PID                    9
 
 const char* kChromeTraceFileName = "clt_trace";
 const char* kChromeTraceFileExt = "json";
@@ -47,6 +48,7 @@ class ClTracer {
     ClTracer* tracer = new ClTracer(options);
 
     if (tracer->CheckOption(CLT_DEVICE_TIMING) ||
+        tracer->CheckOption(CLT_DEVICE_TIMING_VERBOSE) ||
         tracer->CheckOption(CLT_DEVICE_TIMELINE) ||
         tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE) ||
         tracer->CheckOption(CLT_CHROME_DEVICE_STAGES)) {
@@ -74,7 +76,9 @@ class ClTracer {
 
       if (cpu_device != nullptr) {
         cpu_kernel_collector = ClKernelCollector::Create(
-            cpu_device, &tracer->correlator_, callback, tracer);
+            cpu_device, &tracer->correlator_,
+            tracer->CheckOption(CLT_DEVICE_TIMING_VERBOSE),
+            callback, tracer);
         if (cpu_kernel_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create kernel collector for CPU backend" <<
@@ -85,7 +89,9 @@ class ClTracer {
 
       if (gpu_device != nullptr) {
         gpu_kernel_collector = ClKernelCollector::Create(
-            gpu_device, &tracer->correlator_, callback, tracer);
+            gpu_device, &tracer->correlator_,
+            tracer->CheckOption(CLT_DEVICE_TIMING_VERBOSE),
+            callback, tracer);
         if (gpu_kernel_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create kernel collector for GPU backend" <<
@@ -332,7 +338,8 @@ class ClTracer {
     if (CheckOption(CLT_HOST_TIMING)) {
       ReportTiming(cpu_api_collector_, gpu_api_collector_, "API");
     }
-    if (CheckOption(CLT_DEVICE_TIMING)) {
+    if (CheckOption(CLT_DEVICE_TIMING) ||
+        CheckOption(CLT_DEVICE_TIMING_VERBOSE)) {
       ReportTiming(cpu_kernel_collector_, gpu_kernel_collector_, "Device");
     }
     std::cerr << std::endl;

@@ -131,8 +131,3 @@ set PATH=%PATH%;<gtpin>\Profilers\Lib\intel64
 set PATH=%PATH%;<iga_dll_path>
 gpu_inst_count.exe ..\..\cl_gemm\build\cl_gemm.exe
 ```
-### Additional Notes
-GEN12 is currently supported in an experimental mode. To enable it, use the environment variable `PTI_GEN12`:
-```sh
-PTI_GEN12=1 ./gpu_inst_count <target_application>
-```

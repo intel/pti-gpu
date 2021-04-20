@@ -66,7 +66,7 @@ Note, that described instrinsics will work correctly only with `Debug` or `Relea
 - refer to [Intel(R) Processor Graphics Compiler](https://github.com/intel/intel-graphics-compiler) project to get more details on OpenCL(TM) built-in instrinsicts support ([this](https://github.com/intel/intel-graphics-compiler/blob/1c28cd3cd4cf11fa603cf41dbf8ce852c32f1f23/IGC/BiFModule/Languages/OpenCL/IBiF_Impl.cl) file contains its implementations)
 - refer to the paper [Introduction to GEN Assembly](https://software.intel.com/en-us/articles/introduction-to-gen-assembly) to learn more on Intel(R) Processor Graphics instruction set
 - refer to
-[Compute Architecture Manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides) to learn more on Intel(R) Processor Graphics architecture
+[Compute Architecture Manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides) to learn more on Intel(R) Processor Graphics Architecture
 
 ## Samples
 - [OpenCL(TM) GEMM with Manual Code Instrumentation](../../samples/cl_gemm_inst)

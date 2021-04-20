@@ -24,12 +24,13 @@
 #define ZET_CALL_LOGGING           0
 #define ZET_HOST_TIMING            1
 #define ZET_DEVICE_TIMING          2
-#define ZET_DEVICE_TIMELINE        3
-#define ZET_CHROME_CALL_LOGGING    4
-#define ZET_CHROME_DEVICE_TIMELINE 5
-#define ZET_CHROME_DEVICE_STAGES   6
-#define ZET_TID                    7
-#define ZET_PID                    8
+#define ZET_DEVICE_TIMING_VERBOSE  3
+#define ZET_DEVICE_TIMELINE        4
+#define ZET_CHROME_CALL_LOGGING    5
+#define ZET_CHROME_DEVICE_TIMELINE 6
+#define ZET_CHROME_DEVICE_STAGES   7
+#define ZET_TID                    8
+#define ZET_PID                    9
 
 const char* kChromeTraceFileName = "zet_trace";
 const char* kChromeTraceFileExt = "json";
@@ -47,6 +48,7 @@ class ZeTracer {
 
     ZeKernelCollector* kernel_collector = nullptr;
     if (tracer->CheckOption(ZET_DEVICE_TIMING) ||
+        tracer->CheckOption(ZET_DEVICE_TIMING_VERBOSE) ||
         tracer->CheckOption(ZET_DEVICE_TIMELINE) ||
         tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
         tracer->CheckOption(ZET_CHROME_DEVICE_STAGES)) {
@@ -70,7 +72,9 @@ class ZeTracer {
       }
 
       kernel_collector = ZeKernelCollector::Create(
-          &(tracer->correlator_), callback, tracer);
+          &(tracer->correlator_),
+          tracer->CheckOption(ZET_DEVICE_TIMING_VERBOSE),
+          callback, tracer);
       if (kernel_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create kernel collector" <<
           std::endl;
@@ -234,7 +238,8 @@ class ZeTracer {
     if (CheckOption(ZET_HOST_TIMING)) {
       ReportHostTiming();
     }
-    if (CheckOption(ZET_DEVICE_TIMING)) {
+    if (CheckOption(ZET_DEVICE_TIMING) ||
+        CheckOption(ZET_DEVICE_TIMING_VERBOSE)) {
       ReportDeviceTiming();
     }
     std::cerr << std::endl;

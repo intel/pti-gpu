@@ -134,11 +134,6 @@ class GpuPerfMonCollector {
     utils::gtpin::KnobAddInt("allow_sregs", 0);
     utils::gtpin::KnobAddInt("use_global_ra", 1);
 
-    if (!utils::GetEnv("PTI_GEN12").empty()) {
-      std::cerr << "[INFO] Experimental GTPin mode: GEN12" << std::endl;
-      utils::gtpin::KnobAddBool("gen12_1", true);
-    }
-
     GTPin_OnKernelBuild(OnKernelBuild, this);
     GTPin_OnKernelRun(OnKernelRun, this);
     GTPin_OnKernelComplete(OnKernelComplete, this);

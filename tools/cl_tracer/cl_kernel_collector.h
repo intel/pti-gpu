@@ -32,20 +32,20 @@ struct ClEnqueueData {
   cl_ulong device_sync;
 };
 
+struct ClKernelProps {
+  size_t simd_width;
+  size_t bytes_transferred;
+  size_t global_size[3];
+  size_t local_size[3];
+};
+
 struct ClEventData {
   ClKernelCollector* collector;
   std::string kernel_name;
-  ClKernelType kernel_type;
   uint64_t kernel_id;
   cl_ulong host_sync;
   cl_ulong device_sync;
-  union {
-    struct {
-      cl_kernel kernel;
-      size_t local_size[3];
-    };
-    size_t bytes_transferred;
-  };
+  ClKernelProps props;
 };
 
 struct ClKernelInfo {
@@ -53,8 +53,6 @@ struct ClKernelInfo {
   uint64_t min_time;
   uint64_t max_time;
   uint64_t call_count;
-  size_t simd_width;
-  size_t bytes_transferred;
 
   bool operator>(const ClKernelInfo& r) const {
     if (total_time != r.total_time) {
@@ -91,6 +89,7 @@ class ClKernelCollector {
   static ClKernelCollector* Create(
       cl_device_id device,
       Correlator* correlator,
+      bool verbose,
       OnClKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
@@ -98,7 +97,7 @@ class ClKernelCollector {
     TraceGuard guard;
 
     ClKernelCollector* collector = new ClKernelCollector(
-        device, correlator, callback, callback_data);
+        device, correlator, verbose, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
@@ -159,9 +158,6 @@ class ClKernelCollector {
 
     std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
       std::setw(kCallsLength) << "Calls" << "," <<
-      std::setw(kSimdLength) << "SIMD" << "," <<
-      std::setw(kTransferredLength) <<
-        "Transferred (bytes)" << "," <<
       std::setw(kTimeLength) << "Time (ns)" << "," <<
       std::setw(kPercentLength) << "Time (%)" << "," <<
       std::setw(kTimeLength) << "Average (ns)" << "," <<
@@ -171,8 +167,6 @@ class ClKernelCollector {
     for (auto& value : sorted_list) {
       const std::string& function = value.first;
       uint64_t call_count = value.second.call_count;
-      size_t simd_width = value.second.simd_width;
-      size_t bytes_transferred = value.second.bytes_transferred;
       uint64_t duration = value.second.total_time;
       uint64_t avg_duration = duration / call_count;
       uint64_t min_duration = value.second.min_time;
@@ -180,9 +174,6 @@ class ClKernelCollector {
       float percent_duration = 100.0f * duration / total_duration;
       std::cerr << std::setw(max_name_length) << function << "," <<
         std::setw(kCallsLength) << call_count << "," <<
-        std::setw(kSimdLength) << simd_width << "," <<
-        std::setw(kTransferredLength) <<
-          bytes_transferred << "," <<
         std::setw(kTimeLength) << duration << "," <<
         std::setw(kPercentLength) << std::setprecision(2) <<
           std::fixed << percent_duration << "," <<
@@ -196,9 +187,11 @@ class ClKernelCollector {
   ClKernelCollector(
       cl_device_id device,
       Correlator* correlator,
+      bool verbose,
       OnClKernelFinishCallback callback,
       void* callback_data)
       : correlator_(correlator),
+        verbose_(verbose),
         callback_(callback),
         callback_data_(callback_data),
         kernel_id_(1) {
@@ -257,15 +250,32 @@ class ClKernelCollector {
   }
 
   void AddKernelInfo(
-      std::string name, uint64_t time,
-      size_t simd_width, size_t bytes_transferred) {
+      std::string name, uint64_t time, const ClKernelProps* props) {
     PTI_ASSERT(!name.empty());
-    PTI_ASSERT(time > 0);
+    PTI_ASSERT(props != nullptr);
 
     const std::lock_guard<std::mutex> lock(lock_);
+
+    if (verbose_) {
+      if (props->simd_width > 0) {
+        std::stringstream sstream;
+        sstream << name << "[SIMD" << props->simd_width << ", {" <<
+          props->global_size[0] << ", " <<
+          props->global_size[1] << ", " <<
+          props->global_size[2] << "}, {" <<
+          props->local_size[0] << ", " <<
+          props->local_size[1] << ", " <<
+          props->local_size[2] << "}]";
+        name = sstream.str();
+      } else if (props->bytes_transferred > 0) {
+        name = name + "[" +
+          std::to_string(props->bytes_transferred) + " bytes]";
+      }
+    }
+
     if (kernel_info_map_.count(name) == 0) {
       kernel_info_map_[name] = {
-        time, time, time, 1, simd_width, bytes_transferred};
+        time, time, time, 1};
     } else {
       ClKernelInfo& kernel = kernel_info_map_[name];
       kernel.total_time += time;
@@ -276,8 +286,6 @@ class ClKernelCollector {
         kernel.min_time = time;
       }
       kernel.call_count += 1;
-      kernel.bytes_transferred += bytes_transferred;
-      kernel.simd_width = std::max(kernel.simd_width, simd_width);
     }
   }
 
@@ -290,35 +298,56 @@ class ClKernelCollector {
 
   void CalculateKernelLocalSize(
       const cl_params_clEnqueueNDRangeKernel* params,
-      cl_kernel kernel, ClEventData* event_data) {
+      ClKernelProps* props) {
     PTI_ASSERT(params != nullptr);
-    PTI_ASSERT(event_data != nullptr);
-    PTI_ASSERT(kernel != nullptr);
+    PTI_ASSERT(props != nullptr);
 
-    event_data->local_size[0] = 1;
-    event_data->local_size[1] = 1;
-    event_data->local_size[2] = 1;
+    props->local_size[0] = 1;
+    props->local_size[1] = 1;
+    props->local_size[2] = 1;
     if (*(params->localWorkSize) == nullptr) {
-      PTI_ASSERT(*(params->commandQueue) != nullptr);
-      cl_device_id device = utils::cl::GetDevice(*(params->commandQueue));
-      PTI_ASSERT(device != nullptr);
-      event_data->local_size[0] =
-        utils::cl::GetKernelLocalSize(device, kernel);
+      props->local_size[0] = 0;
+      props->local_size[1] = 0;
+      props->local_size[2] = 0;
     } else {
       PTI_ASSERT(*(params->workDim) <= 3);
       for (cl_uint i = 0; i < *(params->workDim); ++i) {
-        event_data->local_size[i] = (*(params->localWorkSize))[i];
+        props->local_size[i] = (*(params->localWorkSize))[i];
       }
     }
   }
 
   void CalculateKernelLocalSize(
       const cl_params_clEnqueueTask* params,
-      cl_kernel kernel, ClEventData* event_data) {
-    PTI_ASSERT(event_data != nullptr);
-    event_data->local_size[0] = 1;
-    event_data->local_size[1] = 1;
-    event_data->local_size[2] = 1;
+      ClKernelProps* props) {
+    PTI_ASSERT(props != nullptr);
+    props->local_size[0] = 1;
+    props->local_size[1] = 1;
+    props->local_size[2] = 1;
+  }
+
+  void CalculateKernelGlobalSize(
+      const cl_params_clEnqueueNDRangeKernel* params,
+      ClKernelProps* props) {
+    PTI_ASSERT(params != nullptr);
+    PTI_ASSERT(props != nullptr);
+    props->global_size[0] = 1;
+    props->global_size[1] = 1;
+    props->global_size[2] = 1;
+
+    PTI_ASSERT(*(params->workDim) <= 3);
+    for (cl_uint i = 0; i < *(params->workDim); ++i) {
+      props->global_size[i] = (*(params->globalWorkSize))[i];
+    }
+  }
+
+  void CalculateKernelGlobalSize(
+      const cl_params_clEnqueueTask* params,
+      ClKernelProps* props) {
+    PTI_ASSERT(props != nullptr);
+    props->global_size[0] = 1;
+    props->global_size[1] = 1;
+    props->global_size[2] = 1;
   }
 
  private: // Callbacks
@@ -346,29 +375,10 @@ class ClKernelCollector {
     cl_ulong time = ended - started;
     PTI_ASSERT(time > 0);
 
-    if (event_data->kernel_type == KERNEL_TYPE_USER) {
-      cl_kernel kernel = event_data->kernel;
+    collector->AddKernelInfo(name, time, &event_data->props);
 
-      cl_device_id device = utils::cl::GetDevice(queue);
-      PTI_ASSERT(device != nullptr);
-
-      size_t simd_width = utils::cl::GetSimdWidth(
-          device, kernel, event_data->local_size);
-      PTI_ASSERT(simd_width > 0);
-
-      cl_int status = clReleaseKernel(kernel);
-      PTI_ASSERT(status == CL_SUCCESS);
-
-      collector->AddKernelInfo(name, time, simd_width, 0);
+    if (event_data->props.simd_width > 0) {
       collector->AddKernelInterval(name, started, ended);
-
-    } else {
-      PTI_ASSERT(event_data->kernel_type == KERNEL_TYPE_TRANSFER);
-
-      size_t bytes_transferred = event_data->bytes_transferred;
-      PTI_ASSERT(bytes_transferred > 0);
-
-      collector->AddKernelInfo(name, time, 0, bytes_transferred);
     }
 
     if (collector->callback_ != nullptr) {
@@ -486,10 +496,20 @@ class ClKernelCollector {
       cl_kernel kernel = *(params->kernel);
       event_data->collector = collector;
       event_data->kernel_name = utils::cl::GetKernelName(kernel);
-      event_data->kernel_type = KERNEL_TYPE_USER;
-      event_data->kernel = kernel;
 
-      collector->CalculateKernelLocalSize(params, kernel, event_data);
+      cl_command_queue queue = *(params->commandQueue);
+      PTI_ASSERT(queue != nullptr);
+      cl_device_id device = utils::cl::GetDevice(queue);
+      PTI_ASSERT(device != nullptr);
+
+      size_t simd_width = utils::cl::GetKernelSimdWidth(device, kernel);
+      PTI_ASSERT(simd_width > 0);
+
+      event_data->props.simd_width = simd_width;
+      event_data->props.bytes_transferred = 0;
+
+      collector->CalculateKernelGlobalSize(params, &event_data->props);
+      collector->CalculateKernelLocalSize(params, &event_data->props);
 
       event_data->kernel_id =
         collector->kernel_id_.fetch_add(
@@ -503,8 +523,6 @@ class ClKernelCollector {
       event_data->device_sync = enqueue_data->device_sync;
       event_data->host_sync = enqueue_data->host_sync;
 
-      status = clRetainKernel(kernel);
-      PTI_ASSERT(status == CL_SUCCESS);
       status = clSetEventCallback(
           **(params->event), CL_COMPLETE, EventNotify, event_data);
       PTI_ASSERT(status == CL_SUCCESS);
@@ -529,8 +547,9 @@ class ClKernelCollector {
     PTI_ASSERT(event_data != nullptr);
     event_data->collector = collector;
     event_data->kernel_name = name;
-    event_data->kernel_type = KERNEL_TYPE_TRANSFER;
-    event_data->bytes_transferred = bytes_transferred;
+
+    event_data->props.simd_width = 0;
+    event_data->props.bytes_transferred = bytes_transferred;
 
     event_data->kernel_id =
       collector->kernel_id_.fetch_add(
@@ -1007,6 +1026,8 @@ class ClKernelCollector {
   ClApiTracer* tracer_ = nullptr;
   Correlator* correlator_ = nullptr;
 
+  bool verbose_ = false;
+
   std::atomic<uint64_t> kernel_id_;
   cl_device_type device_type_ = CL_DEVICE_TYPE_ALL;
 
@@ -1019,8 +1040,6 @@ class ClKernelCollector {
 
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;
-  static const uint32_t kSimdLength = 5;
-  static const uint32_t kTransferredLength = 20;
   static const uint32_t kTimeLength = 20;
   static const uint32_t kPercentLength = 10;
 };
