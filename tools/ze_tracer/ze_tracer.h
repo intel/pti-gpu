@@ -16,21 +16,10 @@
 #include <string>
 
 #include "correlator.h"
-#include "logger.h"
+#include "trace_options.h"
+#include "utils.h"
 #include "ze_api_collector.h"
 #include "ze_kernel_collector.h"
-#include "utils.h"
-
-#define ZET_CALL_LOGGING           0
-#define ZET_HOST_TIMING            1
-#define ZET_DEVICE_TIMING          2
-#define ZET_DEVICE_TIMING_VERBOSE  3
-#define ZET_DEVICE_TIMELINE        4
-#define ZET_CHROME_CALL_LOGGING    5
-#define ZET_CHROME_DEVICE_TIMELINE 6
-#define ZET_CHROME_DEVICE_STAGES   7
-#define ZET_TID                    8
-#define ZET_PID                    9
 
 const char* kChromeTraceFileName = "zet_trace";
 const char* kChromeTraceFileExt = "json";
@@ -40,40 +29,40 @@ class ZeTracer {
   static ZeTracer* Create(
       ze_driver_handle_t driver,
       ze_device_handle_t device,
-      unsigned options) {
+      const TraceOptions& options) {
     PTI_ASSERT(driver != nullptr);
     PTI_ASSERT(device != nullptr);
 
     ZeTracer* tracer = new ZeTracer(options);
 
     ZeKernelCollector* kernel_collector = nullptr;
-    if (tracer->CheckOption(ZET_DEVICE_TIMING) ||
-        tracer->CheckOption(ZET_DEVICE_TIMING_VERBOSE) ||
-        tracer->CheckOption(ZET_DEVICE_TIMELINE) ||
-        tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
-        tracer->CheckOption(ZET_CHROME_DEVICE_STAGES)) {
+    if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||
+        tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE) ||
+        tracer->CheckOption(TRACE_DEVICE_TIMELINE) ||
+        tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
+        tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
 
-      PTI_ASSERT(!(tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE) &&
-                   tracer->CheckOption(ZET_CHROME_DEVICE_STAGES)));
+      PTI_ASSERT(!(tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) &&
+                   tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)));
 
       OnZeKernelFinishCallback callback = nullptr;
-      if (tracer->CheckOption(ZET_DEVICE_TIMELINE) &&
-          tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE)) {
+      if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+          tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
         callback = DeviceAndChromeTimelineCallback;
-      } else if (tracer->CheckOption(ZET_DEVICE_TIMELINE) &&
-                 tracer->CheckOption(ZET_CHROME_DEVICE_STAGES)) {
+      } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+                 tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
         callback = DeviceAndChromeStagesCallback;
-      } else if (tracer->CheckOption(ZET_DEVICE_TIMELINE)) {
+      } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE)) {
         callback = DeviceTimelineCallback;
-      } else if (tracer->CheckOption(ZET_CHROME_DEVICE_TIMELINE)) {
+      } else if (tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
         callback = ChromeTimelineCallback;
-      } else if (tracer->CheckOption(ZET_CHROME_DEVICE_STAGES)) {
+      } else if (tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
         callback = ChromeStagesCallback;
       }
 
       kernel_collector = ZeKernelCollector::Create(
           &(tracer->correlator_),
-          tracer->CheckOption(ZET_DEVICE_TIMING_VERBOSE),
+          tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE),
           callback, tracer);
       if (kernel_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create kernel collector" <<
@@ -85,19 +74,19 @@ class ZeTracer {
     }
 
     ZeApiCollector* api_collector = nullptr;
-    if (tracer->CheckOption(ZET_CALL_LOGGING) ||
-        tracer->CheckOption(ZET_CHROME_CALL_LOGGING) ||
-        tracer->CheckOption(ZET_HOST_TIMING)) {
+    if (tracer->CheckOption(TRACE_CALL_LOGGING) ||
+        tracer->CheckOption(TRACE_CHROME_CALL_LOGGING) ||
+        tracer->CheckOption(TRACE_HOST_TIMING)) {
 
       OnZeFunctionFinishCallback callback = nullptr;
-      if (tracer->CheckOption(ZET_CHROME_CALL_LOGGING)) {
+      if (tracer->CheckOption(TRACE_CHROME_CALL_LOGGING)) {
         callback = ChromeLoggingCallback;
       }
 
       ApiCollectorOptions options{false, false, false};
-      options.call_tracing = tracer->CheckOption(ZET_CALL_LOGGING);
-      options.need_tid = tracer->CheckOption(ZET_TID);
-      options.need_pid = tracer->CheckOption(ZET_PID);
+      options.call_tracing = tracer->CheckOption(TRACE_CALL_LOGGING);
+      options.need_tid = tracer->CheckOption(TRACE_TID);
+      options.need_pid = tracer->CheckOption(TRACE_PID);
 
       api_collector = ZeApiCollector::Create(
           &(tracer->correlator_), options, callback, tracer);
@@ -131,25 +120,31 @@ class ZeTracer {
       delete kernel_collector_;
     }
 
+    if (CheckOption(TRACE_LOG_TO_FILE)) {
+      std::cerr << "[INFO] Log was stored to " <<
+        options_.GetLogFileName() << std::endl;
+    }
+
     if (chrome_logger_ != nullptr) {
       delete chrome_logger_;
-      std::cerr << "Timeline was stored to " <<
+      std::cerr << "[INFO] Timeline was stored to " <<
         chrome_trace_file_name_ << std::endl;
     }
   }
 
   bool CheckOption(unsigned option) {
-    return (options_ & (1 << option));
+    return options_.CheckFlag(option);
   }
 
   ZeTracer(const ZeTracer& copy) = delete;
   ZeTracer& operator=(const ZeTracer& copy) = delete;
 
  private:
-  ZeTracer(unsigned options) : options_(options) {
-    if (CheckOption(ZET_CHROME_CALL_LOGGING) ||
-        CheckOption(ZET_CHROME_DEVICE_TIMELINE) ||
-        CheckOption(ZET_CHROME_DEVICE_STAGES) ) {
+  ZeTracer(const TraceOptions& options)
+      : options_(options), correlator_(options.GetLogFileName()) {
+    if (CheckOption(TRACE_CHROME_CALL_LOGGING) ||
+        CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
+        CheckOption(TRACE_CHROME_DEVICE_STAGES) ) {
       chrome_trace_file_name_ =
         std::string(kChromeTraceFileName) +
           "." + std::to_string(utils::GetPid()) +
@@ -188,17 +183,19 @@ class ZeTracer {
     const size_t title_width = title.size();
     const size_t time_width = 20;
 
-    std::cerr << std::endl;
-    std::cerr << "=== API Timing Results: ===" << std::endl;
-    std::cerr << std::endl;
-    std::cerr << std::setw(title_width) << title <<
+    std::stringstream stream;
+    stream << std::endl;
+    stream << "=== API Timing Results: ===" << std::endl;
+    stream << std::endl;
+    stream << std::setw(title_width) << title <<
       std::setw(time_width) << total_execution_time_ << std::endl;
-    std::cerr << std::setw(title_width) << "Total API Time (ns): " <<
+    stream << std::setw(title_width) << "Total API Time (ns): " <<
       std::setw(time_width) << total_duration << std::endl;
-    std::cerr << std::endl;
+    stream << std::endl;
+    correlator_.Log(stream.str().c_str());
 
     if (total_duration > 0) {
-      ZeApiCollector::PrintFunctionsTable(function_info_map);
+      api_collector_->PrintFunctionsTable();
     }
   }
 
@@ -220,29 +217,31 @@ class ZeTracer {
     const size_t title_width = title.size();
     const size_t time_width = 20;
 
-    std::cerr << std::endl;
-    std::cerr << "=== Device Timing Results: ===" << std::endl;
-    std::cerr << std::endl;
-    std::cerr << std::setw(title_width) << title <<
+    std::stringstream stream;
+    stream << std::endl;
+    stream << "=== Device Timing Results: ===" << std::endl;
+    stream << std::endl;
+    stream << std::setw(title_width) << title <<
       std::setw(time_width) << total_execution_time_ << std::endl;
-    std::cerr << std::setw(title_width) << "Total Device Time (ns): " <<
+    stream << std::setw(title_width) << "Total Device Time (ns): " <<
       std::setw(time_width) << total_duration << std::endl;
-    std::cerr << std::endl;
+    stream << std::endl;
+    correlator_.Log(stream.str().c_str());
 
     if (total_duration > 0) {
-      ZeKernelCollector::PrintKernelsTable(kernel_info_map);
+      kernel_collector_->PrintKernelsTable();
     }
   }
   
   void Report() {
-    if (CheckOption(ZET_HOST_TIMING)) {
+    if (CheckOption(TRACE_HOST_TIMING)) {
       ReportHostTiming();
     }
-    if (CheckOption(ZET_DEVICE_TIMING) ||
-        CheckOption(ZET_DEVICE_TIMING_VERBOSE)) {
+    if (CheckOption(TRACE_DEVICE_TIMING) ||
+        CheckOption(TRACE_DEVICE_TIMING_VERBOSE)) {
       ReportDeviceTiming();
     }
-    std::cerr << std::endl;
+    correlator_.Log("\n");
   }
 
   static void DeviceTimelineCallback(
@@ -253,7 +252,7 @@ class ZeTracer {
     ZeTracer* tracer = reinterpret_cast<ZeTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
     std::stringstream stream;
-    if (tracer->CheckOption(ZET_PID)) {
+    if (tracer->CheckOption(TRACE_PID)) {
       stream << "<PID:" << utils::GetPid() << "> ";
     }
     stream << "Device Timeline (queue: " << queue <<
@@ -262,7 +261,7 @@ class ZeTracer {
       submitted << " (submit) " <<
       started << " (start) " <<
       ended << " (end)" << std::endl;
-    tracer->logger_.Log(stream.str().c_str());
+    tracer->correlator_.Log(stream.str().c_str());
   }
 
   static void ChromeTimelineCallback(
@@ -375,12 +374,10 @@ class ZeTracer {
   }
 
  private:
-  unsigned options_;
+  TraceOptions options_;
 
   std::string chrome_trace_file_name_;
   Logger* chrome_logger_ = nullptr;
-
-  Logger logger_;
 
   Correlator correlator_;
   uint64_t total_execution_time_ = 0;

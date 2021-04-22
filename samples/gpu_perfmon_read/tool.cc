@@ -33,8 +33,8 @@ extern "C"
 __declspec(dllexport)
 #endif
 void SetToolEnv() {
-  utils::SetEnv("ZET_ENABLE_API_TRACING_EXP=1");
-  utils::SetEnv("ZET_ENABLE_PROGRAM_INSTRUMENTATION=1");
+  utils::SetEnv("ZET_ENABLE_API_TRACING_EXP", "1");
+  utils::SetEnv("ZET_ENABLE_PROGRAM_INSTRUMENTATION", "1");
 }
 
 // Internal Tool Functionality ////////////////////////////////////////////////

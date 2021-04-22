@@ -17,7 +17,6 @@
 #include "cl_api_tracer.h"
 #include "cl_utils.h"
 #include "correlator.h"
-#include "logger.h"
 #include "trace_guard.h"
 
 struct ClFunction {
@@ -117,16 +116,17 @@ class ClApiCollector {
   }
 
   void Log(const std::string& text) {
-    logger_.Log(text.c_str());
+    PTI_ASSERT(correlator_ != nullptr);
+    correlator_->Log(text.c_str());
   }
 
   ClApiCollector(const ClApiCollector& copy) = delete;
   ClApiCollector& operator=(const ClApiCollector& copy) = delete;
 
-  static void PrintFunctionsTable(const ClFunctionInfoMap& function_info_map) {
+  void PrintFunctionsTable() const {
     std::set< std::pair<std::string, ClFunction>,
               utils::Comparator > sorted_list(
-        function_info_map.begin(), function_info_map.end());
+        function_info_map_.begin(), function_info_map_.end());
 
     uint64_t total_duration = 0;
     size_t max_name_length = kFunctionLength;
@@ -141,7 +141,8 @@ class ClApiCollector {
       return;
     }
 
-    std::cerr << std::setw(max_name_length) << "Function" << "," <<
+    std::stringstream stream;
+    stream << std::setw(max_name_length) << "Function" << "," <<
       std::setw(kCallsLength) << "Calls" << "," <<
       std::setw(kTimeLength) << "Time (ns)" << "," <<
       std::setw(kPercentLength) << "Time (%)" << "," <<
@@ -157,7 +158,7 @@ class ClApiCollector {
       uint64_t min_duration = value.second.min_time;
       uint64_t max_duration = value.second.max_time;
       float percent_duration = 100.0f * duration / total_duration;
-      std::cerr << std::setw(max_name_length) << function << "," <<
+      stream << std::setw(max_name_length) << function << "," <<
         std::setw(kCallsLength) << call_count << "," <<
         std::setw(kTimeLength) << duration << "," <<
         std::setw(kPercentLength) << std::setprecision(2) <<
@@ -166,6 +167,9 @@ class ClApiCollector {
         std::setw(kTimeLength) << min_duration << "," <<
         std::setw(kTimeLength) << max_duration << std::endl;
     }
+
+    PTI_ASSERT(correlator_ != nullptr);
+    correlator_->Log(stream.str().c_str());
   }
 
  private: // Implementation Details
@@ -263,7 +267,6 @@ class ClApiCollector {
 
  private: // Data
   ClApiTracer* tracer_ = nullptr;
-  Logger logger_;
 
   Correlator* correlator_ = nullptr;
   ApiCollectorOptions options_ = {false, false, false};

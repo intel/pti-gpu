@@ -33,7 +33,7 @@ extern "C"
 __declspec(dllexport)
 #endif
 void SetToolEnv() {
-  utils::SetEnv("ZE_ENABLE_TRACING_LAYER=1");
+  utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
 }
 
 // Internal Tool Functionality ////////////////////////////////////////////////

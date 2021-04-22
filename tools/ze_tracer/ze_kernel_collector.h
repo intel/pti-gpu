@@ -124,10 +124,17 @@ class ZeKernelCollector {
     return collector;
   }
 
-  static void PrintKernelsTable(const ZeKernelInfoMap& kernel_info_map) {
+  ~ZeKernelCollector() {
+    if (tracer_ != nullptr) {
+      ze_result_t status = zelTracerDestroy(tracer_);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    }
+  }
+
+  void PrintKernelsTable() const {
     std::set< std::pair<std::string, ZeKernelInfo>,
               utils::Comparator > sorted_list(
-        kernel_info_map.begin(), kernel_info_map.end());
+        kernel_info_map_.begin(), kernel_info_map_.end());
 
     uint64_t total_duration = 0;
     size_t max_name_length = kKernelLength;
@@ -142,7 +149,8 @@ class ZeKernelCollector {
       return;
     }
 
-    std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
+    std::stringstream stream;
+    stream << std::setw(max_name_length) << "Kernel" << "," <<
       std::setw(kCallsLength) << "Calls" << "," <<
       std::setw(kTimeLength) << "Time (ns)" << "," <<
       std::setw(kPercentLength) << "Time (%)" << "," <<
@@ -158,7 +166,7 @@ class ZeKernelCollector {
       uint64_t min_duration = value.second.min_time;
       uint64_t max_duration = value.second.max_time;
       float percent_duration = 100.0f * duration / total_duration;
-      std::cerr << std::setw(max_name_length) << function << "," <<
+      stream << std::setw(max_name_length) << function << "," <<
         std::setw(kCallsLength) << call_count << "," <<
         std::setw(kTimeLength) << duration << "," <<
         std::setw(kPercentLength) << std::setprecision(2) <<
@@ -167,13 +175,9 @@ class ZeKernelCollector {
         std::setw(kTimeLength) << min_duration << "," <<
         std::setw(kTimeLength) << max_duration << std::endl;
     }
-  }
 
-  ~ZeKernelCollector() {
-    if (tracer_ != nullptr) {
-      ze_result_t status = zelTracerDestroy(tracer_);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    }
+    PTI_ASSERT(correlator_ != nullptr);
+    correlator_->Log(stream.str().c_str());
   }
 
   void DisableTracing() {

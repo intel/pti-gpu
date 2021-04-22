@@ -13,6 +13,7 @@
 
 #include <level_zero/ze_api.h>
 
+#include "logger.h"
 #include "pti_assert.h"
 
 #ifdef CLOCK_HIGH_RESOLUTION
@@ -31,7 +32,12 @@ struct ApiCollectorOptions {
 
 class Correlator {
  public:
-  Correlator() : base_time_(PTI_CLOCK::now()) {}
+  Correlator(const std::string& log_file)
+      : logger_(log_file), base_time_(PTI_CLOCK::now()) {}
+
+  void Log(const char* text) {
+    logger_.Log(text);
+  }
 
   uint64_t GetTimestamp() const {
     std::chrono::duration<uint64_t, std::nano> timestamp =
@@ -86,6 +92,8 @@ class Correlator {
  private:
   TimePoint base_time_;
   std::map<ze_command_list_handle_t, std::vector<uint64_t> > kernel_id_map_;
+
+  Logger logger_;
 
   static thread_local uint64_t kernel_id_;
 };

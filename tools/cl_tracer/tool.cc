@@ -33,12 +33,16 @@ void Usage() {
     "Report kernels execution time" <<
     std::endl;
   std::cout <<
-    "--device-timing-verbose [-v]  " <<
+    "--device-timing-verbose [-v]   " <<
     "Report kernels execution time with SIMD width and global/local sizes" <<
     std::endl;
   std::cout <<
     "--device-timeline [-t]         " <<
     "Trace device activities" <<
+    std::endl;
+  std::cout <<
+    "--output [-o] <filename>       " <<
+    "Print console logs into the file" <<
     std::endl;
   std::cout <<
     "--chrome-call-logging          " <<
@@ -71,38 +75,48 @@ int ParseArgs(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--call-logging") == 0 ||
         strcmp(argv[i], "-c") == 0) {
-      utils::SetEnv("CLT_CallLogging=1");
+      utils::SetEnv("CLT_CallLogging", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--host-timing") == 0 ||
                strcmp(argv[i], "-h") == 0) {
-      utils::SetEnv("CLT_HostTiming=1");
+      utils::SetEnv("CLT_HostTiming", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timing") == 0 ||
                strcmp(argv[i], "-d") == 0) {
-      utils::SetEnv("CLT_DeviceTiming=1");
+      utils::SetEnv("CLT_DeviceTiming", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timing-verbose") == 0 ||
                strcmp(argv[i], "-v") == 0) {
-      utils::SetEnv("CLT_DeviceTimingVerbose=1");
+      utils::SetEnv("CLT_DeviceTimingVerbose", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timeline") == 0 ||
                strcmp(argv[i], "-t") == 0) {
-      utils::SetEnv("CLT_DeviceTimeline=1");
+      utils::SetEnv("CLT_DeviceTimeline", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
-      utils::SetEnv("CLT_ChromeCallLogging=1");
+      utils::SetEnv("CLT_ChromeCallLogging", "1");
       ++app_index;
+    } else if (strcmp(argv[i], "--output") == 0 ||
+               strcmp(argv[i], "-o") == 0) {
+      utils::SetEnv("CLT_LogToFile", "1");
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] Log file name is not specified" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("CLT_LogFilename", argv[i]);
+      app_index += 2;
     } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
-      utils::SetEnv("CLT_ChromeDeviceTimeline=1");
+      utils::SetEnv("CLT_ChromeDeviceTimeline", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
-      utils::SetEnv("CLT_ChromeDeviceStages=1");
+      utils::SetEnv("CLT_ChromeDeviceStages", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--tid") == 0) {
-      utils::SetEnv("CLT_Tid=1");
+      utils::SetEnv("CLT_Tid", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--pid") == 0) {
-      utils::SetEnv("CLT_Pid=1");
+      utils::SetEnv("CLT_Pid", "1");
       ++app_index;
     } else {
       break;
@@ -126,61 +140,69 @@ __declspec(dllexport)
 #endif
 void SetToolEnv() {}
 
-static unsigned ReadArgs() {
+static TraceOptions ReadArgs() {
   std::string value;
-  unsigned options = 0;
+  uint32_t flags = 0;
+  std::string log_file;
 
   value = utils::GetEnv("CLT_CallLogging");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_CALL_LOGGING);
+    flags |= (1 << TRACE_CALL_LOGGING);
   }
 
   value = utils::GetEnv("CLT_HostTiming");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_HOST_TIMING);
+    flags |= (1 << TRACE_HOST_TIMING);
   }
 
   value = utils::GetEnv("CLT_DeviceTiming");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_DEVICE_TIMING);
+    flags |= (1 << TRACE_DEVICE_TIMING);
   }
 
   value = utils::GetEnv("CLT_DeviceTimingVerbose");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_DEVICE_TIMING_VERBOSE);
+    flags |= (1 << TRACE_DEVICE_TIMING_VERBOSE);
   }
 
   value = utils::GetEnv("CLT_DeviceTimeline");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_DEVICE_TIMELINE);
+    flags |= (1 << TRACE_DEVICE_TIMELINE);
+  }
+
+  value = utils::GetEnv("CLT_LogToFile");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_LOG_TO_FILE);
+    log_file = utils::GetEnv("CLT_LogFilename");
+    PTI_ASSERT(!log_file.empty());
   }
 
   value = utils::GetEnv("CLT_ChromeCallLogging");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_CHROME_CALL_LOGGING);
+    flags |= (1 << TRACE_CHROME_CALL_LOGGING);
   }
 
   value = utils::GetEnv("CLT_ChromeDeviceTimeline");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_CHROME_DEVICE_TIMELINE);
+    flags |= (1 << TRACE_CHROME_DEVICE_TIMELINE);
   }
 
   value = utils::GetEnv("CLT_ChromeDeviceStages");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_CHROME_DEVICE_STAGES);
+    flags |= (1 << TRACE_CHROME_DEVICE_STAGES);
   }
 
   value = utils::GetEnv("CLT_Tid");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_TID);
+    flags |= (1 << TRACE_TID);
   }
 
   value = utils::GetEnv("CLT_Pid");
   if (!value.empty() && value == "1") {
-    options |= (1 << CLT_PID);
+    flags |= (1 << TRACE_PID);
   }
 
-  return options;
+  return TraceOptions(flags, log_file);
 }
 
 void EnableProfiling() {

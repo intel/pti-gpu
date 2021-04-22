@@ -104,7 +104,8 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
-  decltype(SetToolEnv)* set_tool_env = lib->GetSym<decltype(SetToolEnv)*>("SetToolEnv");
+  decltype(SetToolEnv)* set_tool_env =
+    lib->GetSym<decltype(SetToolEnv)*>("SetToolEnv");
   if (set_tool_env == nullptr) {
     std::cout << "[ERROR] Failed to find SetToolEnv function in " <<
       library_file_name << std::endl;
@@ -114,7 +115,11 @@ int main(int argc, char* argv[]) {
 
   int app_index = parse_args(argc, argv);
   if (app_index <= 0 || app_index >= argc) {
-    std::cout << "[ERROR] Invalid command line" << std::endl;
+    if (app_index >= argc) {
+      std::cout << "[ERROR] Application to run is not specified" << std::endl;
+    } else {
+      std::cout << "[ERROR] Invalid command line" << std::endl;
+    }
     usage();
     delete lib;
     return 0;
@@ -212,9 +217,8 @@ int main(int argc, char* argv[]) {
 
 #else
 
-  std::string ld_preload = "LD_PRELOAD=" + library_file_path;
-  utils::SetEnv(ld_preload.c_str());
-  utils::SetEnv("PTI_ENABLE=1");
+  utils::SetEnv("LD_PRELOAD", library_file_path.c_str());
+  utils::SetEnv("PTI_ENABLE", "1");
 
   if (execvp(app_args[0], app_args.data())) {
     std::cout << "[ERROR] Failed to launch target application: " <<

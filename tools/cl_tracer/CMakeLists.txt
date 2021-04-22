@@ -11,7 +11,6 @@ SetBuildType()
 add_library(clt_tracer SHARED
   "${PROJECT_SOURCE_DIR}/../../loader/init.cc"
   "${PROJECT_SOURCE_DIR}/../utils/correlator.cc"
-  "${PROJECT_SOURCE_DIR}/../utils/logger.cc"
   trace_guard.cc
   tool.cc)
 target_include_directories(clt_tracer

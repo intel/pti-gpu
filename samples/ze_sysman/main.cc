@@ -17,7 +17,7 @@
 #define BYTES_IN_MB (1024 * 1024)
 
 int main() {
-  utils::SetEnv("ZES_ENABLE_SYSMAN=1");
+  utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
 
   ze_result_t status = ZE_RESULT_SUCCESS;
   status = zeInit(ZE_INIT_FLAG_GPU_ONLY);

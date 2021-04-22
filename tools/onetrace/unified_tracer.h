@@ -18,28 +18,17 @@
 #include "cl_api_collector.h"
 #include "cl_api_callbacks.h"
 #include "cl_kernel_collector.h"
-#include "logger.h"
+#include "trace_options.h"
 #include "utils.h"
 #include "ze_api_collector.h"
 #include "ze_kernel_collector.h"
-
-#define ONETRACE_CALL_LOGGING           0
-#define ONETRACE_HOST_TIMING            1
-#define ONETRACE_DEVICE_TIMING          2
-#define ONETRACE_DEVICE_TIMING_VERBOSE  3
-#define ONETRACE_DEVICE_TIMELINE        4
-#define ONETRACE_CHROME_CALL_LOGGING    5
-#define ONETRACE_CHROME_DEVICE_TIMELINE 6
-#define ONETRACE_CHROME_DEVICE_STAGES   7
-#define ONETRACE_TID                    8
-#define ONETRACE_PID                    9
 
 const char* kChromeTraceFileName = "onetrace";
 const char* kChromeTraceFileExt = "json";
 
 class UnifiedTracer {
  public:
-  static UnifiedTracer* Create(unsigned options) {
+  static UnifiedTracer* Create(const TraceOptions& options) {
     cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
     cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
     if (cl_cpu_device == nullptr && cl_gpu_device == nullptr) {
@@ -49,14 +38,14 @@ class UnifiedTracer {
 
     UnifiedTracer* tracer = new UnifiedTracer(options);
 
-    if (tracer->CheckOption(ONETRACE_DEVICE_TIMING) ||
-        tracer->CheckOption(ONETRACE_DEVICE_TIMING_VERBOSE) ||
-        tracer->CheckOption(ONETRACE_DEVICE_TIMELINE) ||
-        tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE) ||
-        tracer->CheckOption(ONETRACE_CHROME_DEVICE_STAGES)) {
+    if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||
+        tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE) ||
+        tracer->CheckOption(TRACE_DEVICE_TIMELINE) ||
+        tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
+        tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
 
-      PTI_ASSERT(!(tracer->CheckOption(ONETRACE_DEVICE_TIMELINE) &&
-                   tracer->CheckOption(ONETRACE_CHROME_DEVICE_STAGES)));
+      PTI_ASSERT(!(tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+                   tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)));
 
       ZeKernelCollector* ze_kernel_collector = nullptr;
       ClKernelCollector* cl_cpu_kernel_collector = nullptr;
@@ -64,26 +53,26 @@ class UnifiedTracer {
 
       OnZeKernelFinishCallback ze_callback = nullptr;
       OnClKernelFinishCallback cl_callback = nullptr;
-      if (tracer->CheckOption(ONETRACE_DEVICE_TIMELINE) &&
-          tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE)) {
+      if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+          tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
         ze_callback = ZeDeviceAndChromeTimelineCallback;
         cl_callback = ClDeviceAndChromeTimelineCallback;
-      } else if (tracer->CheckOption(ONETRACE_DEVICE_TIMELINE) &&
-                 tracer->CheckOption(ONETRACE_CHROME_DEVICE_STAGES)) {
+      } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+                 tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
         ze_callback = ZeDeviceAndChromeStagesCallback;
         cl_callback = ClDeviceAndChromeStagesCallback;
-      } else if (tracer->CheckOption(ONETRACE_DEVICE_TIMELINE)) {
+      } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE)) {
         ze_callback = ZeDeviceTimelineCallback;
         cl_callback = ClDeviceTimelineCallback;
-      } else if (tracer->CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE)) {
+      } else if (tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
         ze_callback = ZeChromeTimelineCallback;
         cl_callback = ClChromeTimelineCallback;
-      } else if (tracer->CheckOption(ONETRACE_CHROME_DEVICE_STAGES)) {
+      } else if (tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
         ze_callback = ZeChromeStagesCallback;
         cl_callback = ClChromeStagesCallback;
       }
 
-      bool verbose = tracer->CheckOption(ONETRACE_DEVICE_TIMING_VERBOSE);
+      bool verbose = tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE);
 
       ze_kernel_collector = ZeKernelCollector::Create(
           &tracer->correlator_, verbose, ze_callback, tracer);
@@ -124,9 +113,9 @@ class UnifiedTracer {
       }
     }
 
-    if (tracer->CheckOption(ONETRACE_CALL_LOGGING) ||
-        tracer->CheckOption(ONETRACE_CHROME_CALL_LOGGING) ||
-        tracer->CheckOption(ONETRACE_HOST_TIMING)) {
+    if (tracer->CheckOption(TRACE_CALL_LOGGING) ||
+        tracer->CheckOption(TRACE_CHROME_CALL_LOGGING) ||
+        tracer->CheckOption(TRACE_HOST_TIMING)) {
 
       ZeApiCollector* ze_api_collector = nullptr;
       ClApiCollector* cl_cpu_api_collector = nullptr;
@@ -134,15 +123,15 @@ class UnifiedTracer {
 
       OnZeFunctionFinishCallback ze_callback = nullptr;
       OnClFunctionFinishCallback cl_callback = nullptr;
-      if (tracer->CheckOption(ONETRACE_CHROME_CALL_LOGGING)) {
+      if (tracer->CheckOption(TRACE_CHROME_CALL_LOGGING)) {
         ze_callback = ZeChromeLoggingCallback;
         cl_callback = ClChromeLoggingCallback;
       }
 
       ApiCollectorOptions options{false, false, false};
-      options.call_tracing = tracer->CheckOption(ONETRACE_CALL_LOGGING);
-      options.need_tid = tracer->CheckOption(ONETRACE_TID);
-      options.need_pid = tracer->CheckOption(ONETRACE_PID);
+      options.call_tracing = tracer->CheckOption(TRACE_CALL_LOGGING);
+      options.need_tid = tracer->CheckOption(TRACE_TID);
+      options.need_pid = tracer->CheckOption(TRACE_PID);
 
       ze_api_collector = ZeApiCollector::Create(
           &tracer->correlator_, options, ze_callback, tracer);
@@ -226,25 +215,31 @@ class UnifiedTracer {
       delete cl_gpu_kernel_collector_;
     }
 
+    if (CheckOption(TRACE_LOG_TO_FILE)) {
+      std::cerr << "[INFO] Log was stored to " <<
+        options_.GetLogFileName() << std::endl;
+    }
+
     if (chrome_logger_ != nullptr) {
       delete chrome_logger_;
-      std::cerr << "Timeline was stored to " <<
+      std::cerr << "[INFO] Timeline was stored to " <<
         chrome_trace_file_name_ << std::endl;
     }
   }
 
-  bool CheckOption(unsigned option) {
-    return (options_ & (1 << option));
+  bool CheckOption(uint32_t option) {
+    return options_.CheckFlag(option);
   }
 
   UnifiedTracer(const UnifiedTracer& copy) = delete;
   UnifiedTracer& operator=(const UnifiedTracer& copy) = delete;
 
  private:
-  UnifiedTracer(unsigned options) : options_(options) {
-    if (CheckOption(ONETRACE_CHROME_CALL_LOGGING) ||
-        CheckOption(ONETRACE_CHROME_DEVICE_TIMELINE) ||
-        CheckOption(ONETRACE_CHROME_DEVICE_STAGES)) {
+  UnifiedTracer(const TraceOptions& options)
+      : options_(options), correlator_(options.GetLogFileName()) {
+    if (CheckOption(TRACE_CHROME_CALL_LOGGING) ||
+        CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
+        CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
       chrome_trace_file_name_ =
         std::string(kChromeTraceFileName) +
           "." + std::to_string(utils::GetPid()) +
@@ -321,71 +316,67 @@ class UnifiedTracer {
     return total_time;
   }
 
-  static void PrintBackendTable(
+  void PrintBackendTable(
       const ZeApiCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalTime(collector);
     if (total_duration > 0) {
-      std::cerr << std::endl;
-      std::cerr << "== " << device_type << " Backend: ==" << std::endl;
-      std::cerr << std::endl;
-
-      const ZeFunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
-      PTI_ASSERT(function_info_map.size() > 0);
-      ZeApiCollector::PrintFunctionsTable(function_info_map);
+      std::stringstream stream;
+      stream << std::endl;
+      stream << "== " << device_type << " Backend: ==" << std::endl;
+      stream << std::endl;
+      correlator_.Log(stream.str().c_str());
+      collector->PrintFunctionsTable();
     }
   }
 
-  static void PrintBackendTable(
+  void PrintBackendTable(
       const ZeKernelCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalTime(collector);
     if (total_duration > 0) {
-      std::cerr << std::endl;
-      std::cerr << "== " << device_type << " Backend: ==" << std::endl;
-      std::cerr << std::endl;
-
-      const ZeKernelInfoMap& kernel_info_map = collector->GetKernelInfoMap();
-      PTI_ASSERT(kernel_info_map.size() > 0);
-      ZeKernelCollector::PrintKernelsTable(kernel_info_map);
+      std::stringstream stream;
+      stream << std::endl;
+      stream << "== " << device_type << " Backend: ==" << std::endl;
+      stream << std::endl;
+      correlator_.Log(stream.str().c_str());
+      collector->PrintKernelsTable();
     }
   }
 
-  static void PrintBackendTable(
+  void PrintBackendTable(
       const ClApiCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalTime(collector);
     if (total_duration > 0) {
-      std::cerr << std::endl;
-      std::cerr << "== " << device_type << " Backend: ==" << std::endl;
-      std::cerr << std::endl;
-
-      const ClFunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
-      PTI_ASSERT(function_info_map.size() > 0);
-      ClApiCollector::PrintFunctionsTable(function_info_map);
+      std::stringstream stream;
+      stream << std::endl;
+      stream << "== " << device_type << " Backend: ==" << std::endl;
+      stream << std::endl;
+      correlator_.Log(stream.str().c_str());
+      collector->PrintFunctionsTable();
     }
   }
 
-  static void PrintBackendTable(
+  void PrintBackendTable(
       const ClKernelCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalTime(collector);
     if (total_duration > 0) {
-      std::cerr << std::endl;
-      std::cerr << "== " << device_type << " Backend: ==" << std::endl;
-      std::cerr << std::endl;
-
-      const ClKernelInfoMap& kernel_info_map = collector->GetKernelInfoMap();
-      PTI_ASSERT(kernel_info_map.size() > 0);
-      ClKernelCollector::PrintKernelsTable(kernel_info_map);
+      std::stringstream stream;
+      stream << std::endl;
+      stream << "== " << device_type << " Backend: ==" << std::endl;
+      stream << std::endl;
+      correlator_.Log(stream.str().c_str());
+      collector->PrintKernelsTable();
     }
   }
 
@@ -413,16 +404,17 @@ class UnifiedTracer {
     title_width = std::max(title_width, ze_title.size());
     const size_t time_width = 20;
 
-    std::cerr << std::endl;
-    std::cerr << "=== " << type << " Timing Results: ===" << std::endl;
-    std::cerr << std::endl;
-    std::cerr << std::setw(title_width) << "Total Execution Time (ns): " <<
+    std::stringstream stream;
+    stream << std::endl;
+    stream << "=== " << type << " Timing Results: ===" << std::endl;
+    stream << std::endl;
+    stream << std::setw(title_width) << "Total Execution Time (ns): " <<
       std::setw(time_width) << total_execution_time_ << std::endl;
 
     if (ze_collector != nullptr) {
       uint64_t total_time = CalculateTotalTime(ze_collector);
       if (total_time > 0) {
-        std::cerr << std::setw(title_width) << ze_title <<
+        stream << std::setw(title_width) << ze_title <<
           std::setw(time_width) << total_time <<
           std::endl;
       }
@@ -430,7 +422,7 @@ class UnifiedTracer {
     if (cl_cpu_collector != nullptr) {
       uint64_t total_time = CalculateTotalTime(cl_cpu_collector);
       if (total_time > 0) {
-        std::cerr << std::setw(title_width) << cl_cpu_title <<
+        stream << std::setw(title_width) << cl_cpu_title <<
           std::setw(time_width) << total_time <<
           std::endl;
       }
@@ -438,11 +430,13 @@ class UnifiedTracer {
     if (cl_gpu_collector != nullptr) {
       uint64_t total_time = CalculateTotalTime(cl_gpu_collector);
       if (total_time > 0) {
-        std::cerr << std::setw(title_width) << cl_gpu_title <<
+        stream << std::setw(title_width) << cl_gpu_title <<
           std::setw(time_width) << total_time <<
           std::endl;
       }
     }
+
+    correlator_.Log(stream.str().c_str());
 
     if (ze_collector != nullptr) {
       PrintBackendTable(ze_collector, "L0");
@@ -454,26 +448,26 @@ class UnifiedTracer {
       PrintBackendTable(cl_gpu_collector, "CL GPU");
     }
 
-    std::cerr << std::endl;
+    correlator_.Log("\n");
   }
 
   void Report() {
-    if (CheckOption(ONETRACE_HOST_TIMING)) {
+    if (CheckOption(TRACE_HOST_TIMING)) {
       ReportTiming(
           ze_api_collector_,
           cl_cpu_api_collector_,
           cl_gpu_api_collector_,
           "API");
     }
-    if (CheckOption(ONETRACE_DEVICE_TIMING) ||
-        CheckOption(ONETRACE_DEVICE_TIMING_VERBOSE)) {
+    if (CheckOption(TRACE_DEVICE_TIMING) ||
+        CheckOption(TRACE_DEVICE_TIMING_VERBOSE)) {
       ReportTiming(
           ze_kernel_collector_,
           cl_cpu_kernel_collector_,
           cl_gpu_kernel_collector_,
           "Device");
     }
-    std::cerr << std::endl;
+    correlator_.Log("\n");
   }
 
   static void ZeDeviceTimelineCallback(
@@ -485,7 +479,7 @@ class UnifiedTracer {
     PTI_ASSERT(tracer != nullptr);
 
     std::stringstream stream;
-    if (tracer->CheckOption(ONETRACE_PID)) {
+    if (tracer->CheckOption(TRACE_PID)) {
       stream << "<PID:" << utils::GetPid() << "> ";
     }
     stream << "Device Timeline (queue: " << queue <<
@@ -495,7 +489,7 @@ class UnifiedTracer {
       started << " (start) " <<
       ended << " (end)" << std::endl;
 
-    tracer->logger_.Log(stream.str().c_str());
+    tracer->correlator_.Log(stream.str().c_str());
   }
 
   static void ClDeviceTimelineCallback(
@@ -507,7 +501,7 @@ class UnifiedTracer {
     PTI_ASSERT(tracer != nullptr);
 
     std::stringstream stream;
-    if (tracer->CheckOption(ONETRACE_PID)) {
+    if (tracer->CheckOption(TRACE_PID)) {
       stream << "<PID:" << utils::GetPid() << "> ";
     }
     stream << "Device Timeline (queue: " << queue <<
@@ -517,7 +511,7 @@ class UnifiedTracer {
       started << " (start) " <<
       ended << " (end)" << std::endl;
 
-    tracer->logger_.Log(stream.str().c_str());
+    tracer->correlator_.Log(stream.str().c_str());
   }
 
   static void ZeChromeTimelineCallback(
@@ -744,7 +738,7 @@ class UnifiedTracer {
   }
 
  private:
-  unsigned options_;
+  TraceOptions options_;
 
   Correlator correlator_;
   uint64_t total_execution_time_ = 0;
@@ -759,8 +753,6 @@ class UnifiedTracer {
 
   std::string chrome_trace_file_name_;
   Logger* chrome_logger_ = nullptr;
-
-  Logger logger_;
 };
 
 #endif // PTI_SAMPLES_ONETRACE_UNIFIED_TRACER_H_

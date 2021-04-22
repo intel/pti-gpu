@@ -17,8 +17,8 @@
 
 class Logger {
  public:
-  Logger(const char* filename = nullptr) {
-    if (filename != nullptr) {
+  Logger(const std::string& filename) {
+    if (!filename.empty()) {
       file_.open(filename);
       PTI_ASSERT(file_.is_open());
     }
@@ -41,7 +41,7 @@ class Logger {
   }
 
  private:
-  static std::mutex lock_;
+  std::mutex lock_;
   std::ofstream file_;
 };
 

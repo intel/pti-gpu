@@ -18,26 +18,15 @@
 #include "cl_api_collector.h"
 #include "cl_api_callbacks.h"
 #include "cl_kernel_collector.h"
-#include "logger.h"
+#include "trace_options.h"
 #include "utils.h"
-
-#define CLT_CALL_LOGGING           0
-#define CLT_HOST_TIMING            1
-#define CLT_DEVICE_TIMING          2
-#define CLT_DEVICE_TIMING_VERBOSE  3
-#define CLT_DEVICE_TIMELINE        4
-#define CLT_CHROME_CALL_LOGGING    5
-#define CLT_CHROME_DEVICE_TIMELINE 6
-#define CLT_CHROME_DEVICE_STAGES   7
-#define CLT_TID                    8
-#define CLT_PID                    9
 
 const char* kChromeTraceFileName = "clt_trace";
 const char* kChromeTraceFileExt = "json";
 
 class ClTracer {
  public:
-  static ClTracer* Create(unsigned options) {
+  static ClTracer* Create(const TraceOptions& options) {
     cl_device_id cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
     cl_device_id gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
     if (cpu_device == nullptr && gpu_device == nullptr) {
@@ -47,37 +36,37 @@ class ClTracer {
 
     ClTracer* tracer = new ClTracer(options);
 
-    if (tracer->CheckOption(CLT_DEVICE_TIMING) ||
-        tracer->CheckOption(CLT_DEVICE_TIMING_VERBOSE) ||
-        tracer->CheckOption(CLT_DEVICE_TIMELINE) ||
-        tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE) ||
-        tracer->CheckOption(CLT_CHROME_DEVICE_STAGES)) {
+    if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||
+        tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE) ||
+        tracer->CheckOption(TRACE_DEVICE_TIMELINE) ||
+        tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
+        tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
 
-      PTI_ASSERT(!(tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE) &&
-                   tracer->CheckOption(CLT_CHROME_DEVICE_STAGES)));
+      PTI_ASSERT(!(tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) &&
+                   tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)));
 
       ClKernelCollector* cpu_kernel_collector = nullptr;
       ClKernelCollector* gpu_kernel_collector = nullptr;
 
       OnClKernelFinishCallback callback = nullptr;
-      if (tracer->CheckOption(CLT_DEVICE_TIMELINE) &&
-          tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE)) {
+      if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+          tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
         callback = DeviceAndChromeTimelineCallback;
-      } else if (tracer->CheckOption(CLT_DEVICE_TIMELINE) &&
-                 tracer->CheckOption(CLT_CHROME_DEVICE_STAGES)) {
+      } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+                 tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
         callback = DeviceAndChromeStagesCallback;
-      } else if (tracer->CheckOption(CLT_DEVICE_TIMELINE)) {
+      } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE)) {
         callback = DeviceTimelineCallback;
-      } else if (tracer->CheckOption(CLT_CHROME_DEVICE_TIMELINE)) {
+      } else if (tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
         callback = ChromeTimelineCallback;
-      } else if (tracer->CheckOption(CLT_CHROME_DEVICE_STAGES)) {
+      } else if (tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
         callback = ChromeStagesCallback;
       }
 
       if (cpu_device != nullptr) {
         cpu_kernel_collector = ClKernelCollector::Create(
             cpu_device, &tracer->correlator_,
-            tracer->CheckOption(CLT_DEVICE_TIMING_VERBOSE),
+            tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE),
             callback, tracer);
         if (cpu_kernel_collector == nullptr) {
           std::cerr <<
@@ -90,7 +79,7 @@ class ClTracer {
       if (gpu_device != nullptr) {
         gpu_kernel_collector = ClKernelCollector::Create(
             gpu_device, &tracer->correlator_,
-            tracer->CheckOption(CLT_DEVICE_TIMING_VERBOSE),
+            tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE),
             callback, tracer);
         if (gpu_kernel_collector == nullptr) {
           std::cerr <<
@@ -106,22 +95,22 @@ class ClTracer {
       }
     }
 
-    if (tracer->CheckOption(CLT_CALL_LOGGING) ||
-        tracer->CheckOption(CLT_CHROME_CALL_LOGGING) ||
-        tracer->CheckOption(CLT_HOST_TIMING)) {
+    if (tracer->CheckOption(TRACE_CALL_LOGGING) ||
+        tracer->CheckOption(TRACE_CHROME_CALL_LOGGING) ||
+        tracer->CheckOption(TRACE_HOST_TIMING)) {
 
       ClApiCollector* cpu_api_collector = nullptr;
       ClApiCollector* gpu_api_collector = nullptr;
 
       OnClFunctionFinishCallback callback = nullptr;
-      if (tracer->CheckOption(CLT_CHROME_CALL_LOGGING)) {
+      if (tracer->CheckOption(TRACE_CHROME_CALL_LOGGING)) {
         callback = ChromeLoggingCallback;
       }
 
       ApiCollectorOptions cl_api_options{false, false, false};
-      cl_api_options.call_tracing = tracer->CheckOption(CLT_CALL_LOGGING);
-      cl_api_options.need_tid = tracer->CheckOption(CLT_TID);
-      cl_api_options.need_pid = tracer->CheckOption(CLT_PID);
+      cl_api_options.call_tracing = tracer->CheckOption(TRACE_CALL_LOGGING);
+      cl_api_options.need_tid = tracer->CheckOption(TRACE_TID);
+      cl_api_options.need_pid = tracer->CheckOption(TRACE_PID);
 
       if (cpu_device != nullptr) {
         cpu_api_collector = ClApiCollector::Create(
@@ -189,26 +178,31 @@ class ClTracer {
       delete gpu_kernel_collector_;
     }
 
+    if (CheckOption(TRACE_LOG_TO_FILE)) {
+      std::cerr << "[INFO] Log was stored to " <<
+        options_.GetLogFileName() << std::endl;
+    }
+
     if (chrome_logger_ != nullptr) {
       delete chrome_logger_;
-      std::cerr << "Timeline was stored to " <<
+      std::cerr << "[INFO] Timeline was stored to " <<
         chrome_trace_file_name_ << std::endl;
     }
   }
 
   bool CheckOption(unsigned option) {
-    return (options_ & (1 << option));
+    return options_.CheckFlag(option);
   }
 
   ClTracer(const ClTracer& copy) = delete;
   ClTracer& operator=(const ClTracer& copy) = delete;
 
  private:
-  ClTracer(unsigned options)
-      : options_(options) {
-    if (CheckOption(CLT_CHROME_CALL_LOGGING) ||
-        CheckOption(CLT_CHROME_DEVICE_TIMELINE) ||
-        CheckOption(CLT_CHROME_DEVICE_STAGES)) {
+  ClTracer(const TraceOptions& options)
+      : options_(options), correlator_(options.GetLogFileName()) {
+    if (CheckOption(TRACE_CHROME_CALL_LOGGING) ||
+        CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
+        CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
       chrome_trace_file_name_ =
         std::string(kChromeTraceFileName) +
           "." + std::to_string(utils::GetPid()) +
@@ -257,37 +251,35 @@ class ClTracer {
     return total_time;
   }
 
-  static void PrintBackendTable(
+  void PrintBackendTable(
       const ClApiCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalTime(collector);
     if (total_duration > 0) {
-      std::cerr << std::endl;
-      std::cerr << "== " << device_type << " Backend: ==" << std::endl;
-      std::cerr << std::endl;
-
-      const ClFunctionInfoMap& function_info_map = collector->GetFunctionInfoMap();
-      PTI_ASSERT(function_info_map.size() > 0);
-      ClApiCollector::PrintFunctionsTable(function_info_map);
+      std::stringstream stream;
+      stream << std::endl;
+      stream << "== " << device_type << " Backend: ==" << std::endl;
+      stream << std::endl;
+      correlator_.Log(stream.str().c_str());
+      collector->PrintFunctionsTable();
     }
   }
 
-  static void PrintBackendTable(
+  void PrintBackendTable(
       const ClKernelCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
 
     uint64_t total_duration = CalculateTotalTime(collector);
     if (total_duration > 0) {
-      std::cerr << std::endl;
-      std::cerr << "== " << device_type << " Backend: ==" << std::endl;
-      std::cerr << std::endl;
-
-      const ClKernelInfoMap& kernel_info_map = collector->GetKernelInfoMap();
-      PTI_ASSERT(kernel_info_map.size() > 0);
-      ClKernelCollector::PrintKernelsTable(kernel_info_map);
+      std::stringstream stream;
+      stream << std::endl;
+      stream << "== " << device_type << " Backend: ==" << std::endl;
+      stream << std::endl;
+      correlator_.Log(stream.str().c_str());
+      collector->PrintKernelsTable();
     }
   }
 
@@ -307,22 +299,25 @@ class ClTracer {
     size_t title_width = std::max(cpu_title.size(), gpu_title.size());
     const size_t time_width = 20;
 
-    std::cerr << std::endl;
-    std::cerr << "=== " << type << " Timing Results: ===" << std::endl;
-    std::cerr << std::endl;
-    std::cerr << std::setw(title_width) << "Total Execution Time (ns): " <<
+    std::stringstream stream;
+    stream << std::endl;
+    stream << "=== " << type << " Timing Results: ===" << std::endl;
+    stream << std::endl;
+    stream << std::setw(title_width) << "Total Execution Time (ns): " <<
       std::setw(time_width) << total_execution_time_ << std::endl;
 
     if (cpu_collector != nullptr) {
-      std::cerr << std::setw(title_width) << cpu_title <<
+      stream << std::setw(title_width) << cpu_title <<
         std::setw(time_width) << CalculateTotalTime(cpu_collector) <<
         std::endl;
     }
     if (gpu_collector != nullptr) {
-      std::cerr << std::setw(title_width) << gpu_title <<
+      stream << std::setw(title_width) << gpu_title <<
         std::setw(time_width) << CalculateTotalTime(gpu_collector) <<
         std::endl;
     }
+
+    correlator_.Log(stream.str().c_str());
 
     if (cpu_collector != nullptr) {
       PrintBackendTable(cpu_collector, "CPU");
@@ -331,18 +326,18 @@ class ClTracer {
       PrintBackendTable(gpu_collector, "GPU");
     }
 
-    std::cerr << std::endl;
+    correlator_.Log("\n");
   }
 
   void Report() {
-    if (CheckOption(CLT_HOST_TIMING)) {
+    if (CheckOption(TRACE_HOST_TIMING)) {
       ReportTiming(cpu_api_collector_, gpu_api_collector_, "API");
     }
-    if (CheckOption(CLT_DEVICE_TIMING) ||
-        CheckOption(CLT_DEVICE_TIMING_VERBOSE)) {
+    if (CheckOption(TRACE_DEVICE_TIMING) ||
+        CheckOption(TRACE_DEVICE_TIMING_VERBOSE)) {
       ReportTiming(cpu_kernel_collector_, gpu_kernel_collector_, "Device");
     }
-    std::cerr << std::endl;
+    correlator_.Log("\n");
   }
 
   static void DeviceTimelineCallback(
@@ -354,7 +349,7 @@ class ClTracer {
     PTI_ASSERT(tracer != nullptr);
 
     std::stringstream stream;
-    if (tracer->CheckOption(CLT_PID)) {
+    if (tracer->CheckOption(TRACE_PID)) {
       stream << "<PID:" << utils::GetPid() << "> ";
     }
     stream << "Device Timeline (queue: " << queue <<
@@ -363,7 +358,7 @@ class ClTracer {
       submitted << " (submit) " <<
       started << " (start) " <<
       ended << " (end)" << std::endl;
-    tracer->logger_.Log(stream.str().c_str());
+    tracer->correlator_.Log(stream.str().c_str());
   }
 
   static void ChromeTimelineCallback(
@@ -478,7 +473,7 @@ class ClTracer {
   }
 
  private:
-  unsigned options_;
+  TraceOptions options_;
 
   Correlator correlator_;
   uint64_t total_execution_time_ = 0;
@@ -491,8 +486,6 @@ class ClTracer {
 
   std::string chrome_trace_file_name_;
   Logger* chrome_logger_ = nullptr;
-
-  Logger logger_;
 };
 
 #endif // PTI_SAMPLES_CL_TRACER_CL_TRACER_H_

@@ -17,7 +17,6 @@
 #include <level_zero/layers/zel_tracing_api.h>
 
 #include "correlator.h"
-#include "logger.h"
 #include "utils.h"
 #include "ze_utils.h"
 
@@ -92,10 +91,10 @@ class ZeApiCollector {
     return function_info_map_;
   }
 
-  static void PrintFunctionsTable(const ZeFunctionInfoMap& function_info_map) {
+  void PrintFunctionsTable() const {
     std::set< std::pair<std::string, ZeFunction>,
               utils::Comparator > sorted_list(
-        function_info_map.begin(), function_info_map.end());
+        function_info_map_.begin(), function_info_map_.end());
 
     uint64_t total_duration = 0;
     size_t max_name_length = kFunctionLength;
@@ -110,7 +109,8 @@ class ZeApiCollector {
       return;
     }
 
-    std::cerr << std::setw(max_name_length) << "Function" << "," <<
+    std::stringstream stream;
+    stream << std::setw(max_name_length) << "Function" << "," <<
       std::setw(kCallsLength) << "Calls" << "," <<
       std::setw(kTimeLength) << "Time (ns)" << "," <<
       std::setw(kPercentLength) << "Time (%)" << "," <<
@@ -126,7 +126,7 @@ class ZeApiCollector {
       uint64_t min_duration = value.second.min_time;
       uint64_t max_duration = value.second.max_time;
       float percent_duration = 100.0f * duration / total_duration;
-      std::cerr << std::setw(max_name_length) << function << "," <<
+      stream << std::setw(max_name_length) << function << "," <<
         std::setw(kCallsLength) << call_count << "," <<
         std::setw(kTimeLength) << duration << "," <<
         std::setw(kPercentLength) << std::setprecision(2) <<
@@ -135,6 +135,9 @@ class ZeApiCollector {
         std::setw(kTimeLength) << min_duration << "," <<
         std::setw(kTimeLength) << max_duration << std::endl;
     }
+
+    PTI_ASSERT(correlator_ != nullptr);
+    correlator_->Log(stream.str().c_str());
   }
 
   ~ZeApiCollector() {
@@ -180,7 +183,6 @@ class ZeApiCollector {
 
  private: // Data
   zel_tracer_handle_t tracer_ = nullptr;
-  Logger logger_;
 
   ZeFunctionInfoMap function_info_map_;
   std::mutex lock_;

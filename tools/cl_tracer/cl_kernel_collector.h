@@ -138,10 +138,10 @@ class ClKernelCollector {
   ClKernelCollector(const ClKernelCollector& copy) = delete;
   ClKernelCollector& operator=(const ClKernelCollector& copy) = delete;
 
-  static void PrintKernelsTable(const ClKernelInfoMap& kernel_info_map) {
+  void PrintKernelsTable() const {
     std::set< std::pair<std::string, ClKernelInfo>,
               utils::Comparator > sorted_list(
-        kernel_info_map.begin(), kernel_info_map.end());
+        kernel_info_map_.begin(), kernel_info_map_.end());
 
     uint64_t total_duration = 0;
     size_t max_name_length = kKernelLength;
@@ -156,7 +156,8 @@ class ClKernelCollector {
       return;
     }
 
-    std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
+    std::stringstream stream;
+    stream << std::setw(max_name_length) << "Kernel" << "," <<
       std::setw(kCallsLength) << "Calls" << "," <<
       std::setw(kTimeLength) << "Time (ns)" << "," <<
       std::setw(kPercentLength) << "Time (%)" << "," <<
@@ -172,7 +173,7 @@ class ClKernelCollector {
       uint64_t min_duration = value.second.min_time;
       uint64_t max_duration = value.second.max_time;
       float percent_duration = 100.0f * duration / total_duration;
-      std::cerr << std::setw(max_name_length) << function << "," <<
+      stream << std::setw(max_name_length) << function << "," <<
         std::setw(kCallsLength) << call_count << "," <<
         std::setw(kTimeLength) << duration << "," <<
         std::setw(kPercentLength) << std::setprecision(2) <<
@@ -181,6 +182,9 @@ class ClKernelCollector {
         std::setw(kTimeLength) << min_duration << "," <<
         std::setw(kTimeLength) << max_duration << std::endl;
     }
+
+    PTI_ASSERT(correlator_ != nullptr);
+    correlator_->Log(stream.str().c_str());
   }
 
  private: // Implementation Details

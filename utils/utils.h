@@ -111,13 +111,16 @@ inline std::vector<uint8_t> LoadBinaryFile(const std::string& path) {
   return binary;
 }
 
-inline void SetEnv(const char* str) {
-  PTI_ASSERT(str != nullptr);
+inline void SetEnv(const char* name, const char* value) {
+  PTI_ASSERT(name != nullptr);
+  PTI_ASSERT(value != nullptr);
+
   int status = 0;
 #if defined(_WIN32)
+  std::string str = std::string(name) + "=" + value;
   status = _putenv(str);
 #else
-  status = putenv(const_cast<char*>(str));
+  status = setenv(name, value, 1);
 #endif
   PTI_ASSERT(status == 0);
 }

@@ -12,7 +12,6 @@ add_library(onetrace_tool SHARED
   "${PROJECT_SOURCE_DIR}/../../loader/init.cc"
   "${PROJECT_SOURCE_DIR}/../cl_tracer/trace_guard.cc"
   "${PROJECT_SOURCE_DIR}/../utils/correlator.cc"
-  "${PROJECT_SOURCE_DIR}/../utils/logger.cc"
   tool.cc)
 target_include_directories(onetrace_tool
   PRIVATE "${PROJECT_SOURCE_DIR}"

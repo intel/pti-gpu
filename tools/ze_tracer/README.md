@@ -11,6 +11,7 @@ Options:
 --device-timing [-d]           Report kernels execution time
 --device-timing-verbose [-v]   Report kernels execution time with SIMD width and global/local sizes
 --device-timeline [-t]         Trace device activities
+--output [-o] <filename>       Print console logs into the file
 --chrome-call-logging          Dump host API calls to JSON file
 --chrome-device-timeline       Dump device activities to JSON file
 --chrome-device-stages         Dump device activities by stages to JSON file

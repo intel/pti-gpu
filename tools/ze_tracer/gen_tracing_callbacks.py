@@ -317,6 +317,7 @@ def gen_enter_callback(f, func, params, enum_map):
   f.write("  PTI_ASSERT(global_user_data != nullptr);\n")
   f.write("  ZeApiCollector* collector =\n")
   f.write("    reinterpret_cast<ZeApiCollector*>(global_user_data);\n")
+  f.write("  PTI_ASSERT(collector->correlator_ != nullptr);\n")
   f.write("\n")
   f.write("  uint64_t& start_time = *reinterpret_cast<uint64_t*>(instance_user_data);\n")
   f.write("  start_time = collector->GetTimestamp();\n")
@@ -500,7 +501,7 @@ def gen_enter_callback(f, func, params, enum_map):
           f.write("      stream << (*(params->p" + name + "))->flags << \"}\";\n")
           f.write("    }\n")
   f.write("    stream << std::endl;\n")
-  f.write("    collector->logger_.Log(stream.str().c_str());\n")
+  f.write("    collector->correlator_->Log(stream.str().c_str());\n")
   f.write("  }\n")
 
 def gen_exit_callback(f, func, params, enum_map):
@@ -508,6 +509,8 @@ def gen_exit_callback(f, func, params, enum_map):
   f.write("  ZeApiCollector* collector =\n")
   f.write("    reinterpret_cast<ZeApiCollector*>(global_user_data);\n")
   f.write("  uint64_t end_time = collector->GetTimestamp();\n")
+  f.write("\n")
+  f.write("  PTI_ASSERT(collector->correlator_ != nullptr);\n")
   f.write("\n")
   f.write("  uint64_t& start_time = *reinterpret_cast<uint64_t*>(instance_user_data);\n")
   f.write("  PTI_ASSERT(start_time > 0);\n")
@@ -537,13 +540,11 @@ def gen_exit_callback(f, func, params, enum_map):
      func == "zeCommandListAppendImageCopyRegion" or\
      func == "zeCommandListAppendImageCopyToMemory" or\
      func == "zeCommandListAppendImageCopyFromMemory":
-    f.write("    PTI_ASSERT(collector->correlator_ != nullptr);\n")
     f.write("    uint64_t kernel_id = collector->correlator_->GetKernelId();\n")
     f.write("    if (kernel_id > 0) {\n")
     f.write("      stream << \"(\" << kernel_id << \")\";\n")
     f.write("    }\n")
   elif func == "zeCommandQueueExecuteCommandLists":
-    f.write("    PTI_ASSERT(collector->correlator_ != nullptr);\n")
     f.write("    uint32_t command_list_count = *(params->pnumCommandLists);\n")
     f.write("    ze_command_list_handle_t* command_lists = *(params->pphCommandLists);\n")
     f.write("    std::string kernel_id;\n")
@@ -576,7 +577,7 @@ def gen_exit_callback(f, func, params, enum_map):
       f.write("    }\n")
   f.write("    stream << \" -> \" << GetResultString(result) << \n")
   f.write("      \"(0x\" << result << \")\" << std::endl;\n")
-  f.write("    collector->logger_.Log(stream.str().c_str());\n")
+  f.write("    collector->correlator_->Log(stream.str().c_str());\n")
   f.write("  }\n")
   f.write("\n")
   f.write("  if (collector->callback_ != nullptr) {\n")
@@ -593,14 +594,12 @@ def gen_exit_callback(f, func, params, enum_map):
      func == "zeCommandListAppendImageCopyRegion" or\
      func == "zeCommandListAppendImageCopyToMemory" or\
      func == "zeCommandListAppendImageCopyFromMemory":
-    f.write("    PTI_ASSERT(collector->correlator_ != nullptr);\n")
     f.write("    collector->callback_(\n")
     f.write("        collector->callback_data_,\n")
     f.write("        std::to_string(collector->correlator_->GetKernelId()),\n")
     f.write("        \"" + func + "\",\n")
     f.write("        start_time, end_time);\n")
   elif func == "zeCommandQueueExecuteCommandLists":
-    f.write("    PTI_ASSERT(collector->correlator_ != nullptr);\n")
     f.write("    uint32_t command_list_count = *(params->pnumCommandLists);\n")
     f.write("    ze_command_list_handle_t* command_lists = *(params->pphCommandLists);\n")
     f.write("    std::string kernel_id;\n")

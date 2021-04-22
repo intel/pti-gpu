@@ -32,12 +32,16 @@ void Usage() {
     "Report kernels execution time" <<
     std::endl;
   std::cout <<
-    "--device-timing-verbose [-v]  " <<
+    "--device-timing-verbose [-v]   " <<
     "Report kernels execution time with SIMD width and global/local sizes" <<
     std::endl;
   std::cout <<
     "--device-timeline [-t]         " <<
     "Trace device activities" <<
+    std::endl;
+  std::cout <<
+    "--output [-o] <filename>       " <<
+    "Print console logs into the file" <<
     std::endl;
   std::cout <<
     "--chrome-call-logging          " <<
@@ -70,38 +74,48 @@ int ParseArgs(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--call-logging") == 0 ||
         strcmp(argv[i], "-c") == 0) {
-      utils::SetEnv("ONETRACE_CallLogging=1");
+      utils::SetEnv("ONETRACE_CallLogging", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--host-timing") == 0 ||
                strcmp(argv[i], "-h") == 0) {
-      utils::SetEnv("ONETRACE_HostTiming=1");
+      utils::SetEnv("ONETRACE_HostTiming", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timing") == 0 ||
                strcmp(argv[i], "-d") == 0) {
-      utils::SetEnv("ONETRACE_DeviceTiming=1");
+      utils::SetEnv("ONETRACE_DeviceTiming", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timing-verbose") == 0 ||
                strcmp(argv[i], "-v") == 0) {
-      utils::SetEnv("ONETRACE_DeviceTimingVerbose=1");
+      utils::SetEnv("ONETRACE_DeviceTimingVerbose", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timeline") == 0 ||
                strcmp(argv[i], "-t") == 0) {
-      utils::SetEnv("ONETRACE_DeviceTimeline=1");
+      utils::SetEnv("ONETRACE_DeviceTimeline", "1");
       ++app_index;
+    } else if (strcmp(argv[i], "--output") == 0 ||
+               strcmp(argv[i], "-o") == 0) {
+      utils::SetEnv("ONETRACE_LogToFile", "1");
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] Log file name is not specified" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("ONETRACE_LogFilename", argv[i]);
+      app_index += 2;
     } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
-      utils::SetEnv("ONETRACE_ChromeCallLogging=1");
+      utils::SetEnv("ONETRACE_ChromeCallLogging", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
-      utils::SetEnv("ONETRACE_ChromeDeviceTimeline=1");
+      utils::SetEnv("ONETRACE_ChromeDeviceTimeline", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
-      utils::SetEnv("ONETRACE_ChromeDeviceStages=1");
+      utils::SetEnv("ONETRACE_ChromeDeviceStages", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--tid") == 0) {
-      utils::SetEnv("ONETRACE_Tid=1");
+      utils::SetEnv("ONETRACE_Tid", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--pid") == 0) {
-      utils::SetEnv("ONETRACE_Pid=1");
+      utils::SetEnv("ONETRACE_Pid", "1");
       ++app_index;
     } else {
       break;
@@ -124,78 +138,79 @@ extern "C"
 __declspec(dllexport)
 #endif
 void SetToolEnv() {
-  utils::SetEnv("ZE_ENABLE_TRACING_LAYER=1");
+  utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
 }
 
-static unsigned ReadArgs() {
+static TraceOptions ReadArgs() {
   std::string value;
-  unsigned options = 0;
+  uint32_t flags = 0;
+  std::string log_file;
 
   value = utils::GetEnv("ONETRACE_CallLogging");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_CALL_LOGGING);
+    flags |= (1 << TRACE_CALL_LOGGING);
   }
 
   value = utils::GetEnv("ONETRACE_HostTiming");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_HOST_TIMING);
+    flags |= (1 << TRACE_HOST_TIMING);
   }
 
   value = utils::GetEnv("ONETRACE_DeviceTiming");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_DEVICE_TIMING);
+    flags |= (1 << TRACE_DEVICE_TIMING);
   }
 
   value = utils::GetEnv("ONETRACE_DeviceTimingVerbose");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_DEVICE_TIMING_VERBOSE);
+    flags |= (1 << TRACE_DEVICE_TIMING_VERBOSE);
   }
 
   value = utils::GetEnv("ONETRACE_DeviceTimeline");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_DEVICE_TIMELINE);
+    flags |= (1 << TRACE_DEVICE_TIMELINE);
+  }
+
+  value = utils::GetEnv("ONETRACE_LogToFile");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_LOG_TO_FILE);
+    log_file = utils::GetEnv("ONETRACE_LogFilename");
+    PTI_ASSERT(!log_file.empty());
   }
 
   value = utils::GetEnv("ONETRACE_ChromeCallLogging");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_CHROME_CALL_LOGGING);
+    flags |= (1 << TRACE_CHROME_CALL_LOGGING);
   }
 
   value = utils::GetEnv("ONETRACE_ChromeDeviceTimeline");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_CHROME_DEVICE_TIMELINE);
+    flags |= (1 << TRACE_CHROME_DEVICE_TIMELINE);
   }
 
   value = utils::GetEnv("ONETRACE_ChromeDeviceStages");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_CHROME_DEVICE_STAGES);
+    flags |= (1 << TRACE_CHROME_DEVICE_STAGES);
   }
 
   value = utils::GetEnv("ONETRACE_Tid");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_TID);
+    flags |= (1 << TRACE_TID);
   }
 
   value = utils::GetEnv("ONETRACE_Pid");
   if (!value.empty() && value == "1") {
-    options |= (1 << ONETRACE_PID);
+    flags |= (1 << TRACE_PID);
   }
 
-  return options;
+  return TraceOptions(flags, log_file);
 }
 
 void EnableProfiling() {
   ze_result_t status = ZE_RESULT_SUCCESS;
   status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-  unsigned options = ReadArgs();
-  if (options == 0) {
-    options |= (1 << ONETRACE_HOST_TIMING);
-    options |= (1 << ONETRACE_DEVICE_TIMING);
-  }
-
-  tracer = UnifiedTracer::Create(options);
+  tracer = UnifiedTracer::Create(ReadArgs());
 }
 
 void DisableProfiling() {
