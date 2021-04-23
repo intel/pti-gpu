@@ -77,8 +77,8 @@ int main(int argc, char *argv[]) {
       if (status != ZE_RESULT_SUCCESS) {
         continue;
       }
-      std::cout << "Driver #" << i << ": API Version "
-                << ZE_MAJOR_VERSION(version) << "." << ZE_MINOR_VERSION(version);
+      std::cout << "Driver #" << i << ": API Version " <<
+        ZE_MAJOR_VERSION(version) << "." << ZE_MINOR_VERSION(version);
       if (version == ZE_API_VERSION_CURRENT) {
         std::cout << " (latest)";
       }
@@ -133,8 +133,8 @@ int main(int argc, char *argv[]) {
         continue;
       }
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          std::string() + TAB + "Driver API Version " <<
-          ZE_MAJOR_VERSION(version) << "." << ZE_MINOR_VERSION(version);
+        std::string() + TAB + "Driver API Version " <<
+        ZE_MAJOR_VERSION(version) << "." << ZE_MINOR_VERSION(version);
       if (version == ZE_API_VERSION_CURRENT) {
         std::cout << " (latest)";
       }

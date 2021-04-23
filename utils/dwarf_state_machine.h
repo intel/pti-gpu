@@ -116,9 +116,6 @@ class DwarfStateMachine {
         PTI_ASSERT(ptr < data_ + size_);
         break;
       }
-      case DW_LNS_NEGATE_STMT:
-      case DW_LNS_SET_BASIC_BLOCK:
-          break;
       case DW_LNS_CONST_ADD_PC: {
         uint8_t adjusted_opcode = 255 - header_->opcode_base;
         uint8_t operation_advance = adjusted_opcode / header_->line_range;
@@ -134,6 +131,10 @@ class DwarfStateMachine {
         state_.operation = 0;
         break;
       }
+      case DW_LNS_NEGATE_STMT:
+      case DW_LNS_SET_BASIC_BLOCK:
+      case DW_LNS_SET_PROLOGUE_END:
+        break;
       default: {
         PTI_ASSERT(0); // Not supported
         break;

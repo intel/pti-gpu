@@ -74,57 +74,27 @@ There are two types of timestamps one may retrieve:
 The major difference between context and global timestamps is that global time will include time of activity preemption and context will not.
 
 ## Time Correlation
-Common problem while kernel timestamps collection is to map these timestamps to general CPU timeline. Since Level Zero provides kernel timestamps in GPU clocks, one may need to convert them to some CPU time. Level Zero 1.0 doesn't have such a capability yet though it's planned for 1.1.
-
-To solve this problem with currently available software stack one need to work with i915 graphics driver directly. E.g. to get current GPU timestamp on Linux the following function may be employed ([libdrm](https://gitlab.freedesktop.org/mesa/drm) should be used as an interface layer):
+Common problem while kernel timestamps collection is to map these timestamps to general CPU timeline. Since Level Zero provides kernel timestamps in GPU clocks, one may need to convert them to some CPU time. Starting from Level Zero 1.1, new function `zeDeviceGetGlobalTimestamps` is available. Using this function, one can get correlated host (CPU) and device (GPU) timestamps for any particular device:
 ```cpp
-#define I915_TIMESTAMP_LOW_OFFSET 0x2358
-
-uint64_t GetGpuTimestamp() {
-  int fd = drmOpenWithType("i915", NULL, DRM_NODE_RENDER);
-  if (fd < 0) {
-    fd = drmOpenWithType("i915", NULL, DRM_NODE_PRIMARY);
-  }
-  assert(fd >= 0);
-
-  struct drm_i915_reg_read reg_read_params = {0, };
-  reg_read_params.offset = I915_TIMESTAMP_LOW_OFFSET | 1;
-
-  int ioctl_ret = drmIoctl(fd, DRM_IOCTL_I915_REG_READ, &reg_read_params);
-  assert(ioctl_ret == 0);
-
-  drmClose(fd);
-
-  return reg_read_params.val;
-}
+uint64_t host_timestamp = 0, device_timestamp = 0;
+ze_result_t status = zeDeviceGetGlobalTimestamps(
+    device, &host_timestamp, &device_timestamp);
+assert(status == ZE_RESULT_SUCCESS);
 ```
-Note that Level Zero currently use only low 32 bits for the timer, so for correlation purposes one should truncate return value:
+Note, that host timestamp value corresponds to `CLOCK_MONOTONIC_RAW` on Linux or `QueryPerformanceCounter` on Windows, while device timestamp for GPU is collected in raw GPU cycles and it's low 32 bits are the same as kernel or metric timestamps (kernel and metric timestamps in Level Zero limited to 32 bits for now).
 ```cpp
-uint64_t gpu_timestamp = GetGpuTimestamp() & 0x0FFFFFFFF;
+uint64_t kernel_timestamp = (device_timestamp & 0x0FFFFFFFF);
 ```
-Similarly one can get precise timer frequency:
+
+To convert GPU cycles into seconds one may use `timerResolution` field from `ze_device_properties_t` structure, that represents cycles per second starting from Level Zero 1.1:
 ```cpp
-uint64_t GetGpuTimerFrequency() {
-  int fd = drmOpenWithType("i915", NULL, DRM_NODE_RENDER);
-  if (fd < 0) {
-    fd = drmOpenWithType("i915", NULL, DRM_NODE_PRIMARY);
-  }
-  assert(fd >= 0);
+ze_device_properties_t props{};
+props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+ze_result_t status = zeDeviceGetProperties(device, &props);
+assert(status == ZE_RESULT_SUCCESS);
 
-  int32_t frequency = 0;
-
-  drm_i915_getparam_t params = {0, };
-  params.param = I915_PARAM_CS_TIMESTAMP_FREQUENCY;
-  params.value = &frequency;
-
-  int ioctl_ret = drmIoctl(fd, DRM_IOCTL_I915_GETPARAM, &params);
-  assert(ioctl_ret == 0);
-  assert(frequency > 0);
-
-  drmClose(fd);
-
-  return static_cast<uint64_t>(frequency);
-}
+const uint64_t NSEC_IN_SEC = 1000000000;
+uint64_t device_timestamp_ns = NSEC_IN_SEC * device_timestamp / props.timerResolution;
 ```
 
 ## Build and Run

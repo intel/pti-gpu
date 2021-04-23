@@ -80,6 +80,7 @@ struct ZeKernelInterval {
 
 struct ZeCommandListInfo {
   ze_context_handle_t context;
+  ze_device_handle_t device;
   std::vector<ZeKernelInstance*> kernel_list;
   bool immediate;
 };
@@ -212,13 +213,14 @@ class ZeKernelCollector {
     PTI_ASSERT(timer_frequency_ > 0);
   }
 
-  uint64_t GetTimestamp() const {
+  uint64_t GetHostTimestamp() const {
     PTI_ASSERT(correlator_ != nullptr);
     return correlator_->GetTimestamp();
   }
 
-  uint64_t GetDeviceTimestamp() const {
-    return utils::i915::GetGpuTimestamp() & 0x0FFFFFFFF;
+  uint64_t GetDeviceTimestamp(ze_device_handle_t device) const {
+    PTI_ASSERT(device != nullptr);
+    return utils::ze::GetDeviceTimestamp(device) & 0x0FFFFFFFF;
   }
 
   void EnableTracing(zel_tracer_handle_t tracer) {
@@ -502,13 +504,17 @@ class ZeKernelCollector {
     kernel_interval_list_.push_back({name, start, end});
   }
 
-  void AddCommandList(ze_command_list_handle_t command_list,
-                      ze_context_handle_t context, bool immediate) {
+  void AddCommandList(
+      ze_command_list_handle_t command_list,
+      ze_context_handle_t context,
+      ze_device_handle_t device,
+      bool immediate) {
     PTI_ASSERT(command_list != nullptr);
     PTI_ASSERT(context != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(command_list_map_.count(command_list) == 0);
-    command_list_map_[command_list] = {context, std::vector<ZeKernelInstance*>(), immediate};
+    command_list_map_[command_list] =
+      {context, device, std::vector<ZeKernelInstance*>(), immediate};
 
     PTI_ASSERT(correlator_ != nullptr);
     correlator_->CreateKernelIdList(command_list);
@@ -560,6 +566,15 @@ class ZeKernelCollector {
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
     ZeCommandListInfo& command_list_info = command_list_map_[command_list];
     return command_list_info.context;
+  }
+
+  ze_device_handle_t GetCommandListDevice(
+      ze_command_list_handle_t command_list) {
+    PTI_ASSERT(command_list != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    PTI_ASSERT(command_list_map_.count(command_list) == 1);
+    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+    return command_list_info.device;
   }
 
   bool IsCommandListImmediate(ze_command_list_handle_t command_list) {
@@ -778,11 +793,14 @@ class ZeKernelCollector {
     ZeKernelInstance* instance = new ZeKernelInstance;
     instance->name = name;
     instance->props = props;
-    instance->append_time = collector->GetTimestamp();
+    instance->append_time = collector->GetHostTimestamp();
 
     if (collector->IsCommandListImmediate(command_list)) {
+      ze_device_handle_t device =
+        collector->GetCommandListDevice(command_list);
+      PTI_ASSERT(device != nullptr);
       instance->submit_time = instance->append_time;
-      instance->device_submit_time = collector->GetDeviceTimestamp();
+      instance->device_submit_time = collector->GetDeviceTimestamp(device);
       instance->queue = command_list;
     } else {
       instance->device_submit_time = 0;
@@ -1183,7 +1201,10 @@ class ZeKernelCollector {
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
       collector->AddCommandList(
-          **(params->pphCommandList), *(params->phContext), false);
+          **(params->pphCommandList),
+          *(params->phContext),
+          *(params->phDevice),
+          false);
     }
   }
 
@@ -1196,7 +1217,10 @@ class ZeKernelCollector {
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
       collector->AddCommandList(
-          **(params->pphCommandList), *(params->phContext), true);
+          **(params->pphCommandList),
+          *(params->phContext),
+          *(params->phDevice),
+          true);
     }
   }
 
@@ -1233,18 +1257,40 @@ class ZeKernelCollector {
       reinterpret_cast<ZeKernelCollector*>(global_data);
     PTI_ASSERT(collector != nullptr);
 
-    ZeSubmitData* submit_data = new ZeSubmitData;
-    submit_data->host_sync = collector->GetTimestamp();
-    submit_data->device_sync = collector->GetDeviceTimestamp();
+    uint32_t command_list_count = *params->pnumCommandLists;
+    if (command_list_count == 0) {
+      return;
+    }
 
-    *reinterpret_cast<ZeSubmitData**>(instance_data) = submit_data;
+    ze_command_list_handle_t* command_lists = *params->pphCommandLists;
+    if (command_lists == nullptr) {
+      return;
+    }
+
+    std::vector<ZeSubmitData>* submit_data_list =
+      new std::vector<ZeSubmitData>();
+    PTI_ASSERT(submit_data_list != nullptr);
+
+    for (uint32_t i = 0; i < command_list_count; ++i) {
+      ze_device_handle_t device =
+        collector->GetCommandListDevice(command_lists[i]);
+      PTI_ASSERT(device != nullptr);
+
+      submit_data_list->push_back({
+          collector->GetHostTimestamp(),
+          collector->GetDeviceTimestamp(device)});
+    }
+
+    *reinterpret_cast<std::vector<ZeSubmitData>**>(instance_data) =
+      submit_data_list;
   }
 
   static void OnExitCommandQueueExecuteCommandLists(
       ze_command_queue_execute_command_lists_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
-    ZeSubmitData* submit_data = *reinterpret_cast<ZeSubmitData**>(instance_data);
-    PTI_ASSERT(submit_data != nullptr);
+    std::vector<ZeSubmitData>* submit_data_list =
+      *reinterpret_cast<std::vector<ZeSubmitData>**>(instance_data);
+    PTI_ASSERT(submit_data_list != nullptr);
 
     if (result == ZE_RESULT_SUCCESS) {
       ZeKernelCollector* collector =
@@ -1256,12 +1302,14 @@ class ZeKernelCollector {
       for (uint32_t i = 0; i < command_list_count; ++i) {
         if (!collector->IsCommandListImmediate(command_lists[i])) {
           collector->UpdateKernelInstances(
-              command_lists[i], *(params->phCommandQueue), submit_data);
+              command_lists[i],
+              *(params->phCommandQueue),
+              &submit_data_list->at(i));
         }
       }
     }
 
-    delete submit_data;
+    delete submit_data_list;
   }
 
   static void OnExitCommandQueueSynchronize(

@@ -25,32 +25,6 @@
 namespace utils {
 namespace i915 {
 
-inline uint64_t GetGpuTimestamp() {
-#if defined(_WIN32)
-
-  return 0; // Not yet implemented
-
-#elif defined(__linux__)
-
-  int fd = drmOpenWithType("i915", NULL, DRM_NODE_RENDER);
-  if (fd < 0) {
-    fd = drmOpenWithType("i915", NULL, DRM_NODE_PRIMARY);
-  }
-  PTI_ASSERT(fd >= 0);
-
-  struct drm_i915_reg_read reg_read_params = {0, };
-  reg_read_params.offset = I915_TIMESTAMP_LOW_OFFSET | 1;
-
-  int ioctl_ret = drmIoctl(fd, DRM_IOCTL_I915_REG_READ, &reg_read_params);
-  PTI_ASSERT(ioctl_ret == 0);
-
-  drmClose(fd);
-
-  return reg_read_params.val;
-
-#endif
-}
-
 inline uint64_t GetGpuTimerFrequencyFromL0() {
   ze_driver_handle_t driver = nullptr;
   ze_device_handle_t device = nullptr;

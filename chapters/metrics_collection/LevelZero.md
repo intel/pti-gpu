@@ -290,8 +290,7 @@ The difference between these two timestamps is that kernel time is in GPU clocks
 NS_IN_SEC = 1000000000
 gpuTimestampNs = gpuTimestampClocks * NS_IN_SEC / gpuTimerFrequency
 ```
-
-Currently Level Zero does not provide this value, but it can be retrieved with the help of Intel(R) Metrics Discovery Application Programming Interface as part of device information as `GpuTimestampFrequency` symbol (look into "Device Information" section from [here](./MetricsDiscoveryAPI.md) for details).
+Starting from version 1.1, Level Zero provides this value as `timerResolution` field of `ze_device_properties_t` structure in cycles per second. Also it can be retrieved with the help of Intel(R) Metrics Discovery Application Programming Interface as part of device information as `GpuTimestampFrequency` symbol (look into "Device Information" section from [here](./MetricsDiscoveryAPI.md) for details).
 
 ## Build and Run
 To make metrics collection work one need to link the application with Level Zero ICD library (e.g. `libze_loader.so`) and run it as following:
