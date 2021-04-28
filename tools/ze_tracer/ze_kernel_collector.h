@@ -422,7 +422,7 @@ class ZeKernelCollector {
 
     if (callback_ != nullptr) {
       PTI_ASSERT(instance.append_time > 0);
-      PTI_ASSERT(instance.append_time < instance.submit_time);
+      PTI_ASSERT(instance.append_time <= instance.submit_time);
 
       PTI_ASSERT(instance.queue != nullptr);
       PTI_ASSERT(!instance.name.empty());
@@ -554,7 +554,7 @@ class ZeKernelCollector {
         kernel_list[i]->queue = queue;
         kernel_list[i]->submit_time = submit_data->host_sync;
         kernel_list[i]->device_submit_time = submit_data->device_sync;
-        PTI_ASSERT(kernel_list[i]->append_time < kernel_list[i]->submit_time);
+        PTI_ASSERT(kernel_list[i]->append_time <= kernel_list[i]->submit_time);
       }
     }
   }

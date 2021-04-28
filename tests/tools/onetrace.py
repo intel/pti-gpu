@@ -31,17 +31,17 @@ def run(path, option):
   if option == "cl":
     app_folder = utils.get_sample_build_path("cl_gemm")
     app_file = os.path.join(app_folder, "cl_gemm")
-    p = subprocess.Popen(["./onetrace", "-h", "-d", app_file, "gpu", "1024", "1"],\
+    p = subprocess.Popen(["./onetrace", "-h", "-d", "-t", app_file, "gpu", "1024", "1"],\
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   elif option == "ze":
     app_folder = utils.get_sample_build_path("ze_gemm")
     app_file = os.path.join(app_folder, "ze_gemm")
-    p = subprocess.Popen(["./onetrace", "-h", "-d", app_file, "1024", "1"],\
+    p = subprocess.Popen(["./onetrace", "-h", "-d", "-t", app_file, "1024", "1"],\
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   elif option == "omp":
     app_folder = utils.get_sample_build_path("omp_gemm")
     app_file = os.path.join(app_folder, "omp_gemm")
-    p = subprocess.Popen(["./onetrace", "-h", "-d", app_file, "gpu", "1024", "1"],\
+    p = subprocess.Popen(["./onetrace", "-h", "-d", "-t", app_file, "gpu", "1024", "1"],\
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   else:
     app_folder = utils.get_sample_build_path("dpc_gemm")

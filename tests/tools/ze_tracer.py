@@ -30,12 +30,12 @@ def run(path, option):
   if option == "dpc":
     app_folder = utils.get_sample_build_path("dpc_gemm")
     app_file = os.path.join(app_folder, "dpc_gemm")
-    p = subprocess.Popen(["./ze_tracer", "-h", "-d", app_file, "gpu", "1024", "1"],\
+    p = subprocess.Popen(["./ze_tracer", "-h", "-d", "-t", app_file, "gpu", "1024", "1"],\
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   elif option == "omp":
     app_folder = utils.get_sample_build_path("omp_gemm")
     app_file = os.path.join(app_folder, "omp_gemm")
-    p = subprocess.Popen(["./ze_tracer", "-h", "-d", app_file, "gpu", "1024", "1"],\
+    p = subprocess.Popen(["./ze_tracer", "-h", "-d", "-t", app_file, "gpu", "1024", "1"],\
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   else:
     app_folder = utils.get_sample_build_path("ze_gemm")
