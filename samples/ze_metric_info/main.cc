@@ -97,10 +97,8 @@ int main(int argc, char* argv[]) {
   status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  ze_device_handle_t device = nullptr;
-  ze_driver_handle_t driver = nullptr;
-  utils::ze::GetIntelDeviceAndDriver(ZE_DEVICE_TYPE_GPU, device, driver);
-  if (device == nullptr || driver == nullptr) {
+  ze_device_handle_t device = utils::ze::GetGpuDevice();
+  if (device == nullptr) {
     std::cout << "Unable to find target device" << std::endl;
     return 0;
   }

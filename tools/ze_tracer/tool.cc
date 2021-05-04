@@ -140,6 +140,8 @@ __declspec(dllexport)
 #endif
 void SetToolEnv() {
   utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
+  utils::SetEnv("NEOReadDebugKeys", "1");
+  utils::SetEnv("UseCyclesPerSecondTimer", "1");
 }
 
 static TraceOptions ReadArgs() {
@@ -208,21 +210,9 @@ static TraceOptions ReadArgs() {
 }
 
 void EnableProfiling() {
-  ze_result_t status = ZE_RESULT_SUCCESS;
-  status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-  ze_device_handle_t device = nullptr;
-  ze_driver_handle_t driver = nullptr;
-
-  utils::ze::GetIntelDeviceAndDriver(ZE_DEVICE_TYPE_GPU, device, driver);
-  if (device == nullptr || driver == nullptr) {
-    std::cout << "[WARNING] Unable to find target" <<
-      " device for tracing" << std::endl;
-    return;
-  }
-
-  tracer = ZeTracer::Create(driver, device, ReadArgs());
+  tracer = ZeTracer::Create(ReadArgs());
 }
 
 void DisableProfiling() {

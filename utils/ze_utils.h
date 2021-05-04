@@ -21,92 +21,67 @@
 namespace utils {
 namespace ze {
 
-inline void GetIntelDeviceAndDriver(ze_device_type_t type,
-                                    ze_device_handle_t& device,
-                                    ze_driver_handle_t& driver) {
+inline std::vector<ze_driver_handle_t> GetDriverList() {
   ze_result_t status = ZE_RESULT_SUCCESS;
 
   uint32_t driver_count = 0;
   status = zeDriverGet(&driver_count, nullptr);
-  if (status != ZE_RESULT_SUCCESS || driver_count == 0) {
-    return;
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  if (driver_count == 0) {
+    return std::vector<ze_driver_handle_t>();
   }
 
-  std::vector<ze_driver_handle_t> driver_list(driver_count, nullptr);
+  std::vector<ze_driver_handle_t> driver_list(driver_count);
   status = zeDriverGet(&driver_count, driver_list.data());
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  for (uint32_t i = 0; i < driver_count; ++i) {
-    uint32_t device_count = 0;
-    status = zeDeviceGet(driver_list[i], &device_count, nullptr);
-    if (status != ZE_RESULT_SUCCESS || device_count == 0) {
-        continue;
-    }
-
-    std::vector<ze_device_handle_t> device_list(device_count, nullptr);
-    status = zeDeviceGet(driver_list[i], &device_count, device_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    std::string device_string = utils::GetEnv("PTI_DEVICE_ID");
-    uint32_t device_id = device_string.empty() ? 0 : std::stoul(device_string);
-    PTI_ASSERT(device_id < device_count);
-
-    uint32_t sub_device_count = 0;
-    status = zeDeviceGetSubDevices(
-        device_list[device_id], &sub_device_count, nullptr);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    if (sub_device_count == 0) {
-      driver = driver_list[i];
-      device = device_list[device_id];
-      break;
-    }
-
-    std::vector<ze_device_handle_t> sub_device_list(sub_device_count, nullptr);
-    status = zeDeviceGetSubDevices(
-        device_list[device_id], &sub_device_count, sub_device_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    std::string sub_device_string = utils::GetEnv("PTI_SUB_DEVICE_ID");
-    uint32_t sub_device_id =
-      sub_device_string.empty() ? 0 : std::stoul(sub_device_string);
-    PTI_ASSERT(sub_device_id < sub_device_count);
-
-    driver = driver_list[i];
-    device = sub_device_list[sub_device_id];
-    break;
-  }
+  return driver_list;
 }
 
-inline ze_device_handle_t GetGpuDevice() {
+inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) {
+  PTI_ASSERT(driver != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
-
-  uint32_t driver_count = 0;
-  status = zeDriverGet(&driver_count, nullptr);
-  if (status != ZE_RESULT_SUCCESS || driver_count < 1) {
-    return nullptr;
-  }
-
-  ze_driver_handle_t driver = nullptr;
-  status = zeDriverGet(&driver_count, &driver);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   uint32_t device_count = 0;
   status = zeDeviceGet(driver, &device_count, nullptr);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  PTI_ASSERT(device_count > 0);
+
+  if (device_count == 0) {
+    return std::vector<ze_device_handle_t>();
+  }
 
   std::vector<ze_device_handle_t> device_list(device_count);
   status = zeDeviceGet(driver, &device_count, device_list.data());
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  for (uint32_t i = 0; i < device_count; ++i) {
-    ze_device_properties_t device_properties{
-        ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
-    status = zeDeviceGetProperties(device_list[i], &device_properties);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    if (device_properties.type == ZE_DEVICE_TYPE_GPU) {
-      return device_list[i];
+  return device_list;
+}
+
+inline ze_driver_handle_t GetGpuDriver() {
+  for (auto driver : GetDriverList()) {
+    for (auto device : GetDeviceList(driver)) {
+      ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+      ze_result_t status = zeDeviceGetProperties(device, &props);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (props.type == ZE_DEVICE_TYPE_GPU) {
+        return driver;
+      }
+    }
+  }
+
+  return nullptr;
+}
+
+inline ze_device_handle_t GetGpuDevice() {
+  for (auto driver : GetDriverList()) {
+    for (auto device : GetDeviceList(driver)) {
+      ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+      ze_result_t status = zeDeviceGetProperties(device, &props);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (props.type == ZE_DEVICE_TYPE_GPU) {
+        return device;
+      }
     }
   }
 
@@ -200,15 +175,6 @@ inline zet_metric_group_handle_t FindMetricGroup(
   return target;
 }
 
-inline uint64_t GetTimerResolution(ze_device_handle_t device) {
-  ze_device_properties_t props{};
-  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
-  props.pNext = nullptr;
-  ze_result_t status = zeDeviceGetProperties(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  return props.timerResolution;
-}
-
 inline size_t GetKernelMaxSubgroupSize(ze_kernel_handle_t kernel) {
   PTI_ASSERT(kernel != nullptr);
   ze_kernel_properties_t props{};
@@ -240,6 +206,32 @@ inline uint64_t GetDeviceTimestamp(ze_device_handle_t device) {
       device, &host_timestamp, &device_timestamp);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return device_timestamp;
+}
+
+inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
+  PTI_ASSERT(device != nullptr);
+  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  return props.timerResolution;
+}
+
+inline ze_api_version_t GetDriverVersion(ze_driver_handle_t driver) {
+  PTI_ASSERT(driver != nullptr);
+
+  ze_api_version_t version = ZE_API_VERSION_FORCE_UINT32;
+  ze_result_t status = zeDriverGetApiVersion(driver, &version);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  return version;
+}
+
+inline ze_api_version_t GetVersion() {
+  auto driver_list = GetDriverList();
+  if (driver_list.empty()) {
+    return ZE_API_VERSION_FORCE_UINT32;
+  }
+  return GetDriverVersion(driver_list.front());
 }
 
 } // namespace ze

@@ -214,3 +214,6 @@ ZES_ENABLE_SYSMAN=1 ./<application>
 
 ## Samples
 - [Level Zero System Management](../../samples/ze_sysman)
+
+## Tools
+- [System Monitoring Utility](../../tools/sysmon)

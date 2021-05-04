@@ -27,7 +27,6 @@ To set target device and sub-device to collect metrics from one can specify `PTI
 - [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime)
 - [Intel(R) Metrics Discovery Application Programming Interface](https://github.com/intel/metrics-discovery)
 - [Metrics Library for Metrics Discovery API (Metrics Library for MD API)](https://github.com/intel/metrics-library)
-- [libdrm](https://gitlab.freedesktop.org/mesa/drm)
 
 ## Build and Run
 ### Linux

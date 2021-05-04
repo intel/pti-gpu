@@ -40,6 +40,8 @@ __declspec(dllexport)
 #endif
 void SetToolEnv() {
   utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
+  utils::SetEnv("NEOReadDebugKeys", "1");
+  utils::SetEnv("UseCyclesPerSecondTimer", "1");
 }
 
 // Internal Tool Functionality ////////////////////////////////////////////////

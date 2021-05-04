@@ -40,11 +40,6 @@ FindL0Headers(onetrace_tool)
 
 FindL0HeadersPath(onetrace_tool "${PROJECT_SOURCE_DIR}/../ze_tracer/gen_tracing_callbacks.py")
 
-if(UNIX)
-  FindDRMLibrary(onetrace_tool)
-  CheckDRMHeaders(onetrace_tool)
-endif()
-
 # Loader
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTOOL_NAME=onetrace_tool")

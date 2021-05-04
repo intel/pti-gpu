@@ -17,7 +17,6 @@
 #include <level_zero/layers/zel_tracing_api.h>
 
 #include "correlator.h"
-#include "i915_utils.h"
 #include "utils.h"
 #include "ze_utils.h"
 
@@ -48,6 +47,7 @@ struct ZeKernelInstance {
   uint64_t append_time;
   uint64_t submit_time;
   uint64_t device_submit_time;
+  uint64_t timer_frequency;
   ZeKernelProps props;
 };
 
@@ -105,6 +105,8 @@ class ZeKernelCollector {
       bool verbose,
       OnZeKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
+    PTI_ASSERT(utils::ze::GetVersion() != ZE_API_VERSION_1_0);
+
     PTI_ASSERT(correlator != nullptr);
     ZeKernelCollector* collector = new ZeKernelCollector(
         correlator, verbose, callback, callback_data);
@@ -207,10 +209,8 @@ class ZeKernelCollector {
         verbose_(verbose),
         callback_(callback),
         callback_data_(callback_data),
-        timer_frequency_(utils::i915::GetGpuTimerFrequency()),
         kernel_id_(1) {
     PTI_ASSERT(correlator_ != nullptr);
-    PTI_ASSERT(timer_frequency_ > 0);
   }
 
   uint64_t GetHostTimestamp() const {
@@ -393,21 +393,23 @@ class ZeKernelCollector {
 
     uint64_t start = timestamp.global.kernelStart;
     uint64_t end = timestamp.global.kernelEnd;
+    uint64_t freq = instance.timer_frequency;
+    PTI_ASSERT(freq > 0);
 
     uint64_t duration = 0;
     if (start < end) {
       duration = (end - start) *
-        static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
+        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
     } else { // 32-bit timer overflow
       duration = ((1ull << 32) + end - start) *
-        static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
+        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
     }
 
     PTI_ASSERT(instance.submit_time > 0);
     PTI_ASSERT(instance.device_submit_time > 0);
     PTI_ASSERT(start > instance.device_submit_time);
     uint64_t time_shift = (start - instance.device_submit_time) *
-      static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
+      static_cast<uint64_t>(NSEC_IN_SEC) / freq;
     uint64_t host_start = instance.submit_time + time_shift;
     uint64_t host_end = host_start + duration;
 
@@ -415,7 +417,7 @@ class ZeKernelCollector {
 
     if (instance.props.simd_width > 0) { // User kernels only
       uint64_t start_ns = start *
-        static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
+        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
       uint64_t end_ns = start_ns + duration;
       AddKernelInterval(instance.name, start_ns, end_ns);
     }
@@ -795,10 +797,12 @@ class ZeKernelCollector {
     instance->props = props;
     instance->append_time = collector->GetHostTimestamp();
 
+    ze_device_handle_t device = collector->GetCommandListDevice(command_list);
+    PTI_ASSERT(device != nullptr);
+    instance->timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
+    PTI_ASSERT(instance->timer_frequency > 0);
+
     if (collector->IsCommandListImmediate(command_list)) {
-      ze_device_handle_t device =
-        collector->GetCommandListDevice(command_list);
-      PTI_ASSERT(device != nullptr);
       instance->submit_time = instance->append_time;
       instance->device_submit_time = collector->GetDeviceTimestamp(device);
       instance->queue = command_list;
@@ -1365,7 +1369,6 @@ class ZeKernelCollector {
 
   bool verbose_ = false;
 
-  uint64_t timer_frequency_ = 0;
   Correlator* correlator_ = nullptr;
   std::atomic<uint64_t> kernel_id_;
 

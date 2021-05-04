@@ -21,11 +21,6 @@ endif()
 FindL0Library(zet_hot_kernels)
 FindL0Headers(zet_hot_kernels)
 
-if(UNIX)
-  FindDRMLibrary(zet_hot_kernels)
-  CheckDRMHeaders(zet_hot_kernels)
-endif()
-
 # Loader
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTOOL_NAME=zet_hot_kernels")

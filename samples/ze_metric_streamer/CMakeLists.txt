@@ -27,11 +27,6 @@ endif()
 FindL0Library(zet_metric_streamer)
 FindL0Headers(zet_metric_streamer)
 
-if(UNIX)
-  FindDRMLibrary(zet_metric_streamer)
-  CheckDRMHeaders(zet_metric_streamer)
-endif()
-
 # Loader
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTOOL_NAME=zet_metric_streamer")

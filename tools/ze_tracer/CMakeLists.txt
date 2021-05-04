@@ -32,11 +32,6 @@ FindL0Headers(zet_tracer)
 
 FindL0HeadersPath(zet_tracer "${PROJECT_SOURCE_DIR}/gen_tracing_callbacks.py")
 
-if(UNIX)
-  FindDRMLibrary(zet_tracer)
-  CheckDRMHeaders(zet_tracer)
-endif()
-
 # Loader
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTOOL_NAME=zet_tracer")

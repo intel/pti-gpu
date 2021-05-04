@@ -127,7 +127,6 @@ cmake -DCLOCK_HIGH_RESOLUTION=1 ..
 - [oneAPI Level Zero loader](https://github.com/oneapi-src/level-zero)
 - [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime) to run on GPU
 - [Intel(R) Xeon(R) Processor / Intel(R) Core(TM) Processor (CPU) Runtimes](https://software.intel.com/en-us/articles/opencl-drivers#cpu-section) to run on CPU
-- [libdrm](https://gitlab.freedesktop.org/mesa/drm)
 
 ## Build and Run
 ### Linux

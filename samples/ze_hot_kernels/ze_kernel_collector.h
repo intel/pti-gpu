@@ -15,7 +15,6 @@
 
 #include <level_zero/layers/zel_tracing_api.h>
 
-#include "i915_utils.h"
 #include "utils.h"
 #include "ze_utils.h"
 
@@ -24,6 +23,7 @@ struct ZeKernelInstance {
   size_t simd_width;
   ze_event_pool_handle_t event_pool;
   ze_event_handle_t event;
+  uint64_t timer_frequency;
 };
 
 struct ZeKernelInfo {
@@ -54,15 +54,21 @@ struct ZeKernelInterval {
   uint64_t end;
 };
 
+struct ZeCommandListInfo {
+  ze_context_handle_t context;
+  ze_device_handle_t device;
+};
+
 using ZeKernelInfoMap = std::map<std::string, ZeKernelInfo>;
 using ZeKernelIntervalList = std::vector<ZeKernelInterval>;
-using ZeCommandListMap =
-  std::map<ze_command_list_handle_t, ze_context_handle_t>;
+using ZeCommandListMap = std::map<ze_command_list_handle_t, ZeCommandListInfo>;
 
 class ZeKernelCollector {
  public: // Interface
 
   static ZeKernelCollector* Create() {
+    PTI_ASSERT(utils::ze::GetVersion() != ZE_API_VERSION_1_0);
+
     ZeKernelCollector* collector = new ZeKernelCollector();
     PTI_ASSERT(collector != nullptr);
 
@@ -153,8 +159,7 @@ class ZeKernelCollector {
 
  private: // Implementation
 
-  ZeKernelCollector()
-      : timer_frequency_(utils::i915::GetGpuTimerFrequency()) {}
+  ZeKernelCollector() {}
 
   void EnableTracing(zel_tracer_handle_t tracer) {
     PTI_ASSERT(tracer != nullptr);
@@ -238,17 +243,20 @@ class ZeKernelCollector {
 
     uint64_t start = timestamp.global.kernelStart;
     uint64_t end = timestamp.global.kernelEnd;
+    uint64_t freq = instance.timer_frequency;
+    PTI_ASSERT(freq > 0);
+
     uint64_t time = 0, start_ns = 0, end_ns = 0;
 
     start_ns = start *
-      static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
+      static_cast<uint64_t>(NSEC_IN_SEC) / freq;
     if (start < end) {
       end_ns = end *
-        static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
+        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
     } else { // 32-bit timer overflow
       PTI_ASSERT(start < (1ULL << 32));
       end_ns = ((1ULL << 32) + end) *
-        static_cast<uint64_t>(NSEC_IN_SEC) / timer_frequency_;
+        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
     }
     time = end_ns - start_ns;
 
@@ -310,12 +318,13 @@ class ZeKernelCollector {
 
   void AddCommandList(
       ze_command_list_handle_t command_list,
-      ze_context_handle_t context) {
+      ze_context_handle_t context,
+      ze_device_handle_t device) {
     PTI_ASSERT(command_list != nullptr);
     PTI_ASSERT(context != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(command_list_map_.count(command_list) == 0);
-    command_list_map_[command_list] = context;
+    command_list_map_[command_list] = {context, device};
   }
 
   void RemoveCommandList(ze_command_list_handle_t command_list) {
@@ -330,7 +339,15 @@ class ZeKernelCollector {
     PTI_ASSERT(command_list != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    return command_list_map_[command_list];
+    return command_list_map_[command_list].context;
+  }
+
+  ze_device_handle_t GetCommandListDevice(
+      ze_command_list_handle_t command_list) {
+    PTI_ASSERT(command_list != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    PTI_ASSERT(command_list_map_.count(command_list) == 1);
+    return command_list_map_[command_list].device;
   }
 
  private: // Callbacks
@@ -433,6 +450,11 @@ class ZeKernelCollector {
     ZeKernelInstance* instance = new ZeKernelInstance;
     instance->name = name;
     instance->simd_width = simd_width;
+
+    ze_device_handle_t device = collector->GetCommandListDevice(command_list);
+    PTI_ASSERT(device != nullptr);
+    instance->timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
+    PTI_ASSERT(instance->timer_frequency > 0);
 
     if (signal_event == nullptr) {
       ze_context_handle_t context =
@@ -540,7 +562,9 @@ class ZeKernelCollector {
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
       collector->AddCommandList(
-          **(params->pphCommandList), *(params->phContext));
+          **(params->pphCommandList),
+          *(params->phContext),
+          *(params->phDevice));
     }
   }
 
@@ -553,7 +577,9 @@ class ZeKernelCollector {
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
       collector->AddCommandList(
-          **(params->pphCommandList), *(params->phContext));
+          **(params->pphCommandList),
+          *(params->phContext),
+          *(params->phDevice));
     }
   }
 
@@ -594,7 +620,6 @@ class ZeKernelCollector {
 
  private: // Data
   zel_tracer_handle_t tracer_ = nullptr;
-  uint64_t timer_frequency_ = 0;
 
   std::mutex lock_;
   ZeKernelInfoMap kernel_info_map_;

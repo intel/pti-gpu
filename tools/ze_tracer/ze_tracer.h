@@ -26,13 +26,7 @@ const char* kChromeTraceFileExt = "json";
 
 class ZeTracer {
  public:
-  static ZeTracer* Create(
-      ze_driver_handle_t driver,
-      ze_device_handle_t device,
-      const TraceOptions& options) {
-    PTI_ASSERT(driver != nullptr);
-    PTI_ASSERT(device != nullptr);
-
+  static ZeTracer* Create(const TraceOptions& options) {
     ZeTracer* tracer = new ZeTracer(options);
 
     ZeKernelCollector* kernel_collector = nullptr;

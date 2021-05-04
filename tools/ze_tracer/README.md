@@ -100,7 +100,6 @@ cmake -DCLOCK_HIGH_RESOLUTION=1 ..
 - [Python](https://www.python.org/) (version 2.7 and above)
 - [oneAPI Level Zero loader](https://github.com/oneapi-src/level-zero)
 - [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime)
-- [libdrm](https://gitlab.freedesktop.org/mesa/drm)
 
 ## Build and Run
 ### Linux
