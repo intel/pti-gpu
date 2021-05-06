@@ -21,8 +21,6 @@ endif()
 FindL0Library(zet_hot_functions)
 FindL0Headers(zet_hot_functions)
 
-FindL0HeadersPath(zet_hot_functions "${PROJECT_SOURCE_DIR}/gen_tracing_callbacks.py")
-
 # Loader
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTOOL_NAME=zet_hot_functions")

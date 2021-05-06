@@ -11,9 +11,9 @@ EU Count: 48    Threads per EU: 7    EU SIMD Width: 8    Total Memory(MB): 25432
 Core Frequency(MHz): 300 of 1200    Core Temperature(C): 36
 ====================================================================================================
 Running Processes: 2
-     PID,  Device Memory Used(MB),  Shared Memory Used(MB),  GPU Engines,          Executable
-   22246,                 770.250,                   0.000,        OTHER, ./ze_gemm 8192 1000
-   22258,                   0.125,                   0.000,        OTHER,            ./sysmon
+     PID,  Device Memory Used(MB),  Shared Memory Used(MB),  GPU Engines, Executable
+   22246,                 770.250,                   0.000,        OTHER, ./ze_gemm
+   22258,                   0.125,                   0.000,        OTHER, ./sysmon
 ```
 ## Supported OS
 - Linux

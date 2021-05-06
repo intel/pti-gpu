@@ -5,6 +5,7 @@
 // =============================================================
 
 #include "ze_api_collector.h"
+#include "ze_api_callbacks.h"
 
 static ZeApiCollector* collector = nullptr;
 static std::chrono::steady_clock::time_point start;

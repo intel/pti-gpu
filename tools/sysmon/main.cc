@@ -13,10 +13,9 @@
 #define BYTES_IN_MB (1024.0f * 1024.0f)
 #define SPACES "    "
 
-#define PID_LENGTH         8
-#define MEMORY_LENGTH     24
-#define ENGINES_LENGTH    12
-#define EXECUTABLE_LENGTH 16
+#define PID_LENGTH       8
+#define MEMORY_LENGTH   24
+#define ENGINES_LENGTH  12
 
 static uint64_t GetDeviceMemSize(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
@@ -188,12 +187,9 @@ static std::string GetProcessName(uint32_t pid) {
     return std::string();
   }
 
-  std::getline(file, process_name);
+  std::getline(file, process_name, '\0');
   file.close();
 
-  if (process_name[process_name.size() - 1] == '\0') {
-    process_name.pop_back();
-  }
   return process_name;
 }
 
@@ -229,12 +225,7 @@ static void PrintProcesses(zes_device_handle_t device) {
     std::to_string(state_list.size()) << std::endl;
 
   uint32_t engines_length = ENGINES_LENGTH;
-  uint32_t executable_length = EXECUTABLE_LENGTH;
   for (auto& state : state_list) {
-    std::string process_name = GetProcessName(state.processId);
-    if (process_name.size() > executable_length) {
-      executable_length = process_name.size();
-    }
     std::string engines = GetEnginesString(state.engines);
     if (engines.size() > engines_length) {
       engines_length = engines.size();
@@ -242,14 +233,13 @@ static void PrintProcesses(zes_device_handle_t device) {
   }
 
   ++engines_length;
-  ++executable_length;
 
   std::cout << std::setfill(' ') <<
     std::setw(PID_LENGTH) << "PID" << "," <<
     std::setw(MEMORY_LENGTH) << "Device Memory Used(MB)" << "," <<
     std::setw(MEMORY_LENGTH) << "Shared Memory Used(MB)" << "," <<
     std::setw(engines_length) << "GPU Engines" << "," <<
-    std::setw(executable_length) << "Executable" << std::endl;
+    std::setw(1) << " Executable" << std::endl;
 
   for (auto& state : state_list) {
     std::cout <<
@@ -259,8 +249,7 @@ static void PrintProcesses(zes_device_handle_t device) {
       std::setw(MEMORY_LENGTH) << std::fixed << std::setprecision(3) <<
         state.sharedSize / BYTES_IN_MB << "," <<
       std::setw(engines_length) << GetEnginesString(state.engines) << "," <<
-      std::setw(executable_length) << GetProcessName(state.processId) <<
-      std::endl;
+      std::setw(1) << " " << GetProcessName(state.processId) << std::endl;
   }
 }
 

@@ -42,6 +42,8 @@ struct ZeFunction {
 
 using ZeFunctionInfoMap = std::map<std::string, ZeFunction>;
 
+static void SetTracingFunctions(zel_tracer_handle_t tracer);
+
 class ZeApiCollector {
  public: // User Interface
   static ZeApiCollector* Create() {
@@ -61,7 +63,7 @@ class ZeApiCollector {
     }
 
     collector->tracer_ = tracer;
-    SetTracingAPIs(tracer);
+    SetTracingFunctions(tracer);
 
     status = zelTracerSetEnabled(tracer, true);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -132,7 +134,6 @@ class ZeApiCollector {
     }
   }
 
- private: // Tracing Interface
   uint64_t GetTimestamp() const {
     std::chrono::duration<uint64_t, std::nano> timestamp =
       std::chrono::steady_clock::now() - base_time_;
@@ -158,8 +159,6 @@ class ZeApiCollector {
 
  private: // Implementation Details
   ZeApiCollector() {}
-
-  #include <tracing.gen> // Auto-generated callbacks
 
  private: // Data
   zel_tracer_handle_t tracer_ = nullptr;
