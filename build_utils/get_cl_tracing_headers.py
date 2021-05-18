@@ -47,5 +47,11 @@ def main():
 
   postprocess(os.path.join(dst_path, "tracing_api.h"))
 
+  src_path = os.path.join(clone_path, "opencl")
+  src_path = os.path.join(src_path, "extensions")
+  src_path = os.path.join(src_path, "public")
+
+  build_utils.copy(src_path, dst_path, ["cl_ext_private.h"])
+
 if __name__ == "__main__":
   main()

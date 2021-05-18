@@ -17,6 +17,7 @@ Options:
 --chrome-device-stages         Dump device activities by stages to JSON file
 --tid                          Print thread ID into host API trace
 --pid                          Print process ID into host API and device activity trace
+--version                      Print version
 ```
 
 **Call Logging** mode allows to grab full host API trace, e.g.:

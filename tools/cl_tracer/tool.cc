@@ -64,6 +64,10 @@ void Usage() {
     "--pid                          " <<
     "Print process ID into host API and device activity trace" <<
     std::endl;
+  std::cout <<
+    "--version                      " <<
+    "Print version" <<
+    std::endl;
 }
 
 extern "C"
@@ -118,6 +122,11 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--pid") == 0) {
       utils::SetEnv("CLT_Pid", "1");
       ++app_index;
+    } else if (strcmp(argv[i], "--version") == 0) {
+#ifdef PTI_VERSION
+      std::cout << TOSTRING(PTI_VERSION) << std::endl;
+#endif
+      return 0;
     } else {
       break;
     }

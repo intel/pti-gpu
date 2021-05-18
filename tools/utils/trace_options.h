@@ -10,6 +10,7 @@
 #include <string>
 
 #include "pti_assert.h"
+#include "utils.h"
 
 #define TRACE_CALL_LOGGING           0
 #define TRACE_HOST_TIMING            1
@@ -36,12 +37,24 @@ class TraceOptions {
     }
   }
 
-  bool CheckFlag(uint32_t flag) {
+  bool CheckFlag(uint32_t flag) const {
     return (flags_ & (1 << flag));
   }
 
-  const std::string& GetLogFileName() const {
-    return log_file_;
+  std::string GetLogFileName() const {
+    if (!CheckFlag(TRACE_LOG_TO_FILE)) {
+      PTI_ASSERT(log_file_.empty());
+      return std::string();
+    }
+
+    PTI_ASSERT(!log_file_.empty());
+    size_t pos = log_file_.find_first_of('.');
+    if (pos == std::string::npos) {
+      return log_file_ + "." + std::to_string(utils::GetPid());
+    }
+    return log_file_.substr(0, pos + 1) +
+      std::to_string(utils::GetPid()) +
+      log_file_.substr(pos);
   }
 
  private:

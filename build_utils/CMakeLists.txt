@@ -10,6 +10,8 @@ macro(RequirePythonInterp)
 endmacro()
 
 macro(SetCompilerFlags)
+  file(STRINGS "${PTI_CMAKE_MACRO_DIR}/../VERSION" PTI_VERSION)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPTI_VERSION=${PTI_VERSION}")
 endmacro()
 
 macro(SetBuildType)
@@ -86,9 +88,11 @@ macro(GetOpenCLTracingHeaders TARGET)
 
   add_custom_target(cl_tracing_headers ALL
                     DEPENDS ${OPENCL_TRACING_INC_PATH}/CL/tracing_api.h
-                            ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h)
+                            ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h
+                            ${OPENCL_TRACING_INC_PATH}/CL/cl_ext_private.h)
   add_custom_command(OUTPUT ${OPENCL_TRACING_INC_PATH}/CL/tracing_api.h
                             ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h
+                            ${OPENCL_TRACING_INC_PATH}/CL/cl_ext_private.h
                     COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_cl_tracing_headers.py" ${OPENCL_TRACING_INC_PATH} ${CMAKE_BINARY_DIR})
 
   target_include_directories(${TARGET}
@@ -483,7 +487,7 @@ macro(FindL0Headers TARGET)
   if ((NOT LO_CORE_INC_FOUND) OR (NOT LO_TOOLS_INC_FOUND) OR (NOT LO_LAYERS_INC_FOUND) OR (NOT LO_SYSMAN_INC_FOUND))
     message(FATAL_ERROR
       "Level Zero headers are not found. "
-      "You may need to install oneAPI Level Zero loader 1.0.26+ to fix this issue.")
+      "You may need to install oneAPI Level Zero loader 1.2.3+ to fix this issue.")
   endif()
   set(CMAKE_REQUIRED_INCLUDES)
 endmacro()

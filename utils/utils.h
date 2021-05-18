@@ -22,6 +22,9 @@
 
 #include "pti_assert.h"
 
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+
 #define MAX_STR_SIZE 1024
 
 #define BYTES_IN_MBYTES (1024 * 1024)

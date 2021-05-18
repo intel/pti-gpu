@@ -16,9 +16,6 @@
 #error "TOOL_NAME is not defined"
 #endif
 
-#define STRINGIFY(x) #x
-#define TOSTRING(x) STRINGIFY(x)
-
 #include "shared_library.h"
 #include "utils.h"
 
@@ -117,10 +114,11 @@ int main(int argc, char* argv[]) {
   if (app_index <= 0 || app_index >= argc) {
     if (app_index >= argc) {
       std::cout << "[ERROR] Application to run is not specified" << std::endl;
-    } else {
+      usage();
+    } else if (app_index < 0) {
       std::cout << "[ERROR] Invalid command line" << std::endl;
+      usage();
     }
-    usage();
     delete lib;
     return 0;
   }
@@ -223,6 +221,7 @@ int main(int argc, char* argv[]) {
   if (execvp(app_args[0], app_args.data())) {
     std::cout << "[ERROR] Failed to launch target application: " <<
       app_args[0] << std::endl;
+    usage();
     delete lib;
     return 0;
   }

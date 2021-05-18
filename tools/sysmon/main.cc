@@ -199,15 +199,17 @@ static std::string GetEnginesString (uint64_t engines) {
   std::vector<std::string> engine_flags = {
     "OTHER", "COMPUTE", "3D", "MEDIA", "DMA", "RENDER"};
 
-  if (bits[0]) {
-    engines_string = engine_flags[0];
+  if (engines == 0) {
+    return "UNKNOWN";
   }
-  for (size_t i = 1; i < bits.size(); ++i) {
+
+  for (size_t i = 0; i < bits.size(); ++i) {
     if (bits[i]) {
-      engines_string += "|" + engine_flags[i];
+      engines_string += engine_flags[i] + "|";
     }
   }
 
+  engines_string.pop_back();
   return engines_string;
 }
 

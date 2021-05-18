@@ -93,6 +93,7 @@ def test(f, name, option, istool = False):
     else:
       f.write("======= " + name + " =======\n")
     f.write(log)
+    f.write("\n")
     return False
   else:
     sys.stdout.write("PASSED\n")
