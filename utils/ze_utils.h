@@ -234,6 +234,27 @@ inline ze_api_version_t GetVersion() {
   return GetDriverVersion(driver_list.front());
 }
 
+inline std::vector<ze_device_handle_t> GetSubDeviceList(
+    ze_device_handle_t device) {
+  PTI_ASSERT(device != nullptr);
+  ze_result_t status = ZE_RESULT_SUCCESS;
+
+  uint32_t sub_device_count = 0;
+  status = zeDeviceGetSubDevices(device, &sub_device_count, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  if (sub_device_count == 0) {
+    return std::vector<ze_device_handle_t>();
+  }
+
+  std::vector<ze_device_handle_t> sub_device_list(sub_device_count);
+  status = zeDeviceGetSubDevices(
+      device, &sub_device_count, sub_device_list.data());
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  return sub_device_list;
+}
+
 } // namespace ze
 } // namespace utils
 

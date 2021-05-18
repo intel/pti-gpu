@@ -31,7 +31,7 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["dpc_info", "-a", "-l"]]
 
 tools = [["gpuinfo", "-l", "-i", "-m"],
-         ["sysmon", "-p"],
+         ["sysmon", "-p", "-l"],
          ["onetrace", "-c", "-h", "-d", "-v", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "cl", "ze", "omp"],
          ["cl_tracer", "-c", "-h", "-d", "-v", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "gpu", "dpc", "omp"],
          ["ze_tracer", "-c", "-h", "-d", "-v", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "dpc", "omp"]]

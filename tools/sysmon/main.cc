@@ -17,6 +17,34 @@
 #define MEMORY_LENGTH   24
 #define ENGINES_LENGTH  12
 
+enum Mode {
+  MODE_PROCESSES,
+  MODE_DEVICE_LIST,
+};
+
+static void Usage() {
+  std::cout <<
+    "Usage: ./sysmon [options]" <<
+    std::endl;
+  std::cout << "Options:" << std::endl;
+  std::cout <<
+    "--processes [-p]    " <<
+    "Print short device information and running processes (default)" <<
+    std::endl;
+  std::cout <<
+    "--list [-l]         " <<
+    "Print list of devices and subdevices" <<
+    std::endl;
+  std::cout <<
+    "--help [-h]         " <<
+    "Print help message" <<
+    std::endl;
+  std::cout <<
+    "--version           " <<
+    "Print version" <<
+    std::endl;
+}
+
 static uint64_t GetDeviceMemSize(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
@@ -43,7 +71,8 @@ static uint64_t GetDeviceMemSize(ze_device_handle_t device) {
 }
 
 static void PrintShortDeviceInfo(
-    zes_device_handle_t device, uint32_t device_id) {
+    ze_driver_handle_t driver, zes_device_handle_t device,
+    uint32_t device_id) {
   PTI_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
 
@@ -66,8 +95,12 @@ static void PrintShortDeviceInfo(
     std::setw(2) << pci_props.address.device << "." <<
     std::setw(1) << pci_props.address.function << std::dec << std::endl;
 
+  ze_driver_properties_t driver_props{ZE_STRUCTURE_TYPE_DRIVER_PROPERTIES, };
+  status = zeDriverGetProperties(driver, &driver_props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
   std::cout << "Vendor: " << props.vendorName << SPACES;
-  std::cout << "Driver version: " << props.driverVersion << SPACES;
+  std::cout << "Driver version: " << driver_props.driverVersion << SPACES;
   std::cout << "Subdevices: " << props.numSubdevices << std::endl;
 
   uint32_t eu_count =
@@ -217,14 +250,15 @@ static void PrintProcesses(zes_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
 
+  std::cout << "Running Processes: ";
+
   std::vector<zes_process_state_t> state_list = GetDeviceProcesses(device);
   if (state_list.empty()) {
-    std::cout << "Running Processes: unknown" << std::endl;
+    std::cout << "unknown" << std::endl;
     return;
   }
 
-  std::cout << "Running Processes: " <<
-    std::to_string(state_list.size()) << std::endl;
+  std::cout << std::to_string(state_list.size()) << std::endl;
 
   uint32_t engines_length = ENGINES_LENGTH;
   for (auto& state : state_list) {
@@ -255,21 +289,104 @@ static void PrintProcesses(zes_device_handle_t device) {
   }
 }
 
-int main(int argc, char* argv[]) {
+void PrintDeviceList() {
   ze_result_t status = ZE_RESULT_SUCCESS;
+
+  std::vector<ze_driver_handle_t> driver_list = utils::ze::GetDriverList();
+  if (driver_list.empty()) {
+    return;
+  }
+
+  for (size_t i = 0; i < driver_list.size(); ++i) {
+    ze_api_version_t version = utils::ze::GetDriverVersion(driver_list[i]);
+    PTI_ASSERT(version != ZE_API_VERSION_FORCE_UINT32);
+
+    std::cout << "Driver #" << i << ": API Version " <<
+      ZE_MAJOR_VERSION(version) << "." << ZE_MINOR_VERSION(version);
+    if (version == ZE_API_VERSION_CURRENT) {
+      std::cout << " (latest)";
+    }
+    std::cout << std::endl;
+
+    std::vector<ze_device_handle_t> device_list =
+      utils::ze::GetDeviceList(driver_list[i]);
+    if (device_list.empty()) {
+      continue;
+    }
+
+    for (size_t j = 0; j < device_list.size(); ++j) {
+      ze_device_properties_t device_properties{
+          ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+      status = zeDeviceGetProperties(device_list[j], &device_properties);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      std::cout << "-- Device #" << j << ": " <<
+        device_properties.name << std::endl;
+
+      std::vector<ze_device_handle_t> sub_device_list =
+        utils::ze::GetSubDeviceList(device_list[j]);
+      if (sub_device_list.empty()) {
+        continue;
+      }
+
+      for (size_t k = 0; k < sub_device_list.size(); ++k) {
+        ze_device_properties_t sub_device_properties{
+            ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+        status = zeDeviceGetProperties(
+            sub_device_list[k], &sub_device_properties);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        std::cout << "---- Subdevice #" << k << ": " <<
+          sub_device_properties.name << std::endl;
+      }
+    }
+  }
+}
+
+int main(int argc, char* argv[]) {
+  Mode mode = MODE_PROCESSES;
+  ze_result_t status = ZE_RESULT_SUCCESS;
+
+  if (argc > 1) {
+    if (std::string(argv[1]) == "--help" ||
+        std::string(argv[1]) == "-h") {
+      Usage();
+      return 0;
+    } else if (std::string(argv[1]) == "--list" ||
+              std::string(argv[1]) == "-l") {
+      mode = MODE_DEVICE_LIST;
+    } else if (std::string(argv[1]) == "--processes" ||
+              std::string(argv[1]) == "-p") {
+      mode = MODE_PROCESSES;
+    } else if (std::string(argv[1]) == "--version") {
+#ifdef PTI_VERSION
+      std::cout << TOSTRING(PTI_VERSION) << std::endl;
+#endif
+      return 0;
+    }
+  }
 
   utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
 
   status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  uint32_t device_id = 0;
-  for (auto driver : utils::ze::GetDriverList()) {
-    for (auto device : utils::ze::GetDeviceList(driver)) {
-      PrintShortDeviceInfo(device, device_id);
-      PrintProcesses(device);
-      ++device_id;
+  switch(mode) {
+    case MODE_DEVICE_LIST: {
+      PrintDeviceList();
+      break;
     }
+    case MODE_PROCESSES: {
+      uint32_t device_id = 0;
+      for (auto driver : utils::ze::GetDriverList()) {
+        for (auto device : utils::ze::GetDeviceList(driver)) {
+          PrintShortDeviceInfo(driver, device, device_id);
+          PrintProcesses(device);
+          ++device_id;
+        }
+      }
+      break;
+    }
+    default:
+      break;
   }
 
   return 0;

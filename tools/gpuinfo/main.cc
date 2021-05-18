@@ -20,10 +20,16 @@ enum Mode {
 static void Usage() {
   std::cout << "Usage: ./gpuinfo[.exe] <options>" << std::endl;
   std::cout << "Options:" << std::endl;
-  std::cout << "-l        Print list of available devices" << std::endl;
-  std::cout << "-i        Print general device info" << std::endl;
-  std::cout << "-m        Print list of available mertrics" << std::endl;
-  std::cout << "-h        Print this help message" << std::endl;
+  std::cout << "--list [-l]      " <<
+    "Print list of available devices" << std::endl;
+  std::cout << "--info [-i]      " <<
+    "Print general device info (default)" << std::endl;
+  std::cout << "--metrics [-m]   " <<
+    "Print list of available mertrics" << std::endl;
+  std::cout << "--help [-h]      " <<
+    "Print this help message" << std::endl;
+  std::cout << "--version        " <<
+    "Print this help message" << std::endl;
 }
 
 static const char* GetDeviceName(const MetricDevice& device) {
@@ -163,13 +169,21 @@ static void PrintMetricsInfo(const MetricDevice& device) {
 int main(int argc, char* argv[]) {
   Mode mode = GPU_INFO;
 
-  if (argc >= 2) {
-    if (std::string("-l") == argv[1]) {
+  if (argc > 1) {
+    if (std::string("--list") == argv[1] ||
+        std::string("-l") == argv[1]) {
       mode = GPU_LIST;
-    } else if (std::string("-m") == argv[1]) {
+    } else if (std::string("--metrics") == argv[1] ||
+               std::string("-m") == argv[1]) {
       mode = GPU_METRICS;
-    } else if (std::string("-h") == argv[1]) {
+    } else if (std::string("--help") == argv[1] ||
+               std::string("-h") == argv[1]) {
       Usage();
+      return 0;
+    } else if (std::string("--version") == argv[1]) {
+#ifdef PTI_VERSION
+      std::cout << TOSTRING(PTI_VERSION) << std::endl;
+#endif
       return 0;
     }
   }

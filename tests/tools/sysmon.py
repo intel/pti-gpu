@@ -24,13 +24,23 @@ def build(path):
   return None
 
 def parse(output, option):
-  lines = output.split("\n")
-  total_devices = 0
-  for line in lines:
-    if line.find("GPU") != -1:
-      total_devices += 1
-  if total_devices < 1:
-    return False
+  if option == "-p":
+    lines = output.split("\n")
+    total_devices = 0
+    for line in lines:
+      if line.find("GPU") != -1:
+        total_devices += 1
+    if total_devices < 1:
+      return False
+  elif option == "-l":
+    count_drivers = 0
+    count_devices = 0
+    lines = output.split("\n")
+    for line in lines:
+      if line.find("Driver") != -1:
+        count_drivers += 1
+      if line.find("Device") != -1:
+        count_devices += 1
   return True
 
 def run(path, option):
@@ -58,6 +68,9 @@ def main(option):
     return log
 
 if __name__ == "__main__":
-  log = main("-p")
+  option = "-p"
+  if len(sys.argv) > 1 and sys.argv[1] == "-l":
+    option = "-l"
+  log = main(option)
   if log:
     print(log)

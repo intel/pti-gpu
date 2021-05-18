@@ -2,7 +2,17 @@
 ## Overview
 This utility provides basic static and dynamic information about the GPU, including the list of processes that uses this GPU at the moment - similar to Linux `top`.
 
-**Note**, that the list of processes may be unavailable for integrated graphics. Core temperature is available only for *root* user.
+The following options are supported:
+```
+Usage: ./sysmon [options]
+Options:
+--processes [-p]    Print short device information and running processes (default)
+--list [-l]         Print list of devices and subdevices
+--help [-h]         Print help message
+--version           Print version
+```
+
+**Processes** mode dumps short information about all the available GPUs and running processes (default mode):
 ```
 ====================================================================================================
 GPU 0: Intel(R) Iris(R) Plus Graphics 655 [0x3ea5]    PCI bus: 0000:00:02.0
@@ -15,6 +25,14 @@ Running Processes: 2
    22246,                 770.250,                   0.000,        OTHER, ./ze_gemm
    22258,                   0.125,                   0.000,        OTHER, ./sysmon
 ```
+*Note*, that the list of processes may be unavailable for integrated graphics. Core temperature is available only for *root* user.
+
+**Device List** mode prints the list of devices and subdevices on the system:
+```
+Driver #0: API Version 1.1 (latest)
+-- Device #0: Intel(R) Iris(R) Plus Graphics 655 [0x3ea5]
+```
+
 ## Supported OS
 - Linux
 
