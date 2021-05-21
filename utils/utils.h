@@ -121,7 +121,7 @@ inline void SetEnv(const char* name, const char* value) {
   int status = 0;
 #if defined(_WIN32)
   std::string str = std::string(name) + "=" + value;
-  status = _putenv(str);
+  status = _putenv(str.c_str());
 #else
   status = setenv(name, value, 1);
 #endif
