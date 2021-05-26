@@ -22,7 +22,6 @@
 #include "utils.h"
 
 const char* kChromeTraceFileName = "clt_trace";
-const char* kChromeTraceFileExt = "json";
 
 class ClTracer {
  public:
@@ -204,9 +203,7 @@ class ClTracer {
         CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
         CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
       chrome_trace_file_name_ =
-        std::string(kChromeTraceFileName) +
-          "." + std::to_string(utils::GetPid()) +
-          "." + kChromeTraceFileExt;
+        TraceOptions::GetChromeTraceFileName(kChromeTraceFileName);
       chrome_logger_ = new Logger(chrome_trace_file_name_.c_str());
       PTI_ASSERT(chrome_logger_ != nullptr);
 

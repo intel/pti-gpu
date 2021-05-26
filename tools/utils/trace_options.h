@@ -7,6 +7,7 @@
 #ifndef PTI_TOOLS_UTILS_TRACE_OPTIONS_H_
 #define PTI_TOOLS_UTILS_TRACE_OPTIONS_H_
 
+#include <sstream>
 #include <string>
 
 #include "pti_assert.h"
@@ -23,6 +24,8 @@
 #define TRACE_TID                    8
 #define TRACE_PID                    9
 #define TRACE_LOG_TO_FILE            10
+
+const char* kChromeTraceFileExt = "json";
 
 class TraceOptions {
  public:
@@ -49,12 +52,41 @@ class TraceOptions {
 
     PTI_ASSERT(!log_file_.empty());
     size_t pos = log_file_.find_first_of('.');
+
+    std::stringstream result;
     if (pos == std::string::npos) {
-      return log_file_ + "." + std::to_string(utils::GetPid());
+      result << log_file_;
+    } else {
+      result << log_file_.substr(0, pos);
     }
-    return log_file_.substr(0, pos + 1) +
-      std::to_string(utils::GetPid()) +
-      log_file_.substr(pos);
+
+    result << "." + std::to_string(utils::GetPid());
+
+    std::string rank = utils::GetEnv("PMI_RANK");
+    if (!rank.empty()) {
+      result << "." + rank;
+    }
+
+    if (pos != std::string::npos) {
+      result << log_file_.substr(pos);
+    }
+
+    return result.str();
+  }
+
+  static std::string GetChromeTraceFileName(const char* filename) {
+    std::string rank = utils::GetEnv("PMI_RANK");
+    if (!rank.empty()) {
+      return
+        std::string(filename) +
+        "." + std::to_string(utils::GetPid()) +
+        "." + rank +
+        "." + kChromeTraceFileExt;
+    }
+    return
+        std::string(filename) +
+        "." + std::to_string(utils::GetPid()) +
+        "." + kChromeTraceFileExt;
   }
 
  private:
