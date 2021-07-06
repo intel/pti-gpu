@@ -43,7 +43,7 @@ oneapit-toolkits:
     apt_repo: deb https://apt.repos.intel.com/oneapi all main
     apt_source: /etc/apt/sources.list.d/oneAPI.list
     packages:
-    - intel-basekit=2021.2.0-2883
+    - intel-basekit=2021.3.0-3219
 finalize:
   config:
     commands:

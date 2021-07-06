@@ -56,6 +56,10 @@ class GpuInstCountCollector {
     }
 
     for (auto data : kernel_data_map) {
+      if (data.second.call_count == 0) {
+        continue;
+      }
+
       std::stringstream ss;
       ss << "=== " << data.second.name << " (runs " <<
         data.second.call_count  << " times) ===";

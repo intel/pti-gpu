@@ -68,6 +68,10 @@ class GpuPerfMonCollector {
     }
 
     for (auto data : kernel_data_map) {
+      if (data.second.call_count == 0) {
+        continue;
+      }
+
       GenBinaryDecoder decoder(data.second.binary, arch);
 
       std::vector<Instruction> instruction_list =
