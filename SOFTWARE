@@ -1,15 +1,15 @@
 level-zero-loader:
   deb:
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.2.3/level-zero_1.2.3+u18.04_amd64.deb
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.2.3/level-zero-devel_1.2.3+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.3.7/level-zero_1.3.7+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.3.7/level-zero-devel_1.3.7+u18.04_amd64.deb
 compute-runtime:
   deb:
-  - https://github.com/intel/compute-runtime/releases/download/21.16.19610/intel-gmmlib_20.4.1_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.7041/intel-igc-core_1.0.7041_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.7041/intel-igc-opencl_1.0.7041_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.16.19610/intel-opencl_21.16.19610_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.16.19610/intel-ocloc_21.16.19610_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.16.19610/intel-level-zero-gpu_1.1.19610_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.23.20043/intel-gmmlib_21.1.3_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.7423/intel-igc-core_1.0.7423_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.7423/intel-igc-opencl_1.0.7423_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.23.20043/intel-opencl_21.23.20043_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.23.20043/intel-ocloc_21.23.20043_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.23.20043/intel-level-zero-gpu_1.1.20043_amd64.deb
 metrics-discovery:
   github:
     build_path: build
@@ -36,7 +36,7 @@ gtpin:
     commands:
     - tar -xf {} -C {}
     install_path: ~/
-    url: https://software.intel.com/content/dam/develop/public/us/en/protected/external-gtpin-2.12-linux.tar.bz2
+    url: https://software.intel.com/content/dam/develop/public/us/en/protected/external-gtpin-2.13-linux.tar.bz2
 oneapit-toolkits:
   apt:
     apt_key: https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB

@@ -19,9 +19,9 @@ Metric Group 1: D3 / EBS / RenderBasic (Render Metrics Basic Gen9)
     Metric 2: : D3 / EBS / RenderBasic / AvgGpuCoreFrequencyMHz (Average GPU Core Frequency in the measurement.)
     Metric 3: : D3 / EBS / RenderBasic / VsThreads (The total number of vertex shader hardware threads dispatched.)
 ...
-
-To set target device and sub-device to collect metric info from one can specify `PTI_DEVICE_ID` and `PTI_SUB_DEVICE_ID` environment variables.
 ```
+To set target device and sub-device to collect metric info from one can specify `PTI_DEVICE_ID` and `PTI_SUB_DEVICE_ID` environment variables.
+
 ## Supported OS
 - Linux
 - Windows (*under development*)

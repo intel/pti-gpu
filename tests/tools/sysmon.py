@@ -41,6 +41,19 @@ def parse(output, option):
         count_drivers += 1
       if line.find("Device") != -1:
         count_devices += 1
+    if count_drivers < 1:
+      return False
+    if count_drivers < 1:
+      return False
+  elif option == "-d":
+    lines = output.split("\n")
+    total_eu_count = 0
+    for line in lines:
+      if line.find("Total EU Count") == 0:
+        items = line.split(",")
+        total_eu_count += int(items[1].strip())
+    if total_eu_count < 1:
+      return False
   return True
 
 def run(path, option):
@@ -71,6 +84,8 @@ if __name__ == "__main__":
   option = "-p"
   if len(sys.argv) > 1 and sys.argv[1] == "-l":
     option = "-l"
+  elif len(sys.argv) > 1 and sys.argv[1] == "-d":
+    option = "-d"
   log = main(option)
   if log:
     print(log)

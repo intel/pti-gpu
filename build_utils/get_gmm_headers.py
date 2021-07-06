@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/intel/gmmlib.git"
-commit = "6f15b795e1511febf233b42d7dde603f52fcfdab"
+commit = "915cfec5b3da752628d9b6fc79f7a9eef97e79e8"
 
 def main():
   if len(sys.argv) < 3:

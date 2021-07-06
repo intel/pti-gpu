@@ -18,7 +18,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 
 *Some samples may have higher hardware requirements*
 
-## Tested Configurations
+## Regularly Tested Configurations
 - Ubuntu 20.04 with Intel(R) Iris(R) Plus Graphics 655
 
 ## Profiling Chapters

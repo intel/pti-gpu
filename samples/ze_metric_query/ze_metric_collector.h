@@ -420,7 +420,7 @@ class ZeMetricCollector {
         collector->AddQuery(kernel, data->metric_query, event);
       }
 
-      delete[] data;
+      delete data;
     }
   }
 

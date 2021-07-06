@@ -16,7 +16,7 @@ def main():
     os.mkdir(dst_path)
   
   build_path = sys.argv[2]
-  gtpin_package = "external-gtpin-2.12-linux.tar.bz2"
+  gtpin_package = "external-gtpin-2.13-linux.tar.bz2"
   build_utils.download("https://software.intel.com/content/dam/develop/public/us/en/protected/" + gtpin_package, build_path)
   arch_file = os.path.join(build_path, gtpin_package)
   build_utils.unpack(arch_file, build_path)
