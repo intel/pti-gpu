@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_ZE_HOT_FUNCTIONS_ZE_API_COLLECTOR_H_
-#define PTI_SAMPLES_ZE_HOT_FUNCTIONS_ZE_API_COLLECTOR_H_
+#ifndef PTI_TOOLS_ZE_TRACER_ZE_API_COLLECTOR_H_
+#define PTI_TOOLS_ZE_TRACER_ZE_API_COLLECTOR_H_
 
 #include <chrono>
 #include <iomanip>
@@ -199,4 +199,4 @@ class ZeApiCollector {
   static const uint32_t kPercentLength = 10;
 };
 
-#endif // PTI_SAMPLES_ZE_HOT_FUNCTIONS_ZE_API_COLLECTOR_H_
+#endif // PTI_TOOLS_ZE_TRACER_ZE_API_COLLECTOR_H_

@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_ONETRACE_UNIFIED_TRACER_H_
-#define PTI_SAMPLES_ONETRACE_UNIFIED_TRACER_H_
+#ifndef PTI_TOOLS_ONETRACE_UNIFIED_TRACER_H_
+#define PTI_TOOLS_ONETRACE_UNIFIED_TRACER_H_
 
 #include <chrono>
 #include <cstdint>
@@ -15,6 +15,8 @@
 #include <sstream>
 #include <string>
 
+#include "cl_ext_collector.h"
+#include "cl_ext_callbacks.h"
 #include "cl_api_collector.h"
 #include "cl_api_callbacks.h"
 #include "cl_kernel_collector.h"
@@ -170,6 +172,8 @@ class UnifiedTracer {
         delete tracer;
         return nullptr;
       }
+
+      ClExtCollector::Create(cl_cpu_api_collector, cl_gpu_api_collector);
     }
 
     return tracer;
@@ -213,6 +217,8 @@ class UnifiedTracer {
     if (cl_gpu_kernel_collector_ != nullptr) {
       delete cl_gpu_kernel_collector_;
     }
+
+    ClExtCollector::Destroy();
 
     if (CheckOption(TRACE_LOG_TO_FILE)) {
       std::cerr << "[INFO] Log was stored to " <<
@@ -752,4 +758,4 @@ class UnifiedTracer {
   Logger* chrome_logger_ = nullptr;
 };
 
-#endif // PTI_SAMPLES_ONETRACE_UNIFIED_TRACER_H_
+#endif // PTI_TOOLS_ONETRACE_UNIFIED_TRACER_H_

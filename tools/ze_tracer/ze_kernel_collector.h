@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_ZE_HOT_KERNELS_ZE_KERNEL_COLLECTOR_H_
-#define PTI_SAMPLES_ZE_HOT_KERNELS_ZE_KERNEL_COLLECTOR_H_
+#ifndef PTI_TOOLS_ZE_TRACER_ZE_KERNEL_COLLECTOR_H_
+#define PTI_TOOLS_ZE_TRACER_ZE_KERNEL_COLLECTOR_H_
 
 #include <atomic>
 #include <list>
@@ -1389,4 +1389,4 @@ class ZeKernelCollector {
   static const uint32_t kPercentLength = 10;
 };
 
-#endif // PTI_SAMPLES_ZE_HOT_KERNELS_ZE_KERNEL_COLLECTOR_H_
+#endif // PTI_TOOLS_ZE_TRACER_ZE_KERNEL_COLLECTOR_H_

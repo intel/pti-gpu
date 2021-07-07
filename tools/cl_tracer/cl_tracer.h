@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_CL_TRACER_CL_TRACER_H_
-#define PTI_SAMPLES_CL_TRACER_CL_TRACER_H_
+#ifndef PTI_TOOLS_CL_TRACER_CL_TRACER_H_
+#define PTI_TOOLS_CL_TRACER_CL_TRACER_H_
 
 #include <chrono>
 #include <cstdint>
@@ -15,6 +15,8 @@
 #include <sstream>
 #include <string>
 
+#include "cl_ext_collector.h"
+#include "cl_ext_callbacks.h"
 #include "cl_api_collector.h"
 #include "cl_api_callbacks.h"
 #include "cl_kernel_collector.h"
@@ -139,6 +141,8 @@ class ClTracer {
         delete tracer;
         return nullptr;
       }
+
+      ClExtCollector::Create(cpu_api_collector, gpu_api_collector);
     }
 
     return tracer;
@@ -176,6 +180,8 @@ class ClTracer {
     if (gpu_kernel_collector_ != nullptr) {
       delete gpu_kernel_collector_;
     }
+
+    ClExtCollector::Destroy();
 
     if (CheckOption(TRACE_LOG_TO_FILE)) {
       std::cerr << "[INFO] Log was stored to " <<
@@ -485,4 +491,4 @@ class ClTracer {
   Logger* chrome_logger_ = nullptr;
 };
 
-#endif // PTI_SAMPLES_CL_TRACER_CL_TRACER_H_
+#endif // PTI_TOOLS_CL_TRACER_CL_TRACER_H_

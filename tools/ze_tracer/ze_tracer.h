@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_ZE_TRACER_ZE_TRACER_H_
-#define PTI_SAMPLES_ZE_TRACER_ZE_TRACER_H_
+#ifndef PTI_TOOLS_ZE_TRACER_ZE_TRACER_H_
+#define PTI_TOOLS_ZE_TRACER_ZE_TRACER_H_
 
 #include <chrono>
 #include <cstdint>
@@ -377,4 +377,4 @@ class ZeTracer {
   ZeKernelCollector* kernel_collector_ = nullptr;
 };
 
-#endif // PTI_SAMPLES_ZE_TRACER_ZE_TRACER_H_
+#endif // PTI_TOOLS_ZE_TRACER_ZE_TRACER_H_

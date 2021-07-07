@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_CL_HOT_FUNCTIONS_CL_API_COLLECTOR_H_
-#define PTI_SAMPLES_CL_HOT_FUNCTIONS_CL_API_COLLECTOR_H_
+#ifndef PTI_TOOLS_CL_TRACER_CL_API_COLLECTOR_H_
+#define PTI_TOOLS_CL_TRACER_CL_API_COLLECTOR_H_
 
 #include <chrono>
 #include <iomanip>
@@ -68,7 +68,7 @@ class ClApiCollector {
     TraceGuard guard;
 
     ClApiCollector* collector = new ClApiCollector(
-        correlator, options, callback, callback_data);
+        device, correlator, options, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
@@ -174,11 +174,20 @@ class ClApiCollector {
 
  private: // Implementation Details
   ClApiCollector(
-      Correlator* correlator, ApiCollectorOptions options,
-      OnClFunctionFinishCallback callback, void* callback_data)
-      : correlator_(correlator), options_(options),
-        callback_(callback), callback_data_(callback_data) {
+      cl_device_id device,
+      Correlator* correlator,
+      ApiCollectorOptions options,
+      OnClFunctionFinishCallback callback,
+      void* callback_data)
+      : correlator_(correlator),
+        options_(options),
+        callback_(callback),
+        callback_data_(callback_data) {
     PTI_ASSERT(correlator_ != nullptr);
+    device_type_ = utils::cl::GetDeviceType(device);
+    PTI_ASSERT(
+        device_type_ == CL_DEVICE_TYPE_CPU ||
+        device_type_ == CL_DEVICE_TYPE_GPU);
   }
 
   void EnableTracing(ClApiTracer* tracer) {
@@ -263,6 +272,50 @@ class ClApiCollector {
             callback_data->functionName, start_time, end_time);
       }
     }
+
+    #define SET_EXTENSION_FUNCTION(name) \
+      if (std::string(#name) == *params->funcName) { \
+        if (collector->device_type_ == CL_DEVICE_TYPE_GPU) { \
+          *reinterpret_cast<decltype(name<CL_DEVICE_TYPE_GPU>)**>( \
+              callback_data->functionReturnValue) = &name<CL_DEVICE_TYPE_GPU>; \
+        } else { \
+          PTI_ASSERT(collector->device_type_ == CL_DEVICE_TYPE_CPU); \
+          *reinterpret_cast<decltype(name<CL_DEVICE_TYPE_CPU>)**>( \
+              callback_data->functionReturnValue) = &name<CL_DEVICE_TYPE_CPU>; \
+        } \
+      }
+
+    if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
+      if (function == CL_FUNCTION_clGetExtensionFunctionAddress) {
+        const cl_params_clGetExtensionFunctionAddress* params =
+          reinterpret_cast<const cl_params_clGetExtensionFunctionAddress*>(
+              callback_data->functionParams);
+        SET_EXTENSION_FUNCTION(clHostMemAllocINTEL);
+        SET_EXTENSION_FUNCTION(clDeviceMemAllocINTEL);
+        SET_EXTENSION_FUNCTION(clSharedMemAllocINTEL);
+        SET_EXTENSION_FUNCTION(clMemFreeINTEL);
+        SET_EXTENSION_FUNCTION(clGetMemAllocInfoINTEL);
+        SET_EXTENSION_FUNCTION(clSetKernelArgMemPointerINTEL);
+        SET_EXTENSION_FUNCTION(clEnqueueMemcpyINTEL);
+        SET_EXTENSION_FUNCTION(clGetDeviceGlobalVariablePointerINTEL);
+        SET_EXTENSION_FUNCTION(clGetKernelSuggestedLocalWorkSizeINTEL);
+      } else if (function ==
+                 CL_FUNCTION_clGetExtensionFunctionAddressForPlatform) {
+        const cl_params_clGetExtensionFunctionAddressForPlatform* params =
+          reinterpret_cast<
+              const cl_params_clGetExtensionFunctionAddressForPlatform*>(
+                  callback_data->functionParams);
+        SET_EXTENSION_FUNCTION(clHostMemAllocINTEL);
+        SET_EXTENSION_FUNCTION(clDeviceMemAllocINTEL);
+        SET_EXTENSION_FUNCTION(clSharedMemAllocINTEL);
+        SET_EXTENSION_FUNCTION(clMemFreeINTEL);
+        SET_EXTENSION_FUNCTION(clGetMemAllocInfoINTEL);
+        SET_EXTENSION_FUNCTION(clSetKernelArgMemPointerINTEL);
+        SET_EXTENSION_FUNCTION(clEnqueueMemcpyINTEL);
+        SET_EXTENSION_FUNCTION(clGetDeviceGlobalVariablePointerINTEL);
+        SET_EXTENSION_FUNCTION(clGetKernelSuggestedLocalWorkSizeINTEL);
+      }
+    }
   }
 
  private: // Data
@@ -270,6 +323,7 @@ class ClApiCollector {
 
   Correlator* correlator_ = nullptr;
   ApiCollectorOptions options_ = {false, false, false};
+  cl_device_type device_type_ = CL_DEVICE_TYPE_ALL;
 
   OnClFunctionFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;
@@ -281,6 +335,8 @@ class ClApiCollector {
   static const uint32_t kCallsLength = 12;
   static const uint32_t kTimeLength = 20;
   static const uint32_t kPercentLength = 10;
+
+  friend class ClExtCollector;
 };
 
-#endif // PTI_SAMPLES_CL_HOT_FUNCTIONS_CL_API_COLLECTOR_H_
+#endif // PTI_TOOLS_CL_TRACER_CL_API_COLLECTOR_H_

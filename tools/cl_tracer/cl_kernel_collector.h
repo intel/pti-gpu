@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_SAMPLES_CL_HOT_KERNELS_CL_KERNEL_COLLECTOR_H_
-#define PTI_SAMPLES_CL_HOT_KERNELS_CL_KERNEL_COLLECTOR_H_
+#ifndef PTI_TOOLS_CL_TRACER_CL_KERNEL_COLLECTOR_H_
+#define PTI_TOOLS_CL_TRACER_CL_KERNEL_COLLECTOR_H_
 
 #include <atomic>
 #include <list>
@@ -1048,4 +1048,4 @@ class ClKernelCollector {
   static const uint32_t kPercentLength = 10;
 };
 
-#endif // PTI_SAMPLES_CL_HOT_KERNELS_CL_KERNEL_COLLECTOR_H_
+#endif // PTI_TOOLS_CL_TRACER_CL_KERNEL_COLLECTOR_H_
