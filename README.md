@@ -29,6 +29,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 2. Device Activity Tracing
     - for [OpenCL(TM)](chapters/device_activity_tracing/OpenCL.md)
     - for [oneAPI Level Zero (Level Zero)](chapters/device_activity_tracing/LevelZero.md)
+    - for [SYCL/DPC++](chapters/device_activity_tracing/DPCXX.md)
 3. Binary/Source Correlation
     - for [OpenCL(TM)](chapters/binary_source_correlation/OpenCL.md)
     - for [oneAPI Level Zero (Level Zero)](chapters/binary_source_correlation/LevelZero.md)

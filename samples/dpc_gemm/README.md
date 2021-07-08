@@ -46,7 +46,7 @@ Use Microsoft* Visual Studio x64 command prompt to run the following commands an
 cd <pti>\samples\dpc_gemm
 mkdir build
 cd build
-dpcpp [-O2|-O0 -g] ..\main.cc -I..\..\utils -o dpc_gemm.exe
+dpcpp [-O2|-O0 -g] ..\main.cc -I..\..\..\utils -o dpc_gemm.exe
 ```
 Use this command line to run the application:
 ```sh
