@@ -215,11 +215,11 @@ class ClTracer {
 
       std::stringstream stream;
       stream << "[" << std::endl;
-      stream << "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":" <<
-        utils::GetPid() << ", \"tid\":0, \"args\":{\"name\":\"" <<
+      stream << "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":\"" <<
+        utils::GetPid() << "\", \"tid\":0, \"args\":{\"name\":\"" <<
         utils::GetExecutableName() << "\"}}," << std::endl;
-      stream << "{\"ph\":\"M\", \"name\":\"cl_tracer_start_time\", \"pid\":" <<
-        utils::GetPid() << ", \"tid\":0, \"args\":{\"start_time\":\"" <<
+      stream << "{\"ph\":\"M\", \"name\":\"cl_tracer_start_time\", \"pid\":\"" <<
+        utils::GetPid() << "\", \"tid\":0, \"args\":{\"start_time\":\"" <<
         correlator_.GetStartPoint() << "\"}}," << std::endl;
 
       chrome_logger_->Log(stream.str().c_str());
@@ -373,9 +373,9 @@ class ClTracer {
     PTI_ASSERT(tracer != nullptr);
 
     std::stringstream stream;
-    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
-      ", \"tid\":" << reinterpret_cast<uint64_t>(queue) <<
-      ", \"name\":\"" << name <<
+    stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
+      "\", \"tid\":\"" << reinterpret_cast<uint64_t>(queue) <<
+      "\", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"
@@ -400,9 +400,9 @@ class ClTracer {
       "." + std::to_string(reinterpret_cast<uint64_t>(queue));
 
     PTI_ASSERT(submitted > queued);
-    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
-      ", \"tid\":" << tid <<
-      ", \"name\":\"" << name << " (Queued)" <<
+    stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
+      "\", \"tid\":\"" << tid <<
+      "\", \"name\":\"" << name << " (Queued)" <<
       "\", \"ts\": " << queued / NSEC_IN_USEC <<
       ", \"dur\":" << (submitted - queued) / NSEC_IN_USEC <<
       ", \"cname\":\"thread_state_runnable\"" <<
@@ -412,9 +412,9 @@ class ClTracer {
     stream.str(std::string());
 
     PTI_ASSERT(started > submitted);
-    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
-      ", \"tid\":" << tid <<
-      ", \"name\":\"" << name << " (Submitted)" <<
+    stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
+      "\", \"tid\":\"" << tid <<
+      "\", \"name\":\"" << name << " (Submitted)" <<
       "\", \"ts\": " << submitted / NSEC_IN_USEC <<
       ", \"dur\":" << (started - submitted) / NSEC_IN_USEC <<
       ", \"cname\":\"cq_build_running\"" <<
@@ -424,9 +424,9 @@ class ClTracer {
     stream.str(std::string());
 
     PTI_ASSERT(ended > started);
-    stream << "{\"ph\":\"X\", \"pid\":" << utils::GetPid() <<
-      ", \"tid\":" << tid <<
-      ", \"name\":\"" << name << " (Execution)" <<
+    stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
+      "\", \"tid\":\"" << tid <<
+      "\", \"name\":\"" << name << " (Execution)" <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"cname\":\"thread_state_iowait\"" <<
@@ -464,9 +464,9 @@ class ClTracer {
     PTI_ASSERT(tracer != nullptr);
 
     std::stringstream stream;
-    stream << "{\"ph\":\"X\", \"pid\":" <<
-      utils::GetPid() << ", \"tid\":" << utils::GetTid() <<
-      ", \"name\":\"" << name <<
+    stream << "{\"ph\":\"X\", \"pid\":\"" <<
+      utils::GetPid() << "\", \"tid\":\"" << utils::GetTid() <<
+      "\", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"args\": {\"id\": \"" << id << "\"}"

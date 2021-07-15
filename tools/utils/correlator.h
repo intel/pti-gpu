@@ -55,6 +55,10 @@ class Correlator {
     return kernel_id_;
   }
 
+  void SetKernelId(uint64_t kernel_id) {
+    kernel_id_ = kernel_id;
+  }
+
   std::vector<uint64_t> GetKernelId(
       ze_command_list_handle_t command_list) {
     PTI_ASSERT(command_list != nullptr);
@@ -63,10 +67,6 @@ class Correlator {
     } else {
       return std::vector<uint64_t>();
     }
-  }
-
-  void SetKernelId(uint64_t kernel_id) {
-    kernel_id_ = kernel_id;
   }
 
   void CreateKernelIdList(ze_command_list_handle_t command_list) {
@@ -89,9 +89,40 @@ class Correlator {
     kernel_id_map_[command_list].push_back(kernel_id);
   }
 
+  std::vector<uint64_t> GetCallId(
+      ze_command_list_handle_t command_list) {
+    PTI_ASSERT(command_list != nullptr);
+    if (call_id_map_.count(command_list) > 0) {
+      return call_id_map_[command_list];
+    } else {
+      return std::vector<uint64_t>();
+    }
+  }
+
+  void CreateCallIdList(ze_command_list_handle_t command_list) {
+    PTI_ASSERT(call_id_map_.count(command_list) == 0);
+    call_id_map_[command_list] = std::vector<uint64_t>();
+  }
+
+  void RemoveCallIdList(ze_command_list_handle_t command_list) {
+    PTI_ASSERT(call_id_map_.count(command_list) == 1);
+    call_id_map_.erase(command_list);
+  }
+
+  void ResetCallIdList(ze_command_list_handle_t command_list) {
+    PTI_ASSERT(call_id_map_.count(command_list) == 1);
+    call_id_map_[command_list].clear();
+  }
+
+  void AddCallId(ze_command_list_handle_t command_list, uint64_t call_id) {
+    PTI_ASSERT(call_id_map_.count(command_list) == 1);
+    call_id_map_[command_list].push_back(call_id);
+  }
+
  private:
   TimePoint base_time_;
   std::map<ze_command_list_handle_t, std::vector<uint64_t> > kernel_id_map_;
+  std::map<ze_command_list_handle_t, std::vector<uint64_t> > call_id_map_;
 
   Logger logger_;
 

@@ -18,7 +18,7 @@
 #include "utils.h"
 #include "ze_utils.h"
 
-struct ZeKernelInstance {
+struct ZeKernelCommand {
   std::string name;
   size_t simd_width;
   ze_event_pool_handle_t event_pool;
@@ -55,8 +55,10 @@ struct ZeKernelInterval {
 };
 
 struct ZeCommandListInfo {
+  std::vector<const ZeKernelCommand*> kernel_command_list;
   ze_context_handle_t context;
   ze_device_handle_t device;
+  bool immediate;
 };
 
 using ZeKernelInfoMap = std::map<std::string, ZeKernelInfo>;
@@ -180,23 +182,17 @@ class ZeKernelCollector {
     epilogue_callbacks.CommandList.pfnAppendLaunchKernelCb =
       OnExitCommandListAppendLaunchKernel;
 
-    prologue_callbacks.CommandList.pfnAppendLaunchCooperativeKernelCb =
-      OnEnterCommandListAppendLaunchCooperativeKernel;
-    epilogue_callbacks.CommandList.pfnAppendLaunchCooperativeKernelCb =
-      OnExitCommandListAppendLaunchCooperativeKernel;
-
-    prologue_callbacks.CommandList.pfnAppendLaunchKernelIndirectCb =
-      OnEnterCommandListAppendLaunchKernelIndirect;
-    epilogue_callbacks.CommandList.pfnAppendLaunchKernelIndirectCb =
-      OnExitCommandListAppendLaunchKernelIndirect;
-
     epilogue_callbacks.CommandList.pfnCreateCb =
       OnExitCommandListCreate;
     epilogue_callbacks.CommandList.pfnCreateImmediateCb =
       OnExitCommandListCreateImmediate;
     epilogue_callbacks.CommandList.pfnDestroyCb =
       OnExitCommandListDestroy;
+    epilogue_callbacks.CommandList.pfnResetCb =
+      OnExitCommandListReset;
 
+    epilogue_callbacks.CommandQueue.pfnExecuteCommandListsCb =
+      OnExitCommandQueueExecuteCommandLists;
     epilogue_callbacks.CommandQueue.pfnSynchronizeCb =
       OnExitCommandQueueSynchronize;
     epilogue_callbacks.CommandQueue.pfnDestroyCb =
@@ -211,39 +207,71 @@ class ZeKernelCollector {
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
-  void AddKernelInstance(ze_command_list_handle_t command_list,
-                         const ZeKernelInstance& instance) {
+  void AddKernelCommand(
+      ze_command_list_handle_t command_list,
+      const ZeKernelCommand* command) {
     PTI_ASSERT(command_list != nullptr);
+    PTI_ASSERT(command != nullptr);
+
     const std::lock_guard<std::mutex> lock(lock_);
-    kernel_instance_list_.push_back(instance);
+
+    PTI_ASSERT(command_list_map_.count(command_list) == 1);
+    ZeCommandListInfo& info = command_list_map_[command_list];
+    info.kernel_command_list.push_back(command);
   }
 
-  void ProcessInstance(ze_event_handle_t event) {
-    PTI_ASSERT(event != nullptr);
+  void AddKernelCall(const ZeKernelCommand* call) {
+    PTI_ASSERT(call != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    kernel_call_list_.push_back(call);
+  }
+
+  void AddKernelCalls(
+      ze_command_list_handle_t command_list) {
+    PTI_ASSERT(command_list != nullptr);
+
     const std::lock_guard<std::mutex> lock(lock_);
 
-    for (auto it = kernel_instance_list_.begin();
-         it != kernel_instance_list_.end(); ++it) {
-      if ((*it).event == event) {
-        ProcessInstance(*it);
-        kernel_instance_list_.erase(it);
+    PTI_ASSERT(command_list_map_.count(command_list) == 1);
+    ZeCommandListInfo& info = command_list_map_[command_list];
+    PTI_ASSERT(!info.immediate);
+
+    for (const ZeKernelCommand* command : info.kernel_command_list) {
+      kernel_call_list_.push_back(command);
+    }
+  }
+
+  void ProcessCall(ze_event_handle_t event) {
+    PTI_ASSERT(event != nullptr);
+
+    const std::lock_guard<std::mutex> lock(lock_);
+
+    for (auto it = kernel_call_list_.begin();
+         it != kernel_call_list_.end(); ++it) {
+      const ZeKernelCommand* call = *it;
+      PTI_ASSERT(call != nullptr);
+      if (call->event == event) {
+        ProcessCall(call);
+        kernel_call_list_.erase(it);
         break;
       }
     }
   }
 
-  void ProcessInstance(const ZeKernelInstance& instance) {
+  void ProcessCall(const ZeKernelCommand* call) {
+    PTI_ASSERT(call != nullptr);
+
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zeEventQueryStatus(instance.event);
+    status = zeEventQueryStatus(call->event);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_kernel_timestamp_result_t timestamp{};
-    status = zeEventQueryKernelTimestamp(instance.event, &timestamp);
+    status = zeEventQueryKernelTimestamp(call->event, &timestamp);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     uint64_t start = timestamp.global.kernelStart;
     uint64_t end = timestamp.global.kernelEnd;
-    uint64_t freq = instance.timer_frequency;
+    uint64_t freq = call->timer_frequency;
     PTI_ASSERT(freq > 0);
 
     uint64_t time = 0, start_ns = 0, end_ns = 0;
@@ -260,31 +288,26 @@ class ZeKernelCollector {
     }
     time = end_ns - start_ns;
 
-    AddKernelInfo(instance.name, time, instance.simd_width);
-    AddKernelInterval(instance.name, start_ns, end_ns);
-
-    if (instance.event_pool != nullptr) {
-      ze_result_t status = ZE_RESULT_SUCCESS;
-      status = zeEventDestroy(instance.event);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      status = zeEventPoolDestroy(instance.event_pool);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    }
+    AddKernelInfo(call->name, time, call->simd_width);
+    AddKernelInterval(call->name, start_ns, end_ns);
   }
 
-  void ProcessInstances() {
+  void ProcessCalls() {
     ze_result_t status = ZE_RESULT_SUCCESS;
+
     const std::lock_guard<std::mutex> lock(lock_);
 
-    auto it = kernel_instance_list_.begin();
-    while (it != kernel_instance_list_.end()) {
-      PTI_ASSERT(it->event != nullptr);
-      status = zeEventQueryStatus(it->event);
+    auto it = kernel_call_list_.begin();
+    while (it != kernel_call_list_.end()) {
+      const ZeKernelCommand* call = *it;
+      PTI_ASSERT(call != nullptr);
+      PTI_ASSERT(call->event != nullptr);
+      status = zeEventQueryStatus(call->event);
       if (status == ZE_RESULT_NOT_READY) {
         ++it;
       } else if (status == ZE_RESULT_SUCCESS) {
-        ProcessInstance(*it);
-        it = kernel_instance_list_.erase(it);
+        ProcessCall(call);
+        it = kernel_call_list_.erase(it);
       } else {
         PTI_ASSERT(0);
       }
@@ -319,19 +342,50 @@ class ZeKernelCollector {
   void AddCommandList(
       ze_command_list_handle_t command_list,
       ze_context_handle_t context,
-      ze_device_handle_t device) {
+      ze_device_handle_t device,
+      bool immediate) {
     PTI_ASSERT(command_list != nullptr);
     PTI_ASSERT(context != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(command_list_map_.count(command_list) == 0);
-    command_list_map_[command_list] = {context, device};
+    command_list_map_[command_list] = {
+        std::vector<const ZeKernelCommand*>(), context, device, immediate};
+  }
+
+  void RemoveKernelCommands(ze_command_list_handle_t command_list) {
+    PTI_ASSERT(command_list != nullptr);
+
+    PTI_ASSERT(command_list_map_.count(command_list) == 1);
+    ZeCommandListInfo& info = command_list_map_[command_list];
+    for (const ZeKernelCommand* command : info.kernel_command_list) {
+      if (command->event_pool != nullptr) {
+        ze_result_t status = ZE_RESULT_SUCCESS;
+        status = zeEventDestroy(command->event);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        status = zeEventPoolDestroy(command->event_pool);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      }
+
+      for (const ZeKernelCommand* call : kernel_call_list_) {
+        PTI_ASSERT(call != command);
+      }
+
+      delete command;
+    }
+    info.kernel_command_list.clear();
   }
 
   void RemoveCommandList(ze_command_list_handle_t command_list) {
     PTI_ASSERT(command_list != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(command_list_map_.count(command_list) == 1);
+    RemoveKernelCommands(command_list);
     command_list_map_.erase(command_list);
+  }
+
+  void ResetCommandList(ze_command_list_handle_t command_list) {
+    PTI_ASSERT(command_list != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    RemoveKernelCommands(command_list);
   }
 
   ze_context_handle_t GetCommandListContext(
@@ -348,6 +402,14 @@ class ZeKernelCollector {
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
     return command_list_map_[command_list].device;
+  }
+
+  bool IsCommandListImmediate(ze_command_list_handle_t command_list) {
+    PTI_ASSERT(command_list != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    PTI_ASSERT(command_list_map_.count(command_list) == 1);
+    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+    return command_list_info.immediate;
   }
 
  private: // Callbacks
@@ -369,8 +431,9 @@ class ZeKernelCollector {
     profiling_desc->stype = desc->stype;
     // PTI_ASSERT(profiling_desc->stype == ZE_STRUCTURE_TYPE_EVENT_POOL_DESC);
     profiling_desc->pNext = desc->pNext;
-    profiling_desc->flags = (desc->flags | ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP);
-    profiling_desc->flags = (desc->flags | ZE_EVENT_POOL_FLAG_HOST_VISIBLE);
+    profiling_desc->flags = desc->flags;
+    profiling_desc->flags |= ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP;
+    profiling_desc->flags |= ZE_EVENT_POOL_FLAG_HOST_VISIBLE;
     profiling_desc->count = desc->count;
 
     *(params->pdesc) = profiling_desc;
@@ -396,7 +459,7 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessInstance(*(params->phEvent));
+      collector->ProcessCall(*(params->phEvent));
     }
   }
 
@@ -408,7 +471,7 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessInstance(*(params->phEvent));
+      collector->ProcessCall(*(params->phEvent));
     }
   }
 
@@ -447,50 +510,32 @@ class ZeKernelCollector {
       return;
     }
 
-    ZeKernelInstance* instance = new ZeKernelInstance;
-    instance->name = name;
-    instance->simd_width = simd_width;
+    ZeKernelCommand* command = new ZeKernelCommand;
+    PTI_ASSERT(command != nullptr);
+
+    command->name = name;
+    command->simd_width = simd_width;
 
     ze_device_handle_t device = collector->GetCommandListDevice(command_list);
     PTI_ASSERT(device != nullptr);
-    instance->timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
-    PTI_ASSERT(instance->timer_frequency > 0);
+    command->timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
+    PTI_ASSERT(command->timer_frequency > 0);
 
     if (signal_event == nullptr) {
       ze_context_handle_t context =
         collector->GetCommandListContext(command_list);
-      CreateEvent(context, instance->event_pool, instance->event);
-      signal_event = instance->event;
+      CreateEvent(context, command->event_pool, command->event);
+      signal_event = command->event;
     } else {
-      instance->event_pool = nullptr;
-      instance->event = signal_event;
+      command->event_pool = nullptr;
+      command->event = signal_event;
     }
 
-    *instance_data = static_cast<void*>(instance);
+    *instance_data = static_cast<void*>(command);
   }
 
   static void OnEnterCommandListAppendLaunchKernel(
       ze_command_list_append_launch_kernel_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
-    OnEnterKernelAppend(
-        utils::ze::GetKernelName(*(params->phKernel)),
-        utils::ze::GetKernelMaxSubgroupSize(*(params->phKernel)),
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
-  }
-
-  static void OnEnterCommandListAppendLaunchCooperativeKernel(
-      ze_command_list_append_launch_cooperative_kernel_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
-    OnEnterKernelAppend(
-        utils::ze::GetKernelName(*(params->phKernel)),
-        utils::ze::GetKernelMaxSubgroupSize(*(params->phKernel)),
-        *(params->phSignalEvent), *(params->phCommandList),
-        global_data, instance_data);
-  }
-
-  static void OnEnterCommandListAppendLaunchKernelIndirect(
-      ze_command_list_append_launch_kernel_indirect_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
     OnEnterKernelAppend(
         utils::ze::GetKernelName(*(params->phKernel)),
@@ -505,48 +550,35 @@ class ZeKernelCollector {
       ze_result_t result) {
     PTI_ASSERT(command_list != nullptr);
 
-    ZeKernelInstance* instance =
-      static_cast<ZeKernelInstance*>(*instance_data);
-    if (instance == nullptr) {
+    ZeKernelCommand* command =
+      static_cast<ZeKernelCommand*>(*instance_data);
+    if (command == nullptr) {
       return;
     }
 
     if (result != ZE_RESULT_SUCCESS) {
-      if (instance->event_pool != nullptr) {
+      if (command->event_pool != nullptr) {
         ze_result_t status = ZE_RESULT_SUCCESS;
-        status = zeEventDestroy(instance->event);
+        status = zeEventDestroy(command->event);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        status = zeEventPoolDestroy(instance->event_pool);
+        status = zeEventPoolDestroy(command->event_pool);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       }
+
+      delete command;
     } else {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->AddKernelInstance(command_list, *instance);
+      collector->AddKernelCommand(command_list, command);
+      if (collector->IsCommandListImmediate(command_list)) {
+        collector->AddKernelCall(command);
+      }
     }
-
-    delete instance;
   }
 
   static void OnExitCommandListAppendLaunchKernel(
       ze_command_list_append_launch_kernel_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
-    PTI_ASSERT(*(params->phSignalEvent) != nullptr);
-    OnExitKernelAppend(*params->phCommandList, global_data,
-                       instance_data, result);
-  }
-
-  static void OnExitCommandListAppendLaunchCooperativeKernel(
-      ze_command_list_append_launch_cooperative_kernel_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
-    PTI_ASSERT(*(params->phSignalEvent) != nullptr);
-    OnExitKernelAppend(*params->phCommandList, global_data,
-                       instance_data, result);
-  }
-
-  static void OnExitCommandListAppendLaunchKernelIndirect(
-      ze_command_list_append_launch_kernel_indirect_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
     PTI_ASSERT(*(params->phSignalEvent) != nullptr);
     OnExitKernelAppend(*params->phCommandList, global_data,
@@ -564,7 +596,8 @@ class ZeKernelCollector {
       collector->AddCommandList(
           **(params->pphCommandList),
           *(params->phContext),
-          *(params->phDevice));
+          *(params->phDevice),
+          false);
     }
   }
 
@@ -579,7 +612,8 @@ class ZeKernelCollector {
       collector->AddCommandList(
           **(params->pphCommandList),
           *(params->phContext),
-          *(params->phDevice));
+          *(params->phDevice),
+          true);
     }
   }
 
@@ -591,8 +625,39 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessInstances();
+      collector->ProcessCalls();
       collector->RemoveCommandList(*params->phCommandList);
+    }
+  }
+
+  static void OnExitCommandListReset(
+      ze_command_list_reset_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    if (result == ZE_RESULT_SUCCESS) {
+      PTI_ASSERT(*params->phCommandList != nullptr);
+      ZeKernelCollector* collector =
+        reinterpret_cast<ZeKernelCollector*>(global_data);
+      PTI_ASSERT(collector != nullptr);
+      collector->ProcessCalls();
+      collector->ResetCommandList(*params->phCommandList);
+    }
+  }
+
+  static void OnExitCommandQueueExecuteCommandLists(
+      ze_command_queue_execute_command_lists_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeKernelCollector* collector =
+        reinterpret_cast<ZeKernelCollector*>(global_data);
+      PTI_ASSERT(collector != nullptr);
+
+      uint32_t command_list_count = *params->pnumCommandLists;
+      ze_command_list_handle_t* command_lists = *params->pphCommandLists;
+      for (uint32_t i = 0; i < command_list_count; ++i) {
+        if (!collector->IsCommandListImmediate(command_lists[i])) {
+          collector->AddKernelCalls(command_lists[i]);
+        }
+      }
     }
   }
 
@@ -603,7 +668,7 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessInstances();
+      collector->ProcessCalls();
     }
   }
 
@@ -614,7 +679,7 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessInstances();
+      collector->ProcessCalls();
     }
   }
 
@@ -624,7 +689,7 @@ class ZeKernelCollector {
   std::mutex lock_;
   ZeKernelInfoMap kernel_info_map_;
   ZeKernelIntervalList kernel_interval_list_;
-  std::list<ZeKernelInstance> kernel_instance_list_;
+  std::list<const ZeKernelCommand*> kernel_call_list_;
   ZeCommandListMap command_list_map_;
 
   static const uint32_t kKernelLength = 10;
