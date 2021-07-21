@@ -94,7 +94,11 @@ static void PrintDeviceInfo(const MetricDevice& device) {
     std::cout << "---- " << symbol->SymbolName << ": ";
     switch (symbol->SymbolTypedValue.ValueType) {
       case md::VALUE_TYPE_UINT32: {
-        std::cout << symbol->SymbolTypedValue.ValueUInt32;
+        if (std::string("PciDeviceId") == symbol->SymbolName) {
+          std::cout << std::hex << symbol->SymbolTypedValue.ValueUInt32;
+        } else {
+          std::cout << std::dec << symbol->SymbolTypedValue.ValueUInt32;
+        }
         break;
       }
       case md::VALUE_TYPE_UINT64: {
