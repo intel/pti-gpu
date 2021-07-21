@@ -58,34 +58,83 @@ inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) 
   return device_list;
 }
 
+inline std::vector<ze_device_handle_t> GetSubDeviceList(
+    ze_device_handle_t device) {
+  PTI_ASSERT(device != nullptr);
+  ze_result_t status = ZE_RESULT_SUCCESS;
+
+  uint32_t sub_device_count = 0;
+  status = zeDeviceGetSubDevices(device, &sub_device_count, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  if (sub_device_count == 0) {
+    return std::vector<ze_device_handle_t>();
+  }
+
+  std::vector<ze_device_handle_t> sub_device_list(sub_device_count);
+  status = zeDeviceGetSubDevices(
+      device, &sub_device_count, sub_device_list.data());
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  return sub_device_list;
+}
+
 inline ze_driver_handle_t GetGpuDriver() {
+  std::vector<ze_driver_handle_t> driver_list;
+
   for (auto driver : GetDriverList()) {
     for (auto device : GetDeviceList(driver)) {
       ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
       ze_result_t status = zeDeviceGetProperties(device, &props);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       if (props.type == ZE_DEVICE_TYPE_GPU) {
-        return driver;
+        driver_list.push_back(driver);
       }
     }
   }
 
-  return nullptr;
+  if (driver_list.empty()) {
+    return nullptr;
+  }
+
+  std::string value = utils::GetEnv("PTI_DEVICE_ID");
+  uint32_t device_id = value.empty() ? 0 : std::stoul(value);
+  PTI_ASSERT(device_id >= 0 && device_id < driver_list.size());
+  return driver_list[device_id];
 }
 
 inline ze_device_handle_t GetGpuDevice() {
+  std::vector<ze_device_handle_t> device_list;
+
   for (auto driver : GetDriverList()) {
     for (auto device : GetDeviceList(driver)) {
       ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
       ze_result_t status = zeDeviceGetProperties(device, &props);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       if (props.type == ZE_DEVICE_TYPE_GPU) {
-        return device;
+        device_list.push_back(device);
       }
     }
   }
 
-  return nullptr;
+  if (device_list.empty()) {
+    return nullptr;
+  }
+
+  std::string value = utils::GetEnv("PTI_DEVICE_ID");
+  uint32_t device_id = value.empty() ? 0 : std::stoul(value);
+  PTI_ASSERT(device_id >= 0 && device_id < device_list.size());
+
+  std::vector<ze_device_handle_t> sub_device_list =
+    GetSubDeviceList(device_list[device_id]);
+  if (sub_device_list.empty()) {
+    return device_list[device_id];
+  }
+
+  value = utils::GetEnv("PTI_SUB_DEVICE_ID");
+  uint32_t sub_device_id = value.empty() ? 0 : std::stoul(value);
+  PTI_ASSERT(sub_device_id >= 0 && sub_device_id < sub_device_list.size());
+  return sub_device_list[sub_device_id];
 }
 
 inline ze_context_handle_t GetContext(ze_driver_handle_t driver) {
@@ -232,27 +281,6 @@ inline ze_api_version_t GetVersion() {
     return ZE_API_VERSION_FORCE_UINT32;
   }
   return GetDriverVersion(driver_list.front());
-}
-
-inline std::vector<ze_device_handle_t> GetSubDeviceList(
-    ze_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
-  ze_result_t status = ZE_RESULT_SUCCESS;
-
-  uint32_t sub_device_count = 0;
-  status = zeDeviceGetSubDevices(device, &sub_device_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-  if (sub_device_count == 0) {
-    return std::vector<ze_device_handle_t>();
-  }
-
-  std::vector<ze_device_handle_t> sub_device_list(sub_device_count);
-  status = zeDeviceGetSubDevices(
-      device, &sub_device_count, sub_device_list.data());
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-  return sub_device_list;
 }
 
 } // namespace ze
