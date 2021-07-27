@@ -28,6 +28,30 @@ static std::string GetResultType(zet_value_type_t type) {
   return "UNKNOWN";
 }
 
+static std::string GetMetricType(zet_metric_type_t type) {
+  switch (type) {
+    case ZET_METRIC_TYPE_DURATION:
+      return "DURATION";
+    case ZET_METRIC_TYPE_EVENT:
+      return "EVENT";
+    case ZET_METRIC_TYPE_EVENT_WITH_RANGE:
+      return "EVENT_WITH_RANGE";
+    case ZET_METRIC_TYPE_THROUGHPUT:
+      return "THROUGHPUT";
+    case ZET_METRIC_TYPE_TIMESTAMP:
+      return "TIMESTAMP";
+    case ZET_METRIC_TYPE_FLAG:
+      return "FLAG";
+    case ZET_METRIC_TYPE_RATIO:
+      return "RATIO";
+    case ZET_METRIC_TYPE_RAW:
+      return "RAW";
+    default:
+      break;
+  }
+  return "UNKNOWN";
+}
+
 static void PrintMetricsInfo(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
@@ -85,7 +109,8 @@ static void PrintMetricsInfo(ze_device_handle_t device) {
       std::cout << "\tMetric " << mid << ": D" << group_props.domain <<
         " / " << sampling_type << " / " << group_props.name << " / " <<
         metric_props.name << " (" << metric_props.description << ") [" <<
-        GetResultType(metric_props.resultType) << "]" << std::endl;
+        GetResultType(metric_props.resultType) << ", " <<
+        GetMetricType(metric_props.metricType) << "]" << std::endl;
     }
   }
 }
