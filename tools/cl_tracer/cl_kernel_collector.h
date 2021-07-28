@@ -33,19 +33,19 @@ struct ClEnqueueData {
 };
 
 struct ClKernelProps {
+  std::string name;
   size_t simd_width;
   size_t bytes_transferred;
   size_t global_size[3];
   size_t local_size[3];
 };
 
-struct ClEventData {
-  ClKernelCollector* collector;
-  std::string kernel_name;
-  uint64_t kernel_id;
-  cl_ulong host_sync;
-  cl_ulong device_sync;
+struct ClKernelInstance {
+  cl_event event = nullptr;
   ClKernelProps props;
+  uint64_t kernel_id = 0;
+  cl_ulong host_sync = 0;
+  cl_ulong device_sync = 0;
 };
 
 struct ClKernelInfo {
@@ -77,6 +77,7 @@ struct ClKernelInterval {
 
 using ClKernelInfoMap = std::map<std::string, ClKernelInfo>;
 using ClKernelIntervalList = std::vector<ClKernelInterval>;
+using ClKernelInstanceList = std::list<ClKernelInstance*>;
 
 typedef void (*OnClKernelFinishCallback)(
     void* data, void* queue,
@@ -215,11 +216,13 @@ class ClKernelCollector {
         CL_FUNCTION_clCreateCommandQueueWithProperties);
     set = set && tracer->SetTracingFunction(
         CL_FUNCTION_clCreateCommandQueue);
+    PTI_ASSERT(set);
 
     set = set && tracer->SetTracingFunction(
         CL_FUNCTION_clEnqueueNDRangeKernel);
     set = set && tracer->SetTracingFunction(
         CL_FUNCTION_clEnqueueTask);
+    PTI_ASSERT(set);
 
     set = set && tracer->SetTracingFunction(
         CL_FUNCTION_clEnqueueReadBuffer);
@@ -249,16 +252,128 @@ class ClKernelCollector {
         CL_FUNCTION_clEnqueueCopyBufferToImage);
     PTI_ASSERT(set);
 
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clFinish);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clReleaseCommandQueue);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clReleaseEvent);
+    set = set && tracer->SetTracingFunction(
+        CL_FUNCTION_clWaitForEvents);
+    PTI_ASSERT(set);
+
     bool enabled = tracer_->Enable();
     PTI_ASSERT(enabled);
+  }
+
+  void AddKernelInstance(ClKernelInstance* instance) {
+    PTI_ASSERT(instance != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+    kernel_instance_list_.push_back(instance);
+  }
+
+  void ProcessKernelInstance(const ClKernelInstance* instance) {
+    PTI_ASSERT(instance != nullptr);
+
+    PTI_ASSERT(instance->event != nullptr);
+    cl_event event = instance->event;
+
+    cl_int event_status = utils::cl::GetEventStatus(event);
+    PTI_ASSERT(event_status == CL_COMPLETE);
+
+    cl_command_queue queue = utils::cl::GetCommandQueue(event);
+    PTI_ASSERT(queue != nullptr);
+
+    std::string name = instance->props.name;
+    PTI_ASSERT(!name.empty());
+
+    cl_ulong started =
+      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_START);
+    cl_ulong ended =
+      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_END);
+    cl_ulong time = ended - started;
+    PTI_ASSERT(time > 0);
+
+    AddKernelInfo(name, time, &instance->props);
+
+    if (instance->props.simd_width > 0) {
+      AddKernelInterval(name, started, ended);
+    }
+
+    if (callback_ != nullptr) {
+      cl_ulong queued =
+        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_QUEUED);
+      PTI_ASSERT(queued > 0);
+      cl_ulong submitted =
+        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_SUBMIT);
+      PTI_ASSERT(submitted > 0);
+
+      PTI_ASSERT(instance->device_sync <= queued);
+      uint64_t time_shift = queued - instance->device_sync;
+
+      uint64_t host_queued = instance->host_sync + time_shift;
+      PTI_ASSERT(queued <= submitted);
+      uint64_t host_submitted = host_queued + (submitted - queued);
+      PTI_ASSERT(submitted <= started);
+      uint64_t host_started = host_submitted + (started - submitted);
+      PTI_ASSERT(started <= ended);
+      uint64_t host_ended = host_started + (ended - started);
+
+      callback_(
+          callback_data_, queue, instance->kernel_id, name,
+          host_queued, host_submitted, host_started, host_ended);
+    }
+
+    cl_int status = clReleaseEvent(event);
+    PTI_ASSERT(status == CL_SUCCESS);
+
+    delete instance;
+  }
+
+  void ProcessKernelInstance(cl_event event) {
+    PTI_ASSERT(event != nullptr);
+    cl_int event_status = utils::cl::GetEventStatus(event);
+    if (event_status != CL_COMPLETE) {
+      return;
+    }
+
+    const std::lock_guard<std::mutex> lock(lock_);
+    for (auto it = kernel_instance_list_.begin();
+         it != kernel_instance_list_.end(); ++it) {
+      ClKernelInstance* instance = *it;
+      PTI_ASSERT(instance != nullptr);
+      PTI_ASSERT(instance->event != nullptr);
+      if (instance->event == event) {
+        ProcessKernelInstance(instance);
+        it = kernel_instance_list_.erase(it);
+        break;
+      }
+    }
+  }
+
+  void ProcessKernelInstances() {
+    const std::lock_guard<std::mutex> lock(lock_);
+
+    auto it = kernel_instance_list_.begin();
+    while (it != kernel_instance_list_.end()) {
+      ClKernelInstance* instance = *it;
+      PTI_ASSERT(instance != nullptr);
+
+      PTI_ASSERT(instance->event != nullptr);
+      cl_int event_status = utils::cl::GetEventStatus(instance->event);
+      if (event_status == CL_COMPLETE) {
+        ProcessKernelInstance(instance);
+        it = kernel_instance_list_.erase(it);
+      } else {
+        ++it;
+      }
+    }
   }
 
   void AddKernelInfo(
       std::string name, uint64_t time, const ClKernelProps* props) {
     PTI_ASSERT(!name.empty());
     PTI_ASSERT(props != nullptr);
-
-    const std::lock_guard<std::mutex> lock(lock_);
 
     if (verbose_) {
       if (props->simd_width > 0) {
@@ -296,7 +411,6 @@ class ClKernelCollector {
   void AddKernelInterval(std::string name, uint64_t start, uint64_t end) {
     PTI_ASSERT(!name.empty());
     PTI_ASSERT(start < end);
-    const std::lock_guard<std::mutex> lock(lock_);
     kernel_interval_list_.push_back({name, start, end});
   }
 
@@ -355,67 +469,6 @@ class ClKernelCollector {
   }
 
  private: // Callbacks
-  static void CL_CALLBACK EventNotify(
-      cl_event event, cl_int event_status, void* user_data) {
-    PTI_ASSERT(event_status == CL_COMPLETE);
-    TraceGuard guard;
-
-    PTI_ASSERT(user_data != nullptr);
-    ClEventData* event_data = reinterpret_cast<ClEventData*>(user_data);
-
-    ClKernelCollector* collector = event_data->collector;
-    PTI_ASSERT(collector != nullptr);
-
-    cl_command_queue queue = utils::cl::GetCommandQueue(event);
-    PTI_ASSERT(queue != nullptr);
-
-    std::string name = event_data->kernel_name;
-    PTI_ASSERT(!name.empty());
-
-    cl_ulong started =
-      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_START);
-    cl_ulong ended =
-      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_END);
-    cl_ulong time = ended - started;
-    PTI_ASSERT(time > 0);
-
-    collector->AddKernelInfo(name, time, &event_data->props);
-
-    if (event_data->props.simd_width > 0) {
-      collector->AddKernelInterval(name, started, ended);
-    }
-
-    if (collector->callback_ != nullptr) {
-      cl_ulong queued =
-        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_QUEUED);
-      PTI_ASSERT(queued > 0);
-      cl_ulong submitted =
-        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_SUBMIT);
-      PTI_ASSERT(submitted > 0);
-
-      PTI_ASSERT(event_data->device_sync <= queued);
-      uint64_t time_shift = queued - event_data->device_sync;
-
-      uint64_t host_queued = event_data->host_sync + time_shift;
-      PTI_ASSERT(queued <= submitted);
-      uint64_t host_submitted = host_queued + (submitted - queued);
-      PTI_ASSERT(submitted <= started);
-      uint64_t host_started = host_submitted + (started - submitted);
-      PTI_ASSERT(started <= ended);
-      uint64_t host_ended = host_started + (ended - started);
-
-      collector->callback_(
-          collector->callback_data_, queue,
-          event_data->kernel_id, name,
-          host_queued, host_submitted, host_started, host_ended);
-    }
-
-    cl_int status = clReleaseEvent(event);
-    PTI_ASSERT(status == CL_SUCCESS);
-
-    delete event_data;
-  }
-
   static void OnEnterCreateCommandQueueWithProperties(cl_callback_data* data) {
     PTI_ASSERT(data != nullptr);
 
@@ -495,11 +548,12 @@ class ClKernelCollector {
         PTI_ASSERT(status == CL_SUCCESS);
       }
 
-      ClEventData* event_data = new ClEventData;
-      PTI_ASSERT(event_data != nullptr);
+      ClKernelInstance* instance = new ClKernelInstance;
+      PTI_ASSERT(instance != nullptr);
+      instance->event = **(params->event);
+
       cl_kernel kernel = *(params->kernel);
-      event_data->collector = collector;
-      event_data->kernel_name = utils::cl::GetKernelName(kernel);
+      instance->props.name = utils::cl::GetKernelName(kernel);
 
       cl_command_queue queue = *(params->commandQueue);
       PTI_ASSERT(queue != nullptr);
@@ -509,27 +563,25 @@ class ClKernelCollector {
       size_t simd_width = utils::cl::GetKernelSimdWidth(device, kernel);
       PTI_ASSERT(simd_width > 0);
 
-      event_data->props.simd_width = simd_width;
-      event_data->props.bytes_transferred = 0;
+      instance->props.simd_width = simd_width;
+      instance->props.bytes_transferred = 0;
 
-      collector->CalculateKernelGlobalSize(params, &event_data->props);
-      collector->CalculateKernelLocalSize(params, &event_data->props);
+      collector->CalculateKernelGlobalSize(params, &instance->props);
+      collector->CalculateKernelLocalSize(params, &instance->props);
 
-      event_data->kernel_id =
+      instance->kernel_id =
         collector->kernel_id_.fetch_add(
             1, std::memory_order::memory_order_relaxed);
       PTI_ASSERT(collector->correlator_ != nullptr);
-      collector->correlator_->SetKernelId(event_data->kernel_id);
+      collector->correlator_->SetKernelId(instance->kernel_id);
 
       ClEnqueueData* enqueue_data =
         reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
       PTI_ASSERT(enqueue_data != nullptr);
-      event_data->device_sync = enqueue_data->device_sync;
-      event_data->host_sync = enqueue_data->host_sync;
+      instance->device_sync = enqueue_data->device_sync;
+      instance->host_sync = enqueue_data->host_sync;
 
-      status = clSetEventCallback(
-          **(params->event), CL_COMPLETE, EventNotify, event_data);
-      PTI_ASSERT(status == CL_SUCCESS);
+      collector->AddKernelInstance(instance);
 
       delete enqueue_data;
     }
@@ -544,32 +596,33 @@ class ClKernelCollector {
 
     if (event != reinterpret_cast<cl_event*>(data->correlationData)) {
       cl_int status = clRetainEvent(*event);
+      std::cout << "Retain " << *event << std::endl;
       PTI_ASSERT(status == CL_SUCCESS);
     }
 
-    ClEventData* event_data = new ClEventData;
-    PTI_ASSERT(event_data != nullptr);
-    event_data->collector = collector;
-    event_data->kernel_name = name;
+    ClKernelInstance* instance = new ClKernelInstance;
+    PTI_ASSERT(instance != nullptr);
+    instance->event = *event;
+    instance->props.name = name;
 
-    event_data->props.simd_width = 0;
-    event_data->props.bytes_transferred = bytes_transferred;
+    instance->props.simd_width = 0;
+    instance->props.bytes_transferred = bytes_transferred;
 
-    event_data->kernel_id =
+    instance->kernel_id =
       collector->kernel_id_.fetch_add(
           1, std::memory_order::memory_order_relaxed);
     PTI_ASSERT(collector->correlator_ != nullptr);
-    collector->correlator_->SetKernelId(event_data->kernel_id);
+    collector->correlator_->SetKernelId(instance->kernel_id);
 
     ClEnqueueData* enqueue_data =
       reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
     PTI_ASSERT(enqueue_data != nullptr);
-    event_data->device_sync = enqueue_data->device_sync;
-    event_data->host_sync = enqueue_data->host_sync;
+    instance->device_sync = enqueue_data->device_sync;
+    instance->host_sync = enqueue_data->host_sync;
 
-    cl_int status = clSetEventCallback(
-        *event, CL_COMPLETE, EventNotify, event_data);
-    PTI_ASSERT(status == CL_SUCCESS);
+    collector->AddKernelInstance(instance);
+
+    delete enqueue_data;
   }
 
   static void OnExitEnqueueReadBuffer(
@@ -896,6 +949,53 @@ class ClKernelCollector {
     }
   }
 
+  static void OnExitFinish(ClKernelCollector* collector) {
+    PTI_ASSERT(collector != nullptr);
+    collector->ProcessKernelInstances();
+  }
+
+  static void OnExitReleaseCommandQueue(ClKernelCollector* collector) {
+    PTI_ASSERT(collector != nullptr);
+    collector->ProcessKernelInstances();
+  }
+
+  static void OnEnterReleaseEvent(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    const cl_params_clReleaseEvent* params =
+      reinterpret_cast<const cl_params_clReleaseEvent*>(
+          data->functionParams);
+    PTI_ASSERT(params != nullptr);
+
+    if (*(params->event) != nullptr) {
+      collector->ProcessKernelInstance(*(params->event));
+    }
+  }
+
+  static void OnExitWaitForEvents(
+      cl_callback_data* data, ClKernelCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_int* return_value = reinterpret_cast<cl_int*>(
+        data->functionReturnValue);
+    if (*return_value == CL_SUCCESS) {
+      const cl_params_clWaitForEvents* params =
+        reinterpret_cast<const cl_params_clWaitForEvents*>(
+            data->functionParams);
+      PTI_ASSERT(params != nullptr);
+
+      const cl_event* event_list = *(params->eventList);
+      if (event_list != nullptr) {
+        for (cl_uint i = 0; i < *(params->numEvents); ++i) {
+          collector->ProcessKernelInstance(event_list[i]);
+        }
+      }
+    }
+  }
+
   static void Callback(cl_function_id function,
                       cl_callback_data* callback_data,
                       void* user_data) {
@@ -1023,6 +1123,22 @@ class ClKernelCollector {
       } else {
         OnExitEnqueueCopyBufferToImage(callback_data, collector);
       }
+    } else if (function == CL_FUNCTION_clFinish) {
+      if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
+        OnExitFinish(collector);
+      }
+    } else if (function == CL_FUNCTION_clReleaseCommandQueue) {
+      if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
+        OnExitReleaseCommandQueue(collector);
+      }
+    } else if (function == CL_FUNCTION_clReleaseEvent) {
+      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        OnEnterReleaseEvent(callback_data, collector);
+      }
+    } else if (function == CL_FUNCTION_clWaitForEvents) {
+      if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
+        OnExitWaitForEvents(callback_data, collector);
+      }
     }
   }
 
@@ -1041,6 +1157,7 @@ class ClKernelCollector {
   std::mutex lock_;
   ClKernelInfoMap kernel_info_map_;
   ClKernelIntervalList kernel_interval_list_;
+  ClKernelInstanceList kernel_instance_list_;
 
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;

@@ -290,6 +290,16 @@ inline cl_ulong GetEventTimestamp(cl_event event, cl_profiling_info info) {
   return start;
 }
 
+inline cl_int GetEventStatus(cl_event event) {
+  PTI_ASSERT(event != nullptr);
+  cl_int event_status = CL_QUEUED;
+  cl_int status = clGetEventInfo(
+      event, CL_EVENT_COMMAND_EXECUTION_STATUS,
+      sizeof(cl_int), &event_status, nullptr);
+  PTI_ASSERT(status == CL_SUCCESS);
+  return event_status;
+}
+
 inline cl_ulong GetGpuTimestamp() {
   cl_ulong timestamp = 0;
 #if defined(_WIN32)
