@@ -18,8 +18,7 @@ class ClExtCollector {
  public:
   static ClExtCollector* Create(
       ClApiCollector* cpu_collector, ClApiCollector* gpu_collector) {
-    PTI_ASSERT(cpu_collector != nullptr);
-    PTI_ASSERT(gpu_collector != nullptr);
+    PTI_ASSERT(cpu_collector != nullptr || gpu_collector != nullptr);
     if (instance_ == nullptr) {
       instance_ = new ClExtCollector(cpu_collector, gpu_collector);
     }
@@ -140,8 +139,7 @@ class ClExtCollector {
  private:
   ClExtCollector(ClApiCollector* cpu_collector, ClApiCollector* gpu_collector)
       : cpu_collector_(cpu_collector), gpu_collector_(gpu_collector) {
-    PTI_ASSERT(cpu_collector_ != nullptr);
-    PTI_ASSERT(gpu_collector_ != nullptr);
+    PTI_ASSERT(cpu_collector_ != nullptr || gpu_collector_ != nullptr);
   }
 
  private:

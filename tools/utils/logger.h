@@ -10,8 +10,7 @@
 #include <iostream>
 #include <fstream>
 #include <mutex>
-
-#include <string.h>
+#include <string>
 
 #include "pti_assert.h"
 
@@ -30,11 +29,10 @@ class Logger {
     }
   }
 
-  void Log(const char* text) {
+  void Log(const std::string& text) {
     if (file_.is_open()) {
       const std::lock_guard<std::mutex> lock(lock_);
-      file_.write(text, strlen(text));
-      file_.flush();
+      file_ << text << std::flush;
     } else {
       std::cerr << text << std::flush;
     }

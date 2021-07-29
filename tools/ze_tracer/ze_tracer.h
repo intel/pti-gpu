@@ -152,7 +152,7 @@ class ZeTracer {
         utils::GetPid() << "\", \"tid\":0, \"args\":{\"start_time\":\"" <<
         correlator_.GetStartPoint() << "\"}}," << std::endl;
 
-      chrome_logger_->Log(stream.str().c_str());
+      chrome_logger_->Log(stream.str());
     }
   }
 
@@ -183,7 +183,7 @@ class ZeTracer {
     stream << std::setw(title_width) << "Total API Time (ns): " <<
       std::setw(time_width) << total_duration << std::endl;
     stream << std::endl;
-    correlator_.Log(stream.str().c_str());
+    correlator_.Log(stream.str());
 
     if (total_duration > 0) {
       api_collector_->PrintFunctionsTable();
@@ -217,7 +217,7 @@ class ZeTracer {
     stream << std::setw(title_width) << "Total Device Time (ns): " <<
       std::setw(time_width) << total_duration << std::endl;
     stream << std::endl;
-    correlator_.Log(stream.str().c_str());
+    correlator_.Log(stream.str());
 
     if (total_duration > 0) {
       kernel_collector_->PrintKernelsTable();
@@ -252,7 +252,7 @@ class ZeTracer {
       submitted << " (submit) " <<
       started << " (start) " <<
       ended << " (end)" << std::endl;
-    tracer->correlator_.Log(stream.str().c_str());
+    tracer->correlator_.Log(stream.str());
   }
 
   static void ChromeTimelineCallback(
@@ -273,7 +273,7 @@ class ZeTracer {
       "}," << std::endl;
 
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
   static void ChromeStagesCallback(
@@ -298,7 +298,7 @@ class ZeTracer {
       ", \"cname\":\"thread_state_runnable\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
     stream.str(std::string());
 
     PTI_ASSERT(started > submitted);
@@ -310,7 +310,7 @@ class ZeTracer {
       ", \"cname\":\"cq_build_running\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
     stream.str(std::string());
 
     PTI_ASSERT(ended > started);
@@ -322,7 +322,7 @@ class ZeTracer {
       ", \"cname\":\"thread_state_iowait\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
   static void DeviceAndChromeTimelineCallback(
@@ -361,7 +361,7 @@ class ZeTracer {
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
  private:

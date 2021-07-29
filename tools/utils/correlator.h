@@ -35,7 +35,7 @@ class Correlator {
   Correlator(const std::string& log_file)
       : logger_(log_file), base_time_(PTI_CLOCK::now()) {}
 
-  void Log(const char* text) {
+  void Log(const std::string& text) {
     logger_.Log(text);
   }
 

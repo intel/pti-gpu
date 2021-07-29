@@ -186,7 +186,7 @@ class ZeKernelCollector {
     }
 
     PTI_ASSERT(correlator_ != nullptr);
-    correlator_->Log(stream.str().c_str());
+    correlator_->Log(stream.str());
   }
 
   void DisableTracing() {

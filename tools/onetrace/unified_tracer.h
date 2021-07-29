@@ -259,7 +259,7 @@ class UnifiedTracer {
         utils::GetPid() << "\", \"tid\":0, \"args\":{\"start_time\":\"" <<
         correlator_.GetStartPoint() << "\"}}," << std::endl;
 
-      chrome_logger_->Log(stream.str().c_str());
+      chrome_logger_->Log(stream.str());
     }
   }
 
@@ -330,7 +330,7 @@ class UnifiedTracer {
       stream << std::endl;
       stream << "== " << device_type << " Backend: ==" << std::endl;
       stream << std::endl;
-      correlator_.Log(stream.str().c_str());
+      correlator_.Log(stream.str());
       collector->PrintFunctionsTable();
     }
   }
@@ -346,7 +346,7 @@ class UnifiedTracer {
       stream << std::endl;
       stream << "== " << device_type << " Backend: ==" << std::endl;
       stream << std::endl;
-      correlator_.Log(stream.str().c_str());
+      correlator_.Log(stream.str());
       collector->PrintKernelsTable();
     }
   }
@@ -362,7 +362,7 @@ class UnifiedTracer {
       stream << std::endl;
       stream << "== " << device_type << " Backend: ==" << std::endl;
       stream << std::endl;
-      correlator_.Log(stream.str().c_str());
+      correlator_.Log(stream.str());
       collector->PrintFunctionsTable();
     }
   }
@@ -378,7 +378,7 @@ class UnifiedTracer {
       stream << std::endl;
       stream << "== " << device_type << " Backend: ==" << std::endl;
       stream << std::endl;
-      correlator_.Log(stream.str().c_str());
+      correlator_.Log(stream.str());
       collector->PrintKernelsTable();
     }
   }
@@ -439,7 +439,7 @@ class UnifiedTracer {
       }
     }
 
-    correlator_.Log(stream.str().c_str());
+    correlator_.Log(stream.str());
 
     if (ze_collector != nullptr) {
       PrintBackendTable(ze_collector, "L0");
@@ -492,7 +492,7 @@ class UnifiedTracer {
       started << " (start) " <<
       ended << " (end)" << std::endl;
 
-    tracer->correlator_.Log(stream.str().c_str());
+    tracer->correlator_.Log(stream.str());
   }
 
   static void ClDeviceTimelineCallback(
@@ -514,7 +514,7 @@ class UnifiedTracer {
       started << " (start) " <<
       ended << " (end)" << std::endl;
 
-    tracer->correlator_.Log(stream.str().c_str());
+    tracer->correlator_.Log(stream.str());
   }
 
   static void ZeChromeTimelineCallback(
@@ -535,7 +535,7 @@ class UnifiedTracer {
       "}," << std::endl;
 
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
   static void ClChromeTimelineCallback(
@@ -556,7 +556,7 @@ class UnifiedTracer {
       "}," << std::endl;
 
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
   static void ZeChromeStagesCallback(
@@ -581,7 +581,7 @@ class UnifiedTracer {
       ", \"cname\":\"thread_state_runnable\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
     stream.str(std::string());
 
     PTI_ASSERT(started > submitted);
@@ -593,7 +593,7 @@ class UnifiedTracer {
       ", \"cname\":\"cq_build_running\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
     stream.str(std::string());
 
     PTI_ASSERT(ended > started);
@@ -605,7 +605,7 @@ class UnifiedTracer {
       ", \"cname\":\"thread_state_iowait\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
   static void ClChromeStagesCallback(
@@ -631,7 +631,7 @@ class UnifiedTracer {
       ", \"cname\":\"thread_state_runnable\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
     stream.str(std::string());
 
     PTI_ASSERT(started > submitted);
@@ -643,7 +643,7 @@ class UnifiedTracer {
       ", \"cname\":\"cq_build_running\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
     stream.str(std::string());
 
     PTI_ASSERT(ended > started);
@@ -655,7 +655,7 @@ class UnifiedTracer {
       ", \"cname\":\"thread_state_iowait\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
   static void ZeDeviceAndChromeTimelineCallback(
@@ -718,7 +718,7 @@ class UnifiedTracer {
       "}," << std::endl;
 
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
   static void ClChromeLoggingCallback(
@@ -737,7 +737,7 @@ class UnifiedTracer {
       "}," << std::endl;
 
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
  private:

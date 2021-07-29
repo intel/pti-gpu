@@ -222,7 +222,7 @@ class ClTracer {
         utils::GetPid() << "\", \"tid\":0, \"args\":{\"start_time\":\"" <<
         correlator_.GetStartPoint() << "\"}}," << std::endl;
 
-      chrome_logger_->Log(stream.str().c_str());
+      chrome_logger_->Log(stream.str());
     }
   }
 
@@ -265,7 +265,7 @@ class ClTracer {
       stream << std::endl;
       stream << "== " << device_type << " Backend: ==" << std::endl;
       stream << std::endl;
-      correlator_.Log(stream.str().c_str());
+      correlator_.Log(stream.str());
       collector->PrintFunctionsTable();
     }
   }
@@ -281,7 +281,7 @@ class ClTracer {
       stream << std::endl;
       stream << "== " << device_type << " Backend: ==" << std::endl;
       stream << std::endl;
-      correlator_.Log(stream.str().c_str());
+      correlator_.Log(stream.str());
       collector->PrintKernelsTable();
     }
   }
@@ -320,7 +320,7 @@ class ClTracer {
         std::endl;
     }
 
-    correlator_.Log(stream.str().c_str());
+    correlator_.Log(stream.str());
 
     if (cpu_collector != nullptr) {
       PrintBackendTable(cpu_collector, "CPU");
@@ -361,7 +361,7 @@ class ClTracer {
       submitted << " (submit) " <<
       started << " (start) " <<
       ended << " (end)" << std::endl;
-    tracer->correlator_.Log(stream.str().c_str());
+    tracer->correlator_.Log(stream.str());
   }
 
   static void ChromeTimelineCallback(
@@ -382,7 +382,7 @@ class ClTracer {
       "}," << std::endl;
 
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
   static void ChromeStagesCallback(
@@ -408,7 +408,7 @@ class ClTracer {
       ", \"cname\":\"thread_state_runnable\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
     stream.str(std::string());
 
     PTI_ASSERT(started > submitted);
@@ -420,7 +420,7 @@ class ClTracer {
       ", \"cname\":\"cq_build_running\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
     stream.str(std::string());
 
     PTI_ASSERT(ended > started);
@@ -432,7 +432,7 @@ class ClTracer {
       ", \"cname\":\"thread_state_iowait\"" <<
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
   static void DeviceAndChromeTimelineCallback(
@@ -472,7 +472,7 @@ class ClTracer {
       ", \"args\": {\"id\": \"" << id << "\"}"
       "}," << std::endl;
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
-    tracer->chrome_logger_->Log(stream.str().c_str());
+    tracer->chrome_logger_->Log(stream.str());
   }
 
  private:

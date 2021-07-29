@@ -501,7 +501,7 @@ def gen_enter_callback(f, func, params, enum_map):
           f.write("      stream << (*(params->p" + name + "))->flags << \"}\";\n")
           f.write("    }\n")
   f.write("    stream << std::endl;\n")
-  f.write("    collector->correlator_->Log(stream.str().c_str());\n")
+  f.write("    collector->correlator_->Log(stream.str());\n")
   f.write("  }\n")
 
 def gen_exit_callback(f, func, params, enum_map):
@@ -581,7 +581,7 @@ def gen_exit_callback(f, func, params, enum_map):
       f.write("    }\n")
   f.write("    stream << \" -> \" << GetResultString(result) << \n")
   f.write("      \"(0x\" << result << \")\" << std::endl;\n")
-  f.write("    collector->correlator_->Log(stream.str().c_str());\n")
+  f.write("    collector->correlator_->Log(stream.str());\n")
   f.write("  }\n")
   f.write("\n")
   f.write("  if (collector->callback_ != nullptr) {\n")

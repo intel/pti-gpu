@@ -117,7 +117,7 @@ class ClApiCollector {
 
   void Log(const std::string& text) {
     PTI_ASSERT(correlator_ != nullptr);
-    correlator_->Log(text.c_str());
+    correlator_->Log(text);
   }
 
   ClApiCollector(const ClApiCollector& copy) = delete;
@@ -169,7 +169,7 @@ class ClApiCollector {
     }
 
     PTI_ASSERT(correlator_ != nullptr);
-    correlator_->Log(stream.str().c_str());
+    correlator_->Log(stream.str());
   }
 
  private: // Implementation Details
