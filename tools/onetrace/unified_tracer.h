@@ -43,10 +43,15 @@ class UnifiedTracer {
         tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE) ||
         tracer->CheckOption(TRACE_DEVICE_TIMELINE) ||
         tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
+        tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE) ||
         tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
 
-      PTI_ASSERT(!(tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+      PTI_ASSERT(!(tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) &&
                    tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)));
+      PTI_ASSERT(!(tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE) &&
+                   tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)));
+      PTI_ASSERT(!(tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) &&
+                   tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE)));
 
       ZeKernelCollector* ze_kernel_collector = nullptr;
       ClKernelCollector* cl_cpu_kernel_collector = nullptr;
@@ -56,8 +61,12 @@ class UnifiedTracer {
       OnClKernelFinishCallback cl_callback = nullptr;
       if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
           tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
-        ze_callback = ZeDeviceAndChromeTimelineCallback;
-        cl_callback = ClDeviceAndChromeTimelineCallback;
+        ze_callback = ZeDeviceAndChromeDeviceCallback;
+        cl_callback = ClDeviceAndChromeDeviceCallback;
+      } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+                 tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE)) {
+        ze_callback = ZeDeviceAndChromeKernelCallback;
+        cl_callback = ClDeviceAndChromeKernelCallback;
       } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
                  tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
         ze_callback = ZeDeviceAndChromeStagesCallback;
@@ -66,8 +75,11 @@ class UnifiedTracer {
         ze_callback = ZeDeviceTimelineCallback;
         cl_callback = ClDeviceTimelineCallback;
       } else if (tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
-        ze_callback = ZeChromeTimelineCallback;
-        cl_callback = ClChromeTimelineCallback;
+        ze_callback = ZeChromeDeviceCallback;
+        cl_callback = ClChromeDeviceCallback;
+      } else if (tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE)) {
+        ze_callback = ZeChromeKernelCallback;
+        cl_callback = ClChromeKernelCallback;
       } else if (tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
         ze_callback = ZeChromeStagesCallback;
         cl_callback = ClChromeStagesCallback;
@@ -244,6 +256,7 @@ class UnifiedTracer {
       : options_(options), correlator_(options.GetLogFileName()) {
     if (CheckOption(TRACE_CHROME_CALL_LOGGING) ||
         CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
+        CheckOption(TRACE_CHROME_KERNEL_TIMELINE) ||
         CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
       chrome_trace_file_name_ =
         TraceOptions::GetChromeTraceFileName(kChromeTraceFileName);
@@ -517,7 +530,7 @@ class UnifiedTracer {
     tracer->correlator_.Log(stream.str());
   }
 
-  static void ZeChromeTimelineCallback(
+  static void ZeChromeDeviceCallback(
       void* data, void* queue,
       const std::string& id, const std::string& name,
       uint64_t queued, uint64_t submitted,
@@ -538,7 +551,7 @@ class UnifiedTracer {
     tracer->chrome_logger_->Log(stream.str());
   }
 
-  static void ClChromeTimelineCallback(
+  static void ClChromeDeviceCallback(
       void* data, void* queue,
       uint64_t id, const std::string& name,
       uint64_t queued, uint64_t submitted,
@@ -549,6 +562,48 @@ class UnifiedTracer {
     std::stringstream stream;
     stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
       "\", \"tid\":\"" << reinterpret_cast<uint64_t>(queue) <<
+      "\", \"name\":\"" << name <<
+      "\", \"ts\": " << started / NSEC_IN_USEC <<
+      ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str());
+  }
+
+  static void ZeChromeKernelCallback(
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    UnifiedTracer* tracer = reinterpret_cast<UnifiedTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+
+    std::stringstream stream;
+    stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
+      "\", \"tid\":\"" << name <<
+      "\", \"name\":\"" << name <<
+      "\", \"ts\": " << started / NSEC_IN_USEC <<
+      ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    tracer->chrome_logger_->Log(stream.str());
+  }
+
+  static void ClChromeKernelCallback(
+      void* data, void* queue,
+      uint64_t id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    UnifiedTracer* tracer = reinterpret_cast<UnifiedTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+
+    std::stringstream stream;
+    stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
+      "\", \"tid\":\"" << name <<
       "\", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
@@ -658,25 +713,47 @@ class UnifiedTracer {
     tracer->chrome_logger_->Log(stream.str());
   }
 
-  static void ZeDeviceAndChromeTimelineCallback(
+  static void ZeDeviceAndChromeDeviceCallback(
       void* data, void* queue,
       const std::string& id, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
     ZeDeviceTimelineCallback(
         data, queue, id, name, queued, submitted, started, ended);
-    ZeChromeTimelineCallback(
+    ZeChromeDeviceCallback(
         data, queue, id, name, queued, submitted, started, ended);
   }
 
-  static void ClDeviceAndChromeTimelineCallback(
+  static void ClDeviceAndChromeDeviceCallback(
       void* data, void* queue,
       uint64_t id, const std::string& name,
       uint64_t queued, uint64_t submitted,
       uint64_t started, uint64_t ended) {
     ClDeviceTimelineCallback(
         data, queue, id, name, queued, submitted, started, ended);
-    ClChromeTimelineCallback(
+    ClChromeDeviceCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+  }
+
+  static void ZeDeviceAndChromeKernelCallback(
+      void* data, void* queue,
+      const std::string& id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    ZeDeviceTimelineCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+    ZeChromeKernelCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+  }
+
+  static void ClDeviceAndChromeKernelCallback(
+      void* data, void* queue,
+      uint64_t id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    ClDeviceTimelineCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+    ClChromeKernelCallback(
         data, queue, id, name, queued, submitted, started, ended);
   }
 

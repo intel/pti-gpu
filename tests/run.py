@@ -32,9 +32,27 @@ samples = [["cl_gemm", "gpu", "cpu"],
 
 tools = [["gpuinfo", "-l", "-i", "-m"],
          ["sysmon", "-p", "-l", "-d"],
-         ["onetrace", "-c", "-h", "-d", "-v", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "cl", "ze", "omp"],
-         ["cl_tracer", "-c", "-h", "-d", "-v", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "gpu", "dpc", "omp"],
-         ["ze_tracer", "-c", "-h", "-d", "-v", "-t", "--chrome-device-timeline", "--chrome-call-logging", "--chrome-device-stages", "dpc", "omp"]]
+         ["onetrace",
+          "-c", "-h", "-d", "-v", "-t",
+          "--chrome-call-logging",
+          "--chrome-device-timeline",
+          "--chrome-kernel-timeline",
+          "--chrome-device-stages",
+          "cl", "ze", "omp"],
+         ["cl_tracer",
+          "-c", "-h", "-d", "-v", "-t",
+          "--chrome-call-logging",
+          "--chrome-device-timeline",
+          "--chrome-kernel-timeline",
+          "--chrome-device-stages",
+          "gpu", "dpc", "omp"],
+         ["ze_tracer",
+          "-c", "-h", "-d", "-v", "-t",
+          "--chrome-call-logging",
+          "--chrome-device-timeline",
+          "--chrome-kernel-timeline",
+          "--chrome-device-stages",
+          "dpc", "omp"]]
 
 def remove_python_cache(path):
   files = os.listdir(path)

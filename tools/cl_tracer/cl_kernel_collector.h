@@ -596,7 +596,6 @@ class ClKernelCollector {
 
     if (event != reinterpret_cast<cl_event*>(data->correlationData)) {
       cl_int status = clRetainEvent(*event);
-      std::cout << "Retain " << *event << std::endl;
       PTI_ASSERT(status == CL_SUCCESS);
     }
 

@@ -50,7 +50,11 @@ void Usage() {
     std::endl;
   std::cout <<
     "--chrome-device-timeline       " <<
-    "Dump device activities to JSON file" <<
+    "Dump device activities to JSON file per command queue" <<
+    std::endl;
+  std::cout <<
+    "--chrome-kernel-timeline       " <<
+    "Dump device activities to JSON file per kernel name" <<
     std::endl;
   std::cout <<
     "--chrome-device-stages         " <<
@@ -113,6 +117,9 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
       utils::SetEnv("CLT_ChromeDeviceTimeline", "1");
       ++app_index;
+    } else if (strcmp(argv[i], "--chrome-kernel-timeline") == 0) {
+      utils::SetEnv("CLT_ChromeKernelTimeline", "1");
+      ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
       utils::SetEnv("CLT_ChromeDeviceStages", "1");
       ++app_index;
@@ -135,8 +142,25 @@ int ParseArgs(int argc, char* argv[]) {
   if (utils::GetEnv("CLT_ChromeDeviceTimeline") == "1" &&
       utils::GetEnv("CLT_ChromeDeviceStages") == "1") {
     std::cout <<
-      "[ERROR] Options --chrome-device-timeline and --chrome-device-stages" <<
-      " can't be used together, choose one of them" << std::endl;
+      "[ERROR] Options --chrome-device-timeline and " <<
+      "--chrome-device-stages can't be used together, " <<
+      "choose one of them" << std::endl;
+    return -1;
+  }
+  if (utils::GetEnv("CLT_ChromeDeviceTimeline") == "1" &&
+      utils::GetEnv("CLT_ChromeKernelTimeline") == "1") {
+    std::cout <<
+      "[ERROR] Options --chrome-device-timeline and " <<
+      "--chrome-kernel-timeline can't be used together, " <<
+      "choose one of them" << std::endl;
+    return -1;
+  }
+  if (utils::GetEnv("CLT_ChromeKernelTimeline") == "1" &&
+      utils::GetEnv("CLT_ChromeDeviceStages") == "1") {
+    std::cout <<
+      "[ERROR] Options --chrome-kernel-timeline and " <<
+      "--chrome-device-stages can't be used together, " <<
+      "choose one of them" << std::endl;
     return -1;
   }
 
@@ -194,6 +218,11 @@ static TraceOptions ReadArgs() {
   value = utils::GetEnv("CLT_ChromeDeviceTimeline");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_CHROME_DEVICE_TIMELINE);
+  }
+
+  value = utils::GetEnv("CLT_ChromeKernelTimeline");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_CHROME_KERNEL_TIMELINE);
   }
 
   value = utils::GetEnv("CLT_ChromeDeviceStages");

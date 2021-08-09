@@ -93,6 +93,8 @@ if __name__ == "__main__":
     option = "--chrome-call-logging"
   if len(sys.argv) > 1 and sys.argv[1] == "--chrome-device-timeline":
     option = "--chrome-device-timeline"
+  if len(sys.argv) > 1 and sys.argv[1] == "--chrome-kernel-timeline":
+    option = "--chrome-kernel-timeline"
   if len(sys.argv) > 1 and sys.argv[1] == "--chrome-device-stages":
     option = "--chrome-device-stages"
   if len(sys.argv) > 1 and sys.argv[1] == "cl":

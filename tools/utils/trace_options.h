@@ -20,10 +20,11 @@
 #define TRACE_DEVICE_TIMELINE        4
 #define TRACE_CHROME_CALL_LOGGING    5
 #define TRACE_CHROME_DEVICE_TIMELINE 6
-#define TRACE_CHROME_DEVICE_STAGES   7
-#define TRACE_TID                    8
-#define TRACE_PID                    9
-#define TRACE_LOG_TO_FILE            10
+#define TRACE_CHROME_KERNEL_TIMELINE 7
+#define TRACE_CHROME_DEVICE_STAGES   8
+#define TRACE_TID                    9
+#define TRACE_PID                    10
+#define TRACE_LOG_TO_FILE            11
 
 const char* kChromeTraceFileExt = "json";
 
