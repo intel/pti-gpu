@@ -27,6 +27,7 @@ struct HardwareThreadInfo {
   cl_uint tid;
   cl_uint euid;
   cl_uint ssid;
+  cl_uint dssid;
   cl_uint sid;
 };
 
@@ -35,6 +36,7 @@ struct HardwareKernelInfo {
   cl_ulong thread_count;
   cl_ulong eu_count;
   cl_ulong subslice_count;
+  cl_ulong dual_subslice_count;
   cl_ulong slice_count;
   cl_ulong total_samples;
   cl_ulong bad_samples;
@@ -45,6 +47,7 @@ const char* kKernelSource =
   "uint  __attribute__((overloadable)) intel_get_hw_thread_id();\n"
   "uint  __attribute__((overloadable)) intel_get_slice_id();\n"
   "uint  __attribute__((overloadable)) intel_get_subslice_id();\n"
+  "uint  __attribute__((overloadable)) intel_get_dual_subslice_id();\n"
   "uint  __attribute__((overloadable)) intel_get_eu_id();\n"
   "uint  __attribute__((overloadable)) intel_get_eu_thread_id();\n"
   "\n"
@@ -54,6 +57,7 @@ const char* kKernelSource =
   "  uint tid;\n"
   "  uint euid;\n"
   "  uint ssid;\n"
+  "  uint dssid;\n"
   "  uint sid;\n"
   "};\n"
   "\n"
@@ -80,6 +84,7 @@ const char* kKernelSource =
   "  info[id].tid = intel_get_eu_thread_id();\n"
   "  info[id].euid = intel_get_eu_id();\n"
   "  info[id].ssid = intel_get_subslice_id();\n"
+  "  info[id].dssid = intel_get_dual_subslice_id();\n"
   "  info[id].sid = intel_get_slice_id();\n"    
   "}";
 
@@ -110,13 +115,15 @@ static HardwareKernelInfo ProcessHardwareInfo(
 
   std::set<unsigned> tid;
   std::set<unsigned> euid;
-  std::set<unsigned> sid;
   std::set<unsigned> ssid;
+  std::set<unsigned> dssid;
+  std::set<unsigned> sid;
 
   for (auto item : info) {
     tid.insert(item.tid);
     euid.insert(item.euid);
     ssid.insert(item.ssid);
+    dssid.insert(item.dssid);
     sid.insert(item.sid);
   }
 
@@ -124,7 +131,7 @@ static HardwareKernelInfo ProcessHardwareInfo(
     total_cycles / (total_samples - bad_samples) : 0;
   return { average_thread_cycles,
            tid.size(), euid.size(),
-           ssid.size(), sid.size(),
+           ssid.size(), dssid.size(), sid.size(),
            total_samples, bad_samples };
 }
 
@@ -142,6 +149,8 @@ static void PrintInfo(const std::vector<HardwareKernelInfo>& info) {
     kernel_info.eu_count = (std::max)(kernel_info.eu_count, item.eu_count);
     kernel_info.subslice_count = (std::max)(
         kernel_info.subslice_count, item.subslice_count);
+    kernel_info.dual_subslice_count = (std::max)(
+        kernel_info.dual_subslice_count, item.dual_subslice_count);
     kernel_info.slice_count = (std::max)(
         kernel_info.slice_count, item.slice_count);
   }
@@ -169,12 +178,17 @@ static void PrintInfo(const std::vector<HardwareKernelInfo>& info) {
       kernel_info.thread_count << std::endl;
     std::cout << "Estimated number of EUs per subslice: " <<
       kernel_info.eu_count << std::endl;
-    std::cout << "Estimated number of subslices per slice: " <<
+    std::cout << "Estimated number of subslices per dual subslice: " <<
       kernel_info.subslice_count << std::endl;
+    std::cout << "Estimated number of dual subslices per slice: " <<
+      kernel_info.dual_subslice_count << std::endl;
     std::cout << "Estimated number of slices: " << kernel_info.slice_count <<
       std::endl;
-    std::cout << "Estimated total number EUs: " << kernel_info.eu_count *
-      kernel_info.subslice_count * kernel_info.slice_count << std::endl;
+    std::cout << "Estimated total number of EUs: " <<
+      kernel_info.eu_count *
+      kernel_info.subslice_count *
+      kernel_info.dual_subslice_count *
+      kernel_info.slice_count << std::endl;
     std::cout << "Estimated total number of HW threads: " <<
       kernel_info.thread_count * kernel_info.eu_count *
       kernel_info.subslice_count * kernel_info.slice_count << std::endl;

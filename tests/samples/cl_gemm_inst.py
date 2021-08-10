@@ -23,6 +23,19 @@ def build(path):
     return stderr
   return None
 
+def parse(stdout):
+  count = 0
+  for line in stdout.split("\n"):
+    if line.find("Samples collected:") == 0:
+      items = line.split()
+      if len(items) != 7:
+        break
+      count = int(items[2])
+      break
+  if count > 0:
+    return True
+  return False
+
 def run(path):
   p = subprocess.Popen(["./cl_gemm_inst", "1024", "1"],\
     cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
@@ -32,6 +45,8 @@ def run(path):
   if not stdout:
     return "stdout is empty"
   if stdout.find(" CORRECT") == -1:
+    return stdout
+  if not parse(stdout):
     return stdout
   return None
 

@@ -36,7 +36,10 @@ uint __attribute__((overloadable)) intel_get_hw_thread_id( void );
 /* Returns global GPU slice ID */
 uint __attribute__((overloadable)) intel_get_slice_id( void );
 
-/* Returns GPU subslice ID for current slice */
+/* Returns GPU dual subslice ID for current slice or 0 (depends on HW) */
+uint __attribute__((overloadable)) intel_get_dual_subslice_id( void );
+
+/* Returns GPU subslice ID for current slice or dual subslice (depends on HW) */
 uint __attribute__((overloadable)) intel_get_subslice_id( void );
 
 /* Returns GPU EU ID for current subslice */
@@ -60,10 +63,8 @@ __kernel kernel(/*...*/) {
 }
 ```
 
-Note, that described instrinsics will work correctly only with `Debug` or `ReleaseInternal` builds of [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime) and [Intel(R) Processor Graphics Compiler](https://github.com/intel/intel-graphics-compiler).
-
 ## Usage Details
-- refer to [Intel(R) Processor Graphics Compiler](https://github.com/intel/intel-graphics-compiler) project to get more details on OpenCL(TM) built-in instrinsicts support ([this](https://github.com/intel/intel-graphics-compiler/blob/1c28cd3cd4cf11fa603cf41dbf8ce852c32f1f23/IGC/BiFModule/Languages/OpenCL/IBiF_Impl.cl) file contains its implementations)
+- refer to [Intel(R) Processor Graphics Compiler](https://github.com/intel/intel-graphics-compiler) project to get more details on OpenCL(TM) built-in instrinsicts support ([this](https://github.com/intel/intel-graphics-compiler/blob/master/IGC/BiFModule/Languages/OpenCL/IBiF_Impl.cl) file contains its implementations)
 - refer to the paper [Introduction to GEN Assembly](https://software.intel.com/en-us/articles/introduction-to-gen-assembly) to learn more on Intel(R) Processor Graphics instruction set
 - refer to
 [Compute Architecture Manuals](https://software.intel.com/en-us/articles/intel-graphics-developers-guides) to learn more on Intel(R) Processor Graphics Architecture

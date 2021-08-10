@@ -14,14 +14,15 @@ Matrix multiplication time: 0.0686009 sec
 Results are CORRECT with accuracy: 4.90573e-06
 Total execution time: 0.56824 sec
 ======== GEMM Instrumentation Results ========
-Samples collected: 131072 (8.32% of bad samples)
-Estimated average HW thread duration: ~ 391 us (391549 cycles)
+Samples collected: 131072 (16.54% of bad samples)
+Estimated average HW thread duration: ~ 454 us (454972 cycles)
 Estimated number of HW threads per EU: 7
 Estimated number of EUs per subslice: 8
-Estimated number of subslices per slice: 3
-Estimated number of slices: 1
-Estimated total number EUs: 24
-Estimated total number of HW threads: 168
+Estimated number of subslices per dual subslice: 3
+Estimated number of dual subslices per slice: 1
+Estimated number of slices: 2
+Estimated total number EUs: 48
+Estimated total number of HW threads: 336
 ==============================================
 ```
 ## Supported OS
@@ -33,7 +34,7 @@ Estimated total number of HW threads: 168
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
 - [OpenCL(TM) ICD Loader](https://github.com/KhronosGroup/OpenCL-ICD-Loader)
-- [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime) (should be built in `Debug` or `ReleaseInternal` mode)
+- [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime)
 
 ## Build and Run
 ### Linux
