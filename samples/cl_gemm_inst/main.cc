@@ -184,14 +184,16 @@ static void PrintInfo(const std::vector<HardwareKernelInfo>& info) {
       kernel_info.dual_subslice_count << std::endl;
     std::cout << "Estimated number of slices: " << kernel_info.slice_count <<
       std::endl;
-    std::cout << "Estimated total number of EUs: " <<
+
+    cl_uint total_eu_count =
       kernel_info.eu_count *
       kernel_info.subslice_count *
       kernel_info.dual_subslice_count *
-      kernel_info.slice_count << std::endl;
+      kernel_info.slice_count;
+    std::cout << "Estimated total number of EUs: " <<
+      total_eu_count << std::endl;
     std::cout << "Estimated total number of HW threads: " <<
-      kernel_info.thread_count * kernel_info.eu_count *
-      kernel_info.subslice_count * kernel_info.slice_count << std::endl;
+      kernel_info.thread_count * total_eu_count << std::endl;
   }
   std::cout << epilogue << std::endl;
 }

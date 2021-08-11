@@ -99,13 +99,11 @@ Device Timeline (queue: 0x55a9c7e51e70): GEMM [ns] = 318185764 (queued) 31820062
 Device Timeline (queue: 0x55a9c7e51e70): clEnqueueReadBuffer [ns] = 361479600 (queued) 361481387 (submit) 361482574 (start) 362155593 (end)
 ...
 ```
-**Chrome Device Timeline** mode dumps timestamps for device activities per command queue to JSON format that can be opened in [chrome://tracing](https://www.chromium.org/developers/how-tos/trace-event-profiling-tool) browser tool.
+**Chrome Device Timeline** mode dumps timestamps for device activities per command queue to JSON format that can be opened in [chrome://tracing](https://www.chromium.org/developers/how-tos/trace-event-profiling-tool) browser tool. Can't be used with **Chrome Kernel Timeline** and **Chrome Device Stages**.
 
-**Chrome Kernel Timeline** mode dumps timestamps for device activities per kernel name to JSON format that can be opened in [chrome://tracing](https://www.chromium.org/developers/how-tos/trace-event-profiling-tool) browser tool.
+**Chrome Kernel Timeline** mode dumps timestamps for device activities per kernel name to JSON format that can be opened in [chrome://tracing](https://www.chromium.org/developers/how-tos/trace-event-profiling-tool) browser tool. Can't be used with **Chrome Device Timeline**.
 
-**Chrome Device Stages** mode provides alternative view for device queue where each kernel invocation is divided into stages: "queued", "sumbitted" and "execution".
-
-One should choose one of three previously described Chrome options for a single run.
+**Chrome Device Stages** mode provides alternative view for device queue where each kernel invocation is divided into stages: "queued", "sumbitted" and "execution". Can't be used with **Chrome Device Timeline**.
 
 To enable `high_resolution_clock` timestamps instead of `steady_clock` used by default, one may set `CLOCK_HIGH_RESOLUTION` variable for CMake:
 ```sh

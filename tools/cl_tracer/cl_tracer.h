@@ -48,22 +48,27 @@ class ClTracer {
                    tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)));
       PTI_ASSERT(!(tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) &&
                    tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE)));
-      PTI_ASSERT(!(tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE) &&
-                   tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)));
 
       ClKernelCollector* cpu_kernel_collector = nullptr;
       ClKernelCollector* gpu_kernel_collector = nullptr;
 
       OnClKernelFinishCallback callback = nullptr;
       if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
-          tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
+          tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE) &&
+          tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
+        callback = DeviceAndChromeKernelStagesCallback;
+      } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+                 tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
         callback = DeviceAndChromeDeviceCallback;
-      }else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
-                tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE)) {
+      } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
+                 tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE)) {
         callback = DeviceAndChromeKernelCallback;
       } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE) &&
                  tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
         callback = DeviceAndChromeStagesCallback;
+      } else if (tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE) &&
+                 tracer->CheckOption(TRACE_CHROME_DEVICE_STAGES)) {
+        callback = ChromeKernelStagesCallback;
       } else if (tracer->CheckOption(TRACE_DEVICE_TIMELINE)) {
         callback = DeviceTimelineCallback;
       } else if (tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE)) {
@@ -467,6 +472,52 @@ class ClTracer {
     tracer->chrome_logger_->Log(stream.str());
   }
 
+  static void ChromeKernelStagesCallback(
+      void* data, void* queue,
+      uint64_t id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
+    PTI_ASSERT(tracer != nullptr);
+    PTI_ASSERT(tracer->chrome_logger_ != nullptr);
+    std::stringstream stream;
+
+    PTI_ASSERT(submitted > queued);
+    stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
+      "\", \"tid\":\"" << name <<
+      "\", \"name\":\"" << name << " (Queued)" <<
+      "\", \"ts\": " << queued / NSEC_IN_USEC <<
+      ", \"dur\":" << (submitted - queued) / NSEC_IN_USEC <<
+      ", \"cname\":\"thread_state_runnable\"" <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_logger_->Log(stream.str());
+    stream.str(std::string());
+
+    PTI_ASSERT(started > submitted);
+    stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
+      "\", \"tid\":\"" << name <<
+      "\", \"name\":\"" << name << " (Submitted)" <<
+      "\", \"ts\": " << submitted / NSEC_IN_USEC <<
+      ", \"dur\":" << (started - submitted) / NSEC_IN_USEC <<
+      ", \"cname\":\"cq_build_running\"" <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_logger_->Log(stream.str());
+    stream.str(std::string());
+
+    PTI_ASSERT(ended > started);
+    stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
+      "\", \"tid\":\"" << name <<
+      "\", \"name\":\"" << name << " (Execution)" <<
+      "\", \"ts\": " << started / NSEC_IN_USEC <<
+      ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
+      ", \"cname\":\"thread_state_iowait\"" <<
+      ", \"args\": {\"id\": \"" << id << "\"}"
+      "}," << std::endl;
+    tracer->chrome_logger_->Log(stream.str());
+  }
+
   static void DeviceAndChromeDeviceCallback(
       void* data, void* queue,
       uint64_t id, const std::string& name,
@@ -497,6 +548,17 @@ class ClTracer {
     DeviceTimelineCallback(
         data, queue, id, name, queued, submitted, started, ended);
     ChromeStagesCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+  }
+
+  static void DeviceAndChromeKernelStagesCallback(
+      void* data, void* queue,
+      uint64_t id, const std::string& name,
+      uint64_t queued, uint64_t submitted,
+      uint64_t started, uint64_t ended) {
+    DeviceTimelineCallback(
+        data, queue, id, name, queued, submitted, started, ended);
+    ChromeKernelStagesCallback(
         data, queue, id, name, queued, submitted, started, ended);
   }
 

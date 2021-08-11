@@ -154,14 +154,6 @@ int ParseArgs(int argc, char* argv[]) {
       "choose one of them" << std::endl;
     return -1;
   }
-  if (utils::GetEnv("ONETRACE_ChromeKernelTimeline") == "1" &&
-      utils::GetEnv("ONETRACE_ChromeDeviceStages") == "1") {
-    std::cout <<
-      "[ERROR] Options --chrome-kernel-timeline and " <<
-      "--chrome-device-stages can't be used together, " <<
-      "choose one of them" << std::endl;
-    return -1;
-  }
 
   return app_index;
 }
