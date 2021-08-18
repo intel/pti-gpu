@@ -567,18 +567,36 @@ def gen_exit_callback(f, func, params, enum_map):
     f.write("      stream << \"(\" << kernel_call_id << \")\";\n")
     f.write("    }\n")
   f.write("    stream << \" [\" << time << \" ns]\";\n")
+  f.write("    if (result == ZE_RESULT_SUCCESS) {\n")
   for name, type in params:
-    if name.find("ph") == 0 or name.find("pptr") == 0 or name.find("pCount") == 0:
-      f.write("    if (*(params->p" + name + ") != nullptr) {\n")
-      if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
-        f.write("      stream << \" " + name[1:] + " = \" << (*(params->p" + name + "))->data;\n")
+    if name.find("ph") == 0:
+      if func == "zeDeviceGet" or func == "zeDeviceGetSubDevices":
+        f.write("      if (*(params->p" + name + ") != nullptr &&\n")
+        f.write("          *(params->ppCount) != nullptr) {\n")
+        f.write("        for (uint32_t i = 0; i < **(params->ppCount); ++i) {\n")
+        f.write("          stream << \" " + name[1:] + "[\" << i << \"] = \" <<\n")
+        f.write("            (*(params->p" + name + "))[i];\n")
+        f.write("        }\n")
+        f.write("      }\n")
       else:
-        f.write("      stream << \" " + name[1:] + " = \" << **(params->p" + name + ");\n")
-      f.write("    }\n")
+        f.write("      if (*(params->p" + name + ") != nullptr) {\n")
+        if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
+          f.write("        stream << \" " + name[1:] + " = \" << (*(params->p" + name + "))->data;\n")
+        else:
+          f.write("        stream << \" " + name[1:] + " = \" << **(params->p" + name + ");\n")
+        f.write("      }\n")
+    elif name.find("pptr") == 0 or name.find("pCount") == 0:
+      f.write("      if (*(params->p" + name + ") != nullptr) {\n")
+      if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
+        f.write("        stream << \" " + name[1:] + " = \" << (*(params->p" + name + "))->data;\n")
+      else:
+        f.write("        stream << \" " + name[1:] + " = \" << **(params->p" + name + ");\n")
+      f.write("      }\n")
     elif name.find("groupSize") == 0 and type.find("uint32_t*") == 0:
-      f.write("    if (*(params->p" + name + ") != nullptr) {\n")
-      f.write("      stream << \" " + name + " = \" << **(params->p" + name + ");\n")
-      f.write("    }\n")
+      f.write("      if (*(params->p" + name + ") != nullptr) {\n")
+      f.write("        stream << \" " + name + " = \" << **(params->p" + name + ");\n")
+      f.write("      }\n")
+  f.write("    }\n")
   f.write("    stream << \" -> \" << GetResultString(result) << \n")
   f.write("      \"(0x\" << result << \")\" << std::endl;\n")
   f.write("    collector->correlator_->Log(stream.str());\n")

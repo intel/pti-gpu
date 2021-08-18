@@ -497,7 +497,8 @@ endmacro()
 macro(FindL0HeadersPath TARGET L0_GEN_SCRIPT)
   RequirePythonInterp()
   find_path(L0_INC_PATH
-    NAMES level_zero)
+    NAMES level_zero
+    PATHS ENV CPATH)
   if (NOT L0_INC_PATH)
     message(FATAL_ERROR
       "Level Zero headers path is not found.\n"
