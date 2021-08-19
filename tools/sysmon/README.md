@@ -68,15 +68,7 @@ Current Frequency(MHz),                 300
 Changeable Frequency,                   Yes
 Max Core Frequency(MHz),                1200
 Min Core Frequency(MHz),                300
-Current Voltage(V),                     unknown
-Current Frequency Request(MHz),         unknown
-Efficient Min Frequency(MHz),           300.0
-Max Frequency For Current TDP(MHz),     unknown
-Memory Name,                            DDR
-Memory Max Clock Rate(MHz),             0
-Memory Max Bus Width,                   64
-Memory Total Size(MB),                  25431.6
-Engines,                                RENDER_SINGLE(1);MEDIA_DECODE_SINGLE(2);COPY_SINGLE(1);MEDIA_ENHANCEMENT_SINGLE(1)
+...
 ```
 
 ## Supported OS

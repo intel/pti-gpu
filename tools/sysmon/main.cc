@@ -11,8 +11,9 @@
 #include "utils.h"
 #include "ze_utils.h"
 
-#define BYTES_IN_MB (1024.0f * 1024.0f)
-#define BYTES_IN_GB (1024 * 1024 * 1024)
+#define BYTES_IN_KB (1024.0f)
+#define BYTES_IN_MB (1024.0f * 1024)
+#define BYTES_IN_GB (1024.0f * 1024 * 1024)
 #define W_IN_mW 1000
 
 #define SPACES "    "
@@ -369,6 +370,189 @@ void PrintDeviceList() {
       }
     }
   }
+}
+
+void PrintDeviceInfo(
+    ze_driver_handle_t driver,
+    const ze_device_properties_t& props) {
+  std::cout << std::setw(TEXT_WIDTH) <<
+    std::left << "Name," << props.name << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) <<
+    std::left << "Vendor ID," << std::hex <<
+    props.vendorId << std::dec << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) <<
+    std::left << "Device ID," << std::hex <<
+    props.deviceId << std::dec << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Core Clock Rate(MHz)," << props.coreClockRate << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Number Of Slices," << props.numSlices << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Number Of Subslices Per Slice," <<
+    props.numSubslicesPerSlice << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << "Number Of EU Per Subslice," <<
+    props.numEUsPerSubslice << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << "Number Of Threads Per EU," <<
+    props.numThreadsPerEU << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << "Total EU Count," <<
+    props.numSlices * props.numSubslicesPerSlice *
+    props.numEUsPerSubslice << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << "Physical EU SIMD Width," <<
+    props.physicalEUSimdWidth << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Kernel Timestamp Valid Bits," <<
+    props.kernelTimestampValidBits << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Command Queue Priority," <<
+    props.maxCommandQueuePriority << std::endl;
+
+  std::string timer_resolution = "Timer Resolution(";
+  timer_resolution +=
+    utils::ze::GetDriverVersion(driver) == ZE_API_VERSION_1_0 ? "ns" : "clks";
+  timer_resolution += "),";
+  std::cout << std::setw(TEXT_WIDTH) <<
+    timer_resolution << props.timerResolution << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Timestamp Valid Bits," <<
+    props.timestampValidBits << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Hardware Contexts," <<
+    props.maxHardwareContexts << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Memory Allocation Size(MB)," <<
+    ToString(props.maxMemAllocSize / BYTES_IN_MB) << std::endl;
+}
+
+void PrintComputeInfo(ze_device_handle_t device) {
+  PTI_ASSERT(device != nullptr);
+
+  ze_device_compute_properties_t props{
+    ZE_STRUCTURE_TYPE_DEVICE_COMPUTE_PROPERTIES, };
+  ze_result_t status = zeDeviceGetComputeProperties(device, &props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Total Group Size," << props.maxTotalGroupSize << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Group Size X," << props.maxGroupSizeX << std::endl;
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Group Size Y," << props.maxGroupSizeY << std::endl;
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Group Size Z," << props.maxGroupSizeZ << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Group Count X," << props.maxGroupCountX << std::endl;
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Group Count Y," << props.maxGroupCountY << std::endl;
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Group Count Z," << props.maxGroupCountZ << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Shared Local Memory(KB)," <<
+    ToString(props.maxSharedLocalMemory / BYTES_IN_KB) << std::endl;
+
+  if (props.numSubGroupSizes > 0) {
+    PTI_ASSERT(props.numSubGroupSizes <= ZE_SUBGROUPSIZE_COUNT);
+    std::cout << std::setw(TEXT_WIDTH) << std::left <<
+      "Subgroup Sizes Supported,";
+    for (uint32_t i = 0; i < props.numSubGroupSizes - 1; ++i) {
+      std::cout << props.subGroupSizes[i] << ";";
+    }
+    std::cout << props.subGroupSizes[props.numSubGroupSizes - 1] << std::endl;
+  }
+}
+
+void PrintFloatingPointFlags(
+    const std::string& type, ze_device_fp_flags_t value) {
+  static const std::pair<ze_device_fp_flag_t, const char *> flags[] = {
+    {ZE_DEVICE_FP_FLAG_DENORM, "Denormals,"},
+    {ZE_DEVICE_FP_FLAG_INF_NAN, "Infinity And NaN,"},
+    {ZE_DEVICE_FP_FLAG_ROUND_TO_NEAREST, "Round To Nearest Even,"},
+    {ZE_DEVICE_FP_FLAG_ROUND_TO_ZERO, "Round To Zero,"},
+    {ZE_DEVICE_FP_FLAG_ROUND_TO_INF, "Round To Infinity,"},
+    {ZE_DEVICE_FP_FLAG_FMA, "IEEE754-2008 FMA,"},
+    {ZE_DEVICE_FP_FLAG_ROUNDED_DIVIDE_SQRT, "Correctly-Rounded Div Sqrt,"},
+    {ZE_DEVICE_FP_FLAG_SOFT_FLOAT, "Emulated In Software,"},
+  };
+
+  for (auto &v: flags) {
+    ze_device_fp_flag_t flag = v.first;
+    std::string message = type + " " + v.second;
+    std::cout << std::setw(TEXT_WIDTH) << std::left <<
+      message << (value & flag ? "yes" : "no") << std::endl;
+  }
+}
+
+void PrintModuleInfo(ze_device_handle_t device) {
+  PTI_ASSERT(device != nullptr);
+
+  ze_device_module_properties_t props{
+    ZE_STRUCTURE_TYPE_DEVICE_MODULE_PROPERTIES, };
+  ze_result_t status = zeDeviceGetModuleProperties(device, &props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "SPIR-V Version Supported," <<
+    ZE_MAJOR_VERSION(props.spirvVersionSupported) << "." <<
+    ZE_MINOR_VERSION(props.spirvVersionSupported) << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Device Module Flags,";
+  if (props.flags == 0) {
+    std::cout << "none" << std::endl;
+  } else {
+    std::string flags;
+    if (props.flags & ZE_DEVICE_MODULE_FLAG_FP16) {
+      flags += "fp16;";
+    }
+    if (props.flags & ZE_DEVICE_MODULE_FLAG_FP64) {
+      flags += "fp64;";
+    }
+    if (props.flags & ZE_DEVICE_MODULE_FLAG_INT64_ATOMICS) {
+      flags += "int64_atomics;";
+    }
+    if (props.flags & ZE_DEVICE_MODULE_FLAG_DP4A) {
+      flags += "dp4a;";
+    }
+    PTI_ASSERT(!flags.empty());
+    flags.pop_back();
+    std::cout << flags << std::endl;
+  }
+
+  PrintFloatingPointFlags("FP16", props.fp16flags);
+  PrintFloatingPointFlags("FP32", props.fp32flags);
+  PrintFloatingPointFlags("FP64", props.fp64flags);
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Kernel Arguments Size(bytes)," <<
+    props.maxArgumentsSize << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left <<
+    "Max Print Buffer Size(KB)," <<
+    ToString(props.printfBufferSize / BYTES_IN_KB) << std::endl;
+
+  std::cout << std::setw(TEXT_WIDTH) << std::left << "Native Kernel UUID,";
+  std::cout << std::hex << std::setfill('0');
+  for (uint32_t i = 0; i < ZE_MAX_NATIVE_KERNEL_UUID_SIZE; ++i) {
+    std::cout << std::setw(2) <<
+      static_cast<uint16_t>(props.nativeKernelSupported.id[i]);
+  }
+  std::cout << std::setfill(' ') << std::dec << std::endl;
 }
 
 void PrintFrequencyInfo(
@@ -926,55 +1110,9 @@ static void PrintDetails(ze_driver_handle_t driver,
   std::cout << std::setw(DEL_WIDTH) << std::setfill('=') <<
     '=' << std::setfill(' ') << std::endl;
 
-  std::cout << std::setw(TEXT_WIDTH) <<
-    std::left << "Name," << props.core.name << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << std::left <<
-    "Number Of Slices," << props.core.numSlices << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << std::left <<
-    "Number Of Subslices Per Slice," <<
-    props.core.numSubslicesPerSlice << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << "Number Of EU Per Subslice," <<
-    props.core.numEUsPerSubslice << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << "Number Of Threads Per EU," <<
-    props.core.numThreadsPerEU << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << "Total EU Count," <<
-    props.core.numSlices * props.core.numSubslicesPerSlice *
-    props.core.numEUsPerSubslice << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << "Physical EU SIMD Width," <<
-    props.core.physicalEUSimdWidth << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << std::left <<
-    "Kernel Timestamp Valid Bits," <<
-    props.core.kernelTimestampValidBits << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << std::left <<
-    "Max Command Queue Priority," <<
-    props.core.maxCommandQueuePriority << std::endl;
-
-  std::string timer_resolution = "Timer Resolution(";
-  timer_resolution +=
-    utils::ze::GetDriverVersion(driver) == ZE_API_VERSION_1_0 ? "ns" : "clks";
-  timer_resolution += "),";
-  std::cout << std::setw(TEXT_WIDTH) <<
-    timer_resolution << props.core.timerResolution << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << std::left <<
-    "Timestamp Valid Bits," <<
-    props.core.timestampValidBits << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << std::left <<
-    "Max Hardware Contexts," <<
-    props.core.maxHardwareContexts << std::endl;
-
-  std::cout << std::setw(TEXT_WIDTH) << std::left <<
-    "Max Memory Allocation Size(MB)," <<
-    ToString(props.core.maxMemAllocSize / BYTES_IN_MB) << std::endl;
+  PrintDeviceInfo(driver, props.core);
+  PrintComputeInfo(device);
+  PrintModuleInfo(device);
 
   std::cout << std::setw(TEXT_WIDTH) << std::left <<
     "Brand Number," << props.boardNumber << std::endl;

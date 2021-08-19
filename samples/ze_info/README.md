@@ -25,6 +25,7 @@ This sample application provides information on all platforms and devices availa
       Number SubSlices Per Slice                      3
       Number Slices                                   1
       Timer Resolution                                83ns
+      ...
     ```
 * List of available drivers and platforms (`-l`):
     ```
