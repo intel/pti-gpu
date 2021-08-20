@@ -64,10 +64,6 @@ inline std::string GetPreferedLibraryPath() {
   }
 
   return reinterpret_cast<char*>(buffer.get());
-#elif defined(__linux__)
-  return "/opt/intel/opencl";
-#elif defined(__APPLE__)
-  return "/System/Library/Extensions/AppleIntelBDWGraphicsMTLDriver.bundle/Contents/MacOS";
 #else
   return "";
 #endif
