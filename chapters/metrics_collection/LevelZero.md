@@ -305,3 +305,6 @@ ZET_ENABLE_METRICS=1 ./<application>
 - [Level Zero Metric Info](../../samples/ze_metric_info)
 - [Level Zero Metric Query](../../samples/ze_metric_query)
 - [Level Zero Metric Streamer](../../samples/ze_metric_streamer)
+
+## Tools
+- [GPU Metrics Collection Tool for Data Parallel C++ (DPC++)](../../tools/oneprof)

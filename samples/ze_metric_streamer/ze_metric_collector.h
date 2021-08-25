@@ -220,7 +220,8 @@ class ZeMetricCollector {
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_event_pool_desc_t event_pool_desc = {
-        ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr, 0, 1};
+        ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
+        ZE_EVENT_POOL_FLAG_HOST_VISIBLE, 1};
     ze_event_pool_handle_t event_pool = nullptr;
     status = zeEventPoolCreate(collector->context_, &event_pool_desc,
                                0, nullptr, &event_pool);

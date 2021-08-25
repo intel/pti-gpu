@@ -27,6 +27,9 @@ endif()
 FindL0Library(zet_metric_streamer)
 FindL0Headers(zet_metric_streamer)
 
+CheckForMDLibrary(oneprof_tool)
+CheckForMetricsLibrary(oneprof_tool)
+
 # Loader
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTOOL_NAME=zet_metric_streamer")

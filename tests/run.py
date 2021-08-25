@@ -52,7 +52,9 @@ tools = [["gpuinfo", "-l", "-i", "-m"],
           "--chrome-device-timeline",
           "--chrome-kernel-timeline",
           "--chrome-device-stages",
-          "dpc", "omp"]]
+          "dpc", "omp"],
+        ["oneprof",
+         "-i", "-m", "-k", "-a", "cl", "ze", "omp"]]
 
 def remove_python_cache(path):
   files = os.listdir(path)

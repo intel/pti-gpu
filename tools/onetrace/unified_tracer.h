@@ -38,6 +38,7 @@ class UnifiedTracer {
     }
 
     UnifiedTracer* tracer = new UnifiedTracer(options);
+    PTI_ASSERT(tracer != nullptr);
 
     if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||
         tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE) ||

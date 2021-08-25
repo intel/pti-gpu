@@ -110,6 +110,8 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
+  set_tool_env();
+
   int app_index = parse_args(argc, argv);
   if (app_index <= 0 || app_index >= argc) {
     if (app_index >= argc) {
@@ -128,8 +130,6 @@ int main(int argc, char* argv[]) {
     app_args.push_back(argv[i]);
   }
   app_args.push_back(nullptr);
-
-  set_tool_env();
 
 #if defined(_WIN32)
 

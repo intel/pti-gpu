@@ -102,3 +102,4 @@ ZE_ENABLE_TRACING_LAYER=1 ./<application>
 ## Tools
 - [Level Zero Tracer](../../tools/ze_tracer)
 - [Tracing and Profiling Tool for Data Parallel C++ (DPC++)](../../tools/onetrace)
+- [GPU Metrics Collection Tool for Data Parallel C++ (DPC++)](../../tools/oneprof)

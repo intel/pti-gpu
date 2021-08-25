@@ -8,9 +8,12 @@
 #define PTI_TOOLS_ZE_TRACER_ZE_KERNEL_COLLECTOR_H_
 
 #include <atomic>
+#include <iomanip>
+#include <iostream>
 #include <list>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -43,6 +46,7 @@ struct ZeKernelCommand {
   ZeKernelProps props;
   ze_event_pool_handle_t event_pool = nullptr;
   ze_event_handle_t event = nullptr;
+  ze_device_handle_t device = nullptr;
   uint64_t kernel_id = 0;
   uint64_t append_time = 0;
   uint64_t timer_frequency = 0;
@@ -78,12 +82,6 @@ struct ZeKernelInfo {
   }
 };
 
-struct ZeKernelInterval {
-  std::string name;
-  uint64_t start;
-  uint64_t end;
-};
-
 struct ZeCommandListInfo {
   std::vector<ZeKernelCommand*> kernel_command_list;
   ze_context_handle_t context;
@@ -91,11 +89,30 @@ struct ZeCommandListInfo {
   bool immediate;
 };
 
+#ifdef PTI_KERNEL_INTERVALS
+
+struct ZeDeviceInterval {
+  uint64_t start;
+  uint64_t end;
+  uint32_t sub_device_id;
+};
+
+struct ZeKernelInterval {
+  std::string kernel_name;
+  ze_device_handle_t device;
+  std::vector<ZeDeviceInterval> device_interval_list;
+};
+
+using ZeKernelIntervalList = std::vector<ZeKernelInterval>;
+
+#endif
+
 using ZeKernelGroupSizeMap = std::map<ze_kernel_handle_t, ZeKernelGroupSize>;
 using ZeKernelInfoMap = std::map<std::string, ZeKernelInfo>;
-using ZeKernelIntervalList = std::vector<ZeKernelInterval>;
 using ZeCommandListMap = std::map<ze_command_list_handle_t, ZeCommandListInfo>;
 using ZeImageSizeMap = std::map<ze_image_handle_t, size_t>;
+using ZeDeviceMap = std::map<
+    ze_device_handle_t, std::vector<ze_device_handle_t> >;
 
 typedef void (*OnZeKernelFinishCallback)(
     void* data, void* queue,
@@ -200,9 +217,11 @@ class ZeKernelCollector {
     return kernel_info_map_;
   }
 
+#ifdef PTI_KERNEL_INTERVALS
   const ZeKernelIntervalList& GetKernelIntervalList() const {
     return kernel_interval_list_;
   }
+#endif // PTI_KERNEL_INTERVALS
 
  private: // Implementation
 
@@ -217,7 +236,23 @@ class ZeKernelCollector {
         callback_data_(callback_data),
         kernel_id_(1) {
     PTI_ASSERT(correlator_ != nullptr);
+#ifdef PTI_KERNEL_INTERVALS
+    CreateDeviceMap();
+#endif //PTI_KERNEL_INTERVALS
   }
+
+#ifdef PTI_KERNEL_INTERVALS
+  void CreateDeviceMap() {
+    std::vector<ze_device_handle_t> device_list =
+      utils::ze::GetDeviceList();
+    for (auto device : device_list) {
+      std::vector<ze_device_handle_t> sub_device_list =
+        utils::ze::GetSubDeviceList(device);
+      PTI_ASSERT(device_map_.count(device) == 0);
+      device_map_[device] = sub_device_list;
+    }
+  }
+#endif //PTI_KERNEL_INTERVALS
 
   uint64_t GetHostTimestamp() const {
     PTI_ASSERT(correlator_ != nullptr);
@@ -446,13 +481,9 @@ class ZeKernelCollector {
     uint64_t host_end = host_start + duration;
 
     AddKernelInfo(host_end - host_start, &command->props);
-
-    if (command->props.simd_width > 0) { // User kernels only
-      uint64_t start_ns = start *
-        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-      uint64_t end_ns = start_ns + duration;
-      AddKernelInterval(command->props.name, start_ns, end_ns);
-    }
+#ifdef PTI_KERNEL_INTERVALS
+    AddKernelInterval(command);
+#endif // PTI_KERNEL_INTERVALS
 
     if (callback_ != nullptr) {
       PTI_ASSERT(command->append_time > 0);
@@ -496,6 +527,28 @@ class ZeKernelCollector {
     }
   }
 
+  static std::string GetVerboseName(
+      const std::string& name, const ZeKernelProps* props) {
+    PTI_ASSERT(!name.empty());
+    PTI_ASSERT(props != nullptr);
+
+    std::stringstream sstream;
+    sstream << name;
+    if (props->simd_width > 0) {
+      sstream << "[SIMD" << props->simd_width << " {" <<
+        props->group_count[0] << "; " <<
+        props->group_count[1] << "; " <<
+        props->group_count[2] << "} {" <<
+        props->group_size[0] << "; " <<
+        props->group_size[1] << "; " <<
+        props->group_size[2] << "}]";
+    } else if (props->bytes_transferred > 0) {
+      sstream << "[" << props->bytes_transferred << " bytes]";
+    }
+
+    return sstream.str();
+  }
+
   void AddKernelInfo(uint64_t time, const ZeKernelProps* props) {
     PTI_ASSERT(props != nullptr);
 
@@ -503,20 +556,7 @@ class ZeKernelCollector {
     PTI_ASSERT(!name.empty());
 
     if (verbose_) {
-      if (props->simd_width > 0) {
-        std::stringstream sstream;
-        sstream << name << "[SIMD" << props->simd_width << ", {" <<
-          props->group_count[0] << ", " <<
-          props->group_count[1] << ", " <<
-          props->group_count[2] << "}, {" <<
-          props->group_size[0] << ", " <<
-          props->group_size[1] << ", " <<
-          props->group_size[2] << "}]";
-        name = sstream.str();
-      } else if (props->bytes_transferred > 0) {
-        name = name + "[" +
-          std::to_string(props->bytes_transferred) + " bytes]";
-      }
+      name = GetVerboseName(name, props);
     }
 
     if (kernel_info_map_.count(name) == 0) {
@@ -534,11 +574,105 @@ class ZeKernelCollector {
     }
   }
 
-  void AddKernelInterval(std::string name, uint64_t start, uint64_t end) {
+#ifdef PTI_KERNEL_INTERVALS
+  void AddKernelInterval(const ZeKernelCommand* command) {
+    PTI_ASSERT(command != nullptr);
+
+    std::string name = command->props.name;
     PTI_ASSERT(!name.empty());
-    PTI_ASSERT(start < end);
-    kernel_interval_list_.push_back({name, start, end});
+
+    if (verbose_) {
+      name = GetVerboseName(name, &command->props);
+    }
+
+    ze_result_t status = zeEventQueryStatus(command->event);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    if (device_map_.count(command->device) == 1 &&
+        !device_map_[command->device].empty()) { // Implicit Scaling
+      // TODO: Use zeEventQueryTimestampsExp for better results
+      ze_kernel_timestamp_result_t timestamp{};
+      status = zeEventQueryKernelTimestamp(command->event, &timestamp);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+      uint64_t start = timestamp.global.kernelStart;
+      uint64_t end = timestamp.global.kernelEnd;
+      uint64_t freq = command->timer_frequency;
+      PTI_ASSERT(freq > 0);
+
+      uint64_t duration = 0;
+      if (start < end) {
+        duration = (end - start) *
+          static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      } else { // 32-bit timer overflow
+        duration = ((1ull << 32) + end - start) *
+          static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      }
+
+      uint64_t start_ns = start *
+        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      uint64_t end_ns = start_ns + duration;
+      PTI_ASSERT(start_ns < end_ns);
+
+      ZeKernelInterval kernel_interval{
+          name, command->device, std::vector<ZeDeviceInterval>()};
+      for (size_t i = 0; i < device_map_[command->device].size(); ++i) {
+        PTI_ASSERT(i < (std::numeric_limits<uint32_t>::max)());
+        kernel_interval.device_interval_list.push_back(
+            {start_ns, end_ns, static_cast<uint32_t>(i)});
+      }
+      kernel_interval_list_.push_back(kernel_interval);
+    } else { // Explicit scaling
+      ze_kernel_timestamp_result_t timestamp{};
+      status = zeEventQueryKernelTimestamp(command->event, &timestamp);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+      uint64_t start = timestamp.global.kernelStart;
+      uint64_t end = timestamp.global.kernelEnd;
+      uint64_t freq = command->timer_frequency;
+      PTI_ASSERT(freq > 0);
+
+      uint64_t duration = 0;
+      if (start < end) {
+        duration = (end - start) *
+          static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      } else { // 32-bit timer overflow
+        duration = ((1ull << 32) + end - start) *
+          static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      }
+
+      uint64_t start_ns = start *
+        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      uint64_t end_ns = start_ns + duration;
+      PTI_ASSERT(start_ns < end_ns);
+
+      if (device_map_.count(command->device) == 0) { // Subdevice
+        for (auto it : device_map_) {
+          std::vector<ze_device_handle_t> sub_device_list =
+            device_map_[it.first];
+          for (size_t i = 0; i < sub_device_list.size(); ++i) {
+            if (sub_device_list[i] == command->device) {
+              ZeKernelInterval kernel_interval{
+                  name, it.first, std::vector<ZeDeviceInterval>()};
+              PTI_ASSERT(i < (std::numeric_limits<uint32_t>::max)());
+              kernel_interval.device_interval_list.push_back(
+                  {start_ns, end_ns, static_cast<uint32_t>(i)});
+              kernel_interval_list_.push_back(kernel_interval);
+              return;
+            }
+          }
+        }
+        PTI_ASSERT(0);
+      } else { // Device with no subdevices
+        PTI_ASSERT(device_map_[command->device].empty());
+        ZeKernelInterval kernel_interval{
+            name, command->device, std::vector<ZeDeviceInterval>()};
+        kernel_interval.device_interval_list.push_back({start_ns, end_ns, 0});
+        kernel_interval_list_.push_back(kernel_interval);
+      }
+    }
   }
+#endif // PTI_KERNEL_INTERVALS
 
   void AddCommandList(
       ze_command_list_handle_t command_list,
@@ -872,6 +1006,7 @@ class ZeKernelCollector {
 
     ze_device_handle_t device = collector->GetCommandListDevice(command_list);
     PTI_ASSERT(device != nullptr);
+    command->device = device;
     command->timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
     PTI_ASSERT(command->timer_frequency > 0);
 
@@ -1453,11 +1588,15 @@ class ZeKernelCollector {
 
   std::mutex lock_;
   ZeKernelInfoMap kernel_info_map_;
-  ZeKernelIntervalList kernel_interval_list_;
   std::list<ZeKernelCall*> kernel_call_list_;
   ZeCommandListMap command_list_map_;
   ZeImageSizeMap image_size_map_;
   ZeKernelGroupSizeMap kernel_group_size_map_;
+
+#ifdef PTI_KERNEL_INTERVALS
+  ZeKernelIntervalList kernel_interval_list_;
+  ZeDeviceMap device_map_;
+#endif // PTI_KERNEL_INTERVALS
 
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;

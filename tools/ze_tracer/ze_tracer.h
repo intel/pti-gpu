@@ -10,8 +10,6 @@
 #include <chrono>
 #include <cstdint>
 #include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <sstream>
 #include <string>
 
@@ -27,6 +25,7 @@ class ZeTracer {
  public:
   static ZeTracer* Create(const TraceOptions& options) {
     ZeTracer* tracer = new ZeTracer(options);
+    PTI_ASSERT(tracer != nullptr);
 
     ZeKernelCollector* kernel_collector = nullptr;
     if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||

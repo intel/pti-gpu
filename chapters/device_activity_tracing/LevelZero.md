@@ -113,3 +113,4 @@ Event pool profiling does not require any additional environment variables to be
 ## Tools
 - [Level Zero Tracer](../../tools/ze_tracer)
 - [Tracing and Profiling Tool for Data Parallel C++ (DPC++)](../../tools/onetrace)
+- [GPU Metrics Collection Tool for Data Parallel C++ (DPC++)](../../tools/oneprof)

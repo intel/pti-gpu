@@ -58,6 +58,16 @@ inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) 
   return device_list;
 }
 
+inline std::vector<ze_device_handle_t> GetDeviceList() {
+  std::vector<ze_device_handle_t> device_list;
+  for (auto driver : utils::ze::GetDriverList()) {
+    for (auto device : utils::ze::GetDeviceList(driver)) {
+      device_list.push_back(device);
+    }
+  }
+  return device_list;
+}
+
 inline std::vector<ze_device_handle_t> GetSubDeviceList(
     ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
@@ -132,6 +142,10 @@ inline ze_device_handle_t GetGpuDevice() {
   }
 
   value = utils::GetEnv("PTI_SUB_DEVICE_ID");
+  if (value.empty()) {
+    return device_list[device_id];
+  }
+
   uint32_t sub_device_id = value.empty() ? 0 : std::stoul(value);
   PTI_ASSERT(sub_device_id >= 0 && sub_device_id < sub_device_list.size());
   return sub_device_list[sub_device_id];
@@ -222,6 +236,48 @@ inline zet_metric_group_handle_t FindMetricGroup(
   }
 
   return target;
+}
+
+inline std::string GetResultType(zet_value_type_t type) {
+  switch (type) {
+    case ZET_VALUE_TYPE_UINT32:
+      return "UINT32";
+    case ZET_VALUE_TYPE_UINT64:
+      return "UINT64";
+    case ZET_VALUE_TYPE_FLOAT32:
+      return "FLOAT32";
+    case ZET_VALUE_TYPE_FLOAT64:
+      return "FLOAT64";
+    case ZET_VALUE_TYPE_BOOL8:
+      return "BOOL8";
+    default:
+      break;
+  }
+  return "UNKNOWN";
+}
+
+inline std::string GetMetricType(zet_metric_type_t type) {
+  switch (type) {
+    case ZET_METRIC_TYPE_DURATION:
+      return "DURATION";
+    case ZET_METRIC_TYPE_EVENT:
+      return "EVENT";
+    case ZET_METRIC_TYPE_EVENT_WITH_RANGE:
+      return "EVENT_WITH_RANGE";
+    case ZET_METRIC_TYPE_THROUGHPUT:
+      return "THROUGHPUT";
+    case ZET_METRIC_TYPE_TIMESTAMP:
+      return "TIMESTAMP";
+    case ZET_METRIC_TYPE_FLAG:
+      return "FLAG";
+    case ZET_METRIC_TYPE_RATIO:
+      return "RATIO";
+    case ZET_METRIC_TYPE_RAW:
+      return "RAW";
+    default:
+      break;
+  }
+  return "UNKNOWN";
 }
 
 inline size_t GetKernelMaxSubgroupSize(ze_kernel_handle_t kernel) {
