@@ -7,29 +7,77 @@
 #ifndef PTI_TOOLS_ONEPROF_PROF_UTILS_H_
 #define PTI_TOOLS_ONEPROF_PROF_UTILS_H_
 
-#include "ze_utils.h"
+#include <iomanip>
+#include <iostream>
 
-inline ze_driver_handle_t GetDriver(uint32_t device_id) {
+#include <level_zero/zes_api.h>
+#include <CL/cl_ext_private.h>
+
+#include "ze_utils.h"
+#include "cl_utils.h"
+
+inline ze_driver_handle_t GetZeDriver(uint32_t device_id) {
   uint32_t id = 0;
   for (auto driver : utils::ze::GetDriverList()) {
     for (auto device : utils::ze::GetDeviceList(driver)) {
       if (id == device_id) {
         return driver;
       }
+      ++id;
     }
   }
   return nullptr;
 }
 
-inline ze_device_handle_t GetDevice(uint32_t device_id) {
+inline ze_device_handle_t GetZeDevice(uint32_t device_id) {
   uint32_t id = 0;
   for (auto driver : utils::ze::GetDriverList()) {
     for (auto device : utils::ze::GetDeviceList(driver)) {
       if (id == device_id) {
         return device;
       }
+      ++id;
     }
   }
+  return nullptr;
+}
+
+inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
+  PTI_ASSERT(device != nullptr);
+
+  if (!utils::cl::CheckExtension(device, "cl_khr_pci_bus_info")) {
+    return cl_device_pci_bus_info_khr{0, 0, 0, 0};
+  }
+
+  cl_device_pci_bus_info_khr pci_info{};
+  cl_int status = clGetDeviceInfo(
+      device, CL_DEVICE_PCI_BUS_INFO_KHR,
+      sizeof(cl_device_pci_bus_info_khr), &pci_info, nullptr);
+  PTI_ASSERT(status == CL_SUCCESS);
+
+  return pci_info;
+}
+
+inline cl_device_id GetClDevice(uint32_t device_id) {
+  ze_device_handle_t device = GetZeDevice(device_id);
+  if (device == nullptr) {
+    return nullptr;
+  }
+
+  zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
+  ze_result_t status = zesDevicePciGetProperties(device, &pci_props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  for (auto device : utils::cl::GetDeviceList(CL_DEVICE_TYPE_GPU)) {
+    cl_device_pci_bus_info_khr pci_info = GetDevicePciInfo(device);
+    if (pci_info.pci_domain == pci_props.address.domain &&
+        pci_info.pci_bus == pci_props.address.bus &&
+        pci_info.pci_device == pci_props.address.device &&
+        pci_info.pci_function == pci_props.address.function) {
+      return device;
+    }
+  }
+
   return nullptr;
 }
 
@@ -49,7 +97,15 @@ inline void PrintDeviceList() {
     status = zeDeviceGetProperties(device_list[i], &device_properties);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    std::cout << "Device #" << i << ": " <<
+    zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
+    status = zesDevicePciGetProperties(device_list[i], &pci_props);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    std::cout << "Device #" << i << ": [" << std::hex << std::setfill('0') <<
+      std::setw(4) << pci_props.address.domain << ":" <<
+      std::setw(2) << pci_props.address.bus << ":" <<
+      std::setw(2) << pci_props.address.device << "." <<
+      std::setw(1) << pci_props.address.function << std::dec << "] " <<
       device_properties.name << std::endl;
   }
 }

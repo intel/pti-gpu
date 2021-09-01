@@ -15,8 +15,6 @@
 #include <thread>
 #include <vector>
 
-#include <level_zero/layers/zel_tracing_api.h>
-
 #include "metric_storage.h"
 #include "ze_utils.h"
 
@@ -66,37 +64,12 @@ class MetricCollector {
     }
     PTI_ASSERT(metric_group_list.size() == sub_device_list.size());
 
-    MetricCollector* collector = new MetricCollector(
+    return new MetricCollector(
         context, sub_device_list, metric_group_list, sampling_interval);
-    PTI_ASSERT(collector != nullptr);
-
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    zel_tracer_desc_t tracer_desc = {
-        ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
-    zel_tracer_handle_t tracer = nullptr;
-    status = zelTracerCreate(&tracer_desc, &tracer);
-    if (status != ZE_RESULT_SUCCESS) {
-      std::cerr <<
-        "[WARNING] Unable to create Level Zero tracer for target context" <<
-        std::endl;
-      delete collector;
-      return nullptr;
-    }
-
-    collector->EnableTracing(tracer);
-    return collector;
   }
 
-  void DisableTracing() {
-    PTI_ASSERT(tracer_ != nullptr);
-    ze_result_t status = zelTracerSetEnabled(tracer_, false);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    if (collector_thread_ != nullptr ||
-        collector_state_ != COLLECTOR_STATE_IDLE) {
-      std::cout << "[WARNING] Command queue was not destroyed" << std::endl;
-      ForceDisableMetrics();
-    }
+  void DisableCollection() {
+    DisableMetrics();
 
     PTI_ASSERT(metric_storage_ != nullptr);
     delete metric_storage_;
@@ -108,13 +81,7 @@ class MetricCollector {
 
   ~MetricCollector() {
     ze_result_t status = ZE_RESULT_SUCCESS;
-    PTI_ASSERT(collector_thread_ == nullptr);
-    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_IDLE);
-
-    if (tracer_ != nullptr) {
-      status = zelTracerDestroy(tracer_);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    }
+    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_DISABLED);
 
     PTI_ASSERT(context_ != nullptr);
     status = zeContextDestroy(context_);
@@ -262,65 +229,31 @@ class MetricCollector {
     for (size_t i = 0; i < sub_device_list_.size(); ++i) {
       metric_buffer_.push_back(std::vector<uint8_t>(CHUNK_SIZE));
     }
-  }
 
-  void EnableTracing(zel_tracer_handle_t tracer) {
-    PTI_ASSERT(tracer != nullptr);
-    tracer_ = tracer;
-
-    zet_core_callbacks_t epilogue_callbacks{};
-
-    epilogue_callbacks.CommandQueue.pfnCreateCb =
-      OnExitCommandQueueCreate;
-    epilogue_callbacks.CommandQueue.pfnDestroyCb =
-      OnExitCommandQueueDestroy;
-
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zelTracerSetEpilogues(tracer_, &epilogue_callbacks);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    status = zelTracerSetEnabled(tracer_, true);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    EnableMetrics();
   }
 
   void EnableMetrics() {
-    const std::lock_guard<std::mutex> lock(lock_);
+    PTI_ASSERT(collector_thread_ == nullptr);
+    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_IDLE);
 
-    PTI_ASSERT(queue_count_ >= 0);
-    if (queue_count_ == 0) {
-      PTI_ASSERT(collector_thread_ == nullptr);
-      PTI_ASSERT(collector_state_ == COLLECTOR_STATE_IDLE);
+    collector_state_.store(COLLECTOR_STATE_IDLE, std::memory_order_release);
+    collector_thread_ = new std::thread(Collect, this);
+    PTI_ASSERT(collector_thread_ != nullptr);
 
-      collector_state_.store(COLLECTOR_STATE_IDLE, std::memory_order_release);
-      collector_thread_ = new std::thread(Collect, this);
-      PTI_ASSERT(collector_thread_ != nullptr);
-
-      while (collector_state_.load(std::memory_order_acquire) !=
-            COLLECTOR_STATE_ENABLED) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      }
+    while (collector_state_.load(std::memory_order_acquire) !=
+          COLLECTOR_STATE_ENABLED) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-
-    ++queue_count_;
   }
 
-  void ForceDisableMetrics() {
+  void DisableMetrics() {
     PTI_ASSERT(collector_thread_ != nullptr);
+    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_ENABLED);
     collector_state_.store(
         COLLECTOR_STATE_DISABLED, std::memory_order_release);
     collector_thread_->join();
     delete collector_thread_;
-    collector_thread_ = nullptr;
-    collector_state_.store(
-        COLLECTOR_STATE_IDLE, std::memory_order_release);
-  }
-
-  void DisableMetrics() {
-    const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(queue_count_ > 0);
-    --queue_count_;
-    if (queue_count_ == 0) {
-      ForceDisableMetrics();
-    }
   }
 
   void AppendMetrics(
@@ -464,33 +397,9 @@ class MetricCollector {
     }
   }
 
- private: // Callbacks
-  static void OnExitCommandQueueCreate(
-      ze_command_queue_create_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
-    if (result == ZE_RESULT_SUCCESS) {
-      MetricCollector* collector =
-        reinterpret_cast<MetricCollector*>(global_data);
-      PTI_ASSERT(collector != nullptr);
-      collector->EnableMetrics();
-    }
-  }
-
-  static void OnExitCommandQueueDestroy(
-      ze_command_queue_destroy_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
-    if (result == ZE_RESULT_SUCCESS) {
-      MetricCollector* collector =
-        reinterpret_cast<MetricCollector*>(global_data);
-      PTI_ASSERT(collector != nullptr);
-      collector->DisableMetrics();
-    }
-  }
-
  private: // Data
   std::vector<ze_device_handle_t> sub_device_list_;
   ze_context_handle_t context_ = nullptr;
-  zel_tracer_handle_t tracer_ = nullptr;
 
   std::thread* collector_thread_ = nullptr;
   std::atomic<CollectorState> collector_state_{COLLECTOR_STATE_IDLE};
@@ -501,8 +410,6 @@ class MetricCollector {
 
   std::vector<std::vector<uint8_t> > metric_buffer_;
 
-  std::mutex lock_;
-  int queue_count_ = 0;
   uint32_t sampling_interval_ = 0;
 };
 

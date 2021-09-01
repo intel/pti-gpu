@@ -104,15 +104,15 @@ struct ZeKernelInterval {
 };
 
 using ZeKernelIntervalList = std::vector<ZeKernelInterval>;
+using ZeDeviceMap = std::map<
+    ze_device_handle_t, std::vector<ze_device_handle_t> >;
 
-#endif
+#endif // PTI_KERNEL_INTERVALS
 
 using ZeKernelGroupSizeMap = std::map<ze_kernel_handle_t, ZeKernelGroupSize>;
 using ZeKernelInfoMap = std::map<std::string, ZeKernelInfo>;
 using ZeCommandListMap = std::map<ze_command_list_handle_t, ZeCommandListInfo>;
 using ZeImageSizeMap = std::map<ze_image_handle_t, size_t>;
-using ZeDeviceMap = std::map<
-    ze_device_handle_t, std::vector<ze_device_handle_t> >;
 
 typedef void (*OnZeKernelFinishCallback)(
     void* data, void* queue,
@@ -238,7 +238,7 @@ class ZeKernelCollector {
     PTI_ASSERT(correlator_ != nullptr);
 #ifdef PTI_KERNEL_INTERVALS
     CreateDeviceMap();
-#endif //PTI_KERNEL_INTERVALS
+#endif // PTI_KERNEL_INTERVALS
   }
 
 #ifdef PTI_KERNEL_INTERVALS
@@ -252,7 +252,7 @@ class ZeKernelCollector {
       device_map_[device] = sub_device_list;
     }
   }
-#endif //PTI_KERNEL_INTERVALS
+#endif // PTI_KERNEL_INTERVALS
 
   uint64_t GetHostTimestamp() const {
     PTI_ASSERT(correlator_ != nullptr);
@@ -261,7 +261,8 @@ class ZeKernelCollector {
 
   uint64_t GetDeviceTimestamp(ze_device_handle_t device) const {
     PTI_ASSERT(device != nullptr);
-    return utils::ze::GetDeviceTimestamp(device) & 0x0FFFFFFFF;
+    return utils::ze::GetDeviceTimestamp(device) &
+      utils::ze::GetDeviceTimestampMask(device);
   }
 
   void EnableTracing(zel_tracer_handle_t tracer) {
@@ -648,8 +649,7 @@ class ZeKernelCollector {
 
       if (device_map_.count(command->device) == 0) { // Subdevice
         for (auto it : device_map_) {
-          std::vector<ze_device_handle_t> sub_device_list =
-            device_map_[it.first];
+          std::vector<ze_device_handle_t> sub_device_list = it.second;
           for (size_t i = 0; i < sub_device_list.size(); ++i) {
             if (sub_device_list[i] == command->device) {
               ZeKernelInterval kernel_interval{

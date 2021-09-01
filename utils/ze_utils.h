@@ -9,7 +9,9 @@
 
 #include <string.h>
 
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <level_zero/ze_api.h>
@@ -319,6 +321,14 @@ inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
   ze_result_t status = zeDeviceGetProperties(device, &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return props.timerResolution;
+}
+
+uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
+  PTI_ASSERT(device != nullptr);
+  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  return (1ull << props.kernelTimestampValidBits) - 1ull;
 }
 
 inline ze_api_version_t GetDriverVersion(ze_driver_handle_t driver) {

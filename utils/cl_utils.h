@@ -21,48 +21,101 @@
 namespace utils {
 namespace cl {
 
-inline cl_device_id GetIntelDevice(cl_device_type type) {
+inline std::vector<cl_device_id> GetDeviceList(cl_device_type type) {
   cl_int status = CL_SUCCESS;
 
   cl_uint platform_count = 0;
   status = clGetPlatformIDs(0, nullptr, &platform_count);
-  if (status != CL_SUCCESS || platform_count == 0) return nullptr;
+  if (status != CL_SUCCESS || platform_count == 0) {
+    return std::vector<cl_device_id>();
+  }
 
   std::vector<cl_platform_id> platform_list(platform_count, nullptr);
   status = clGetPlatformIDs(platform_count, platform_list.data(), nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
 
-  cl_device_id target = nullptr;
+  std::vector<cl_device_id> result;
   for (cl_uint i = 0; i < platform_count; ++i) {
     cl_uint device_count = 0;
 
-    status = clGetDeviceIDs(platform_list[i], type, 0, nullptr,
-                            &device_count);
+    status = clGetDeviceIDs(
+        platform_list[i], type, 0, nullptr, &device_count);
     if (status != CL_SUCCESS || device_count == 0) continue;
 
     std::vector<cl_device_id> device_list(device_count, nullptr);
-    status = clGetDeviceIDs(platform_list[i], type, device_count,
-                            device_list.data(), nullptr);
+    status = clGetDeviceIDs(
+        platform_list[i], type, device_count, device_list.data(), nullptr);
     PTI_ASSERT(status == CL_SUCCESS);
 
-    char vendor[MAX_STR_SIZE] = { 0 };
     for (cl_uint j = 0; j < device_count; ++j) {
-        status = clGetDeviceInfo(device_list[j], CL_DEVICE_VENDOR,
-                                 MAX_STR_SIZE, vendor, nullptr);
-        PTI_ASSERT(status == CL_SUCCESS);
-
-        if (strstr(vendor, "Intel") != nullptr) {
-            target = device_list[j];
-            break;
-        }
+      result.push_back(device_list[j]);
     }
+  }
 
-    if (target != nullptr) {
+  return result;
+}
+
+inline std::vector<cl_device_id> CreateSubDeviceList(cl_device_id device) {
+  PTI_ASSERT(device != nullptr);
+
+  cl_int status = CL_SUCCESS;
+  cl_device_partition_property props[] = {
+    CL_DEVICE_PARTITION_BY_AFFINITY_DOMAIN,
+    CL_DEVICE_AFFINITY_DOMAIN_NEXT_PARTITIONABLE,
+    0};
+
+  cl_uint sub_device_count = 0;
+  status = clCreateSubDevices(device, props, 0, nullptr, &sub_device_count);
+  PTI_ASSERT(status == CL_SUCCESS || status == CL_DEVICE_PARTITION_FAILED);
+
+  if (status == CL_DEVICE_PARTITION_FAILED || sub_device_count == 0) {
+    return std::vector<cl_device_id>();
+  }
+
+  std::vector<cl_device_id> sub_device_list(sub_device_count);
+  status = clCreateSubDevices(
+      device, props, sub_device_count, sub_device_list.data(), nullptr);
+  PTI_ASSERT(status == CL_SUCCESS);
+
+  return sub_device_list;
+}
+
+inline void ReleaseSubDeviceList(
+    const std::vector<cl_device_id>& sub_device_list) {
+  for (auto sub_device : sub_device_list) {
+    cl_int status = clReleaseDevice(sub_device);
+    PTI_ASSERT(status == CL_SUCCESS);
+  }
+}
+
+inline cl_device_id GetIntelDevice(cl_device_type type) {
+  cl_int status = CL_SUCCESS;
+  cl_device_id target = nullptr;
+  char vendor[MAX_STR_SIZE] = { 0 };
+
+  std::vector<cl_device_id> device_list = GetDeviceList(type);
+  for (auto device : device_list) {
+    status = clGetDeviceInfo(
+        device, CL_DEVICE_VENDOR, MAX_STR_SIZE, vendor, nullptr);
+    PTI_ASSERT(status == CL_SUCCESS);
+    if (strstr(vendor, "Intel") != nullptr) {
+      target = device;
       break;
     }
   }
 
   return target;
+}
+
+inline cl_device_id GetDeviceParent(cl_device_id device) {
+  PTI_ASSERT(device != nullptr);
+
+  cl_device_id parent = nullptr;
+  cl_int status = clGetDeviceInfo(
+      device, CL_DEVICE_PARENT_DEVICE, sizeof(cl_device_id), &parent, nullptr);
+  PTI_ASSERT(status != CL_SUCCESS);
+
+  return parent;
 }
 
 inline std::string GetKernelName(cl_kernel kernel) {
@@ -300,32 +353,14 @@ inline cl_int GetEventStatus(cl_event event) {
   return event_status;
 }
 
-inline cl_ulong GetGpuTimestamp() {
-  cl_ulong timestamp = 0;
-#if defined(_WIN32)
-  BOOL success = QueryPerformanceCounter(&timestamp);
-  PTI_ASSERT(success);
-#else
-  timespec tp{0, 0};
-  int status = clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
-  PTI_ASSERT(status == 0);
-  timestamp = NSEC_IN_SEC * tp.tv_sec + tp.tv_nsec;
-#endif
-  return timestamp;
-}
-
-inline cl_ulong GetCpuTimestamp() {
-  cl_ulong timestamp = 0;
-#if defined(_WIN32)
-  BOOL success = QueryPerformanceCounter(&timestamp);
-  PTI_ASSERT(success);
-#else
-  timespec tp{0, 0};
-  int status = clock_gettime(CLOCK_MONOTONIC, &tp);
-  PTI_ASSERT(status == 0);
-  timestamp = NSEC_IN_SEC * tp.tv_sec + tp.tv_nsec;
-#endif
-  return timestamp;
+inline void GetTimestamps(
+    cl_device_id device,
+    cl_ulong* host_timestamp,
+    cl_ulong* device_timestamp) {
+  PTI_ASSERT(device != nullptr);
+  cl_int status = clGetDeviceAndHostTimer(
+      device, device_timestamp, host_timestamp);
+  PTI_ASSERT(status == CL_SUCCESS);
 }
 
 inline const char* GetErrorString(cl_int error) {

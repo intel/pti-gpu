@@ -1,6 +1,6 @@
 # GPU Metrics Collection Tool for Data Parallel C++ (DPC++)
 ## Overview
-This tool provides GPU hardware metrics collection capabilities for the compute applications based on Intel runtimes for OpenCL(TM) and Level Zero, like DPC++ and OpenMP* GPU offload programs (***Level Zero only is currently supported***).
+This tool provides GPU hardware metrics collection capabilities for the compute applications based on Intel runtimes for OpenCL(TM) and Level Zero, like DPC++ and OpenMP* GPU offload programs.
 
 The following capabilities are available:
 ```
@@ -19,7 +19,7 @@ Options:
 --version                        Print version
 ```
 
-**Raw Metrics** mode allows to grab all the HW metric reports while application execution and dump them in CSV format for further investigation:
+**Raw Metrics** mode allows to grab all the HW metric reports while application execution and dump them in CSV format for further investigation (doesn't depend on compute runtime), e.g.:
 ```
 == Raw Metrics ==
 
@@ -35,9 +35,9 @@ SubDeviceId,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThr
 ...
 ```
 
-**Kernel Intervals** mode dumps execution intervals for all of the kernels and transfers on the device to be able to correlate raw metrics with kernels:
+**Kernel Intervals** mode dumps execution intervals for all of the kernels and transfers on the device to be able to correlate raw metrics with kernels, e.g.:
 ```
-== Raw Kernel Intervals ==
+== Raw Kernel Intervals (Level Zero) ==
 
 SubDeviceId,Name,Start,End,
 0,zeCommandListAppendMemoryCopy[4194304 bytes],333082304833,333082625166,
@@ -51,24 +51,24 @@ SubDeviceId,Name,Start,End,
 
 **Kernel Metrics** mode automatically correlates metric reports to kernels giving an ability to track metrics bevahiour for a kernel over time:
 ```
-== Kernel Metrics ==
+== Kernel Metrics (OpenCL) ==
 
-Kernel,zeCommandListAppendMemoryCopy[4194304 bytes],
+Kernel,clEnqueueWriteBuffer[4194304 bytes],
 SubDeviceId,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,
-0,432083,461935,1069,95.7031,0,0,0,0,0,7433,2.76567,91.2182,0.0204845,1.86034,0.0787088,1.01068,0.80828,85.3694,0,0,0,0,0,0,0,0,0,0,0,173687,0,11115968,0,0,0,7210368,3509504,3878080,3245760,287764821333,1099,1099,1,32,428071356,
+0,374750,364111,971,93.864,0,0,0,0,0,6280,2.71498,90.43,0.0452701,1.86351,0.0731233,1.02394,0.860377,85.2366,0,0,0,0,0,0,0,0,0,0,0,145957,0,9341248,0,0,0,6262528,3028480,3227200,2642816,259520606666,1149,1149,8,32,0,
 
-Kernel,GEMM[SIMD32 {4; 1024; 1} {256; 1; 1}],
+Kernel,GEMM[SIMD32, {1024, 1024, 1}, {0, 0, 0}],
 SubDeviceId,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,
-0,682666,744586,1090,100,0,0,0,0,0,9287,34.4207,61.9457,18.4297,24.9721,24.804,1.58793,6.15802,91.2837,0,0,0,0,0,0,0,0,0,0,0,1204485,0,77087040,0,0,0,72248576,4699904,7800704,5146048,287765504000,1149,1149,1,32,428071356,
-0,682666,783265,1147,100,0,0,0,0,0,672,75.7509,24.2489,31.6743,51.4844,51.7752,1.44247,11.7958,99.9036,0,0,0,0,0,0,0,0,0,0,0,2215748,0,141807872,0,0,0,141718784,86016,6840320,86272,287766186666,1149,1149,1,32,428071356,
-0,682666,593831,869,100,0,0,0,0,0,336,75.335,24.665,29.9696,50.7634,50.5477,1.42009,11.5746,99.9246,0,0,0,0,0,0,0,0,0,0,0,1648763,0,105520832,0,0,0,105474560,43008,5090368,43520,287766869333,749,749,1,32,428071356,
-0,682666,526677,771,100,0,0,0,0,0,336,75.2392,24.7608,29.8865,50.6788,50.4903,1.41927,11.5586,99.9203,0,0,0,0,0,0,0,0,0,0,0,1460194,0,93452416,0,0,0,93419520,43008,4507328,43520,287767552000,1149,1149,1,32,428071356,
+0,246666,248846,1008,100,0,0,0,0,0,2248,29.8595,62.0995,12.2179,19.2157,19.4196,1.46249,6.01644,88.0508,0,0,0,0,0,0,0,0,0,0,0,382460,0,24477440,0,0,0,23375744,1162752,2120704,1556480,259520853333,1149,1149,1,32,0,
+0,682666,783231,1147,100,0,0,0,0,0,336,64.3564,35.6436,22.5158,39.9458,41.0742,1.38486,11.9982,99.9483,0,0,0,0,0,0,0,0,0,0,0,2254528,0,144289792,0,0,0,144233472,43008,6960768,43264,259521536000,1149,1149,1,32,0,
+0,682666,759046,1111,100,0,0,0,0,0,672,64.7454,35.2543,18.8366,39.1944,38.9525,1.31759,11.5678,99.8654,0,0,0,0,0,0,0,0,0,0,0,2105639,0,134760896,0,0,0,134665472,86016,6498496,86784,259522218666,1149,1149,1,32,0,
+0,682666,783230,1147,100,0,0,0,0,0,672,65.9991,34.0009,18.9462,39.8569,39.5415,1.31341,11.7531,99.871,0,0,0,0,0,0,0,0,0,0,0,2207611,0,141287104,0,0,0,141199616,86016,6814400,43264,259522901333,1149,1149,1,32,0,
 ...
 ```
 
 **Aggregation** mode provides a single metric report for a kernel to see cumulative results:
 ```
-== Aggregated Metrics ==
+== Aggregated Metrics (Level Zero) ==
 
 Kernel,zeCommandListAppendMemoryCopy[4194304 bytes],
 SubDeviceId,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,
@@ -92,6 +92,13 @@ SubDeviceId,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThr
 - [OpenCL(TM) ICD Loader](https://github.com/KhronosGroup/OpenCL-ICD-Loader)
 - [oneAPI Level Zero loader](https://github.com/oneapi-src/level-zero)
 - [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime)
+- [Intel(R) Metrics Discovery Application Programming Interface](https://github.com/intel/metrics-discovery)
+    - one may need to install `libdrm-dev` package to build the library from sources
+    - one may need to allow metrics collection for non-root users:
+        ```sh
+        sudo echo 0 > /proc/sys/dev/i915/perf_stream_paranoid
+        ```
+- [Metrics Library for Metrics Discovery API (Metrics Library for MD API)](https://github.com/intel/metrics-library)
 
 ## Build and Run
 ### Linux

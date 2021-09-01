@@ -14,7 +14,6 @@
 #include <thread>
 #include <vector>
 
-#include "cl_api_tracer.h"
 #include "cl_utils.h"
 #include "metric_device.h"
 
@@ -55,41 +54,17 @@ class ClMetricCollector {
       return nullptr;
     }
 
-    ClMetricCollector* collector =
-      new ClMetricCollector(metric_device, group, set);
-    PTI_ASSERT(collector != nullptr);
-
-    ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
-    if (tracer == nullptr || !tracer->IsValid()) {
-      std::cerr << "[WARNING] Unable to create OpenCL tracer " <<
-        "for target device" << std::endl;
-      if (tracer != nullptr) {
-        delete tracer;
-        delete collector;
-      }
-      return nullptr;
-    }
-
-    collector->EnableTracing(tracer);
-    return collector;
+    return new ClMetricCollector(metric_device, group, set);
   }
 
   ~ClMetricCollector() {
-    PTI_ASSERT(collector_thread_ == nullptr);
-    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_IDLE);
-
-    if (tracer_ != nullptr) {
-      delete tracer_;
-    }
-
+    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_DISABLED);
     PTI_ASSERT(device_ != nullptr);
     delete device_;
   }
 
-  void DisableTracing() {
-    PTI_ASSERT(tracer_ != nullptr);
-    bool disabled = tracer_->Disable();
-    PTI_ASSERT(disabled);
+  void DisableCollection() {
+    DisableMetrics();
   }
 
   uint64_t GetKernelTimestamp(uint64_t report_timestamp) const {
@@ -188,59 +163,30 @@ class ClMetricCollector {
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(group_ != nullptr);
     PTI_ASSERT(set_ != nullptr);
-  }
-
-  void EnableTracing(ClApiTracer* tracer) {
-    PTI_ASSERT(tracer != nullptr);
-    tracer_ = tracer;
-
-    bool set = true;
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clCreateCommandQueueWithProperties);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clCreateCommandQueue);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clReleaseCommandQueue);
-    PTI_ASSERT(set);
-
-    bool enabled = tracer_->Enable();
-    PTI_ASSERT(enabled);
+    EnableMetrics();
   }
 
   void EnableMetrics() {
-    const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(queue_count_ >= 0);
-    if (queue_count_ == 0) {
-      PTI_ASSERT(collector_thread_ == nullptr);
-      PTI_ASSERT(collector_state_ == COLLECTOR_STATE_IDLE);
+    PTI_ASSERT(collector_thread_ == nullptr);
+    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_IDLE);
 
-      collector_thread_ = new std::thread(Collect, this);
-      PTI_ASSERT(collector_thread_ != nullptr);
+    collector_thread_ = new std::thread(Collect, this);
+    PTI_ASSERT(collector_thread_ != nullptr);
 
-      while (collector_state_.load(std::memory_order_acquire) !=
-            COLLECTOR_STATE_ENABLED) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      }
+    while (collector_state_.load(std::memory_order_acquire) !=
+          COLLECTOR_STATE_ENABLED) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    ++queue_count_;
   }
 
   void DisableMetrics() {
-    const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(queue_count_ > 0);
-    --queue_count_;
-    if (queue_count_ == 0) {
-      PTI_ASSERT(collector_thread_ != nullptr);
-      PTI_ASSERT(collector_state_ == COLLECTOR_STATE_ENABLED);
+    PTI_ASSERT(collector_thread_ != nullptr);
+    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_ENABLED);
 
-      collector_state_.store(
-          COLLECTOR_STATE_DISABLED, std::memory_order_release);
-      collector_thread_->join();
-      delete collector_thread_;
-
-      collector_thread_ = nullptr;
-      collector_state_.store(COLLECTOR_STATE_IDLE, std::memory_order_release);
-    }
+    collector_state_.store(
+        COLLECTOR_STATE_DISABLED, std::memory_order_release);
+    collector_thread_->join();
+    delete collector_thread_;
   }
 
   void AppendMetrics(const std::vector<uint8_t>& storage) {
@@ -303,48 +249,13 @@ class ClMetricCollector {
     PTI_ASSERT(status == md::CC_OK);
   }
 
- private: // Callbacks
-  static void Callback(
-      cl_function_id function,
-      cl_callback_data* callback_data,
-      void* user_data) {
-    if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-      return;
-    }
-
-    ClMetricCollector* collector =
-      reinterpret_cast<ClMetricCollector*>(user_data);
-    PTI_ASSERT(collector != nullptr);
-
-    if (function == CL_FUNCTION_clCreateCommandQueue ||
-        function == CL_FUNCTION_clCreateCommandQueueWithProperties) {
-      cl_command_queue queue =
-        *reinterpret_cast<cl_command_queue*>(
-            callback_data->functionReturnValue);
-      if (queue != nullptr) {
-        collector->EnableMetrics();
-      }
-    } else if (function == CL_FUNCTION_clReleaseCommandQueue) {
-      cl_int status =
-        *reinterpret_cast<cl_int*>(callback_data->functionReturnValue);
-      if (status == CL_SUCCESS) {
-        collector->DisableMetrics();
-      }
-    }
-  }
-
  private: // Data
-  ClApiTracer* tracer_ = nullptr;
-
   MetricDevice* device_ = nullptr;
   md::IConcurrentGroup_1_5* group_ = nullptr;
   md::IMetricSet_1_5* set_ = nullptr;
 
   std::atomic<CollectorState> collector_state_{COLLECTOR_STATE_IDLE};
   std::thread* collector_thread_ = nullptr;
-
-  std::mutex lock_;
-  int queue_count_ = 0;
 
   std::vector<uint8_t> metric_storage_;
 };

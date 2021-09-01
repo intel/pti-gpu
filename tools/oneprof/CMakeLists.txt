@@ -12,10 +12,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPTI_KERNEL_INTERVALS=1")
 add_library(oneprof_tool SHARED
   "${PROJECT_SOURCE_DIR}/../../loader/init.cc"
   "${PROJECT_SOURCE_DIR}/../utils/correlator.cc"
+  "${PROJECT_SOURCE_DIR}/../cl_tracer/trace_guard.cc"
   tool.cc)
 target_include_directories(oneprof_tool
   PRIVATE "${PROJECT_SOURCE_DIR}"
   PRIVATE "${PROJECT_SOURCE_DIR}/../ze_tracer"
+  PRIVATE "${PROJECT_SOURCE_DIR}/../cl_tracer"
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(CMAKE_INCLUDE_PATH)
@@ -23,10 +25,10 @@ if(CMAKE_INCLUDE_PATH)
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
 
-#FindOpenCLLibrary(oneprof_tool)
-#FindOpenCLHeaders(oneprof_tool)
+FindOpenCLLibrary(oneprof_tool)
+FindOpenCLHeaders(oneprof_tool)
 
-#GetOpenCLTracingHeaders(oneprof_tool)
+GetOpenCLTracingHeaders(oneprof_tool)
 
 FindL0Library(oneprof_tool)
 FindL0Headers(oneprof_tool)

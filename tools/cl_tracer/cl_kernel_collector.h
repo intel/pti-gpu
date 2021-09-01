@@ -8,9 +8,12 @@
 #define PTI_TOOLS_CL_TRACER_CL_KERNEL_COLLECTOR_H_
 
 #include <atomic>
+#include <iomanip>
+#include <iostream>
 #include <list>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -69,15 +72,28 @@ struct ClKernelInfo {
   }
 };
 
-struct ClKernelInterval {
-  std::string name;
+using ClKernelInfoMap = std::map<std::string, ClKernelInfo>;
+using ClKernelInstanceList = std::list<ClKernelInstance*>;
+
+#ifdef PTI_KERNEL_INTERVALS
+
+struct ClDeviceInterval {
   uint64_t start;
   uint64_t end;
+  uint32_t sub_device_id;
 };
 
-using ClKernelInfoMap = std::map<std::string, ClKernelInfo>;
+struct ClKernelInterval {
+  std::string kernel_name;
+  cl_device_id device;
+  std::vector<ClDeviceInterval> device_interval_list;
+};
+
 using ClKernelIntervalList = std::vector<ClKernelInterval>;
-using ClKernelInstanceList = std::list<ClKernelInstance*>;
+using ClDeviceMap = std::map<
+    cl_device_id, std::vector<cl_device_id> >;
+
+#endif // PTI_KERNEL_INTERVALS
 
 typedef void (*OnClKernelFinishCallback)(
     void* data, void* queue,
@@ -117,6 +133,9 @@ class ClKernelCollector {
   }
 
   ~ClKernelCollector() {
+#ifdef PTI_KERNEL_INTERVALS
+    ReleaseDeviceMap();
+#endif // PTI_KERNEL_INTERVALS
     if (tracer_ != nullptr) {
       delete tracer_;
     }
@@ -132,9 +151,11 @@ class ClKernelCollector {
     return kernel_info_map_;
   }
 
+#ifdef PTI_KERNEL_INTERVALS
   const ClKernelIntervalList& GetKernelIntervalList() const {
     return kernel_interval_list_;
   }
+#endif // PTI_KERNEL_INTERVALS
 
   ClKernelCollector(const ClKernelCollector& copy) = delete;
   ClKernelCollector& operator=(const ClKernelCollector& copy) = delete;
@@ -195,17 +216,41 @@ class ClKernelCollector {
       bool verbose,
       OnClKernelFinishCallback callback,
       void* callback_data)
-      : correlator_(correlator),
+      : device_(device),
+        correlator_(correlator),
         verbose_(verbose),
         callback_(callback),
         callback_data_(callback_data),
         kernel_id_(1) {
+    PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(correlator_ != nullptr);
-    device_type_ = utils::cl::GetDeviceType(device);
-    PTI_ASSERT(
-        device_type_ == CL_DEVICE_TYPE_CPU ||
-        device_type_ == CL_DEVICE_TYPE_GPU);
+#ifdef PTI_KERNEL_INTERVALS
+    CreateDeviceMap();
+#endif // PTI_KERNEL_INTERVALS
   }
+
+#ifdef PTI_KERNEL_INTERVALS
+  void CreateDeviceMap() {
+    cl_device_type type = utils::cl::GetDeviceType(device_);
+    PTI_ASSERT(type == CL_DEVICE_TYPE_GPU);
+
+    std::vector<cl_device_id> device_list = utils::cl::GetDeviceList(type);
+    for (auto device : device_list) {
+      std::vector<cl_device_id> sub_device_list =
+        utils::cl::CreateSubDeviceList(device);
+      PTI_ASSERT(device_map_.count(device) == 0);
+      device_map_[device] = sub_device_list;
+    }
+  }
+
+  void ReleaseDeviceMap() {
+    for (auto it : device_map_) {
+      if (!it.second.empty()) {
+        utils::cl::ReleaseSubDeviceList(it.second);
+      }
+    }
+  }
+#endif // PTI_KERNEL_INTERVALS
 
   void EnableTracing(ClApiTracer* tracer) {
     PTI_ASSERT(tracer != nullptr);
@@ -272,6 +317,39 @@ class ClKernelCollector {
     kernel_instance_list_.push_back(instance);
   }
 
+  static void ComputeHostTimestamps(
+      const ClKernelInstance* instance,
+      cl_ulong started,
+      cl_ulong ended,
+      uint64_t& host_queued,
+      uint64_t& host_submitted,
+      uint64_t& host_started,
+      uint64_t& host_ended) {
+    PTI_ASSERT(instance != nullptr);
+    PTI_ASSERT(started < ended);
+
+    PTI_ASSERT(instance->event != nullptr);
+    cl_event event = instance->event;
+
+    cl_ulong queued =
+      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_QUEUED);
+    PTI_ASSERT(queued > 0);
+    cl_ulong submitted =
+      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_SUBMIT);
+    PTI_ASSERT(submitted > 0);
+
+    PTI_ASSERT(instance->device_sync <= queued);
+    uint64_t time_shift = queued - instance->device_sync;
+
+    host_queued = instance->host_sync + time_shift;
+    PTI_ASSERT(queued <= submitted);
+    host_submitted = host_queued + (submitted - queued);
+    PTI_ASSERT(submitted <= started);
+    host_started = host_submitted + (started - submitted);
+    PTI_ASSERT(started <= ended);
+    host_ended = host_started + (ended - started);
+  }
+
   void ProcessKernelInstance(const ClKernelInstance* instance) {
     PTI_ASSERT(instance != nullptr);
 
@@ -284,9 +362,6 @@ class ClKernelCollector {
     cl_command_queue queue = utils::cl::GetCommandQueue(event);
     PTI_ASSERT(queue != nullptr);
 
-    std::string name = instance->props.name;
-    PTI_ASSERT(!name.empty());
-
     cl_ulong started =
       utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_START);
     cl_ulong ended =
@@ -294,30 +369,25 @@ class ClKernelCollector {
     cl_ulong time = ended - started;
     PTI_ASSERT(time > 0);
 
-    AddKernelInfo(name, time, &instance->props);
+    AddKernelInfo(&instance->props, time);
 
-    if (instance->props.simd_width > 0) {
-      AddKernelInterval(name, started, ended);
-    }
+#ifdef PTI_KERNEL_INTERVALS
+    cl_device_id device = utils::cl::GetDevice(queue);
+    PTI_ASSERT(device != nullptr);
+    AddKernelInterval(instance, device, started, ended);
+#endif // PTI_KERNEL_INTERVALS
 
     if (callback_ != nullptr) {
-      cl_ulong queued =
-        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_QUEUED);
-      PTI_ASSERT(queued > 0);
-      cl_ulong submitted =
-        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_SUBMIT);
-      PTI_ASSERT(submitted > 0);
+      uint64_t host_queued = 0, host_submitted = 0;
+      uint64_t host_started = 0, host_ended = 0;
+      ComputeHostTimestamps(
+          instance,
+          started, ended,
+          host_queued, host_submitted,
+          host_started, host_ended);
 
-      PTI_ASSERT(instance->device_sync <= queued);
-      uint64_t time_shift = queued - instance->device_sync;
-
-      uint64_t host_queued = instance->host_sync + time_shift;
-      PTI_ASSERT(queued <= submitted);
-      uint64_t host_submitted = host_queued + (submitted - queued);
-      PTI_ASSERT(submitted <= started);
-      uint64_t host_started = host_submitted + (started - submitted);
-      PTI_ASSERT(started <= ended);
-      uint64_t host_ended = host_started + (ended - started);
+      std::string name = instance->props.name;
+      PTI_ASSERT(!name.empty());
 
       callback_(
           callback_data_, queue, instance->kernel_id, name,
@@ -370,26 +440,36 @@ class ClKernelCollector {
     }
   }
 
-  void AddKernelInfo(
-      std::string name, uint64_t time, const ClKernelProps* props) {
-    PTI_ASSERT(!name.empty());
+  std::string GetVerboseName(
+      const ClKernelProps* props) {
+    PTI_ASSERT(props != nullptr);
+    PTI_ASSERT(!props->name.empty());
+
+    std::stringstream sstream;
+    if (props->simd_width > 0) {
+      sstream << props->name << "[SIMD" << props->simd_width << ", {" <<
+        props->global_size[0] << ", " <<
+        props->global_size[1] << ", " <<
+        props->global_size[2] << "}, {" <<
+        props->local_size[0] << ", " <<
+        props->local_size[1] << ", " <<
+        props->local_size[2] << "}]";
+    } else if (props->bytes_transferred > 0) {
+      sstream << props->name << "[" <<
+        std::to_string(props->bytes_transferred) << " bytes]";
+    }
+
+    return sstream.str();
+  }
+
+  void AddKernelInfo(const ClKernelProps* props, uint64_t time) {
     PTI_ASSERT(props != nullptr);
 
+    std::string name = props->name;
+    PTI_ASSERT(!name.empty());
+
     if (verbose_) {
-      if (props->simd_width > 0) {
-        std::stringstream sstream;
-        sstream << name << "[SIMD" << props->simd_width << ", {" <<
-          props->global_size[0] << ", " <<
-          props->global_size[1] << ", " <<
-          props->global_size[2] << "}, {" <<
-          props->local_size[0] << ", " <<
-          props->local_size[1] << ", " <<
-          props->local_size[2] << "}]";
-        name = sstream.str();
-      } else if (props->bytes_transferred > 0) {
-        name = name + "[" +
-          std::to_string(props->bytes_transferred) + " bytes]";
-      }
+      name = GetVerboseName(props);
     }
 
     if (kernel_info_map_.count(name) == 0) {
@@ -408,11 +488,72 @@ class ClKernelCollector {
     }
   }
 
-  void AddKernelInterval(std::string name, uint64_t start, uint64_t end) {
+#ifdef PTI_KERNEL_INTERVALS
+  void AddKernelInterval(
+      const ClKernelInstance* instance,
+      cl_device_id device,
+      uint64_t started, uint64_t ended) {
+    PTI_ASSERT(instance != nullptr);
+    PTI_ASSERT(device != nullptr);
+    PTI_ASSERT(started < ended);
+
+    uint64_t host_queued = 0, host_submitted = 0;
+    uint64_t host_started = 0, host_ended = 0;
+    ComputeHostTimestamps(
+        instance,
+        started, ended,
+        host_queued, host_submitted,
+        host_started, host_ended);
+
+    std::string name = instance->props.name;
     PTI_ASSERT(!name.empty());
-    PTI_ASSERT(start < end);
-    kernel_interval_list_.push_back({name, start, end});
+
+    if (verbose_) {
+      name = GetVerboseName(&instance->props);
+    }
+
+    if (device_map_.count(device) == 1 &&
+        !device_map_[device].empty()) { // Implicit Scaling
+      ClKernelInterval kernel_interval{
+          name, device, std::vector<ClDeviceInterval>()};
+      std::vector<cl_device_id> sub_device_list = device_map_[device];
+      for (size_t i = 0; i < sub_device_list.size(); ++i) {
+        kernel_interval.device_interval_list.push_back(
+            {host_started, host_ended, static_cast<uint32_t>(i)});
+      }
+      kernel_interval_list_.push_back(kernel_interval);
+    } else { // Explicit Scaling
+      if (device_map_.count(device) == 0) { // Subdevice
+        cl_device_id parent = utils::cl::GetDeviceParent(device);
+        PTI_ASSERT(parent != nullptr);
+
+        PTI_ASSERT(device_map_.count(parent) == 1);
+        std::vector<cl_device_id> sub_device_list = device_map_[parent];
+        PTI_ASSERT(!sub_device_list.empty());
+
+        for (size_t i = 0; i < sub_device_list.size(); ++i) {
+          if (sub_device_list[i] == device) {
+            ClKernelInterval kernel_interval{
+                name, parent, std::vector<ClDeviceInterval>()};
+            kernel_interval.device_interval_list.push_back(
+                {host_started, host_ended, static_cast<uint32_t>(i)});
+            kernel_interval_list_.push_back(kernel_interval);
+            return;
+          }
+
+          PTI_ASSERT(0);
+        }
+      } else { // Device with no subdevices
+        PTI_ASSERT(device_map_[device].empty());
+        ClKernelInterval kernel_interval{
+            name, device, std::vector<ClDeviceInterval>()};
+        kernel_interval.device_interval_list.push_back(
+            {host_started, host_ended, 0});
+        kernel_interval_list_.push_back(kernel_interval);
+      }
+    }
   }
+#endif // PTI_KERNEL_INTERVALS
 
   void CalculateKernelLocalSize(
       const cl_params_clEnqueueNDRangeKernel* params,
@@ -508,14 +649,18 @@ class ClKernelCollector {
       cl_callback_data* data, ClKernelCollector* collector) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
+    PTI_ASSERT(collector->device_ != nullptr);
 
     ClEnqueueData* enqueue_data = new ClEnqueueData;
     enqueue_data->event = nullptr;
-    enqueue_data->device_sync =
-      (collector->device_type_ == CL_DEVICE_TYPE_GPU) ?
-      utils::cl::GetGpuTimestamp() :
-      utils::cl::GetCpuTimestamp();
     enqueue_data->host_sync = collector->correlator_->GetTimestamp();
+
+    cl_ulong host_timestamp = 0;
+    utils::cl::GetTimestamps(
+        collector->device_, &host_timestamp, &enqueue_data->device_sync);
+#ifdef PTI_KERNEL_INTERVALS
+    enqueue_data->host_sync = host_timestamp;
+#endif
 
     const T* params = reinterpret_cast<const T*>(data->functionParams);
     PTI_ASSERT(params != nullptr);
@@ -1148,15 +1293,19 @@ class ClKernelCollector {
   bool verbose_ = false;
 
   std::atomic<uint64_t> kernel_id_;
-  cl_device_type device_type_ = CL_DEVICE_TYPE_ALL;
+  cl_device_id device_ = nullptr;
 
   OnClKernelFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;
 
   std::mutex lock_;
   ClKernelInfoMap kernel_info_map_;
-  ClKernelIntervalList kernel_interval_list_;
   ClKernelInstanceList kernel_instance_list_;
+
+#ifdef PTI_KERNEL_INTERVALS
+  ClDeviceMap device_map_;
+  ClKernelIntervalList kernel_interval_list_;
+#endif // PTI_KERNEL_INTERVALS
 
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;

@@ -13,14 +13,36 @@
 #include "metric_collector.h"
 #include "prof_options.h"
 #include "prof_utils.h"
+#include "cl_kernel_collector.h"
 #include "ze_kernel_collector.h"
+
+namespace detail {
+
+template <typename KernelInterval>
+uint64_t ConvertTimestamp(
+    uint64_t timestamp, uint64_t device_freq,
+    uint64_t host_sync, uint64_t device_sync) {
+  return timestamp;
+}
+
+template <>
+uint64_t ConvertTimestamp<ClKernelInterval>(
+    uint64_t timestamp, uint64_t device_freq,
+    uint64_t host_sync, uint64_t device_sync) {
+  PTI_ASSERT(timestamp > host_sync);
+  uint64_t time_shift = timestamp - host_sync;
+  return device_sync * static_cast<uint64_t>(NSEC_IN_SEC) /
+    device_freq + time_shift;
+}
+
+} // namespace detail
 
 class Profiler {
  public:
   static Profiler* Create(const ProfOptions& options) {
-    ze_driver_handle_t driver = GetDriver(options.GetDeviceId());
+    ze_driver_handle_t driver = GetZeDriver(options.GetDeviceId());
     PTI_ASSERT(driver != nullptr);
-    ze_device_handle_t device = GetDevice(options.GetDeviceId());
+    ze_device_handle_t device = GetZeDevice(options.GetDeviceId());
     PTI_ASSERT(device != nullptr);
 
     uint32_t sub_device_count = 0;
@@ -31,38 +53,62 @@ class Profiler {
       sub_device_count = 1;
     }
 
-    Profiler* profiler = new Profiler(options, device, sub_device_count);
+    Profiler* profiler = new Profiler(
+        options, options.GetDeviceId(), sub_device_count);
     PTI_ASSERT(profiler != nullptr);
 
-    MetricCollector* metric_collector = nullptr;
     if (profiler->CheckOption(PROF_RAW_METRICS) ||
         profiler->CheckOption(PROF_KERNEL_METRICS) ||
         profiler->CheckOption(PROF_AGGREGATION)) {
-      metric_collector = MetricCollector::Create(
+      MetricCollector* metric_collector = MetricCollector::Create(
           driver, device, options.GetMetricGroup().c_str(),
           options.GetSamplingInterval());
       if (metric_collector == nullptr) {
         std::cout <<
           "[WARNING] Unable to create metric collector" << std::endl;
+      }
+      profiler->metric_collector_ = metric_collector;
+
+      if (profiler->metric_collector_ == nullptr) {
         delete profiler;
         return nullptr;
       }
-      profiler->metric_collector_ = metric_collector;
     }
 
-    ZeKernelCollector* kernel_collector = nullptr;
     if (profiler->CheckOption(PROF_KERNEL_INTERVALS) ||
         profiler->CheckOption(PROF_KERNEL_METRICS) ||
         profiler->CheckOption(PROF_AGGREGATION)) {
-      kernel_collector = ZeKernelCollector::Create(
+
+      ZeKernelCollector* ze_kernel_collector = ZeKernelCollector::Create(
           &(profiler->correlator_), true);
-      if (kernel_collector == nullptr) {
+      if (ze_kernel_collector == nullptr) {
         std::cout <<
-          "[WARNING] Unable to create kernel collector" << std::endl;
+          "[WARNING] Unable to create Level Zero kernel collector" <<
+          std::endl;
+      }
+      profiler->ze_kernel_collector_ = ze_kernel_collector;
+
+      ClKernelCollector* cl_kernel_collector = nullptr;
+      cl_device_id device = GetClDevice(options.GetDeviceId());
+      if (device == nullptr) {
+        std::cout <<
+          "[WARNING] Unable to find target OpenCL device" << std::endl;
+      } else {
+        cl_kernel_collector = ClKernelCollector::Create(
+            device, &(profiler->correlator_), true);
+        if (cl_kernel_collector == nullptr) {
+          std::cout <<
+            "[WARNING] Unable to create OpenCL kernel collector" <<
+            std::endl;
+        }
+      }
+      profiler->cl_kernel_collector_ = cl_kernel_collector;
+
+      if (profiler->ze_kernel_collector_ == nullptr &&
+          profiler->cl_kernel_collector_ == nullptr) {
         delete profiler;
         return nullptr;
       }
-      profiler->kernel_collector_ = kernel_collector;
     }
 
     return profiler;
@@ -70,10 +116,13 @@ class Profiler {
 
   ~Profiler() {
     if (metric_collector_ != nullptr) {
-      metric_collector_->DisableTracing();
+      metric_collector_->DisableCollection();
     }
-    if (kernel_collector_ != nullptr) {
-      kernel_collector_->DisableTracing();
+    if (ze_kernel_collector_ != nullptr) {
+      ze_kernel_collector_->DisableTracing();
+    }
+    if (cl_kernel_collector_ != nullptr) {
+      cl_kernel_collector_->DisableTracing();
     }
 
     Report();
@@ -81,8 +130,11 @@ class Profiler {
     if (metric_collector_ != nullptr) {
       delete metric_collector_;
     }
-    if (kernel_collector_ != nullptr) {
-      delete kernel_collector_;
+    if (ze_kernel_collector_ != nullptr) {
+      delete ze_kernel_collector_;
+    }
+    if (cl_kernel_collector_ != nullptr) {
+      delete cl_kernel_collector_;
     }
 
     if (!options_.GetLogFileName().empty()) {
@@ -101,14 +153,24 @@ class Profiler {
  private:
   Profiler(
       ProfOptions options,
-      ze_device_handle_t device,
+      uint32_t device_id,
       uint32_t sub_device_count)
       : options_(options),
-        device_(device),
+        device_id_(device_id),
         sub_device_count_(sub_device_count),
         correlator_(options_.GetLogFileName()) {
-    PTI_ASSERT(device != nullptr);
     PTI_ASSERT(sub_device_count_ > 0);
+
+    ze_device_handle_t device = GetZeDevice(device_id_);
+    PTI_ASSERT(device != nullptr);
+
+    ze_result_t result = zeDeviceGetGlobalTimestamps(
+        device, &host_sync_, &device_sync_);
+    PTI_ASSERT(result == ZE_RESULT_SUCCESS);
+    device_sync_ &= utils::ze::GetDeviceTimestampMask(device);
+
+    device_freq_ = utils::ze::GetDeviceTimerFrequency(device);
+    PTI_ASSERT(device_freq_ > 0);
   }
 
   static void PrintTypedValue(
@@ -147,70 +209,151 @@ class Profiler {
 
     if (metric_collector_ != nullptr &&
         CheckOption(PROF_RAW_METRICS)) {
+      correlator_.Log("\n");
+      correlator_.Log("== Raw Metrics ==\n");
+      correlator_.Log("\n");
       for (uint32_t i = 0; i < sub_device_count_; ++i) {
-        correlator_.Log("\n");
-        correlator_.Log("== Raw Metrics ==\n");
-        correlator_.Log("\n");
         ReportRawMetrics(i);
+        correlator_.Log("\n");
       }
     }
 
-    if (kernel_collector_ != nullptr &&
-        CheckOption(PROF_KERNEL_INTERVALS)) {
-      correlator_.Log("\n");
-      correlator_.Log("== Raw Kernel Intervals ==\n");
-      correlator_.Log("\n");
-      ReportKernelIntervals();
+    if (CheckOption(PROF_KERNEL_INTERVALS)) {
+      if (ze_kernel_collector_ != nullptr) {
+        if (!ze_kernel_collector_->GetKernelIntervalList().empty()) {
+          correlator_.Log("\n");
+          correlator_.Log("== Raw Kernel Intervals (Level Zero) ==\n");
+          correlator_.Log("\n");
+          ReportZeKernelIntervals();
+        }
+      }
+      if (cl_kernel_collector_ != nullptr) {
+        if (!cl_kernel_collector_->GetKernelIntervalList().empty()) {
+          correlator_.Log("\n");
+          correlator_.Log("== Raw Kernel Intervals (OpenCL) ==\n");
+          correlator_.Log("\n");
+          ReportClKernelIntervals();
+        }
+      }
     }
 
     if (metric_collector_ != nullptr &&
-        kernel_collector_ != nullptr &&
         CheckOption(PROF_KERNEL_METRICS)) {
-      correlator_.Log("\n");
-      correlator_.Log("== Kernel Metrics ==\n");
-      correlator_.Log("\n");
-      ReportKernelMetrics();
+      if (ze_kernel_collector_ != nullptr) {
+        if (!ze_kernel_collector_->GetKernelIntervalList().empty()) {
+          correlator_.Log("\n");
+          correlator_.Log("== Kernel Metrics (Level Zero) ==\n");
+          correlator_.Log("\n");
+          ReportZeKernelMetrics();
+        }
+      }
+      if (cl_kernel_collector_ != nullptr) {
+        if (!cl_kernel_collector_->GetKernelIntervalList().empty()) {
+          correlator_.Log("\n");
+          correlator_.Log("== Kernel Metrics (OpenCL) ==\n");
+          correlator_.Log("\n");
+          ReportClKernelMetrics();
+        }
+      }
     }
 
     if (metric_collector_ != nullptr &&
-        kernel_collector_ != nullptr &&
         CheckOption(PROF_AGGREGATION)) {
-      correlator_.Log("\n");
-      correlator_.Log("== Aggregated Metrics ==\n");
-      correlator_.Log("\n");
-      ReportAggregatedMetrics();
+      if (ze_kernel_collector_ != nullptr) {
+        if (!ze_kernel_collector_->GetKernelIntervalList().empty()) {
+          correlator_.Log("\n");
+          correlator_.Log("== Aggregated Metrics (Level Zero) ==\n");
+          correlator_.Log("\n");
+          ReportZeAggregatedMetrics();
+        }
+      }
+      if (cl_kernel_collector_ != nullptr) {
+        if (!cl_kernel_collector_->GetKernelIntervalList().empty()) {
+          correlator_.Log("\n");
+          correlator_.Log("== Aggregated Metrics (OpenCL) ==\n");
+          correlator_.Log("\n");
+          ReportClAggregatedMetrics();
+        }
+      }
     }
   }
 
-  void ReportKernelIntervals() {
-    PTI_ASSERT(kernel_collector_ != nullptr);
+  template <typename KernelInterval>
+  uint64_t ConvertTimestamp(uint64_t timestamp) const {
+    return detail::ConvertTimestamp<KernelInterval>(
+        timestamp, device_freq_, host_sync_, device_sync_);
+  }
+
+  template <typename KernelInterval>
+  void ReportKernelInterval(const KernelInterval& interval) {
+    std::stringstream stream;
+    stream << "Kernel," << interval.kernel_name << "," << std::endl;
+    correlator_.Log(stream.str());
+
+    std::stringstream header;
+    header << "SubDeviceId,";
+    header << "Start,";
+    header << "End,";
+    header << std::endl;
+    correlator_.Log(header.str());
+
+    for (auto& device_interval : interval.device_interval_list) {
+      std::stringstream line;
+      line << device_interval.sub_device_id << ",";
+      line << ConvertTimestamp<KernelInterval>(device_interval.start) << ",";
+      line << ConvertTimestamp<KernelInterval>(device_interval.end) << ",";
+      line << std::endl;
+      correlator_.Log(line.str());
+    }
+
+    correlator_.Log("\n");
+  }
+
+  void ReportClKernelIntervals() {
+    PTI_ASSERT(cl_kernel_collector_ != nullptr);
+
+    std::vector<cl_device_id> device_list =
+      utils::cl::GetDeviceList(CL_DEVICE_TYPE_GPU);
+    if (device_list.empty()) {
+      return;
+    }
+
+    const ClKernelIntervalList& interval_list =
+      cl_kernel_collector_->GetKernelIntervalList();
+    if (interval_list.empty()) {
+      return;
+    }
+
+    for (auto& interval : interval_list) {
+      if (device_list[device_id_] != interval.device) {
+        continue;
+      }
+
+      ReportKernelInterval(interval);
+    }
+  }
+
+  void ReportZeKernelIntervals() {
+    PTI_ASSERT(ze_kernel_collector_ != nullptr);
+
+    std::vector<ze_device_handle_t> device_list =
+      utils::ze::GetDeviceList();
+    if (device_list.empty()) {
+      return;
+    }
 
     const ZeKernelIntervalList& interval_list =
-      kernel_collector_->GetKernelIntervalList();
+      ze_kernel_collector_->GetKernelIntervalList();
+    if (interval_list.empty()) {
+      return;
+    }
+
     for (auto& kernel_interval : interval_list) {
-      if (kernel_interval.device == device_) {
-        std::stringstream stream;
-        stream << "Kernel," << kernel_interval.kernel_name << "," << std::endl;
-        correlator_.Log(stream.str());
-
-        std::stringstream header;
-        header << "SubDeviceId,";
-        header << "Start,";
-        header << "End,";
-        header << std::endl;
-        correlator_.Log(header.str());
-
-        for (auto& device_interval : kernel_interval.device_interval_list) {
-          std::stringstream line;
-          line << device_interval.sub_device_id << ",";
-          line << device_interval.start << ",";
-          line << device_interval.end << ",";
-          line << std::endl;
-          correlator_.Log(line.str());
-        }
-
-        correlator_.Log("\n");
+      if (device_list[device_id_] != kernel_interval.device) {
+        continue;
       }
+
+      ReportKernelInterval(kernel_interval);
     }
   }
 
@@ -322,59 +465,96 @@ class Profiler {
     return metric_list.size();
   }
 
-  void ReportKernelMetrics() {
+  template <typename KernelInterval>
+  void ReportKernelMetrics(const KernelInterval& interval) {
+    std::stringstream stream;
+    stream << "Kernel," << interval.kernel_name << "," << std::endl;
+    correlator_.Log(stream.str());
+    for (auto& device_interval : interval.device_interval_list) {
+      uint32_t report_size =
+        metric_collector_->GetReportSize(device_interval.sub_device_id);
+      PTI_ASSERT(report_size > 0);
+
+      std::vector<std::string> metric_list =
+        metric_collector_->GetMetricList(device_interval.sub_device_id);
+      PTI_ASSERT(!metric_list.empty());
+      PTI_ASSERT(metric_list.size() == report_size);
+
+      size_t report_time_id = GetMetricId(metric_list, "QueryBeginTime");
+      PTI_ASSERT(report_time_id < metric_list.size());
+
+      std::vector<zet_typed_value_t> report_list = GetMetricInterval(
+          ConvertTimestamp<KernelInterval>(device_interval.start),
+          ConvertTimestamp<KernelInterval>(device_interval.end),
+          device_interval.sub_device_id, report_time_id);
+      uint32_t report_count = report_list.size() / report_size;
+      PTI_ASSERT(report_count * report_size == report_list.size());
+
+      if (report_count > 0) {
+        std::stringstream header;
+        header << "SubDeviceId,";
+        for (auto& metric : metric_list) {
+          header << metric << ",";
+        }
+        header << std::endl;
+        correlator_.Log(header.str());
+      }
+
+      for (int i = 0; i < report_count; ++i) {
+        std::stringstream line;
+        line << device_interval.sub_device_id << ",";
+        const zet_typed_value_t* report =
+          report_list.data() + i * report_size;
+        for (int j = 0; j < report_size; ++j) {
+          PrintTypedValue(line, report[j]);
+          line << ",";
+        }
+        line << std::endl;
+        correlator_.Log(line.str());
+      }
+    }
+    correlator_.Log("\n");
+  }
+
+  void ReportZeKernelMetrics() {
     PTI_ASSERT(metric_collector_ != nullptr);
-    PTI_ASSERT(kernel_collector_ != nullptr);
+    PTI_ASSERT(ze_kernel_collector_ != nullptr);
+
+    std::vector<ze_device_handle_t> device_list =
+      utils::ze::GetDeviceList();
+    if (device_list.empty()) {
+      return;
+    }
 
     const ZeKernelIntervalList& interval_list =
-      kernel_collector_->GetKernelIntervalList();
+      ze_kernel_collector_->GetKernelIntervalList();
     for (auto& kernel_interval : interval_list) {
-      std::stringstream stream;
-      stream << "Kernel," << kernel_interval.kernel_name << "," << std::endl;
-      correlator_.Log(stream.str());
-      for (auto& device_interval : kernel_interval.device_interval_list) {
-        uint32_t report_size =
-          metric_collector_->GetReportSize(device_interval.sub_device_id);
-        PTI_ASSERT(report_size > 0);
-
-        std::vector<std::string> metric_list =
-          metric_collector_->GetMetricList(device_interval.sub_device_id);
-        PTI_ASSERT(!metric_list.empty());
-        PTI_ASSERT(metric_list.size() == report_size);
-
-        size_t report_time_id = GetMetricId(metric_list, "QueryBeginTime");
-        PTI_ASSERT(report_time_id < metric_list.size());
-
-        std::vector<zet_typed_value_t> report_list = GetMetricInterval(
-            device_interval.start, device_interval.end,
-            device_interval.sub_device_id, report_time_id);
-        uint32_t report_count = report_list.size() / report_size;
-        PTI_ASSERT(report_count * report_size == report_list.size());
-
-        if (report_count > 0) {
-          std::stringstream header;
-          header << "SubDeviceId,";
-          for (auto& metric : metric_list) {
-            header << metric << ",";
-          }
-          header << std::endl;
-          correlator_.Log(header.str());
-        }
-
-        for (int i = 0; i < report_count; ++i) {
-          std::stringstream line;
-          line << device_interval.sub_device_id << ",";
-          const zet_typed_value_t* report =
-            report_list.data() + i * report_size;
-          for (int j = 0; j < report_size; ++j) {
-            PrintTypedValue(line, report[j]);
-            line << ",";
-          }
-          line << std::endl;
-          correlator_.Log(line.str());
-        }
+      if (device_list[device_id_] != kernel_interval.device) {
+        continue;
       }
-      correlator_.Log("\n");
+
+      ReportKernelMetrics(kernel_interval);
+    }
+  }
+
+  void ReportClKernelMetrics() {
+    PTI_ASSERT(metric_collector_ != nullptr);
+    PTI_ASSERT(cl_kernel_collector_ != nullptr);
+
+    std::vector<cl_device_id> device_list =
+      utils::cl::GetDeviceList(CL_DEVICE_TYPE_GPU);
+    if (device_list.empty()) {
+      return;
+    }
+
+    const ClKernelIntervalList& interval_list =
+      cl_kernel_collector_->GetKernelIntervalList();
+    for (auto& kernel_interval : interval_list) {
+      if (device_list[device_id_] != kernel_interval.device) {
+        continue;
+      }
+
+      ReportKernelMetrics(kernel_interval);
     }
   }
 
@@ -622,73 +802,115 @@ class Profiler {
     return aggregated_report;
   }
 
-  void ReportAggregatedMetrics() {
+  template <typename KernelInterval>
+  void ReportAggregatedMetrics(const KernelInterval& interval) {
+    std::stringstream stream;
+    stream << "Kernel," << interval.kernel_name << "," << std::endl;
+    correlator_.Log(stream.str());
+    for (auto& device_interval : interval.device_interval_list) {
+      uint32_t report_size =
+        metric_collector_->GetReportSize(device_interval.sub_device_id);
+      PTI_ASSERT(report_size > 0);
+
+      std::vector<std::string> metric_list =
+        metric_collector_->GetMetricList(device_interval.sub_device_id);
+      PTI_ASSERT(!metric_list.empty());
+      PTI_ASSERT(metric_list.size() == report_size);
+
+      size_t report_time_id = GetMetricId(metric_list, "QueryBeginTime");
+      PTI_ASSERT(report_time_id < metric_list.size());
+
+      size_t gpu_clocks_id = GetMetricId(metric_list, "GpuCoreClocks");
+      PTI_ASSERT(gpu_clocks_id < metric_list.size());
+
+      std::vector<zet_typed_value_t> report_list = GetAggregatedMetrics(
+          ConvertTimestamp<KernelInterval>(device_interval.start),
+          ConvertTimestamp<KernelInterval>(device_interval.end),
+          device_interval.sub_device_id, report_time_id, gpu_clocks_id);
+      uint32_t report_count = report_list.size() / report_size;
+      PTI_ASSERT(report_count * report_size == report_list.size());
+
+      if (report_count > 0) {
+        std::stringstream header;
+        header << "SubDeviceId,";
+        for (auto& metric : metric_list) {
+          header << metric << ",";
+        }
+        header << std::endl;
+        correlator_.Log(header.str());
+      }
+
+      for (int i = 0; i < report_count; ++i) {
+        std::stringstream line;
+        line << device_interval.sub_device_id << ",";
+        const zet_typed_value_t* report =
+          report_list.data() + i * report_size;
+        for (int j = 0; j < report_size; ++j) {
+          PrintTypedValue(line, report[j]);
+          line << ",";
+        }
+        line << std::endl;
+        correlator_.Log(line.str());
+      }
+    }
+    correlator_.Log("\n");
+  }
+
+  void ReportZeAggregatedMetrics() {
     PTI_ASSERT(metric_collector_ != nullptr);
-    PTI_ASSERT(kernel_collector_ != nullptr);
+    PTI_ASSERT(ze_kernel_collector_ != nullptr);
+
+    std::vector<ze_device_handle_t> device_list =
+      utils::ze::GetDeviceList();
+    if (device_list.empty()) {
+      return;
+    }
 
     const ZeKernelIntervalList& interval_list =
-      kernel_collector_->GetKernelIntervalList();
+      ze_kernel_collector_->GetKernelIntervalList();
     for (auto& kernel_interval : interval_list) {
-      std::stringstream stream;
-      stream << "Kernel," << kernel_interval.kernel_name << "," << std::endl;
-      correlator_.Log(stream.str());
-      for (auto& device_interval : kernel_interval.device_interval_list) {
-        uint32_t report_size =
-          metric_collector_->GetReportSize(device_interval.sub_device_id);
-        PTI_ASSERT(report_size > 0);
-
-        std::vector<std::string> metric_list =
-          metric_collector_->GetMetricList(device_interval.sub_device_id);
-        PTI_ASSERT(!metric_list.empty());
-        PTI_ASSERT(metric_list.size() == report_size);
-
-        size_t report_time_id = GetMetricId(metric_list, "QueryBeginTime");
-        PTI_ASSERT(report_time_id < metric_list.size());
-
-        size_t gpu_clocks_id = GetMetricId(metric_list, "GpuCoreClocks");
-        PTI_ASSERT(gpu_clocks_id < metric_list.size());
-
-        std::vector<zet_typed_value_t> report_list = GetAggregatedMetrics(
-            device_interval.start, device_interval.end,
-            device_interval.sub_device_id, report_time_id, gpu_clocks_id);
-        uint32_t report_count = report_list.size() / report_size;
-        PTI_ASSERT(report_count * report_size == report_list.size());
-
-        if (report_count > 0) {
-          std::stringstream header;
-          header << "SubDeviceId,";
-          for (auto& metric : metric_list) {
-            header << metric << ",";
-          }
-          header << std::endl;
-          correlator_.Log(header.str());
-        }
-
-        for (int i = 0; i < report_count; ++i) {
-          std::stringstream line;
-          line << device_interval.sub_device_id << ",";
-          const zet_typed_value_t* report =
-            report_list.data() + i * report_size;
-          for (int j = 0; j < report_size; ++j) {
-            PrintTypedValue(line, report[j]);
-            line << ",";
-          }
-          line << std::endl;
-          correlator_.Log(line.str());
-        }
+      if (device_list[device_id_] != kernel_interval.device) {
+        continue;
       }
-      correlator_.Log("\n");
+
+      ReportAggregatedMetrics(kernel_interval);
+    }
+  }
+
+  void ReportClAggregatedMetrics() {
+    PTI_ASSERT(metric_collector_ != nullptr);
+    PTI_ASSERT(cl_kernel_collector_ != nullptr);
+
+    std::vector<cl_device_id> device_list =
+      utils::cl::GetDeviceList(CL_DEVICE_TYPE_GPU);
+    if (device_list.empty()) {
+      return;
+    }
+
+    const ClKernelIntervalList& interval_list =
+      cl_kernel_collector_->GetKernelIntervalList();
+    for (auto& kernel_interval : interval_list) {
+      if (device_list[device_id_] != kernel_interval.device) {
+        continue;
+      }
+
+      ReportAggregatedMetrics(kernel_interval);
     }
   }
 
  private:
   ProfOptions options_;
   MetricCollector* metric_collector_ = nullptr;
-  ZeKernelCollector* kernel_collector_ = nullptr;
+  ZeKernelCollector* ze_kernel_collector_ = nullptr;
+  ClKernelCollector* cl_kernel_collector_ = nullptr;
   Correlator correlator_;
 
-  ze_device_handle_t device_ = nullptr;
+  uint32_t device_id_ = 0;
   uint32_t sub_device_count_ = 0;
+
+  uint64_t host_sync_ = 0;
+  uint64_t device_sync_ = 0;
+  uint64_t device_freq_ = 0;
 };
 
 #endif // PTI_TOOLS_ONEPROF_PROFILER_H_

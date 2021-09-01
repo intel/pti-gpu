@@ -264,7 +264,7 @@ void DisableProfiling() {
     PTI_ASSERT(kernel_collector != nullptr);
     PTI_ASSERT(metric_collector != nullptr);
     kernel_collector->DisableTracing();
-    metric_collector->DisableTracing();
+    metric_collector->DisableCollection();
     PrintResults();
     delete kernel_collector;
     delete metric_collector;

@@ -1,6 +1,6 @@
 # Metrics Collectoin with Intel(R) Metrics Discovery Application Programming Interface
 
-**WARNING: this NOT a recommended way for metrics collection, use [oneAPI L0 Metrics API](./LevelZero.md) instead**
+**WARNING: this is NOT a recommended way for metrics collection, use [oneAPI L0 Metrics API](./LevelZero.md) instead**
 
 ## Overview
 [Intel(R) Metrics Discovery Application Programming Interface](https://github.com/intel/metrics-discovery) is an open-source solution for hardware metrics collection on Intel(R) Processor Graphics.
@@ -106,7 +106,7 @@ for (uint32_t i = 0; i < device->GetParams()->GlobalSymbolsCount; ++i) {
 ```
 
 ### Enumeration
-To enumerate metrics available on the system one have to iterate over all metric groups, next over all metric sets inside each group and finally over all metrics inside each set.
+To enumerate metrics available on the system one has to iterate over all metric groups, next over all metric sets inside each group and finally over all metrics inside each set.
 
 Every group, set and seprate metric contain a list of properties that helps to determine their purpose (like name or description) as well as to grab some additional information that should be used while collecton (e.g. size of collected data chunks or number of metrics in a set).
 
@@ -236,7 +236,7 @@ It's often needed to map collected hardware metrics to a kernel in terms of time
 
 Each metric set contains a special *information* item called `QueryBeginTime` that represents a timestamp (in nanoseconds) for a sample. At the same time one can collect kernel execution intervals using ***Device Activity Tracing*** capabilities. So to map exact sample to the kernel invocation, one need just to check if sample timestamp is in between of kernel start and end timestamps.
 
-The problem is that metrics timestamp one can get with Intel(R) Metrics Discovery Application Programming Interface and kernel timestamps one can get e.g. with OpenCL(TM) are different and can't be compared directly - so one have to convert them to a single time format first.
+The problem is that metrics timestamp one can get with Intel(R) Metrics Discovery Application Programming Interface and kernel timestamps one can get e.g. with OpenCL(TM) are different and can't be compared directly - so one has to convert them to a single time format first.
 
 In Intel(R) Metrics Discovery Application Programming Interface library there is a function `GetGpuCpuTimestamps` that allows to bind GPU metrics timestamp to some CPU timestamp (which is based on `CLOCK_MONOTONIC` on Linux and `QueryPerformanceCounter` on Windows).
 
