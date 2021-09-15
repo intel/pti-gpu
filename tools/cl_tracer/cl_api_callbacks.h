@@ -2930,6 +2930,12 @@ static void clEnqueueTaskOnEnter(
 
   stream << " commandQueue = " << *(params->commandQueue);
   stream << " kernel = " << *(params->kernel);
+  if (*(params->kernel) != nullptr) {
+    std::string kernel_name = utils::cl::GetKernelName(*(params->kernel));
+    if (!kernel_name.empty()) {
+      stream << " (" << kernel_name << ")";
+    }
+  }
   stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
   stream << " eventWaitList = " << *(params->eventWaitList);
   stream << " event = " << *(params->event);
@@ -3575,6 +3581,12 @@ static void clEnqueueNDRangeKernelOnEnter(
 
   stream << " commandQueue = " << *(params->commandQueue);
   stream << " kernel = " << *(params->kernel);
+  if (*(params->kernel) != nullptr) {
+    std::string kernel_name = utils::cl::GetKernelName(*(params->kernel));
+    if (!kernel_name.empty()) {
+      stream << " (" << kernel_name << ")";
+    }
+  }
   stream << " workDim = " << *(params->workDim);
   stream << " globalWorkOffset = " << *(params->globalWorkOffset);
   if (*(params->globalWorkOffset) != nullptr && *(params->workDim) > 0) {

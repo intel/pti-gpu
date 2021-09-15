@@ -345,6 +345,13 @@ def gen_enter_callback(f, func, params, enum_map):
         f.write("    }\n")
       else:
         f.write("    stream << \" " + name + " = \" << *(params->p" + name + ");\n")
+        if name.find("Kernel") >= 0 and func == "zeCommandListAppendLaunchKernel":
+          f.write("    if (*(params->p" + name + ") != nullptr) {\n")
+          f.write("      std::string kernel_name = utils::ze::GetKernelName(*(params->p" + name + "));\n")
+          f.write("      if (!kernel_name.empty()) {\n")
+          f.write("        stream << \" (\" << kernel_name << \")\";\n")
+          f.write("      }\n")
+          f.write("    }\n")
         if name.find("ph") == 0 or name.find("pptr") == 0 or name.find("pCount") == 0:
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
           if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":

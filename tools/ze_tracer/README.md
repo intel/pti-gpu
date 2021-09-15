@@ -41,38 +41,39 @@ Options:
 Total Execution Time (ns):    418056422
       Total API Time (ns):    407283268
 
-                         Function,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
-        zeCommandQueueSynchronize,           4,           182529847,     44.82,            45632461,            45271728,            46364532
-                   zeModuleCreate,           1,           111687828,     27.42,           111687828,           111687828,           111687828
-zeCommandQueueExecuteCommandLists,           4,           108593458,     26.66,            27148364,             1756304,           102803947
-    zeCommandListAppendMemoryCopy,          12,             2493748,      0.61,              207812,               62061,             1037087
+                         Function,       Calls,     Time (ns),  Time (%),     Average (ns),      Min (ns),      Max (ns)
+        zeCommandQueueSynchronize,           4,     182529847,     44.82,         45632461,      45271728,      46364532
+                   zeModuleCreate,           1,     111687828,     27.42,        111687828,     111687828,     111687828
+zeCommandQueueExecuteCommandLists,           4,     108593458,     26.66,         27148364,       1756304,     102803947
+    zeCommandListAppendMemoryCopy,          12,       2493748,      0.61,           207812,         62061,       1037087
 ...
 ```
 **Device Timing** mode collects duration for each kernel on the device and provides the summary for the whole application:
 ```
 === Device Timing Results: ===
 
-Total Execution Time (ns):             95693944
-   Total Device Time (ns):              2470823
+Total Execution Time (ns):            295236137
+   Total Device Time (ns):            177147822
 
-                       Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
-                         GEMM,           4,             2202998,     89.16,              550749,              509666,              578833
-zeCommandListAppendMemoryCopy,          12,              257495,     10.42,               21457,               12666,               50166
-   zeCommandListAppendBarrier,           8,               10330,      0.42,                1291,                1166,                1500
+                            Kernel,       Calls,     Time (ns),  Time (%),     Average (ns),      Min (ns),      Max (ns)
+                              GEMM,           4,     172104499,     97.15,         43026124,      42814000,      43484166
+zeCommandListAppendMemoryCopy(H2D),           8,       2934831,      1.66,           366853,        286500,        585333
+zeCommandListAppendMemoryCopy(D2H),           4,       2099164,      1.18,           524791,        497666,        559666
+        zeCommandListAppendBarrier,           8,          9328,      0.01,             1166,          1166,          1166
 ...
 ```
 **Device Timing Verbose** mode provides additional information per kernel (SIMD width, group count and group size) and per transfer (bytes transferred):
 ```
 === Device Timing Results: ===
 
-Total Execution Time (ns):             95831439
-   Total Device Time (ns):              2414157
+Total Execution Time (ns):            289685451
+   Total Device Time (ns):            176178824
 
-                                     Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
-     GEMM[SIMD32, {1, 256, 1}, {256, 1, 1}],           4,             2155831,     89.30,              538957,              508666,              606166
-zeCommandListAppendMemoryCopy[262144 bytes],           8,              213831,      8.86,               26728,               12500,               49833
-zeCommandListAppendMemoryCopy[131072 bytes],           4,               34499,      1.43,                8624,                8000,               10000
-                 zeCommandListAppendBarrier,           8,                9996,      0.41,                1249,                1166,                1333
+                                           Kernel,    Calls,    Time (ns),  Time (%),     Average (ns),      Min (ns),      Max (ns)
+            GEMM[SIMD32 {4; 1024; 1} {256; 1; 1}],        4,    171667499,     97.44,         42916874,      42650833,      43501500
+zeCommandListAppendMemoryCopy(H2D)[4194304 bytes],        8,      2535164,      1.44,           316895,        276166,        363666
+zeCommandListAppendMemoryCopy(D2H)[4194304 bytes],        4,      1966499,      1.12,           491624,        464500,        516833
+                       zeCommandListAppendBarrier,        8,         9662,      0.01,             1207,          1166,           1333
 ```
 
 **Device Timeline** mode (***Linux kernel 5.0+ is required for accurate measurements***) dumps four timestamps for each device activity - *append* to the command list, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):

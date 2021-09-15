@@ -389,6 +389,10 @@ class ClKernelCollector {
       std::string name = instance->props.name;
       PTI_ASSERT(!name.empty());
 
+      if (verbose_) {
+        name = GetVerboseName(&(instance->props));
+      }
+
       callback_(
           callback_data_, queue, instance->kernel_id, name,
           host_queued, host_submitted, host_started, host_ended);
