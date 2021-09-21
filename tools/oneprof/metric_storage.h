@@ -13,7 +13,7 @@
 
 #include "utils.h"
 
-#define CACHE_SIZE 16777216
+#define CACHE_SIZE 134217728
 
 struct CacheBuffer {
   std::vector<uint8_t> buffer = std::vector<uint8_t>(CACHE_SIZE);
@@ -22,17 +22,18 @@ struct CacheBuffer {
 
 class MetricStorage {
  public:
-  MetricStorage(uint32_t count) {
+  MetricStorage(uint32_t count, const std::string& ext) {
     for (uint32_t i = 0; i < count; ++i) {
       std::string filename =
         std::string("data.") + std::to_string(utils::GetPid()) +
-        "." + std::to_string(i) + ".bin";
+        "." + std::to_string(i) + "." + ext;
       storage_.emplace(
           storage_.end(),
           std::ofstream(filename, std::ios::out | std::ios::binary));
       PTI_ASSERT(storage_.back().is_open());
 
       cache_.emplace_back(CacheBuffer());
+      PTI_ASSERT(!cache_.back().buffer.empty());
     }
   }
 
@@ -83,11 +84,11 @@ class MetricStorage {
 
 class MetricReader {
  public:
-  MetricReader(uint32_t count) {
+  MetricReader(uint32_t count, const std::string& ext) {
     for (uint32_t i = 0; i < count; ++i) {
       std::string filename =
         std::string("data.") + std::to_string(utils::GetPid()) +
-        "." + std::to_string(i) + ".bin";
+        "." + std::to_string(i) + "." + ext;
       storage_.emplace(
           storage_.end(),
           std::ifstream(filename, std::ios::in | std::ios::binary));

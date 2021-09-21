@@ -118,7 +118,7 @@ static void PrintDeviceInfo(const MetricDevice& device) {
         break;
       }
       default: {
-        PTI_ASSERT(0);
+        std::cout << "unknown";
         break;
       }
     }
