@@ -19,7 +19,7 @@ endif()
 FindL0Library(zet_metric_query)
 FindL0Headers(zet_metric_query)
 
-CheckForMDLibrary()
+CheckForMDLibrary(zet_metric_query)
 CheckForMetricsLibrary()
 
 # Loader

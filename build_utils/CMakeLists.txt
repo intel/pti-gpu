@@ -30,39 +30,57 @@ macro(SetBuildType)
 endmacro()
 
 macro(FindOpenCLLibrary TARGET)
-  if(DEFINED ENV{LD_LIBRARY_PATH})
-    string(REPLACE ":" ";" SEARCH_LIB_PATH $ENV{LD_LIBRARY_PATH})
+  if(WIN32)
+    if(NOT OpenCL_FOUND)
+      find_package(OpenCL 2.1)
+    endif()
+  else()
+    if(DEFINED ENV{LD_LIBRARY_PATH})
+      string(REPLACE ":" ";" SEARCH_LIB_PATH $ENV{LD_LIBRARY_PATH})
+    endif()
+
+    list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES .so.1)
+    find_library(OpenCL_LIBRARY
+      NAMES OpenCL
+      PATHS ${SEARCH_LIB_PATH})
   endif()
 
-  list(APPEND CMAKE_FIND_LIBRARY_SUFFIXES .so.1)
-  find_library(OPENCL_LIB_PATH
-    NAMES OpenCL
-    PATHS ${SEARCH_LIB_PATH})
-  if(NOT OPENCL_LIB_PATH)
+  if(EXISTS ${OpenCL_LIBRARY})
+    message(STATUS
+      "OpenCL library is found at ${OpenCL_LIBRARY}")
+    target_link_libraries (${TARGET} ${OpenCL_LIBRARY})
+  else()
     message(FATAL_ERROR
       "OpenCL library is not found. "
-      "You may need to install OpenCL ICD Loader (e.g. by Khrono) to fix this issue.")
-  else()
-    message(STATUS
-      "OpenCL library is found at ${OPENCL_LIB_PATH}")
+      "You may need to install OpenCL ICD Loader or specify the path "
+      "to the library as -DCMAKE_LIBRARY_PATH=<OpenCL_Library_Path>")
   endif()
-
-  target_link_libraries(${TARGET}
-    "${OPENCL_LIB_PATH}")
 endmacro()
 
 macro(FindOpenCLHeaders TARGET)
-  include(CheckIncludeFileCXX)
-  CHECK_INCLUDE_FILE_CXX(CL/cl.h OPENCL_INC_FOUND)
-  if (OPENCL_INC_FOUND)
-    include(CheckTypeSize)
-    set(CMAKE_EXTRA_INCLUDE_FILES "CL/cl.h")
-    CHECK_TYPE_SIZE(cl_kernel_sub_group_info CL_KERNEL_SUB_GROUP_INFO_SIZE LANGUAGE CXX)
-    set(CMAKE_EXTRA_INCLUDE_FILES)
+  if(WIN32)
+    if(NOT OpenCL_FOUND)
+      find_package(OpenCL 2.1)
+    endif()
+  else()
+    include(CheckIncludeFileCXX)
+    CHECK_INCLUDE_FILE_CXX(CL/cl.h OpenCL_INCLUDE_DIRS)
+    if (OpenCL_INCLUDE_DIRS)
+      include(CheckTypeSize)
+      set(CMAKE_EXTRA_INCLUDE_FILES "CL/cl.h")
+      CHECK_TYPE_SIZE(cl_kernel_sub_group_info CL_KERNEL_SUB_GROUP_INFO_SIZE LANGUAGE CXX)
+      set(CMAKE_EXTRA_INCLUDE_FILES)
+      if(NOT CL_KERNEL_SUB_GROUP_INFO_SIZE)
+        set(OpenCL_INCLUDE_DIRS 0)
+      endif()
+    endif()
   endif()
-  if (NOT (OPENCL_INC_FOUND AND CL_KERNEL_SUB_GROUP_INFO_SIZE))
-    set(OPENCL_INC_PATH "${CMAKE_BINARY_DIR}")
+
+  if(NOT OpenCL_INCLUDE_DIRS)
     RequirePythonInterp()
+    set(OPENCL_INC_PATH "${CMAKE_BINARY_DIR}")
+
+    message(STATUS "OpenCL headers are not found, will be downloaded automatically")
 
     add_custom_target(cl_headers ALL
                       DEPENDS "${OPENCL_INC_PATH}/CL/cl.h"
@@ -75,10 +93,10 @@ macro(FindOpenCLHeaders TARGET)
                               "${OPENCL_INC_PATH}/CL/cl_platform.h"
                       COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_cl_headers.py" "${OPENCL_INC_PATH}" "${CMAKE_BINARY_DIR}")
 
-    target_include_directories(${TARGET}
-      PUBLIC "${OPENCL_INC_PATH}")
-    add_dependencies(${TARGET}
-      cl_headers)
+    target_include_directories(${TARGET} PUBLIC "${OPENCL_INC_PATH}")
+    add_dependencies(${TARGET} cl_headers)
+  else()
+    target_include_directories (${TARGET} PUBLIC ${OpenCL_INCLUDE_DIRS})
   endif()
   target_compile_options(${TARGET}
     PRIVATE -DCL_TARGET_OPENCL_VERSION=210)
@@ -132,6 +150,8 @@ endmacro()
 
 macro(FindIGALibrary TARGET)
   if(WIN32)
+    RequirePythonInterp()
+
     foreach(VALUE IN ITEMS $ENV{PATH})
       if(VALUE MATCHES "[S|s]ystem32*$")
         set(WIN_SYS_PATH ${VALUE})
@@ -146,18 +166,25 @@ macro(FindIGALibrary TARGET)
     else()
       message(STATUS
         "IGA is found at ${IGA_DLL_PATH}")
-    endif()
-
-    find_library(IGA_LIB_PATH
-      NAMES iga64
-      PATHS ${SEARCH_LIB_PATH})
-    if(NOT IGA_LIB_PATH)
-      message(FATAL_ERROR
-        "IGA library is not found. "
-        "You may need to generate *.lib file from *.dll and provide path to it to cmake.")
-    else()
-      message(STATUS
-        "IGA library is found at ${IGA_LIB_PATH}")
+      find_library(IGA_LIB_PATH
+        NAMES iga64
+        PATHS ${SEARCH_LIB_PATH})
+      if(NOT IGA_LIB_PATH)
+        add_custom_target(iga_lib ALL
+                          DEPENDS ${CMAKE_BINARY_DIR}/iga64.lib)
+        add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/iga64.lib
+                           COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/convert_dll_to_lib.py" ${CMAKE_BINARY_DIR} ${IGA_DLL_PATH})
+        add_dependencies(${TARGET} iga_lib)
+        add_custom_command(TARGET ${TARGET} POST_BUILD
+                           COMMAND ${CMAKE_COMMAND} -E copy_if_different "${IGA_DLL_PATH}" ${CMAKE_BINARY_DIR}/iga64.dll
+                           COMMAND ${CMAKE_COMMAND} -E echo "File ${IGA_DLL_PATH} was copied into project binary directory: ${CMAKE_BINARY_DIR}")
+        target_link_libraries(${TARGET} "${CMAKE_BINARY_DIR}/iga64.lib")
+      else()
+        message(STATUS
+          "IGA library is found at ${IGA_LIB_PATH}")
+        target_link_libraries(${TARGET}
+          "${IGA_LIB_PATH}")
+      endif()
     endif()
   else()
     if(DEFINED ENV{LD_LIBRARY_PATH})
@@ -174,10 +201,9 @@ macro(FindIGALibrary TARGET)
       message(STATUS
         "IGA library is found at ${IGA_LIB_PATH}")
     endif()
-  endif()
-
   target_link_libraries(${TARGET}
     "${IGA_LIB_PATH}")
+  endif()
 endmacro()
 
 macro(GetIGAHeaders TARGET)
@@ -270,7 +296,7 @@ macro(GetGmmHeaders TARGET)
   endif()
 endmacro()
 
-macro(CheckForMDLibrary)
+macro(CheckForMDLibrary TARGET)
   if(WIN32)
     foreach(VALUE IN ITEMS $ENV{PATH})
       if(VALUE MATCHES "[S|s]ystem32*$")
@@ -286,6 +312,9 @@ macro(CheckForMDLibrary)
     else()
       message(STATUS
         "Intel(R) Metrics Discovery Application Programming Interface is found at ${MD_LIB_PATH}")
+      add_custom_command(TARGET ${TARGET} POST_BUILD
+                         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MD_LIB_PATH}" ${CMAKE_BINARY_DIR}/igdmd64.dll
+                         COMMAND ${CMAKE_COMMAND} -E echo "File ${MD_LIB_PATH} was copied into project binary directory: ${CMAKE_BINARY_DIR}")
     endif()
   else()
     if(DEFINED ENV{LD_LIBRARY_PATH})

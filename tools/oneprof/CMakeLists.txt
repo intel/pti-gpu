@@ -34,7 +34,7 @@ FindL0Library(oneprof_tool)
 FindL0Headers(oneprof_tool)
 
 CheckForMDLibrary(oneprof_tool)
-CheckForMetricsLibrary(oneprof_tool)
+CheckForMetricsLibrary()
 
 # Loader
 

@@ -12,6 +12,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #include "cl_api_tracer.h"
 #include "cl_utils.h"

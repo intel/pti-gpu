@@ -20,6 +20,6 @@ if(UNIX)
 endif()
 
 GetMDHeaders(gpuinfo)
-CheckForMDLibrary()
+CheckForMDLibrary(gpuinfo)
 
 install(TARGETS gpuinfo DESTINATION bin)

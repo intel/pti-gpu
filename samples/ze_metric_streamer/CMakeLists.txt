@@ -27,8 +27,8 @@ endif()
 FindL0Library(zet_metric_streamer)
 FindL0Headers(zet_metric_streamer)
 
-CheckForMDLibrary(oneprof_tool)
-CheckForMetricsLibrary(oneprof_tool)
+CheckForMDLibrary(zet_metric_streamer)
+CheckForMetricsLibrary()
 
 # Loader
 

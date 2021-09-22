@@ -102,9 +102,11 @@ class MetricCollector {
     metric_reader_->Reset();
   }
 
-  std::vector<zet_typed_value_t> GetReportChunk(uint32_t sub_device_id) const {
+  zet_typed_value_t* GetReportChunk(
+      uint32_t sub_device_id, uint32_t* size) const {
     ze_result_t status = ZE_RESULT_SUCCESS;
 
+    PTI_ASSERT(size != nullptr);
     PTI_ASSERT(sub_device_id < sub_device_list_.size());
     PTI_ASSERT(sub_device_list_.size() == metric_group_list_.size());
     PTI_ASSERT(!metric_group_list_.empty());
@@ -116,18 +118,18 @@ class MetricCollector {
 
     uint32_t report_size_in_bytes = report_size * sizeof(zet_typed_value_t);
     uint32_t chunk_size = report_size_in_bytes * MAX_REPORT_COUNT;
-    std::vector<uint8_t> metric_data =
+    uint8_t* metric_data =
       metric_reader_->ReadChunk(chunk_size, sub_device_id);
-    if (metric_data.empty()) {
-      return std::vector<zet_typed_value_t>();
+    if (metric_data == nullptr) {
+      *size = 0;
+      return nullptr;
     }
 
-    uint32_t report_count = metric_data.size() / report_size_in_bytes;
-    PTI_ASSERT(report_count * report_size_in_bytes == metric_data.size());
-    std::vector<zet_typed_value_t> report_chunk(report_count * report_size);
-    memcpy(report_chunk.data(), metric_data.data(), metric_data.size());
+    uint32_t report_count = chunk_size / report_size_in_bytes;
+    PTI_ASSERT(report_count * report_size_in_bytes == chunk_size);
 
-    return report_chunk;
+    *size = report_count * report_size;
+    return reinterpret_cast<zet_typed_value_t*>(metric_data);
   }
 
   uint32_t GetReportSize(uint32_t sub_device_id) const {
@@ -235,9 +237,9 @@ class MetricCollector {
         PTI_ASSERT(sub_device_list_.size() == metric_group_list_.size());
         PTI_ASSERT(!metric_group_list_.empty());
 
-        std::vector<uint8_t> metric_data =
-          reader.ReadChunk(MAX_BUFFER_SIZE, i);
-        if (metric_data.empty()) {
+        uint32_t metric_data_size = MAX_BUFFER_SIZE;
+        uint8_t* metric_data = reader.ReadChunk(metric_data_size, i);
+        if (metric_data == nullptr) {
           break;
         }
 
@@ -245,7 +247,7 @@ class MetricCollector {
         status = zetMetricGroupCalculateMetricValues(
             metric_group_list_[i],
             ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-            metric_data.size(), metric_data.data(), &value_count, nullptr);
+            metric_data_size, metric_data, &value_count, nullptr);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         PTI_ASSERT(value_count > 0);
 
@@ -253,7 +255,7 @@ class MetricCollector {
         status = zetMetricGroupCalculateMetricValues(
             metric_group_list_[i],
             ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-            metric_data.size(), metric_data.data(),
+            metric_data_size, metric_data,
             &value_count, report_chunk.data());
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         report_chunk.resize(value_count);
@@ -261,6 +263,8 @@ class MetricCollector {
         storage.Dump(
             reinterpret_cast<uint8_t*>(report_chunk.data()),
             report_chunk.size() * sizeof(zet_typed_value_t), i);
+
+        delete[] metric_data;
       }
     }
   }

@@ -379,20 +379,20 @@ class Profiler {
 
     metric_collector_->ResetReportReader();
     while (true) {
-      std::vector<zet_typed_value_t> report_chunk =
-        metric_collector_->GetReportChunk(sub_device_id);
-      if (report_chunk.empty()) {
+      uint32_t report_chunk_size = 0;
+      zet_typed_value_t* report_chunk =
+        metric_collector_->GetReportChunk(sub_device_id, &report_chunk_size);
+      if (report_chunk == nullptr) {
         break;
       }
 
-      uint32_t report_count = report_chunk.size() / report_size;
-      PTI_ASSERT(report_count * report_size == report_chunk.size());
+      uint32_t report_count = report_chunk_size / report_size;
+      PTI_ASSERT(report_count * report_size == report_chunk_size);
 
       for (int i = 0; i < report_count; ++i) {
         std::stringstream line;
         line << sub_device_id << ",";
-        const zet_typed_value_t* report =
-          report_chunk.data() + i * report_size;
+        const zet_typed_value_t* report = report_chunk + i * report_size;
         for (int j = 0; j < report_size; ++j) {
           PrintTypedValue(line, report[j]);
           line << ",";
@@ -400,6 +400,8 @@ class Profiler {
         line << std::endl;
         correlator_.Log(line.str());
       }
+
+      delete[] report_chunk;
     }
   }
 
@@ -416,23 +418,24 @@ class Profiler {
 
     metric_collector_->ResetReportReader();
     while (true) {
-      std::vector<zet_typed_value_t> report_chunk =
-        metric_collector_->GetReportChunk(sub_device_id);
-      if (report_chunk.empty()) {
+      uint32_t report_chunk_size = 0;
+      zet_typed_value_t* report_chunk =
+        metric_collector_->GetReportChunk(sub_device_id, &report_chunk_size);
+      if (report_chunk == nullptr) {
         break;
       }
 
-      uint32_t report_count = report_chunk.size() / report_size;
-      PTI_ASSERT(report_count * report_size == report_chunk.size());
+      uint32_t report_count = report_chunk_size / report_size;
+      PTI_ASSERT(report_count * report_size == report_chunk_size);
 
-      const zet_typed_value_t* first_report = report_chunk.data();
+      const zet_typed_value_t* first_report = report_chunk;
       PTI_ASSERT(first_report[report_time_id].type == ZET_VALUE_TYPE_UINT64);
       if (first_report[report_time_id].value.ui64 > end) {
         continue;
       }
 
       const zet_typed_value_t* last_report =
-        report_chunk.data() + (report_count - 1) * report_size;
+        report_chunk + (report_count - 1) * report_size;
       PTI_ASSERT(last_report[report_time_id].type == ZET_VALUE_TYPE_UINT64);
       if (last_report[report_time_id].value.ui64 < start) {
         continue;
@@ -440,7 +443,7 @@ class Profiler {
 
       for (int i = 0; i < report_count; ++i) {
         const zet_typed_value_t* report =
-          report_chunk.data() + i * report_size;
+          report_chunk + i * report_size;
         zet_typed_value_t report_time = report[report_time_id];
         PTI_ASSERT(report_time.type == ZET_VALUE_TYPE_UINT64);
         if (report_time.value.ui64 >= start && report_time.value.ui64 <= end) {
@@ -449,6 +452,8 @@ class Profiler {
           }
         }
       }
+
+      delete[] report_chunk;
     }
 
     return target_list;

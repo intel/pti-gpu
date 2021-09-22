@@ -29,7 +29,7 @@ FindOpenCLHeaders(clt_gpu_metrics)
 GetOpenCLTracingHeaders(clt_gpu_metrics)
 
 GetMDHeaders(clt_gpu_metrics)
-CheckForMDLibrary()
+CheckForMDLibrary(clt_gpu_metrics)
 
 # Loader
 

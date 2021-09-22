@@ -14,6 +14,7 @@
 #include <map>
 #include <mutex>
 #include <vector>
+#include <sstream>
 
 #include "cl_api_tracer.h"
 #include "cl_utils.h"

@@ -103,17 +103,21 @@ class MetricReader {
     }
   }
 
-  std::vector<uint8_t> ReadChunk(uint32_t size, uint32_t storage_id) {
+  uint8_t* ReadChunk(uint32_t& size, uint32_t storage_id) {
     PTI_ASSERT(storage_id < storage_.size());
     if (storage_[storage_id].eof()) {
-      return std::vector<uint8_t>();
+      size = 0;
+      return nullptr;
     }
 
-    std::vector<uint8_t> data(size);
-    storage_[storage_id].read(reinterpret_cast<char*>(data.data()), size);
+    uint8_t* data = new uint8_t[size];
+    PTI_ASSERT(data != nullptr);
+
+    storage_[storage_id].read(reinterpret_cast<char*>(data), size);
     if (storage_[storage_id].gcount() < size) {
-      data.resize(storage_[storage_id].gcount());
+      size = storage_[storage_id].gcount();
     }
+
     return data;
   }
 
