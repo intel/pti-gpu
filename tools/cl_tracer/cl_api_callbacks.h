@@ -6669,7 +6669,7 @@ static void clReleaseEventOnExit(
   collector->Log(stream.str());
 }
 
-static void OnEnterFunction(
+void OnEnterFunction(
     cl_function_id function, cl_callback_data* data,
     uint64_t start, ClApiCollector* collector) {
   PTI_ASSERT(collector != nullptr);
@@ -7033,7 +7033,7 @@ static void OnEnterFunction(
   }
 }
 
-static void OnExitFunction(
+void OnExitFunction(
     cl_function_id function, cl_callback_data* data,
     uint64_t start, uint64_t end, ClApiCollector* collector) {
   PTI_ASSERT(collector != nullptr);

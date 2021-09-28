@@ -1,6 +1,6 @@
 # Tracing and Profiling Tool for Data Parallel C++ (DPC++)
 ## Overview
-This tool provides basic tracing and profiling capabilities for the compute applications based on Intel runtimes for OpenCL(TM) and Level Zero, like DPC++ and OpenMP* GPU offload programs.
+This tool provides basic tracing and profiling capabilities for the compute applications based on Intel runtimes for OpenCL(TM) and Level Zero, like DPC++, Intel(R) Implicit SPMD Program Compiler (Intel(R) ISPC) and OpenMP* GPU offload programs.
 
 The following capabilities are available:
 ```
@@ -101,6 +101,7 @@ GEMM[SIMD32, {1024, 1024, 1}, {0, 0, 0}],           4,           172101915,     
 
 **Device Timeline** mode dumps four timestamps for each device activity - *queued* to the host command queue for OpenCL(TM) or "append" to the command list for Level Zero, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
 ```
+Device Timeline: start time [ns] = 1632829416753742036
 ...
 Device Timeline (queue: 0x55a9c7e51e70): clEnqueueWriteBuffer [ns] = 317341082 (queued) 317355010 (submit) 317452332 (start) 317980165 (end)
 Device Timeline (queue: 0x55a9c7e51e70): clEnqueueWriteBuffer [ns] = 317789774 (queued) 317814558 (submit) 318160607 (start) 318492690 (end)

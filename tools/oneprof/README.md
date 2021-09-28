@@ -1,6 +1,6 @@
 # GPU Metrics Collection Tool for Data Parallel C++ (DPC++)
 ## Overview
-This tool provides GPU hardware metrics collection capabilities for the compute applications based on Intel runtimes for OpenCL(TM) and Level Zero, like DPC++ and OpenMP* GPU offload programs.
+This tool provides GPU hardware metrics collection capabilities for the compute applications based on Intel runtimes for OpenCL(TM) and Level Zero, like DPC++, Intel(R) Implicit SPMD Program Compiler (Intel(R) ISPC) and OpenMP* GPU offload programs.
 
 The following capabilities are available:
 ```

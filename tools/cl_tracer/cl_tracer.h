@@ -14,6 +14,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <algorithm>
 
 #include "cl_ext_collector.h"
 #include "cl_ext_callbacks.h"
@@ -316,7 +317,7 @@ class ClTracer {
     std::string gpu_title =
       std::string("Total ") + std::string(type) +
       " Time for GPU backend (ns): ";
-    size_t title_width = std::max(cpu_title.size(), gpu_title.size());
+    size_t title_width = (std::max)(cpu_title.size(), gpu_title.size());
     const size_t time_width = 20;
 
     std::stringstream stream;

@@ -282,6 +282,12 @@ class UnifiedTracer {
 
       chrome_logger_->Log(stream.str());
     }
+    if (CheckOption(TRACE_DEVICE_TIMELINE)) {
+      std::stringstream stream;
+      stream << "Device Timeline: start time [ns] = " <<
+        correlator_.GetStartPoint() << std::endl;
+      correlator_.Log(stream.str());
+    }
   }
 
   static uint64_t CalculateTotalTime(const ZeApiCollector* collector) {

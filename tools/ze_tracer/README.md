@@ -78,6 +78,7 @@ zeCommandListAppendMemoryCopy(D2H)[4194304 bytes],        4,      1966499,      
 
 **Device Timeline** mode (***Linux kernel 5.0+ is required for accurate measurements***) dumps four timestamps for each device activity - *append* to the command list, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
 ```
+Device Timeline: start time [ns] = 2736828495339248
 Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 396835703 (append) 398002195 (submit) 399757026 (start) 400230526 (end)
 Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 397039340 (append) 398002195 (submit) 400231776 (start) 400547193 (end)
 Device Timeline (queue: 0x556fa2318fc0): GEMM [ns] = 397513563 (append) 398002195 (submit) 400548943 (start) 443632026 (end)

@@ -48,10 +48,10 @@ typedef void (*OnClFunctionFinishCallback)(
 
 class ClApiCollector;
 
-static void OnEnterFunction(
+void OnEnterFunction(
     cl_function_id function, cl_callback_data* data,
     uint64_t start, ClApiCollector* collector);
-static void OnExitFunction(
+void OnExitFunction(
     cl_function_id function, cl_callback_data* data,
     uint64_t start, uint64_t end, ClApiCollector* collector);
 
