@@ -25,9 +25,7 @@ enum CollectorState {
 
 class ClMetricCollector {
  public:
-  static ClMetricCollector* Create(
-      cl_device_id device, const char* set_name) {
-    PTI_ASSERT(device != nullptr);
+  static ClMetricCollector* Create(const char* set_name) {
     PTI_ASSERT(set_name != nullptr);
 
     std::string device_string = utils::GetEnv("PTI_DEVICE_ID");

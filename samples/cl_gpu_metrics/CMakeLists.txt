@@ -8,6 +8,7 @@ SetBuildType()
 
 # Tool Library
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPTI_KERNEL_INTERVALS=1")
 add_library(clt_gpu_metrics SHARED
   "${PROJECT_SOURCE_DIR}/../../loader/init.cc"
   tool.cc)

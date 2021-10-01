@@ -4,12 +4,12 @@ level-zero-loader:
   - https://github.com/oneapi-src/level-zero/releases/download/v1.4.1/level-zero-devel_1.4.1+u18.04_amd64.deb
 compute-runtime:
   deb:
-  - https://github.com/intel/compute-runtime/releases/download/21.31.20514/intel-gmmlib_21.2.1_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8173/intel-igc-core_1.0.8173_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8173/intel-igc-opencl_1.0.8173_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.31.20514/intel-opencl_21.31.20514_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.31.20514/intel-ocloc_21.31.20514_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.31.20514/intel-level-zero-gpu_1.1.20514_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.38.21026/intel-gmmlib_21.2.1_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8708/intel-igc-core_1.0.8708_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8708/intel-igc-opencl_1.0.8708_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.38.21026/intel-opencl_21.38.21026_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.38.21026/intel-ocloc_21.38.21026_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.38.21026/intel-level-zero-gpu_1.2.21026_amd64.deb
 metrics-discovery:
   github:
     build_path: build
@@ -43,7 +43,7 @@ oneapit-toolkits:
     apt_repo: deb https://apt.repos.intel.com/oneapi all main
     apt_source: /etc/apt/sources.list.d/oneAPI.list
     packages:
-    - intel-basekit=2021.3.0-3219
+    - intel-basekit=2021.4.0-3422
 finalize:
   config:
     commands:

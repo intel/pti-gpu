@@ -144,7 +144,7 @@ for (uint32_t gid = 0; gid < device->GetParams()->ConcurrentGroupsCount; ++gid) 
 }
 ```
 
-### Collection
+### Continuous Collection
 Process of metrics collection with Intel(R) Metrics Discovery Application Programming Interface assumes that there is an infinite loop in a seprate thread, where one asks for collected samples periodically, read the data for a chunk of samples and store them into some memory or file (one sample contains all the metics and information items from a metric set).
 
 First, one should set sampling interval for collection (in nanoseconds) and determine the size of the buffer with raw results (in bytes).
@@ -231,57 +231,69 @@ assert(status == md::CC_OK);
 calculated_reports.resize(calculated_report_count * calculated_report_size);
 ```
 
-### Time Correlation With OpenCL(TM)
+### Time Correlation
 It's often needed to map collected hardware metrics to a kernel in terms of time intervals.
 
 Each metric set contains a special *information* item called `QueryBeginTime` that represents a timestamp (in nanoseconds) for a sample. At the same time one can collect kernel execution intervals using ***Device Activity Tracing*** capabilities. So to map exact sample to the kernel invocation, one need just to check if sample timestamp is in between of kernel start and end timestamps.
 
-The problem is that metrics timestamp one can get with Intel(R) Metrics Discovery Application Programming Interface and kernel timestamps one can get e.g. with OpenCL(TM) are different and can't be compared directly - so one has to convert them to a single time format first.
+The problem is that metrics timestamp one can get with Intel(R) Metrics Discovery Application Programming Interface and kernel timestamps one can get e.g. with OpenCL(TM) or with oneAPI Level Zero (Level Zero) are different and can't be compared directly - so one has to convert them to a single time format first.
 
 In Intel(R) Metrics Discovery Application Programming Interface library there is a function `GetGpuCpuTimestamps` that allows to bind GPU metrics timestamp to some CPU timestamp (which is based on `CLOCK_MONOTONIC` on Linux and `QueryPerformanceCounter` on Windows).
 
-So e.g. to convert GPU metrics timestamp (`gpuTimestamp`) to OpenCL GPU timestamp (`cpu_timestamp`), which is based on `CLOCK_MONOTONIC_RAW` on Linux, one should perform the following steps:
-1. Get "time snap point" to correlate GPU and `CLOCK_MONOTONIC` time:
+So the common strategy of metrics to kernels mapping is the following:
+1. Convert `QueryBeginTime` into CPU timestamp with the help of `GetGpuCpuTimestamps` of Intel(R) Metrics Discovery Application Programming Interface library;
+2. Convert kernel timestamp into host timestamp:
+    - for OpenCL(TM) - with the help of `clGetDeviceAndHostTimer` function (Time Correlation section [here](../device_activity_tracing/OpenCL.md));
+    - for oneAPI Level Zero (Level Zero) - with the help of `zeDeviceGetGlobalTimestamps` function (Time Correlation section [here](../device_activity_tracing/LevelZero.md));
+    - on Linux one may need to convert `CLOCK_MONOTONIC_RAW` into `CLOCK_MONOTONIC` to use the same time units;
+3. Compare directly metic CPU timestamp with kernel host start and host end timestamps to perform metrics to kernel correlation.
+
+### Query-Based Collection for OpenCL(TM)
+An alternative approach could be to collect a single aggregated metric report per each kernel invocation. In some sense such a way may be easier than time-based collection, since one don't need to worry about time correlation (report is already for the kernel) and to deal with separate thread (runtime takes most of the responsibilities on data collection), but from the other hand one will get the only aggregated report per kernel (that may be not enough to analyse over time kernel behaviour). Also such approach is limited to support only specific runtimes (e.g. OpenCL(TM)).
+
+To enable query-based mertrics collection for OpenCL(TM) one should perform the following steps:
+1. Create MD device and choose target metric set (as described above);
+2. Set API filtering mode to OpenCL(TM) and activate metric set:
 ```cpp
-uint64_t cpu_snap_point = 0, gpu_snap_point = 0;
-status = device->GetGpuCpuTimestamps(
-    &gpu_snap_point, &cpu_snap_point, nullptr);
+md::TCompletionCode status = set_->SetApiFiltering(
+    md::API_TYPE_OCL | md::API_TYPE_OGL4_X);
+assert(status == md::CC_OK);
+status = set_->Activate();
 assert(status == md::CC_OK);
 ```
-2. Calculate `CLOCK_MONOTONIC` time for `gpuTimestamp`:
+3. To be able to retrieve metrics for a kernel, one need to create a specific command queue with the help of extension. The argument `configuration` here could be obtained from the target metric set. Note, that `CL_QUEUE_PROFILING_ENABLE` property is required for such a queue:
 ```cpp
-if (gpuTimestamp > gpu_snap_point) {
-  cpu_timestamp = cpu_snap_point + (gpuTimestamp - gpu_snap_point);
-} else {
-  cpu_timestamp = cpu_snap_point - (gpu_snap_point - gpuTimestamp);
-}
-```
-3. Convert `CLOCK_MONOTONIC` to `CLOCK_MONOTONIC_RAW`:
-```cpp
-uint64_t ConvertClockMonotonicToRaw(uint64_t clock_monotonic) {
-  timespec monotonic_time;
-  timespec raw_time;
-  int status = 0;
-  
-  status = clock_gettime(CLOCK_MONOTONIC, &monotonic_time);
-  assert(status == 0);
-  status = clock_gettime(CLOCK_MONOTONIC_RAW, &raw_time);
-  assert(status == 0);
-
-  uint64_t raw = raw_time.tv_nsec + NSEC_IN_SEC * raw_time.tv_sec;
-  uint64_t monotonic = monotonic_time.tv_nsec +
-    NSEC_IN_SEC * monotonic_time.tv_sec;
-  if (raw > monotonic) {
-      return clock_monotonic + (raw - monotonic);
-  } else {
-      return clock_monotonic - (monotonic - raw);
-  }
-}
+cl_command_queue CL_API_CALL
+clCreatePerfCountersCommandQueueINTEL(
+    cl_context context,
+    cl_device_id device,
+    cl_command_queue_properties properties,
+    cl_uint configuration,
+    cl_int *errcodeRet);
 // ...
-
-cpu_timestamp = ConvertClockMonotonicToRaw(cpu_timestamp);
+cl_uint configuration = set_->GetParams()->ApiSpecificId.OCL;
 ```
-After that one can directly compare this `cpu_timestamp` with kernel start and end timestamps to perform metrics to kernel correlation.
+4. Metric report for specific kernel could be retrieved as event profiling info:
+```cpp
+#define CL_PROFILING_COMMAND_PERFCOUNTERS_INTEL 0x407F
+
+size_t report_size = set_->GetParams()->QueryReportSize;
+PTI_ASSERT(report_size > 0);
+
+std::vector<uint8_t> report(report_size, 0);
+size_t output_size = 0;
+cl_int status = clGetEventProfilingInfo(
+    event, CL_PROFILING_COMMAND_PERFCOUNTERS_INTEL,
+    report_size, report.data(), &output_size);
+assert(status == CL_SUCCESS);
+```
+5. Report data grabbed from `clGetEventProfilingInfo` should be calculated into metrics (described above). There will be a single metric report.
+6. To finalize data collection one should deactive target metric set and remove MD device:
+```cpp
+md::TCompletionCode status = set_->Deactivate();
+assert(status == md::CC_OK);
+```
+Query-based metrics collection for Level Zero is described [here](./LevelZero.md).
 
 ## Build and Run
 Since Intel(R) Metrics Discovery Application Programming Interface library is loaded dynamically at runtime, there is no need in any special build/run options. Just make sure Intel(R) Metrics Discovery Application Programming Interface library can be found correctly:
@@ -296,6 +308,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path_to_libmd.so> ./<application>
 
 ## Samples
 - [GPU Metrics for OpenCL(TM)](../../samples/cl_gpu_metrics)
+- [GPU Query for OpenCL(TM)](../../samples/cl_gpu_query)
 
 ## Tools
 - [GPU Info](../../tools/gpuinfo)

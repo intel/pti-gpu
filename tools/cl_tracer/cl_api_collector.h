@@ -76,9 +76,9 @@ class ClApiCollector {
       std::cerr << "[WARNING] Unable to create OpenCL tracer " <<
         "for target device" << std::endl;
       if (tracer != nullptr) {
-        delete tracer;
         delete collector;
       }
+      delete tracer;
       return nullptr;
     }
 

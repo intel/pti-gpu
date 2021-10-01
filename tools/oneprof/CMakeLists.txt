@@ -12,7 +12,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPTI_KERNEL_INTERVALS=1")
 add_library(oneprof_tool SHARED
   "${PROJECT_SOURCE_DIR}/../../loader/init.cc"
   "${PROJECT_SOURCE_DIR}/../utils/correlator.cc"
-  "${PROJECT_SOURCE_DIR}/../cl_tracer/trace_guard.cc"
+  "${PROJECT_SOURCE_DIR}/../../utils/trace_guard.cc"
   tool.cc)
 target_include_directories(oneprof_tool
   PRIVATE "${PROJECT_SOURCE_DIR}"

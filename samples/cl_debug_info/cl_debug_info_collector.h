@@ -59,8 +59,8 @@ class ClDebugInfoCollector {
         "for target device" << std::endl;
       if (tracer != nullptr) {
         delete tracer;
-        delete collector;
       }
+      delete collector;
       return nullptr;
     }
 

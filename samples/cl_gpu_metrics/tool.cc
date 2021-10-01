@@ -239,7 +239,7 @@ void EnableProfiling() {
     return;
   }
 
-  metric_collector = ClMetricCollector::Create(device, "ComputeBasic");
+  metric_collector = ClMetricCollector::Create("ComputeBasic");
   if (metric_collector == nullptr) {
     kernel_collector->DisableTracing();
     delete kernel_collector;

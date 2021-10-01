@@ -34,7 +34,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - for [OpenCL(TM)](chapters/binary_source_correlation/OpenCL.md)
     - for [oneAPI Level Zero (Level Zero)](chapters/binary_source_correlation/LevelZero.md)
 4. Metrics Collection
-    - for [oneAPI Level Zero (Level Zero)](chapters/metrics_collection/LevelZero.md)
+    - based on [oneAPI Level Zero (Level Zero) Metric API](chapters/metrics_collection/LevelZero.md)
     - based on [Intel(R) Metrics Discovery Application Programming Interface](chapters/metrics_collection/MetricsDiscoveryAPI.md)
     - based on [Performance Monitoring (PM) Register](chapters/metrics_collection/PerfMonReg.md)
 5. Binary Instrumentation
@@ -58,7 +58,8 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - [cl_hot_functions](samples/cl_hot_functions) - provides a list of hottest OpenCL(TM) API calls by backend (CPU and GPU);
     - [cl_hot_kernels](samples/cl_hot_kernels) - provides a list of hottest OpenCL(TM) kernels by backend (CPU and GPU);
     - [cl_debug_info](samples/cl_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
-    - [cl_gpu_metrics](samples/cl_gpu_metrics) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle;
+    - [cl_gpu_metrics](samples/cl_gpu_metrics) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle (based on continuous  metrics collection mode);
+    - [cl_gpu_query](samples/cl_gpu_query) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle (based on query  metrics collection mode);
 - tools for Level Zero, DPC++ (with Level Zero backend) and OpenMP* GPU offload (with Level Zero backend):
     - [ze_hot_functions](samples/ze_hot_functions) - provides a list of hottest Level Zero API calls;
     - [ze_hot_kernels](samples/ze_hot_kernels) - provides a list of hottest Level Zero kernels;

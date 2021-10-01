@@ -69,6 +69,15 @@ void CL_CALLBACK EventNotify(cl_event event,
     assert(status == CL_SUCCESS);
 }
 ```
+## Time Correlation
+It's commonly needed to map OpenCL kernel timestamps to general CPU timeline. To solve this problem one should use `clGetDeviceAndHostTimer` function to get time sync point between host and device:
+```cpp
+cl_ulong device_timestamp = 0, host_timestamp = 0;
+cl_int status = clGetDeviceAndHostTimer(
+    device, device_timestamp, host_timestamp);
+assert(status == CL_SUCCESS)
+```
+Note, that host timestamp in Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver is based on `CLOCK_MONOTONIC_RAW` on Linux and `QueryPerformanceCounter` on Windows (implementation specific, may be changed in future). Both timers are in nanoseconds.
 
 ## Usage Details
 - refer to the documentation for the function [clGetEventProfilingInfo](https://www.khronos.org/registry/OpenCL/sdk/2.1/docs/man/xhtml/clGetEventProfilingInfo.html) to learn more on OpenCL(TM) profiling
@@ -77,3 +86,8 @@ void CL_CALLBACK EventNotify(cl_event event,
 - [OpenCL(TM) GEMM](../../samples/cl_gemm)
 - [OpenCL(TM) Hot Kernels](../../samples/cl_hot_kernels)
 - [OpenCL(TM) GPU Metrics](../../samples/cl_gpu_metrics)
+
+## Tools
+- [OpenCL(TM) Tracer](../../tools/cl_tracer)
+- [Tracing and Profiling Tool for Data Parallel C++ (DPC++)](../../tools/onetrace)
+- [GPU Metrics Collection Tool for Data Parallel C++ (DPC++)](../../tools/oneprof)

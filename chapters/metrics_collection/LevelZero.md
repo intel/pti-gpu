@@ -283,6 +283,7 @@ assert(status == ZE_RESULT_SUCCESS);
 ```
 
 ### Time Correlation
+#### Level Zero Kernels
 To map metric report to some particular device activity (e.g. kernel execution) one need to correlate report timestamp (metric with name `QueryBeginTime` inside a report) to kernel `global` timestamps retrieved with the help of [device activity tracing](../device_activity_tracing/LevelZero.md).
 
 The difference between these two timestamps is that kernel time is in GPU clocks, and `QueryBeginTime` is in nanoseconds. To convert clocks to nanoseconds one need to know GPU timer frequency and use the following formula:
@@ -291,6 +292,15 @@ NS_IN_SEC = 1000000000
 gpuTimestampNs = gpuTimestampClocks * NS_IN_SEC / gpuTimerFrequency
 ```
 Starting from version 1.1, Level Zero provides this value as `timerResolution` field of `ze_device_properties_t` structure in cycles per second. Also it can be retrieved with the help of Intel(R) Metrics Discovery Application Programming Interface as part of device information as `GpuTimestampFrequency` symbol (look into "Device Information" section from [here](./MetricsDiscoveryAPI.md) for details).
+
+Also note that not all bits in `global` kernel timestamp value may be valid, to get exact number of valid bits use `timestampValidBits` field from `ze_device_properties_t` structure.
+
+#### OpenCL(TM) Kernels
+Common stragety of metrics to kernel mapping for OpenCL(TM) kernels may be the following:
+1. Collect kernel timestamps based on [OpenCL(TM) device activity tracing](../device_activity_tracing/OpenCL.md) mechanism;
+2. Convert device timestamps into host timestamps with the help of `clGetDeviceAndHostTimer` function (Time Correlation section [here](../device_activity_tracing/OpenCL.md));
+3. Convert host timestamps into Level Zero kernel timestamps with the help of `zeDeviceGetGlobalTimestamps` function (Time Correlation section [here](../device_activity_tracing/LevelZero.md));
+4. Use the approach described for Level Zero kernels (above).
 
 ## Build and Run
 To make metrics collection work one need to link the application with Level Zero ICD library (e.g. `libze_loader.so`) and run it as following:

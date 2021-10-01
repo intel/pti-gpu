@@ -1,8 +1,10 @@
-#include <CL/sycl.hpp>
 #include <iostream>
 #include <iomanip>
+#include <string>
 
-#define TAB "  "
+#include <CL/sycl.hpp>
+
+#define TAB std::string("  ")
 
 #define TEXT_WIDTH   50
 #define BYTES_IN_KB  1024
@@ -53,7 +55,7 @@ int main(int argc, char* argv[]) {
 
   if (list_mode) {
     for (size_t pl_id = 0; pl_id < platforms.size(); pl_id++) {
-      sycl::string_class name =
+      std::string name =
         platforms[pl_id].get_info<sycl::info::platform::name>();
       std::cout << "Platform #" << pl_id << ": " << name << std::endl;
 
@@ -61,7 +63,7 @@ int main(int argc, char* argv[]) {
         platforms[pl_id].get_devices(sycl::info::device_type::all);
 
       for (size_t device_id = 0; device_id < devices.size(); device_id++) {
-        sycl::string_class name =
+        std::string name =
           devices[device_id].get_info<sycl::info::device::name>();
         std::cout << " `-- Device #" << device_id << ": " << name << "\n";
       }
@@ -69,32 +71,28 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
   } else {
     std::cout << std::setw(TEXT_WIDTH) << std::left <<
-      sycl::string_class() + TAB + "Number of  platforms " <<
-      platforms.size() << std::endl;
+      TAB + "Number of  platforms " << platforms.size() << std::endl;
 
     for (auto platform : platforms) {
-      sycl::string_class name =
+      std::string name =
         platform.get_info<sycl::info::platform::name>();
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
-        sycl::string_class() + TAB + "Platform Name " <<
-        name << std::endl;
+        TAB + "Platform Name " << name << std::endl;
 
-      sycl::string_class vendor =
+      std::string vendor =
         platform.get_info<sycl::info::platform::vendor>();
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
-        sycl::string_class() + TAB + "Platform Vendor " <<
-        vendor << std::endl;
+        TAB + "Platform Vendor " << vendor << std::endl;
 
-      sycl::string_class profile =
+      std::string profile =
         platform.get_info<sycl::info::platform::profile>();
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
-        sycl::string_class() + TAB + "Platform Profile " <<
-        profile << std::endl;
+        TAB + "Platform Profile " << profile << std::endl;
 
-      sycl::vector_class<sycl::string_class> extensions =
+      sycl::vector_class<std::string> extensions =
         platform.get_info<sycl::info::platform::extensions>();
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
-        sycl::string_class() + TAB + "Platform Extensions ";
+        TAB + "Platform Extensions ";
       for (auto extenton : extensions) {
         std::cout << extenton << " ";
       }
@@ -102,10 +100,10 @@ int main(int argc, char* argv[]) {
     }
 
     for (auto platform : platforms) {
-      sycl::string_class name =
+      std::string name =
         platform.get_info<sycl::info::platform::name>();
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
-        sycl::string_class() + TAB + "Platform Name " << name << std::endl;
+        TAB + "Platform Name " << name << std::endl;
 
       sycl::vector_class<sycl::device> devices =
         platform.get_devices(sycl::info::device_type::all);
@@ -117,44 +115,40 @@ int main(int argc, char* argv[]) {
       }
 
       for (auto device : devices) {
-        sycl::string_class name =
+        std::string name =
           device.get_info<sycl::info::device::name>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Device Name " << name << std::endl;
+          TAB + "Device Name " << name << std::endl;
 
-        sycl::string_class vendor =
+        std::string vendor =
           device.get_info<sycl::info::device::vendor>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Device Vendor "<<
-          vendor << std::endl;
+          TAB + "Device Vendor "<< vendor << std::endl;
 
         cl_uint vendor_id = device.get_info<sycl::info::device::vendor_id>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Device vendor ID " << "0x" <<
+          TAB + "Device vendor ID " << "0x" <<
           std::hex << vendor_id << std::dec << std::endl;
 
-        sycl::string_class device_version =
+        std::string device_version =
           device.get_info<sycl::info::device::version>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Device Version " <<
-          device_version << std::endl;
+          TAB + "Device Version " << device_version << std::endl;
 
-        sycl::string_class driver_version =
+        std::string driver_version =
           device.get_info<sycl::info::device::driver_version>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Driver Version " <<
-          driver_version << std::endl;
+          TAB + "Driver Version " << driver_version << std::endl;
 
-        sycl::string_class version =
+        std::string version =
           device.get_info<sycl::info::device::version>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Device SYCL Vesrion " <<
-          version << std::endl;
+          TAB + "Device SYCL Vesrion " << version << std::endl;
 
         sycl::info::device_type device_type =
           device.get_info<sycl::info::device::device_type>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Device type ";
+          TAB + "Device type ";
         switch (device_type) {
           case sycl::info::device_type::gpu:
             std::cout << "GPU";
@@ -176,64 +170,62 @@ int main(int argc, char* argv[]) {
         bool is_avilable =
           device.get_info<sycl::info::device::is_available>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Device Available " <<
+          TAB + "Device Available " <<
           (is_avilable ? "Yes" : "No") << std::endl;
 
         bool is_compiler_avilable =
           device.get_info<sycl::info::device::is_compiler_available>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Compiler Available " <<
+          TAB + "Compiler Available " <<
           (is_compiler_avilable ? "Yes" : "No") << std::endl;
 
         bool is_linker_avilable =
           device.get_info<sycl::info::device::is_linker_available>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Linker Available " <<
+          TAB + "Linker Available " <<
           (is_linker_avilable ? "Yes" : "No") << std::endl;
 
         cl_uint max_compute_units =
           device.get_info<sycl::info::device::max_compute_units>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Max compute units " <<
-          max_compute_units << std::endl;
+          TAB + "Max compute units " << max_compute_units << std::endl;
 
         if (device_type != sycl::info::device_type::host) {
           cl_uint maxClockFrequency =
             device.get_info<sycl::info::device::max_clock_frequency>();
           std::cout << std::setw(TEXT_WIDTH) << std::left <<
-            sycl::string_class() + TAB + "Max clock frequency " <<
+            TAB + "Max clock frequency " <<
             maxClockFrequency << "MHz" << std::endl;
         }
 
         cl_uint max_work_item_dimensions =
           device.get_info<sycl::info::device::max_work_item_dimensions>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Max work item dimensions " <<
+          TAB + "Max work item dimensions " <<
           max_work_item_dimensions << std::endl;
 
         sycl::id<3> sizes =
           device.get_info<sycl::info::device::max_work_item_sizes>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Max work item sizes " <<
+          TAB + "Max work item sizes " <<
           sizes[0] << " x " << sizes[1] << " x " << sizes[2] << std::endl;
 
         size_t max_work_group_size =
           device.get_info<sycl::info::device::max_work_group_size>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Max work group size " <<
+          TAB + "Max work group size " <<
           max_work_group_size << std::endl;
 
         cl_ulong global_mem_size =
           device.get_info<sycl::info::device::global_mem_size>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Global memory size " <<
-          global_mem_size << " (" << ConvertBytesToString(global_mem_size) <<
-          ")" << std::endl;
+          TAB + "Global memory size " << global_mem_size <<
+          " (" << ConvertBytesToString(global_mem_size) << ")" << std::endl;
 
         sycl::info::global_mem_cache_type global_mem_cache_type =
           device.get_info<sycl::info::device::global_mem_cache_type>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Global Memory cache type ";
+          TAB + "Global Memory cache type ";
         switch (global_mem_cache_type) {
           case sycl::info::global_mem_cache_type::none:
             std::cout << "None" << std::endl;
@@ -251,35 +243,34 @@ int main(int argc, char* argv[]) {
         bool preferred_interop_user_sync =
           device.get_info<sycl::info::device::preferred_interop_user_sync>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Prefer user sync for interop " <<
+          TAB + "Prefer user sync for interop " <<
           (is_compiler_avilable ? "Yes" : "No") << std::endl;
 
         size_t profiling_timer_resolution =
           device.get_info<sycl::info::device::profiling_timer_resolution>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Profiling timer resolution " <<
+          TAB + "Profiling timer resolution " <<
           profiling_timer_resolution << "ns" << std::endl;
 
         size_t printf_buffer_size =
           device.get_info<sycl::info::device::printf_buffer_size>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "printf() buffer size" <<
-          printf_buffer_size << " (" <<
+          TAB + "printf() buffer size" << printf_buffer_size << " (" <<
           ConvertBytesToString(printf_buffer_size) << ")" << std::endl;
 
-        sycl::vector_class<sycl::string_class> built_in_kernels =
+        sycl::vector_class<std::string> built_in_kernels =
           device.get_info<sycl::info::device::built_in_kernels>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Built-in kernels ";
+          TAB + "Built-in kernels ";
         for (auto kernel : built_in_kernels) {
           std::cout << kernel << " ";
         }
         std::cout << std::endl;
 
-        sycl::vector_class<sycl::string_class> device_extensions =
+        sycl::vector_class<std::string> device_extensions =
           device.get_info<sycl::info::device::extensions>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          sycl::string_class() + TAB + "Device Extensions ";
+          TAB + "Device Extensions ";
         for (auto device_extension : device_extensions) {
           std::cout << device_extension << " ";
         }

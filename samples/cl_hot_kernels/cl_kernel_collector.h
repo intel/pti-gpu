@@ -54,14 +54,17 @@ struct ClKernelInterval {
 };
 
 using ClKernelInfoMap = std::map<std::string, ClKernelInfo>;
+
+#ifdef PTI_KERNEL_INTERVALS
 using ClKernelIntervalList = std::vector<ClKernelInterval>;
+#endif // PTI_KERNEL_INTERVALS
 
 class ClKernelCollector {
  public: // Interface
   static ClKernelCollector* Create(cl_device_id device) {
     PTI_ASSERT(device != nullptr);
 
-    ClKernelCollector* collector = new ClKernelCollector();
+    ClKernelCollector* collector = new ClKernelCollector(device);
     PTI_ASSERT(collector != nullptr);
 
     ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
@@ -70,8 +73,8 @@ class ClKernelCollector {
         "for target device" << std::endl;
       if (tracer != nullptr) {
         delete tracer;
-        delete collector;
       }
+      delete collector;
       return nullptr;
     }
 
@@ -95,9 +98,11 @@ class ClKernelCollector {
     return kernel_info_map_;
   }
 
+#ifdef PTI_KERNEL_INTERVALS
   const ClKernelIntervalList& GetKernelIntervalList() const {
     return kernel_interval_list_;
   }
+#endif // PTI_KERNEL_INTERVALS
 
   ClKernelCollector(const ClKernelCollector& copy) = delete;
   ClKernelCollector& operator=(const ClKernelCollector& copy) = delete;
@@ -151,7 +156,12 @@ class ClKernelCollector {
   }
 
  private: // Implementation Details
-  ClKernelCollector() {}
+  ClKernelCollector(cl_device_id device) {
+    PTI_ASSERT(device != nullptr);
+#ifdef PTI_KERNEL_INTERVALS
+    utils::cl::GetTimestamps(device, &host_sync_, &dev_sync_);
+#endif // PTI_KERNEL_INTERVALS
+  }
 
   void EnableTracing(ClApiTracer* tracer) {
     PTI_ASSERT(tracer != nullptr);
@@ -191,12 +201,20 @@ class ClKernelCollector {
     }
   }
 
+#ifdef PTI_KERNEL_INTERVALS
   void AddKernelInterval(std::string name, uint64_t start, uint64_t end) {
     PTI_ASSERT(!name.empty());
     PTI_ASSERT(start < end);
     const std::lock_guard<std::mutex> lock(lock_);
-    kernel_interval_list_.push_back({name, start, end});
+
+    PTI_ASSERT(start >= dev_sync_);
+    uint64_t host_start = host_sync_ + (start - dev_sync_);
+    PTI_ASSERT(end >= start);
+    uint64_t host_end = host_start + (end - start);
+
+    kernel_interval_list_.push_back({name, host_start, host_end});
   }
+#endif // PTI_KERNEL_INTERVALS
 
  private: // Callbacks
   static void CL_CALLBACK EventNotify(
@@ -233,7 +251,10 @@ class ClKernelCollector {
     PTI_ASSERT(status == CL_SUCCESS);
 
     collector->AddKernelInfo(name, time, simd_width);
+
+#ifdef PTI_KERNEL_INTERVALS
     collector->AddKernelInterval(name, started, ended);
+#endif // PTI_KERNEL_INTERVALS
 
     status = clReleaseEvent(event);
     PTI_ASSERT(status == CL_SUCCESS);
@@ -355,13 +376,18 @@ class ClKernelCollector {
 
   std::mutex lock_;
   ClKernelInfoMap kernel_info_map_;
-  ClKernelIntervalList kernel_interval_list_;
 
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;
   static const uint32_t kSimdLength = 5;
   static const uint32_t kTimeLength = 20;
   static const uint32_t kPercentLength = 10;
+
+#ifdef PTI_KERNEL_INTERVALS
+  ClKernelIntervalList kernel_interval_list_;
+  cl_ulong host_sync_ = 0;
+  cl_ulong dev_sync_ = 0;
+#endif // PTI_KERNEL_INTERVALS
 };
 
 #endif // PTI_SAMPLES_CL_HOT_KERNELS_CL_KERNEL_COLLECTOR_H_
