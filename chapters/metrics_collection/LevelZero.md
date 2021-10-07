@@ -293,8 +293,6 @@ gpuTimestampNs = gpuTimestampClocks * NS_IN_SEC / gpuTimerFrequency
 ```
 Starting from version 1.1, Level Zero provides this value as `timerResolution` field of `ze_device_properties_t` structure in cycles per second. Also it can be retrieved with the help of Intel(R) Metrics Discovery Application Programming Interface as part of device information as `GpuTimestampFrequency` symbol (look into "Device Information" section from [here](./MetricsDiscoveryAPI.md) for details).
 
-Also note that not all bits in `global` kernel timestamp value may be valid, to get exact number of valid bits use `timestampValidBits` field from `ze_device_properties_t` structure.
-
 #### OpenCL(TM) Kernels
 Common stragety of metrics to kernel mapping for OpenCL(TM) kernels may be the following:
 1. Collect kernel timestamps based on [OpenCL(TM) device activity tracing](../device_activity_tracing/OpenCL.md) mechanism;

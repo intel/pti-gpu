@@ -81,7 +81,9 @@ ze_result_t status = zeDeviceGetGlobalTimestamps(
     device, &host_timestamp, &device_timestamp);
 assert(status == ZE_RESULT_SUCCESS);
 ```
-Note, that host timestamp value corresponds to `CLOCK_MONOTONIC_RAW` on Linux or `QueryPerformanceCounter` on Windows, while device timestamp for GPU is collected in raw GPU cycles. Also note that not all bits of device timestamp are valid, to get exact number of valid bits use `timestampValidBits` field from `ze_device_properties_t` structure, e.g.:
+Host timestamp value corresponds to `CLOCK_MONOTONIC_RAW` on Linux or `QueryPerformanceCounter` on Windows, while device timestamp for GPU is collected in raw GPU cycles.
+
+Note that the number of valid bits for the device timestamp returned by `zeDeviceGetGlobalTimestamps` is `timestampValidBits`, while the global kernel timastamp returned by `zeEventQueryKernelTimestamp` has `kernelTimestampValidBits` (both values are fields of `ze_device_properties_t`). And currently `kernelTimestampValidBits` is less then `timestampValidBits`, so to map kernels into CPU timeline one may need to truncate device timestamp to `kernelTimestampValidBits`:
 ```cpp
 ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
 ze_result_t status = zeDeviceGetProperties(device, &props);
@@ -90,8 +92,6 @@ assert(status == ZE_RESULT_SUCCESS);
 uint64_t mask = (1ull << props.kernelTimestampValidBits) - 1ull;
 uint64_t kernel_timestamp = (device_timestamp & mask);
 ```
-The same valid bits mask should be applied to `global` kernel timestamps.
-
 To convert GPU cycles into seconds one may use `timerResolution` field from `ze_device_properties_t` structure, that represents cycles per second starting from Level Zero 1.1:
 ```cpp
 ze_device_properties_t props{};
