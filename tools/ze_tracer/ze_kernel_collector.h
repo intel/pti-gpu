@@ -1129,7 +1129,8 @@ class ZeKernelCollector {
           direction.push_back('H');
           break;
         case ZE_MEMORY_TYPE_HOST:
-          direction.push_back('P');
+          direction.push_back('U');
+          direction.push_back('H');
           break;
         case ZE_MEMORY_TYPE_DEVICE:
           direction.push_back('D');
@@ -1154,7 +1155,8 @@ class ZeKernelCollector {
           direction.push_back('H');
           break;
         case ZE_MEMORY_TYPE_HOST:
-          direction.push_back('P');
+          direction.push_back('U');
+          direction.push_back('H');
           break;
         case ZE_MEMORY_TYPE_DEVICE:
           direction.push_back('D');
