@@ -48,7 +48,13 @@ zeCommandQueueExecuteCommandLists,           4,     108593458,     26.66,       
     zeCommandListAppendMemoryCopy,          12,       2493748,      0.61,           207812,         62061,       1037087
 ...
 ```
-**Device Timing** mode collects duration for each kernel on the device and provides the summary for the whole application:
+**Device Timing** mode collects duration for each kernel on the device and provides the summary for the whole application.
+
+Memory transfers are supplemented by transfer direction:
+- "M" - system memory allocated with malloc or new;
+- "H" - USM host memory allocated with `zeMemAllocHost`;
+- "D" - USM device memory allocated with `zeMemAllocDevice`;
+- "S" - USM shared memory allocated with `zeMemAllocShared`;
 ```
 === Device Timing Results: ===
 
@@ -57,8 +63,8 @@ Total Execution Time (ns):            295236137
 
                             Kernel,       Calls,     Time (ns),  Time (%),     Average (ns),      Min (ns),      Max (ns)
                               GEMM,           4,     172104499,     97.15,         43026124,      42814000,      43484166
-zeCommandListAppendMemoryCopy(H2D),           8,       2934831,      1.66,           366853,        286500,        585333
-zeCommandListAppendMemoryCopy(D2H),           4,       2099164,      1.18,           524791,        497666,        559666
+zeCommandListAppendMemoryCopy(M2D),           8,       2934831,      1.66,           366853,        286500,        585333
+zeCommandListAppendMemoryCopy(D2M),           4,       2099164,      1.18,           524791,        497666,        559666
         zeCommandListAppendBarrier,           8,          9328,      0.01,             1166,          1166,          1166
 ...
 ```
@@ -71,8 +77,8 @@ Total Execution Time (ns):            289685451
 
                                            Kernel,    Calls,    Time (ns),  Time (%),     Average (ns),      Min (ns),      Max (ns)
             GEMM[SIMD32 {4; 1024; 1} {256; 1; 1}],        4,    171667499,     97.44,         42916874,      42650833,      43501500
-zeCommandListAppendMemoryCopy(H2D)[4194304 bytes],        8,      2535164,      1.44,           316895,        276166,        363666
-zeCommandListAppendMemoryCopy(D2H)[4194304 bytes],        4,      1966499,      1.12,           491624,        464500,        516833
+zeCommandListAppendMemoryCopy(M2D)[4194304 bytes],        8,      2535164,      1.44,           316895,        276166,        363666
+zeCommandListAppendMemoryCopy(D2M)[4194304 bytes],        4,      1966499,      1.12,           491624,        464500,        516833
                        zeCommandListAppendBarrier,        8,         9662,      0.01,             1207,          1166,           1333
 ```
 

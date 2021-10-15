@@ -1126,10 +1126,9 @@ class ZeKernelCollector {
 
       switch (props.type) {
         case ZE_MEMORY_TYPE_UNKNOWN:
-          direction.push_back('H');
+          direction.push_back('M');
           break;
         case ZE_MEMORY_TYPE_HOST:
-          direction.push_back('U');
           direction.push_back('H');
           break;
         case ZE_MEMORY_TYPE_DEVICE:
@@ -1152,10 +1151,9 @@ class ZeKernelCollector {
       direction.push_back('2');
       switch (props.type) {
         case ZE_MEMORY_TYPE_UNKNOWN:
-          direction.push_back('H');
+          direction.push_back('M');
           break;
         case ZE_MEMORY_TYPE_HOST:
-          direction.push_back('U');
           direction.push_back('H');
           break;
         case ZE_MEMORY_TYPE_DEVICE:

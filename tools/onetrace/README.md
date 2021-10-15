@@ -70,18 +70,25 @@ clGetPlatformInfo,           2,                1452,     20.40,                 
 ...
 ```
 **Device Timing** mode collects duration for each kernel on the device and provides the summary for the whole application:
+
+Memory transfers for Level Zero are supplemented by transfer direction:
+- "M" - system memory allocated with malloc or new;
+- "H" - USM host memory allocated with `zeMemAllocHost`;
+- "D" - USM device memory allocated with `zeMemAllocDevice`;
+- "S" - USM shared memory allocated with `zeMemAllocShared`;
 ```
 === Device Timing Results: ===
 
-                Total Execution Time (ns):            377704260
-Total Device Time for CL GPU backend (ns):            177959198
+                Total Execution Time (ns):            295236137
+Total Device Time for L0 backend (ns):                177147822
 
-== CL GPU Backend: ==
+== L0 Backend: ==
 
-              Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
-                GEMM,           4,           172599165,     96.99,            43149791,            43075500,            43236833
-clEnqueueWriteBuffer,           8,             3117997,      1.75,              389749,              298666,              506916
- clEnqueueReadBuffer,           4,             2242036,      1.26,              560509,              554136,              563793
+                            Kernel,       Calls,     Time (ns),  Time (%),     Average (ns),      Min (ns),      Max (ns)
+                              GEMM,           4,     172104499,     97.15,         43026124,      42814000,      43484166
+zeCommandListAppendMemoryCopy(M2D),           8,       2934831,      1.66,           366853,        286500,        585333
+zeCommandListAppendMemoryCopy(D2M),           4,       2099164,      1.18,           524791,        497666,        559666
+        zeCommandListAppendBarrier,           8,          9328,      0.01,             1166,          1166,          1166
 ...
 ```
 **Device Timing Verbose** mode provides additional information per kernel (SIMD width, group count and group size for oneAPI Level Zero (Level Zero) and SIMD width, global and local size for OpenCL(TM)) and per transfer (bytes transferred):
@@ -93,10 +100,10 @@ Total Device Time for CL GPU backend (ns):            177544981
 
 == CL GPU Backend: ==
 
-                                  Kernel,       Calls,           Time (ns),  Time (%),        Average (ns),            Min (ns),            Max (ns)
-GEMM[SIMD32, {1024, 1024, 1}, {0, 0, 0}],           4,           172101915,     96.93,            43025478,            42804333,            43375416
-     clEnqueueWriteBuffer[4194304 bytes],           8,             3217914,      1.81,              402239,              277416,              483750
-      clEnqueueReadBuffer[4194304 bytes],           4,             2225152,      1.25,              556288,              527122,              570898
+                                  Kernel,   Calls,   Time (ns),  Time (%),     Average (ns),      Min (ns),      Max (ns)
+GEMM[SIMD32, {1024, 1024, 1}, {0, 0, 0}],       4,   172101915,     96.93,         43025478,      42804333,      43375416
+     clEnqueueWriteBuffer[4194304 bytes],       8,     3217914,      1.81,           402239,        277416,        483750
+      clEnqueueReadBuffer[4194304 bytes],       4      2225152,      1.25,           556288,        527122,        570898
 ```
 
 **Device Timeline** mode dumps four timestamps for each device activity - *queued* to the host command queue for OpenCL(TM) or "append" to the command list for Level Zero, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):
