@@ -446,6 +446,18 @@ class ZeKernelCollector {
     }
   }
 
+  uint64_t ComputeTimeDuration(uint64_t start, uint64_t end, uint64_t freq) {
+    uint64_t duration = 0;
+    if (start < end) {
+      duration = (end - start) *
+        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+    } else { // 32-bit timer overflow
+      duration = ((1ull << 32) + end - start) *
+        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+    }
+    return duration;
+  }
+
   void ProcessCall(const ZeKernelCall* call) {
     PTI_ASSERT(call != nullptr);
     ZeKernelCommand* command = call->command;
@@ -464,20 +476,12 @@ class ZeKernelCollector {
     uint64_t freq = command->timer_frequency;
     PTI_ASSERT(freq > 0);
 
-    uint64_t duration = 0;
-    if (start < end) {
-      duration = (end - start) *
-        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-    } else { // 32-bit timer overflow
-      duration = ((1ull << 32) + end - start) *
-        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-    }
-
     PTI_ASSERT(call->submit_time > 0);
     PTI_ASSERT(call->device_submit_time > 0);
-    PTI_ASSERT(start > call->device_submit_time);
-    uint64_t time_shift = (start - call->device_submit_time) *
-      static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+    uint64_t time_shift =
+      ComputeTimeDuration(call->device_submit_time, start, freq);
+    uint64_t duration = ComputeTimeDuration(start, end, freq);
+
     uint64_t host_start = call->submit_time + time_shift;
     uint64_t host_end = host_start + duration;
 
@@ -607,15 +611,7 @@ class ZeKernelCollector {
       uint64_t freq = command->timer_frequency;
       PTI_ASSERT(freq > 0);
 
-      uint64_t duration = 0;
-      if (start < end) {
-        duration = (end - start) *
-          static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-      } else { // 32-bit timer overflow
-        duration = ((1ull << 32) + end - start) *
-          static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-      }
-
+      uint64_t duration = ComputeTimeDuration(start, end, freq);
       uint64_t start_ns = start *
         static_cast<uint64_t>(NSEC_IN_SEC) / freq;
       uint64_t end_ns = start_ns + duration;
@@ -639,15 +635,7 @@ class ZeKernelCollector {
       uint64_t freq = command->timer_frequency;
       PTI_ASSERT(freq > 0);
 
-      uint64_t duration = 0;
-      if (start < end) {
-        duration = (end - start) *
-          static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-      } else { // 32-bit timer overflow
-        duration = ((1ull << 32) + end - start) *
-          static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-      }
-
+      uint64_t duration = ComputeTimeDuration(start, end, freq);
       uint64_t start_ns = start *
         static_cast<uint64_t>(NSEC_IN_SEC) / freq;
       uint64_t end_ns = start_ns + duration;
