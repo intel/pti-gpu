@@ -234,6 +234,9 @@ static void Compute(ze_device_handle_t device,
 
   status = zeModuleDestroy(module);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  status = zeContextDestroy(context);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 }
 
 int main(int argc, char* argv[]) {

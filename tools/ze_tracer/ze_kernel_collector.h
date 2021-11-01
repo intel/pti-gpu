@@ -21,6 +21,7 @@
 
 #include "correlator.h"
 #include "utils.h"
+#include "ze_event_cache.h"
 #include "ze_utils.h"
 
 struct ZeSubmitData {
@@ -44,7 +45,6 @@ struct ZeKernelProps {
 
 struct ZeKernelCommand {
   ZeKernelProps props;
-  ze_event_pool_handle_t event_pool = nullptr;
   ze_event_handle_t event = nullptr;
   ze_device_handle_t device = nullptr;
   uint64_t kernel_id = 0;
@@ -376,6 +376,9 @@ class ZeKernelCollector {
     epilogue_callbacks.Event.pfnHostSynchronizeCb =
       OnExitEventHostSynchronize;
 
+    epilogue_callbacks.Context.pfnDestroyCb =
+      OnExitContextDestroy;
+
     ze_result_t status = ZE_RESULT_SUCCESS;
     status = zelTracerSetPrologues(tracer_, &prologue_callbacks);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -512,6 +515,7 @@ class ZeKernelCollector {
           host_start, host_end);
     }
 
+    event_cache_.ResetEvent(command->event);
     delete call;
   }
 
@@ -691,14 +695,7 @@ class ZeKernelCollector {
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
     ZeCommandListInfo& info = command_list_map_[command_list];
     for (ZeKernelCommand* command : info.kernel_command_list) {
-      if (command->event_pool != nullptr) {
-        ze_result_t status = ZE_RESULT_SUCCESS;
-        status = zeEventDestroy(command->event);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        status = zeEventPoolDestroy(command->event_pool);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      }
-
+      event_cache_.ReleaseEvent(command->event);
       for (ZeKernelCall* call : kernel_call_list_) {
         PTI_ASSERT(call->command != command);
       }
@@ -958,27 +955,6 @@ class ZeKernelCollector {
     }
   }
 
-  static void CreateEvent(ze_context_handle_t context,
-                          ze_event_pool_handle_t& event_pool,
-                          ze_event_handle_t& event) {
-    PTI_ASSERT(context != nullptr);
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
-    ze_event_pool_desc_t event_pool_desc = {
-        ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
-        ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP | ZE_EVENT_POOL_FLAG_HOST_VISIBLE,
-        1};
-    status = zeEventPoolCreate(
-        context, &event_pool_desc, 0, nullptr, &event_pool);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    ze_event_desc_t event_desc = {
-        ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, 0,
-        ZE_EVENT_SCOPE_FLAG_HOST, ZE_EVENT_SCOPE_FLAG_HOST};
-    zeEventCreate(event_pool, &event_desc, &event);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  }
-
   static void OnEnterKernelAppend(
       ZeKernelCollector* collector,
       const ZeKernelProps& props,
@@ -1005,10 +981,10 @@ class ZeKernelCollector {
     if (signal_event == nullptr) {
       ze_context_handle_t context =
         collector->GetCommandListContext(command_list);
-      CreateEvent(context, command->event_pool, command->event);
+      command->event = collector->event_cache_.GetEvent(context);
+      PTI_ASSERT(command->event != nullptr);
       signal_event = command->event;
     } else {
-      command->event_pool = nullptr;
       command->event = signal_event;
     }
 
@@ -1039,21 +1015,15 @@ class ZeKernelCollector {
     ZeKernelCommand* command = call->command;
     PTI_ASSERT(command != nullptr);
 
-    if (result != ZE_RESULT_SUCCESS) {
-      if (command->event_pool != nullptr) {
-        ze_result_t status = ZE_RESULT_SUCCESS;
-        status = zeEventDestroy(command->event);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        status = zeEventPoolDestroy(command->event_pool);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      }
+    ZeKernelCollector* collector =
+      reinterpret_cast<ZeKernelCollector*>(global_data);
+    PTI_ASSERT(collector != nullptr);
 
+    if (result != ZE_RESULT_SUCCESS) {
+      collector->event_cache_.ReleaseEvent(command->event);
       delete call;
       delete command;
     } else {
-      ZeKernelCollector* collector =
-        reinterpret_cast<ZeKernelCollector*>(global_data);
-      PTI_ASSERT(collector != nullptr);
       collector->AddKernelCommand(command_list, command);
       if (call->queue != nullptr) {
         collector->AddKernelCall(command_list, call);
@@ -1725,6 +1695,17 @@ class ZeKernelCollector {
     }
   }
 
+  static void OnExitContextDestroy(
+      ze_context_destroy_params_t* params,
+      ze_result_t result, void* global_data, void** instance_data) {
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeKernelCollector* collector =
+        reinterpret_cast<ZeKernelCollector*>(global_data);
+      PTI_ASSERT(collector != nullptr);
+      collector->event_cache_.ReleaseContext(*(params->phContext));
+    }
+  }
+
  private: // Data
   zel_tracer_handle_t tracer_ = nullptr;
 
@@ -1742,6 +1723,8 @@ class ZeKernelCollector {
   ZeCommandListMap command_list_map_;
   ZeImageSizeMap image_size_map_;
   ZeKernelGroupSizeMap kernel_group_size_map_;
+
+  ZeEventCache event_cache_;
 
 #ifdef PTI_KERNEL_INTERVALS
   ZeKernelIntervalList kernel_interval_list_;
