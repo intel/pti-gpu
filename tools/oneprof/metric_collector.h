@@ -35,7 +35,8 @@ class MetricCollector {
       ze_driver_handle_t driver,
       ze_device_handle_t device,
       const char* group_name,
-      uint32_t sampling_interval) {
+      uint32_t sampling_interval,
+      const std::string& raw_data_path) {
     PTI_ASSERT(driver != nullptr);
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(group_name != nullptr);
@@ -65,7 +66,8 @@ class MetricCollector {
     PTI_ASSERT(metric_group_list.size() == sub_device_list.size());
 
     return new MetricCollector(
-        context, sub_device_list, metric_group_list, sampling_interval);
+        context, sub_device_list, metric_group_list,
+        sampling_interval, raw_data_path);
   }
 
   void DisableCollection() {
@@ -77,7 +79,8 @@ class MetricCollector {
 
     ComputeMetrics();
 
-    metric_reader_ = new MetricReader(sub_device_list_.size(), "bin");
+    metric_reader_ = new MetricReader(
+        sub_device_list_.size(), "bin", raw_data_path_);
     PTI_ASSERT(metric_reader_ != nullptr);
   }
 
@@ -209,17 +212,20 @@ class MetricCollector {
       ze_context_handle_t context,
       const std::vector<ze_device_handle_t>& sub_device_list,
       const std::vector<zet_metric_group_handle_t>& metric_group_list,
-      uint32_t sampling_interval)
+      uint32_t sampling_interval,
+      const std::string& raw_data_path)
       : context_(context),
         sub_device_list_(sub_device_list),
         metric_group_list_(metric_group_list),
-        sampling_interval_(sampling_interval) {
+        sampling_interval_(sampling_interval),
+        raw_data_path_(raw_data_path) {
     PTI_ASSERT(context_ != nullptr);
     PTI_ASSERT(!sub_device_list_.empty());
     PTI_ASSERT(!metric_group_list_.empty());
     PTI_ASSERT(sampling_interval_ > 0);
 
-    metric_storage_ = new MetricStorage(sub_device_list_.size(), "raw");
+    metric_storage_ = new MetricStorage(
+        sub_device_list_.size(), "raw", raw_data_path_);
     PTI_ASSERT(metric_storage_ != nullptr);
 
     EnableMetrics();
@@ -229,8 +235,8 @@ class MetricCollector {
     PTI_ASSERT(metric_storage_ == nullptr);
     ze_result_t status = ZE_RESULT_SUCCESS;
 
-    MetricReader reader(sub_device_list_.size(), "raw");
-    MetricStorage storage(sub_device_list_.size(), "bin");
+    MetricReader reader(sub_device_list_.size(), "raw", raw_data_path_);
+    MetricStorage storage(sub_device_list_.size(), "bin", raw_data_path_);
 
     for (size_t i = 0; i < sub_device_list_.size(); ++i) {
       while (true) {
@@ -385,7 +391,9 @@ class MetricCollector {
       if (status != ZE_RESULT_SUCCESS) {
         std::cout <<
           "[WARNING] Sampling interval is not supported" << std::endl;
-        break;
+        collector->collector_state_.store(
+          COLLECTOR_STATE_ENABLED, std::memory_order_release);
+        return;
       }
 
       PTI_ASSERT(metric_streamer_desc.notifyEveryNReports == MAX_REPORT_COUNT);
@@ -437,6 +445,7 @@ class MetricCollector {
   MetricReader* metric_reader_ = nullptr;
 
   uint32_t sampling_interval_ = 0;
+  std::string raw_data_path_;
 };
 
 #endif // PTI_TOOLS_ONEPROF_METRIC_COLLECTOR_H_

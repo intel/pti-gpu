@@ -25,12 +25,14 @@ class ProfOptions {
       uint32_t device_id,
       uint32_t sampling_interval,
       const std::string& metric_group,
-      const std::string& log_file)
+      const std::string& log_file,
+      const std::string& raw_data_path)
       : flags_(flags),
         device_id_(device_id),
         sampling_interval_(sampling_interval),
         metric_group_(metric_group),
-        log_file_(log_file) {}
+        log_file_(log_file),
+        raw_data_path_(raw_data_path) {}
 
   bool CheckFlag(uint32_t flag) const {
     return (flags_ & (1 << flag));
@@ -76,12 +78,17 @@ class ProfOptions {
     return result.str();
   }
 
+  std::string GetRawDataPath() const {
+    return raw_data_path_;
+  }
+
  private:
   uint32_t flags_;
   uint32_t device_id_;
   uint32_t sampling_interval_;
-  std::string log_file_;
   std::string metric_group_;
+  std::string log_file_;
+  std::string raw_data_path_;
 };
 
 #endif // PTI_TOOLS_ONEPROF_PROF_OPTIONS_H_

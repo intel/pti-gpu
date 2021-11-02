@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "profiler.h"
+#include "utils.h"
 
 static Profiler* profiler = nullptr;
 
@@ -48,8 +49,12 @@ void Usage() {
     "Sampling interval for metrics collection in us (default is 1000 us)" <<
     std::endl;
   std::cout <<
-    "--output [-o] <filename>         " <<
+    "--output [-o] <FILENAME>         " <<
     "Print console logs into the file" <<
+    std::endl;
+  std::cout <<
+    "--raw-data-path [-p] <DIRECTORY> " <<
+    "Path to store raw metic data into (default is process folder)" <<
     std::endl;
   std::cout <<
     "--device-list                    " <<
@@ -126,6 +131,15 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("ONEPROF_LogFilename", argv[i]);
       app_index += 2;
+    } else if (strcmp(argv[i], "--raw-data-path") == 0 ||
+               strcmp(argv[i], "-p") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] Raw data path is not specified" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("ONEPROF_RawDataPath", argv[i]);
+      app_index += 2;
     } else if (strcmp(argv[i], "--device-list") == 0) {
       PrintDeviceList();
       return 0;
@@ -171,6 +185,7 @@ static ProfOptions ReadArgs() {
   uint32_t sampling_interval = 1000000;
   std::string metric_group("ComputeBasic");
   std::string log_file;
+  std::string raw_data_path;
 
   value = utils::GetEnv("ONEPROF_RawMetrics");
   if (!value.empty()) {
@@ -202,6 +217,11 @@ static ProfOptions ReadArgs() {
     log_file = value;
   }
 
+  value = utils::GetEnv("ONEPROF_RawDataPath");
+  if (!value.empty()) {
+    raw_data_path = value;
+  }
+
   value = utils::GetEnv("ONEPROF_DeviceId");
   if (!value.empty()) {
     device_id = std::stoul(value);
@@ -214,7 +234,8 @@ static ProfOptions ReadArgs() {
   }
 
   return ProfOptions(
-      flags, device_id, sampling_interval, metric_group, log_file);
+      flags, device_id, sampling_interval,
+      metric_group, log_file, raw_data_path);
 }
 
 void EnableProfiling() {

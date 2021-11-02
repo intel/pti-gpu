@@ -62,7 +62,7 @@ class Profiler {
         profiler->CheckOption(PROF_AGGREGATION)) {
       MetricCollector* metric_collector = MetricCollector::Create(
           driver, device, options.GetMetricGroup().c_str(),
-          options.GetSamplingInterval());
+          options.GetSamplingInterval(), options.GetRawDataPath());
       if (metric_collector == nullptr) {
         std::cout <<
           "[WARNING] Unable to create metric collector" << std::endl;

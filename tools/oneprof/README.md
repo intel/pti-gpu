@@ -13,7 +13,8 @@ Options:
 --device [-d] <ID>               Target device for profiling (default is 0)
 --group [-g] <NAME>              Target metric group to collect (default is ComputeBasic)
 --sampling-interval [-s] <VALUE> Sampling interval for metrics collection in us (default is 1000 us)
---output [-o] <filename>         Print console logs into the file
+--output [-o] <FILENAME>         Print console logs into the file
+--raw-data-path [-p] <DIRECTORY> Path to store raw metic data into (default is process folder)
 --device-list                    Print list of available devices
 --metric-list                    Print list of available metrics
 --version                        Print version

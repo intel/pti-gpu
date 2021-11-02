@@ -22,11 +22,17 @@ struct CacheBuffer {
 
 class MetricStorage {
  public:
-  MetricStorage(uint32_t count, const std::string& ext) {
+  MetricStorage(
+      uint32_t count,
+      const std::string& ext,
+      const std::string& raw_data_path) {
     for (uint32_t i = 0; i < count; ++i) {
       std::string filename =
         std::string("data.") + std::to_string(utils::GetPid()) +
         "." + std::to_string(i) + "." + ext;
+      if (!raw_data_path.empty()) {
+        filename = raw_data_path + "/" + filename;
+      }
       storage_.emplace(
           storage_.end(),
           std::ofstream(filename, std::ios::out | std::ios::binary));
@@ -84,11 +90,17 @@ class MetricStorage {
 
 class MetricReader {
  public:
-  MetricReader(uint32_t count, const std::string& ext) {
+  MetricReader(
+      uint32_t count,
+      const std::string& ext,
+      const std::string& raw_data_path) {
     for (uint32_t i = 0; i < count; ++i) {
       std::string filename =
         std::string("data.") + std::to_string(utils::GetPid()) +
         "." + std::to_string(i) + "." + ext;
+      if (!raw_data_path.empty()) {
+        filename = raw_data_path + "/" + filename;
+      }
       storage_.emplace(
           storage_.end(),
           std::ifstream(filename, std::ios::in | std::ios::binary));
@@ -105,7 +117,7 @@ class MetricReader {
 
   uint8_t* ReadChunk(uint32_t& size, uint32_t storage_id) {
     PTI_ASSERT(storage_id < storage_.size());
-    if (storage_[storage_id].eof()) {
+    if (storage_[storage_id].peek() == std::ifstream::traits_type::eof()) {
       size = 0;
       return nullptr;
     }
