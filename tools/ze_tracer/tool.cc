@@ -61,6 +61,10 @@ void Usage() {
     "Dump device activities by stages to JSON file" <<
     std::endl;
   std::cout <<
+    "--kernels-per-tile             " <<
+    "Dump kernel information per tile" <<
+    std::endl;
+  std::cout <<
     "--tid                          " <<
     "Print thread ID into host API trace" <<
     std::endl;
@@ -122,6 +126,9 @@ int ParseArgs(int argc, char* argv[]) {
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
       utils::SetEnv("ZET_ChromeDeviceStages", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--kernels-per-tile") == 0) {
+      utils::SetEnv("ZET_KernelsPerTile", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--tid") == 0) {
       utils::SetEnv("ZET_Tid", "1");
@@ -224,6 +231,11 @@ static TraceOptions ReadArgs() {
   value = utils::GetEnv("ZET_ChromeDeviceStages");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_CHROME_DEVICE_STAGES);
+  }
+
+  value = utils::GetEnv("ZET_KernelsPerTile");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_KERNELS_PER_TILE);
   }
 
   value = utils::GetEnv("ZET_Tid");

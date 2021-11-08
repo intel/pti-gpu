@@ -96,10 +96,14 @@ using ClDeviceMap = std::map<
 #endif // PTI_KERNEL_INTERVALS
 
 typedef void (*OnClKernelFinishCallback)(
-    void* data, void* queue,
-    uint64_t id, const std::string& name,
-    uint64_t queued, uint64_t submitted,
-    uint64_t started, uint64_t ended);
+    void* data,
+    const std::string& queue,
+    const std::string& id,
+    const std::string& name,
+    uint64_t queued,
+    uint64_t submitted,
+    uint64_t started,
+    uint64_t ended);
 
 class ClKernelCollector {
  public: // Interface
@@ -393,9 +397,14 @@ class ClKernelCollector {
         name = GetVerboseName(&(instance->props));
       }
 
+      std::stringstream stream;
+      stream << std::hex << queue;
+
       callback_(
-          callback_data_, queue, instance->kernel_id, name,
-          host_queued, host_submitted, host_started, host_ended);
+          callback_data_, stream.str(),
+          std::to_string(instance->kernel_id), name,
+          host_queued, host_submitted,
+          host_started, host_ended);
     }
 
     cl_int status = clReleaseEvent(event);

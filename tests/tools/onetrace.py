@@ -43,6 +43,11 @@ def run(path, option):
     app_file = os.path.join(app_folder, "omp_gemm")
     p = subprocess.Popen(["./onetrace", "-h", "-d", "-t", app_file, "gpu", "1024", "1"],\
       cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+  elif option == "--kernels-per-tile":
+    app_folder = utils.get_sample_build_path("dpc_gemm")
+    app_file = os.path.join(app_folder, "dpc_gemm")
+    p = subprocess.Popen(["./onetrace", "-d", option, app_file, "gpu", "1024", "1"],\
+      cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   else:
     app_folder = utils.get_sample_build_path("dpc_gemm")
     app_file = os.path.join(app_folder, "dpc_gemm")
@@ -89,6 +94,8 @@ if __name__ == "__main__":
     option = "-d"
   if len(sys.argv) > 1 and sys.argv[1] == "-t":
     option = "-t"
+  if len(sys.argv) > 1 and sys.argv[1] == "--kernels-per-tile":
+    option = "--kernels-per-tile"
   if len(sys.argv) > 1 and sys.argv[1] == "--chrome-call-logging":
     option = "--chrome-call-logging"
   if len(sys.argv) > 1 and sys.argv[1] == "--chrome-device-timeline":

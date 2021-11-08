@@ -44,6 +44,11 @@ class ZeEventCache {
 
     auto result = event_map_.find(context);
     if (result == event_map_.end()) {
+      result = event_map_.emplace(
+          std::make_pair(context, std::vector<ze_event_handle_t>())).first;
+    }
+
+    if (result->second.empty()) {
       ze_result_t status = ZE_RESULT_SUCCESS;
 
       ze_event_pool_desc_t pool_desc = {
@@ -97,12 +102,8 @@ class ZeEventCache {
     }
 
     auto result = event_map_.find(info->second.context);
-    if (result == event_map_.end()) {
-      event_map_[info->second.context] =
-        std::vector<ze_event_handle_t>(1, event);
-    } else {
-      result->second.push_back(event);
-    }
+    PTI_ASSERT(result != event_map_.end());
+    result->second.push_back(event);
   }
 
   void ReleaseContext(ze_context_handle_t context) {

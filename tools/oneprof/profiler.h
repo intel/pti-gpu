@@ -80,7 +80,7 @@ class Profiler {
         profiler->CheckOption(PROF_AGGREGATION)) {
 
       ZeKernelCollector* ze_kernel_collector = ZeKernelCollector::Create(
-          &(profiler->correlator_), true);
+          &(profiler->correlator_), true, false);
       if (ze_kernel_collector == nullptr) {
         std::cout <<
           "[WARNING] Unable to create Level Zero kernel collector" <<

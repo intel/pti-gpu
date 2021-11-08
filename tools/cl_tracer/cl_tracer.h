@@ -362,10 +362,14 @@ class ClTracer {
   }
 
   static void DeviceTimelineCallback(
-      void* data, void* queue,
-      uint64_t id, const std::string& name,
-      uint64_t queued, uint64_t submitted,
-      uint64_t started, uint64_t ended) {
+      void* data,
+      const std::string& queue,
+      const std::string& id,
+      const std::string& name,
+      uint64_t queued,
+      uint64_t submitted,
+      uint64_t started,
+      uint64_t ended) {
     ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
 
@@ -374,7 +378,7 @@ class ClTracer {
       stream << "<PID:" << utils::GetPid() << "> ";
     }
     stream << "Device Timeline (queue: " << queue <<
-      "): " << name << "(" << id << ") [ns] = " <<
+      "): " << name << "<" << id << "> [ns] = " <<
       queued << " (queued) " <<
       submitted << " (submit) " <<
       started << " (start) " <<
@@ -383,16 +387,20 @@ class ClTracer {
   }
 
   static void ChromeDeviceCallback(
-      void* data, void* queue,
-      uint64_t id, const std::string& name,
-      uint64_t queued, uint64_t submitted,
-      uint64_t started, uint64_t ended) {
+      void* data,
+      const std::string& queue,
+      const std::string& id,
+      const std::string& name,
+      uint64_t queued,
+      uint64_t submitted,
+      uint64_t started,
+      uint64_t ended) {
     ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
 
     std::stringstream stream;
     stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
-      "\", \"tid\":\"" << reinterpret_cast<uint64_t>(queue) <<
+      "\", \"tid\":\"" << queue <<
       "\", \"name\":\"" << name <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
@@ -404,10 +412,14 @@ class ClTracer {
   }
 
   static void ChromeKernelCallback(
-      void* data, void* queue,
-      uint64_t id, const std::string& name,
-      uint64_t queued, uint64_t submitted,
-      uint64_t started, uint64_t ended) {
+      void* data,
+      const std::string& queue,
+      const std::string& id,
+      const std::string& name,
+      uint64_t queued,
+      uint64_t submitted,
+      uint64_t started,
+      uint64_t ended) {
     ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
 
@@ -425,18 +437,20 @@ class ClTracer {
   }
 
   static void ChromeStagesCallback(
-      void* data, void* queue,
-      uint64_t id, const std::string& name,
-      uint64_t queued, uint64_t submitted,
-      uint64_t started, uint64_t ended) {
+      void* data,
+      const std::string& queue,
+      const std::string& id,
+      const std::string& name,
+      uint64_t queued,
+      uint64_t submitted,
+      uint64_t started,
+      uint64_t ended) {
     ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
     std::stringstream stream;
 
-    std::string tid =
-      std::to_string(id) +
-      "." + std::to_string(reinterpret_cast<uint64_t>(queue));
+    std::string tid = id + "." + queue;
 
     PTI_ASSERT(submitted > queued);
     stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
@@ -465,7 +479,7 @@ class ClTracer {
     PTI_ASSERT(ended > started);
     stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
       "\", \"tid\":\"" << tid <<
-      "\", \"name\":\"" << name << " (Execution)" <<
+      "\", \"name\":\"" << name << " (Executed)" <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"cname\":\"thread_state_iowait\"" <<
@@ -475,10 +489,14 @@ class ClTracer {
   }
 
   static void ChromeKernelStagesCallback(
-      void* data, void* queue,
-      uint64_t id, const std::string& name,
-      uint64_t queued, uint64_t submitted,
-      uint64_t started, uint64_t ended) {
+      void* data,
+      const std::string& queue,
+      const std::string& id,
+      const std::string& name,
+      uint64_t queued,
+      uint64_t submitted,
+      uint64_t started,
+      uint64_t ended) {
     ClTracer* tracer = reinterpret_cast<ClTracer*>(data);
     PTI_ASSERT(tracer != nullptr);
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
@@ -511,7 +529,7 @@ class ClTracer {
     PTI_ASSERT(ended > started);
     stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
       "\", \"tid\":\"" << name <<
-      "\", \"name\":\"" << name << " (Execution)" <<
+      "\", \"name\":\"" << name << " (Executed)" <<
       "\", \"ts\": " << started / NSEC_IN_USEC <<
       ", \"dur\":" << (ended - started) / NSEC_IN_USEC <<
       ", \"cname\":\"thread_state_iowait\"" <<
@@ -521,10 +539,14 @@ class ClTracer {
   }
 
   static void DeviceAndChromeDeviceCallback(
-      void* data, void* queue,
-      uint64_t id, const std::string& name,
-      uint64_t queued, uint64_t submitted,
-      uint64_t started, uint64_t ended) {
+      void* data,
+      const std::string& queue,
+      const std::string& id,
+      const std::string& name,
+      uint64_t queued,
+      uint64_t submitted,
+      uint64_t started,
+      uint64_t ended) {
     DeviceTimelineCallback(
         data, queue, id, name, queued, submitted, started, ended);
     ChromeDeviceCallback(
@@ -532,10 +554,14 @@ class ClTracer {
   }
 
   static void DeviceAndChromeKernelCallback(
-      void* data, void* queue,
-      uint64_t id, const std::string& name,
-      uint64_t queued, uint64_t submitted,
-      uint64_t started, uint64_t ended) {
+      void* data,
+      const std::string& queue,
+      const std::string& id,
+      const std::string& name,
+      uint64_t queued,
+      uint64_t submitted,
+      uint64_t started,
+      uint64_t ended) {
     DeviceTimelineCallback(
         data, queue, id, name, queued, submitted, started, ended);
     ChromeKernelCallback(
@@ -543,10 +569,14 @@ class ClTracer {
   }
 
   static void DeviceAndChromeStagesCallback(
-      void* data, void* queue,
-      uint64_t id, const std::string& name,
-      uint64_t queued, uint64_t submitted,
-      uint64_t started, uint64_t ended) {
+      void* data,
+      const std::string& queue,
+      const std::string& id,
+      const std::string& name,
+      uint64_t queued,
+      uint64_t submitted,
+      uint64_t started,
+      uint64_t ended) {
     DeviceTimelineCallback(
         data, queue, id, name, queued, submitted, started, ended);
     ChromeStagesCallback(
@@ -554,10 +584,14 @@ class ClTracer {
   }
 
   static void DeviceAndChromeKernelStagesCallback(
-      void* data, void* queue,
-      uint64_t id, const std::string& name,
-      uint64_t queued, uint64_t submitted,
-      uint64_t started, uint64_t ended) {
+      void* data,
+      const std::string& queue,
+      const std::string& id,
+      const std::string& name,
+      uint64_t queued,
+      uint64_t submitted,
+      uint64_t started,
+      uint64_t ended) {
     DeviceTimelineCallback(
         data, queue, id, name, queued, submitted, started, ended);
     ChromeKernelStagesCallback(
