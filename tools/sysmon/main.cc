@@ -187,9 +187,8 @@ static void PrintShorInfo(
   uint32_t sensor_count = 0;
   status = zesDeviceEnumTemperatureSensors(
       device, &sensor_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  if (sensor_count > 0) {
+  if (status == ZE_RESULT_SUCCESS && sensor_count > 0) {
     std::vector<zes_temp_handle_t> sensor_list(sensor_count);
     status = zesDeviceEnumTemperatureSensors(
         device, &sensor_count, sensor_list.data());
@@ -1010,9 +1009,8 @@ void PrintTemperatureInfo(
   uint32_t sensor_count = 0;
   status = zesDeviceEnumTemperatureSensors(
       device, &sensor_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  if (sensor_count > 0) {
+  if (status == ZE_RESULT_SUCCESS && sensor_count > 0) {
     std::vector<zes_temp_handle_t> sensor_list(sensor_count);
     status = zesDeviceEnumTemperatureSensors(
         device, &sensor_count, sensor_list.data());

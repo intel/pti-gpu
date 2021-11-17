@@ -1,7 +1,7 @@
 level-zero-loader:
   deb:
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.4.1/level-zero_1.4.1+u18.04_amd64.deb
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.4.1/level-zero-devel_1.4.1+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.6.2/level-zero_1.6.2+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.6.2/level-zero-devel_1.6.2+u18.04_amd64.deb
 compute-runtime:
   deb:
   - https://github.com/intel/compute-runtime/releases/download/21.38.21026/intel-gmmlib_21.2.1_amd64.deb

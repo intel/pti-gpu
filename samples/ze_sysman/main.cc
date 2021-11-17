@@ -121,9 +121,8 @@ int main() {
     uint32_t sensor_count = 0;
     status = zesDeviceEnumTemperatureSensors(
         device, &sensor_count, nullptr);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    if (sensor_count > 0) {
+    if (status == ZE_RESULT_SUCCESS && sensor_count > 0) {
 #ifdef __linux__
       if (geteuid() != 0) {
         std::cout << "Need to be root to see temperature" << std::endl;

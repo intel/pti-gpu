@@ -243,7 +243,9 @@ def gen_api(f, func_list, group_map):
   f.write("  zet_core_callbacks_t epilogue = {};\n")
   f.write("\n")
   for func in func_list:
-    assert func in group_map
+    if not func in group_map:
+      continue
+
     group, callback = group_map[func]
     group_name = group[0]
     group_cond = group[1]
@@ -664,7 +666,9 @@ def gen_exit_callback(f, func, params, enum_map):
 
 def gen_callbacks(f, func_list, group_map, param_map, enum_map):
   for func in func_list:
-    assert func in group_map
+    if not func in group_map:
+      continue
+
     assert func in param_map
     group, callback = group_map[func]
     callback_name = callback[0]
