@@ -4,29 +4,36 @@ import sys
 
 import utils
 
+if sys.platform == 'win32':
+  cmake_generator = "NMake Makefiles"
+  file_extention = ".exe"
+  file_name_prefix = ""
+  make = ["nmake"]
+else:
+  cmake_generator = "Unix Makefiles"
+  file_extention = ""
+  file_name_prefix = "./"
+  make = ["make"]
+
+
 def config(path):
-  p = subprocess.Popen(["cmake",\
-    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."],\
-    cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  p.wait()
-  stdout, stderr = utils.run_process(p)
+  cmake = ["cmake", "-G", cmake_generator,\
+    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
+  stdout, stderr = utils.run_process(cmake, path)
   if stderr and stderr.find("CMake Error") != -1:
     return stderr
   return None
 
 def build(path):
-  p = subprocess.Popen(["make"], cwd = path,\
-    stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  p.wait()
-  stdout, stderr = utils.run_process(p)
+  stdout, stderr = utils.run_process(make, path)
   if stderr and stderr.lower().find("error") != -1:
     return stderr
   return None
 
 def run(path, option):
-  p = subprocess.Popen(["./cl_gemm_itt", option, "1024", "1"],\
-    cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  stdout, stderr = utils.run_process(p)
+  command = [file_name_prefix + "cl_gemm_itt" + file_extention,\
+    option, "1024", "1"]
+  stdout, stderr = utils.run_process(command, path)
   if stderr:
     return stderr
   if not stdout:

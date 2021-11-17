@@ -16,7 +16,7 @@ Total execution time: 0.739879 sec
 ```
 ## Supported OS
 - Linux
-- Windows (*under development*)
+- Windows
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 3.12 and above)

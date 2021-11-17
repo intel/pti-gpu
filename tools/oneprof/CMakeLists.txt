@@ -8,7 +8,6 @@ SetBuildType()
 
 # Tool Library
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPTI_KERNEL_INTERVALS=1")
 add_library(oneprof_tool SHARED
   "${PROJECT_SOURCE_DIR}/../../loader/init.cc"
   "${PROJECT_SOURCE_DIR}/../utils/correlator.cc"
@@ -20,6 +19,8 @@ target_include_directories(oneprof_tool
   PRIVATE "${PROJECT_SOURCE_DIR}/../cl_tracer"
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
+target_compile_definitions(oneprof_tool PUBLIC PTI_KERNEL_INTERVALS=1)
+target_compile_definitions(oneprof_tool PUBLIC PTI_LEVEL_ZERO=1)
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(oneprof_tool
     PUBLIC "${CMAKE_INCLUDE_PATH}")

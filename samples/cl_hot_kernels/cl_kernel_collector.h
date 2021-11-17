@@ -197,7 +197,7 @@ class ClKernelCollector {
         kernel.min_time = time;
       }
       kernel.call_count += 1;
-      kernel.simd_width = std::max(kernel.simd_width, simd_width);
+      kernel.simd_width = (std::max)(kernel.simd_width, simd_width);
     }
   }
 

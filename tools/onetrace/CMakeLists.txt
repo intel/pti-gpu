@@ -20,6 +20,7 @@ target_include_directories(onetrace_tool
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../cl_tracer"
   PRIVATE "${PROJECT_SOURCE_DIR}/../ze_tracer")
+target_compile_definitions(onetrace_tool PUBLIC PTI_LEVEL_ZERO=1)
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(onetrace_tool
     PUBLIC "${CMAKE_INCLUDE_PATH}")

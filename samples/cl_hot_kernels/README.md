@@ -17,7 +17,7 @@ Total Device Time for GPU (ns): 174828332
 ```
 ## Supported OS
 - Linux
-- Windows (*under development*)
+- Windows
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 3.12 and above)
@@ -62,5 +62,5 @@ cl_hot_kernels.exe <target_application>
 One may use [cl_gemm](../cl_gemm) or [dpc_gemm](../dpc_gemm) as target application:
 ```sh
 cl_hot_kernels.exe ..\..\cl_gemm\build\cl_gemm.exe
-cl_hot_kernels.exe ..\..\dpc_gemm\build\dpc_gemm.exe cpu
+cl_hot_kernels.exe ..\..\dpc_gemm\build\Release\dpc_gemm.exe cpu
 ```

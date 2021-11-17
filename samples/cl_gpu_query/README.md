@@ -16,7 +16,7 @@ To set target device and sub-device to collect metrics from one can specify `PTI
 
 ## Supported OS
 - Linux
-- Windows (*under development*)
+- Windows
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 3.12 and above)

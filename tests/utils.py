@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 
 def get_script_path():
   path, script = os.path.split(os.path.realpath(__file__))
@@ -17,6 +18,13 @@ def get_sample_build_path(name):
   path = os.path.join(path, "build")
   if not os.path.exists(path):
     os.mkdir(path)
+  return path
+
+def get_sample_executable_path(name, build_type = ""):
+  path = get_sample_build_path(name)
+  if sys.platform == 'win32' and len(build_type) != 0:
+    path = os.path.join(path, build_type)
+  assert os.path.exists(path)
   return path
 
 def get_tool_build_path(name):
@@ -49,7 +57,10 @@ def add_env(env, name, val):
   custom_env[name] = val
   return custom_env
 
-def run_process(p):
+def run_process(command, path, environ = None):
+  shell = True if sys.platform == 'win32' else False
+  p = subprocess.Popen(command, cwd = path, shell = shell,\
+    env = environ, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
   stdout, stderr = p.communicate()
   if sys.version_info.major > 2:
     if stderr:

@@ -6,20 +6,15 @@ from samples import omp_gemm
 import utils
 
 def config(path):
-  p = subprocess.Popen(["cmake",\
-    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."],\
-    cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  p.wait()
-  stdout, stderr = utils.run_process(p)
+  cmake = ["cmake",\
+    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
+  stdout, stderr = utils.run_process(cmake, path)
   if stderr and stderr.find("CMake Error") != -1:
     return stderr
   return None
 
 def build(path):
-  p = subprocess.Popen(["make"], cwd = path,\
-    stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  p.wait()
-  stdout, stderr = utils.run_process(p)
+  stdout, stderr = utils.run_process(["make"], path)
   if stderr and stderr.lower().find("error") != -1:
     return stderr
   return None
@@ -43,12 +38,11 @@ def parse(output):
   return True
 
 def run(path, option):
-  app_folder = utils.get_sample_build_path("omp_gemm")
+  app_folder = utils.get_sample_executable_path("omp_gemm")
   app_file = os.path.join(app_folder, "omp_gemm")
   e = utils.add_env(None, "OMP_TOOL_LIBRARIES", "./libomp_hot_regions.so")
-  p = subprocess.Popen([app_file, option, "1024", "1"], env = e,\
-    cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  stdout, stderr = utils.run_process(p)
+  command = [app_file, option, "1024", "1"]
+  stdout, stderr = utils.run_process(command, path, e)
   if not stdout:
     return "stdout is empty"
   if not stderr:

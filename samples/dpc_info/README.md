@@ -42,7 +42,7 @@ The following modes are implemented:
 
 ## Supported OS
 - Linux
-- Windows (*under development*)
+- Windows
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 3.12 and above)
@@ -65,16 +65,18 @@ Use this command line to run the utility:
 ```sh
 ./dpc_info [-l|-a]
 ```
-### Windows (manual build)
+### Windows
 Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you have oneAPI DPC++ Compiler in `PATH` for building):
 ```sh
 <inteloneapi>\setvars.bat
 cd <pti>\samples\dpc_info
 mkdir build
 cd build
-dpcpp [-O2|-O0 -g] ..\main.cc -o dpc_info.exe
+cmake ..
+cmake --build . --config Release
 ```
 Use this command line to run the application:
 ```sh
+cd Release
 dpc_info.exe [-l|-a]
 ```

@@ -27,7 +27,7 @@ Estimated total number of HW threads: 336
 ```
 ## Supported OS
 - Linux
-- Windows (*under development*)
+- Windows
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 3.12 and above)

@@ -112,7 +112,7 @@ cmake -DCLOCK_HIGH_RESOLUTION=1 ..
 
 ## Supported OS
 - Linux
-- Windows (*under development*)
+- Windows
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 3.12 and above)
@@ -157,5 +157,5 @@ cl_tracer.exe [options] <target_application>
 One may use [cl_gemm](../../samples/cl_gemm) or [dpc_gemm](../../samples/dpc_gemm) as target application, e.g.:
 ```sh
 cl_tracer.exe -c -h ..\..\..\samples\cl_gemm\build\cl_gemm.exe
-cl_tracer.exe -c -h ..\..\..\samples\dpc_gemm\build\dpc_gemm.exe cpu
+cl_tracer.exe -c -h ..\..\..\samples\dpc_gemm\build\Release\dpc_gemm.exe cpu
 ```

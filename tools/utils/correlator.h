@@ -11,7 +11,9 @@
 #include <map>
 #include <vector>
 
+#ifdef PTI_LEVEL_ZERO
 #include <level_zero/ze_api.h>
+#endif // PTI_LEVEL_ZERO
 
 #include "logger.h"
 #include "pti_assert.h"
@@ -58,6 +60,8 @@ class Correlator {
   void SetKernelId(uint64_t kernel_id) {
     kernel_id_ = kernel_id;
   }
+
+#ifdef PTI_LEVEL_ZERO
 
   std::vector<uint64_t> GetKernelId(
       ze_command_list_handle_t command_list) {
@@ -119,10 +123,14 @@ class Correlator {
     call_id_map_[command_list].push_back(call_id);
   }
 
+#endif // PTI_LEVEL_ZERO
+
  private:
   TimePoint base_time_;
+#ifdef PTI_LEVEL_ZERO
   std::map<ze_command_list_handle_t, std::vector<uint64_t> > kernel_id_map_;
   std::map<ze_command_list_handle_t, std::vector<uint64_t> > call_id_map_;
+#endif // PTI_LEVEL_ZERO
 
   Logger logger_;
 

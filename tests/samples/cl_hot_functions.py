@@ -7,21 +7,28 @@ from samples import dpc_gemm
 from samples import omp_gemm
 import utils
 
+if sys.platform == 'win32':
+  cmake_generator = "NMake Makefiles"
+  file_extention = ".exe"
+  file_name_prefix = ""
+  make = ["nmake"]
+else:
+  cmake_generator = "Unix Makefiles"
+  file_extention = ""
+  file_name_prefix = "./"
+  make = ["make"]
+
+
 def config(path):
-  p = subprocess.Popen(["cmake",\
-    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."],\
-    cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  p.wait()
-  stdout, stderr = utils.run_process(p)
+  cmake = ["cmake", "-G", cmake_generator,\
+    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
+  stdout, stderr = utils.run_process(cmake, path)
   if stderr and stderr.find("CMake Error") != -1:
     return stderr
   return None
 
 def build(path):
-  p = subprocess.Popen(["make"], cwd = path,\
-    stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  p.wait()
-  stdout, stderr = utils.run_process(p)
+  stdout, stderr = utils.run_process(make, path)
   if stderr and stderr.lower().find("error") != -1:
     return stderr
   return None
@@ -44,25 +51,26 @@ def parse(output):
   return True
 
 def run(path, option):
+  environ = None
   if option == "dpc":
-    app_folder = utils.get_sample_build_path("dpc_gemm")
-    app_file = os.path.join(app_folder, "dpc_gemm")
+    app_folder = utils.get_sample_executable_path("dpc_gemm")
+    app_file = os.path.join(app_folder, "dpc_gemm" + file_extention)
     option = "cpu"
-    p = subprocess.Popen(["./cl_hot_functions", app_file, option, "1024", "1"],\
-      cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+    command = [file_name_prefix + "cl_hot_functions" + file_extention,\
+      app_file, option, "1024", "1"]
   elif option == "omp":
-    app_folder = utils.get_sample_build_path("omp_gemm")
-    app_file = os.path.join(app_folder, "omp_gemm")
+    app_folder = utils.get_sample_executable_path("omp_gemm")
+    app_file = os.path.join(app_folder, "omp_gemm" + file_extention)
     option = "gpu"
     e = utils.add_env(None, "LIBOMPTARGET_PLUGIN", "OPENCL")
-    p = subprocess.Popen(["./cl_hot_functions", app_file, option, "1024", "1"],\
-      env = e, cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+    command = [file_name_prefix + "cl_hot_functions" + file_extention,\
+      app_file, option, "1024", "1"]
   else:
-    app_folder = utils.get_sample_build_path("cl_gemm")
-    app_file = os.path.join(app_folder, "cl_gemm")
-    p = subprocess.Popen(["./cl_hot_functions", app_file, option, "1024", "1"],\
-      cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  stdout, stderr = utils.run_process(p)
+    app_folder = utils.get_sample_executable_path("cl_gemm")
+    app_file = os.path.join(app_folder, "cl_gemm" + file_extention)
+    command = [file_name_prefix + "cl_hot_functions" + file_extention,\
+      app_file, option, "1024", "1"]
+  stdout, stderr = utils.run_process(command, path, environ)
   if not stdout:
     return "stdout is empty"
   if not stderr:

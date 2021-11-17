@@ -20,3 +20,7 @@ endif()
 
 FindL0Library(sysmon)
 FindL0Headers(sysmon)
+
+# Installation
+
+install(TARGETS sysmon DESTINATION bin)

@@ -16,7 +16,7 @@ Total execution time: 0.373728 sec
 ```
 ## Supported OS
 - Linux
-- Windows (*under development*)
+- Windows
 
 ## Prerequisites
 - [CMake](https://cmake.org/) (version 3.12 and above)
@@ -39,16 +39,18 @@ Use this command line to run the application:
 ```sh
 ./dpc_gemm [cpu|gpu|host] [matrix_size] [repeat_count]
 ```
-### Windows (manual build)
+### Windows
 Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you have oneAPI DPC++ Compiler in `PATH` for building):
 ```sh
 <inteloneapi>\setvars.bat
 cd <pti>\samples\dpc_gemm
 mkdir build
 cd build
-dpcpp [-O2|-O0 -g] ..\main.cc -I..\..\..\utils -o dpc_gemm.exe
+cmake ..
+cmake --build . --config Release
 ```
 Use this command line to run the application:
 ```sh
+cd Release
 dpc_gemm.exe [cpu|gpu|host] [matrix_size] [repeats_count]
 ```

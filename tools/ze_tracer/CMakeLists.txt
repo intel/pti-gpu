@@ -16,6 +16,7 @@ target_include_directories(zet_tracer
   PRIVATE "${PROJECT_SOURCE_DIR}"
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
+target_compile_definitions(zet_tracer PUBLIC PTI_LEVEL_ZERO=1)
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(zet_tracer
     PUBLIC "${CMAKE_INCLUDE_PATH}")

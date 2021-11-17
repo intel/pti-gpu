@@ -4,29 +4,34 @@ import sys
 
 import utils
 
+if sys.platform == 'win32':
+  file_extention = ".exe"
+  file_name_prefix = ""
+  make = ["cmake", "--build", ".", "--config", utils.get_build_flag()]
+else:
+  file_extention = ""
+  file_name_prefix = "./"
+  make = ["make"]
+
 def config(path):
-  p = subprocess.Popen(["cmake",\
-    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."],\
-    cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  p.wait()
-  stdout, stderr = utils.run_process(p)
+  cmake = ["cmake",\
+    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
+  stdout, stderr = utils.run_process(cmake, path)
   if stderr and stderr.find("CMake Error") != -1:
     return stderr
   return None
 
 def build(path):
-  p = subprocess.Popen(["make"], cwd = path,\
-    stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  p.wait()
-  stdout, stderr = utils.run_process(p)
+  stdout, stderr = utils.run_process(make, path)
   if stderr and stderr.lower().find("error") != -1:
     return stderr
   return None
 
 def run(path, option):
-  p = subprocess.Popen(["./dpc_gemm", option, "1024", "1"],\
-    cwd = path, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-  stdout, stderr = utils.run_process(p)
+  command = [file_name_prefix + "dpc_gemm" + file_extention,\
+    option, "1024", "1"]
+  stdout, stderr = utils.run_process(command,\
+    utils.get_sample_executable_path("dpc_gemm", utils.get_build_flag()))
   if stderr:
     return stderr
   if not stdout:
