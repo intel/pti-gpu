@@ -26,6 +26,7 @@
 #define TRACE_TID                    10
 #define TRACE_PID                    11
 #define TRACE_LOG_TO_FILE            12
+#define TRACE_CONDITIONAL_COLLECTION 13
 
 const char* kChromeTraceFileExt = "json";
 

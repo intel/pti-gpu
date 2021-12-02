@@ -397,11 +397,10 @@ macro(FindGTPinLibrary TARGET)
       message(FATAL_ERROR "Graphics Technology Pin (GT Pin) library was not found at ${GTPIN_PATH}/Lib/intel64")
     endif()
   else()
+    message(STATUS "Graphics Technology Pin (GT Pin) path was not defined - it will be downloaded automatically on build")
+    set(GTPIN_LIB_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
     if(UNIX)
-      message(STATUS "Graphics Technology Pin (GT Pin) path was not defined - it will be downloaded automatically on build")
-      set(GTPIN_LIB_PATH "${CMAKE_BINARY_DIR}")
-      RequirePythonInterp()
-
       add_custom_target(gtpin_libs ALL
                         DEPENDS ${GTPIN_LIB_PATH}/GTPIN/libgcc_s.so.1
                                 ${GTPIN_LIB_PATH}/GTPIN/libged.so
@@ -421,6 +420,24 @@ macro(FindGTPinLibrary TARGET)
         "${GTPIN_LIB_PATH}/GTPIN/libgtpin.so")
       add_dependencies(${TARGET}
         gtpin_libs)
+    elseif(WIN32)
+      add_custom_target(gtpin_libs ALL
+                        DEPENDS ${GTPIN_LIB_PATH}/GTPIN/gtpin.lib
+                                ${GTPIN_LIB_PATH}/ged.dll
+                                ${GTPIN_LIB_PATH}/gtpin.dll
+                                ${GTPIN_LIB_PATH}/gtpin_core.dll
+                                ${GTPIN_LIB_PATH}/iga_wrapper.dll)
+      add_custom_command(OUTPUT ${GTPIN_LIB_PATH}/GTPIN/gtpin.lib
+                                ${GTPIN_LIB_PATH}/ged.dll
+                                ${GTPIN_LIB_PATH}/gtpin.dll
+                                ${GTPIN_LIB_PATH}/gtpin_core.dll
+                                ${GTPIN_LIB_PATH}/iga_wrapper.dll
+                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_libs.py" ${GTPIN_LIB_PATH} ${CMAKE_BINARY_DIR})
+
+      target_link_libraries(${TARGET}
+        "${GTPIN_LIB_PATH}/GTPIN/gtpin.lib")
+      add_dependencies(${TARGET}
+        gtpin_libs)
     else()
       message(FATAL_ERROR "Graphics Technology Pin (GT Pin) path was not specified. Use -DGTPIN_PATH to set it")
     endif()
@@ -434,78 +451,152 @@ macro(GetGTPinHeaders TARGET)
       PUBLIC "${GTPIN_PATH}/Include"
       PUBLIC "${GTPIN_PATH}/Include/ged/intel64")
   else()
-    if(UNIX)
-      message(STATUS "Graphics Technology Pin (GT Pin) path was not defined - it will be downloaded automatically on build")
-      set(GTPIN_INC_PATH "${CMAKE_BINARY_DIR}")
-      RequirePythonInterp()
+    message(STATUS "Graphics Technology Pin (GT Pin) path was not defined - it will be downloaded automatically on build")
+    set(GTPIN_INC_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
 
-      add_custom_target(gtpin_headers ALL
-                        DEPENDS ${GTPIN_INC_PATH}/GTPIN/callbacks.h
-                                ${GTPIN_INC_PATH}/GTPIN/client_knob.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged_ops.h
-                                ${GTPIN_INC_PATH}/GTPIN/gtpin_deprecated_types.h
-                                ${GTPIN_INC_PATH}/GTPIN/gtpin.h
-                                ${GTPIN_INC_PATH}/GTPIN/gtpin.hpp
-                                ${GTPIN_INC_PATH}/GTPIN/gtpintool_types.h
-                                ${GTPIN_INC_PATH}/GTPIN/init.h
-                                ${GTPIN_INC_PATH}/GTPIN/kernel.h
-                                ${GTPIN_INC_PATH}/GTPIN/knob.h
-                                ${GTPIN_INC_PATH}/GTPIN/knob_defs.h
-                                ${GTPIN_INC_PATH}/GTPIN/send_exec_semantics.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_basic_types.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enumerations.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enum_types.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_ins_field.h)
-      add_custom_command(OUTPUT ${GTPIN_INC_PATH}/GTPIN/callbacks.h
-                                ${GTPIN_INC_PATH}/GTPIN/client_knob.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged_ops.h
-                                ${GTPIN_INC_PATH}/GTPIN/gtpin_deprecated_types.h
-                                ${GTPIN_INC_PATH}/GTPIN/gtpin.h
-                                ${GTPIN_INC_PATH}/GTPIN/gtpin.hpp
-                                ${GTPIN_INC_PATH}/GTPIN/gtpintool_types.h
-                                ${GTPIN_INC_PATH}/GTPIN/init.h
-                                ${GTPIN_INC_PATH}/GTPIN/kernel.h
-                                ${GTPIN_INC_PATH}/GTPIN/knob.h
-                                ${GTPIN_INC_PATH}/GTPIN/knob_defs.h
-                                ${GTPIN_INC_PATH}/GTPIN/send_exec_semantics.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_basic_types.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enumerations.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enum_types.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged.h
-                                ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_ins_field.h
-                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_headers.py" ${GTPIN_INC_PATH} ${CMAKE_BINARY_DIR})
+    add_custom_target(gtpin_headers ALL
+                      DEPENDS ${GTPIN_INC_PATH}/GTPIN/callbacks.h
+                              ${GTPIN_INC_PATH}/GTPIN/client_knob.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged_ops.h
+                              ${GTPIN_INC_PATH}/GTPIN/clientdb.h
+                              ${GTPIN_INC_PATH}/GTPIN/gtpin.h
+                              ${GTPIN_INC_PATH}/GTPIN/gtpin.hpp
+                              ${GTPIN_INC_PATH}/GTPIN/gtpintool_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/init.h
+                              ${GTPIN_INC_PATH}/GTPIN/kernel.h
+                              ${GTPIN_INC_PATH}/GTPIN/send_exec_semantics.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_basic_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enumerations.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enum_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_ins_field.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_knob.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_knob_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_knob_arg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_knob_registry.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_basic_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_core.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_gpu_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_basic_utils.h)
+    add_custom_command(OUTPUT ${GTPIN_INC_PATH}/GTPIN/callbacks.h
+                              ${GTPIN_INC_PATH}/GTPIN/client_knob.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged_ops.h
+                              ${GTPIN_INC_PATH}/GTPIN/clientdb.h
+                              ${GTPIN_INC_PATH}/GTPIN/gtpin.h
+                              ${GTPIN_INC_PATH}/GTPIN/gtpin.hpp
+                              ${GTPIN_INC_PATH}/GTPIN/gtpintool_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/init.h
+                              ${GTPIN_INC_PATH}/GTPIN/kernel.h
+                              ${GTPIN_INC_PATH}/GTPIN/send_exec_semantics.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_basic_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enumerations.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_enum_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/intel64/ged_ins_field.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_knob.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_knob_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_knob_arg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_knob_registry.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_basic_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_core.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_gpu_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_basic_utils.h
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_headers.py" ${GTPIN_INC_PATH} ${CMAKE_BINARY_DIR})
 
-      target_include_directories(${TARGET}
-        PUBLIC "${GTPIN_INC_PATH}/GTPIN"
-        PUBLIC "${GTPIN_INC_PATH}/GTPIN/ged/intel64")
-      add_dependencies(${TARGET}
-        gtpin_headers)
-    else()
-      message(FATAL_ERROR "Graphics Technology Pin (GT Pin) path was not specified. Use -DGTPIN_PATH to set it")
-    endif()
+    target_include_directories(${TARGET}
+      PUBLIC "${GTPIN_INC_PATH}/GTPIN"
+      PUBLIC "${GTPIN_INC_PATH}/GTPIN/ged/intel64")
+    add_dependencies(${TARGET}
+      gtpin_headers)
   endif()
 endmacro()
 
+macro(GetLevelZeroHeaders TARGET)
+  set(L0_INC_PATH "${CMAKE_BINARY_DIR}")
+  RequirePythonInterp()
+
+  add_custom_target(level_zero_headers ALL
+                    DEPENDS ${L0_INC_PATH}/level_zero/ze_api.h
+                            ${L0_INC_PATH}/level_zero/zes_api.h
+                            ${L0_INC_PATH}/level_zero/zet_api.h
+                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h)
+  add_custom_command(OUTPUT ${L0_INC_PATH}/level_zero/ze_api.h
+                            ${L0_INC_PATH}/level_zero/zes_api.h
+                            ${L0_INC_PATH}/level_zero/zet_api.h
+                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
+                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_ze_headers.py" ${L0_INC_PATH} ${CMAKE_BINARY_DIR})
+  target_include_directories(${TARGET}
+    PUBLIC "${L0_INC_PATH}")
+  add_dependencies(${TARGET}
+    level_zero_headers)
+endmacro()
+
 macro(FindL0Library TARGET)
-  if(DEFINED ENV{LD_LIBRARY_PATH})
-    string(REPLACE ":" ";" SEARCH_LIB_PATH $ENV{LD_LIBRARY_PATH})
-  endif()
+  if(WIN32)
+    find_library(L0_LIB_PATH
+      NAMES ze_loader
+      PATHS ${CMAKE_LIBRARY_PATH})
+    if(NOT L0_LIB_PATH)
+      foreach(VALUE IN ITEMS $ENV{PATH})
+        if(VALUE MATCHES "[S|s]ystem32*$")
+          set(WIN_SYS_PATH ${VALUE})
+          break()
+        endif()
+      endforeach()
+      file(GLOB_RECURSE L0_DLL_PATH "${WIN_SYS_PATH}/ze_loader.dll")
+      if(NOT L0_DLL_PATH)
+        message(FATAL_ERROR
+          "Level Zero loader is not found. "
+          "You may need to install oneAPI Level Zero loader to fix this issue.")
+      else()
+        message(STATUS
+          "Level Zero Loader is found at ${L0_DLL_PATH}")
+        find_library(L0_LIB_PATH
+          NAMES ze_loader
+          PATHS ${SEARCH_LIB_PATH})
+        if(NOT L0_LIB_PATH)
+          RequirePythonInterp()
 
-  find_library(L0_LIB_PATH
-    NAMES ze_loader
-    PATHS ${SEARCH_LIB_PATH})
-  if(NOT L0_LIB_PATH)
-    message(FATAL_ERROR
-      "Level Zero loader is not found. "
-      "You may need to install oneAPI Level Zero loader to fix this issue.")
+          add_custom_target(level_zero_lib ALL
+                            DEPENDS ${CMAKE_BINARY_DIR}/ze_loader.lib)
+          add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/ze_loader.lib
+                             COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/convert_dll_to_lib.py" ${CMAKE_BINARY_DIR} ${L0_DLL_PATH})
+          add_dependencies(${TARGET} level_zero_lib)
+          target_link_libraries(${TARGET} "${CMAKE_BINARY_DIR}/ze_loader.lib")
+        else()
+          message(STATUS
+            "Level Zero library is found at ${L0_LIB_PATH}")
+          target_link_libraries(${TARGET}
+            "${L0_LIB_PATH}")
+        endif()
+      endif()
+    else()
+      message(STATUS
+        "Level Zero loader is found at ${L0_LIB_PATH}")
+      target_link_libraries(${TARGET}
+        "${L0_LIB_PATH}")
+    endif()
   else()
-    message(STATUS
-      "Level Zero loader is found at ${L0_LIB_PATH}")
-  endif()
+    if(DEFINED ENV{LD_LIBRARY_PATH})
+      string(REPLACE ":" ";" SEARCH_LIB_PATH $ENV{LD_LIBRARY_PATH})
+    endif()
 
-  target_link_libraries(${TARGET}
-    "${L0_LIB_PATH}")
+    find_library(L0_LIB_PATH
+      NAMES ze_loader
+      PATHS ${SEARCH_LIB_PATH})
+    if(NOT L0_LIB_PATH)
+      message(FATAL_ERROR
+        "Level Zero loader is not found. "
+        "You may need to install oneAPI Level Zero loader to fix this issue.")
+    else()
+      message(STATUS
+        "Level Zero loader is found at ${L0_LIB_PATH}")
+    endif()
+
+    target_link_libraries(${TARGET}
+      "${L0_LIB_PATH}")
+  endif()
 endmacro()
 
 macro(FindL0Headers TARGET)
@@ -518,9 +609,8 @@ macro(FindL0Headers TARGET)
   check_include_file_cxx(level_zero/zes_api.h LO_SYSMAN_INC_FOUND)
   check_include_file_cxx(level_zero/layers/zel_tracing_api.h LO_LAYERS_INC_FOUND)
   if ((NOT LO_CORE_INC_FOUND) OR (NOT LO_TOOLS_INC_FOUND) OR (NOT LO_LAYERS_INC_FOUND) OR (NOT LO_SYSMAN_INC_FOUND))
-    message(FATAL_ERROR
-      "Level Zero headers are not found. "
-      "You may need to install oneAPI Level Zero loader 1.2.3+ to fix this issue.")
+    message(STATUS "Level Zero headers are not found, will be downloaded automatically")
+    GetLevelZeroHeaders(${TARGET})
   endif()
   set(CMAKE_REQUIRED_INCLUDES)
 endmacro()

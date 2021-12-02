@@ -16,8 +16,13 @@ def main():
     os.mkdir(dst_path)
   
   build_path = sys.argv[2]
-  gtpin_package = "external-gtpin-2.13-linux.tar.bz2"
-  build_utils.download("https://downloadmirror.intel.com/682776/" + gtpin_package, build_path)
+  if sys.platform == 'win32':
+    gtpin_package = "external-gtpin-2.19-win.zip"
+    download_link = "https://downloadmirror.intel.com/686382/"
+  else:
+    gtpin_package = "external-gtpin-2.19-linux.tar.xz"
+    download_link = "https://downloadmirror.intel.com/686383/"
+  build_utils.download(download_link + gtpin_package, build_path)
   arch_file = os.path.join(build_path, gtpin_package)
   build_utils.unpack(arch_file, build_path)
 
@@ -25,13 +30,25 @@ def main():
   src_path = os.path.join(src_path, "Lib")
   src_path = os.path.join(src_path, "intel64")
 
-  build_utils.copy(src_path, dst_path,
+  gtpin_libs = ["gtpin.lib"]\
+    if sys.platform == 'win32' else\
     ["libgcc_s.so.1",
      "libged.so",
      "libgtpin.so",
      "libgtpin_core.so",
      "libiga_wrapper.so",
-     "libstdc++.so.6"])
+     "libstdc++.so.6"]
+
+  build_utils.copy(src_path, dst_path, gtpin_libs)
+
+  if sys.platform == 'win32':
+    gtpin_dlls = [
+      "gtpin.dll",
+      "ged.dll",
+      "gtpin_core.dll",
+      "iga_wrapper.dll"]
+
+    build_utils.copy(src_path, build_path, gtpin_dlls)
 
 if __name__ == "__main__":
   main()

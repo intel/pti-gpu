@@ -17,6 +17,7 @@
 
 #include "logger.h"
 #include "pti_assert.h"
+#include "utils.h"
 
 #ifdef CLOCK_HIGH_RESOLUTION
 #define PTI_CLOCK std::chrono::high_resolution_clock
@@ -34,8 +35,9 @@ struct ApiCollectorOptions {
 
 class Correlator {
  public:
-  Correlator(const std::string& log_file)
-      : logger_(log_file), base_time_(PTI_CLOCK::now()) {}
+  Correlator(const std::string& log_file, bool conditional_collection)
+      : logger_(log_file), conditional_collection_(conditional_collection),
+        base_time_(PTI_CLOCK::now()) {}
 
   void Log(const std::string& text) {
     logger_.Log(text);
@@ -59,6 +61,13 @@ class Correlator {
 
   void SetKernelId(uint64_t kernel_id) {
     kernel_id_ = kernel_id;
+  }
+
+  bool IsCollectionDisabled() const {
+    if (conditional_collection_) {
+      return !utils::GetEnv("PTI_DISABLE_COLLECTION").empty();
+    }
+    return false;
   }
 
 #ifdef PTI_LEVEL_ZERO
@@ -133,6 +142,7 @@ class Correlator {
 #endif // PTI_LEVEL_ZERO
 
   Logger logger_;
+  bool conditional_collection_;
 
   static thread_local uint64_t kernel_id_;
 };

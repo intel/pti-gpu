@@ -221,7 +221,9 @@ class ClTracer {
 
  private:
   ClTracer(const TraceOptions& options)
-      : options_(options), correlator_(options.GetLogFileName()) {
+      : options_(options),
+        correlator_(options.GetLogFileName(),
+          CheckOption(TRACE_CONDITIONAL_COLLECTION)) {
     if (CheckOption(TRACE_CHROME_CALL_LOGGING) ||
         CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
         CheckOption(TRACE_CHROME_KERNEL_TIMELINE) ||

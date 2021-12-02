@@ -25,8 +25,14 @@ def download(url, download_path):
 
   url_items = url.split('/')
   file_name = os.path.join(download_path, url_items[len(url_items) - 1])
+  command = "curl " + url + " --output " + file_name
+  shell = True
+  if sys.platform != 'win32':
+    shell = False
+    command = command.split(" ")
+
   if not os.path.isfile(file_name):
-    subprocess.call(["wget", "-O", file_name, url])
+    subprocess.call(command, shell = shell)
 
   return file_name
 

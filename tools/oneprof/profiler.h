@@ -158,7 +158,7 @@ class Profiler {
       : options_(options),
         device_id_(device_id),
         sub_device_count_(sub_device_count),
-        correlator_(options_.GetLogFileName()) {
+        correlator_(options_.GetLogFileName(), false) {
     PTI_ASSERT(sub_device_count_ > 0);
 
     ze_device_handle_t device = GetZeDevice(device_id_);

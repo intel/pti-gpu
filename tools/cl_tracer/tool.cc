@@ -61,6 +61,10 @@ void Usage() {
     "Dump device activities by stages to JSON file" <<
     std::endl;
   std::cout <<
+    "--conditional-collection       " <<
+    "Enable conditional collection mode" <<
+    std::endl;
+  std::cout <<
     "--tid                          " <<
     "Print thread ID into host API trace" <<
     std::endl;
@@ -122,6 +126,9 @@ int ParseArgs(int argc, char* argv[]) {
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
       utils::SetEnv("CLT_ChromeDeviceStages", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--conditional-collection") == 0) {
+      utils::SetEnv("CLT_ConditionalCollection", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--tid") == 0) {
       utils::SetEnv("CLT_Tid", "1");
@@ -220,6 +227,11 @@ static TraceOptions ReadArgs() {
   value = utils::GetEnv("CLT_ChromeDeviceStages");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_CHROME_DEVICE_STAGES);
+  }
+
+  value = utils::GetEnv("CLT_ConditionalCollection");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_CONDITIONAL_COLLECTION);
   }
 
   value = utils::GetEnv("CLT_Tid");

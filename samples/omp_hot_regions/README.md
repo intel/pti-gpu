@@ -43,15 +43,14 @@ One may use [omp_gemm](../omp_gemm) as target application:
 ```sh
 OMP_TOOL_LIBRARIES=./libomp_hot_regions.so ../../omp_gemm/build/omp_gemm
 ```
-### Windows
+### Windows (manual build)
 Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you have Intel(R) C++ Compiler in `PATH` for building):
 ```sh
 <inteloneapi>\setvars.sh
 cd <pti>\samples\omp_hot_regions
 mkdir build
 cd build
-cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release ..
-nmake
+icx.exe ../tool.cc /Qnextgen /Qopenmp -I../../../utils -o omp_hot_regions.dll /LD
 ```
 Use this command line to run the tool:
 ```sh

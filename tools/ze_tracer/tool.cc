@@ -65,6 +65,10 @@ void Usage() {
     "Dump kernel information per tile" <<
     std::endl;
   std::cout <<
+    "--conditional-collection       " <<
+    "Enable conditional collection mode" <<
+    std::endl;
+  std::cout <<
     "--tid                          " <<
     "Print thread ID into host API trace" <<
     std::endl;
@@ -129,6 +133,9 @@ int ParseArgs(int argc, char* argv[]) {
       ++app_index;
     } else if (strcmp(argv[i], "--kernels-per-tile") == 0) {
       utils::SetEnv("ZET_KernelsPerTile", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--conditional-collection") == 0) {
+      utils::SetEnv("ZET_ConditionalCollection", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--tid") == 0) {
       utils::SetEnv("ZET_Tid", "1");
@@ -236,6 +243,11 @@ static TraceOptions ReadArgs() {
   value = utils::GetEnv("ZET_KernelsPerTile");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_KERNELS_PER_TILE);
+  }
+
+  value = utils::GetEnv("ZET_ConditionalCollection");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_CONDITIONAL_COLLECTION);
   }
 
   value = utils::GetEnv("ZET_Tid");

@@ -238,6 +238,12 @@ class ClApiCollector {
     PTI_ASSERT(callback_data->correlationData != nullptr);
 
     if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+      PTI_ASSERT(collector->correlator_ != nullptr);
+      if (collector->correlator_->IsCollectionDisabled()) {
+        *reinterpret_cast<uint64_t*>(callback_data->correlationData) = 0;
+        return;
+      }
+
       uint64_t& start_time = *reinterpret_cast<uint64_t*>(
           callback_data->correlationData);
       start_time = collector->GetTimestamp();
@@ -247,9 +253,13 @@ class ClApiCollector {
       }
     } else {
       uint64_t end_time = collector->GetTimestamp();
-
       uint64_t& start_time = *reinterpret_cast<uint64_t*>(
           callback_data->correlationData);
+
+      if (start_time == 0) {
+        return;
+      }
+
       collector->AddFunctionTime(
         callback_data->functionName, end_time - start_time);
 

@@ -49,6 +49,7 @@ struct ClKernelInstance {
   uint64_t kernel_id = 0;
   cl_ulong host_sync = 0;
   cl_ulong device_sync = 0;
+  bool need_to_process = true;
 };
 
 struct ClKernelInfo {
@@ -363,48 +364,49 @@ class ClKernelCollector {
     cl_int event_status = utils::cl::GetEventStatus(event);
     PTI_ASSERT(event_status == CL_COMPLETE);
 
-    cl_command_queue queue = utils::cl::GetCommandQueue(event);
-    PTI_ASSERT(queue != nullptr);
+    if (instance->need_to_process) {
+      cl_command_queue queue = utils::cl::GetCommandQueue(event);
+      PTI_ASSERT(queue != nullptr);
 
-    cl_ulong started =
-      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_START);
-    cl_ulong ended =
-      utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_END);
-    cl_ulong time = ended - started;
-    PTI_ASSERT(time > 0);
-
-    AddKernelInfo(&instance->props, time);
+      cl_ulong started =
+        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_START);
+      cl_ulong ended =
+        utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_END);
+      cl_ulong time = ended - started;
+      PTI_ASSERT(time > 0);
 
 #ifdef PTI_KERNEL_INTERVALS
-    cl_device_id device = utils::cl::GetDevice(queue);
-    PTI_ASSERT(device != nullptr);
-    AddKernelInterval(instance, device, started, ended);
-#endif // PTI_KERNEL_INTERVALS
+      cl_device_id device = utils::cl::GetDevice(queue);
+      PTI_ASSERT(device != nullptr);
+      AddKernelInterval(instance, device, started, ended);
+#else // PTI_KERNEL_INTERVALS
+      AddKernelInfo(&instance->props, time);
+      if (callback_ != nullptr) {
+        uint64_t host_queued = 0, host_submitted = 0;
+        uint64_t host_started = 0, host_ended = 0;
+        ComputeHostTimestamps(
+            instance,
+            started, ended,
+            host_queued, host_submitted,
+            host_started, host_ended);
 
-    if (callback_ != nullptr) {
-      uint64_t host_queued = 0, host_submitted = 0;
-      uint64_t host_started = 0, host_ended = 0;
-      ComputeHostTimestamps(
-          instance,
-          started, ended,
-          host_queued, host_submitted,
-          host_started, host_ended);
+        std::string name = instance->props.name;
+        PTI_ASSERT(!name.empty());
 
-      std::string name = instance->props.name;
-      PTI_ASSERT(!name.empty());
+        if (verbose_) {
+          name = GetVerboseName(&(instance->props));
+        }
 
-      if (verbose_) {
-        name = GetVerboseName(&(instance->props));
+        std::stringstream stream;
+        stream << std::hex << queue;
+
+        callback_(
+            callback_data_, stream.str(),
+            std::to_string(instance->kernel_id), name,
+            host_queued, host_submitted,
+            host_started, host_ended);
       }
-
-      std::stringstream stream;
-      stream << std::hex << queue;
-
-      callback_(
-          callback_data_, stream.str(),
-          std::to_string(instance->kernel_id), name,
-          host_queued, host_submitted,
-          host_started, host_ended);
+#endif // PTI_KERNEL_INTERVALS
     }
 
     cl_int status = clReleaseEvent(event);
@@ -732,6 +734,8 @@ class ClKernelCollector {
             1, std::memory_order::memory_order_relaxed);
       PTI_ASSERT(collector->correlator_ != nullptr);
       collector->correlator_->SetKernelId(instance->kernel_id);
+      instance->need_to_process =
+        !collector->correlator_->IsCollectionDisabled();
 
       ClEnqueueData* enqueue_data =
         reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
@@ -770,6 +774,8 @@ class ClKernelCollector {
           1, std::memory_order::memory_order_relaxed);
     PTI_ASSERT(collector->correlator_ != nullptr);
     collector->correlator_->SetKernelId(instance->kernel_id);
+    instance->need_to_process =
+        !collector->correlator_->IsCollectionDisabled();
 
     ClEnqueueData* enqueue_data =
       reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
@@ -798,6 +804,10 @@ class ClKernelCollector {
       OnExitEnqueueTransfer(
           "clEnqueueReadBuffer", *(params->cb),
           *(params->event), data, collector);
+
+      if (*params->blockingRead) {
+        collector->ProcessKernelInstances();
+      }
     }
   }
 
@@ -817,6 +827,10 @@ class ClKernelCollector {
       OnExitEnqueueTransfer(
           "clEnqueueWriteBuffer", *(params->cb),
           *(params->event), data, collector);
+
+      if (*params->blockingWrite) {
+        collector->ProcessKernelInstances();
+      }
     }
   }
 

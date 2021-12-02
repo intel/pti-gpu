@@ -52,7 +52,7 @@ def parse(output):
 def run(path, option):
   environ = None
   if option == "dpc":
-    app_folder = utils.get_sample_executable_path("dpc_gemm")
+    app_folder = utils.get_sample_executable_path("dpc_gemm", utils.get_build_flag())
     app_file = os.path.join(app_folder, "dpc_gemm" + file_extention)
     option = "cpu"
     command = [file_name_prefix + "cl_hot_kernels" + file_extention,\

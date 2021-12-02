@@ -4,12 +4,11 @@ level-zero-loader:
   - https://github.com/oneapi-src/level-zero/releases/download/v1.6.2/level-zero-devel_1.6.2+u18.04_amd64.deb
 compute-runtime:
   deb:
-  - https://github.com/intel/compute-runtime/releases/download/21.38.21026/intel-gmmlib_21.2.1_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8708/intel-igc-core_1.0.8708_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8708/intel-igc-opencl_1.0.8708_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.38.21026/intel-opencl_21.38.21026_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.38.21026/intel-ocloc_21.38.21026_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.38.21026/intel-level-zero-gpu_1.2.21026_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.45.21574/intel-gmmlib_21.2.1_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8744/intel-igc-core_1.0.8744_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8744/intel-igc-opencl_1.0.8744_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.45.21574/intel-opencl-icd_21.45.21574_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/21.45.21574/intel-level-zero-gpu_1.2.21574_amd64.deb
 metrics-discovery:
   github:
     build_path: build
@@ -36,7 +35,7 @@ gtpin:
     commands:
     - tar -xf {} -C {}
     install_path: ~/
-    url: https://downloadmirror.intel.com/682776/external-gtpin-2.13-linux.tar.bz2
+    url: https://downloadmirror.intel.com/686383/external-gtpin-2.19-linux.tar.xz
 oneapit-toolkits:
   apt:
     apt_key: https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS-2023.PUB

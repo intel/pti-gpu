@@ -17,6 +17,7 @@ Options:
 --chrome-kernel-timeline       Dump device activities to JSON file per kernel name
 --chrome-device-stages         Dump device activities by stages to JSON file
 --kernels-per-tile             Dump kernel information per tile
+--conditional-collection       Enable conditional collection mode
 --tid                          Print thread ID into host API trace
 --pid                          Print process ID into host API and device activity trace
 --version                      Print version
@@ -122,6 +123,16 @@ Device Timeline (queue: 0x55a9c7e51e70): clEnqueueReadBuffer [ns] = 361479600 (q
 **Chrome Kernel Timeline** mode dumps timestamps for device activities per kernel name to JSON format that can be opened in [chrome://tracing](https://www.chromium.org/developers/how-tos/trace-event-profiling-tool) browser tool. Can't be used with **Chrome Device Timeline**.
 
 **Chrome Device Stages** mode provides alternative view for device queue where each kernel invocation is divided into stages: "queued" or "appended", "sumbitted" and "execution". Can't be used with **Chrome Device Timeline**.
+
+**Conditional Collection** mode allows one to disable data collection for any target interval using environment variable `PTI_DISABLE_COLLECTION`, e.g.:
+```cpp
+// Collection enabled
+setenv("PTI_DISABLE_COLLECTION", "1", 1);
+// Collection disabled
+unsetenv("PTI_DISABLE_COLLECTION");
+// Collection enabled
+```
+All the API calls and kernels, which submission happens while collection disabled interval, will be omitted from final results.
 
 To enable `high_resolution_clock` timestamps instead of `steady_clock` used by default, one may set `CLOCK_HIGH_RESOLUTION` variable for CMake:
 ```sh

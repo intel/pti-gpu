@@ -39,15 +39,14 @@ Use this command line to run the application:
 ```sh
 ./omp_gemm [cpu|gpu] [matrix_size] [repeat_count]
 ```
-### Windows
+### Windows (manual build)
 Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample (make sure you have Intel(R) C++ Compiler in `PATH` for building):
 ```sh
 <inteloneapi>\setvars.bat
 cd <pti>\samples\omp_gemm
 mkdir build
 cd build
-cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release ..
-nmake
+icx.exe ../main.cc /Qopenmp /Qopenmp-targets=spir64 -I../../../utils -o omp_gemm.exe
 ```
 Use this command line to run the application:
 ```sh

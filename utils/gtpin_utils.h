@@ -17,15 +17,15 @@ namespace gtpin {
 
 inline iga_gen_t GetArch(GED_MODEL arch) {
   switch(arch) {
-  case GED_MODEL_GEN_8:
+  case GED_MODEL_8:
     return IGA_GEN8;
-  case GED_MODEL_GEN_9:
+  case GED_MODEL_9:
     return IGA_GEN9;
-  case GED_MODEL_GEN_10:
+  case GED_MODEL_10:
     return IGA_GEN10;
-  case GED_MODEL_GEN_11:
+  case GED_MODEL_11:
     return IGA_GEN11;
-  case GED_MODEL_GEN_TGL:
+  case GED_MODEL_TGL:
     return IGA_GEN12p1;
   default:
     break;
@@ -38,7 +38,7 @@ inline void KnobAddBool(const char* name, bool value) {
   PTI_ASSERT(knob != nullptr);
   KnobValue knob_value;
   knob_value.value._bool = value;
-  knob_value.type = KNOB_TYPE_BOOL;
+  knob_value.type = KNOB_TYPE::KNOB_TYPE_BOOL;
   KNOB_STATUS status = KNOB_AddValue(knob, &knob_value);
   PTI_ASSERT(status == KNOB_STATUS_SUCCESS);
 }
@@ -48,7 +48,7 @@ inline void KnobAddInt(const char* name, int value) {
   PTI_ASSERT(knob != nullptr);
   KnobValue knob_value;
   knob_value.value._bool = value;
-  knob_value.type = KNOB_TYPE_INTEGER;
+  knob_value.type = KNOB_TYPE::KNOB_TYPE_INTEGER;
   KNOB_STATUS status = KNOB_AddValue(knob, &knob_value);
   PTI_ASSERT(status == KNOB_STATUS_SUCCESS);
 }

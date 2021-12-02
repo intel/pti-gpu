@@ -5,16 +5,34 @@ import sys
 from samples import omp_gemm
 import utils
 
+if sys.platform == 'win32':
+  file_extention = ".exe"
+  file_name_prefix = ""
+  lib_name = "omp_hot_regions.dll"
+else:
+  file_extention = ""
+  file_name_prefix = "./"
+  lib_name = "./libomp_hot_regions.so"
+
+
 def config(path):
-  cmake = ["cmake",\
-    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
-  stdout, stderr = utils.run_process(cmake, path)
-  if stderr and stderr.find("CMake Error") != -1:
-    return stderr
+  if sys.platform != 'win32':
+    cmake = ["cmake",\
+      "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
+    stdout, stderr = utils.run_process(cmake, path)
+    if stderr and stderr.find("CMake Error") != -1:
+      return stderr
   return None
 
 def build(path):
-  stdout, stderr = utils.run_process(["make"], path)
+  make = ""
+  if sys.platform == 'win32':
+    make += "icx.exe ../tool.cc /Qnextgen /Qopenmp" +\
+      " -I../../../utils -o omp_hot_regions.dll"
+    make += " /LDd" if utils.get_build_flag() == "Debug" else " /LD"
+  else:
+    make = ["make"]
+  stdout, stderr = utils.run_process(make, path)
   if stderr and stderr.lower().find("error") != -1:
     return stderr
   return None
@@ -40,7 +58,7 @@ def parse(output):
 def run(path, option):
   app_folder = utils.get_sample_executable_path("omp_gemm")
   app_file = os.path.join(app_folder, "omp_gemm")
-  e = utils.add_env(None, "OMP_TOOL_LIBRARIES", "./libomp_hot_regions.so")
+  e = utils.add_env(None, "OMP_TOOL_LIBRARIES", lib_name)
   command = [app_file, option, "1024", "1"]
   stdout, stderr = utils.run_process(command, path, e)
   if not stdout:

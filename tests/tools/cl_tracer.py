@@ -35,7 +35,7 @@ def build(path):
 def run(path, option):
   environ = None
   if option == "dpc":
-    app_folder = utils.get_sample_executable_path("dpc_gemm")
+    app_folder = utils.get_sample_executable_path("dpc_gemm", utils.get_build_flag())
     app_file = os.path.join(app_folder, "dpc_gemm" + file_extention)
     command = [file_name_prefix + "cl_tracer" + file_extention,\
       "-h", "-d", "-t", app_file, "cpu", "1024", "1"]
@@ -51,6 +51,9 @@ def run(path, option):
     if option == "gpu":
       command = [file_name_prefix + "cl_tracer" + file_extention,\
         "-h", "-d", "-t", app_file, "gpu", "1024", "1"]
+    elif option == "--conditional-collection":
+      command = [file_name_prefix + "cl_tracer" + file_extention,\
+        "-d", option, app_file, "cpu", "1024", "1"]
     else:
       command = [file_name_prefix + "cl_tracer" + file_extention,\
         option, app_file, "cpu", "1024", "1"]
@@ -103,6 +106,8 @@ if __name__ == "__main__":
     option = "--chrome-kernel-timeline"
   if len(sys.argv) > 1 and sys.argv[1] == "--chrome-device-stages":
     option = "--chrome-device-stages"
+  if len(sys.argv) > 1 and sys.argv[1] == "--conditional-collection":
+    option = "--conditional-collection"
   if len(sys.argv) > 1 and sys.argv[1] == "gpu":
     option = "gpu"
   if len(sys.argv) > 1 and sys.argv[1] == "dpc":

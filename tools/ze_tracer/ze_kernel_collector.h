@@ -55,11 +55,12 @@ struct ZeKernelCommand {
 };
 
 struct ZeKernelCall {
-  ZeKernelCommand* command;
-  ze_command_queue_handle_t queue;
-  uint64_t submit_time;
-  uint64_t device_submit_time;
-  uint64_t call_id;
+  ZeKernelCommand* command = nullptr;
+  ze_command_queue_handle_t queue = nullptr;
+  uint64_t submit_time = 0;
+  uint64_t device_submit_time = 0;
+  uint64_t call_id = 0;
+  bool need_to_process = true;
 };
 
 struct ZeKernelInfo {
@@ -558,54 +559,54 @@ class ZeKernelCollector {
     ZeKernelCommand* command = call->command;
     PTI_ASSERT(command != nullptr);
 
+    if (call->need_to_process) {
 #ifdef PTI_KERNEL_INTERVALS
-    AddKernelInterval(command);
+      AddKernelInterval(command);
 #else // PTI_KERNEL_INTERVALS
+      ze_result_t status = ZE_RESULT_SUCCESS;
+      status = zeEventQueryStatus(command->event);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zeEventQueryStatus(command->event);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      ze_kernel_timestamp_result_t timestamp{};
+      status = zeEventQueryKernelTimestamp(command->event, &timestamp);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    ze_kernel_timestamp_result_t timestamp{};
-    status = zeEventQueryKernelTimestamp(command->event, &timestamp);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (kernels_per_tile_ && command->props.simd_width > 0) {
+        if (device_map_.count(command->device) == 1 &&
+            !device_map_[command->device].empty()) { // Implicit Scaling
+          uint32_t count = 0;
+          status = zeEventQueryTimestampsExp(
+              command->event, command->device, &count, nullptr);
+          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          PTI_ASSERT(count > 0);
 
-    if (kernels_per_tile_ && command->props.simd_width > 0) {
-      if (device_map_.count(command->device) == 1 &&
-          !device_map_[command->device].empty()) { // Implicit Scaling
-        uint32_t count = 0;
-        status = zeEventQueryTimestampsExp(
-            command->event, command->device, &count, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        PTI_ASSERT(count > 0);
+          std::vector<ze_kernel_timestamp_result_t> timestamps(count);
+          status = zeEventQueryTimestampsExp(
+              command->event, command->device, &count, timestamps.data());
+          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-        std::vector<ze_kernel_timestamp_result_t> timestamps(count);
-        status = zeEventQueryTimestampsExp(
-            command->event, command->device, &count, timestamps.data());
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-        if (count == 1) { // First tile is used only
-          ProcessCall(call, timestamp, 0, true);
-        } else {
-          ProcessCall(call, timestamp, -1, false);
-          for (uint32_t i = 0; i < count; ++i) {
-            ProcessCall(call, timestamps[i], static_cast<int>(i), true);
+          if (count == 1) { // First tile is used only
+            ProcessCall(call, timestamp, 0, true);
+          } else {
+            ProcessCall(call, timestamp, -1, false);
+            for (uint32_t i = 0; i < count; ++i) {
+              ProcessCall(call, timestamps[i], static_cast<int>(i), true);
+            }
+          }
+        } else { // Explicit Scaling
+          if (device_map_.count(command->device) == 0) { // Subdevice
+            int sub_device_id = GetSubDeviceId(command->device);
+            PTI_ASSERT(sub_device_id >= 0);
+            ProcessCall(call, timestamp, sub_device_id, true);
+          } else { // Device with no subdevices
+            ProcessCall(call, timestamp, 0, true);
           }
         }
-      } else { // Explicit Scaling
-        if (device_map_.count(command->device) == 0) { // Subdevice
-          int sub_device_id = GetSubDeviceId(command->device);
-          PTI_ASSERT(sub_device_id >= 0);
-          ProcessCall(call, timestamp, sub_device_id, true);
-        } else { // Device with no subdevices
-          ProcessCall(call, timestamp, 0, true);
-        }
+      } else {
+        ProcessCall(call, timestamp, -1, true);
       }
-    } else {
-      ProcessCall(call, timestamp, -1, true);
-    }
-
 #endif // PTI_KERNEL_INTERVALS
+    }
 
     event_cache_.ResetEvent(command->event);
     delete call;
@@ -839,6 +840,7 @@ class ZeKernelCollector {
       PTI_ASSERT(command->append_time <= call->submit_time);
       ++(command->call_count);
       call->call_id = command->call_count;
+      call->need_to_process = !correlator_->IsCollectionDisabled();
 
       kernel_call_list_.push_back(call);
       correlator_->AddCallId(command_list, call->call_id);
@@ -1072,7 +1074,7 @@ class ZeKernelCollector {
       command->event = signal_event;
     }
 
-    ZeKernelCall* call = new ZeKernelCall{nullptr, nullptr, 0, 0};
+    ZeKernelCall* call = new ZeKernelCall{};
     PTI_ASSERT(call != nullptr);
     call->command = command;
 
@@ -1080,6 +1082,8 @@ class ZeKernelCollector {
       call->submit_time = command->append_time;
       call->device_submit_time = collector->GetDeviceTimestamp(device);
       call->queue = reinterpret_cast<ze_command_queue_handle_t>(command_list);
+      PTI_ASSERT(collector->correlator_ != nullptr);
+      call->need_to_process = !collector->correlator_->IsCollectionDisabled();
     }
 
     *instance_data = static_cast<void*>(call);
