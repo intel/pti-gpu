@@ -306,13 +306,16 @@ inline std::string GetKernelName(ze_kernel_handle_t kernel) {
   return std::string(name.begin(), name.end() - 1);
 }
 
-inline uint64_t GetDeviceTimestamp(ze_device_handle_t device) {
+inline void GetTimestamps(
+    ze_device_handle_t device,
+    uint64_t* host_timestamp,
+    uint64_t* device_timestamp) {
   PTI_ASSERT(device != nullptr);
-  uint64_t host_timestamp = 0, device_timestamp = 0;
+  PTI_ASSERT(host_timestamp != nullptr);
+  PTI_ASSERT(device_timestamp != nullptr);
   ze_result_t status = zeDeviceGetGlobalTimestamps(
-      device, &host_timestamp, &device_timestamp);
+      device, host_timestamp, device_timestamp);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  return device_timestamp;
 }
 
 inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {

@@ -47,26 +47,22 @@ struct Comparator {
 };
 
 #if defined(__gnu_linux__)
-inline uint64_t ConvertClockMonotonicToRaw(uint64_t clock_monotonic) {
-  int status = 0;
 
-  timespec monotonic_time;
-  status = clock_gettime(CLOCK_MONOTONIC, &monotonic_time);
+inline uint64_t GetTime(clockid_t id) {
+  timespec ts{0};
+  int status = clock_gettime(id, &ts);
   PTI_ASSERT(status == 0);
-
-  timespec raw_time;
-  status = clock_gettime(CLOCK_MONOTONIC_RAW, &raw_time);
-  PTI_ASSERT(status == 0);
-
-  uint64_t raw = raw_time.tv_nsec + NSEC_IN_SEC * raw_time.tv_sec;
-  uint64_t monotonic = monotonic_time.tv_nsec +
-    NSEC_IN_SEC * monotonic_time.tv_sec;
-  if (raw > monotonic) {
-    return clock_monotonic + (raw - monotonic);
-  } else {
-    return clock_monotonic - (monotonic - raw);
-  }
+  return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
 }
+
+inline uint64_t ConvertClockMonotonicToRaw(uint64_t clock_monotonic) {
+  uint64_t raw = GetTime(CLOCK_MONOTONIC_RAW);
+  uint64_t monotonic = GetTime(CLOCK_MONOTONIC);
+  return (raw > monotonic) ?
+    clock_monotonic + (raw - monotonic) :
+    clock_monotonic - (monotonic - raw);
+}
+
 #endif
 
 inline std::string GetExecutablePath() {
@@ -166,6 +162,17 @@ inline uint32_t GetTid() {
 #else
   #error "SYS_gettid is unavailable on this system"
 #endif
+#endif
+}
+
+inline uint64_t GetSystemTime() {
+#if defined(_WIN32)
+  LARGE_INTEGER ticks{0};
+  BOOL status = QueryPerformanceCounter(&ticks);
+  PTI_ASSERT(status != 0);
+  return ticks.QuadPart;
+#else
+  return GetTime(CLOCK_MONOTONIC_RAW);
 #endif
 }
 

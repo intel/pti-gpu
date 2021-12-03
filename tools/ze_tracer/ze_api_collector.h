@@ -82,9 +82,10 @@ class ZeApiCollector {
 
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zelTracerSetEnabled(tracer_, false);
+#if !defined(_WIN32)
+    ze_result_t status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+#endif
   }
 
   const ZeFunctionInfoMap& GetFunctionInfoMap() const {
@@ -142,8 +143,10 @@ class ZeApiCollector {
 
   ~ZeApiCollector() {
     if (tracer_ != nullptr) {
+#if !defined(_WIN32)
       ze_result_t status = zelTracerDestroy(tracer_);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+#endif
     }
   }
 

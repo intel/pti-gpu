@@ -7,7 +7,6 @@
 #ifndef PTI_TOOLS_UTILS_CORRELATOR_H_
 #define PTI_TOOLS_UTILS_CORRELATOR_H_
 
-#include <chrono>
 #include <map>
 #include <vector>
 
@@ -19,14 +18,6 @@
 #include "pti_assert.h"
 #include "utils.h"
 
-#ifdef CLOCK_HIGH_RESOLUTION
-#define PTI_CLOCK std::chrono::high_resolution_clock
-#else
-#define PTI_CLOCK std::chrono::steady_clock
-#endif
-
-using TimePoint = std::chrono::time_point<PTI_CLOCK>;
-
 struct ApiCollectorOptions {
   bool call_tracing;
   bool need_tid;
@@ -37,22 +28,23 @@ class Correlator {
  public:
   Correlator(const std::string& log_file, bool conditional_collection)
       : logger_(log_file), conditional_collection_(conditional_collection),
-        base_time_(PTI_CLOCK::now()) {}
+        base_time_(utils::GetSystemTime()) {}
 
   void Log(const std::string& text) {
     logger_.Log(text);
   }
 
   uint64_t GetTimestamp() const {
-    std::chrono::duration<uint64_t, std::nano> timestamp =
-      PTI_CLOCK::now() - base_time_;
-    return timestamp.count();
+    return utils::GetSystemTime() - base_time_;
+  }
+
+  uint64_t GetTimestamp(uint64_t timestamp) const {
+    PTI_ASSERT(timestamp > base_time_);
+    return timestamp - base_time_;
   }
 
   uint64_t GetStartPoint() const {
-    std::chrono::duration<uint64_t, std::nano> start_point =
-      base_time_.time_since_epoch();
-    return start_point.count();
+    return base_time_;
   }
 
   uint64_t GetKernelId() const {
@@ -135,16 +127,14 @@ class Correlator {
 #endif // PTI_LEVEL_ZERO
 
  private:
-  TimePoint base_time_;
+  uint64_t base_time_;
+  Logger logger_;
+  bool conditional_collection_;
+  static thread_local uint64_t kernel_id_;
 #ifdef PTI_LEVEL_ZERO
   std::map<ze_command_list_handle_t, std::vector<uint64_t> > kernel_id_map_;
   std::map<ze_command_list_handle_t, std::vector<uint64_t> > call_id_map_;
 #endif // PTI_LEVEL_ZERO
-
-  Logger logger_;
-  bool conditional_collection_;
-
-  static thread_local uint64_t kernel_id_;
 };
 
 #endif // PTI_TOOLS_UTILS_CORRELATOR_H_

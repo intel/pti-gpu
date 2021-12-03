@@ -23,12 +23,6 @@ if(CMAKE_INCLUDE_PATH)
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
 
-if(DEFINED CLOCK_HIGH_RESOLUTION)
-  message(STATUS "High resolution clock will be used")
-  target_compile_definitions(clt_tracer
-    PUBLIC CLOCK_HIGH_RESOLUTION=${CLOCK_HIGH_RESOLUTION})
-endif()
-
 FindOpenCLLibrary(clt_tracer)
 FindOpenCLHeaders(clt_tracer)
 

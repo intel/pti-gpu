@@ -455,14 +455,19 @@ class ClKernelCollector {
     }
   }
 
-  std::string GetVerboseName(
-      const ClKernelProps* props) {
+  std::string GetVerboseName(const ClKernelProps* props) {
     PTI_ASSERT(props != nullptr);
     PTI_ASSERT(!props->name.empty());
 
     std::stringstream sstream;
     if (props->simd_width > 0) {
-      sstream << props->name << "[SIMD" << props->simd_width << ", {" <<
+      sstream << "[SIMD";
+      if (props->simd_width == 1) {
+        sstream << "_ANY";
+      } else {
+        sstream << props->simd_width;
+      }
+      sstream << ", {" <<
         props->global_size[0] << ", " <<
         props->global_size[1] << ", " <<
         props->global_size[2] << "}, {" <<
@@ -668,13 +673,14 @@ class ClKernelCollector {
 
     ClEnqueueData* enqueue_data = new ClEnqueueData;
     enqueue_data->event = nullptr;
-    enqueue_data->host_sync = collector->correlator_->GetTimestamp();
 
     cl_ulong host_timestamp = 0;
     utils::cl::GetTimestamps(
-        collector->device_, &host_timestamp, &enqueue_data->device_sync);
-#ifdef PTI_KERNEL_INTERVALS
-    enqueue_data->host_sync = host_timestamp;
+        collector->device_, &enqueue_data->host_sync, &enqueue_data->device_sync);
+#ifndef PTI_KERNEL_INTERVALS
+    PTI_ASSERT(collector->correlator_ != nullptr);
+    enqueue_data->host_sync =
+      collector->correlator_->GetTimestamp(enqueue_data->host_sync);
 #endif
 
     const T* params = reinterpret_cast<const T*>(data->functionParams);

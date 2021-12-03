@@ -22,12 +22,6 @@ if(CMAKE_INCLUDE_PATH)
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
 
-if(DEFINED CLOCK_HIGH_RESOLUTION)
-  message(STATUS "High resolution clock will be used")
-  target_compile_definitions(zet_tracer
-    PUBLIC CLOCK_HIGH_RESOLUTION=${CLOCK_HIGH_RESOLUTION})
-endif()
-
 FindL0Library(zet_tracer)
 FindL0Headers(zet_tracer)
 

@@ -358,9 +358,16 @@ inline void GetTimestamps(
     cl_ulong* host_timestamp,
     cl_ulong* device_timestamp) {
   PTI_ASSERT(device != nullptr);
+  PTI_ASSERT(host_timestamp != nullptr);
+  PTI_ASSERT(device_timestamp != nullptr);
   cl_int status = clGetDeviceAndHostTimer(
       device, device_timestamp, host_timestamp);
   PTI_ASSERT(status == CL_SUCCESS);
+#if defined(__gnu_linux__)
+  if (GetDeviceType(device) == CL_DEVICE_TYPE_CPU) {
+    *host_timestamp = utils::ConvertClockMonotonicToRaw(*host_timestamp);
+  }
+#endif
 }
 
 inline const char* GetErrorString(cl_int error) {

@@ -152,6 +152,11 @@ class ZeTracer {
       : options_(options),
         correlator_(options.GetLogFileName(),
           CheckOption(TRACE_CONDITIONAL_COLLECTION)) {
+#if !defined(_WIN32)
+    uint64_t monotonic_time = utils::GetTime(CLOCK_MONOTONIC);
+    uint64_t real_time = utils::GetTime(CLOCK_REALTIME);
+#endif
+
     if (CheckOption(TRACE_CHROME_CALL_LOGGING) ||
         CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
         CheckOption(TRACE_CHROME_KERNEL_TIMELINE) ||
@@ -164,18 +169,43 @@ class ZeTracer {
       std::stringstream stream;
       stream << "[" << std::endl;
       stream << "{\"ph\":\"M\", \"name\":\"process_name\", \"pid\":\"" <<
-        utils::GetPid() << "\", \"tid\":0, \"args\":{\"name\":\"" <<
+        utils::GetPid() << "\", \"args\":{\"name\":\"" <<
         utils::GetExecutableName() << "\"}}," << std::endl;
-      stream << "{\"ph\":\"M\", \"name\":\"ze_tracer_start_time\", \"pid\":\"" <<
-        utils::GetPid() << "\", \"tid\":0, \"args\":{\"start_time\":\"" <<
-        correlator_.GetStartPoint() << "\"}}," << std::endl;
+
+      stream << "{\"ph\":\"M\", \"name\":\"start_time\", \"pid\":\"" <<
+        utils::GetPid() << "\", \"args\":{";
+#if defined(_WIN32)
+      stream << "\"QueryPerformanceCounter\":\"" <<
+        correlator_.GetStartPoint() << "\"";
+#else
+      stream << "\"CLOCK_MONOTONIC_RAW\":\"" <<
+        correlator_.GetStartPoint() << "\", ";
+      stream << "\"CLOCK_MONOTONIC\":\"" <<
+        monotonic_time << "\", ";
+      stream << "\"CLOCK_REALTIME\":\"" <<
+        real_time << "\"";
+#endif
+      stream << "}}," << std::endl;
 
       chrome_logger_->Log(stream.str());
     }
     if (CheckOption(TRACE_DEVICE_TIMELINE)) {
       std::stringstream stream;
-      stream << "Device Timeline: start time [ns] = " <<
+#if defined(_WIN32)
+      stream <<
+        "Device Timeline: start time (QueryPerformanceCounter) [ns] = " <<
         correlator_.GetStartPoint() << std::endl;
+#else
+      stream <<
+        "Device Timeline: start time (CLOCK_MONOTONIC_RAW) [ns] = " <<
+        correlator_.GetStartPoint() << std::endl;
+      stream <<
+        "Device Timeline: start time (CLOCK_MONOTONIC) [ns] = " <<
+        monotonic_time << std::endl;
+      stream <<
+        "Device Timeline: start time (CLOCK_REALTIME) [ns] = " <<
+        real_time << std::endl;
+#endif
       correlator_.Log(stream.str());
     }
   }

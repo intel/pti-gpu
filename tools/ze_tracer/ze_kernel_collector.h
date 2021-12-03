@@ -162,8 +162,10 @@ class ZeKernelCollector {
 
   ~ZeKernelCollector() {
     if (tracer_ != nullptr) {
+#if !defined(_WIN32)
       ze_result_t status = zelTracerDestroy(tracer_);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+#endif
     }
   }
 
@@ -218,9 +220,10 @@ class ZeKernelCollector {
 
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zelTracerSetEnabled(tracer_, false);
+#if !defined(_WIN32)
+    ze_result_t status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+#endif
   }
 
   const ZeKernelInfoMap& GetKernelInfoMap() const {
@@ -292,10 +295,16 @@ class ZeKernelCollector {
     return correlator_->GetTimestamp();
   }
 
-  uint64_t GetDeviceTimestamp(ze_device_handle_t device) const {
+  void GetSyncTimestamps(
+      ze_device_handle_t device,
+      uint64_t& host_timestamp,
+      uint64_t& device_timestamp) const {
     PTI_ASSERT(device != nullptr);
-    return utils::ze::GetDeviceTimestamp(device) &
-      utils::ze::GetDeviceTimestampMask(device);
+    PTI_ASSERT(correlator_ != nullptr);
+
+    utils::ze::GetTimestamps(device, &host_timestamp, &device_timestamp);
+    host_timestamp = correlator_->GetTimestamp(host_timestamp);
+    device_timestamp &= utils::ze::GetDeviceTimestampMask(device);
   }
 
   void EnableTracing(zel_tracer_handle_t tracer) {
@@ -643,7 +652,13 @@ class ZeKernelCollector {
     std::stringstream sstream;
     sstream << props->name;
     if (props->simd_width > 0) {
-      sstream << "[SIMD" << props->simd_width << " {" <<
+      sstream << "[SIMD";
+      if (props->simd_width == 1) {
+        sstream << "_ANY";
+      } else {
+        sstream << props->simd_width;
+      }
+      sstream << ", {" <<
         props->group_count[0] << "; " <<
         props->group_count[1] << "; " <<
         props->group_count[2] << "} {" <<
@@ -1079,8 +1094,11 @@ class ZeKernelCollector {
     call->command = command;
 
     if (collector->IsCommandListImmediate(command_list)) {
+      uint64_t host_timestamp = 0, device_timestamp = 0;
+      collector->GetSyncTimestamps(device, host_timestamp, device_timestamp);
+      command->append_time = host_timestamp;
       call->submit_time = command->append_time;
-      call->device_submit_time = collector->GetDeviceTimestamp(device);
+      call->device_submit_time = device_timestamp;
       call->queue = reinterpret_cast<ze_command_queue_handle_t>(command_list);
       PTI_ASSERT(collector->correlator_ != nullptr);
       call->need_to_process = !collector->correlator_->IsCollectionDisabled();
@@ -1699,9 +1717,9 @@ class ZeKernelCollector {
         collector->GetCommandListDevice(command_lists[i]);
       PTI_ASSERT(device != nullptr);
 
-      submit_data_list->push_back({
-          collector->GetHostTimestamp(),
-          collector->GetDeviceTimestamp(device)});
+      uint64_t host_timestamp = 0, device_timestamp = 0;
+      collector->GetSyncTimestamps(device, host_timestamp, device_timestamp);
+      submit_data_list->push_back({host_timestamp, device_timestamp});
     }
 
     *reinterpret_cast<std::vector<ZeSubmitData>**>(instance_data) =

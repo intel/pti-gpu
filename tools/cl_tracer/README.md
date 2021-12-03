@@ -116,11 +116,6 @@ unsetenv("PTI_DISABLE_COLLECTION");
 ```
 All the API calls and kernels, which submission happens while collection disabled interval, will be omitted from final results.
 
-To enable `high_resolution_clock` timestamps instead of `steady_clock` used by default, one may set `CLOCK_HIGH_RESOLUTION` variable for CMake:
-```sh
-cmake -DCLOCK_HIGH_RESOLUTION=1 ..
-```
-
 ## Supported OS
 - Linux
 - Windows
