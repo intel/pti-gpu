@@ -53,20 +53,22 @@ struct ClKernelInstance {
 };
 
 struct ClKernelInfo {
-  uint64_t total_time;
+  uint64_t queued_time;
+  uint64_t submit_time;
+  uint64_t execute_time;
   uint64_t min_time;
   uint64_t max_time;
   uint64_t call_count;
 
   bool operator>(const ClKernelInfo& r) const {
-    if (total_time != r.total_time) {
-      return total_time > r.total_time;
+    if (execute_time != r.execute_time) {
+      return execute_time > r.execute_time;
     }
     return call_count > r.call_count;
   }
 
   bool operator!=(const ClKernelInfo& r) const {
-    if (total_time == r.total_time) {
+    if (execute_time == r.execute_time) {
       return call_count != r.call_count;
     }
     return true;
@@ -173,7 +175,7 @@ class ClKernelCollector {
     uint64_t total_duration = 0;
     size_t max_name_length = kKernelLength;
     for (auto& value : sorted_list) {
-      total_duration += value.second.total_time;
+      total_duration += value.second.execute_time;
       if (value.first.size() > max_name_length) {
         max_name_length = value.first.size();
       }
@@ -195,7 +197,7 @@ class ClKernelCollector {
     for (auto& value : sorted_list) {
       const std::string& function = value.first;
       uint64_t call_count = value.second.call_count;
-      uint64_t duration = value.second.total_time;
+      uint64_t duration = value.second.execute_time;
       uint64_t avg_duration = duration / call_count;
       uint64_t min_duration = value.second.min_time;
       uint64_t max_duration = value.second.max_time;
@@ -208,6 +210,67 @@ class ClKernelCollector {
         std::setw(kTimeLength) << avg_duration << "," <<
         std::setw(kTimeLength) << min_duration << "," <<
         std::setw(kTimeLength) << max_duration << std::endl;
+    }
+
+    PTI_ASSERT(correlator_ != nullptr);
+    correlator_->Log(stream.str());
+  }
+
+  void PrintSubmissionTable() const {
+    std::set< std::pair<std::string, ClKernelInfo>,
+              utils::Comparator > sorted_list(
+        kernel_info_map_.begin(), kernel_info_map_.end());
+
+    uint64_t total_queued_duration = 0;
+    uint64_t total_submit_duration = 0;
+    uint64_t total_execute_duration = 0;
+    size_t max_name_length = kKernelLength;
+    for (auto& value : sorted_list) {
+      total_queued_duration += value.second.queued_time;
+      total_submit_duration += value.second.submit_time;
+      total_execute_duration += value.second.execute_time;
+      if (value.first.size() > max_name_length) {
+        max_name_length = value.first.size();
+      }
+    }
+
+    if (total_execute_duration == 0) {
+      return;
+    }
+
+    std::stringstream stream;
+    stream << std::setw(max_name_length) << "Kernel" << "," <<
+      std::setw(kCallsLength) << "Calls" << "," <<
+      std::setw(kTimeLength) << "Queued (ns)" << "," <<
+      std::setw(kPercentLength) << "Queued (%)" << "," <<
+      std::setw(kTimeLength) << "Submit (ns)" << "," <<
+      std::setw(kPercentLength) << "Submit (%)" << "," <<
+      std::setw(kTimeLength) << "Execute (ns)" << "," <<
+      std::setw(kPercentLength) << "Execute (%)" << "," << std::endl;
+
+    for (auto& value : sorted_list) {
+      const std::string& function = value.first;
+      uint64_t call_count = value.second.call_count;
+      uint64_t queued_duration = value.second.queued_time;
+      float queued_percent =
+        100.0f * queued_duration / total_queued_duration;
+      uint64_t submit_duration = value.second.submit_time;
+      float submit_percent =
+        100.0f * submit_duration / total_submit_duration;
+      uint64_t execute_duration = value.second.execute_time;
+      float execute_percent =
+        100.0f * execute_duration / total_execute_duration;
+      stream << std::setw(max_name_length) << function << "," <<
+        std::setw(kCallsLength) << call_count << "," <<
+        std::setw(kTimeLength) << queued_duration << "," <<
+        std::setw(kPercentLength) << std::setprecision(2) <<
+          std::fixed << queued_percent << "," <<
+        std::setw(kTimeLength) << submit_duration << "," <<
+        std::setw(kPercentLength) << std::setprecision(2) <<
+          std::fixed << submit_percent << "," <<
+        std::setw(kTimeLength) << execute_duration << "," <<
+        std::setw(kPercentLength) << std::setprecision(2) <<
+          std::fixed << execute_percent << "," << std::endl;
     }
 
     PTI_ASSERT(correlator_ != nullptr);
@@ -380,16 +443,20 @@ class ClKernelCollector {
       PTI_ASSERT(device != nullptr);
       AddKernelInterval(instance, device, started, ended);
 #else // PTI_KERNEL_INTERVALS
-      AddKernelInfo(&instance->props, time);
-      if (callback_ != nullptr) {
-        uint64_t host_queued = 0, host_submitted = 0;
-        uint64_t host_started = 0, host_ended = 0;
-        ComputeHostTimestamps(
-            instance,
-            started, ended,
-            host_queued, host_submitted,
-            host_started, host_ended);
+      uint64_t host_queued = 0, host_submitted = 0;
+      uint64_t host_started = 0, host_ended = 0;
+      ComputeHostTimestamps(
+          instance,
+          started, ended,
+          host_queued, host_submitted,
+          host_started, host_ended);
+      AddKernelInfo(
+        &instance->props,
+        host_submitted - host_queued,
+        host_started - host_submitted,
+        host_ended - host_started);
 
+      if (callback_ != nullptr) {
         std::string name = instance->props.name;
         PTI_ASSERT(!name.empty());
 
@@ -460,6 +527,7 @@ class ClKernelCollector {
     PTI_ASSERT(!props->name.empty());
 
     std::stringstream sstream;
+    sstream << props->name;
     if (props->simd_width > 0) {
       sstream << "[SIMD";
       if (props->simd_width == 1) {
@@ -482,7 +550,9 @@ class ClKernelCollector {
     return sstream.str();
   }
 
-  void AddKernelInfo(const ClKernelProps* props, uint64_t time) {
+  void AddKernelInfo(
+      const ClKernelProps* props, uint64_t queued_time,
+      uint64_t submit_time, uint64_t execute_time) {
     PTI_ASSERT(props != nullptr);
 
     std::string name = props->name;
@@ -493,16 +563,24 @@ class ClKernelCollector {
     }
 
     if (kernel_info_map_.count(name) == 0) {
-      kernel_info_map_[name] = {
-        time, time, time, 1};
+      ClKernelInfo info;
+      info.queued_time = queued_time;
+      info.submit_time = submit_time;
+      info.execute_time = execute_time;
+      info.min_time = execute_time;
+      info.max_time = execute_time;
+      info.call_count = 1;
+      kernel_info_map_[name] = info;
     } else {
       ClKernelInfo& kernel = kernel_info_map_[name];
-      kernel.total_time += time;
-      if (time > kernel.max_time) {
-        kernel.max_time = time;
+      kernel.queued_time += queued_time;
+      kernel.submit_time += submit_time;
+      kernel.execute_time += execute_time;
+      if (execute_time > kernel.max_time) {
+        kernel.max_time = execute_time;
       }
-      if (time < kernel.min_time) {
-        kernel.min_time = time;
+      if (execute_time < kernel.min_time) {
+        kernel.min_time = execute_time;
       }
       kernel.call_count += 1;
     }
@@ -1343,7 +1421,7 @@ class ClKernelCollector {
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;
   static const uint32_t kTimeLength = 20;
-  static const uint32_t kPercentLength = 10;
+  static const uint32_t kPercentLength = 12;
 };
 
 #endif // PTI_TOOLS_CL_TRACER_CL_KERNEL_COLLECTOR_H_

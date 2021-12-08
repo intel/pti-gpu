@@ -18,7 +18,7 @@ metrics-discovery:
     - sudo make install
     - sudo make package
     - sudo dpkg -i *.deb
-    commit: 7c416548fe13274effb795fcee55d099aee41b3f
+    commit: 8334347b2e61c339e1118680938470172dd38cb4
     url: https://github.com/intel/metrics-discovery
 metrics-library:
   github:
@@ -28,7 +28,7 @@ metrics-library:
     - make -j$(nproc)
     - sudo make package
     - sudo dpkg -i *.deb
-    commit: 0b05eb3138d3f0492c20111599d9a9a5af4a065f
+    commit: 3fd6eb0544fadcec2ac762aedee7c2d5d6479feb
     url: https://github.com/intel/metrics-library
 gtpin:
   archive:

@@ -16,17 +16,18 @@
 #define TRACE_CALL_LOGGING           0
 #define TRACE_HOST_TIMING            1
 #define TRACE_DEVICE_TIMING          2
-#define TRACE_DEVICE_TIMING_VERBOSE  3
+#define TRACE_KERNEL_SUBMITTING      3
 #define TRACE_DEVICE_TIMELINE        4
 #define TRACE_CHROME_CALL_LOGGING    5
 #define TRACE_CHROME_DEVICE_TIMELINE 6
 #define TRACE_CHROME_KERNEL_TIMELINE 7
 #define TRACE_CHROME_DEVICE_STAGES   8
-#define TRACE_KERNELS_PER_TILE       9
-#define TRACE_TID                    10
-#define TRACE_PID                    11
-#define TRACE_LOG_TO_FILE            12
-#define TRACE_CONDITIONAL_COLLECTION 13
+#define TRACE_VERBOSE                9
+#define TRACE_KERNELS_PER_TILE       10
+#define TRACE_TID                    11
+#define TRACE_PID                    12
+#define TRACE_LOG_TO_FILE            13
+#define TRACE_CONDITIONAL_COLLECTION 14
 
 const char* kChromeTraceFileExt = "json";
 

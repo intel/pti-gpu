@@ -85,17 +85,16 @@ Host timestamp value corresponds to `CLOCK_MONOTONIC_RAW` on Linux or `QueryPerf
 
 Note that the number of valid bits for the device timestamp returned by `zeDeviceGetGlobalTimestamps` is `timestampValidBits`, while the global kernel timastamp returned by `zeEventQueryKernelTimestamp` has `kernelTimestampValidBits` (both values are fields of `ze_device_properties_t`). And currently `kernelTimestampValidBits` is less then `timestampValidBits`, so to map kernels into CPU timeline one may need to truncate device timestamp to `kernelTimestampValidBits`:
 ```cpp
-ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
 ze_result_t status = zeDeviceGetProperties(device, &props);
 assert(status == ZE_RESULT_SUCCESS);
 
 uint64_t mask = (1ull << props.kernelTimestampValidBits) - 1ull;
 uint64_t kernel_timestamp = (device_timestamp & mask);
 ```
-To convert GPU cycles into seconds one may use `timerResolution` field from `ze_device_properties_t` structure, that represents cycles per second starting from Level Zero 1.1:
+To convert GPU cycles into seconds one may use `timerResolution` field from `ze_device_properties_t` structure, that represents cycles per second starting from Level Zero 1.2:
 ```cpp
-ze_device_properties_t props{};
-props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
 ze_result_t status = zeDeviceGetProperties(device, &props);
 assert(status == ZE_RESULT_SUCCESS);
 

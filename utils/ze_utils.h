@@ -169,8 +169,7 @@ inline ze_context_handle_t GetContext(ze_driver_handle_t driver) {
 inline std::string GetDeviceName(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
-  ze_device_properties_t props{};
-  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
   status = zeDeviceGetProperties(device, &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return props.name;
@@ -320,7 +319,7 @@ inline void GetTimestamps(
 
 inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
-  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
   ze_result_t status = zeDeviceGetProperties(device, &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return props.timerResolution;
@@ -328,7 +327,7 @@ inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
 
 uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
-  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
   ze_result_t status = zeDeviceGetProperties(device, &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return (1ull << props.kernelTimestampValidBits) - 1ull;

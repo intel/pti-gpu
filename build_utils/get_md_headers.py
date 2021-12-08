@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/intel/metrics-discovery.git"
-commit = "7c416548fe13274effb795fcee55d099aee41b3f"
+commit = "8334347b2e61c339e1118680938470172dd38cb4"
 
 def main():
   if len(sys.argv) < 3:

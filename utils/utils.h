@@ -168,9 +168,12 @@ inline uint32_t GetTid() {
 inline uint64_t GetSystemTime() {
 #if defined(_WIN32)
   LARGE_INTEGER ticks{0};
-  BOOL status = QueryPerformanceCounter(&ticks);
+  LARGE_INTEGER frequency{0};
+  BOOL status = QueryPerformanceFrequency(&frequency);
   PTI_ASSERT(status != 0);
-  return ticks.QuadPart;
+  status = QueryPerformanceCounter(&ticks);
+  PTI_ASSERT(status != 0);
+  return ticks.QuadPart * (NSEC_IN_SEC / frequency.QuadPart);
 #else
   return GetTime(CLOCK_MONOTONIC_RAW);
 #endif

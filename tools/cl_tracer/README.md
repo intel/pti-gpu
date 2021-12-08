@@ -9,16 +9,17 @@ Options:
 --call-logging [-c]            Trace host API calls
 --host-timing  [-h]            Report host API execution time
 --device-timing [-d]           Report kernels execution time
---device-timing-verbose [-v]   Report kernels execution time with SIMD width and global/local sizes
+--kernel-submission [-s]       Report queued, submit and execute intervals for kernels
 --device-timeline [-t]         Trace device activities
---output [-o] <filename>       Print console logs into the file
 --chrome-call-logging          Dump host API calls to JSON file
 --chrome-device-timeline       Dump device activities to JSON file per command queue
 --chrome-kernel-timeline       Dump device activities to JSON file per kernel name
 --chrome-device-stages         Dump device activities by stages to JSON file
---conditional-collection       Enable conditional collection mode
+--verbose [-v]                 Enable verbose mode to show more kernel information
 --tid                          Print thread ID into host API trace
 --pid                          Print process ID into host API and device activity trace
+--output [-o] <filename>       Print console logs into the file
+--conditional-collection       Enable conditional collection mode
 --version                      Print version
 ```
 
@@ -73,9 +74,23 @@ Total Device Time for GPU backend (ns):            176740729
                 GEMM,           4,           171231415,     96.88,            42807853,            42778416,            42843666
 clEnqueueWriteBuffer,           8,             3256330,      1.84,              407041,              287916,              548416
  clEnqueueReadBuffer,           4,             2252984,      1.27,              563246,              558973,              567022
-...
 ```
-**Device Timing Verbose** mode provides additional information per kernel (SIMD width, global and local size) and per transfer (bytes transferred):
+**Kernel Submission** mode collects queued, submit and execute intervals for kernels and memory transfers:
+```
+=== Kernel Submission Results: ===
+
+             Total Execution Time (ns):            424658735
+Total Device Time for CPU backend (ns):                    0
+Total Device Time for GPU backend (ns):            171493149
+
+== GPU Backend: ==
+
+              Kernel,       Calls,         Queued (ns),  Queued (%),         Submit (ns),  Submit (%),        Execute (ns), Execute (%),
+                GEMM,           4,               61975,       20.61,             2076275,       39.43,           166183665,       96.90,
+clEnqueueWriteBuffer,           8,              231249,       76.92,             3181001,       60.41,             3032164,        1.77,
+ clEnqueueReadBuffer,           4,                7422,        2.47,                8694,        0.17,             2277320,        1.33,
+```
+**Verbose** mode provides additional information per kernel (SIMD width, global and local sizes) and per transfer (bytes transferred). This option should be used in addition to others, e.g. for **Device Timing** mode one can get:
 ```
 === Device Timing Results: ===
 

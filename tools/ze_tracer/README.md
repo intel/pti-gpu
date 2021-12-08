@@ -9,17 +9,18 @@ Options:
 --call-logging [-c]            Trace host API calls
 --host-timing  [-h]            Report host API execution time
 --device-timing [-d]           Report kernels execution time
---device-timing-verbose [-v]   Report kernels execution time with SIMD width and global/local sizes
+--kernel-submission [-s]       Report append, submit and execute intervals for kernels
 --device-timeline [-t]         Trace device activities
---output [-o] <filename>       Print console logs into the file
 --chrome-call-logging          Dump host API calls to JSON file
 --chrome-device-timeline       Dump device activities to JSON file per command queue
 --chrome-kernel-timeline       Dump device activities to JSON file per kernel name
 --chrome-device-stages         Dump device activities by stages to JSON file
+--verbose [-v]                 Enable verbose mode to show more kernel information
 --kernels-per-tile             Dump kernel information per tile
---conditional-collection       Enable conditional collection mode
 --tid                          Print thread ID into host API trace
 --pid                          Print process ID into host API and device activity trace
+--output [-o] <filename>       Print console logs into the file
+--conditional-collection       Enable conditional collection mode
 --version                      Print version
 ```
 
@@ -68,9 +69,21 @@ Total Execution Time (ns):            295236137
 zeCommandListAppendMemoryCopy(M2D),           8,       2934831,      1.66,           366853,        286500,        585333
 zeCommandListAppendMemoryCopy(D2M),           4,       2099164,      1.18,           524791,        497666,        559666
         zeCommandListAppendBarrier,           8,          9328,      0.01,             1166,          1166,          1166
-...
 ```
-**Device Timing Verbose** mode provides additional information per kernel (SIMD width, group count and group size) and per transfer (bytes transferred):
+**Kernel Submission** mode collects append, submit and execute intervals for kernels and memory transfers:
+```
+=== Kernel Submission Results: ===
+
+Total Execution Time (ns):            256576162
+   Total Device Time (ns):            174582990
+
+                            Kernel,       Calls,         Append (ns),  Append (%),         Submit (ns),  Submit (%),        Execute (ns), Execute (%),
+                              GEMM,           4,              553087,       10.79,            12441082,        3.03,           169770832,       97.24,
+zeCommandListAppendMemoryCopy(M2D),           8,             2898413,       56.53,            20843165,        5.08,             2843832,        1.63,
+zeCommandListAppendMemoryCopy(D2M),           4,              534710,       10.43,           182217916,       44.43,             1957331,        1.12,
+        zeCommandListAppendBarrier,           8,             1140561,       22.25,           194646664,       47.46,               10995,        0.01,
+```
+**Verbose** mode provides additional information per kernel (SIMD width, group count and group size) and per transfer (bytes transferred). This option should be used in addition to others, e.g. for **Device Timing** mode one can get:
 ```
 === Device Timing Results: ===
 
@@ -81,7 +94,7 @@ Total Execution Time (ns):            289685451
             GEMM[SIMD32 {4; 1024; 1} {256; 1; 1}],        4,    171667499,     97.44,         42916874,      42650833,      43501500
 zeCommandListAppendMemoryCopy(M2D)[4194304 bytes],        8,      2535164,      1.44,           316895,        276166,        363666
 zeCommandListAppendMemoryCopy(D2M)[4194304 bytes],        4,      1966499,      1.12,           491624,        464500,        516833
-                       zeCommandListAppendBarrier,        8,         9662,      0.01,             1207,          1166,           1333
+                       zeCommandListAppendBarrier,        8,         9662,      0.01,             1207,          1166,          1333
 ```
 
 **Device Timeline** mode (***Linux kernel 5.0+ is required for accurate measurements***) dumps four timestamps for each device activity - *append* to the command list, *submit* to device queue, *start* and *end* on the device (all the timestamps are in CPU nanoseconds):

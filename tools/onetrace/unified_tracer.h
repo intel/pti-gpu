@@ -41,7 +41,7 @@ class UnifiedTracer {
     PTI_ASSERT(tracer != nullptr);
 
     if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||
-        tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE) ||
+        tracer->CheckOption(TRACE_KERNEL_SUBMITTING) ||
         tracer->CheckOption(TRACE_DEVICE_TIMELINE) ||
         tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
         tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE) ||
@@ -93,7 +93,7 @@ class UnifiedTracer {
         cl_callback = ClChromeStagesCallback;
       }
 
-      bool verbose = tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE);
+      bool verbose = tracer->CheckOption(TRACE_VERBOSE);
       bool kernels_per_tile = tracer->CheckOption(TRACE_KERNELS_PER_TILE);
 
       ze_kernel_collector = ZeKernelCollector::Create(
@@ -345,7 +345,7 @@ class UnifiedTracer {
     const ZeKernelInfoMap& kernel_info_map = collector->GetKernelInfoMap();
     if (kernel_info_map.size() != 0) {
       for (auto& value : kernel_info_map) {
-        total_time += value.second.total_time;
+        total_time += value.second.execute_time;
       }
     }
 
@@ -373,7 +373,7 @@ class UnifiedTracer {
     const ClKernelInfoMap& kernel_info_map = collector->GetKernelInfoMap();
     if (kernel_info_map.size() != 0) {
       for (auto& value : kernel_info_map) {
-        total_time += value.second.total_time;
+        total_time += value.second.execute_time;
       }
     }
 
@@ -441,6 +441,38 @@ class UnifiedTracer {
       stream << std::endl;
       correlator_.Log(stream.str());
       collector->PrintKernelsTable();
+    }
+  }
+
+  void PrintSubmissionTable(
+      const ZeKernelCollector* collector, const char* device_type) {
+    PTI_ASSERT(collector != nullptr);
+    PTI_ASSERT(device_type != nullptr);
+
+    uint64_t total_duration = CalculateTotalTime(collector);
+    if (total_duration > 0) {
+      std::stringstream stream;
+      stream << std::endl;
+      stream << "== " << device_type << " Backend: ==" << std::endl;
+      stream << std::endl;
+      correlator_.Log(stream.str());
+      collector->PrintSubmissionTable();
+    }
+  }
+
+  void PrintSubmissionTable(
+      const ClKernelCollector* collector, const char* device_type) {
+    PTI_ASSERT(collector != nullptr);
+    PTI_ASSERT(device_type != nullptr);
+
+    uint64_t total_duration = CalculateTotalTime(collector);
+    if (total_duration > 0) {
+      std::stringstream stream;
+      stream << std::endl;
+      stream << "== " << device_type << " Backend: ==" << std::endl;
+      stream << std::endl;
+      correlator_.Log(stream.str());
+      collector->PrintSubmissionTable();
     }
   }
 
@@ -515,6 +547,76 @@ class UnifiedTracer {
     correlator_.Log("\n");
   }
 
+  void ReportKernelSubmission(
+      const ZeKernelCollector* ze_collector,
+      const ClKernelCollector* cl_cpu_collector,
+      const ClKernelCollector* cl_gpu_collector,
+      const char* type) {
+    PTI_ASSERT(
+        ze_collector != nullptr ||
+        cl_cpu_collector != nullptr ||
+        cl_gpu_collector != nullptr);
+
+    std::string ze_title =
+      std::string("Total ") + std::string(type) +
+      " Time for L0 backend (ns): ";
+    std::string cl_cpu_title =
+      std::string("Total ") + std::string(type) +
+      " Time for CL CPU backend (ns): ";
+    std::string cl_gpu_title =
+      std::string("Total ") + std::string(type) +
+      " Time for CL GPU backend (ns): ";
+    size_t title_width = std::max(cl_cpu_title.size(), cl_gpu_title.size());
+    title_width = std::max(title_width, ze_title.size());
+    const size_t time_width = 20;
+
+    std::stringstream stream;
+    stream << std::endl;
+    stream << "=== Kernel Submission Results: ===" << std::endl;
+    stream << std::endl;
+    stream << std::setw(title_width) << "Total Execution Time (ns): " <<
+      std::setw(time_width) << total_execution_time_ << std::endl;
+
+    if (ze_collector != nullptr) {
+      uint64_t total_time = CalculateTotalTime(ze_collector);
+      if (total_time > 0) {
+        stream << std::setw(title_width) << ze_title <<
+          std::setw(time_width) << total_time <<
+          std::endl;
+      }
+    }
+    if (cl_cpu_collector != nullptr) {
+      uint64_t total_time = CalculateTotalTime(cl_cpu_collector);
+      if (total_time > 0) {
+        stream << std::setw(title_width) << cl_cpu_title <<
+          std::setw(time_width) << total_time <<
+          std::endl;
+      }
+    }
+    if (cl_gpu_collector != nullptr) {
+      uint64_t total_time = CalculateTotalTime(cl_gpu_collector);
+      if (total_time > 0) {
+        stream << std::setw(title_width) << cl_gpu_title <<
+          std::setw(time_width) << total_time <<
+          std::endl;
+      }
+    }
+
+    correlator_.Log(stream.str());
+
+    if (ze_collector != nullptr) {
+      PrintSubmissionTable(ze_collector, "L0");
+    }
+    if (cl_cpu_collector != nullptr) {
+      PrintSubmissionTable(cl_cpu_collector, "CL CPU");
+    }
+    if (cl_gpu_collector != nullptr) {
+      PrintSubmissionTable(cl_gpu_collector, "CL GPU");
+    }
+
+    correlator_.Log("\n");
+  }
+
   void Report() {
     if (CheckOption(TRACE_HOST_TIMING)) {
       ReportTiming(
@@ -523,9 +625,15 @@ class UnifiedTracer {
           cl_gpu_api_collector_,
           "API");
     }
-    if (CheckOption(TRACE_DEVICE_TIMING) ||
-        CheckOption(TRACE_DEVICE_TIMING_VERBOSE)) {
+    if (CheckOption(TRACE_DEVICE_TIMING)) {
       ReportTiming(
+          ze_kernel_collector_,
+          cl_cpu_kernel_collector_,
+          cl_gpu_kernel_collector_,
+          "Device");
+    }
+    if (CheckOption(TRACE_KERNEL_SUBMITTING)) {
+      ReportKernelSubmission(
           ze_kernel_collector_,
           cl_cpu_kernel_collector_,
           cl_gpu_kernel_collector_,

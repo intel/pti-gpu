@@ -130,16 +130,15 @@ static void PrintMetricsInfo(const MetricDevice& device) {
   uint32_t group_count = device->GetParams()->ConcurrentGroupsCount;
   PTI_ASSERT(group_count > 0);
   for (uint32_t gid = 0; gid < group_count; ++gid) {
-    md::IConcurrentGroup_1_5* group = device->GetConcurrentGroup(gid);
+    md::IConcurrentGroupLatest* group = device->GetConcurrentGroup(gid);
     PTI_ASSERT(group != nullptr);
 
     const char* group_name = group->GetParams()->SymbolName;
     std::cout << "---- Metric Group " << gid << ": " << group_name << std::endl;
 
     uint32_t set_count = group->GetParams()->MetricSetsCount;
-    PTI_ASSERT(set_count > 0);
     for (uint32_t sid = 0; sid < set_count; ++sid) {
-      md::IMetricSet_1_5* set = group->GetMetricSet(sid);
+      md::IMetricSetLatest* set = group->GetMetricSet(sid);
       PTI_ASSERT(set != nullptr);
 
       const char* set_name = set->GetParams()->SymbolName;
@@ -149,7 +148,7 @@ static void PrintMetricsInfo(const MetricDevice& device) {
       uint32_t metric_count = set->GetParams()->MetricsCount;
       PTI_ASSERT(metric_count > 0);
       for (uint32_t mid = 0; mid < metric_count; ++mid) {
-        md::IMetric_1_0* metric = set->GetMetric(mid);
+        md::IMetricLatest* metric = set->GetMetric(mid);
         PTI_ASSERT(metric != nullptr);
         std::cout << "-------- Metric " << mid << ": " << group_name << " / " <<
           set_name << " / " << metric->GetParams()->SymbolName <<

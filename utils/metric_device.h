@@ -28,7 +28,7 @@ class MetricDevice {
       lib->GetSym<md::OpenAdapterGroup_fn>("OpenAdapterGroup");
     PTI_ASSERT(OpenAdapterGroup != nullptr);
 
-    md::IAdapterGroup_1_9* adapter_group = nullptr;
+    md::IAdapterGroupLatest* adapter_group = nullptr;
     md::TCompletionCode status = OpenAdapterGroup(&adapter_group);
     PTI_ASSERT(status == md::CC_OK);
     PTI_ASSERT(adapter_group != nullptr);
@@ -48,14 +48,14 @@ class MetricDevice {
       lib->GetSym<md::OpenAdapterGroup_fn>("OpenAdapterGroup");
     PTI_ASSERT(OpenAdapterGroup != nullptr);
 
-    md::IAdapterGroup_1_9* adapter_group = nullptr;
+    md::IAdapterGroupLatest* adapter_group = nullptr;
     md::TCompletionCode status = OpenAdapterGroup(&adapter_group);
     PTI_ASSERT(status == md::CC_OK);
     PTI_ASSERT(adapter_group != nullptr);
 
     uint32_t sub_device_count = 0;
     if (device_id < adapter_group->GetParams()->AdapterCount) {
-      md::IAdapter_1_9* adapter = adapter_group->GetAdapter(device_id);
+      md::IAdapterLatest* adapter = adapter_group->GetAdapter(device_id);
       PTI_ASSERT(adapter != nullptr);
       sub_device_count = adapter->GetParams()->SubDevicesCount;
     }
@@ -70,14 +70,14 @@ class MetricDevice {
       return nullptr;
     }
 
-    md::IMetricsDevice_1_5* device = nullptr;
+    md::IMetricsDeviceLatest* device = nullptr;
     md::TCompletionCode status = md::CC_OK;
 
     md::OpenAdapterGroup_fn OpenAdapterGroup =
       lib->GetSym<md::OpenAdapterGroup_fn>("OpenAdapterGroup");
     PTI_ASSERT(OpenAdapterGroup != nullptr);
 
-    md::IAdapterGroup_1_9* adapter_group = nullptr;
+    md::IAdapterGroupLatest* adapter_group = nullptr;
     status = OpenAdapterGroup(&adapter_group);
     PTI_ASSERT(status == md::CC_OK);
     PTI_ASSERT(adapter_group != nullptr);
@@ -88,7 +88,7 @@ class MetricDevice {
     }
 
     PTI_ASSERT(device_id < adapter_group->GetParams()->AdapterCount);
-    md::IAdapter_1_9* adapter = adapter_group->GetAdapter(device_id);
+    md::IAdapterLatest* adapter = adapter_group->GetAdapter(device_id);
     PTI_ASSERT(adapter != nullptr);
 
     uint32_t sub_device_count = adapter->GetParams()->SubDevicesCount;
@@ -119,24 +119,24 @@ class MetricDevice {
     delete lib_;
   }
 
-  md::IMetricsDevice_1_5* operator->() const {
+  md::IMetricsDeviceLatest* operator->() const {
     return device_;
   }
 
   MetricDevice(const MetricDevice& copy) = delete;
   MetricDevice& operator=(const MetricDevice& copy) = delete;
 
-  md::IConcurrentGroup_1_5* FindMetricGroup(const char* set_name) {
+  md::IConcurrentGroupLatest* FindMetricGroup(const char* set_name) {
     PTI_ASSERT(set_name != nullptr);
 
     uint32_t group_count = device_->GetParams()->ConcurrentGroupsCount;
     for (uint32_t gid = 0; gid < group_count; ++gid) {
-      md::IConcurrentGroup_1_5* group = device_->GetConcurrentGroup(gid);
+      md::IConcurrentGroupLatest* group = device_->GetConcurrentGroup(gid);
       PTI_ASSERT(group != nullptr);
 
       uint32_t set_count = group->GetParams()->MetricSetsCount;
       for (uint32_t sid = 0; sid < set_count; ++sid) {
-        md::IMetricSet_1_5* set = group->GetMetricSet(sid);
+        md::IMetricSetLatest* set = group->GetMetricSet(sid);
         PTI_ASSERT(set != nullptr);
 
         if (strcmp(set_name, set->GetParams()->SymbolName) == 0) {
@@ -148,17 +148,17 @@ class MetricDevice {
     return nullptr;
   }
 
-  md::IMetricSet_1_5* FindMetricSet(const char* set_name) {
+  md::IMetricSetLatest* FindMetricSet(const char* set_name) {
     PTI_ASSERT(set_name != nullptr);
 
     uint32_t group_count = device_->GetParams()->ConcurrentGroupsCount;
     for (uint32_t gid = 0; gid < group_count; ++gid) {
-      md::IConcurrentGroup_1_5* group = device_->GetConcurrentGroup(gid);
+      md::IConcurrentGroupLatest* group = device_->GetConcurrentGroup(gid);
       PTI_ASSERT(group != nullptr);
 
       uint32_t set_count = group->GetParams()->MetricSetsCount;
       for (uint32_t sid = 0; sid < set_count; ++sid) {
-        md::IMetricSet_1_5* set = group->GetMetricSet(sid);
+        md::IMetricSetLatest* set = group->GetMetricSet(sid);
         PTI_ASSERT(set != nullptr);
 
         if (strcmp(set_name, set->GetParams()->SymbolName) == 0) {
@@ -183,14 +183,14 @@ private:
   }
 
   MetricDevice(
-      md::IAdapterGroup_1_9* adapter_group, md::IAdapter_1_9* adapter,
-      md::IMetricsDevice_1_5* device, SharedLibrary* lib)
+      md::IAdapterGroupLatest* adapter_group, md::IAdapterLatest* adapter,
+      md::IMetricsDeviceLatest* device, SharedLibrary* lib)
       : adapter_group_(adapter_group), adapter_(adapter),
         device_(device), lib_(lib) {}
 
-  md::IAdapterGroup_1_9* adapter_group_ = nullptr;
-  md::IAdapter_1_9* adapter_ = nullptr;
-  md::IMetricsDevice_1_5* device_ = nullptr;
+  md::IAdapterGroupLatest* adapter_group_ = nullptr;
+  md::IAdapterLatest* adapter_ = nullptr;
+  md::IMetricsDeviceLatest* device_ = nullptr;
   SharedLibrary* lib_ = nullptr;
 };
 

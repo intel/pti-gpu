@@ -33,16 +33,12 @@ void Usage() {
     "Report kernels execution time" <<
     std::endl;
   std::cout <<
-    "--device-timing-verbose [-v]   " <<
-    "Report kernels execution time with SIMD width and global/local sizes" <<
+    "--kernel-submission [-s]       " <<
+    "Report queued, submit and execute intervals for kernels" <<
     std::endl;
   std::cout <<
     "--device-timeline [-t]         " <<
     "Trace device activities" <<
-    std::endl;
-  std::cout <<
-    "--output [-o] <filename>       " <<
-    "Print console logs into the file" <<
     std::endl;
   std::cout <<
     "--chrome-call-logging          " <<
@@ -61,8 +57,8 @@ void Usage() {
     "Dump device activities by stages to JSON file" <<
     std::endl;
   std::cout <<
-    "--conditional-collection       " <<
-    "Enable conditional collection mode" <<
+    "--verbose [-v]                 " <<
+    "Enable verbose mode to show more kernel information" <<
     std::endl;
   std::cout <<
     "--tid                          " <<
@@ -71,6 +67,14 @@ void Usage() {
   std::cout <<
     "--pid                          " <<
     "Print process ID into host API and device activity trace" <<
+    std::endl;
+  std::cout <<
+    "--output [-o] <filename>       " <<
+    "Print console logs into the file" <<
+    std::endl;
+  std::cout <<
+    "--conditional-collection       " <<
+    "Enable conditional collection mode" <<
     std::endl;
   std::cout <<
     "--version                      " <<
@@ -97,9 +101,9 @@ int ParseArgs(int argc, char* argv[]) {
                strcmp(argv[i], "-d") == 0) {
       utils::SetEnv("CLT_DeviceTiming", "1");
       ++app_index;
-    } else if (strcmp(argv[i], "--device-timing-verbose") == 0 ||
-               strcmp(argv[i], "-v") == 0) {
-      utils::SetEnv("CLT_DeviceTimingVerbose", "1");
+    } else if (strcmp(argv[i], "--kernel-submission") == 0 ||
+               strcmp(argv[i], "-s") == 0) {
+      utils::SetEnv("CLT_KernelSubmission", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timeline") == 0 ||
                strcmp(argv[i], "-t") == 0) {
@@ -107,6 +111,25 @@ int ParseArgs(int argc, char* argv[]) {
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
       utils::SetEnv("CLT_ChromeCallLogging", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
+      utils::SetEnv("CLT_ChromeDeviceTimeline", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--chrome-kernel-timeline") == 0) {
+      utils::SetEnv("CLT_ChromeKernelTimeline", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
+      utils::SetEnv("CLT_ChromeDeviceStages", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--verbose") == 0 ||
+               strcmp(argv[i], "-v") == 0) {
+      utils::SetEnv("CLT_Verbose", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--tid") == 0) {
+      utils::SetEnv("CLT_Tid", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--pid") == 0) {
+      utils::SetEnv("CLT_Pid", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--output") == 0 ||
                strcmp(argv[i], "-o") == 0) {
@@ -118,23 +141,8 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("CLT_LogFilename", argv[i]);
       app_index += 2;
-    } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
-      utils::SetEnv("CLT_ChromeDeviceTimeline", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--chrome-kernel-timeline") == 0) {
-      utils::SetEnv("CLT_ChromeKernelTimeline", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
-      utils::SetEnv("CLT_ChromeDeviceStages", "1");
-      ++app_index;
     } else if (strcmp(argv[i], "--conditional-collection") == 0) {
       utils::SetEnv("CLT_ConditionalCollection", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--tid") == 0) {
-      utils::SetEnv("CLT_Tid", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--pid") == 0) {
-      utils::SetEnv("CLT_Pid", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--version") == 0) {
 #ifdef PTI_VERSION
@@ -192,21 +200,14 @@ static TraceOptions ReadArgs() {
     flags |= (1 << TRACE_DEVICE_TIMING);
   }
 
-  value = utils::GetEnv("CLT_DeviceTimingVerbose");
+  value = utils::GetEnv("CLT_KernelSubmission");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_DEVICE_TIMING_VERBOSE);
+    flags |= (1 << TRACE_KERNEL_SUBMITTING);
   }
 
   value = utils::GetEnv("CLT_DeviceTimeline");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_DEVICE_TIMELINE);
-  }
-
-  value = utils::GetEnv("CLT_LogToFile");
-  if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_LOG_TO_FILE);
-    log_file = utils::GetEnv("CLT_LogFilename");
-    PTI_ASSERT(!log_file.empty());
   }
 
   value = utils::GetEnv("CLT_ChromeCallLogging");
@@ -229,9 +230,9 @@ static TraceOptions ReadArgs() {
     flags |= (1 << TRACE_CHROME_DEVICE_STAGES);
   }
 
-  value = utils::GetEnv("CLT_ConditionalCollection");
+  value = utils::GetEnv("CLT_Verbose");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CONDITIONAL_COLLECTION);
+    flags |= (1 << TRACE_VERBOSE);
   }
 
   value = utils::GetEnv("CLT_Tid");
@@ -242,6 +243,18 @@ static TraceOptions ReadArgs() {
   value = utils::GetEnv("CLT_Pid");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_PID);
+  }
+
+  value = utils::GetEnv("CLT_LogToFile");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_LOG_TO_FILE);
+    log_file = utils::GetEnv("CLT_LogFilename");
+    PTI_ASSERT(!log_file.empty());
+  }
+
+  value = utils::GetEnv("CLT_ConditionalCollection");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_CONDITIONAL_COLLECTION);
   }
 
   return TraceOptions(flags, log_file);

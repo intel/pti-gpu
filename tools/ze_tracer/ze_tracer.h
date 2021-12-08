@@ -29,7 +29,7 @@ class ZeTracer {
 
     ZeKernelCollector* kernel_collector = nullptr;
     if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||
-        tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE) ||
+        tracer->CheckOption(TRACE_KERNEL_SUBMITTING) ||
         tracer->CheckOption(TRACE_DEVICE_TIMELINE) ||
         tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
         tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE) ||
@@ -69,7 +69,7 @@ class ZeTracer {
 
       kernel_collector = ZeKernelCollector::Create(
           &(tracer->correlator_),
-          tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE),
+          tracer->CheckOption(TRACE_VERBOSE),
           tracer->CheckOption(TRACE_KERNELS_PER_TILE),
           callback, tracer);
       if (kernel_collector == nullptr) {
@@ -255,7 +255,7 @@ class ZeTracer {
 
     uint64_t total_duration = 0;
     for (auto& value : kernel_info_map) {
-      total_duration += value.second.total_time;
+      total_duration += value.second.execute_time;
     }
 
     std::string title = "Total Execution Time (ns): ";
@@ -277,14 +277,50 @@ class ZeTracer {
       kernel_collector_->PrintKernelsTable();
     }
   }
+
+  void ReportKernelSubmission() {
+    PTI_ASSERT(kernel_collector_ != nullptr);
+
+    const ZeKernelInfoMap& kernel_info_map =
+      kernel_collector_->GetKernelInfoMap();
+    if (kernel_info_map.size() == 0) {
+      return;
+    }
+
+    uint64_t total_duration = 0;
+    for (auto& value : kernel_info_map) {
+      total_duration += value.second.execute_time;
+    }
+
+    std::string title = "Total Execution Time (ns): ";
+    const size_t title_width = title.size();
+    const size_t time_width = 20;
+
+    std::stringstream stream;
+    stream << std::endl;
+    stream << "=== Kernel Submission Results: ===" << std::endl;
+    stream << std::endl;
+    stream << std::setw(title_width) << title <<
+      std::setw(time_width) << total_execution_time_ << std::endl;
+    stream << std::setw(title_width) << "Total Device Time (ns): " <<
+      std::setw(time_width) << total_duration << std::endl;
+    stream << std::endl;
+    correlator_.Log(stream.str());
+
+    if (total_duration > 0) {
+      kernel_collector_->PrintSubmissionTable();
+    }
+  }
   
   void Report() {
     if (CheckOption(TRACE_HOST_TIMING)) {
       ReportHostTiming();
     }
-    if (CheckOption(TRACE_DEVICE_TIMING) ||
-        CheckOption(TRACE_DEVICE_TIMING_VERBOSE)) {
+    if (CheckOption(TRACE_DEVICE_TIMING)) {
       ReportDeviceTiming();
+    }
+    if (CheckOption(TRACE_KERNEL_SUBMITTING)) {
+      ReportKernelSubmission();
     }
     correlator_.Log("\n");
   }

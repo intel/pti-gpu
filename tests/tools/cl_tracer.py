@@ -51,7 +51,7 @@ def run(path, option):
     if option == "gpu":
       command = [file_name_prefix + "cl_tracer" + file_extention,\
         "-h", "-d", "-t", app_file, "gpu", "1024", "1"]
-    elif option == "--conditional-collection":
+    elif option == "-v" or option == "--conditional-collection":
       command = [file_name_prefix + "cl_tracer" + file_extention,\
         "-d", option, app_file, "cpu", "1024", "1"]
     else:
@@ -98,6 +98,10 @@ if __name__ == "__main__":
     option = "-d"
   if len(sys.argv) > 1 and sys.argv[1] == "-t":
     option = "-t"
+  if len(sys.argv) > 1 and sys.argv[1] == "-s":
+    option = "-s"
+  if len(sys.argv) > 1 and sys.argv[1] == "-v":
+    option = "-v"
   if len(sys.argv) > 1 and sys.argv[1] == "--chrome-call-logging":
     option = "--chrome-call-logging"
   if len(sys.argv) > 1 and sys.argv[1] == "--chrome-device-timeline":

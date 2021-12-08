@@ -40,7 +40,7 @@ class ClTracer {
     PTI_ASSERT(tracer != nullptr);
 
     if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||
-        tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE) ||
+        tracer->CheckOption(TRACE_KERNEL_SUBMITTING) ||
         tracer->CheckOption(TRACE_DEVICE_TIMELINE) ||
         tracer->CheckOption(TRACE_CHROME_DEVICE_TIMELINE) ||
         tracer->CheckOption(TRACE_CHROME_KERNEL_TIMELINE) ||
@@ -84,7 +84,7 @@ class ClTracer {
       if (cpu_device != nullptr) {
         cpu_kernel_collector = ClKernelCollector::Create(
             cpu_device, &tracer->correlator_,
-            tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE),
+            tracer->CheckOption(TRACE_VERBOSE),
             callback, tracer);
         if (cpu_kernel_collector == nullptr) {
           std::cerr <<
@@ -97,7 +97,7 @@ class ClTracer {
       if (gpu_device != nullptr) {
         gpu_kernel_collector = ClKernelCollector::Create(
             gpu_device, &tracer->correlator_,
-            tracer->CheckOption(TRACE_DEVICE_TIMING_VERBOSE),
+            tracer->CheckOption(TRACE_VERBOSE),
             callback, tracer);
         if (gpu_kernel_collector == nullptr) {
           std::cerr <<
@@ -303,7 +303,7 @@ class ClTracer {
     const ClKernelInfoMap& kernel_info_map = collector->GetKernelInfoMap();
     if (kernel_info_map.size() != 0) {
       for (auto& value : kernel_info_map) {
-        total_time += value.second.total_time;
+        total_time += value.second.execute_time;
       }
     }
 
@@ -339,6 +339,22 @@ class ClTracer {
       stream << std::endl;
       correlator_.Log(stream.str());
       collector->PrintKernelsTable();
+    }
+  }
+
+  void PrintSubmissionTable(
+      const ClKernelCollector* collector, const char* device_type) {
+    PTI_ASSERT(collector != nullptr);
+    PTI_ASSERT(device_type != nullptr);
+
+    uint64_t total_duration = CalculateTotalTime(collector);
+    if (total_duration > 0) {
+      std::stringstream stream;
+      stream << std::endl;
+      stream << "== " << device_type << " Backend: ==" << std::endl;
+      stream << std::endl;
+      correlator_.Log(stream.str());
+      collector->PrintSubmissionTable();
     }
   }
 
@@ -388,13 +404,61 @@ class ClTracer {
     correlator_.Log("\n");
   }
 
+  void ReportKernelSubmission(
+      const ClKernelCollector* cpu_collector,
+      const ClKernelCollector* gpu_collector,
+      const char* type) {
+    PTI_ASSERT (cpu_collector != nullptr || gpu_collector != nullptr);
+
+    std::string cpu_title =
+      std::string("Total ") + std::string(type) +
+      " Time for CPU backend (ns): ";
+    std::string gpu_title =
+      std::string("Total ") + std::string(type) +
+      " Time for GPU backend (ns): ";
+    size_t title_width = (std::max)(cpu_title.size(), gpu_title.size());
+    const size_t time_width = 20;
+
+    std::stringstream stream;
+    stream << std::endl;
+    stream << "=== Kernel Submission Results: ===" << std::endl;
+    stream << std::endl;
+    stream << std::setw(title_width) << "Total Execution Time (ns): " <<
+      std::setw(time_width) << total_execution_time_ << std::endl;
+
+    if (cpu_collector != nullptr) {
+      stream << std::setw(title_width) << cpu_title <<
+        std::setw(time_width) << CalculateTotalTime(cpu_collector) <<
+        std::endl;
+    }
+    if (gpu_collector != nullptr) {
+      stream << std::setw(title_width) << gpu_title <<
+        std::setw(time_width) << CalculateTotalTime(gpu_collector) <<
+        std::endl;
+    }
+
+    correlator_.Log(stream.str());
+
+    if (cpu_collector != nullptr) {
+      PrintSubmissionTable(cpu_collector, "CPU");
+    }
+    if (gpu_collector != nullptr) {
+      PrintSubmissionTable(gpu_collector, "GPU");
+    }
+
+    correlator_.Log("\n");
+  }
+
   void Report() {
     if (CheckOption(TRACE_HOST_TIMING)) {
       ReportTiming(cpu_api_collector_, gpu_api_collector_, "API");
     }
-    if (CheckOption(TRACE_DEVICE_TIMING) ||
-        CheckOption(TRACE_DEVICE_TIMING_VERBOSE)) {
+    if (CheckOption(TRACE_DEVICE_TIMING)) {
       ReportTiming(cpu_kernel_collector_, gpu_kernel_collector_, "Device");
+    }
+    if (CheckOption(TRACE_KERNEL_SUBMITTING)) {
+      ReportKernelSubmission(
+          cpu_kernel_collector_, gpu_kernel_collector_, "Device");
     }
     correlator_.Log("\n");
   }

@@ -42,9 +42,9 @@ class ClMetricCollector {
       return nullptr;
     }
 
-    md::IConcurrentGroup_1_5* group =
+    md::IConcurrentGroupLatest* group =
       metric_device->FindMetricGroup(set_name);
-    md::IMetricSet_1_5* set = metric_device->FindMetricSet(set_name);
+    md::IMetricSetLatest* set = metric_device->FindMetricSet(set_name);
     if (group == nullptr || set == nullptr) {
       std::cerr << "[WARNING] Metric set is not found: " <<
         set_name << std::endl;
@@ -87,7 +87,7 @@ class ClMetricCollector {
     PTI_ASSERT(set_ != nullptr);
 
     for (uint32_t mid = 0; mid < set_->GetParams()->MetricsCount; ++mid) {
-      md::IMetric_1_0* metric = set_->GetMetric(mid);
+      md::IMetricLatest* metric = set_->GetMetric(mid);
       PTI_ASSERT(metric != nullptr);
       if (strcmp(metric->GetParams()->SymbolName, name) == 0) {
         return mid;
@@ -155,8 +155,8 @@ class ClMetricCollector {
 
  private: // Implementation Details
   ClMetricCollector(
-      MetricDevice* device, md::IConcurrentGroup_1_5* group,
-      md::IMetricSet_1_5* set)
+      MetricDevice* device, md::IConcurrentGroupLatest* group,
+      md::IMetricSetLatest* set)
       : device_(device), group_(group), set_(set) {
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(group_ != nullptr);
@@ -202,8 +202,8 @@ class ClMetricCollector {
     PTI_ASSERT(collector->group_ != nullptr);
     PTI_ASSERT(collector->set_ != nullptr);
 
-    md::IConcurrentGroup_1_5* group = collector->group_;
-    md::IMetricSet_1_5* set = collector->set_;
+    md::IConcurrentGroupLatest* group = collector->group_;
+    md::IMetricSetLatest* set = collector->set_;
 
     uint32_t sampling_interval = 100000; // nanoseconds
     uint32_t buffer_size = 0; // defined by MDAPI
@@ -249,8 +249,8 @@ class ClMetricCollector {
 
  private: // Data
   MetricDevice* device_ = nullptr;
-  md::IConcurrentGroup_1_5* group_ = nullptr;
-  md::IMetricSet_1_5* set_ = nullptr;
+  md::IConcurrentGroupLatest* group_ = nullptr;
+  md::IMetricSetLatest* set_ = nullptr;
 
   std::atomic<CollectorState> collector_state_{COLLECTOR_STATE_IDLE};
   std::thread* collector_thread_ = nullptr;

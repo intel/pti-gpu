@@ -50,11 +50,11 @@ md::OpenAdapterGroup_fn OpenAdapterGroup =
   (md::OpenAdapterGroup_fn)dlsym(handle, "OpenAdapterGroup");
 assert(OpenAdapterGroup != nullptr);
 
-md::IAdapterGroup_1_9* adapter_group = nullptr;
+md::IAdapterGroupLatest* adapter_group = nullptr;
 status = OpenAdapterGroup(&adapter_group);
 PTI_ASSERT(status == md::CC_OK);
 
-md::IAdapter_1_9* adapter = adapter_group->GetAdapter(0 /* device id*/);
+md::IAdapterLatest* adapter = adapter_group->GetAdapter(0 /* device id*/);
 PTI_ASSERT(adapter != nullptr);
 
 uint32_t sub_devices_count = adapter->GetParams()->SubDevicesCount;
@@ -113,20 +113,20 @@ Every group, set and seprate metric contain a list of properties that helps to d
 In addition to metrics, each set includes so called *information* items, that will be collected along with the metrics and show e.g. time when sample was collected, GPU core frequency, report identifier and others.
 ```cpp
 for (uint32_t gid = 0; gid < device->GetParams()->ConcurrentGroupsCount; ++gid) {
-  md::IConcurrentGroup_1_5* group = device->GetConcurrentGroup(gid);
+  md::IConcurrentGroupLatest* group = device->GetConcurrentGroup(gid);
   assert(group != nullptr);
   std::cout << "Metric Group " << gid << ": " <<
       group->GetParams()->SymbolName << std::endl;
 
   for (uint32_t sid = 0; sid < group->GetParams()->MetricSetsCount; ++sid) {
-    md::IMetricSet_1_5* set = group->GetMetricSet(sid);
+    md::IMetricSetLatest* set = group->GetMetricSet(sid);
     assert(set != nullptr);
     std::cout << "\tMetric Set " << sid << ": " <<
       set->GetParams()->SymbolName << " (" << set->GetParams()->ShortName <<
       ")" << std::endl;
     
     for (uint32_t mid = 0; mid < set->GetParams()->MetricsCount; ++mid) {
-      md::IMetric_1_0* metric = set->GetMetric(mid);
+      md::IMetricLatest* metric = set->GetMetric(mid);
       assert(metric != nullptr);
       std::cout << "\t\tMetric " << mid << ": " <<
         metric->GetParams()->SymbolName << " (" <<
@@ -160,7 +160,7 @@ md::TCompletionCode status = md::CC_OK;
 Next, one should set a type of collection for target metric set. MD library allows to work with multiple APIs, like OpenGL, DirectX, Metal and others, so it's needed to determine explicitely which type of API one wants to employ. In addition to exact API, it's possible to enable the
 most general collection using `API_TYPE_IOSTREAM` flag.
 ```cpp
-md::IMetricSet_1_5* set; // target metric set, see Enumeration section
+md::IMetricSetLatest* set; // target metric set, see Enumeration section
 status = set->SetApiFiltering(md::API_TYPE_IOSTREAM);
 assert(status == md::CC_OK);
 ```
@@ -171,7 +171,7 @@ As a result, both `sampling_interval` and `buffer_size` may be updated by the va
 Note, that the call may fail due to lack of access rights for the current user (try "root" on Linux), or too small sampling interval value. Refer to
 [Metrics Discovery (MD) API](https://github.com/intel/metrics-discovery) project to get more information.
 ```cpp
-md::IConcurrentGroup_1_5* group; // target metric group, see Enumeration section
+md::IConcurrentGroupLatest* group; // target metric group, see Enumeration section
 status = group->OpenIoStream(set, 0, &sampling_interval, &buffer_size);
 assert (status == md::CC_OK && buffer_size > 0);
 

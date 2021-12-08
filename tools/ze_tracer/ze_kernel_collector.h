@@ -64,20 +64,22 @@ struct ZeKernelCall {
 };
 
 struct ZeKernelInfo {
-  uint64_t total_time;
+  uint64_t append_time;
+  uint64_t submit_time;
+  uint64_t execute_time;
   uint64_t min_time;
   uint64_t max_time;
   uint64_t call_count;
 
   bool operator>(const ZeKernelInfo& r) const {
-    if (total_time != r.total_time) {
-      return total_time > r.total_time;
+    if (execute_time != r.execute_time) {
+      return execute_time > r.execute_time;
     }
     return call_count > r.call_count;
   }
 
   bool operator!=(const ZeKernelInfo& r) const {
-    if (total_time == r.total_time) {
+    if (execute_time == r.execute_time) {
       return call_count != r.call_count;
     }
     return true;
@@ -136,9 +138,9 @@ class ZeKernelCollector {
       OnZeKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     ze_api_version_t version = utils::ze::GetVersion();
-    //PTI_ASSERT(
-    //    ZE_MAJOR_VERSION(version) >= 1 &&
-    //    ZE_MINOR_VERSION(version) >= 2);
+    PTI_ASSERT(
+        ZE_MAJOR_VERSION(version) >= 1 &&
+        ZE_MINOR_VERSION(version) >= 2);
 
     PTI_ASSERT(correlator != nullptr);
     ZeKernelCollector* collector = new ZeKernelCollector(
@@ -177,7 +179,7 @@ class ZeKernelCollector {
     uint64_t total_duration = 0;
     size_t max_name_length = kKernelLength;
     for (auto& value : sorted_list) {
-      total_duration += value.second.total_time;
+      total_duration += value.second.execute_time;
       if (value.first.size() > max_name_length) {
         max_name_length = value.first.size();
       }
@@ -199,7 +201,7 @@ class ZeKernelCollector {
     for (auto& value : sorted_list) {
       const std::string& function = value.first;
       uint64_t call_count = value.second.call_count;
-      uint64_t duration = value.second.total_time;
+      uint64_t duration = value.second.execute_time;
       uint64_t avg_duration = duration / call_count;
       uint64_t min_duration = value.second.min_time;
       uint64_t max_duration = value.second.max_time;
@@ -212,6 +214,67 @@ class ZeKernelCollector {
         std::setw(kTimeLength) << avg_duration << "," <<
         std::setw(kTimeLength) << min_duration << "," <<
         std::setw(kTimeLength) << max_duration << std::endl;
+    }
+
+    PTI_ASSERT(correlator_ != nullptr);
+    correlator_->Log(stream.str());
+  }
+
+  void PrintSubmissionTable() const {
+    std::set< std::pair<std::string, ZeKernelInfo>,
+              utils::Comparator > sorted_list(
+        kernel_info_map_.begin(), kernel_info_map_.end());
+
+    uint64_t total_append_duration = 0;
+    uint64_t total_submit_duration = 0;
+    uint64_t total_execute_duration = 0;
+    size_t max_name_length = kKernelLength;
+    for (auto& value : sorted_list) {
+      total_append_duration += value.second.append_time;
+      total_submit_duration += value.second.submit_time;
+      total_execute_duration += value.second.execute_time;
+      if (value.first.size() > max_name_length) {
+        max_name_length = value.first.size();
+      }
+    }
+
+    if (total_execute_duration == 0) {
+      return;
+    }
+
+    std::stringstream stream;
+    stream << std::setw(max_name_length) << "Kernel" << "," <<
+      std::setw(kCallsLength) << "Calls" << "," <<
+      std::setw(kTimeLength) << "Append (ns)" << "," <<
+      std::setw(kPercentLength) << "Append (%)" << "," <<
+      std::setw(kTimeLength) << "Submit (ns)" << "," <<
+      std::setw(kPercentLength) << "Submit (%)" << "," <<
+      std::setw(kTimeLength) << "Execute (ns)" << "," <<
+      std::setw(kPercentLength) << "Execute (%)" << "," << std::endl;
+
+    for (auto& value : sorted_list) {
+      const std::string& function = value.first;
+      uint64_t call_count = value.second.call_count;
+      uint64_t append_duration = value.second.append_time;
+      float append_percent =
+        100.0f * append_duration / total_append_duration;
+      uint64_t submit_duration = value.second.submit_time;
+      float submit_percent =
+        100.0f * submit_duration / total_submit_duration;
+      uint64_t execute_duration = value.second.execute_time;
+      float execute_percent =
+        100.0f * execute_duration / total_execute_duration;
+      stream << std::setw(max_name_length) << function << "," <<
+        std::setw(kCallsLength) << call_count << "," <<
+        std::setw(kTimeLength) << append_duration << "," <<
+        std::setw(kPercentLength) << std::setprecision(2) <<
+          std::fixed << append_percent << "," <<
+        std::setw(kTimeLength) << submit_duration << "," <<
+        std::setw(kPercentLength) << std::setprecision(2) <<
+          std::fixed << submit_percent << "," <<
+        std::setw(kTimeLength) << execute_duration << "," <<
+        std::setw(kPercentLength) << std::setprecision(2) <<
+          std::fixed << execute_percent << "," << std::endl;
     }
 
     PTI_ASSERT(correlator_ != nullptr);
@@ -538,7 +601,14 @@ class ZeKernelCollector {
     }
 
     if (in_summary) {
-      AddKernelInfo(host_end - host_start, name);
+      PTI_ASSERT(command->append_time > 0);
+      PTI_ASSERT(command->append_time <= call->submit_time);
+      uint64_t append_time = call->submit_time - command->append_time;
+      PTI_ASSERT(call->submit_time <= host_start);
+      uint64_t submit_time = host_start - call->submit_time;
+      PTI_ASSERT(host_start <= host_end);
+      uint64_t execute_time = host_end - host_start;
+      AddKernelInfo(append_time, submit_time, execute_time, name);
     }
 
     if (callback_ != nullptr) {
@@ -672,19 +742,30 @@ class ZeKernelCollector {
     return sstream.str();
   }
 
-  void AddKernelInfo(uint64_t time, const std::string& name) {
+  void AddKernelInfo(
+      uint64_t append_time, uint64_t submit_time,
+      uint64_t execute_time, const std::string& name) {
     PTI_ASSERT(!name.empty());
 
     if (kernel_info_map_.count(name) == 0) {
-      kernel_info_map_[name] = {time, time, time, 1};
+      ZeKernelInfo info;
+      info.append_time = append_time;
+      info.submit_time = submit_time;
+      info.execute_time = execute_time;
+      info.min_time = execute_time;
+      info.max_time = execute_time;
+      info.call_count = 1;
+      kernel_info_map_[name] = info;
     } else {
       ZeKernelInfo& kernel = kernel_info_map_[name];
-      kernel.total_time += time;
-      if (time > kernel.max_time) {
-        kernel.max_time = time;
+      kernel.append_time += append_time;
+      kernel.submit_time +=  submit_time;
+      kernel.execute_time += execute_time;
+      if (execute_time > kernel.max_time) {
+        kernel.max_time = execute_time;
       }
-      if (time < kernel.min_time) {
-        kernel.min_time = time;
+      if (execute_time < kernel.min_time) {
+        kernel.min_time = execute_time;
       }
       kernel.call_count += 1;
     }
@@ -1841,7 +1922,7 @@ class ZeKernelCollector {
   static const uint32_t kKernelLength = 10;
   static const uint32_t kCallsLength = 12;
   static const uint32_t kTimeLength = 20;
-  static const uint32_t kPercentLength = 10;
+  static const uint32_t kPercentLength = 12;
 };
 
 #endif // PTI_TOOLS_ZE_TRACER_ZE_KERNEL_COLLECTOR_H_

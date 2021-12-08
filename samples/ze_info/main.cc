@@ -173,8 +173,12 @@ void PrintDeviceInfo() {
       "Number of devices " << device_list.size() << std::endl;
 
     for (size_t j = 0; j < device_list.size(); ++j) {
-      ze_device_properties_t device_props{
-          ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+      ze_structure_type_t stype =
+        version >= ZE_API_VERSION_1_2 ?
+        ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2 :
+        ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+
+      ze_device_properties_t device_props{stype, };
       status = zeDeviceGetProperties(device_list[j], &device_props);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
@@ -267,7 +271,7 @@ void PrintDeviceInfo() {
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
         std::string() + TAB + "Timer Resolution " <<
         device_props.timerResolution;
-      if (version >= ZE_API_VERSION_1_0) {
+      if (version < ZE_API_VERSION_1_2) {
         std::cout << "ns";
       } else {
         std::cout << "clks";
@@ -372,9 +376,6 @@ int main(int argc, char *argv[]) {
       list_mode = true;
     }
   }
-
-  utils::SetEnv("NEOReadDebugKeys", "1");
-  utils::SetEnv("UseCyclesPerSecondTimer", "1");
 
   ze_result_t status = ZE_RESULT_SUCCESS;
   status = zeInit(ZE_INIT_FLAG_GPU_ONLY);

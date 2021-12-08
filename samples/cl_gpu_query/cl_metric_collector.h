@@ -78,9 +78,9 @@ class ClMetricCollector {
       return nullptr;
     }
 
-    md::IConcurrentGroup_1_5* group =
+    md::IConcurrentGroupLatest* group =
       metric_device->FindMetricGroup(set_name);
-    md::IMetricSet_1_5* set = metric_device->FindMetricSet(set_name);
+    md::IMetricSetLatest* set = metric_device->FindMetricSet(set_name);
     if (group == nullptr || set == nullptr) {
       std::cerr << "[WARNING] Metric set is not found: " <<
         set_name << std::endl;
@@ -204,8 +204,8 @@ class ClMetricCollector {
  private: // Implementation Details
   ClMetricCollector(
       MetricDevice* device,
-      md::IConcurrentGroup_1_5* group,
-      md::IMetricSet_1_5* set,
+      md::IConcurrentGroupLatest* group,
+      md::IMetricSetLatest* set,
       decltype(clCreatePerfCountersCommandQueueINTEL)* ptr)
           : device_(device), group_(group), set_(set),
             clCreatePerfCountersCommandQueue_(ptr) {
@@ -312,7 +312,7 @@ class ClMetricCollector {
     PTI_ASSERT(set_ != nullptr);
 
     for (uint32_t mid = 0; mid < set_->GetParams()->MetricsCount; ++mid) {
-      md::IMetric_1_0* metric = set_->GetMetric(mid);
+      md::IMetricLatest* metric = set_->GetMetric(mid);
       PTI_ASSERT(metric != nullptr);
       if (strcmp(metric->GetParams()->SymbolName, name) == 0) {
         return mid;
@@ -520,8 +520,8 @@ class ClMetricCollector {
   ClKernelInfoMap kernel_info_map_;
 
   MetricDevice* device_ = nullptr;
-  md::IConcurrentGroup_1_5* group_ = nullptr;
-  md::IMetricSet_1_5* set_ = nullptr;
+  md::IConcurrentGroupLatest* group_ = nullptr;
+  md::IMetricSetLatest* set_ = nullptr;
 
   decltype(clCreatePerfCountersCommandQueueINTEL)*
     clCreatePerfCountersCommandQueue_ = nullptr;

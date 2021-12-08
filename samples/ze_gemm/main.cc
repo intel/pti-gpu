@@ -167,7 +167,7 @@ static float RunAndCheck(ze_kernel_handle_t kernel,
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   ze_device_properties_t props{};
-  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
   status = zeDeviceGetProperties(device, &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
@@ -248,9 +248,6 @@ static void Compute(ze_device_handle_t device,
 }
 
 int main(int argc, char* argv[]) {
-  utils::SetEnv("NEOReadDebugKeys", "1");
-  utils::SetEnv("UseCyclesPerSecondTimer", "1");
-
   ze_result_t status = ZE_RESULT_SUCCESS;
   status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);

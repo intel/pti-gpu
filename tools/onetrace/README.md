@@ -9,17 +9,18 @@ Options:
 --call-logging [-c]            Trace host API calls
 --host-timing  [-h]            Report host API execution time
 --device-timing [-d]           Report kernels execution time
---device-timing-verbose [-v]   Report kernels execution time with SIMD width and global/local sizes
+--kernel-submission [-s]       Report append (queued), submit and execute intervals for kernels
 --device-timeline [-t]         Trace device activities
---output [-o] <filename>       Print console logs into the file
 --chrome-call-logging          Dump host API calls to JSON file
 --chrome-device-timeline       Dump device activities to JSON file per command queue
 --chrome-kernel-timeline       Dump device activities to JSON file per kernel name
 --chrome-device-stages         Dump device activities by stages to JSON file
+--verbose [-v]                 Enable verbose mode to show more kernel information
 --kernels-per-tile             Dump kernel information per tile
---conditional-collection       Enable conditional collection mode
 --tid                          Print thread ID into host API trace
 --pid                          Print process ID into host API and device activity trace
+--output [-o] <filename>       Print console logs into the file
+--conditional-collection       Enable conditional collection mode
 --version                      Print version
 ```
 
@@ -91,9 +92,21 @@ Total Device Time for L0 backend (ns):                177147822
 zeCommandListAppendMemoryCopy(M2D),           8,       2934831,      1.66,           366853,        286500,        585333
 zeCommandListAppendMemoryCopy(D2M),           4,       2099164,      1.18,           524791,        497666,        559666
         zeCommandListAppendBarrier,           8,          9328,      0.01,             1166,          1166,          1166
-...
 ```
-**Device Timing Verbose** mode provides additional information per kernel (SIMD width, group count and group size for oneAPI Level Zero (Level Zero) and SIMD width, global and local size for OpenCL(TM)) and per transfer (bytes transferred):
+**Kernel Submission** mode collects append (queued for OpenCL(TM)), submit and execute intervals for kernels and memory transfers:
+```
+=== Kernel Submission Results: ===
+
+Total Execution Time (ns):            256576162
+   Total Device Time (ns):            174582990
+
+                            Kernel,       Calls,         Append (ns),  Append (%),         Submit (ns),  Submit (%),        Execute (ns), Execute (%),
+                              GEMM,           4,              553087,       10.79,            12441082,        3.03,           169770832,       97.24,
+zeCommandListAppendMemoryCopy(M2D),           8,             2898413,       56.53,            20843165,        5.08,             2843832,        1.63,
+zeCommandListAppendMemoryCopy(D2M),           4,              534710,       10.43,           182217916,       44.43,             1957331,        1.12,
+        zeCommandListAppendBarrier,           8,             1140561,       22.25,           194646664,       47.46,               10995,        0.01,
+```
+**Verbose** mode provides additional information per kernel (SIMD width, group count and group size for oneAPI Level Zero (Level Zero) and SIMD width, global and local size for OpenCL(TM)) and per transfer (bytes transferred). This option should be used in addition to others, e.g. for **Device Timing** mode one can get:
 ```
 === Device Timing Results: ===
 

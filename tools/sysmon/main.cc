@@ -373,7 +373,19 @@ void PrintDeviceList() {
 
 void PrintDeviceInfo(
     ze_driver_handle_t driver,
-    const ze_device_properties_t& props) {
+    ze_device_handle_t device) {
+  PTI_ASSERT(driver != nullptr);
+  PTI_ASSERT(device != nullptr);
+
+  ze_structure_type_t stype =
+      utils::ze::GetDriverVersion(driver) >= ZE_API_VERSION_1_2 ?
+      ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2 :
+      ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+
+  ze_device_properties_t props{stype, };
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
   std::cout << std::setw(TEXT_WIDTH) <<
     std::left << "Name," << props.name << std::endl;
 
@@ -418,7 +430,7 @@ void PrintDeviceInfo(
 
   std::string timer_resolution = "Timer Resolution(";
   timer_resolution +=
-    utils::ze::GetDriverVersion(driver) == ZE_API_VERSION_1_0 ? "ns" : "clks";
+    utils::ze::GetDriverVersion(driver) < ZE_API_VERSION_1_2 ? "ns" : "clks";
   timer_resolution += "),";
   std::cout << std::setw(TEXT_WIDTH) <<
     timer_resolution << props.timerResolution << std::endl;
@@ -1055,7 +1067,8 @@ static void PrintSubdeviceDetails(
     utils::ze::GetSubDeviceList(device);
   PTI_ASSERT(subdevice_id < subdevice_list.size());
 
-  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+  ze_device_properties_t props{
+      ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
   ze_result_t status = zeDeviceGetProperties(
       subdevice_list[subdevice_id], &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -1108,7 +1121,7 @@ static void PrintDetails(ze_driver_handle_t driver,
   std::cout << std::setw(DEL_WIDTH) << std::setfill('=') <<
     '=' << std::setfill(' ') << std::endl;
 
-  PrintDeviceInfo(driver, props.core);
+  PrintDeviceInfo(driver, device);
   PrintComputeInfo(device);
   PrintModuleInfo(device);
 
@@ -1215,8 +1228,6 @@ int main(int argc, char* argv[]) {
   }
 
   utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
-  utils::SetEnv("NEOReadDebugKeys", "1");
-  utils::SetEnv("UseCyclesPerSecondTimer", "1");
 
   status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
