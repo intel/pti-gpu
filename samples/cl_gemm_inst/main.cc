@@ -297,7 +297,10 @@ static float RunAndCheck(cl_device_id device, cl_kernel kernel,
   status = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END,
                                    sizeof(cl_ulong), &end, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
-  
+
+  status = clReleaseEvent(event);
+  PTI_ASSERT(status == CL_SUCCESS);
+
   double time = static_cast<double>(end - start) / NSEC_IN_SEC;
   std::cout << "Matrix multiplication time: " << time <<
     " sec" << std::endl;

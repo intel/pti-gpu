@@ -237,8 +237,14 @@ static ProfOptions ReadArgs() {
 }
 
 void EnableProfiling() {
-  ze_result_t status = ZE_RESULT_SUCCESS;
-  status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  if (status == ZE_RESULT_ERROR_DEPENDENCY_UNAVAILABLE) {
+    std::cout <<
+      "[WARNING] Unable to initialize Level Zero Metrics API" << std::endl;
+    std::cout << "  Please check that metrics libraries are installed " <<
+      "and /proc/sys/dev/i915/perf_stream_paranoid is set to 0" << std::endl;
+    exit(EXIT_FAILURE);
+  }
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   profiler = Profiler::Create(ReadArgs());
 }

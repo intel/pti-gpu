@@ -176,6 +176,8 @@ static float RunAndCheck(ze_kernel_handle_t kernel,
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   status = zeEventDestroy(event);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeEventPoolDestroy(event_pool);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   double time = static_cast<double>(
       timestamp.global.kernelEnd - timestamp.global.kernelStart) /
