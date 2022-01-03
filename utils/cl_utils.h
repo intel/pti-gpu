@@ -14,6 +14,7 @@
 
 #include <CL/cl.h>
 
+#include "demangle.h"
 #include "utils.h"
 
 #define CL_KERNEL_MAX_SUB_GROUP_SIZE_FOR_NDRANGE_KHR 0x2033
@@ -128,7 +129,7 @@ inline std::string GetKernelName(cl_kernel kernel) {
                            MAX_STR_SIZE, name, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
 
-  return name;
+  return demangle(name);
 }
 
 inline std::string GetDeviceName(cl_device_id device) {
