@@ -51,7 +51,7 @@ class ZeApiCollector {
  public: // User Interface
   static ZeApiCollector* Create(
       Correlator* correlator,
-      ApiCollectorOptions options = {false, false, false},
+      ApiCollectorOptions options,
       OnZeFunctionFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(correlator != nullptr);
@@ -191,7 +191,7 @@ class ZeApiCollector {
   std::mutex lock_;
 
   Correlator* correlator_ = nullptr;
-  ApiCollectorOptions options_{false, false, false};
+  ApiCollectorOptions options_;
 
   OnZeFunctionFinishCallback callback_ = nullptr;
   void* callback_data_ = nullptr;

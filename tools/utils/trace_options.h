@@ -23,11 +23,12 @@
 #define TRACE_CHROME_KERNEL_TIMELINE 7
 #define TRACE_CHROME_DEVICE_STAGES   8
 #define TRACE_VERBOSE                9
-#define TRACE_KERNELS_PER_TILE       10
-#define TRACE_TID                    11
-#define TRACE_PID                    12
-#define TRACE_LOG_TO_FILE            13
-#define TRACE_CONDITIONAL_COLLECTION 14
+#define TRACE_DEMANGLE               10
+#define TRACE_KERNELS_PER_TILE       11
+#define TRACE_TID                    12
+#define TRACE_PID                    13
+#define TRACE_LOG_TO_FILE            14
+#define TRACE_CONDITIONAL_COLLECTION 15
 
 const char* kChromeTraceFileExt = "json";
 

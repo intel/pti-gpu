@@ -2931,7 +2931,8 @@ static void clEnqueueTaskOnEnter(
   stream << " commandQueue = " << *(params->commandQueue);
   stream << " kernel = " << *(params->kernel);
   if (*(params->kernel) != nullptr) {
-    std::string kernel_name = utils::cl::GetKernelName(*(params->kernel));
+    std::string kernel_name = utils::cl::GetKernelName(
+        *(params->kernel), collector->Demangle());
     if (!kernel_name.empty()) {
       stream << " (" << kernel_name << ")";
     }
@@ -3582,7 +3583,8 @@ static void clEnqueueNDRangeKernelOnEnter(
   stream << " commandQueue = " << *(params->commandQueue);
   stream << " kernel = " << *(params->kernel);
   if (*(params->kernel) != nullptr) {
-    std::string kernel_name = utils::cl::GetKernelName(*(params->kernel));
+    std::string kernel_name = utils::cl::GetKernelName(
+        *(params->kernel), collector->Demangle());
     if (!kernel_name.empty()) {
       stream << " (" << kernel_name << ")";
     }
@@ -5966,6 +5968,9 @@ static void clCreateKernelOnEnter(
     stream << " kernelName = \"\"";
   } else {
     stream << " kernelName = \"" << *(params->kernelName) << "\"";
+    if (collector->Demangle()) {
+      stream << " (" << utils::Demangle(*(params->kernelName)) << ")";
+    }
   }
   stream << " errcodeRet = " << *(params->errcodeRet);
   stream << std::endl;

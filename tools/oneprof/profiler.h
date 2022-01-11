@@ -16,27 +16,6 @@
 #include "cl_kernel_collector.h"
 #include "ze_kernel_collector.h"
 
-namespace detail {
-
-template <typename KernelInterval>
-uint64_t ConvertTimestamp(
-    uint64_t timestamp, uint64_t device_freq,
-    uint64_t host_sync, uint64_t device_sync) {
-  return timestamp;
-}
-
-template <>
-uint64_t ConvertTimestamp<ClKernelInterval>(
-    uint64_t timestamp, uint64_t device_freq,
-    uint64_t host_sync, uint64_t device_sync) {
-  PTI_ASSERT(timestamp > host_sync);
-  uint64_t time_shift = timestamp - host_sync;
-  return device_sync * static_cast<uint64_t>(NSEC_IN_SEC) /
-    device_freq + time_shift;
-}
-
-} // namespace detail
-
 class Profiler {
  public:
   static Profiler* Create(const ProfOptions& options) {
@@ -79,8 +58,11 @@ class Profiler {
         profiler->CheckOption(PROF_KERNEL_METRICS) ||
         profiler->CheckOption(PROF_AGGREGATION)) {
 
+      KernelCollectorOptions kernel_options;
+      kernel_options.verbose = true;
+
       ZeKernelCollector* ze_kernel_collector = ZeKernelCollector::Create(
-          &(profiler->correlator_), true, false);
+          &(profiler->correlator_), kernel_options);
       if (ze_kernel_collector == nullptr) {
         std::cout <<
           "[WARNING] Unable to create Level Zero kernel collector" <<
@@ -95,7 +77,7 @@ class Profiler {
           "[WARNING] Unable to find target OpenCL device" << std::endl;
       } else {
         cl_kernel_collector = ClKernelCollector::Create(
-            device, &(profiler->correlator_), true);
+            device, &(profiler->correlator_), kernel_options);
         if (cl_kernel_collector == nullptr) {
           std::cout <<
             "[WARNING] Unable to create OpenCL kernel collector" <<
@@ -164,13 +146,12 @@ class Profiler {
     ze_device_handle_t device = GetZeDevice(device_id_);
     PTI_ASSERT(device != nullptr);
 
-    ze_result_t result = zeDeviceGetGlobalTimestamps(
-        device, &host_sync_, &device_sync_);
-    PTI_ASSERT(result == ZE_RESULT_SUCCESS);
-    device_sync_ &= utils::ze::GetDeviceTimestampMask(device);
-
-    device_freq_ = utils::ze::GetDeviceTimerFrequency(device);
-    PTI_ASSERT(device_freq_ > 0);
+    uint64_t device_freq = utils::ze::GetDeviceTimerFrequency(device);
+    utils::ze::GetMetricTimestamps(device, &host_sync_, &device_sync_);
+    host_sync_ = correlator_.GetTimestamp(host_sync_);
+    device_sync_ &= utils::ze::GetMetricTimestampMask(device);
+    device_sync_ = device_sync_ * static_cast<uint64_t>(NSEC_IN_SEC) / device_freq;
+    PTI_ASSERT(device_freq > 0);
   }
 
   static void PrintTypedValue(
@@ -196,6 +177,28 @@ class Profiler {
         PTI_ASSERT(0);
         break;
     }
+  }
+
+  static size_t GetMetricId(
+      const std::vector<std::string>& metric_list,
+      const std::string& metric_name) {
+    for (size_t i = 0; i < metric_list.size(); ++i) {
+      if (metric_list[i] == metric_name) {
+        return i;
+      }
+    }
+    return metric_list.size();
+  }
+
+  uint64_t GetHostTime(
+      const zet_typed_value_t* report, size_t time_id) const {
+    PTI_ASSERT(report != nullptr);
+
+    PTI_ASSERT(report[time_id].type == ZET_VALUE_TYPE_UINT64);
+    uint64_t device_time = report[time_id].value.ui64;
+
+    PTI_ASSERT(device_sync_ < device_time);
+    return host_sync_ + (device_time - device_sync_);
   }
 
   void Report() {
@@ -279,12 +282,6 @@ class Profiler {
   }
 
   template <typename KernelInterval>
-  uint64_t ConvertTimestamp(uint64_t timestamp) const {
-    return detail::ConvertTimestamp<KernelInterval>(
-        timestamp, device_freq_, host_sync_, device_sync_);
-  }
-
-  template <typename KernelInterval>
   void ReportKernelInterval(const KernelInterval& interval) {
     std::stringstream stream;
     stream << "Kernel," << interval.kernel_name << "," << std::endl;
@@ -300,8 +297,8 @@ class Profiler {
     for (auto& device_interval : interval.device_interval_list) {
       std::stringstream line;
       line << device_interval.sub_device_id << ",";
-      line << ConvertTimestamp<KernelInterval>(device_interval.start) << ",";
-      line << ConvertTimestamp<KernelInterval>(device_interval.end) << ",";
+      line << device_interval.start << ",";
+      line << device_interval.end << ",";
       line << std::endl;
       correlator_.Log(line.str());
     }
@@ -369,8 +366,12 @@ class Profiler {
     PTI_ASSERT(!metric_list.empty());
     PTI_ASSERT(metric_list.size() == report_size);
 
+    size_t report_time_id = GetMetricId(metric_list, "QueryBeginTime");
+    PTI_ASSERT(report_time_id < metric_list.size());
+
     std::stringstream header;
     header << "SubDeviceId,";
+    header << "HostTimestamp,";
     for (auto& metric : metric_list) {
       header << metric << ",";
     }
@@ -392,7 +393,11 @@ class Profiler {
       for (int i = 0; i < report_count; ++i) {
         std::stringstream line;
         line << sub_device_id << ",";
+
         const zet_typed_value_t* report = report_chunk + i * report_size;
+        uint64_t host_time = GetHostTime(report, report_time_id);
+        line << host_time << ",";
+
         for (int j = 0; j < report_size; ++j) {
           PrintTypedValue(line, report[j]);
           line << ",";
@@ -429,24 +434,23 @@ class Profiler {
       PTI_ASSERT(report_count * report_size == report_chunk_size);
 
       const zet_typed_value_t* first_report = report_chunk;
-      PTI_ASSERT(first_report[report_time_id].type == ZET_VALUE_TYPE_UINT64);
-      if (first_report[report_time_id].value.ui64 > end) {
+      uint64_t first_time = GetHostTime(first_report, report_time_id);
+      if (first_time > end) {
         continue;
       }
 
       const zet_typed_value_t* last_report =
         report_chunk + (report_count - 1) * report_size;
-      PTI_ASSERT(last_report[report_time_id].type == ZET_VALUE_TYPE_UINT64);
-      if (last_report[report_time_id].value.ui64 < start) {
+      uint64_t last_time = GetHostTime(last_report, report_time_id);
+      if (last_time < start) {
         continue;
       }
 
       for (int i = 0; i < report_count; ++i) {
         const zet_typed_value_t* report =
           report_chunk + i * report_size;
-        zet_typed_value_t report_time = report[report_time_id];
-        PTI_ASSERT(report_time.type == ZET_VALUE_TYPE_UINT64);
-        if (report_time.value.ui64 >= start && report_time.value.ui64 <= end) {
+        uint64_t host_time = GetHostTime(report, report_time_id);
+        if (host_time >= start && host_time <= end) {
           for (int j = 0; j < report_size; ++j) {
             target_list.push_back(report[j]);
           }
@@ -457,17 +461,6 @@ class Profiler {
     }
 
     return target_list;
-  }
-
-  static size_t GetMetricId(
-      const std::vector<std::string>& metric_list,
-      const std::string& metric_name) {
-    for (size_t i = 0; i < metric_list.size(); ++i) {
-      if (metric_list[i] == metric_name) {
-        return i;
-      }
-    }
-    return metric_list.size();
   }
 
   template <typename KernelInterval>
@@ -489,8 +482,7 @@ class Profiler {
       PTI_ASSERT(report_time_id < metric_list.size());
 
       std::vector<zet_typed_value_t> report_list = GetMetricInterval(
-          ConvertTimestamp<KernelInterval>(device_interval.start),
-          ConvertTimestamp<KernelInterval>(device_interval.end),
+          device_interval.start, device_interval.end,
           device_interval.sub_device_id, report_time_id);
       uint32_t report_count = report_list.size() / report_size;
       PTI_ASSERT(report_count * report_size == report_list.size());
@@ -498,6 +490,7 @@ class Profiler {
       if (report_count > 0) {
         std::stringstream header;
         header << "SubDeviceId,";
+        header << "HostTimestamp,";
         for (auto& metric : metric_list) {
           header << metric << ",";
         }
@@ -510,6 +503,7 @@ class Profiler {
         line << device_interval.sub_device_id << ",";
         const zet_typed_value_t* report =
           report_list.data() + i * report_size;
+        line << GetHostTime(report, report_time_id) << ",";
         for (int j = 0; j < report_size; ++j) {
           PrintTypedValue(line, report[j]);
           line << ",";
@@ -829,8 +823,7 @@ class Profiler {
       PTI_ASSERT(gpu_clocks_id < metric_list.size());
 
       std::vector<zet_typed_value_t> report_list = GetAggregatedMetrics(
-          ConvertTimestamp<KernelInterval>(device_interval.start),
-          ConvertTimestamp<KernelInterval>(device_interval.end),
+          device_interval.start, device_interval.end,
           device_interval.sub_device_id, report_time_id, gpu_clocks_id);
       uint32_t report_count = report_list.size() / report_size;
       PTI_ASSERT(report_count * report_size == report_list.size());
@@ -838,6 +831,7 @@ class Profiler {
       if (report_count > 0) {
         std::stringstream header;
         header << "SubDeviceId,";
+        header << "HostTimestamp,";
         for (auto& metric : metric_list) {
           header << metric << ",";
         }
@@ -850,6 +844,7 @@ class Profiler {
         line << device_interval.sub_device_id << ",";
         const zet_typed_value_t* report =
           report_list.data() + i * report_size;
+        line << GetHostTime(report, report_time_id) << ",";
         for (int j = 0; j < report_size; ++j) {
           PrintTypedValue(line, report[j]);
           line << ",";
@@ -915,7 +910,6 @@ class Profiler {
 
   uint64_t host_sync_ = 0;
   uint64_t device_sync_ = 0;
-  uint64_t device_freq_ = 0;
 };
 
 #endif // PTI_TOOLS_ONEPROF_PROFILER_H_

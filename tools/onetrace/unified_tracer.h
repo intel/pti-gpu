@@ -93,12 +93,14 @@ class UnifiedTracer {
         cl_callback = ClChromeStagesCallback;
       }
 
-      bool verbose = tracer->CheckOption(TRACE_VERBOSE);
-      bool kernels_per_tile = tracer->CheckOption(TRACE_KERNELS_PER_TILE);
+      KernelCollectorOptions kernel_options;
+      kernel_options.verbose = tracer->CheckOption(TRACE_VERBOSE);
+      kernel_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
+      kernel_options.kernels_per_tile =
+        tracer->CheckOption(TRACE_KERNELS_PER_TILE);
 
       ze_kernel_collector = ZeKernelCollector::Create(
-          &tracer->correlator_, verbose,
-          kernels_per_tile, ze_callback, tracer);
+          &tracer->correlator_, kernel_options, ze_callback, tracer);
       if (ze_kernel_collector == nullptr) {
         std::cerr <<
           "[WARNING] Unable to create kernel collector for L0 backend" <<
@@ -108,7 +110,8 @@ class UnifiedTracer {
 
       if (cl_cpu_device != nullptr) {
         cl_cpu_kernel_collector = ClKernelCollector::Create(
-            cl_cpu_device, &tracer->correlator_, verbose, cl_callback, tracer);
+            cl_cpu_device, &tracer->correlator_,
+            kernel_options, cl_callback, tracer);
         if (cl_cpu_kernel_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create kernel collector for CL CPU backend" <<
@@ -119,7 +122,8 @@ class UnifiedTracer {
 
       if (cl_gpu_device != nullptr) {
         cl_gpu_kernel_collector = ClKernelCollector::Create(
-            cl_gpu_device, &tracer->correlator_, verbose, cl_callback, tracer);
+            cl_gpu_device, &tracer->correlator_,
+            kernel_options, cl_callback, tracer);
         if (cl_gpu_kernel_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create kernel collector for CL GPU backend" <<
@@ -151,13 +155,14 @@ class UnifiedTracer {
         cl_callback = ClChromeLoggingCallback;
       }
 
-      ApiCollectorOptions options{false, false, false};
-      options.call_tracing = tracer->CheckOption(TRACE_CALL_LOGGING);
-      options.need_tid = tracer->CheckOption(TRACE_TID);
-      options.need_pid = tracer->CheckOption(TRACE_PID);
+      ApiCollectorOptions api_options;
+      api_options.call_tracing = tracer->CheckOption(TRACE_CALL_LOGGING);
+      api_options.need_tid = tracer->CheckOption(TRACE_TID);
+      api_options.need_pid = tracer->CheckOption(TRACE_PID);
+      api_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
 
       ze_api_collector = ZeApiCollector::Create(
-          &tracer->correlator_, options, ze_callback, tracer);
+          &tracer->correlator_, api_options, ze_callback, tracer);
       if (ze_api_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create L0 API collector" <<
           std::endl;
@@ -167,7 +172,7 @@ class UnifiedTracer {
       if (cl_cpu_device != nullptr) {
         cl_cpu_api_collector = ClApiCollector::Create(
             cl_cpu_device, &tracer->correlator_,
-            options, cl_callback, tracer);
+            api_options, cl_callback, tracer);
         if (cl_cpu_api_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create CL API collector for CPU backend" <<
@@ -179,7 +184,7 @@ class UnifiedTracer {
       if (cl_gpu_device != nullptr) {
         cl_gpu_api_collector = ClApiCollector::Create(
             cl_gpu_device, &tracer->correlator_,
-            options, cl_callback, tracer);
+            api_options, cl_callback, tracer);
         if (cl_gpu_api_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create CL API collector for GPU backend" <<

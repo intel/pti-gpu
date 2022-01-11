@@ -63,12 +63,10 @@ static bool CheckBitness(HANDLE parent, HANDLE child) {
 int main(int argc, char* argv[]) {
   std::string library_file_name = GetLibFileName();
   std::string executable_path = utils::GetExecutablePath();
-  std::string library_file_path = executable_path + library_file_name;
 
+  std::string library_file_path = executable_path + library_file_name;
   if (!IsFileExists(library_file_path.c_str())) {
-    std::cout << "[ERROR] Failed to find " <<
-      library_file_name << " near the loader" << std::endl;
-    return 0;
+    library_file_path = library_file_name;
   }
 
   SharedLibrary* lib = SharedLibrary::Create(library_file_path);

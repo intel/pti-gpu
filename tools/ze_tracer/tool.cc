@@ -61,6 +61,10 @@ void Usage() {
     "Enable verbose mode to show more kernel information" <<
     std::endl;
   std::cout <<
+    "--demangle                     " <<
+    "Demangle DPC++ kernel names" <<
+    std::endl;
+  std::cout <<
     "--kernels-per-tile             " <<
     "Dump kernel information per tile" <<
     std::endl;
@@ -128,6 +132,9 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--verbose") == 0 ||
                strcmp(argv[i], "-v") == 0) {
       utils::SetEnv("ZET_Verbose", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--demangle") == 0) {
+      utils::SetEnv("ZET_Demangle", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--kernels-per-tile") == 0) {
       utils::SetEnv("ZET_KernelsPerTile", "1");
@@ -242,6 +249,11 @@ static TraceOptions ReadArgs() {
   value = utils::GetEnv("ZET_Verbose");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_VERBOSE);
+  }
+
+  value = utils::GetEnv("ZET_Demangle");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_DEMANGLE);
   }
 
   value = utils::GetEnv("ZET_KernelsPerTile");

@@ -50,8 +50,9 @@ struct ZeKernelCommand {
   ze_device_handle_t device = nullptr;
   uint64_t kernel_id = 0;
   uint64_t append_time = 0;
-  uint64_t timer_frequency = 0;
   uint64_t call_count = 0;
+  uint64_t timer_frequency = 0;
+  uint64_t timer_mask = 0;
 };
 
 struct ZeKernelCall {
@@ -133,8 +134,7 @@ class ZeKernelCollector {
 
   static ZeKernelCollector* Create(
       Correlator* correlator,
-      bool verbose,
-      bool kernels_per_tile,
+      KernelCollectorOptions options,
       OnZeKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     ze_api_version_t version = utils::ze::GetVersion();
@@ -144,7 +144,7 @@ class ZeKernelCollector {
 
     PTI_ASSERT(correlator != nullptr);
     ZeKernelCollector* collector = new ZeKernelCollector(
-        correlator, verbose, kernels_per_tile, callback, callback_data);
+        correlator, options, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
@@ -303,13 +303,11 @@ class ZeKernelCollector {
 
   ZeKernelCollector(
       Correlator* correlator,
-      bool verbose,
-      bool kernels_per_tile,
+      KernelCollectorOptions options,
       OnZeKernelFinishCallback callback,
       void* callback_data)
       : correlator_(correlator),
-        verbose_(verbose),
-        kernels_per_tile_(kernels_per_tile),
+        options_(options),
         callback_(callback),
         callback_data_(callback_data),
         kernel_id_(1) {
@@ -365,7 +363,7 @@ class ZeKernelCollector {
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(correlator_ != nullptr);
 
-    utils::ze::GetTimestamps(device, &host_timestamp, &device_timestamp);
+    utils::ze::GetDeviceTimestamps(device, &host_timestamp, &device_timestamp);
     host_timestamp = correlator_->GetTimestamp(host_timestamp);
     device_timestamp &= utils::ze::GetDeviceTimestampMask(device);
   }
@@ -554,16 +552,42 @@ class ZeKernelCollector {
     }
   }
 
-  uint64_t ComputeDuration(uint64_t start, uint64_t end, uint64_t freq) {
+  uint64_t ComputeDuration(
+      uint64_t start, uint64_t end, uint64_t freq, uint64_t mask) {
     uint64_t duration = 0;
     if (start < end) {
       duration = (end - start) *
         static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-    } else { // 32-bit timer overflow
-      duration = ((1ull << 32) + end - start) *
+    } else { // Timer Overflow
+      duration = ((mask + 1ull) + end - start) *
         static_cast<uint64_t>(NSEC_IN_SEC) / freq;
     }
     return duration;
+  }
+
+  void GetHostTime(
+      const ZeKernelCall* call,
+      const ze_kernel_timestamp_result_t& timestamp,
+      uint64_t& host_start, uint64_t& host_end) {
+    PTI_ASSERT(call != nullptr);
+
+    ZeKernelCommand* command = call->command;
+    PTI_ASSERT(command != nullptr);
+
+    uint64_t start = timestamp.global.kernelStart;
+    uint64_t end = timestamp.global.kernelEnd;
+    uint64_t freq = command->timer_frequency;
+    uint64_t mask = command->timer_mask;
+    PTI_ASSERT(freq > 0);
+
+    PTI_ASSERT(call->submit_time > 0);
+    PTI_ASSERT(call->device_submit_time > 0);
+    uint64_t time_shift =
+      ComputeDuration(call->device_submit_time, start, freq, mask);
+    uint64_t duration = ComputeDuration(start, end, freq, mask);
+
+    host_start = call->submit_time + time_shift;
+    host_end = host_start + duration;
   }
 
   void ProcessCall(
@@ -575,24 +599,14 @@ class ZeKernelCollector {
     ZeKernelCommand* command = call->command;
     PTI_ASSERT(command != nullptr);
 
-    uint64_t start = timestamp.global.kernelStart;
-    uint64_t end = timestamp.global.kernelEnd;
-    uint64_t freq = command->timer_frequency;
-    PTI_ASSERT(freq > 0);
-
-    PTI_ASSERT(call->submit_time > 0);
-    PTI_ASSERT(call->device_submit_time > 0);
-    uint64_t time_shift =
-      ComputeDuration(call->device_submit_time, start, freq);
-    uint64_t duration = ComputeDuration(start, end, freq);
-
-    uint64_t host_start = call->submit_time + time_shift;
-    uint64_t host_end = host_start + duration;
+    uint64_t host_start = 0, host_end = 0;
+    GetHostTime(call, timestamp, host_start, host_end);
+    PTI_ASSERT(host_start <= host_end);
 
     std::string name = command->props.name;
     PTI_ASSERT(!name.empty());
 
-    if (verbose_) {
+    if (options_.verbose) {
       name = GetVerboseName(&command->props);
     }
 
@@ -640,7 +654,7 @@ class ZeKernelCollector {
 
     if (call->need_to_process) {
 #ifdef PTI_KERNEL_INTERVALS
-      AddKernelInterval(command);
+      AddKernelInterval(call);
 #else // PTI_KERNEL_INTERVALS
       ze_result_t status = ZE_RESULT_SUCCESS;
       status = zeEventQueryStatus(command->event);
@@ -650,7 +664,7 @@ class ZeKernelCollector {
       status = zeEventQueryKernelTimestamp(command->event, &timestamp);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-      if (kernels_per_tile_ && command->props.simd_width > 0) {
+      if (options_.kernels_per_tile && command->props.simd_width > 0) {
         if (device_map_.count(command->device) == 1 &&
             !device_map_[command->device].empty()) { // Implicit Scaling
           uint32_t count = 0;
@@ -772,13 +786,16 @@ class ZeKernelCollector {
   }
 
 #ifdef PTI_KERNEL_INTERVALS
-  void AddKernelInterval(const ZeKernelCommand* command) {
+  void AddKernelInterval(const ZeKernelCall* call) {
+    PTI_ASSERT(call != nullptr);
+
+    const ZeKernelCommand* command = call->command;
     PTI_ASSERT(command != nullptr);
 
     std::string name = command->props.name;
     PTI_ASSERT(!name.empty());
 
-    if (verbose_) {
+    if (options_.verbose) {
       name = GetVerboseName(&command->props);
     }
 
@@ -801,18 +818,12 @@ class ZeKernelCollector {
       ZeKernelInterval kernel_interval{
           name, command->device, std::vector<ZeDeviceInterval>()};
       for (uint32_t i = 0; i < count; ++i) {
-        uint64_t start = timestamps[i].global.kernelStart;
-        uint64_t end = timestamps[i].global.kernelEnd;
-        uint64_t freq = command->timer_frequency;
-        PTI_ASSERT(freq > 0);
+        uint64_t host_start = 0, host_end = 0;
+        GetHostTime(call, timestamps[i], host_start, host_end);
+        PTI_ASSERT(host_start <= host_end);
 
-        uint64_t duration = ComputeDuration(start, end, freq);
-        uint64_t start_ns = start *
-          static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-        uint64_t end_ns = start_ns + duration;
-        PTI_ASSERT(start_ns < end_ns);
-
-        kernel_interval.device_interval_list.push_back({start_ns, end_ns, i});
+        kernel_interval.device_interval_list.push_back(
+            {host_start, host_end, i});
       }
       kernel_interval_list_.push_back(kernel_interval);
     } else { // Explicit scaling
@@ -820,16 +831,9 @@ class ZeKernelCollector {
       status = zeEventQueryKernelTimestamp(command->event, &timestamp);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-      uint64_t start = timestamp.global.kernelStart;
-      uint64_t end = timestamp.global.kernelEnd;
-      uint64_t freq = command->timer_frequency;
-      PTI_ASSERT(freq > 0);
-
-      uint64_t duration = ComputeDuration(start, end, freq);
-      uint64_t start_ns = start *
-        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-      uint64_t end_ns = start_ns + duration;
-      PTI_ASSERT(start_ns < end_ns);
+      uint64_t host_start = 0, host_end = 0;
+      GetHostTime(call, timestamp, host_start, host_end);
+      PTI_ASSERT(host_start <= host_end);
 
       if (device_map_.count(command->device) == 0) { // Subdevice
         ze_device_handle_t device = GetDeviceForSubDevice(command->device);
@@ -840,13 +844,14 @@ class ZeKernelCollector {
         ZeKernelInterval kernel_interval{
             name, device, std::vector<ZeDeviceInterval>()};
         kernel_interval.device_interval_list.push_back(
-            {start_ns, end_ns, static_cast<uint32_t>(sub_device_id)});
+            {host_start, host_end, static_cast<uint32_t>(sub_device_id)});
         kernel_interval_list_.push_back(kernel_interval);
       } else { // Device with no subdevices
         PTI_ASSERT(device_map_[command->device].empty());
         ZeKernelInterval kernel_interval{
             name, command->device, std::vector<ZeDeviceInterval>()};
-        kernel_interval.device_interval_list.push_back({start_ns, end_ns, 0});
+        kernel_interval.device_interval_list.push_back(
+            {host_start, host_end, 0});
         kernel_interval_list_.push_back(kernel_interval);
       }
     }
@@ -1159,6 +1164,8 @@ class ZeKernelCollector {
     command->device = device;
     command->timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
     PTI_ASSERT(command->timer_frequency > 0);
+    command->timer_mask = utils::ze::GetDeviceTimestampMask(device);
+    PTI_ASSERT(command->timer_mask > 0);
 
     if (signal_event == nullptr) {
       ze_context_handle_t context =
@@ -1229,7 +1236,8 @@ class ZeKernelCollector {
 
     ZeKernelProps props{};
 
-    props.name = utils::ze::GetKernelName(kernel);
+    props.name = utils::ze::GetKernelName(
+        kernel, collector->options_.demangle);
     props.simd_width =
       utils::ze::GetKernelMaxSubgroupSize(kernel);
     props.bytes_transferred = 0;
@@ -1896,8 +1904,7 @@ class ZeKernelCollector {
  private: // Data
   zel_tracer_handle_t tracer_ = nullptr;
 
-  bool verbose_ = false;
-  bool kernels_per_tile_ = false;
+  KernelCollectorOptions options_;
 
   Correlator* correlator_ = nullptr;
   std::atomic<uint64_t> kernel_id_;

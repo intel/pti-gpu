@@ -60,7 +60,7 @@ class ClApiCollector {
   static ClApiCollector* Create(
       cl_device_id device,
       Correlator* correlator,
-      ApiCollectorOptions options = {false, false, false},
+      ApiCollectorOptions options,
       OnClFunctionFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
@@ -113,6 +113,10 @@ class ClApiCollector {
 
   bool NeedPid() const {
     return options_.need_pid;
+  }
+
+  bool Demangle() const {
+    return options_.demangle;
   }
 
   void Log(const std::string& text) {
@@ -332,7 +336,7 @@ class ClApiCollector {
   ClApiTracer* tracer_ = nullptr;
 
   Correlator* correlator_ = nullptr;
-  ApiCollectorOptions options_ = {false, false, false};
+  ApiCollectorOptions options_;
   cl_device_type device_type_ = CL_DEVICE_TYPE_ALL;
 
   OnClFunctionFinishCallback callback_ = nullptr;

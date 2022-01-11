@@ -35,7 +35,8 @@ def run(path, option):
     app_folder = utils.get_sample_executable_path("omp_gemm")
     app_file = os.path.join(app_folder, "omp_gemm")
     command = ["./onetrace", "-h", "-d", "-t", app_file, "gpu", "1024", "1"]
-  elif option == "-v" or option == "--kernels-per-tile" or option == "--conditional-collection":
+  elif option == "-v" or option == "--demangle" or\
+       option == "--kernels-per-tile" or option == "--conditional-collection":
     app_folder = utils.get_sample_executable_path("dpc_gemm")
     app_file = os.path.join(app_folder, "dpc_gemm")
     command = ["./onetrace", "-d", option, app_file, "gpu", "1024", "1"]
@@ -88,6 +89,8 @@ if __name__ == "__main__":
     option = "-s"
   if len(sys.argv) > 1 and sys.argv[1] == "-v":
     option = "-v"
+  if len(sys.argv) > 1 and sys.argv[1] == "--demangle":
+    option = "--demangle"
   if len(sys.argv) > 1 and sys.argv[1] == "--kernels-per-tile":
     option = "--kernels-per-tile"
   if len(sys.argv) > 1 and sys.argv[1] == "--chrome-call-logging":

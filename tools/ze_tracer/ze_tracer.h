@@ -67,11 +67,14 @@ class ZeTracer {
         callback = ChromeStagesCallback;
       }
 
+      KernelCollectorOptions kernel_options;
+      kernel_options.verbose = tracer->CheckOption(TRACE_VERBOSE);
+      kernel_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
+      kernel_options.kernels_per_tile =
+        tracer->CheckOption(TRACE_KERNELS_PER_TILE);
+
       kernel_collector = ZeKernelCollector::Create(
-          &(tracer->correlator_),
-          tracer->CheckOption(TRACE_VERBOSE),
-          tracer->CheckOption(TRACE_KERNELS_PER_TILE),
-          callback, tracer);
+          &(tracer->correlator_), kernel_options, callback, tracer);
       if (kernel_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create kernel collector" <<
           std::endl;
@@ -91,13 +94,14 @@ class ZeTracer {
         callback = ChromeLoggingCallback;
       }
 
-      ApiCollectorOptions options{false, false, false};
-      options.call_tracing = tracer->CheckOption(TRACE_CALL_LOGGING);
-      options.need_tid = tracer->CheckOption(TRACE_TID);
-      options.need_pid = tracer->CheckOption(TRACE_PID);
+      ApiCollectorOptions api_options;
+      api_options.call_tracing = tracer->CheckOption(TRACE_CALL_LOGGING);
+      api_options.need_tid = tracer->CheckOption(TRACE_TID);
+      api_options.need_pid = tracer->CheckOption(TRACE_PID);
+      api_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
 
       api_collector = ZeApiCollector::Create(
-          &(tracer->correlator_), options, callback, tracer);
+          &(tracer->correlator_), api_options, callback, tracer);
       if (api_collector == nullptr) {
         std::cerr << "[WARNING] Unable to create API collector" << std::endl;
         delete tracer;

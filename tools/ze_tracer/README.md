@@ -16,6 +16,7 @@ Options:
 --chrome-kernel-timeline       Dump device activities to JSON file per kernel name
 --chrome-device-stages         Dump device activities by stages to JSON file
 --verbose [-v]                 Enable verbose mode to show more kernel information
+--demangle                     Demangle DPC++ kernel names
 --kernels-per-tile             Dump kernel information per tile
 --tid                          Print thread ID into host API trace
 --pid                          Print process ID into host API and device activity trace

@@ -113,7 +113,7 @@ class ClKernelCollector {
   static ClKernelCollector* Create(
       cl_device_id device,
       Correlator* correlator,
-      bool verbose,
+      KernelCollectorOptions options,
       OnClKernelFinishCallback callback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
@@ -121,7 +121,7 @@ class ClKernelCollector {
     TraceGuard guard;
 
     ClKernelCollector* collector = new ClKernelCollector(
-        device, correlator, verbose, callback, callback_data);
+        device, correlator, options, callback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     ClApiTracer* tracer = new ClApiTracer(device, Callback, collector);
@@ -281,12 +281,12 @@ class ClKernelCollector {
   ClKernelCollector(
       cl_device_id device,
       Correlator* correlator,
-      bool verbose,
+      KernelCollectorOptions options,
       OnClKernelFinishCallback callback,
       void* callback_data)
       : device_(device),
         correlator_(correlator),
-        verbose_(verbose),
+        options_(options),
         callback_(callback),
         callback_data_(callback_data),
         kernel_id_(1) {
@@ -443,6 +443,13 @@ class ClKernelCollector {
       PTI_ASSERT(device != nullptr);
       AddKernelInterval(instance, device, started, ended);
 #else // PTI_KERNEL_INTERVALS
+      std::string name = instance->props.name;
+      PTI_ASSERT(!name.empty());
+
+      if (options_.verbose) {
+        name = GetVerboseName(&(instance->props));
+      }
+
       uint64_t host_queued = 0, host_submitted = 0;
       uint64_t host_started = 0, host_ended = 0;
       ComputeHostTimestamps(
@@ -451,19 +458,12 @@ class ClKernelCollector {
           host_queued, host_submitted,
           host_started, host_ended);
       AddKernelInfo(
-        &instance->props,
+        name,
         host_submitted - host_queued,
         host_started - host_submitted,
         host_ended - host_started);
 
       if (callback_ != nullptr) {
-        std::string name = instance->props.name;
-        PTI_ASSERT(!name.empty());
-
-        if (verbose_) {
-          name = GetVerboseName(&(instance->props));
-        }
-
         std::stringstream stream;
         stream << std::hex << queue;
 
@@ -551,16 +551,9 @@ class ClKernelCollector {
   }
 
   void AddKernelInfo(
-      const ClKernelProps* props, uint64_t queued_time,
+      std::string name, uint64_t queued_time,
       uint64_t submit_time, uint64_t execute_time) {
-    PTI_ASSERT(props != nullptr);
-
-    std::string name = props->name;
     PTI_ASSERT(!name.empty());
-
-    if (verbose_) {
-      name = GetVerboseName(props);
-    }
 
     if (kernel_info_map_.count(name) == 0) {
       ClKernelInfo info;
@@ -606,7 +599,7 @@ class ClKernelCollector {
     std::string name = instance->props.name;
     PTI_ASSERT(!name.empty());
 
-    if (verbose_) {
+    if (options_.verbose) {
       name = GetVerboseName(&instance->props);
     }
 
@@ -755,11 +748,9 @@ class ClKernelCollector {
     cl_ulong host_timestamp = 0;
     utils::cl::GetTimestamps(
         collector->device_, &enqueue_data->host_sync, &enqueue_data->device_sync);
-#ifndef PTI_KERNEL_INTERVALS
     PTI_ASSERT(collector->correlator_ != nullptr);
     enqueue_data->host_sync =
       collector->correlator_->GetTimestamp(enqueue_data->host_sync);
-#endif
 
     const T* params = reinterpret_cast<const T*>(data->functionParams);
     PTI_ASSERT(params != nullptr);
@@ -797,7 +788,8 @@ class ClKernelCollector {
       instance->event = **(params->event);
 
       cl_kernel kernel = *(params->kernel);
-      instance->props.name = utils::cl::GetKernelName(kernel);
+      instance->props.name = utils::cl::GetKernelName(
+          kernel, collector->options_.demangle);
 
       cl_command_queue queue = *(params->commandQueue);
       PTI_ASSERT(queue != nullptr);
@@ -1401,7 +1393,7 @@ class ClKernelCollector {
   ClApiTracer* tracer_ = nullptr;
   Correlator* correlator_ = nullptr;
 
-  bool verbose_ = false;
+  KernelCollectorOptions options_;
 
   std::atomic<uint64_t> kernel_id_;
   cl_device_id device_ = nullptr;

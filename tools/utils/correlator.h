@@ -19,9 +19,16 @@
 #include "utils.h"
 
 struct ApiCollectorOptions {
-  bool call_tracing;
-  bool need_tid;
-  bool need_pid;
+  bool call_tracing = false;
+  bool need_tid = false;
+  bool need_pid = false;
+  bool demangle = false;
+};
+
+struct KernelCollectorOptions {
+  bool verbose = false;
+  bool demangle = false;
+  bool kernels_per_tile = false;
 };
 
 class Correlator {

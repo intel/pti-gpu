@@ -166,6 +166,7 @@ macro(FindIGALibrary TARGET)
         "IGA is not found. "
         "You may need to install Intel(R) Processor Graphics Driver to fix this issue.")
     else()
+      list(GET IGA_DLL_PATH 0 IGA_DLL_PATH)
       message(STATUS
         "IGA is found at ${IGA_DLL_PATH}")
       find_library(IGA_LIB_PATH

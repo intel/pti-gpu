@@ -354,7 +354,9 @@ def gen_enter_callback(f, func, params, enum_map):
         f.write("    stream << \" " + name + " = \" << *(params->p" + name + ");\n")
         if name.find("Kernel") >= 0 and func == "zeCommandListAppendLaunchKernel":
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
-          f.write("      std::string kernel_name = utils::ze::GetKernelName(*(params->p" + name + "));\n")
+          f.write("      bool demangle = collector->options_.demangle;\n")
+          f.write("      std::string kernel_name =\n")
+          f.write("        utils::ze::GetKernelName(*(params->p" + name + "), demangle);\n")
           f.write("      if (!kernel_name.empty()) {\n")
           f.write("        stream << \" (\" << kernel_name << \")\";\n")
           f.write("      }\n")
@@ -402,7 +404,11 @@ def gen_enter_callback(f, func, params, enum_map):
           f.write("      } else if (strlen((*(params->p" + name + "))->pKernelName) == 0) {\n")
           f.write("        stream << \" " + name + " = \\\"\\\"\";\n")
           f.write("      } else {\n")
-          f.write("        stream << (*(params->p" + name + "))->pKernelName << \"}\";\n")
+          f.write("        stream << \"\\\"\" << (*(params->p" + name + "))->pKernelName << \"\\\"\";\n")
+          f.write("        if (collector->options_.demangle) {\n")
+          f.write("          stream << \" (\" << utils::Demangle((*(params->p" + name + "))->pKernelName) << \")\";\n")
+          f.write("        }\n")
+          f.write("        stream << \"}\";\n")
           f.write("      }\n")
           f.write("    }\n")
         elif type.find("ze_device_mem_alloc_desc_t*") >= 0:

@@ -119,17 +119,20 @@ inline cl_device_id GetDeviceParent(cl_device_id device) {
   return parent;
 }
 
-inline std::string GetKernelName(cl_kernel kernel) {
+inline std::string GetKernelName(cl_kernel kernel, bool demangle = false) {
   PTI_ASSERT(kernel != nullptr);
 
   char name[MAX_STR_SIZE] = { 0 };
   cl_int status = CL_SUCCESS;
 
-  status = clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME,
-                           MAX_STR_SIZE, name, nullptr);
+  status = clGetKernelInfo(
+      kernel, CL_KERNEL_FUNCTION_NAME, MAX_STR_SIZE, name, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
 
-  return demangle(name);
+  if (demangle) {
+    return utils::Demangle(name);
+  }
+  return name;
 }
 
 inline std::string GetDeviceName(cl_device_id device) {

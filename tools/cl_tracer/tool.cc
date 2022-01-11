@@ -61,6 +61,10 @@ void Usage() {
     "Enable verbose mode to show more kernel information" <<
     std::endl;
   std::cout <<
+    "--demangle                     " <<
+    "Demangle DPC++ kernel names" <<
+    std::endl;
+  std::cout <<
     "--tid                          " <<
     "Print thread ID into host API trace" <<
     std::endl;
@@ -124,6 +128,9 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--verbose") == 0 ||
                strcmp(argv[i], "-v") == 0) {
       utils::SetEnv("CLT_Verbose", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--demangle") == 0) {
+      utils::SetEnv("CLT_Demangle", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--tid") == 0) {
       utils::SetEnv("CLT_Tid", "1");
@@ -233,6 +240,11 @@ static TraceOptions ReadArgs() {
   value = utils::GetEnv("CLT_Verbose");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_VERBOSE);
+  }
+
+  value = utils::GetEnv("CLT_Demangle");
+  if (!value.empty() && value == "1") {
+    flags |= (1 << TRACE_DEMANGLE);
   }
 
   value = utils::GetEnv("CLT_Tid");

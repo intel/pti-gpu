@@ -10,27 +10,29 @@
 #endif
 #include <string>
 
+#include "pti_assert.h"
+
 namespace utils {
 
-static inline std::string demangle(const char* name) {
-  if (!name)
-  {
-    return std::string{};
-  }
+static inline std::string Demangle(const char* name) {
+  PTI_ASSERT(name != nullptr);
+
 #if HAVE_CXXABI
-  int status;
-  char *demangled = abi::__cxa_demangle(name, nullptr, 0, &status);
+  int status = 0;
+  char* demangled = abi::__cxa_demangle(name, nullptr, 0, &status);
   if (status != 0) {
     return name;
   }
-  
-  constexpr const char *const prefixToSkip = "typeinfo name for ";
-  const size_t prefixToSkipLen = strlen(prefixToSkip);
-  const size_t shift = (std::strncmp(demangled, prefixToSkip, prefixToSkipLen) == 0) ? prefixToSkipLen : 0;
 
-  std::string retVal(demangled + shift);
+  constexpr const char* const prefix_to_skip = "typeinfo name for ";
+  const size_t prefix_to_skip_len = strlen(prefix_to_skip);
+  const size_t shift =
+    (std::strncmp(demangled, prefix_to_skip, prefix_to_skip_len) == 0) ?
+    prefix_to_skip_len : 0;
+
+  std::string result(demangled + shift);
   free(demangled);
-  return retVal;
+  return result;
 #else
   return name;
 #endif

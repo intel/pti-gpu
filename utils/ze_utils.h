@@ -290,7 +290,8 @@ inline size_t GetKernelMaxSubgroupSize(ze_kernel_handle_t kernel) {
   return props.maxSubgroupSize;
 }
 
-inline std::string GetKernelName(ze_kernel_handle_t kernel) {
+inline std::string GetKernelName(
+    ze_kernel_handle_t kernel, bool demangle = false) {
   PTI_ASSERT(kernel != nullptr);
 
   size_t size = 0;
@@ -301,12 +302,15 @@ inline std::string GetKernelName(ze_kernel_handle_t kernel) {
   std::vector<char> name(size);
   status = zeKernelGetName(kernel, &size, name.data());
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
   PTI_ASSERT(name[size - 1] == '\0');
-  return demangle(name.data());
+
+  if (demangle) {
+    return utils::Demangle(name.data());
+  }
+  return std::string(name.begin(), name.end() - 1);
 }
 
-inline void GetTimestamps(
+inline void GetDeviceTimestamps(
     ze_device_handle_t device,
     uint64_t* host_timestamp,
     uint64_t* device_timestamp) {
@@ -315,6 +319,19 @@ inline void GetTimestamps(
   PTI_ASSERT(device_timestamp != nullptr);
   ze_result_t status = zeDeviceGetGlobalTimestamps(
       device, host_timestamp, device_timestamp);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+}
+
+inline void GetMetricTimestamps(
+    ze_device_handle_t device,
+    uint64_t* host_timestamp,
+    uint64_t* metric_timestamp) {
+  PTI_ASSERT(device != nullptr);
+  PTI_ASSERT(host_timestamp != nullptr);
+  PTI_ASSERT(metric_timestamp != nullptr);
+  // TODO: replace with zeMetricGetGlobalTimestamps
+  ze_result_t status = zeDeviceGetGlobalTimestamps(
+      device, host_timestamp, metric_timestamp);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 }
 
@@ -327,6 +344,14 @@ inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
 }
 
 uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
+  PTI_ASSERT(device != nullptr);
+  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  return (1ull << props.kernelTimestampValidBits) - 1ull;
+}
+
+uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
   ze_result_t status = zeDeviceGetProperties(device, &props);

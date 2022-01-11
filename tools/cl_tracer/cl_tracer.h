@@ -81,11 +81,14 @@ class ClTracer {
         callback = ChromeStagesCallback;
       }
 
+      KernelCollectorOptions kernel_options;
+      kernel_options.verbose = tracer->CheckOption(TRACE_VERBOSE);
+      kernel_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
+
       if (cpu_device != nullptr) {
         cpu_kernel_collector = ClKernelCollector::Create(
             cpu_device, &tracer->correlator_,
-            tracer->CheckOption(TRACE_VERBOSE),
-            callback, tracer);
+            kernel_options, callback, tracer);
         if (cpu_kernel_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create kernel collector for CPU backend" <<
@@ -97,8 +100,7 @@ class ClTracer {
       if (gpu_device != nullptr) {
         gpu_kernel_collector = ClKernelCollector::Create(
             gpu_device, &tracer->correlator_,
-            tracer->CheckOption(TRACE_VERBOSE),
-            callback, tracer);
+            kernel_options, callback, tracer);
         if (gpu_kernel_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create kernel collector for GPU backend" <<
@@ -125,15 +127,16 @@ class ClTracer {
         callback = ChromeLoggingCallback;
       }
 
-      ApiCollectorOptions cl_api_options{false, false, false};
-      cl_api_options.call_tracing = tracer->CheckOption(TRACE_CALL_LOGGING);
-      cl_api_options.need_tid = tracer->CheckOption(TRACE_TID);
-      cl_api_options.need_pid = tracer->CheckOption(TRACE_PID);
+      ApiCollectorOptions api_options;
+      api_options.call_tracing = tracer->CheckOption(TRACE_CALL_LOGGING);
+      api_options.need_tid = tracer->CheckOption(TRACE_TID);
+      api_options.need_pid = tracer->CheckOption(TRACE_PID);
+      api_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
 
       if (cpu_device != nullptr) {
         cpu_api_collector = ClApiCollector::Create(
             cpu_device, &tracer->correlator_,
-            cl_api_options, callback, tracer);
+            api_options, callback, tracer);
         if (cpu_api_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create API collector for CPU backend" <<
@@ -145,7 +148,7 @@ class ClTracer {
       if (gpu_device != nullptr) {
         gpu_api_collector = ClApiCollector::Create(
             gpu_device, &tracer->correlator_,
-            cl_api_options, callback, tracer);
+            api_options, callback, tracer);
         if (gpu_api_collector == nullptr) {
           std::cerr <<
             "[WARNING] Unable to create API collector for GPU backend" <<
