@@ -17,6 +17,7 @@
 #include <level_zero/ze_api.h>
 #include <level_zero/zet_api.h>
 
+#include "demangle.h"
 #include "pti_assert.h"
 #include "utils.h"
 
@@ -302,7 +303,7 @@ inline std::string GetKernelName(ze_kernel_handle_t kernel) {
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   PTI_ASSERT(name[size - 1] == '\0');
-  return std::string(name.begin(), name.end() - 1);
+  return demangle(name.data());
 }
 
 inline void GetTimestamps(
