@@ -21,6 +21,10 @@ target_include_directories(oneprof_tool
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 target_compile_definitions(oneprof_tool PUBLIC PTI_KERNEL_INTERVALS=1)
 target_compile_definitions(oneprof_tool PUBLIC PTI_LEVEL_ZERO=1)
+if(DEFINED PTI_OA_TIMESTAMP_VALID_BITS)
+  message(STATUS "PTI_OA_TIMESTAMP_VALID_BITS is set to ${PTI_OA_TIMESTAMP_VALID_BITS}")
+  target_compile_definitions(oneprof_tool PUBLIC PTI_OA_TIMESTAMP_VALID_BITS=${PTI_OA_TIMESTAMP_VALID_BITS})
+endif()
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(oneprof_tool
     PUBLIC "${CMAKE_INCLUDE_PATH}")

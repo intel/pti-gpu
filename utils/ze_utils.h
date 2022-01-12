@@ -322,6 +322,7 @@ inline void GetDeviceTimestamps(
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 }
 
+// TODO: use zeMetricGetGlobalTimestamps
 inline void GetMetricTimestamps(
     ze_device_handle_t device,
     uint64_t* host_timestamp,
@@ -329,7 +330,6 @@ inline void GetMetricTimestamps(
   PTI_ASSERT(device != nullptr);
   PTI_ASSERT(host_timestamp != nullptr);
   PTI_ASSERT(metric_timestamp != nullptr);
-  // TODO: replace with zeMetricGetGlobalTimestamps
   ze_result_t status = zeDeviceGetGlobalTimestamps(
       device, host_timestamp, metric_timestamp);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -352,11 +352,14 @@ uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
 }
 
 uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
+#ifdef PTI_OA_TIMESTAMP_VALID_BITS
+  return (1ull << PTI_OA_TIMESTAMP_VALID_BITS) - 1ull;
+#else
   ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
   ze_result_t status = zeDeviceGetProperties(device, &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return (1ull << props.kernelTimestampValidBits) - 1ull;
+#endif
 }
 
 inline ze_api_version_t GetDriverVersion(ze_driver_handle_t driver) {
