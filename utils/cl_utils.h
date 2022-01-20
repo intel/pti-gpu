@@ -22,6 +22,14 @@
 namespace utils {
 namespace cl {
 
+inline std::string GetDeviceVendor(cl_device_id device) {
+  char vendor[MAX_STR_SIZE] = { 0 };
+  cl_int status = clGetDeviceInfo(
+      device, CL_DEVICE_VENDOR, MAX_STR_SIZE, vendor, nullptr);
+  PTI_ASSERT(status == CL_SUCCESS);
+  return vendor;
+}
+
 inline std::vector<cl_device_id> GetDeviceList(cl_device_type type) {
   cl_int status = CL_SUCCESS;
 
@@ -49,7 +57,9 @@ inline std::vector<cl_device_id> GetDeviceList(cl_device_type type) {
     PTI_ASSERT(status == CL_SUCCESS);
 
     for (cl_uint j = 0; j < device_count; ++j) {
-      result.push_back(device_list[j]);
+      if (GetDeviceVendor(device_list[j]).find("Intel") != std::string::npos) {
+        result.push_back(device_list[j]);
+      }
     }
   }
 
@@ -90,16 +100,11 @@ inline void ReleaseSubDeviceList(
 }
 
 inline cl_device_id GetIntelDevice(cl_device_type type) {
-  cl_int status = CL_SUCCESS;
   cl_device_id target = nullptr;
-  char vendor[MAX_STR_SIZE] = { 0 };
 
   std::vector<cl_device_id> device_list = GetDeviceList(type);
   for (auto device : device_list) {
-    status = clGetDeviceInfo(
-        device, CL_DEVICE_VENDOR, MAX_STR_SIZE, vendor, nullptr);
-    PTI_ASSERT(status == CL_SUCCESS);
-    if (strstr(vendor, "Intel") != nullptr) {
+    if (GetDeviceVendor(device).find("Intel") != std::string::npos) {
       target = device;
       break;
     }

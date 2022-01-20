@@ -199,6 +199,9 @@ static void Compute(cl_device_id device, const std::vector<float>& a,
 }
 
 int main(int argc, char* argv[]) {
+  utils::SetEnv("INTEL_LIBITTNOTIFY32", "1");
+  utils::SetEnv("INTEL_LIBITTNOTIFY64", "1");
+
   cl_device_type type = CL_DEVICE_TYPE_GPU;
   if (argc > 1 && strcmp(argv[1], "cpu") == 0) {
     type = CL_DEVICE_TYPE_CPU;

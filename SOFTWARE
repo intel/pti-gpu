@@ -1,14 +1,14 @@
 level-zero-loader:
   deb:
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.6.2/level-zero_1.6.2+u18.04_amd64.deb
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.6.2/level-zero-devel_1.6.2+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.7.9/level-zero_1.7.9+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.7.9/level-zero-devel_1.7.9+u18.04_amd64.deb
 compute-runtime:
   deb:
-  - https://github.com/intel/compute-runtime/releases/download/21.45.21574/intel-gmmlib_21.2.1_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8744/intel-igc-core_1.0.8744_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.8744/intel-igc-opencl_1.0.8744_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.45.21574/intel-opencl-icd_21.45.21574_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/21.45.21574/intel-level-zero-gpu_1.2.21574_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/22.02.22151/intel-gmmlib_22.0.0_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.9933/intel-igc-core_1.0.9933_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.9933/intel-igc-opencl_1.0.9933_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/22.02.22151/intel-opencl-icd_22.02.22151_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/22.02.22151/intel-level-zero-gpu_1.2.22151_amd64.deb
 metrics-discovery:
   github:
     build_path: build
@@ -18,7 +18,7 @@ metrics-discovery:
     - sudo make install
     - sudo make package
     - sudo dpkg -i *.deb
-    commit: 8334347b2e61c339e1118680938470172dd38cb4
+    commit: 0bb7d238bb64dada396f6958b4ab47bb13455610
     url: https://github.com/intel/metrics-discovery
 metrics-library:
   github:
@@ -42,7 +42,7 @@ oneapit-toolkits:
     apt_repo: deb https://apt.repos.intel.com/oneapi all main
     apt_source: /etc/apt/sources.list.d/oneAPI.list
     packages:
-    - intel-basekit=2021.4.0-3422
+    - intel-basekit=2022.1.1-119
 finalize:
   config:
     commands:

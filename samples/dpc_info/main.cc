@@ -1,6 +1,7 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
+#include <vector>
 
 #include <CL/sycl.hpp>
 
@@ -50,7 +51,7 @@ int main(int argc, char* argv[]) {
     list_mode = true;
   }
 
-  sycl::vector_class<sycl::platform> platforms =
+  std::vector<sycl::platform> platforms =
     sycl::platform::get_platforms();
 
   if (list_mode) {
@@ -59,7 +60,7 @@ int main(int argc, char* argv[]) {
         platforms[pl_id].get_info<sycl::info::platform::name>();
       std::cout << "Platform #" << pl_id << ": " << name << std::endl;
 
-      sycl::vector_class<sycl::device> devices =
+      std::vector<sycl::device> devices =
         platforms[pl_id].get_devices(sycl::info::device_type::all);
 
       for (size_t device_id = 0; device_id < devices.size(); device_id++) {
@@ -88,15 +89,6 @@ int main(int argc, char* argv[]) {
         platform.get_info<sycl::info::platform::profile>();
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
         TAB + "Platform Profile " << profile << std::endl;
-
-      sycl::vector_class<std::string> extensions =
-        platform.get_info<sycl::info::platform::extensions>();
-      std::cout << std::setw(TEXT_WIDTH) << std::left <<
-        TAB + "Platform Extensions ";
-      for (auto extenton : extensions) {
-        std::cout << extenton << " ";
-      }
-      std::cout << std::endl << std::endl;
     }
 
     for (auto platform : platforms) {
@@ -105,7 +97,7 @@ int main(int argc, char* argv[]) {
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
         TAB + "Platform Name " << name << std::endl;
 
-      sycl::vector_class<sycl::device> devices =
+      std::vector<sycl::device> devices =
         platform.get_devices(sycl::info::device_type::all);
       std::cout << std::setw(TEXT_WIDTH) << std::left <<
         "Number of devices " << devices.size() << std::endl;
@@ -258,21 +250,21 @@ int main(int argc, char* argv[]) {
           TAB + "printf() buffer size" << printf_buffer_size << " (" <<
           ConvertBytesToString(printf_buffer_size) << ")" << std::endl;
 
-        sycl::vector_class<std::string> built_in_kernels =
+        std::vector<std::string> built_in_kernels =
           device.get_info<sycl::info::device::built_in_kernels>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "Built-in kernels ";
-        for (auto kernel : built_in_kernels) {
-          std::cout << kernel << " ";
+        for (size_t i = 0; i < built_in_kernels.size(); ++i) {
+          std::cout << built_in_kernels[i] << " ";
         }
         std::cout << std::endl;
 
-        sycl::vector_class<std::string> device_extensions =
+        std::vector<std::string> device_extensions =
           device.get_info<sycl::info::device::extensions>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "Device Extensions ";
-        for (auto device_extension : device_extensions) {
-          std::cout << device_extension << " ";
+        for (size_t i = 0; i < device_extensions.size(); ++i) {
+          std::cout << device_extensions[i] << " ";
         }
         std::cout << std::endl << std::endl;
       }

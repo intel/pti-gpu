@@ -32,10 +32,6 @@ class UnifiedTracer {
   static UnifiedTracer* Create(const TraceOptions& options) {
     cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
     cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
-    if (cl_cpu_device == nullptr && cl_gpu_device == nullptr) {
-      std::cerr << "[WARNING] Intel OpenCL devices are not found" << std::endl;
-      return nullptr;
-    }
 
     UnifiedTracer* tracer = new UnifiedTracer(options);
     PTI_ASSERT(tracer != nullptr);
@@ -135,6 +131,7 @@ class UnifiedTracer {
       if (ze_kernel_collector == nullptr &&
           cl_cpu_kernel_collector == nullptr &&
           cl_gpu_kernel_collector == nullptr) {
+        std::cerr << "[WARNING] Unable to trace anything" << std::endl;
         delete tracer;
         return nullptr;
       }
@@ -200,7 +197,9 @@ class UnifiedTracer {
         return nullptr;
       }
 
-      ClExtCollector::Create(cl_cpu_api_collector, cl_gpu_api_collector);
+      if (cl_gpu_api_collector != nullptr || cl_cpu_api_collector != nullptr) {
+        ClExtCollector::Create(cl_cpu_api_collector, cl_gpu_api_collector);
+      }
     }
 
     return tracer;
@@ -238,14 +237,16 @@ class UnifiedTracer {
       delete ze_api_collector_;
     }
 
-    if (cl_cpu_kernel_collector_ != nullptr) {
-      delete cl_cpu_kernel_collector_;
+    if (cl_cpu_kernel_collector_ != nullptr ||
+        cl_gpu_kernel_collector_ != nullptr) {
+      if (cl_cpu_kernel_collector_ != nullptr) {
+        delete cl_cpu_kernel_collector_;
+      }
+      if (cl_gpu_kernel_collector_ != nullptr) {
+        delete cl_gpu_kernel_collector_;
+      }
+      ClExtCollector::Destroy();
     }
-    if (cl_gpu_kernel_collector_ != nullptr) {
-      delete cl_gpu_kernel_collector_;
-    }
-
-    ClExtCollector::Destroy();
 
     if (CheckOption(TRACE_LOG_TO_FILE)) {
       std::cerr << "[INFO] Log was stored to " <<
