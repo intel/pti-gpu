@@ -811,7 +811,7 @@ class ClKernelCollector {
       PTI_ASSERT(collector->correlator_ != nullptr);
       collector->correlator_->SetKernelId(instance->kernel_id);
       instance->need_to_process =
-        !collector->correlator_->IsCollectionDisabled();
+        collector->correlator_->IsCollectionEnabled();
 
       ClEnqueueData* enqueue_data =
         reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
@@ -851,7 +851,7 @@ class ClKernelCollector {
     PTI_ASSERT(collector->correlator_ != nullptr);
     collector->correlator_->SetKernelId(instance->kernel_id);
     instance->need_to_process =
-        !collector->correlator_->IsCollectionDisabled();
+        collector->correlator_->IsCollectionEnabled();
 
     ClEnqueueData* enqueue_data =
       reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);

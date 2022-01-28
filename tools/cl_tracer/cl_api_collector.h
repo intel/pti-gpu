@@ -243,7 +243,7 @@ class ClApiCollector {
 
     if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
       PTI_ASSERT(collector->correlator_ != nullptr);
-      if (collector->correlator_->IsCollectionDisabled()) {
+      if (!collector->correlator_->IsCollectionEnabled()) {
         *reinterpret_cast<uint64_t*>(callback_data->correlationData) = 0;
         return;
       }

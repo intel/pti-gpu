@@ -1,6 +1,6 @@
 # OpenCL(TM) GEMM with Code Annotation
 ## Overview
-This sample application performs general matrix multiplication using OpenCL(TM) CPU or GPU device. Its code is annotated with Instrumentation and Tracing Technology API (ITT API) that allows to highligh its regions-of-interest while using Intel(R) VTune(TM) Profiler.
+This sample application performs general matrix multiplication using OpenCL(TM) CPU or GPU device. Its code is annotated with Instrumentation and Tracing Technology API (ITT API) that allows to highligh its regions-of-interest while using Intel(R) VTune(TM) Analyzer.
 ```
 OpenCL Matrix Multiplication (matrix size: 1024 x 1024, repeats 4 times)
 Target device: Intel(R) Gen9 HD Graphics NEO
@@ -53,4 +53,4 @@ Use this command line to run the application:
 cl_gemm_itt.exe [cpu|gpu] [matrix_size] [repeats_count]
 ```
 
-Use [Intel(R) VTune(TM) Profiler](https://software.intel.com/content/www/us/en/develop/tools/oneapi/components/vtune-profiler.html) to profile this application in order to look into its regions-of-interest.
+Use [Intel(R) VTune(TM) Analyzer](https://software.intel.com/content/www/us/en/develop/tools/oneapi/components/vtune-profiler.html) to profile this application in order to look into its regions-of-interest.

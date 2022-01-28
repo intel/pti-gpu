@@ -1040,19 +1040,25 @@ void PrintTemperatureInfo(
         if (temp_props.type == ZES_TEMP_SENSORS_GPU) {
           double temp = 0.0f;
           status = zesTemperatureGetState(sensor_list[i], &temp);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-          std::cout << std::setw(TEXT_WIDTH) << std::left <<
-            "Core Temperature(C)," << temp << std::endl;
+          std::cout << std::setw(TEXT_WIDTH) <<
+            std::left << "Core Temperature(C),";
+          if (status == ZE_RESULT_SUCCESS) {
+            std::cout << temp << std::endl;
+          } else {
+            std::cout << "N/A" << std::endl;
+          }
         }
 
         if (temp_props.type == ZES_TEMP_SENSORS_MEMORY) {
           double temp = 0.0f;
           status = zesTemperatureGetState(sensor_list[i], &temp);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
           std::cout << std::setw(TEXT_WIDTH) << std::left <<
-            "Memory Temperature(C)," << temp << std::endl;
+            "Memory Temperature(C),";
+          if (status == ZE_RESULT_SUCCESS) {
+            std::cout << temp << std::endl;
+          } else {
+            std::cout << "N/A" << std::endl;
+          }
         }
       }
     }

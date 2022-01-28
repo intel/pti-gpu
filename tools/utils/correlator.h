@@ -62,11 +62,14 @@ class Correlator {
     kernel_id_ = kernel_id;
   }
 
-  bool IsCollectionDisabled() const {
+  bool IsCollectionEnabled() const {
     if (conditional_collection_) {
-      return !utils::GetEnv("PTI_DISABLE_COLLECTION").empty();
+      std::string enabled = utils::GetEnv("PTI_ENABLE_COLLECTION");
+      if (enabled.empty() || enabled == "0") {
+        return false;
+      }
     }
-    return false;
+    return true;
   }
 
 #ifdef PTI_LEVEL_ZERO

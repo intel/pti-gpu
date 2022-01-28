@@ -941,7 +941,7 @@ class ZeKernelCollector {
       PTI_ASSERT(command->append_time <= call->submit_time);
       ++(command->call_count);
       call->call_id = command->call_count;
-      call->need_to_process = !correlator_->IsCollectionDisabled();
+      call->need_to_process = correlator_->IsCollectionEnabled();
 
       kernel_call_list_.push_back(call);
       correlator_->AddCallId(command_list, call->call_id);
@@ -1189,7 +1189,7 @@ class ZeKernelCollector {
       call->device_submit_time = device_timestamp;
       call->queue = reinterpret_cast<ze_command_queue_handle_t>(command_list);
       PTI_ASSERT(collector->correlator_ != nullptr);
-      call->need_to_process = !collector->correlator_->IsCollectionDisabled();
+      call->need_to_process = collector->correlator_->IsCollectionEnabled();
     }
 
     *instance_data = static_cast<void*>(call);

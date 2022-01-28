@@ -219,14 +219,14 @@ static void Compute(ze_device_handle_t device,
   PTI_ASSERT(status == ZE_RESULT_SUCCESS && module != nullptr);
 
   ze_kernel_desc_t kernel_desc = {
-     ZE_STRUCTURE_TYPE_KERNEL_DESC, nullptr, 0, "GEMM"};
+      ZE_STRUCTURE_TYPE_KERNEL_DESC, nullptr, 0, "GEMM"};
   ze_kernel_handle_t kernel = nullptr;
   status = zeKernelCreate(module, &kernel_desc, &kernel);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS && kernel != nullptr);
 
   for (unsigned i = 0; i < repeat_count; ++i) {
-    if (i == 0) { // Disable data collection for the first iteration
-      utils::SetEnv("PTI_DISABLE_COLLECTION", "1");
+    if (i == 0) { // Enable data collection for the first iteration
+      utils::SetEnv("PTI_ENABLE_COLLECTION", "1");
     }
 
     float eps = RunAndCheck(kernel, device, context, a, b, c,
@@ -234,8 +234,8 @@ static void Compute(ze_device_handle_t device,
     std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN") <<
       "CORRECT with accuracy: " << eps << std::endl;
 
-    if (i == 0) { // Enable data collection for the rest iterations
-      utils::SetEnv("PTI_DISABLE_COLLECTION", "");
+    if (i == 0) { // Disable data collection for the rest iterations
+      utils::SetEnv("PTI_ENABLE_COLLECTION", "");
     }
   }
 

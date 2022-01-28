@@ -113,13 +113,13 @@ Device Timeline (queue: 0x556fa2318fc0): zeCommandListAppendMemoryCopy [ns] = 39
 
 **Chrome Device Stages** mode provides alternative view for device queue where each kernel invocation is divided into stages: "appended", "sumbitted" and "execution". Can't be used with **Chrome Device Timeline**.
 
-**Conditional Collection** mode allows one to disable data collection for any target interval using environment variable `PTI_DISABLE_COLLECTION`, e.g.:
+**Conditional Collection** mode allows one to enable data collection for any target interval (by default collection will be disabled) using environment variable `PTI_ENABLE_COLLECTION`, e.g.:
 ```cpp
-// Collection enabled
-setenv("PTI_DISABLE_COLLECTION", "1", 1);
 // Collection disabled
-unsetenv("PTI_DISABLE_COLLECTION");
+setenv("PTI_ENABLE_COLLECTION", "1", 1);
 // Collection enabled
+unsetenv("PTI_ENABLE_COLLECTION");
+// Collection disabled
 ```
 All the API calls and kernels, which submission happens while collection disabled interval, will be omitted from final results.
 

@@ -321,7 +321,7 @@ def gen_enter_callback(f, func, params, enum_map):
   f.write("  PTI_ASSERT(collector != nullptr);\n")
   f.write("  PTI_ASSERT(collector->correlator_ != nullptr);\n")
   f.write("\n")
-  f.write("  if (collector->correlator_->IsCollectionDisabled()) {\n")
+  f.write("  if (!collector->correlator_->IsCollectionEnabled()) {\n")
   f.write("    *reinterpret_cast<uint64_t*>(instance_user_data) = 0;\n")
   f.write("    return;\n")
   f.write("  }\n")
@@ -343,13 +343,21 @@ def gen_enter_callback(f, func, params, enum_map):
       f.write("    stream << \" " + name + " = \" << (params->p" + name + ")->data;\n")
     else:
       if type.find("char*") >= 0 and type.find("char*") == len(type) - len("char*"):
-        f.write("    if (*(params->p" + name + ") == nullptr) {\n")
-        f.write("      stream << \" " + name + " = \" << \"0\";\n")
-        f.write("    } else if (strlen(*(params->p" + name +")) == 0) {\n")
-        f.write("      stream << \" " + name + " = \\\"\\\"\";\n")
-        f.write("    } else {\n")
-        f.write("      stream << \" " + name + " = \\\"\" << *(params->p" + name + ") << \"\\\"\";\n")
-        f.write("    }\n")
+        if func == "zeModuleGetFunctionPointer" or func == "zeModuleGetGlobalPointer":
+          f.write("    if (*(params->p" + name + ") == nullptr) {\n")
+          f.write("      stream << \" " + name + " = \" << \"0\";\n")
+          f.write("    } else if (strlen(*(params->p" + name +")) == 0) {\n")
+          f.write("      stream << \" " + name + " = \\\"\\\"\";\n")
+          f.write("    } else {\n")
+          f.write("      stream << \" " + name + " = \\\"\" << *(params->p" + name + ") << \"\\\"\";\n")
+          f.write("    }\n")
+        else:
+          f.write("    if (*(params->p" + name + ") == nullptr) {\n")
+          f.write("      stream << \" " + name + " = \" << \"0\";\n")
+          f.write("    } else {\n")
+          f.write("      stream << \" " + name + " = \" <<\n")
+          f.write("        reinterpret_cast<void*>(*(params->p" + name + "));\n")
+          f.write("    }\n")
       else:
         f.write("    stream << \" " + name + " = \" << *(params->p" + name + ");\n")
         if name.find("Kernel") >= 0 and func == "zeCommandListAppendLaunchKernel":
@@ -608,7 +616,7 @@ def gen_exit_callback(f, func, params, enum_map):
         else:
           f.write("        stream << \" " + name[1:] + " = \" << **(params->p" + name + ");\n")
         f.write("      }\n")
-    elif name.find("pptr") == 0 or name.find("pCount") == 0:
+    elif name.find("pptr") == 0 or name == "pCount" or name == "pSize":
       f.write("      if (*(params->p" + name + ") != nullptr) {\n")
       if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
         f.write("        stream << \" " + name[1:] + " = \" << (*(params->p" + name + "))->data;\n")
@@ -618,6 +626,14 @@ def gen_exit_callback(f, func, params, enum_map):
     elif name.find("groupSize") == 0 and type.find("uint32_t*") == 0:
       f.write("      if (*(params->p" + name + ") != nullptr) {\n")
       f.write("        stream << \" " + name + " = \" << **(params->p" + name + ");\n")
+      f.write("      }\n")
+    elif name == "pName":
+      f.write("      if (*(params->p" + name + ") != nullptr) {\n")
+      f.write("        if (strlen(*(params->p" + name +")) == 0) {\n")
+      f.write("          stream << \" " + name[1:] + " = \\\"\\\"\";\n")
+      f.write("        } else {\n")
+      f.write("          stream << \" " + name[1:] + " = \\\"\" << *(params->p" + name + ") << \"\\\"\";\n")
+      f.write("        }\n")
       f.write("      }\n")
   f.write("    }\n")
   f.write("    stream << \" -> \" << GetResultString(result) << \n")

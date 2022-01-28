@@ -109,7 +109,7 @@ Event pool profiling does not require any additional environment variables to be
 ```
 
 ## Usage Details
-- refer to oneAPI Level Zero [documentation](https://spec.oneapi.com/level-zero/latest/index.html) to learn more
+- refer to oneAPI Level Zero [documentation](https://spec.oneapi.io/level-zero/latest/index.html) to learn more
 
 ## Samples
 - [Level Zero GEMM](../../samples/ze_gemm)
