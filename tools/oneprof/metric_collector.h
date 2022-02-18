@@ -18,9 +18,6 @@
 #include "metric_storage.h"
 #include "ze_utils.h"
 
-#define MAX_REPORT_SIZE  512
-#define MAX_REPORT_COUNT 32768
-#define MAX_BUFFER_SIZE  (MAX_REPORT_COUNT * MAX_REPORT_SIZE)
 #define WAIT_DELAY       10000000 // 10 ms
 
 enum CollectorState {
@@ -70,18 +67,17 @@ class MetricCollector {
         sampling_interval, raw_data_path);
   }
 
-  void DisableCollection() {
-    DisableMetrics();
+  void DisableMetrics() {
+    PTI_ASSERT(collector_thread_ != nullptr);
+    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_ENABLED);
+    collector_state_.store(
+        COLLECTOR_STATE_DISABLED, std::memory_order_release);
+    collector_thread_->join();
+    delete collector_thread_;
 
     PTI_ASSERT(metric_storage_ != nullptr);
     delete metric_storage_;
     metric_storage_ = nullptr;
-
-    ComputeMetrics();
-
-    metric_reader_ = new MetricReader(
-        sub_device_list_.size(), "bin", raw_data_path_);
-    PTI_ASSERT(metric_reader_ != nullptr);
   }
 
   ~MetricCollector() {
@@ -94,114 +90,8 @@ class MetricCollector {
 
     if (metric_storage_ != nullptr) {
       delete metric_storage_;
+      PTI_ASSERT(0);
     }
-
-    PTI_ASSERT(metric_reader_ != nullptr);
-    delete metric_reader_;
-  }
-
-  void ResetReportReader() {
-    PTI_ASSERT(metric_reader_ != nullptr);
-    metric_reader_->Reset();
-  }
-
-  zet_typed_value_t* GetReportChunk(
-      uint32_t sub_device_id, uint32_t* size) const {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
-    PTI_ASSERT(size != nullptr);
-    PTI_ASSERT(sub_device_id < sub_device_list_.size());
-    PTI_ASSERT(sub_device_list_.size() == metric_group_list_.size());
-    PTI_ASSERT(!metric_group_list_.empty());
-    PTI_ASSERT(metric_storage_ == nullptr);
-    PTI_ASSERT(metric_reader_ != nullptr);
-
-    uint32_t report_size = GetReportSize(sub_device_id);
-    PTI_ASSERT(report_size > 0);
-
-    uint32_t report_size_in_bytes = report_size * sizeof(zet_typed_value_t);
-    uint32_t chunk_size = report_size_in_bytes * MAX_REPORT_COUNT;
-    uint8_t* metric_data =
-      metric_reader_->ReadChunk(chunk_size, sub_device_id);
-    if (metric_data == nullptr) {
-      *size = 0;
-      return nullptr;
-    }
-
-    uint32_t report_count = chunk_size / report_size_in_bytes;
-    PTI_ASSERT(report_count * report_size_in_bytes == chunk_size);
-
-    *size = report_count * report_size;
-    return reinterpret_cast<zet_typed_value_t*>(metric_data);
-  }
-
-  uint32_t GetReportSize(uint32_t sub_device_id) const {
-    PTI_ASSERT(sub_device_id < sub_device_list_.size());
-    PTI_ASSERT(sub_device_list_.size() == metric_group_list_.size());
-    PTI_ASSERT(!metric_group_list_.empty());
-
-    zet_metric_group_properties_t group_props{};
-    group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
-    ze_result_t status = zetMetricGroupGetProperties(
-        metric_group_list_[sub_device_id], &group_props);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    return group_props.metricCount;
-  }
-
-  std::vector<std::string> GetMetricList(uint32_t sub_device_id) const {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
-    PTI_ASSERT(sub_device_id < sub_device_list_.size());
-    PTI_ASSERT(sub_device_list_.size() == metric_group_list_.size());
-    PTI_ASSERT(!metric_group_list_.empty());
-
-    uint32_t metric_count = GetReportSize(sub_device_id);
-    PTI_ASSERT(metric_count > 0);
-
-    std::vector<zet_metric_handle_t> metric_list(metric_count);
-    status = zetMetricGet(
-        metric_group_list_[sub_device_id], &metric_count, metric_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    PTI_ASSERT(metric_count == metric_list.size());
-
-    std::vector<std::string> name_list;
-    for (auto metric : metric_list) {
-      zet_metric_properties_t metric_props{
-          ZET_STRUCTURE_TYPE_METRIC_PROPERTIES, };
-      status = zetMetricGetProperties(metric, &metric_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      name_list.push_back(metric_props.name);
-    }
-
-    return name_list;
-  }
-
-  std::vector<zet_metric_type_t> GetMetricTypeList(uint32_t sub_device_id) const {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
-    PTI_ASSERT(sub_device_id < sub_device_list_.size());
-    PTI_ASSERT(sub_device_list_.size() == metric_group_list_.size());
-    PTI_ASSERT(!metric_group_list_.empty());
-
-    uint32_t metric_count = GetReportSize(sub_device_id);
-    PTI_ASSERT(metric_count > 0);
-
-    std::vector<zet_metric_handle_t> metric_list(metric_count);
-    status = zetMetricGet(
-        metric_group_list_[sub_device_id], &metric_count, metric_list.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    PTI_ASSERT(metric_count == metric_list.size());
-
-    std::vector<zet_metric_type_t> type_list;
-    for (auto metric : metric_list) {
-      zet_metric_properties_t metric_props{
-          ZET_STRUCTURE_TYPE_METRIC_PROPERTIES, };
-      status = zetMetricGetProperties(metric, &metric_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      type_list.push_back(metric_props.metricType);
-    }
-
-    return type_list;
   }
 
   MetricCollector(const MetricCollector& copy) = delete;
@@ -224,55 +114,11 @@ class MetricCollector {
     PTI_ASSERT(!metric_group_list_.empty());
     PTI_ASSERT(sampling_interval_ > 0);
 
-    metric_storage_ = new MetricStorage(
-        sub_device_list_.size(), "raw", raw_data_path_);
+    metric_storage_ = MetricStorage::Create(
+        sub_device_list_.size(), utils::GetPid(), "raw", raw_data_path_);
     PTI_ASSERT(metric_storage_ != nullptr);
 
     EnableMetrics();
-  }
-
-  void ComputeMetrics() {
-    PTI_ASSERT(metric_storage_ == nullptr);
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
-    MetricReader reader(sub_device_list_.size(), "raw", raw_data_path_);
-    MetricStorage storage(sub_device_list_.size(), "bin", raw_data_path_);
-
-    for (size_t i = 0; i < sub_device_list_.size(); ++i) {
-      while (true) {
-        PTI_ASSERT(sub_device_list_.size() == metric_group_list_.size());
-        PTI_ASSERT(!metric_group_list_.empty());
-
-        uint32_t metric_data_size = MAX_BUFFER_SIZE;
-        uint8_t* metric_data = reader.ReadChunk(metric_data_size, i);
-        if (metric_data == nullptr) {
-          break;
-        }
-
-        uint32_t value_count = 0;
-        status = zetMetricGroupCalculateMetricValues(
-            metric_group_list_[i],
-            ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-            metric_data_size, metric_data, &value_count, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        PTI_ASSERT(value_count > 0);
-
-        std::vector<zet_typed_value_t> report_chunk(value_count);
-        status = zetMetricGroupCalculateMetricValues(
-            metric_group_list_[i],
-            ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-            metric_data_size, metric_data,
-            &value_count, report_chunk.data());
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        report_chunk.resize(value_count);
-
-        storage.Dump(
-            reinterpret_cast<uint8_t*>(report_chunk.data()),
-            report_chunk.size() * sizeof(zet_typed_value_t), i);
-
-        delete[] metric_data;
-      }
-    }
   }
 
   void EnableMetrics() {
@@ -287,15 +133,6 @@ class MetricCollector {
           COLLECTOR_STATE_ENABLED) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-  }
-
-  void DisableMetrics() {
-    PTI_ASSERT(collector_thread_ != nullptr);
-    PTI_ASSERT(collector_state_ == COLLECTOR_STATE_ENABLED);
-    collector_state_.store(
-        COLLECTOR_STATE_DISABLED, std::memory_order_release);
-    collector_thread_->join();
-    delete collector_thread_;
   }
 
   void AppendMetrics(
@@ -389,7 +226,7 @@ class MetricCollector {
           collector->metric_group_list_[i], &metric_streamer_desc,
           event, &metric_streamer);
       if (status != ZE_RESULT_SUCCESS) {
-        std::cout <<
+        std::cerr <<
           "[WARNING] Sampling interval is not supported" << std::endl;
         collector->collector_state_.store(
           COLLECTOR_STATE_ENABLED, std::memory_order_release);
@@ -442,7 +279,6 @@ class MetricCollector {
 
   std::vector<zet_metric_group_handle_t> metric_group_list_;
   MetricStorage* metric_storage_ = nullptr;
-  MetricReader* metric_reader_ = nullptr;
 
   uint32_t sampling_interval_ = 0;
   std::string raw_data_path_;

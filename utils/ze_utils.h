@@ -343,7 +343,15 @@ inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
   return props.timerResolution;
 }
 
-uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
+inline uint64_t GetMetricTimerFrequency(ze_device_handle_t device) {
+  PTI_ASSERT(device != nullptr);
+  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  return props.timerResolution;
+}
+
+inline uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
   ze_result_t status = zeDeviceGetProperties(device, &props);
@@ -351,7 +359,7 @@ uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
   return (1ull << props.kernelTimestampValidBits) - 1ull;
 }
 
-uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
+inline uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
 #ifdef PTI_OA_TIMESTAMP_VALID_BITS
   return (1ull << PTI_OA_TIMESTAMP_VALID_BITS) - 1ull;
 #else

@@ -15,6 +15,8 @@ Options:
 --sampling-interval [-s] <VALUE> Sampling interval for metrics collection in us (default is 1000 us)
 --output [-o] <FILENAME>         Print console logs into the file
 --raw-data-path [-p] <DIRECTORY> Path to store raw metic data into (default is process folder)
+--finalize [-f] <FILENAME>       Print output from collected result file
+--no-finalize                    Do not finalize and do not report collection results
 --device-list                    Print list of available devices
 --metric-list                    Print list of available metrics
 --version                        Print version
@@ -35,7 +37,7 @@ SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,V
 
 **Kernel Intervals** mode dumps execution intervals for all of the kernels and transfers on the device to be able to correlate raw metrics with kernels, e.g.:
 ```
-== Raw Kernel Intervals (Level Zero) ==
+== Raw Kernel Intervals ==
 
 Kernel,zeCommandListAppendMemoryCopy(M2D)[4194304 bytes],
 SubDeviceId,Start,End,
@@ -53,7 +55,7 @@ SubDeviceId,Start,End,
 
 **Kernel Metrics** mode automatically correlates metric reports to kernels giving an ability to track metrics bevahiour for a kernel over time:
 ```
-== Kernel Metrics (OpenCL) ==
+== Kernel Metrics ==
 
 Kernel,clEnqueueWriteBufferclEnqueueWriteBuffer[4194304 bytes],
 SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,
@@ -68,7 +70,7 @@ SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,V
 
 **Aggregation** mode provides a single metric report for a kernel to see cumulative results:
 ```
-== Aggregated Metrics (Level Zero) ==
+== Aggregated Kernel Metrics ==
 
 Kernel,zeCommandListAppendMemoryCopy(M2D)[4194304 bytes],
 SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,

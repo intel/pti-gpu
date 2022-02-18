@@ -65,6 +65,17 @@ inline uint64_t ConvertClockMonotonicToRaw(uint64_t clock_monotonic) {
 
 #endif
 
+inline std::string GetFilePath(const std::string& filename) {
+  PTI_ASSERT(!filename.empty());
+
+  size_t pos = filename.find_last_of("/\\");
+  if (pos == std::string::npos) {
+    return "";
+  }
+
+  return filename.substr(0, pos + 1);
+}
+
 inline std::string GetExecutablePath() {
   char buffer[MAX_STR_SIZE] = { 0 };
 #if defined(_WIN32)
@@ -74,8 +85,7 @@ inline std::string GetExecutablePath() {
   ssize_t status = readlink("/proc/self/exe", buffer, MAX_STR_SIZE);
   PTI_ASSERT(status > 0);
 #endif
-  std::string path(buffer);
-  return path.substr(0, path.find_last_of("/\\") + 1);
+  return GetFilePath(buffer);
 }
 
 inline std::string GetExecutableName() {
@@ -177,6 +187,34 @@ inline uint64_t GetSystemTime() {
 #else
   return GetTime(CLOCK_MONOTONIC_RAW);
 #endif
+}
+
+inline size_t LowerBound(const std::vector<uint64_t>& data, uint64_t value) {
+  size_t start = 0;
+  size_t end = data.size();
+  while (start < end) {
+    size_t middle = (start + end) / 2;
+    if (value <= data[middle]) {
+      end = middle;
+    } else {
+      start = middle + 1;
+    }
+  }
+  return start;
+}
+
+inline size_t UpperBound(const std::vector<uint64_t>& data, uint64_t value) {
+  size_t start = 0;
+  size_t end = data.size();
+  while (start < end) {
+    size_t middle = (start + end) / 2;
+    if (value >= data[middle]) {
+      start = middle + 1;
+    } else {
+      end = middle;
+    }
+  }
+  return start;
 }
 
 } // namespace utils

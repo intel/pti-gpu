@@ -6,10 +6,13 @@
 
 #include <iostream>
 
+#include "finalizer.h"
 #include "profiler.h"
 #include "utils.h"
 
 static Profiler* profiler = nullptr;
+
+void Finalize();
 
 extern "C"
 #if defined(_WIN32)
@@ -57,6 +60,14 @@ void Usage() {
     "Path to store raw metic data into (default is process folder)" <<
     std::endl;
   std::cout <<
+    "--finalize [-f] <FILENAME>       " <<
+    "Print output from collected result file" <<
+    std::endl;
+  std::cout <<
+    "--no-finalize                    " <<
+    "Do not finalize and do not report collection results" <<
+    std::endl;
+  std::cout <<
     "--device-list                    " <<
     "Print list of available devices" <<
     std::endl;
@@ -76,6 +87,7 @@ __declspec(dllexport)
 #endif
 int ParseArgs(int argc, char* argv[]) {
   bool metric_list = false;
+  bool finalization = false;
 
   int app_index = 1;
   for (int i = 1; i < argc; ++i) {
@@ -140,6 +152,19 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("ONEPROF_RawDataPath", argv[i]);
       app_index += 2;
+    } else if (strcmp(argv[i], "--finalize") == 0 ||
+               strcmp(argv[i], "-f") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] File name is not specified" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("ONEPROF_ResultFile", argv[i]);
+      app_index += 2;
+      finalization = true;
+    } else if (strcmp(argv[i], "--no-finalize") == 0) {
+      utils::SetEnv("ONEPROF_NoFinalize", "1");
+      ++app_index;
     } else if (strcmp(argv[i], "--device-list") == 0) {
       PrintDeviceList();
       return 0;
@@ -154,6 +179,11 @@ int ParseArgs(int argc, char* argv[]) {
     } else {
       break;
     }
+  }
+
+  if (finalization) {
+    Finalize();
+    return 0;
   }
 
   if (metric_list) {
@@ -184,6 +214,7 @@ static ProfOptions ReadArgs() {
   std::string metric_group("ComputeBasic");
   std::string log_file;
   std::string raw_data_path;
+  std::string result_file;
 
   value = utils::GetEnv("ONEPROF_RawMetrics");
   if (!value.empty()) {
@@ -220,6 +251,16 @@ static ProfOptions ReadArgs() {
     raw_data_path = value;
   }
 
+  value = utils::GetEnv("ONEPROF_ResultFile");
+  if (!value.empty()) {
+    result_file = value;
+  }
+
+  value = utils::GetEnv("ONEPROF_NoFinalize");
+  if (!value.empty()) {
+    flags |= (1 << PROF_NO_FINALIZE);
+  }
+
   value = utils::GetEnv("ONEPROF_DeviceId");
   if (!value.empty()) {
     device_id = std::stoul(value);
@@ -231,9 +272,15 @@ static ProfOptions ReadArgs() {
     sampling_interval *= 1000;
   }
 
+  if (result_file.empty()) {
+    result_file = ResultStorage::GetResultFileName(
+        raw_data_path, utils::GetPid());
+    PTI_ASSERT(!result_file.empty());
+  }
+
   return ProfOptions(
-      flags, device_id, sampling_interval,
-      metric_group, log_file, raw_data_path);
+      flags, device_id, sampling_interval, metric_group,
+      log_file, raw_data_path, result_file);
 }
 
 void EnableProfiling() {
@@ -252,5 +299,25 @@ void EnableProfiling() {
 void DisableProfiling() {
   if (profiler != nullptr) {
     delete profiler;
+  }
+}
+
+void Finalize() {
+  utils::SetEnv("ZET_ENABLE_METRICS", "1");
+
+  ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+  if (status == ZE_RESULT_ERROR_DEPENDENCY_UNAVAILABLE) {
+    std::cout <<
+      "[WARNING] Unable to initialize Level Zero Metrics API" << std::endl;
+    std::cout << "  Please check that metrics libraries are installed " <<
+      "and /proc/sys/dev/i915/perf_stream_paranoid is set to 0" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  Finalizer* finalizer = Finalizer::Create(ReadArgs());
+  if (finalizer != nullptr) {
+    finalizer->Report();
+    delete finalizer;
   }
 }

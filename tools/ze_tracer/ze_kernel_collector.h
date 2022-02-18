@@ -25,7 +25,7 @@
 #include "ze_event_cache.h"
 #include "ze_utils.h"
 
-struct ZeSubmitData {
+struct ZeSyncPoint {
   uint64_t host_sync;
   uint64_t device_sync;
 };
@@ -313,7 +313,36 @@ class ZeKernelCollector {
         kernel_id_(1) {
     PTI_ASSERT(correlator_ != nullptr);
     CreateDeviceMap();
+#ifdef PTI_KERNEL_INTERVALS
+    SetSyncPoints();
+#endif
   }
+
+#ifdef PTI_KERNEL_INTERVALS
+  void SetSyncPoints() {
+    std::vector<ze_device_handle_t> device_list =
+      utils::ze::GetDeviceList();
+    for (auto device : device_list) {
+      std::vector<ze_device_handle_t> sub_device_list =
+        utils::ze::GetSubDeviceList(device);
+      if (sub_device_list.empty()) {
+        ZeSyncPoint sync_point{0, 0};
+        GetSyncTimestamps(
+            device, sync_point.host_sync, sync_point.device_sync);
+        PTI_ASSERT(sync_point_map_.count(device) == 0);
+        sync_point_map_[device] = sync_point;
+      } else {
+        for (auto sub_device : sub_device_list) {
+          ZeSyncPoint sync_point{0, 0};
+          GetSyncTimestamps(
+              sub_device, sync_point.host_sync, sync_point.device_sync);
+          PTI_ASSERT(sync_point_map_.count(sub_device) == 0);
+          sync_point_map_[sub_device] = sync_point;
+        }
+      }
+    }
+  }
+#endif
 
   void CreateDeviceMap() {
     std::vector<ze_device_handle_t> device_list =
@@ -362,10 +391,15 @@ class ZeKernelCollector {
       uint64_t& device_timestamp) const {
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(correlator_ != nullptr);
-
+#ifdef PTI_KERNEL_INTERVALS
+    utils::ze::GetMetricTimestamps(device, &host_timestamp, &device_timestamp);
+    host_timestamp = correlator_->GetTimestamp(host_timestamp);
+    device_timestamp &= utils::ze::GetMetricTimestampMask(device);
+#else
     utils::ze::GetDeviceTimestamps(device, &host_timestamp, &device_timestamp);
     host_timestamp = correlator_->GetTimestamp(host_timestamp);
     device_timestamp &= utils::ze::GetDeviceTimestampMask(device);
+#endif
   }
 
   void EnableTracing(zel_tracer_handle_t tracer) {
@@ -565,6 +599,77 @@ class ZeKernelCollector {
     return duration;
   }
 
+#ifdef PTI_KERNEL_INTERVALS
+  uint64_t ConvertToMetricTimestamp(
+      uint64_t kernel_timestamp,
+      uint64_t mask) {
+    return (kernel_timestamp & mask);
+  }
+
+  uint64_t ProcessTimerOverflow(
+      const ZeSyncPoint& base_sync,
+      const ZeSyncPoint& target_sync,
+      uint64_t mask,
+      uint64_t freq) {
+    PTI_ASSERT(base_sync.host_sync < target_sync.host_sync);
+    uint64_t duration = target_sync.host_sync - base_sync.host_sync;
+
+    uint64_t base_time = base_sync.device_sync *
+      static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+    uint64_t target_time = base_time + duration;
+
+    uint64_t max_time = (mask + 1ull) *
+      static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+
+    uint64_t shift = 0;
+    uint64_t metric_time = target_sync.device_sync *
+      static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+    while (metric_time + shift + max_time < target_time) {
+      shift += max_time;
+    }
+
+    return shift;
+  }
+
+  void GetMetricTime(
+      const ZeKernelCall* call,
+      ze_device_handle_t device,
+      const ze_kernel_timestamp_result_t& timestamp,
+      uint64_t& metric_start, uint64_t& metric_end) {
+    PTI_ASSERT(call != nullptr);
+
+    ZeKernelCommand* command = call->command;
+    PTI_ASSERT(command != nullptr);
+
+    uint64_t freq = command->timer_frequency;
+    uint64_t mask = command->timer_mask;
+    PTI_ASSERT(freq > 0);
+    PTI_ASSERT(mask > 0);
+
+    uint64_t start = ConvertToMetricTimestamp(
+        timestamp.global.kernelStart, mask);
+    uint64_t end = ConvertToMetricTimestamp(
+        timestamp.global.kernelEnd, mask);
+
+    PTI_ASSERT(!sync_point_map_.empty());
+    PTI_ASSERT(sync_point_map_.count(device) == 1);
+    const ZeSyncPoint& base_sync = sync_point_map_[device];
+
+    PTI_ASSERT(call->submit_time > 0);
+    ZeSyncPoint submit_sync{call->submit_time, call->device_submit_time};
+
+    uint64_t time_shift = ComputeDuration(
+        submit_sync.device_sync, start, freq, mask);
+    uint64_t duration = ComputeDuration(start, end, freq, mask);
+
+    uint64_t metric_sync = submit_sync.device_sync *
+      static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+    metric_sync += ProcessTimerOverflow(base_sync, submit_sync, mask, freq);
+    metric_start = metric_sync + time_shift;
+    metric_end = metric_start + duration;
+  }
+
+#else // PTI_KERNEL_INTERVALS
   void GetHostTime(
       const ZeKernelCall* call,
       const ze_kernel_timestamp_result_t& timestamp,
@@ -576,12 +681,13 @@ class ZeKernelCollector {
 
     uint64_t start = timestamp.global.kernelStart;
     uint64_t end = timestamp.global.kernelEnd;
+
     uint64_t freq = command->timer_frequency;
     uint64_t mask = command->timer_mask;
     PTI_ASSERT(freq > 0);
+    PTI_ASSERT(mask > 0);
 
     PTI_ASSERT(call->submit_time > 0);
-    PTI_ASSERT(call->device_submit_time > 0);
     uint64_t time_shift =
       ComputeDuration(call->device_submit_time, start, freq, mask);
     uint64_t duration = ComputeDuration(start, end, freq, mask);
@@ -646,6 +752,7 @@ class ZeKernelCollector {
           host_start, host_end);
     }
   }
+#endif // PTI_KERNEL_INTERVALS
 
   void ProcessCall(const ZeKernelCall* call) {
     PTI_ASSERT(call != nullptr);
@@ -792,6 +899,10 @@ class ZeKernelCollector {
     const ZeKernelCommand* command = call->command;
     PTI_ASSERT(command != nullptr);
 
+    if (command->props.simd_width == 0) {
+      return; // Process user kernels only
+    }
+
     std::string name = command->props.name;
     PTI_ASSERT(!name.empty());
 
@@ -814,12 +925,15 @@ class ZeKernelCollector {
       status = zeEventQueryTimestampsExp(
           command->event, command->device, &count, timestamps.data());
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      PTI_ASSERT(count <= device_map_[command->device].size());
 
       ZeKernelInterval kernel_interval{
           name, command->device, std::vector<ZeDeviceInterval>()};
       for (uint32_t i = 0; i < count; ++i) {
+        ze_device_handle_t sub_device = device_map_[command->device][i];
+
         uint64_t host_start = 0, host_end = 0;
-        GetHostTime(call, timestamps[i], host_start, host_end);
+        GetMetricTime(call, sub_device, timestamps[i], host_start, host_end);
         PTI_ASSERT(host_start <= host_end);
 
         kernel_interval.device_interval_list.push_back(
@@ -832,7 +946,7 @@ class ZeKernelCollector {
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       uint64_t host_start = 0, host_end = 0;
-      GetHostTime(call, timestamp, host_start, host_end);
+      GetMetricTime(call, command->device, timestamp, host_start, host_end);
       PTI_ASSERT(host_start <= host_end);
 
       if (device_map_.count(command->device) == 0) { // Subdevice
@@ -918,7 +1032,7 @@ class ZeKernelCollector {
 
   void AddKernelCalls(
       ze_command_list_handle_t command_list,
-      ze_command_queue_handle_t queue, const ZeSubmitData* submit_data) {
+      ze_command_queue_handle_t queue, const ZeSyncPoint* submit_data) {
     PTI_ASSERT(command_list != nullptr);
 
     const std::lock_guard<std::mutex> lock(lock_);
@@ -1162,9 +1276,17 @@ class ZeKernelCollector {
     ze_device_handle_t device = collector->GetCommandListDevice(command_list);
     PTI_ASSERT(device != nullptr);
     command->device = device;
+#ifdef PTI_KERNEL_INTERVALS
+    command->timer_frequency = utils::ze::GetMetricTimerFrequency(device);
+#else
     command->timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
+#endif
     PTI_ASSERT(command->timer_frequency > 0);
+#ifdef PTI_KERNEL_INTERVALS
+    command->timer_mask = utils::ze::GetMetricTimestampMask(device);
+#else
     command->timer_mask = utils::ze::GetDeviceTimestampMask(device);
+#endif
     PTI_ASSERT(command->timer_mask > 0);
 
     if (signal_event == nullptr) {
@@ -1797,8 +1919,8 @@ class ZeKernelCollector {
       return;
     }
 
-    std::vector<ZeSubmitData>* submit_data_list =
-      new std::vector<ZeSubmitData>();
+    std::vector<ZeSyncPoint>* submit_data_list =
+      new std::vector<ZeSyncPoint>();
     PTI_ASSERT(submit_data_list != nullptr);
 
     for (uint32_t i = 0; i < command_list_count; ++i) {
@@ -1811,15 +1933,15 @@ class ZeKernelCollector {
       submit_data_list->push_back({host_timestamp, device_timestamp});
     }
 
-    *reinterpret_cast<std::vector<ZeSubmitData>**>(instance_data) =
+    *reinterpret_cast<std::vector<ZeSyncPoint>**>(instance_data) =
       submit_data_list;
   }
 
   static void OnExitCommandQueueExecuteCommandLists(
       ze_command_queue_execute_command_lists_params_t* params,
       ze_result_t result, void* global_data, void** instance_data) {
-    std::vector<ZeSubmitData>* submit_data_list =
-      *reinterpret_cast<std::vector<ZeSubmitData>**>(instance_data);
+    std::vector<ZeSyncPoint>* submit_data_list =
+      *reinterpret_cast<std::vector<ZeSyncPoint>**>(instance_data);
     PTI_ASSERT(submit_data_list != nullptr);
 
     if (result == ZE_RESULT_SUCCESS) {
@@ -1924,6 +2046,7 @@ class ZeKernelCollector {
 
 #ifdef PTI_KERNEL_INTERVALS
   ZeKernelIntervalList kernel_interval_list_;
+  std::map<ze_device_handle_t, ZeSyncPoint> sync_point_map_;
 #endif // PTI_KERNEL_INTERVALS
 
   static const uint32_t kKernelLength = 10;

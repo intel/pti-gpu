@@ -33,6 +33,9 @@ class UnifiedTracer {
     cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
     cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
 
+    ze_result_t status = ZE_RESULT_SUCCESS;
+    status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+
     UnifiedTracer* tracer = new UnifiedTracer(options);
     PTI_ASSERT(tracer != nullptr);
 
@@ -95,14 +98,16 @@ class UnifiedTracer {
       kernel_options.kernels_per_tile =
         tracer->CheckOption(TRACE_KERNELS_PER_TILE);
 
-      ze_kernel_collector = ZeKernelCollector::Create(
-          &tracer->correlator_, kernel_options, ze_callback, tracer);
-      if (ze_kernel_collector == nullptr) {
-        std::cerr <<
-          "[WARNING] Unable to create kernel collector for L0 backend" <<
-          std::endl;
+      if (status == ZE_RESULT_SUCCESS) {
+        ze_kernel_collector = ZeKernelCollector::Create(
+            &tracer->correlator_, kernel_options, ze_callback, tracer);
+        if (ze_kernel_collector == nullptr) {
+          std::cerr <<
+            "[WARNING] Unable to create kernel collector for L0 backend" <<
+            std::endl;
+        }
+        tracer->ze_kernel_collector_ = ze_kernel_collector;
       }
-      tracer->ze_kernel_collector_ = ze_kernel_collector;
 
       if (cl_cpu_device != nullptr) {
         cl_cpu_kernel_collector = ClKernelCollector::Create(
@@ -131,7 +136,7 @@ class UnifiedTracer {
       if (ze_kernel_collector == nullptr &&
           cl_cpu_kernel_collector == nullptr &&
           cl_gpu_kernel_collector == nullptr) {
-        std::cerr << "[WARNING] Unable to trace anything" << std::endl;
+        std::cerr << "[WARNING] Unable to trace any kernels" << std::endl;
         delete tracer;
         return nullptr;
       }
@@ -158,13 +163,15 @@ class UnifiedTracer {
       api_options.need_pid = tracer->CheckOption(TRACE_PID);
       api_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
 
-      ze_api_collector = ZeApiCollector::Create(
-          &tracer->correlator_, api_options, ze_callback, tracer);
-      if (ze_api_collector == nullptr) {
-        std::cerr << "[WARNING] Unable to create L0 API collector" <<
-          std::endl;
+      if (status == ZE_RESULT_SUCCESS) {
+        ze_api_collector = ZeApiCollector::Create(
+            &tracer->correlator_, api_options, ze_callback, tracer);
+        if (ze_api_collector == nullptr) {
+          std::cerr << "[WARNING] Unable to create L0 API collector" <<
+            std::endl;
+        }
+        tracer->ze_api_collector_ = ze_api_collector;
       }
-      tracer->ze_api_collector_ = ze_api_collector;
 
       if (cl_cpu_device != nullptr) {
         cl_cpu_api_collector = ClApiCollector::Create(
@@ -193,6 +200,7 @@ class UnifiedTracer {
       if (ze_api_collector == nullptr &&
           cl_gpu_api_collector == nullptr &&
           cl_cpu_api_collector == nullptr) {
+        std::cerr << "[WARNING] Unable to trace any host APIs" << std::endl;
         delete tracer;
         return nullptr;
       }
@@ -224,6 +232,9 @@ class UnifiedTracer {
     if (cl_gpu_kernel_collector_ != nullptr) {
       cl_gpu_kernel_collector_->DisableTracing();
     }
+    if (ze_kernel_collector_ != nullptr) {
+      ze_kernel_collector_->DisableTracing();
+    }
 
     Report();
 
@@ -246,6 +257,9 @@ class UnifiedTracer {
         delete cl_gpu_kernel_collector_;
       }
       ClExtCollector::Destroy();
+    }
+    if (ze_kernel_collector_ != nullptr) {
+      delete ze_kernel_collector_;
     }
 
     if (CheckOption(TRACE_LOG_TO_FILE)) {

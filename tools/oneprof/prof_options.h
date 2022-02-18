@@ -7,6 +7,7 @@
 #ifndef PTI_TOOLS_ONEPROF_PROF_OPTIONS_H_
 #define PTI_TOOLS_ONEPROF_PROF_OPTIONS_H_
 
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -17,6 +18,7 @@
 #define PROF_KERNEL_METRICS    1
 #define PROF_KERNEL_INTERVALS  2
 #define PROF_AGGREGATION       3
+#define PROF_NO_FINALIZE       4
 
 class ProfOptions {
  public:
@@ -26,16 +28,22 @@ class ProfOptions {
       uint32_t sampling_interval,
       const std::string& metric_group,
       const std::string& log_file,
-      const std::string& raw_data_path)
+      const std::string& raw_data_path,
+      const std::string& result_file)
       : flags_(flags),
         device_id_(device_id),
         sampling_interval_(sampling_interval),
         metric_group_(metric_group),
         log_file_(log_file),
-        raw_data_path_(raw_data_path) {}
+        raw_data_path_(raw_data_path),
+        result_file_(result_file) {}
 
   bool CheckFlag(uint32_t flag) const {
     return (flags_ & (1 << flag));
+  }
+
+  uint32_t GetFlags() const {
+    return flags_;
   }
 
   uint32_t GetDeviceId() const {
@@ -50,7 +58,8 @@ class ProfOptions {
     return metric_group_;
   }
 
-  std::string GetLogFileName() const {
+  std::string GetLogFileName(
+      uint32_t pid = std::numeric_limits<uint32_t>::max()) const {
     if (log_file_.empty()) {
       return std::string();
     }
@@ -64,7 +73,10 @@ class ProfOptions {
       result << log_file_.substr(0, pos);
     }
 
-    result << "." + std::to_string(utils::GetPid());
+    if (pid == std::numeric_limits<uint32_t>::max()) {
+      pid = utils::GetPid();
+    }
+    result << "." + std::to_string(pid);
 
     std::string rank = utils::GetEnv("PMI_RANK");
     if (!rank.empty()) {
@@ -82,6 +94,10 @@ class ProfOptions {
     return raw_data_path_;
   }
 
+  std::string GetResultFile() const {
+    return result_file_;
+  }
+
  private:
   uint32_t flags_;
   uint32_t device_id_;
@@ -89,6 +105,7 @@ class ProfOptions {
   std::string metric_group_;
   std::string log_file_;
   std::string raw_data_path_;
+  std::string result_file_;
 };
 
 #endif // PTI_TOOLS_ONEPROF_PROF_OPTIONS_H_

@@ -13,6 +13,10 @@
 
 #include "utils.h"
 
+#define MAX_REPORT_SIZE  512
+#define MAX_REPORT_COUNT 32768
+#define MAX_BUFFER_SIZE  (MAX_REPORT_COUNT * MAX_REPORT_SIZE)
+
 #define CACHE_SIZE 134217728
 
 struct CacheBuffer {
@@ -22,25 +26,27 @@ struct CacheBuffer {
 
 class MetricStorage {
  public:
-  MetricStorage(
+  static MetricStorage* Create(
       uint32_t count,
+      uint32_t pid,
       const std::string& ext,
-      const std::string& raw_data_path) {
-    for (uint32_t i = 0; i < count; ++i) {
-      std::string filename =
-        std::string("data.") + std::to_string(utils::GetPid()) +
-        "." + std::to_string(i) + "." + ext;
-      if (!raw_data_path.empty()) {
-        filename = raw_data_path + "/" + filename;
-      }
-      storage_.emplace(
-          storage_.end(),
-          std::ofstream(filename, std::ios::out | std::ios::binary));
-      PTI_ASSERT(storage_.back().is_open());
+      const std::string& path) {
+    PTI_ASSERT(!ext.empty());
 
-      cache_.emplace_back(CacheBuffer());
-      PTI_ASSERT(!cache_.back().buffer.empty());
+    MetricStorage* storage = new MetricStorage(count, pid, ext, path);
+    PTI_ASSERT(storage != nullptr);
+
+    bool succeed = true;
+    for (const auto& file : storage->storage_) {
+      succeed = succeed && file.is_open();
     }
+
+    if (!succeed) {
+      delete storage;
+      return nullptr;
+    }
+
+    return storage;
   }
 
   ~MetricStorage() {
@@ -84,28 +90,56 @@ class MetricStorage {
   }
 
  private:
+  MetricStorage(
+      uint32_t count,
+      uint32_t pid,
+      const std::string& ext,
+      const std::string& path) {
+    for (uint32_t i = 0; i < count; ++i) {
+      std::string filename =
+        std::string("data.") + std::to_string(pid) +
+        "." + std::to_string(i) + "." + ext;
+      if (!path.empty()) {
+        filename = path + "/" + filename;
+      }
+
+      storage_.emplace(
+          storage_.end(),
+          std::ofstream(filename, std::ios::out | std::ios::binary));
+
+      cache_.emplace_back(CacheBuffer());
+      PTI_ASSERT(!cache_.back().buffer.empty());
+    }
+  }
+
+ private:
   std::vector<std::ofstream> storage_;
   std::vector<CacheBuffer> cache_;
 };
 
 class MetricReader {
  public:
-  MetricReader(
+  static MetricReader* Create(
       uint32_t count,
+      uint32_t pid,
       const std::string& ext,
-      const std::string& raw_data_path) {
-    for (uint32_t i = 0; i < count; ++i) {
-      std::string filename =
-        std::string("data.") + std::to_string(utils::GetPid()) +
-        "." + std::to_string(i) + "." + ext;
-      if (!raw_data_path.empty()) {
-        filename = raw_data_path + "/" + filename;
-      }
-      storage_.emplace(
-          storage_.end(),
-          std::ifstream(filename, std::ios::in | std::ios::binary));
-      PTI_ASSERT(storage_.back().is_open());
+      const std::string& path) {
+    PTI_ASSERT(!ext.empty());
+
+    MetricReader* reader = new MetricReader(count, pid, ext, path);
+    PTI_ASSERT(reader != nullptr);
+
+    bool succeed = true;
+    for (const auto& file : reader->storage_) {
+      succeed = succeed && file.is_open();
     }
+
+    if (!succeed) {
+      delete reader;
+      return nullptr;
+    }
+
+    return reader;
   }
 
   void Reset() {
@@ -133,9 +167,38 @@ class MetricReader {
     return data;
   }
 
+  void Read(uint32_t storage_id, size_t start, size_t size, char* data) {
+    PTI_ASSERT(storage_id < storage_.size());
+    PTI_ASSERT(data != nullptr);
+
+    storage_[storage_id].seekg(start);
+    storage_[storage_id].read(data, size);
+    PTI_ASSERT(storage_[storage_id].gcount() == size);
+  }
+
   ~MetricReader() {
     for (auto& storage : storage_) {
       storage.close();
+    }
+  }
+
+ private:
+  MetricReader(
+      uint32_t count,
+      uint32_t pid,
+      const std::string& ext,
+      const std::string& raw_data_path) {
+    for (uint32_t i = 0; i < count; ++i) {
+      std::string filename =
+        std::string("data.") + std::to_string(pid) +
+        "." + std::to_string(i) + "." + ext;
+      if (!raw_data_path.empty()) {
+        filename = raw_data_path + "/" + filename;
+      }
+
+      storage_.emplace(
+          storage_.end(),
+          std::ifstream(filename, std::ios::in | std::ios::binary));
     }
   }
 
