@@ -110,6 +110,19 @@ inline void PrintDeviceList() {
   }
 }
 
+inline std::string GetMetricUnits(const char* units) {
+  PTI_ASSERT(units != nullptr);
+
+  std::string result = units;
+  if (result.find("null") != std::string::npos) {
+    result = "";
+  } else if (result.find("percent") != std::string::npos) {
+    result = "%";
+  }
+
+  return result;
+}
+
 inline void PrintMetricList(uint32_t device_id) {
   ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -166,8 +179,12 @@ inline void PrintMetricList(uint32_t device_id) {
       status = zetMetricGetProperties(metric_list[j], &metric_props);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-      std::cout << "\tMetric " << j << ": "  << metric_props.name <<
-        " (" << metric_props.description << ") [" <<
+      std::cout << "\tMetric " << j << ": "  << metric_props.name;
+      std::string units = GetMetricUnits(metric_props.resultUnits);
+      if (!units.empty()) {
+        std::cout << "[" << units << "]";
+      }
+      std::cout << " (" << metric_props.description << ") [" <<
         utils::ze::GetResultType(metric_props.resultType) << ", " <<
         utils::ze::GetMetricType(metric_props.metricType) << ", " <<
         group_props.name << "]" << std::endl;

@@ -122,7 +122,13 @@ class Finalizer {
           ZET_STRUCTURE_TYPE_METRIC_PROPERTIES, };
       status = zetMetricGetProperties(metric, &metric_props);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      name_list.push_back(metric_props.name);
+
+      std::string units = GetMetricUnits(metric_props.resultUnits);
+      std::string name = metric_props.name;
+      if (!units.empty()) {
+        name += "[" + units + "]";
+      }
+      name_list.push_back(name);
     }
 
     return name_list;
@@ -161,7 +167,7 @@ class Finalizer {
     PTI_ASSERT(!metric_name.empty());
 
     for (size_t i = 0; i < metric_list.size(); ++i) {
-      if (metric_list[i] == metric_name) {
+      if (metric_list[i].find(metric_name) == 0) {
         return i;
       }
     }
@@ -698,21 +704,23 @@ class Finalizer {
     logger_.Log("\n");
 
     for (const auto& kernel_interval : data_->kernel_interval_list) {
-      std::stringstream stream;
-      stream << "Kernel," << kernel_interval.kernel_name << "," << std::endl;
-      logger_.Log(stream.str());
-
       std::stringstream header;
+      header << "Kernel,";
       header << "SubDeviceId,";
-      header << "Start,";
-      header << "End,";
+      header << "Time[ns],";
+      header << "Start[ns],";
+      header << "End[ns],";
       header << std::endl;
       logger_.Log(header.str());
 
       const auto& device_interval_list = kernel_interval.device_interval_list;
       for (const auto& device_interval : device_interval_list) {
+        PTI_ASSERT(device_interval.start <= device_interval.end);
+        uint64_t time = device_interval.end - device_interval.start;
         std::stringstream line;
+        line << kernel_interval.kernel_name << ",";
         line << device_interval.sub_device_id << ",";
+        line << time << ",";
         line << device_interval.start << ",";
         line << device_interval.end << ",";
         line << std::endl;
@@ -840,10 +848,6 @@ class Finalizer {
     PTI_ASSERT(reader != nullptr);
 
     for (const auto& kernel_interval : data_->kernel_interval_list) {
-      std::stringstream stream;
-      stream << "Kernel," << kernel_interval.kernel_name << "," << std::endl;
-      logger_.Log(stream.str());
-
       const auto& device_interval_list = kernel_interval.device_interval_list;
       for (const auto& device_interval : device_interval_list) {
         uint32_t sub_device_id = device_interval.sub_device_id;
@@ -866,6 +870,7 @@ class Finalizer {
 
         if (report_count > 0) {
           std::stringstream header;
+          header << "Kernel,";
           header << "SubDeviceId,";
           for (auto& metric : metric_list) {
             header << metric << ",";
@@ -876,6 +881,7 @@ class Finalizer {
 
         for (int i = 0; i < report_count; ++i) {
           std::stringstream line;
+          line << kernel_interval.kernel_name << ",";
           line << device_interval.sub_device_id << ",";
           const zet_typed_value_t* report =
             report_list.data() + i * report_size;
@@ -929,10 +935,6 @@ class Finalizer {
     PTI_ASSERT(reader != nullptr);
 
     for (const auto& kernel_interval : data_->kernel_interval_list) {
-      std::stringstream stream;
-      stream << "Kernel," << kernel_interval.kernel_name << "," << std::endl;
-      logger_.Log(stream.str());
-
       const auto& device_interval_list = kernel_interval.device_interval_list;
       for (const auto& device_interval : device_interval_list) {
         uint32_t sub_device_id = device_interval.sub_device_id;
@@ -962,7 +964,9 @@ class Finalizer {
 
         if (report_count > 0) {
           std::stringstream header;
+          header << "Kernel,";
           header << "SubDeviceId,";
+          header << "KernelTime[ns],";
           for (auto& metric : metric_list) {
             header << metric << ",";
           }
@@ -971,8 +975,13 @@ class Finalizer {
         }
 
         for (int i = 0; i < report_count; ++i) {
+          PTI_ASSERT(device_interval.start <= device_interval.end);
+          uint64_t kernel_time = device_interval.end - device_interval.start;
+
           std::stringstream line;
+          line << kernel_interval.kernel_name << ",";
           line << device_interval.sub_device_id << ",";
+          line << kernel_time << ",";
           const zet_typed_value_t* report =
             report_list.data() + i * report_size;
           for (int j = 0; j < report_size; ++j) {

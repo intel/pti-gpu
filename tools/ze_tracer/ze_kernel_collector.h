@@ -849,7 +849,7 @@ class ZeKernelCollector {
       } else {
         sstream << props->simd_width;
       }
-      sstream << ", {" <<
+      sstream << " {" <<
         props->group_count[0] << "; " <<
         props->group_count[1] << "; " <<
         props->group_count[2] << "} {" <<

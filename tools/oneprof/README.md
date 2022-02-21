@@ -26,12 +26,12 @@ Options:
 ```
 == Raw Metrics ==
 
-SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,
-0,343304199,682666,753618,1103,100,0,0,0,0,0,336,56.1465,43.8535,22.9954,36.4886,36.9501,1.45587,10.8754,99.9425,0,0,0,0,0,0,0,0,0,0,0,1966165,0,125834560,0,0,0,125785344,43008,6073216,44032,238066688000,1149,1149,1,32,1179654540,
-0,343986865,682666,773375,1132,100,0,0,0,0,0,672,67.1219,32.8779,18.8542,40.5393,39.8573,1.30636,11.9009,99.8918,0,0,0,0,0,0,0,0,0,0,0,2207249,0,141263936,0,0,0,141191680,86016,6814912,43520,238067370666,1149,1149,1,32,1179654540,
-0,344669532,682666,783253,1147,100,0,0,0,0,0,336,67.4071,32.5929,19.2494,40.8147,40.1636,1.31184,11.9925,99.9399,0,0,0,0,0,0,0,0,0,0,0,2253502,0,144224128,0,0,0,144171136,43008,6954560,86272,238068053333,1149,1149,1,32,1179654540,
-0,345352199,682666,773433,1132,100,0,0,0,0,0,672,66.4875,33.5125,18.8932,40.1962,39.5619,1.31041,11.8066,99.8886,0,0,0,0,0,0,0,0,0,0,0,2189916,0,140154624,0,0,0,140070272,86016,6761088,86528,238068736000,1149,1149,1,32,1179654540,
-0,346034865,682666,773375,1132,100,0,0,0,0,0,336,66.2652,33.7344,17.3913,39.4322,38.6375,1.28662,11.561,99.9126,0,0,0,0,0,0,0,0,0,0,0,2144985,0,137279040,0,0,0,137233664,43008,6620416,43520,238069418666,1149,1149,1,32,1179654540,
+SubDeviceId,GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuBusy[%],VsThreads[threads],HsThreads[threads],DsThreads[threads],GsThreads[threads],PsThreads[threads],CsThreads[threads],EuActive[%],EuStall[%],EuFpuBothActive[%],Fpu0Active[%],Fpu1Active[%],EuAvgIpcRate[number],EuSendActive[%],EuThreadOccupancy[%],RasterizedPixels[pixels],HiDepthTestFails[pixels],EarlyDepthTestFails[pixels],SamplesKilledInPs[pixels],PixelsFailingPostPsTests[pixels],SamplesWritten[pixels],SamplesBlended[pixels],SamplerTexels[texels],SamplerTexelMisses[texels],SlmBytesRead[bytes],SlmBytesWritten[bytes],ShaderMemoryAccesses[messages],ShaderAtomics[messages],L3ShaderThroughput[bytes],ShaderBarriers[messages],TypedBytesRead[bytes],TypedBytesWritten[bytes],UntypedBytesRead[bytes],UntypedBytesWritten[bytes],GtiReadThroughput[bytes],GtiWriteThroughput[bytes],QueryBeginTime[ns],CoreFrequencyMHz[MHz],EuSliceFrequencyMHz[MHz],ReportReason,ContextId,StreamMarker,
+0,665083,631139,948,96.7231,0,0,0,0,0,4768,48.1844,38.0917,28.6887,37.3213,37.2607,1.62512,8.75791,82.9885,0,0,0,0,0,0,0,0,0,0,0,1372563,0,87844032,0,0,0,85624064,2114560,6231488,2143424,66413568000,1149,1149,1,32,1179654540,
+0,682666,783219,1147,100,0,0,0,0,0,1344,81.9616,18.0384,38.7397,58.4375,58.7402,1.49389,13.3814,99.8482,0,0,0,0,0,0,0,0,0,0,0,2511983,0,160766912,0,0,0,160627072,172032,3802560,129280,66414250666,1149,1149,1,32,1179654540,
+0,682666,783253,1147,100,0,0,0,0,0,1035,79.8366,20.1634,36.3135,56.0759,56.3012,1.47741,12.8364,99.8778,0,0,0,0,0,0,0,0,0,0,0,2410378,0,154264192,0,0,0,154127104,134528,3567168,172096,66414933333,1149,1149,1,32,1179654540,
+0,682666,783254,1147,100,0,0,0,0,0,1317,78.7735,21.2265,35.3096,55.0285,55.194,1.47134,12.5856,99.8278,0,0,0,0,0,0,0,0,0,0,0,2362583,0,151205312,0,0,0,151031168,166528,3526336,129472,66415616000,1149,1149,1,32,1179654540,
+0,682666,773283,1132,100,0,0,0,0,0,1008,77.721,22.279,34.449,54.0922,54.2257,1.46635,12.3713,99.876,0,0,0,0,0,0,0,0,0,0,0,2293428,0,146779392,0,0,0,146652416,129024,3415872,172480,66416298666,1149,1149,1,32,1179654540,
 ...
 ```
 
@@ -39,17 +39,14 @@ SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,V
 ```
 == Raw Kernel Intervals ==
 
-Kernel,zeCommandListAppendMemoryCopy(M2D)[4194304 bytes],
-SubDeviceId,Start,End,
-0,106673485,106963818,
+Kernel,SubDeviceId,Time[ns],Start[ns],End[ns],
+GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,4875166,66413228499,66418103665,
 
-Kernel,zeCommandListAppendBarrier,
-SubDeviceId,Start,End,
-0,106963985,106965318,
+Kernel,SubDeviceId,Time[ns],Start[ns],End[ns],
+GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,4914833,66419571333,66424486166,
 
-Kernel,GEMM[SIMD32, {4; 1024; 1} {256; 1; 1}],
-SubDeviceId,Start,End,
-0,106965485,149496985,
+Kernel,SubDeviceId,Time[ns],Start[ns],End[ns],
+GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,4894833,66425926333,66430821166,
 ...
 ```
 
@@ -57,14 +54,11 @@ SubDeviceId,Start,End,
 ```
 == Kernel Metrics ==
 
-Kernel,clEnqueueWriteBufferclEnqueueWriteBuffer[4194304 bytes],
-SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,
-0,342796169,248333,260664,1049,89.4032,0,0,0,0,0,5000,2.97376,84.5846,0.0751366,2.04254,0.111094,1.03615,0.946629,79.7974,0,0,0,0,0,0,0,0,0,0,0,115437,0,7387968,0,0,0,4883072,2340224,2575616,2002560,29069653333,1149,1149,1,32,1179654540,
-
-Kernel,GEMM[SIMD32, {1024, 1024, 1}, {0, 0, 0}],
-SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,
-0,344161502,590666,653470,1106,95.8942,0,0,0,0,0,672,52.4014,42.434,23.2914,34.7129,35.3936,1.49752,10.3669,94.677,0,0,0,0,0,0,0,0,0,0,0,1624753,0,103984192,0,0,0,103949056,43008,5054976,20736,29071018666,1149,1149,1,32,1179654540,
-0,344844169,682666,783253,1147,100,0,0,0,0,0,336,69.2735,30.7265,19.4396,41.9169,41.3087,1.30476,12.3252,99.9455,0,0,0,0,0,0,0,0,0,0,0,2316056,0,148227584,0,0,0,148178304,43008,7149248,67328,29071701333,1149,1149,1,32,1179654540,
+Kernel,SubDeviceId,GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuBusy[%],VsThreads[threads],HsThreads[threads],DsThreads[threads],GsThreads[threads],PsThreads[threads],CsThreads[threads],EuActive[%],EuStall[%],EuFpuBothActive[%],Fpu0Active[%],Fpu1Active[%],EuAvgIpcRate[number],EuSendActive[%],EuThreadOccupancy[%],RasterizedPixels[pixels],HiDepthTestFails[pixels],EarlyDepthTestFails[pixels],SamplesKilledInPs[pixels],PixelsFailingPostPsTests[pixels],SamplesWritten[pixels],SamplesBlended[pixels],SamplerTexels[texels],SamplerTexelMisses[texels],SlmBytesRead[bytes],SlmBytesWritten[bytes],ShaderMemoryAccesses[messages],ShaderAtomics[messages],L3ShaderThroughput[bytes],ShaderBarriers[messages],TypedBytesRead[bytes],TypedBytesWritten[bytes],UntypedBytesRead[bytes],UntypedBytesWritten[bytes],GtiReadThroughput[bytes],GtiWriteThroughput[bytes],QueryBeginTime[ns],CoreFrequencyMHz[MHz],EuSliceFrequencyMHz[MHz],ReportReason,ContextId,StreamMarker,
+GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,636000,729679,1147,97.3827,0,0,0,0,0,5104,56.9211,34.0079,32.6102,43.4698,43.4986,1.59991,10.139,88.376,0,0,0,0,0,0,0,0,0,0,0,1820732,0,116526848,0,0,0,114358784,2182144,6848832,2142592,66432682666,1149,1149,1,32,1179654540,
+GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,682666,783242,1147,100,0,0,0,0,0,1344,79.9666,20.0334,36.5073,56.2568,56.4681,1.47899,12.8727,99.8256,0,0,0,0,0,0,0,0,0,0,0,2416416,0,154650624,0,0,0,154475648,172032,3639680,172224,66433365333,1149,1149,1,32,1179654540,
+GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,682666,783254,1147,100,0,0,0,0,0,1008,78.7907,21.2093,35.5036,55.0709,55.3467,1.47392,12.6116,99.8635,0,0,0,0,0,0,0,0,0,0,0,2368212,0,151565568,0,0,0,151426304,129024,3530112,129344,66434048000,1149,1149,1,32,1179654540,
+GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,682666,773363,1132,100,0,0,0,0,0,1008,77.7469,22.2531,35.1834,54.3703,54.6638,1.47641,12.4527,99.8311,0,0,0,0,0,0,0,0,0,0,0,2308793,0,147762752,0,0,0,147626496,129024,3429376,172544,66434730666,1149,1149,1,32,1179654540,
 ...
 ```
 
@@ -72,14 +66,11 @@ SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,V
 ```
 == Aggregated Kernel Metrics ==
 
-Kernel,zeCommandListAppendMemoryCopy(M2D)[4194304 bytes],
-SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,
-0,162137469,581750,565065,971,96.6676,0,0,0,0,0,10243,3.12565,88.8954,0.0217637,2.09571,0.0898717,1.01006,0.91929,82.8795,0,0,0,0,0,0,0,0,0,0,0,240969,0,15422016,0,0,0,9946880,4878464,5353472,4689728,70536192000,1149,1149,1,32,1179654540,
+Kernel,SubDeviceId,KernelTime[ns],GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuBusy[%],VsThreads[threads],HsThreads[threads],DsThreads[threads],GsThreads[threads],PsThreads[threads],CsThreads[threads],EuActive[%],EuStall[%],EuFpuBothActive[%],Fpu0Active[%],Fpu1Active[%],EuAvgIpcRate[number],EuSendActive[%],EuThreadOccupancy[%],RasterizedPixels[pixels],HiDepthTestFails[pixels],EarlyDepthTestFails[pixels],SamplesKilledInPs[pixels],PixelsFailingPostPsTests[pixels],SamplesWritten[pixels],SamplesBlended[pixels],SamplerTexels[texels],SamplerTexelMisses[texels],SlmBytesRead[bytes],SlmBytesWritten[bytes],ShaderMemoryAccesses[messages],ShaderAtomics[messages],L3ShaderThroughput[bytes],ShaderBarriers[messages],TypedBytesRead[bytes],TypedBytesWritten[bytes],UntypedBytesRead[bytes],UntypedBytesWritten[bytes],GtiReadThroughput[bytes],GtiWriteThroughput[bytes],QueryBeginTime[ns],CoreFrequencyMHz[MHz],EuSliceFrequencyMHz[MHz],ReportReason,ContextId,StreamMarker,
+GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,4894833,682666,5433336,7954,100,0,0,0,0,0,9750,77.7741,21.8482,36.3855,55.1099,55.3827,1.49191,12.6323,99.3342,0,0,0,0,0,0,0,0,0,0,0,16472733,0,1054254912,0,0,0,1052214784,2006528,26288832,2037632,66426538666,1149,1149,1,32,1179654540,
 
-Kernel,GEMM[SIMD32, {4; 1024; 1} {256; 1; 1}],
-SubDeviceId,HostTimestamp,GpuTime,GpuCoreClocks,AvgGpuCoreFrequencyMHz,GpuBusy,VsThreads,HsThreads,DsThreads,GsThreads,PsThreads,CsThreads,EuActive,EuStall,EuFpuBothActive,Fpu0Active,Fpu1Active,EuAvgIpcRate,EuSendActive,EuThreadOccupancy,RasterizedPixels,HiDepthTestFails,EarlyDepthTestFails,SamplesKilledInPs,PixelsFailingPostPsTests,SamplesWritten,SamplesBlended,SamplerTexels,SamplerTexelMisses,SlmBytesRead,SlmBytesWritten,ShaderMemoryAccesses,ShaderAtomics,L3ShaderThroughput,ShaderBarriers,TypedBytesRead,TypedBytesWritten,UntypedBytesRead,UntypedBytesWritten,GtiReadThroughput,GtiWriteThroughput,QueryBeginTime,CoreFrequencyMHz,EuSliceFrequencyMHz,ReportReason,ContextId,StreamMarker,
-0,162820135,43007958,49035563,1139,100,0,0,0,0,0,38909,74.4577,25.5021,29.1877,49.928,49.687,1.41558,11.3856,99.6933,0,0,0,0,0,0,0,0,0,0,0,133982149,0,8574857536,0,0,0,8571003008,7448448,417155712,7897472,70536874666,1149,1149,1,32,1179654540,
-
+Kernel,SubDeviceId,KernelTime[ns],GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuBusy[%],VsThreads[threads],HsThreads[threads],DsThreads[threads],GsThreads[threads],PsThreads[threads],CsThreads[threads],EuActive[%],EuStall[%],EuFpuBothActive[%],Fpu0Active[%],Fpu1Active[%],EuAvgIpcRate[number],EuSendActive[%],EuThreadOccupancy[%],RasterizedPixels[pixels],HiDepthTestFails[pixels],EarlyDepthTestFails[pixels],SamplesKilledInPs[pixels],PixelsFailingPostPsTests[pixels],SamplesWritten[pixels],SamplesBlended[pixels],SamplerTexels[texels],SamplerTexelMisses[texels],SlmBytesRead[bytes],SlmBytesWritten[bytes],ShaderMemoryAccesses[messages],ShaderAtomics[messages],L3ShaderThroughput[bytes],ShaderBarriers[messages],TypedBytesRead[bytes],TypedBytesWritten[bytes],UntypedBytesRead[bytes],UntypedBytesWritten[bytes],GtiReadThroughput[bytes],GtiWriteThroughput[bytes],QueryBeginTime[ns],CoreFrequencyMHz[MHz],EuSliceFrequencyMHz[MHz],ReportReason,ContextId,StreamMarker,
+GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,4914833,676371,5409317,7999,99.6469,0,0,0,0,0,11824,75.5374,23.2388,34.8788,53.2544,53.463,1.48967,12.2158,98.2753,0,0,0,0,0,0,0,0,0,0,0,15887331,0,1016789184,0,0,0,1013739776,3042304,27809920,3047808,66432682666,1149,1149,1,32,1179654540,
 ...
 ```
 
