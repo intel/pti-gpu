@@ -169,7 +169,9 @@ class MetricCollector {
           metric_streamer_list[i], UINT32_MAX, &data_size, storage.data());
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-      collector->AppendMetrics(storage.data(), data_size, i);
+      if (data_size > 0) {
+        collector->AppendMetrics(storage.data(), data_size, i);
+      }
     }
   }
 
