@@ -414,16 +414,16 @@ class Finalizer {
     std::vector<zet_typed_value_t> aggregated_report(report_size);
 
     for (uint32_t i = 0; i < metric_list.size(); ++i) {
-      if (metric_list[i] == "GpuTime") {
+      if (metric_list[i].find("GpuTime") != std::string::npos) {
         aggregated_report[i] = ComputeTotalValue(i, report_list, report_size);
         continue;
       }
-      if (metric_list[i] == "AvgGpuCoreFrequencyMHz") {
+      if (metric_list[i].find("AvgGpuCoreFrequencyMHz") != std::string::npos) {
         aggregated_report[i] = ComputeAverageValue(
             i, report_list, report_size, total_clocks, gpu_clocks_id);
         continue;
       }
-      if (metric_list[i] == "ReportReason") {
+      if (metric_list[i].find("ReportReason") != std::string::npos) {
         aggregated_report[i] = report_list.data()[i];
         continue;
       }
