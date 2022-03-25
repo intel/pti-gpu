@@ -149,7 +149,7 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("ONETRACE_LogToFile", "1");
       ++i;
       if (i >= argc) {
-        std::cout << "[ERROR] Log file name is not specified" << std::endl;
+        std::cerr << "[ERROR] Log file name is not specified" << std::endl;
         return -1;
       }
       utils::SetEnv("ONETRACE_LogFilename", argv[i]);
@@ -169,7 +169,7 @@ int ParseArgs(int argc, char* argv[]) {
 
   if (utils::GetEnv("ONETRACE_ChromeDeviceTimeline") == "1" &&
       utils::GetEnv("ONETRACE_ChromeDeviceStages") == "1") {
-    std::cout <<
+    std::cerr <<
       "[ERROR] Options --chrome-device-timeline and " <<
       "--chrome-device-stages can't be used together, " <<
       "choose one of them" << std::endl;
@@ -177,7 +177,7 @@ int ParseArgs(int argc, char* argv[]) {
   }
   if (utils::GetEnv("ONETRACE_ChromeDeviceTimeline") == "1" &&
       utils::GetEnv("ONETRACE_ChromeKernelTimeline") == "1") {
-    std::cout <<
+    std::cerr <<
       "[ERROR] Options --chrome-device-timeline and " <<
       "--chrome-kernel-timeline can't be used together, " <<
       "choose one of them" << std::endl;

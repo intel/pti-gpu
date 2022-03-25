@@ -310,7 +310,8 @@ class ZeKernelCollector {
         options_(options),
         callback_(callback),
         callback_data_(callback_data),
-        kernel_id_(1) {
+        kernel_id_(1),
+        event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP) {
     PTI_ASSERT(correlator_ != nullptr);
     CreateDeviceMap();
 #ifdef PTI_KERNEL_INTERVALS
@@ -1365,7 +1366,6 @@ class ZeKernelCollector {
     props.bytes_transferred = 0;
 
     ZeKernelGroupSize group_size = collector->GetKernelGroupSize(kernel);
-
     props.group_size[0] = group_size.x;
     props.group_size[1] = group_size.y;
     props.group_size[2] = group_size.z;

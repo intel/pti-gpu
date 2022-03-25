@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/intel/ittapi.git"
-commit = "3a19f624f6f9754237de0068c95fbaf0c255616f"
+commit = "83d6ca4bb7df67dfacac7618bd7ef5f12735c8a7"
 
 def main():
   if len(sys.argv) < 3:
@@ -26,14 +26,14 @@ def main():
   src_path = os.path.join(src_path, "ittnotify")
   build_utils.copy(src_path, dst_path, ["disable_warnings.h", "ittnotify_config.h",
     "ittnotify_static.c", "ittnotify_static.h", "ittnotify_types.h"])
-  
+
   src_path = os.path.join(clone_path, "include")
   build_utils.copy(src_path, dst_path, ["ittnotify.h"])
 
   dst_path = os.path.join(dst_path, "legacy")
   if (not os.path.exists(dst_path)):
     os.mkdir(dst_path)
-  
+
   src_path = os.path.join(src_path, "legacy")
   build_utils.copy(src_path, dst_path, ["ittnotify.h"])
 

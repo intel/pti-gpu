@@ -41,7 +41,7 @@ static float RunAndCheck(ze_kernel_handle_t kernel,
   PTI_ASSERT(kernel != nullptr);
   PTI_ASSERT(device != nullptr);
   PTI_ASSERT(context != nullptr);
-  
+
   PTI_ASSERT(size > 0);
   PTI_ASSERT(a.size() == size * size);
   PTI_ASSERT(b.size() == size * size);
@@ -72,7 +72,7 @@ static float RunAndCheck(ze_kernel_handle_t kernel,
   void* dev_c = nullptr;
   status = zeMemAllocDevice(context, &alloc_desc, size * size * sizeof(float),
                             ALIGN, device, &dev_c);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);        
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   status = zeKernelSetGroupSize(
       kernel, group_size[0], group_size[1], group_size[2]);
@@ -285,7 +285,7 @@ int main(int argc, char* argv[]) {
   Compute(device, driver, a, b, c, size, repeat_count, expected_result);
   auto end = std::chrono::steady_clock::now();
   std::chrono::duration<float> time = end - start;
-  
+
   std::cout << "Total execution time: " << time.count() <<
     " sec" << std::endl;
   return 0;

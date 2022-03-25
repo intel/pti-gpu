@@ -24,7 +24,7 @@ struct DeviceInterval {
 };
 
 struct KernelInterval {
-  std::string kernel_name;
+  uint32_t kernel_id;
   std::vector<DeviceInterval> device_interval_list;
 };
 
@@ -32,9 +32,10 @@ struct ResultData {
   uint32_t pid;
   uint32_t device_id;
   uint64_t execution_time;
-  std::vector<DeviceProps> device_props_list;
-  std::vector<KernelInterval> kernel_interval_list;
   std::string metric_group;
+  std::vector<DeviceProps> device_props_list;
+  std::vector<std::string> kernel_name_list;
+  std::vector<KernelInterval> kernel_interval_list;
 };
 
 class ResultStorage {
@@ -82,14 +83,29 @@ class ResultStorage {
         reinterpret_cast<const char*>(&data->execution_time),
         sizeof(uint64_t));
 
-    DumpDeviceProps(data->device_props_list);
     DumpMetricGroup(data->metric_group);
+    DumpDeviceProps(data->device_props_list);
+    DumpKernelNames(data->kernel_name_list);
     DumpKernelIntervals(data->kernel_interval_list);
   }
 
  private:
-  ResultStorage(const std::string& filename) 
+  ResultStorage(const std::string& filename)
       : file_(filename, std::ios::out | std::ios::binary) {}
+
+  void DumpMetricGroup(const std::string& metric_group) {
+    PTI_ASSERT(!metric_group.empty());
+    PTI_ASSERT(file_.is_open());
+
+    size_t metric_group_size = metric_group.size();
+    file_.write( // Metic Group Name Size
+        reinterpret_cast<const char*>(&metric_group_size),
+        sizeof(size_t));
+
+    file_.write( // Metric Group Name
+        metric_group.c_str(),
+        metric_group_size * sizeof(char));
+  }
 
   void DumpDeviceProps(const std::vector<DeviceProps>& device_props_list) {
     PTI_ASSERT(file_.is_open());
@@ -110,18 +126,26 @@ class ResultStorage {
     }
   }
 
-  void DumpMetricGroup(const std::string& metric_group) {
-    PTI_ASSERT(!metric_group.empty());
+  void DumpKernelNames(
+      const std::vector<std::string>& kernel_name_list) {
     PTI_ASSERT(file_.is_open());
 
-    size_t metric_group_size = metric_group.size();
-    file_.write( // Metic Group Name Size
-        reinterpret_cast<const char*>(&metric_group_size),
+    size_t kernel_name_list_size = kernel_name_list.size();
+    file_.write( // Kernel Name List Size
+        reinterpret_cast<const char*>(&kernel_name_list_size),
         sizeof(size_t));
 
-    file_.write( // Metric Group Name
-        metric_group.c_str(),
-        metric_group_size * sizeof(char));
+    for (const auto& kernel_name : kernel_name_list) {
+      size_t kernel_name_size = kernel_name.size();
+      PTI_ASSERT(kernel_name_size > 0);
+      file_.write( // Kernel Name Size
+          reinterpret_cast<const char*>(&kernel_name_size),
+          sizeof(size_t));
+
+      file_.write( // Kernel Name
+          kernel_name.c_str(),
+          kernel_name_size * sizeof(char));
+    }
   }
 
   void DumpKernelIntervals(
@@ -134,17 +158,9 @@ class ResultStorage {
         sizeof(size_t));
 
     for (const auto& kernel_interval : kernel_interval_list) {
-      const std::string& kernel_name = kernel_interval.kernel_name;
-
-      size_t kernel_name_size = kernel_name.size();
-      PTI_ASSERT(kernel_name_size > 0);
-      file_.write( // Kernel Name Size
-          reinterpret_cast<const char*>(&kernel_name_size),
-          sizeof(size_t));
-
-      file_.write( // Kernel Name
-          kernel_name.c_str(),
-          kernel_name_size * sizeof(char));
+      file_.write( // Kernel ID
+          reinterpret_cast<const char*>(&kernel_interval.kernel_id),
+          sizeof(uint32_t));
 
       const auto& device_interval_list =
         kernel_interval.device_interval_list;
@@ -207,16 +223,33 @@ class ResultReader {
         reinterpret_cast<char*>(&data->execution_time),
         sizeof(uint64_t));
 
-    data->device_props_list = ReadDeviceProps();
     data->metric_group = ReadMetricGroup();
+    data->device_props_list = ReadDeviceProps();
+    data->kernel_name_list = ReadKernelNames();
     data->kernel_interval_list = ReadKernelIntervals();
 
     return data;
   }
 
  private:
-  ResultReader(const std::string& filename) 
+  ResultReader(const std::string& filename)
       : file_(filename, std::ios::in | std::ios::binary) {}
+
+  std::string ReadMetricGroup() {
+    PTI_ASSERT(file_.is_open());
+
+    size_t metric_group_size = 0;
+    file_.read( // Metic Group Name Size
+        reinterpret_cast<char*>(&metric_group_size),
+        sizeof(size_t));
+
+    std::vector<char> metric_group(metric_group_size);
+    file_.read( // Metric Group Name
+        metric_group.data(),
+        metric_group_size * sizeof(char));
+
+    return std::string(metric_group.begin(), metric_group.end());
+  }
 
   std::vector<DeviceProps> ReadDeviceProps() {
     PTI_ASSERT(file_.is_open());
@@ -241,20 +274,31 @@ class ResultReader {
     return device_props_list;
   }
 
-  std::string ReadMetricGroup() {
+  std::vector<std::string> ReadKernelNames() {
     PTI_ASSERT(file_.is_open());
 
-    size_t metric_group_size = 0;
-    file_.read( // Metic Group Name Size
-        reinterpret_cast<char*>(&metric_group_size),
+    size_t kernel_name_list_size = 0;
+    file_.read( // Kernel Name List Size
+        reinterpret_cast<char*>(&kernel_name_list_size),
         sizeof(size_t));
 
-    std::vector<char> metric_group(metric_group_size);
-    file_.read( // Metric Group Name
-        metric_group.data(),
-        metric_group_size * sizeof(char));
+    std::vector<std::string> kernel_name_list;
+    for (size_t i = 0; i < kernel_name_list_size; ++i) {
+      size_t kernel_name_size = 0;
+      file_.read( // Kernel Name Size
+          reinterpret_cast<char*>(&kernel_name_size),
+          sizeof(size_t));
 
-    return std::string(metric_group.begin(), metric_group.end());
+      std::vector<char> kernel_name(kernel_name_size);
+      file_.read( // Kernel Name
+          kernel_name.data(),
+          kernel_name_size * sizeof(char));
+
+      kernel_name_list.push_back(std::string(
+          kernel_name.begin(), kernel_name.end()));
+    }
+
+    return kernel_name_list;
   }
 
   std::vector<KernelInterval> ReadKernelIntervals() {
@@ -269,18 +313,9 @@ class ResultReader {
     for (size_t i = 0; i < kernel_interval_list_size; ++i) {
       KernelInterval kernel_interval{};
 
-      size_t kernel_name_size = 0;
-      file_.read( // Kernel Name Size
-          reinterpret_cast<char*>(&kernel_name_size),
-          sizeof(size_t));
-
-      std::vector<char> kernel_name(kernel_name_size);
-      file_.read( // Kernel Name
-          kernel_name.data(),
-          kernel_name_size * sizeof(char));
-
-      kernel_interval.kernel_name =
-        std::string(kernel_name.begin(), kernel_name.end());
+      file_.read( // Kernel ID
+          reinterpret_cast<char*>(&kernel_interval.kernel_id),
+          sizeof(uint32_t));
 
       size_t device_interval_list_size = 0;
       file_.read( // Device Interval List Size

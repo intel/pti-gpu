@@ -86,6 +86,10 @@ class Finalizer {
     if (options_.CheckFlag(PROF_AGGREGATION)) {
       ReportAggregatedMetrics(cache);
     }
+
+    if (options_.CheckFlag(PROF_KERNEL_QUERY)) {
+      ReportQueryMetrics();
+    }
   }
 
   Finalizer(const Finalizer& copy) = delete;
@@ -715,10 +719,15 @@ class Finalizer {
 
       const auto& device_interval_list = kernel_interval.device_interval_list;
       for (const auto& device_interval : device_interval_list) {
+        PTI_ASSERT(kernel_interval.kernel_id < data_->kernel_name_list.size());
+        const std::string& kernel_name =
+          data_->kernel_name_list[kernel_interval.kernel_id];
+
         PTI_ASSERT(device_interval.start <= device_interval.end);
         uint64_t time = device_interval.end - device_interval.start;
+
         std::stringstream line;
-        line << kernel_interval.kernel_name << ",";
+        line << kernel_name << ",";
         line << device_interval.sub_device_id << ",";
         line << time << ",";
         line << device_interval.start << ",";
@@ -853,6 +862,10 @@ class Finalizer {
         uint32_t sub_device_id = device_interval.sub_device_id;
         PTI_ASSERT(sub_device_id < sub_device_list.size());
 
+        PTI_ASSERT(kernel_interval.kernel_id < data_->kernel_name_list.size());
+        const std::string& kernel_name =
+          data_->kernel_name_list[kernel_interval.kernel_id];
+
         uint32_t report_size = GetMetricCount(
             metric_group_list[sub_device_id]);
         PTI_ASSERT(report_size > 0);
@@ -881,7 +894,7 @@ class Finalizer {
 
         for (int i = 0; i < report_count; ++i) {
           std::stringstream line;
-          line << kernel_interval.kernel_name << ",";
+          line << kernel_name << ",";
           line << device_interval.sub_device_id << ",";
           const zet_typed_value_t* report =
             report_list.data() + i * report_size;
@@ -940,6 +953,10 @@ class Finalizer {
         uint32_t sub_device_id = device_interval.sub_device_id;
         PTI_ASSERT(sub_device_id < sub_device_list.size());
 
+        PTI_ASSERT(kernel_interval.kernel_id < data_->kernel_name_list.size());
+        const std::string& kernel_name =
+          data_->kernel_name_list[kernel_interval.kernel_id];
+
         uint32_t report_size = GetMetricCount(
             metric_group_list[sub_device_id]);
         PTI_ASSERT(report_size > 0);
@@ -979,7 +996,7 @@ class Finalizer {
           uint64_t kernel_time = device_interval.end - device_interval.start;
 
           std::stringstream line;
-          line << kernel_interval.kernel_name << ",";
+          line << kernel_name << ",";
           line << device_interval.sub_device_id << ",";
           line << kernel_time << ",";
           const zet_typed_value_t* report =
@@ -991,6 +1008,109 @@ class Finalizer {
           line << std::endl;
           logger_.Log(line.str());
         }
+      }
+
+      logger_.Log("\n");
+    }
+
+    delete reader;
+  }
+
+  void ReportQueryMetrics() {
+    PTI_ASSERT(data_ != nullptr);
+
+    logger_.Log("\n");
+    logger_.Log("== Query Kernel Metrics ==\n");
+    logger_.Log("\n");
+
+    ze_device_handle_t device = GetZeDevice(data_->device_id);
+    PTI_ASSERT(device != nullptr);
+
+    zet_metric_group_handle_t group = utils::ze::FindMetricGroup(
+        device, data_->metric_group,
+        ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED);
+    PTI_ASSERT(group != nullptr);
+
+    std::vector<std::string> metric_list = GetMetricList(group);
+    PTI_ASSERT(!metric_list.empty());
+
+    std::string filename = options_.GetResultFile();
+    PTI_ASSERT(!filename.empty());
+
+    std::string path = utils::GetFilePath(filename);
+
+    MetricReader* reader = MetricReader::Create(
+        0, data_->pid, "query", path);
+    PTI_ASSERT(reader != nullptr);
+
+    while (true) {
+      bool ok = true;
+
+      uint32_t kernel_id = 0;
+      ok = reader->ReadNext(
+          0, sizeof(uint32_t), reinterpret_cast<char*>(&kernel_id));
+      if (!ok) {
+        break;
+      }
+
+      uint32_t size = 0;
+      ok = reader->ReadNext(
+          0, sizeof(uint32_t), reinterpret_cast<char*>(&size));
+      PTI_ASSERT(ok);
+      PTI_ASSERT(size > 0);
+
+      std::vector<uint8_t> data(size);
+      ok = reader->ReadNext(
+          0, size, reinterpret_cast<char*>(data.data()));
+      PTI_ASSERT(ok);
+
+      PTI_ASSERT(kernel_id < data_->kernel_name_list.size());
+      const std::string& kernel_name = data_->kernel_name_list[kernel_id];
+
+      uint32_t set_count = 0, total_metric_count = 0;
+      ze_result_t status = zetMetricGroupCalculateMultipleMetricValuesExp(
+          group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+          data.size(), data.data(), &set_count, &total_metric_count,
+          nullptr, nullptr);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+      PTI_ASSERT(set_count > 0);
+      std::vector<uint32_t> metric_count_list(set_count);
+      PTI_ASSERT(total_metric_count > 0);
+      std::vector<zet_typed_value_t> metric_value_list(total_metric_count);
+
+      status = zetMetricGroupCalculateMultipleMetricValuesExp(
+          group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+          data.size(), data.data(), &set_count, &total_metric_count,
+          metric_count_list.data(), metric_value_list.data());
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+      std::stringstream header;
+      header << "Kernel,";
+      header << "SubDeviceId,";
+      for (auto& metric : metric_list) {
+        header << metric << ",";
+      }
+      header << std::endl;
+      logger_.Log(header.str());
+
+      for (uint32_t i = 0; i < set_count; ++i) {
+        std::stringstream line;
+        line << kernel_name << ",";
+        line << i << ",";
+
+        uint32_t report_size = metric_count_list[i];
+        PTI_ASSERT(report_size == metric_list.size());
+
+        const zet_typed_value_t* report =
+          metric_value_list.data() + i * report_size;
+        for (int j = 0; j < report_size; ++j) {
+          PrintTypedValue(line, report[j]);
+          line << ",";
+        }
+
+        line << std::endl;
+        logger_.Log(line.str());
       }
 
       logger_.Log("\n");

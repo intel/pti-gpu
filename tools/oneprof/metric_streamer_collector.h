@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_TOOLS_ONEPROF_METRIC_COLLECTOR_H_
-#define PTI_TOOLS_ONEPROF_METRIC_COLLECTOR_H_
+#ifndef PTI_TOOLS_ONEPROF_METRIC_STREAMER_COLLECTOR_H_
+#define PTI_TOOLS_ONEPROF_METRIC_STREAMER_COLLECTOR_H_
 
 #include <algorithm>
 #include <atomic>
@@ -26,9 +26,9 @@ enum CollectorState {
   COLLECTOR_STATE_DISABLED = 2
 };
 
-class MetricCollector {
+class MetricStreamerCollector {
  public: // Interface
-  static MetricCollector* Create(
+  static MetricStreamerCollector* Create(
       ze_driver_handle_t driver,
       ze_device_handle_t device,
       const char* group_name,
@@ -62,7 +62,7 @@ class MetricCollector {
     }
     PTI_ASSERT(metric_group_list.size() == sub_device_list.size());
 
-    return new MetricCollector(
+    return new MetricStreamerCollector(
         context, sub_device_list, metric_group_list,
         sampling_interval, raw_data_path);
   }
@@ -80,7 +80,7 @@ class MetricCollector {
     metric_storage_ = nullptr;
   }
 
-  ~MetricCollector() {
+  ~MetricStreamerCollector() {
     ze_result_t status = ZE_RESULT_SUCCESS;
     PTI_ASSERT(collector_state_ == COLLECTOR_STATE_DISABLED);
 
@@ -94,11 +94,11 @@ class MetricCollector {
     }
   }
 
-  MetricCollector(const MetricCollector& copy) = delete;
-  MetricCollector& operator=(const MetricCollector& copy) = delete;
+  MetricStreamerCollector(const MetricStreamerCollector& copy) = delete;
+  MetricStreamerCollector& operator=(const MetricStreamerCollector& copy) = delete;
 
  private: // Implementation
-  MetricCollector(
+  MetricStreamerCollector(
       ze_context_handle_t context,
       const std::vector<ze_device_handle_t>& sub_device_list,
       const std::vector<zet_metric_group_handle_t>& metric_group_list,
@@ -143,7 +143,7 @@ class MetricCollector {
   }
 
   static void CollectChunk(
-      MetricCollector* collector,
+      MetricStreamerCollector* collector,
       const std::vector<ze_event_handle_t>& event_list,
       const std::vector<zet_metric_streamer_handle_t>& metric_streamer_list,
       std::vector<uint8_t>& storage) {
@@ -175,7 +175,7 @@ class MetricCollector {
     }
   }
 
-  static void Collect(MetricCollector* collector) {
+  static void Collect(MetricStreamerCollector* collector) {
     PTI_ASSERT(collector != nullptr);
 
     PTI_ASSERT(collector->context_ != nullptr);
@@ -286,4 +286,4 @@ class MetricCollector {
   std::string raw_data_path_;
 };
 
-#endif // PTI_TOOLS_ONEPROF_METRIC_COLLECTOR_H_
+#endif // PTI_TOOLS_ONEPROF_METRIC_STREAMER_COLLECTOR_H_

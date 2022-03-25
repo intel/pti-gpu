@@ -882,7 +882,7 @@ class UnifiedTracer {
 
     std::string tid = id + "." + queue;
 
-    PTI_ASSERT(submitted >= queued);
+    PTI_ASSERT(submitted > queued);
     stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
       "\", \"tid\":\"" << tid <<
       "\", \"name\":\"" << name << " (Queued)" <<
@@ -982,7 +982,7 @@ class UnifiedTracer {
     PTI_ASSERT(tracer->chrome_logger_ != nullptr);
     std::stringstream stream;
 
-    PTI_ASSERT(submitted >= queued);
+    PTI_ASSERT(submitted > queued);
     stream << "{\"ph\":\"X\", \"pid\":\"" << utils::GetPid() <<
       "\", \"tid\":\"" << name <<
       "\", \"name\":\"" << name << " (Queued)" <<

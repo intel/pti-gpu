@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/oneapi-src/level-zero.git"
-commit = "78f08cc338d70ac60a8f61084ad194fa0dbc90b0"
+commit = "bb7fff05b801e26c3d7858e03e509d1089914d59"
 
 def main():
   if len(sys.argv) < 3:

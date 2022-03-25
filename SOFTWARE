@@ -1,14 +1,14 @@
 level-zero-loader:
   deb:
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.7.9/level-zero_1.7.9+u18.04_amd64.deb
-  - https://github.com/oneapi-src/level-zero/releases/download/v1.7.9/level-zero-devel_1.7.9+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.7.15/level-zero_1.7.15+u18.04_amd64.deb
+  - https://github.com/oneapi-src/level-zero/releases/download/v1.7.15/level-zero-devel_1.7.15+u18.04_amd64.deb
 compute-runtime:
   deb:
-  - https://github.com/intel/compute-runtime/releases/download/22.02.22151/intel-gmmlib_22.0.0_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.9933/intel-igc-core_1.0.9933_amd64.deb
-  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.9933/intel-igc-opencl_1.0.9933_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/22.02.22151/intel-opencl-icd_22.02.22151_amd64.deb
-  - https://github.com/intel/compute-runtime/releases/download/22.02.22151/intel-level-zero-gpu_1.2.22151_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/22.10.22597/intel-gmmlib_22.0.2_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.10409/intel-igc-core_1.0.10409_amd64.deb
+  - https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.10409/intel-igc-opencl_1.0.10409_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/22.10.22597/intel-opencl-icd_22.10.22597_amd64.deb
+  - https://github.com/intel/compute-runtime/releases/download/22.10.22597/intel-level-zero-gpu_1.3.22597_amd64.deb
 metrics-discovery:
   github:
     build_path: build
@@ -18,7 +18,7 @@ metrics-discovery:
     - sudo make install
     - sudo make package
     - sudo dpkg -i *.deb
-    commit: 0bb7d238bb64dada396f6958b4ab47bb13455610
+    commit: 16ceed40246d9638fde27e384d8a8681337d9828
     url: https://github.com/intel/metrics-discovery
 metrics-library:
   github:

@@ -33,11 +33,15 @@ void Usage() {
     std::endl;
   std::cout <<
     "--kernel-metrics [-k]            " <<
-    "Collect metrics for each kernel" <<
+    "Collect over-time metrics for each kernel instance" <<
     std::endl;
   std::cout <<
     "--aggregation [-a]               " <<
-    "Aggregate metrics for each kernel" <<
+    "Collect aggregated metrics for each kernel instance in time-based mode" <<
+    std::endl;
+  std::cout <<
+    "--kernel-query [-q]              " <<
+    "Collect aggregated metrics for each kernel instance in query-based mode" <<
     std::endl;
   std::cout <<
     "--device [-d] <ID>               " <<
@@ -106,6 +110,10 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--aggregation") == 0 ||
                strcmp(argv[i], "-a") == 0) {
       utils::SetEnv("ONEPROF_Aggregation", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--kernel-query") == 0 ||
+               strcmp(argv[i], "-q") == 0) {
+      utils::SetEnv("ONEPROF_KernelQuery", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device") == 0 ||
                strcmp(argv[i], "-d") == 0) {
@@ -181,6 +189,17 @@ int ParseArgs(int argc, char* argv[]) {
     }
   }
 
+  if (utils::GetEnv("ONEPROF_KernelQuery") == "1") {
+    if (utils::GetEnv("ONEPROF_RawMetrics") == "1" ||
+        utils::GetEnv("ONEPROF_KernelIntervals") == "1" ||
+        utils::GetEnv("ONEPROF_KernelMetrics") == "1" ||
+        utils::GetEnv("ONEPROF_Aggregation") == "1") {
+      std::cerr << "[ERROR] Query mode cannot be combined with other modes" <<
+        std::endl;
+      return 0;
+    }
+  }
+
   if (finalization) {
     Finalize();
     return 0;
@@ -234,6 +253,11 @@ static ProfOptions ReadArgs() {
   value = utils::GetEnv("ONEPROF_Aggregation");
   if (!value.empty()) {
     flags |= (1 << PROF_AGGREGATION);
+  }
+
+  value = utils::GetEnv("ONEPROF_KernelQuery");
+  if (!value.empty()) {
+    flags |= (1 << PROF_KERNEL_QUERY);
   }
 
   value = utils::GetEnv("ONEPROF_MetricGroup");

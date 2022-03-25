@@ -80,6 +80,8 @@ if __name__ == "__main__":
     option = "-k"
   if len(sys.argv) > 1 and sys.argv[1] == "-a":
     option = "-a"
+  if len(sys.argv) > 1 and sys.argv[1] == "-q":
+    option = "-q"
   if len(sys.argv) > 1 and sys.argv[1] == "cl":
     option = "cl"
   if len(sys.argv) > 1 and sys.argv[1] == "ze":

@@ -8,8 +8,9 @@ Usage: ./oneprof[.exe] [options] <application> <args>
 Options:
 --raw-metrics [-m]               Collect raw metric stream for the device
 --kernel-intrevals [-i]          Collect raw kernel intervals for the device
---kernel-metrics [-k]            Collect metrics for each kernel
---aggregation [-a]               Aggregate metrics for each kernel
+--kernel-metrics [-k]            Collect over-time metrics for each kernel instance
+--aggregation [-a]               Collect aggregated metrics for each kernel instance in time-based mode
+--kernel-query [-q]              Collect aggregated metrics for each kernel instance in query-based mode
 --device [-d] <ID>               Target device for profiling (default is 0)
 --group [-g] <NAME>              Target metric group to collect (default is ComputeBasic)
 --sampling-interval [-s] <VALUE> Sampling interval for metrics collection in us (default is 1000 us)
@@ -32,7 +33,6 @@ SubDeviceId,GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuBus
 0,682666,783253,1147,100,0,0,0,0,0,1035,79.8366,20.1634,36.3135,56.0759,56.3012,1.47741,12.8364,99.8778,0,0,0,0,0,0,0,0,0,0,0,2410378,0,154264192,0,0,0,154127104,134528,3567168,172096,66414933333,1149,1149,1,32,1179654540,
 0,682666,783254,1147,100,0,0,0,0,0,1317,78.7735,21.2265,35.3096,55.0285,55.194,1.47134,12.5856,99.8278,0,0,0,0,0,0,0,0,0,0,0,2362583,0,151205312,0,0,0,151031168,166528,3526336,129472,66415616000,1149,1149,1,32,1179654540,
 0,682666,773283,1132,100,0,0,0,0,0,1008,77.721,22.279,34.449,54.0922,54.2257,1.46635,12.3713,99.876,0,0,0,0,0,0,0,0,0,0,0,2293428,0,146779392,0,0,0,146652416,129024,3415872,172480,66416298666,1149,1149,1,32,1179654540,
-...
 ```
 
 **Kernel Intervals** mode dumps execution intervals for all of the kernels and transfers on the device to be able to correlate raw metrics with kernels, e.g.:
@@ -47,7 +47,6 @@ GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,4914833,66419571333,66424486166,
 
 Kernel,SubDeviceId,Time[ns],Start[ns],End[ns],
 GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,4894833,66425926333,66430821166,
-...
 ```
 
 **Kernel Metrics** mode automatically correlates metric reports to kernels giving an ability to track metrics bevahiour for a kernel over time:
@@ -59,19 +58,38 @@ GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,636000,729679,1147,97.3827,0,0,0,0,0,5104
 GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,682666,783242,1147,100,0,0,0,0,0,1344,79.9666,20.0334,36.5073,56.2568,56.4681,1.47899,12.8727,99.8256,0,0,0,0,0,0,0,0,0,0,0,2416416,0,154650624,0,0,0,154475648,172032,3639680,172224,66433365333,1149,1149,1,32,1179654540,
 GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,682666,783254,1147,100,0,0,0,0,0,1008,78.7907,21.2093,35.5036,55.0709,55.3467,1.47392,12.6116,99.8635,0,0,0,0,0,0,0,0,0,0,0,2368212,0,151565568,0,0,0,151426304,129024,3530112,129344,66434048000,1149,1149,1,32,1179654540,
 GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,682666,773363,1132,100,0,0,0,0,0,1008,77.7469,22.2531,35.1834,54.3703,54.6638,1.47641,12.4527,99.8311,0,0,0,0,0,0,0,0,0,0,0,2308793,0,147762752,0,0,0,147626496,129024,3429376,172544,66434730666,1149,1149,1,32,1179654540,
-...
 ```
 
-**Aggregation** mode provides a single metric report for a kernel to see cumulative results:
+**Aggregation** mode provides a single metric report for a kernel to see cumulative results. These are results of automatic aggregation for the metrics, collected in time-based mode:
 ```
 == Aggregated Kernel Metrics ==
 
 Kernel,SubDeviceId,KernelTime[ns],GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuBusy[%],VsThreads[threads],HsThreads[threads],DsThreads[threads],GsThreads[threads],PsThreads[threads],CsThreads[threads],EuActive[%],EuStall[%],EuFpuBothActive[%],Fpu0Active[%],Fpu1Active[%],EuAvgIpcRate[number],EuSendActive[%],EuThreadOccupancy[%],RasterizedPixels[pixels],HiDepthTestFails[pixels],EarlyDepthTestFails[pixels],SamplesKilledInPs[pixels],PixelsFailingPostPsTests[pixels],SamplesWritten[pixels],SamplesBlended[pixels],SamplerTexels[texels],SamplerTexelMisses[texels],SlmBytesRead[bytes],SlmBytesWritten[bytes],ShaderMemoryAccesses[messages],ShaderAtomics[messages],L3ShaderThroughput[bytes],ShaderBarriers[messages],TypedBytesRead[bytes],TypedBytesWritten[bytes],UntypedBytesRead[bytes],UntypedBytesWritten[bytes],GtiReadThroughput[bytes],GtiWriteThroughput[bytes],QueryBeginTime[ns],CoreFrequencyMHz[MHz],EuSliceFrequencyMHz[MHz],ReportReason,ContextId,StreamMarker,
-GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,4894833,682666,5433336,7954,100,0,0,0,0,0,9750,77.7741,21.8482,36.3855,55.1099,55.3827,1.49191,12.6323,99.3342,0,0,0,0,0,0,0,0,0,0,0,16472733,0,1054254912,0,0,0,1052214784,2006528,26288832,2037632,66426538666,1149,1149,1,32,1179654540,
+GEMM[SIMD32 {4; 1024; 1} {256; 1; 1}],0,42523000,43007960,49099595,1141,100,0,0,0,0,0,43326,74.529,25.3546,29.2023,50.0025,49.7394,1.41551,11.4035,99.3923,0,0,0,0,0,0,0,0,0,0,0,134419343,0,8602837952,0,0,0,8593193984,9804288,426876416,10557504,357781162666,1149,1149,1,32,40,
 
 Kernel,SubDeviceId,KernelTime[ns],GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuBusy[%],VsThreads[threads],HsThreads[threads],DsThreads[threads],GsThreads[threads],PsThreads[threads],CsThreads[threads],EuActive[%],EuStall[%],EuFpuBothActive[%],Fpu0Active[%],Fpu1Active[%],EuAvgIpcRate[number],EuSendActive[%],EuThreadOccupancy[%],RasterizedPixels[pixels],HiDepthTestFails[pixels],EarlyDepthTestFails[pixels],SamplesKilledInPs[pixels],PixelsFailingPostPsTests[pixels],SamplesWritten[pixels],SamplesBlended[pixels],SamplerTexels[texels],SamplerTexelMisses[texels],SlmBytesRead[bytes],SlmBytesWritten[bytes],ShaderMemoryAccesses[messages],ShaderAtomics[messages],L3ShaderThroughput[bytes],ShaderBarriers[messages],TypedBytesRead[bytes],TypedBytesWritten[bytes],UntypedBytesRead[bytes],UntypedBytesWritten[bytes],GtiReadThroughput[bytes],GtiWriteThroughput[bytes],QueryBeginTime[ns],CoreFrequencyMHz[MHz],EuSliceFrequencyMHz[MHz],ReportReason,ContextId,StreamMarker,
-GEMM[SIMD32 {2; 512; 1} {256; 1; 1}],0,4914833,676371,5409317,7999,99.6469,0,0,0,0,0,11824,75.5374,23.2388,34.8788,53.2544,53.463,1.48967,12.2158,98.2753,0,0,0,0,0,0,0,0,0,0,0,15887331,0,1016789184,0,0,0,1013739776,3042304,27809920,3047808,66432682666,1149,1149,1,32,1179654540,
-...
+GEMM[SIMD32 {4; 1024; 1} {256; 1; 1}],0,42675500,42325292,48219155,1139,100,0,0,0,0,0,32592,75.3883,24.5697,29.646,50.6168,50.3917,1.41555,11.5397,99.8522,0,0,0,0,0,0,0,0,0,0,0,133463067,0,8541636288,0,0,0,8537506816,4128768,411957312,4760000,357828949333,1149,1149,1,32,40,
+```
+
+**Kernel Query** mode also provides a single metric report for a kernel instance, but it is based on query mode:
+```
+== Query Kernel Metrics ==
+
+Kernel,SubDeviceId,GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuBusy[%],VsThreads[threads],HsThreads[threads],DsThreads[threads],GsThreads[threads],PsThreads[threads],CsThreads[threads],EuActive[%],EuStall[%],EuFpuBothActive[%],Fpu0Active[%],Fpu1Active[%],EuAvgIpcRate[number],EuSendActive[%],EuThreadOccupancy[%],RasterizedPixels[pixels],HiDepthTestFails[pixels],EarlyDepthTestFails[pixels],SamplesKilledInPs[pixels],PixelsFailingPostPsTests[pixels],SamplesWritten[pixels],SamplesBlended[pixels],SamplerTexels[texels],SamplerTexelMisses[texels],SlmBytesRead[bytes],SlmBytesWritten[bytes],ShaderMemoryAccesses[messages],ShaderAtomics[messages],L3ShaderThroughput[bytes],ShaderBarriers[messages],TypedBytesRead[bytes],TypedBytesWritten[bytes],UntypedBytesRead[bytes],UntypedBytesWritten[bytes],GtiReadThroughput[bytes],GtiWriteThroughput[bytes],QueryBeginTime[ns],CoreFrequencyMHz[MHz],CoreFrequencyChanged,QuerySplitOccurred,ReportId,ReportsCount,OverrunOccured,ReportError,ReportInconsistent,ReportCtxSwitchLost,ReportWithoutWorkload,
+GEMM[SIMD32 {4; 1024; 1} {256; 1; 1}],0,42345936,48278766,1140,100,0,0,0,0,0,32768,75.488,24.4516,30.0049,50.8641,50.6392,1.41966,11.5963,99.5197,0,0,0,0,0,0,0,0,0,0,0,134283264,0,8594128896,0,0,0,8610906880,4204544,415981504,4992896,214977194916,1150,0,0,1,1,0,0,0,8,0,
+
+Kernel,SubDeviceId,GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuBusy[%],VsThreads[threads],HsThreads[threads],DsThreads[threads],GsThreads[threads],PsThreads[threads],CsThreads[threads],EuActive[%],EuStall[%],EuFpuBothActive[%],Fpu0Active[%],Fpu1Active[%],EuAvgIpcRate[number],EuSendActive[%],EuThreadOccupancy[%],RasterizedPixels[pixels],HiDepthTestFails[pixels],EarlyDepthTestFails[pixels],SamplesKilledInPs[pixels],PixelsFailingPostPsTests[pixels],SamplesWritten[pixels],SamplesBlended[pixels],SamplerTexels[texels],SamplerTexelMisses[texels],SlmBytesRead[bytes],SlmBytesWritten[bytes],ShaderMemoryAccesses[messages],ShaderAtomics[messages],L3ShaderThroughput[bytes],ShaderBarriers[messages],TypedBytesRead[bytes],TypedBytesWritten[bytes],UntypedBytesRead[bytes],UntypedBytesWritten[bytes],GtiReadThroughput[bytes],GtiWriteThroughput[bytes],QueryBeginTime[ns],CoreFrequencyMHz[MHz],CoreFrequencyChanged,QuerySplitOccurred,ReportId,ReportsCount,OverrunOccured,ReportError,ReportInconsistent,ReportCtxSwitchLost,ReportWithoutWorkload,
+GEMM[SIMD32 {4; 1024; 1} {256; 1; 1}],0,42713211,48514430,1135,100,0,0,0,0,0,32768,75.1907,24.7165,29.808,50.615,50.3952,1.41864,11.54,99.5191,0,0,0,0,0,0,0,0,0,0,0,134283264,0,8594128896,0,0,0,8601469696,4199936,416482240,4996864,215024800416,1150,0,0,1,1,0,0,0,8,0,
+```
+
+***Note, that metric names provided by the tool may be not obvious.*** To learn what each metric exactly means, use `--metric-list` option. E.g. `Throughput` metrics may be represented in bytes, and to calculate actual throughput  one should devide it to `GpuTime`:
+```
+Group 1: ComputeBasic (Compute Metrics Basic set)
+    Metric 0: GpuTime[ns] (Time elapsed on the GPU during the measurement.) [UINT64, DURATION, ComputeBasic]
+    ...
+    Metric 37: GtiReadThroughput[bytes] (The total number of GPU memory bytes read from GTI.) [UINT64, THROUGHPUT, ComputeBasic]
+    Metric 38: GtiWriteThroughput[bytes] (The total number of GPU memory bytes written to GTI.) [UINT64, THROUGHPUT, ComputeBasic]
+    ...
 ```
 
 ## Supported OS

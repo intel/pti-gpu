@@ -10,7 +10,8 @@
 #include <sstream>
 
 #include "logger.h"
-#include "metric_collector.h"
+#include "metric_query_collector.h"
+#include "metric_streamer_collector.h"
 #include "prof_options.h"
 #include "prof_utils.h"
 #include "result_storage.h"
@@ -38,60 +39,78 @@ class Profiler {
         options, options.GetDeviceId(), sub_device_count);
     PTI_ASSERT(profiler != nullptr);
 
-    if (profiler->CheckOption(PROF_RAW_METRICS) ||
-        profiler->CheckOption(PROF_KERNEL_METRICS) ||
-        profiler->CheckOption(PROF_AGGREGATION)) {
-      MetricCollector* metric_collector = MetricCollector::Create(
-          driver, device, options.GetMetricGroup().c_str(),
-          options.GetSamplingInterval(), options.GetRawDataPath());
+    if (profiler->CheckOption(PROF_KERNEL_QUERY)) { // Metric Query Mode
+      MetricQueryCollector* metric_collector = MetricQueryCollector::Create(
+          driver, device,
+          options.GetMetricGroup().c_str(),
+          options.GetRawDataPath());
       if (metric_collector == nullptr) {
         std::cout <<
           "[WARNING] Unable to create metric collector" << std::endl;
       }
-      profiler->metric_collector_ = metric_collector;
+      profiler->metric_query_collector_ = metric_collector;
 
-      if (profiler->metric_collector_ == nullptr) {
+      if (profiler->metric_query_collector_ == nullptr) {
         delete profiler;
         return nullptr;
       }
-    }
-
-    if (profiler->CheckOption(PROF_KERNEL_INTERVALS) ||
-        profiler->CheckOption(PROF_KERNEL_METRICS) ||
-        profiler->CheckOption(PROF_AGGREGATION)) {
-
-      KernelCollectorOptions kernel_options;
-      kernel_options.verbose = true;
-
-      ZeKernelCollector* ze_kernel_collector = ZeKernelCollector::Create(
-          &(profiler->correlator_), kernel_options);
-      if (ze_kernel_collector == nullptr) {
-        std::cout <<
-          "[WARNING] Unable to create Level Zero kernel collector" <<
-          std::endl;
-      }
-      profiler->ze_kernel_collector_ = ze_kernel_collector;
-
-      ClKernelCollector* cl_kernel_collector = nullptr;
-      cl_device_id device = GetClDevice(options.GetDeviceId());
-      if (device == nullptr) {
-        std::cout <<
-          "[WARNING] Unable to find target OpenCL device" << std::endl;
-      } else {
-        cl_kernel_collector = ClKernelCollector::Create(
-            device, &(profiler->correlator_), kernel_options);
-        if (cl_kernel_collector == nullptr) {
+    } else { // Metric Streamer Mode
+      if (profiler->CheckOption(PROF_RAW_METRICS) ||
+          profiler->CheckOption(PROF_KERNEL_METRICS) ||
+          profiler->CheckOption(PROF_AGGREGATION)) {
+        MetricStreamerCollector* metric_collector =
+          MetricStreamerCollector::Create(
+            driver, device, options.GetMetricGroup().c_str(),
+            options.GetSamplingInterval(), options.GetRawDataPath());
+        if (metric_collector == nullptr) {
           std::cout <<
-            "[WARNING] Unable to create OpenCL kernel collector" <<
-            std::endl;
+            "[WARNING] Unable to create metric collector" << std::endl;
+        }
+        profiler->metric_streamer_collector_ = metric_collector;
+
+        if (profiler->metric_streamer_collector_ == nullptr) {
+          delete profiler;
+          return nullptr;
         }
       }
-      profiler->cl_kernel_collector_ = cl_kernel_collector;
 
-      if (profiler->ze_kernel_collector_ == nullptr &&
-          profiler->cl_kernel_collector_ == nullptr) {
-        delete profiler;
-        return nullptr;
+      if (profiler->CheckOption(PROF_KERNEL_INTERVALS) ||
+          profiler->CheckOption(PROF_KERNEL_METRICS) ||
+          profiler->CheckOption(PROF_AGGREGATION)) {
+
+        KernelCollectorOptions kernel_options;
+        kernel_options.verbose = true;
+
+        ZeKernelCollector* ze_kernel_collector = ZeKernelCollector::Create(
+            &(profiler->correlator_), kernel_options);
+        if (ze_kernel_collector == nullptr) {
+          std::cout <<
+            "[WARNING] Unable to create Level Zero kernel collector" <<
+            std::endl;
+        }
+        profiler->ze_kernel_collector_ = ze_kernel_collector;
+
+        ClKernelCollector* cl_kernel_collector = nullptr;
+        cl_device_id device = GetClDevice(options.GetDeviceId());
+        if (device == nullptr) {
+          std::cout <<
+            "[WARNING] Unable to find target OpenCL device" << std::endl;
+        } else {
+          cl_kernel_collector = ClKernelCollector::Create(
+              device, &(profiler->correlator_), kernel_options);
+          if (cl_kernel_collector == nullptr) {
+            std::cout <<
+              "[WARNING] Unable to create OpenCL kernel collector" <<
+              std::endl;
+          }
+        }
+        profiler->cl_kernel_collector_ = cl_kernel_collector;
+
+        if (profiler->ze_kernel_collector_ == nullptr &&
+            profiler->cl_kernel_collector_ == nullptr) {
+          delete profiler;
+          return nullptr;
+        }
       }
     }
 
@@ -99,33 +118,45 @@ class Profiler {
   }
 
   ~Profiler() {
-    if (metric_collector_ != nullptr) {
-      metric_collector_->DisableMetrics();
-    }
-    if (ze_kernel_collector_ != nullptr) {
-      ze_kernel_collector_->DisableTracing();
-    }
-    if (cl_kernel_collector_ != nullptr) {
-      cl_kernel_collector_->DisableTracing();
-    }
+    if (CheckOption(PROF_KERNEL_QUERY)) { // Metric Query Mode
+      PTI_ASSERT(metric_streamer_collector_ == nullptr);
+      PTI_ASSERT(ze_kernel_collector_ == nullptr);
+      PTI_ASSERT(cl_kernel_collector_ == nullptr);
 
-    DumpResultFile();
+      if (metric_query_collector_ != nullptr) {
+        metric_query_collector_->DisableTracing();
+        DumpResultFile();
+        delete metric_query_collector_;
+      }
+    } else { // Metric Streamer Mode
+      PTI_ASSERT(metric_query_collector_ == nullptr);
 
-    if (metric_collector_ != nullptr) {
-      delete metric_collector_;
-    }
-    if (ze_kernel_collector_ != nullptr) {
-      delete ze_kernel_collector_;
-    }
-    if (cl_kernel_collector_ != nullptr) {
-      delete cl_kernel_collector_;
+      if (metric_streamer_collector_ != nullptr) {
+        metric_streamer_collector_->DisableMetrics();
+      }
+      if (ze_kernel_collector_ != nullptr) {
+        ze_kernel_collector_->DisableTracing();
+      }
+      if (cl_kernel_collector_ != nullptr) {
+        cl_kernel_collector_->DisableTracing();
+      }
+
+      DumpResultFile();
+
+      if (metric_streamer_collector_ != nullptr) {
+        delete metric_streamer_collector_;
+      }
+      if (ze_kernel_collector_ != nullptr) {
+        delete ze_kernel_collector_;
+      }
+      if (cl_kernel_collector_ != nullptr) {
+        delete cl_kernel_collector_;
+      }
     }
 
     if (CheckOption(PROF_NO_FINALIZE)) {
       std::cerr << "[INFO] No finalization is done, " <<
         "use --finalize option to perform it later" << std::endl;
-      std::cerr << "[INFO] Result file is " <<
-        options_.GetResultFile() << std::endl;
     } else {
       Finalizer* finalizer = Finalizer::Create(options_);
       if (finalizer != nullptr) {
@@ -138,6 +169,9 @@ class Profiler {
           options_.GetLogFileName() << std::endl;
       }
     }
+
+    std::cerr << "[INFO] Result file is " <<
+        options_.GetResultFile() << std::endl;
   }
 
   bool CheckOption(unsigned option) {
@@ -183,7 +217,50 @@ class Profiler {
     }
   }
 
+  template <typename RuntimeKernelInterval, typename RuntimeDevice>
+  void AddKernelIntervals(
+      RuntimeKernelInterval& runtime_kernel_interval_list,
+      RuntimeDevice device,
+      std::vector<std::string>& kernel_name_list,
+      std::vector<KernelInterval>& kernel_interval_list) {
+    PTI_ASSERT(device != nullptr);
+
+    for (const auto& runtime_kernel_interval : runtime_kernel_interval_list) {
+      if (device != runtime_kernel_interval.device) {
+        continue;
+      }
+
+      const std::string& name = runtime_kernel_interval.kernel_name;
+      size_t kernel_id = kernel_name_list.size();
+      for (size_t i = 0; i < kernel_name_list.size(); ++i) {
+        if (kernel_name_list[i] == name) {
+          kernel_id = i;
+          break;
+        }
+      }
+
+      if (kernel_id == kernel_name_list.size()) {
+        kernel_name_list.push_back(name);
+      }
+
+      KernelInterval kernel_interval{};
+      kernel_interval.kernel_id = kernel_id;
+
+      const auto& runtime_device_interval_list =
+        runtime_kernel_interval.device_interval_list;
+      for (const auto& runtime_device_interval : runtime_device_interval_list) {
+        kernel_interval.device_interval_list.push_back(
+            {runtime_device_interval.start,
+             runtime_device_interval.end,
+             runtime_device_interval.sub_device_id});
+      }
+
+      kernel_interval_list.push_back(kernel_interval);
+    }
+  }
+
   void DumpResultFile() {
+    std::vector<std::string> kernel_name_list;
     std::vector<KernelInterval> kernel_interval_list;
 
     if (CheckOption(PROF_KERNEL_INTERVALS) ||
@@ -198,26 +275,11 @@ class Profiler {
           utils::cl::GetDeviceList(CL_DEVICE_TYPE_GPU);
         if (!device_list.empty()) {
           PTI_ASSERT(device_id_ < device_list.size());
-
-          for (const auto& cl_kernel_interval : cl_kernel_interval_list) {
-            if (device_list[device_id_] != cl_kernel_interval.device) {
-              continue;
-            }
-
-            KernelInterval kernel_interval{};
-            kernel_interval.kernel_name = cl_kernel_interval.kernel_name;
-
-            const auto& cl_device_interval_list =
-              cl_kernel_interval.device_interval_list;
-            for (const auto& cl_device_interval : cl_device_interval_list) {
-              kernel_interval.device_interval_list.push_back(
-                {cl_device_interval.start,
-                 cl_device_interval.end,
-                 cl_device_interval.sub_device_id});
-            }
-
-            kernel_interval_list.push_back(kernel_interval);
-          }
+          AddKernelIntervals(
+              cl_kernel_interval_list,
+              device_list[device_id_],
+              kernel_name_list,
+              kernel_interval_list);
         }
       }
 
@@ -229,28 +291,18 @@ class Profiler {
           utils::ze::GetDeviceList();
         if (!device_list.empty()) {
           PTI_ASSERT(device_id_ < device_list.size());
-
-          for (const auto& ze_kernel_interval : ze_kernel_interval_list) {
-            if (device_list[device_id_] != ze_kernel_interval.device) {
-              continue;
-            }
-
-            KernelInterval kernel_interval{};
-            kernel_interval.kernel_name = ze_kernel_interval.kernel_name;
-
-            const auto& ze_device_interval_list =
-              ze_kernel_interval.device_interval_list;
-            for (const auto& ze_device_interval : ze_device_interval_list) {
-              kernel_interval.device_interval_list.push_back(
-                {ze_device_interval.start,
-                 ze_device_interval.end,
-                 ze_device_interval.sub_device_id});
-            }
-
-            kernel_interval_list.push_back(kernel_interval);
-          }
+          AddKernelIntervals(
+              ze_kernel_interval_list,
+              device_list[device_id_],
+              kernel_name_list,
+              kernel_interval_list);
         }
       }
+    }
+
+    if (CheckOption(PROF_KERNEL_QUERY)) {
+      PTI_ASSERT(metric_query_collector_ != nullptr);
+      kernel_name_list = metric_query_collector_->GetKernels();
     }
 
     ResultStorage* storage = ResultStorage::Create(
@@ -261,9 +313,10 @@ class Profiler {
         utils::GetPid(),
         device_id_,
         correlator_.GetTimestamp(),
+        options_.GetMetricGroup(),
         device_props_list_,
-        kernel_interval_list,
-        options_.GetMetricGroup()};
+        kernel_name_list,
+        kernel_interval_list};
 
     storage->Dump(&data);
 
@@ -272,9 +325,13 @@ class Profiler {
 
  private:
   ProfOptions options_;
-  MetricCollector* metric_collector_ = nullptr;
+
+  MetricQueryCollector* metric_query_collector_ = nullptr;
+
+  MetricStreamerCollector* metric_streamer_collector_ = nullptr;
   ZeKernelCollector* ze_kernel_collector_ = nullptr;
   ClKernelCollector* cl_kernel_collector_ = nullptr;
+
   Correlator correlator_;
 
   uint32_t device_id_ = 0;

@@ -20,7 +20,7 @@ struct ZeEventInfo {
 
 class ZeEventCache {
  public:
-  ZeEventCache() {}
+  ZeEventCache(ze_event_pool_flags_t flags) : flags_(flags) {}
 
   ~ZeEventCache() {
     for (auto& value : event_map_) {
@@ -51,12 +51,10 @@ class ZeEventCache {
     if (result->second.empty()) {
       ze_result_t status = ZE_RESULT_SUCCESS;
 
+      ze_event_pool_flags_t flags = ZE_EVENT_POOL_FLAG_HOST_VISIBLE | flags_;
       ze_event_pool_desc_t pool_desc = {
           ZE_STRUCTURE_TYPE_EVENT_POOL_DESC,
-          nullptr,
-          ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP |
-            ZE_EVENT_POOL_FLAG_HOST_VISIBLE,
-          1};
+          nullptr, flags, 1};
       ze_event_pool_handle_t pool = nullptr;
       status = zeEventPoolCreate(context, &pool_desc, 0, nullptr, &pool);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -130,6 +128,7 @@ class ZeEventCache {
   }
 
  private:
+  ze_event_pool_flags_t flags_ = 0;
   std::map<ze_context_handle_t, std::vector<ze_event_handle_t> > event_map_;
   std::map<ze_event_handle_t, ZeEventInfo> event_info_map_;
   std::mutex lock_;

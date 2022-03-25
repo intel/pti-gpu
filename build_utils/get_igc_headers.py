@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/intel/intel-graphics-compiler.git"
-commit = "373eb7767186f0d185f249cfee7014b756130d54"
+commit = "d5bef0c991c41e03a567187eb78fe35b6c116847"
 
 def main():
   if len(sys.argv) < 3:

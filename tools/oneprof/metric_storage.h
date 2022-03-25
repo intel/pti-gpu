@@ -95,18 +95,30 @@ class MetricStorage {
       uint32_t pid,
       const std::string& ext,
       const std::string& path) {
-    for (uint32_t i = 0; i < count; ++i) {
+    std::vector<std::string> filename_list;
+    if (count == 0) {
       std::string filename =
-        std::string("data.") + std::to_string(pid) +
-        "." + std::to_string(i) + "." + ext;
+        std::string("data.") + std::to_string(pid) + "." + ext;
       if (!path.empty()) {
         filename = path + "/" + filename;
       }
+      filename_list.push_back(filename);
+    } else {
+      for (uint32_t i = 0; i < count; ++i) {
+        std::string filename =
+          std::string("data.") + std::to_string(pid) + "." +
+          std::to_string(i) + "." + ext;
+        if (!path.empty()) {
+          filename = path + "/" + filename;
+        }
+        filename_list.push_back(filename);
+      }
+    }
 
+    for (const auto& filename : filename_list) {
       storage_.emplace(
           storage_.end(),
           std::ofstream(filename, std::ios::out | std::ios::binary));
-
       cache_.emplace_back(CacheBuffer());
       PTI_ASSERT(!cache_.back().buffer.empty());
     }
@@ -176,6 +188,18 @@ class MetricReader {
     PTI_ASSERT(storage_[storage_id].gcount() == size);
   }
 
+  bool ReadNext(uint32_t storage_id, size_t size, char* data) {
+    PTI_ASSERT(storage_id < storage_.size());
+    PTI_ASSERT(data != nullptr);
+
+    storage_[storage_id].read(data, size);
+    if (storage_[storage_id].gcount() < size) {
+      return false;
+    }
+
+    return true;
+  }
+
   ~MetricReader() {
     for (auto& storage : storage_) {
       storage.close();
@@ -187,15 +211,28 @@ class MetricReader {
       uint32_t count,
       uint32_t pid,
       const std::string& ext,
-      const std::string& raw_data_path) {
-    for (uint32_t i = 0; i < count; ++i) {
+      const std::string& path) {
+    std::vector<std::string> filename_list;
+    if (count == 0) {
       std::string filename =
-        std::string("data.") + std::to_string(pid) +
-        "." + std::to_string(i) + "." + ext;
-      if (!raw_data_path.empty()) {
-        filename = raw_data_path + "/" + filename;
+        std::string("data.") + std::to_string(pid) + "." + ext;
+      if (!path.empty()) {
+        filename = path + "/" + filename;
       }
+      filename_list.push_back(filename);
+    } else {
+      for (uint32_t i = 0; i < count; ++i) {
+        std::string filename =
+          std::string("data.") + std::to_string(pid) + "." +
+          std::to_string(i) + "." + ext;
+        if (!path.empty()) {
+          filename = path + "/" + filename;
+        }
+        filename_list.push_back(filename);
+      }
+    }
 
+    for (const auto& filename : filename_list) {
       storage_.emplace(
           storage_.end(),
           std::ifstream(filename, std::ios::in | std::ios::binary));

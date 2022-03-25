@@ -81,11 +81,11 @@ static KernelMap GetKernelMap() {
     return KernelMap();
   }
 
-  int gpu_time_id = collector->GetMetricId("GpuTime");
+  int gpu_time_id = collector->GetGpuTimeId();
   PTI_ASSERT(gpu_time_id >= 0);
-  int eu_active_id = collector->GetMetricId("EuActive");
+  int eu_active_id = collector->GetEuActiveId();
   PTI_ASSERT(eu_active_id >= 0);
-  int eu_stall_id = collector->GetMetricId("EuStall");
+  int eu_stall_id = collector->GetEuStallId();
   PTI_ASSERT(eu_stall_id >= 0);
 
   KernelMap kernel_map;

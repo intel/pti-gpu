@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/intel/compute-runtime.git"
-commit = "7968823b3c96cd65552b9752bb1ae5b1e1acaa45"
+commit = "ca7d47598a63959d42750c62a2981e08ffa392a1"
 
 def postprocess(file_path):
   input = open(file_path, "rt")

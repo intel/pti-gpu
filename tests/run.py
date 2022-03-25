@@ -63,14 +63,14 @@ tools = [["gpuinfo", "-l", "-i", "-m"],
           "--conditional-collection",
           "dpc", "omp"],
         ["oneprof",
-         "-i", "-m", "-k", "-a", "cl", "ze", "omp"]]
+         "-i", "-m", "-k", "-a", "-q", "cl", "ze", "omp"]]
 
 def remove_python_cache(path):
   files = os.listdir(path)
   for file in files:
     if file.endswith(".pyc"):
       os.remove(os.path.join(path, file))
-  
+
   path = os.path.join(path, "__pycache__")
   if os.path.exists(path):
     shutil.rmtree(path)

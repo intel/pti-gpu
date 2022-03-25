@@ -60,7 +60,7 @@ class ZeMetricCollector {
     PTI_ASSERT(context != nullptr);
 
     ZeMetricCollector* collector = new ZeMetricCollector(
-        device, context, max_kernel_count);
+        device, context, max_kernel_count, group);
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
@@ -84,8 +84,10 @@ class ZeMetricCollector {
     PTI_ASSERT(query_list_.size() == 0);
 
     if (tracer_ != nullptr) {
+#if !defined(_WIN32)
       status = zelTracerDestroy(tracer_);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+#endif
     }
 
     if (metric_query_pool_ != nullptr || event_pool_ != nullptr) {
@@ -99,30 +101,43 @@ class ZeMetricCollector {
 
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
+#if !defined(_WIN32)
     ze_result_t status = ZE_RESULT_SUCCESS;
     status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+#endif
   }
 
   const KernelReportMap& GetKernelReportMap() const {
     return kernel_report_map_;
   }
 
-  int GetMetricId(const char* metric_name) const {
-    PTI_ASSERT(metric_name != nullptr);
-    PTI_ASSERT(metric_group_ != nullptr);
-    return utils::ze::GetMetricId(metric_group_, metric_name);
+  int GetGpuTimeId() const {
+    return gpu_time_id_;
   }
 
+  int GetEuActiveId() const {
+    return eu_active_id_;
+  }
+
+  int GetEuStallId() const {
+    return eu_stall_id_;
+  }
  private: // Implementation
   ZeMetricCollector(
       ze_device_handle_t device, ze_context_handle_t context,
-      uint32_t max_kernel_count)
+      uint32_t max_kernel_count, zet_metric_group_handle_t group)
       : device_(device), context_(context),
-        max_kernel_count_(max_kernel_count) {
+        max_kernel_count_(max_kernel_count),
+        gpu_time_id_(utils::ze::GetMetricId(group, "GpuTime")),
+        eu_active_id_(utils::ze::GetMetricId(group, "EuActive")),
+        eu_stall_id_(utils::ze::GetMetricId(group, "EuStall")) {
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(context_ != nullptr);
     PTI_ASSERT(max_kernel_count_ > 0);
+    PTI_ASSERT(gpu_time_id_ != -1);
+    PTI_ASSERT(eu_active_id_ != -1);
+    PTI_ASSERT(eu_stall_id_ != -1);
   }
 
   void EnableTracing(zel_tracer_handle_t tracer) {
@@ -454,6 +469,9 @@ class ZeMetricCollector {
   zet_metric_group_handle_t metric_group_ = nullptr;
   zet_metric_query_pool_handle_t metric_query_pool_ = nullptr;
   ze_event_pool_handle_t event_pool_ = nullptr;
+  int gpu_time_id_;
+  int eu_active_id_;
+  int eu_stall_id_;
 
   std::atomic<uint32_t> kernel_id_{0};
   uint32_t max_kernel_count_ = 0;

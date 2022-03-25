@@ -18,7 +18,8 @@
 #define PROF_KERNEL_METRICS    1
 #define PROF_KERNEL_INTERVALS  2
 #define PROF_AGGREGATION       3
-#define PROF_NO_FINALIZE       4
+#define PROF_KERNEL_QUERY      4
+#define PROF_NO_FINALIZE       5
 
 class ProfOptions {
  public:
