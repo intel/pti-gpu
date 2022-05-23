@@ -69,6 +69,9 @@ macro(FindOpenCLHeaders TARGET)
     endif()
   else()
     include(CheckIncludeFileCXX)
+    if(EXISTS ${OpenCL_INCLUDE_DIR})
+      set(CMAKE_REQUIRED_INCLUDES ${OpenCL_INCLUDE_DIR})
+    endif()
     CHECK_INCLUDE_FILE_CXX(CL/cl.h OpenCL_INCLUDE_DIRS)
     if (OpenCL_INCLUDE_DIRS)
       include(CheckTypeSize)
@@ -146,7 +149,7 @@ macro(GetITT TARGET)
                             ${ITT_INC_PATH}/ITT/ittnotify.h
                             ${ITT_INC_PATH}/ITT/legacy/ittnotify.h
                     COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_itt.py" ${ITT_INC_PATH} ${CMAKE_BINARY_DIR})
-  
+
   target_include_directories(${TARGET}
     PUBLIC "${ITT_INC_PATH}")
   add_dependencies(${TARGET}
@@ -367,7 +370,7 @@ macro(CheckForMetricsLibrary)
       NAMES igdml64
       PATHS ${SEARCH_LIB_PATH})
   endif()
-  
+
   if(NOT ML_LIB_PATH)
     message(WARNING
       "Metrics Library for Metrics Discovery API (Metrics Library for MD API) is not found. "
@@ -704,7 +707,7 @@ macro(CheckDRMHeaders TARGET)
     message(STATUS
       "DRM headers path is found at ${DRM_INC_PATH}/drm")
   endif()
-  
+
   set(CMAKE_REQUIRED_INCLUDES " ${DRM_INC_PATH}/drm")
   CHECK_INCLUDE_FILE_CXX(xf86drm.h XF86DRM_INC_FOUND)
   unset(CMAKE_REQUIRED_INCLUDES)
