@@ -280,6 +280,20 @@ class Finalizer {
         }
         return total;
       }
+      case ZET_VALUE_TYPE_BOOL8: {
+        // how to aggregate bool values?
+        zet_typed_value_t total;
+        total.type = ZET_VALUE_TYPE_BOOL8;
+        total.value.b8 = 0;
+
+        for (int j = 0; j < report_count; ++j) {
+          report = report_list.data() + j * report_size;
+          zet_typed_value_t value = report[metric_id];
+          PTI_ASSERT(value.type == ZET_VALUE_TYPE_BOOL8);
+          total.value.b8 |= value.value.b8;
+        }
+        return total;
+      }
       default: {
         PTI_ASSERT(0);
         break;
