@@ -997,11 +997,17 @@ class ZeKernelCollector {
     ZeCommandListInfo& info = command_list_map_[command_list];
     for (ZeKernelCommand* command : info.kernel_command_list) {
       event_cache_.ReleaseEvent(command->event);
+      bool found = false;
       for (ZeKernelCall* call : kernel_call_list_) {
-        PTI_ASSERT(call->command != command);
+        if (call->command == command) {
+          found = true;
+          break;
+        }
       }
 
-      delete command;
+      if (!found) {
+        delete command;
+      }
     }
     info.kernel_command_list.clear();
   }

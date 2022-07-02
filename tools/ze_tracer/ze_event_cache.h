@@ -114,7 +114,9 @@ class ZeEventCache {
 
     auto result = event_map_.find(info->second);
     PTI_ASSERT(result != event_map_.end());
-    result->second.push_back(event);
+    if (result != event_map_.end()) {
+      result->second.push_back(event);
+    }
   }
 
   void ReleaseContext(ze_context_handle_t context) {
@@ -124,23 +126,26 @@ class ZeEventCache {
     // all events in the context should already be released
     auto result = event_map_.find(context);
     if (result != event_map_.end()) {
-      for (auto event : result->second) {
-        ze_result_t status = ZE_RESULT_SUCCESS;
-        status = zeEventDestroy(event);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      }
+      auto iter = event_pools_.find(context);
+      if (iter != event_pools_.end()) {
+        if (result->second.size() == (EVENT_POOL_SIZE * iter->second.size())) {
+          for (auto event : result->second) {
+            ze_result_t status = ZE_RESULT_SUCCESS;
+            status = zeEventDestroy(event);
+            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            event_info_map_.erase(event);
+          }
 
-      event_map_.erase(result);
-    }
+          event_map_.erase(result);
 
-    auto pool_iter = event_pools_.find(context);
-    if (pool_iter != event_pools_.end()) {
-      for (auto pool: pool_iter->second) {
-        ze_result_t status = ZE_RESULT_SUCCESS;
-        status = zeEventPoolDestroy(pool);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          for (auto pool: iter->second) {
+            ze_result_t status = ZE_RESULT_SUCCESS;
+            status = zeEventPoolDestroy(pool);
+            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          }
+          event_pools_.erase(iter);
+        }
       }
-      event_pools_.erase(pool_iter);
     }
   }
 
