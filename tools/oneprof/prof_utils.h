@@ -81,6 +81,27 @@ inline cl_device_id GetClDevice(uint32_t device_id) {
   return nullptr;
 }
 
+inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
+  if (device_id == nullptr) {
+    return nullptr;
+  }
+
+  cl_device_pci_bus_info_khr pci_info = GetDevicePciInfo(device_id);
+
+  for (auto device : utils::ze::GetDeviceList()) {
+    zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
+    ze_result_t status = zesDevicePciGetProperties(device, &pci_props);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (pci_info.pci_domain == pci_props.address.domain &&
+        pci_info.pci_bus == pci_props.address.bus &&
+        pci_info.pci_device == pci_props.address.device &&
+        pci_info.pci_function == pci_props.address.function) {
+      return device;
+    }
+  }
+
+  return nullptr;
+}
 inline void PrintDeviceList() {
   ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
