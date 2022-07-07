@@ -544,12 +544,12 @@ class ClKernelCollector {
       } else {
         sstream << props->simd_width;
       }
-      sstream << ", {" <<
-        props->global_size[0] << ", " <<
-        props->global_size[1] << ", " <<
-        props->global_size[2] << "}, {" <<
-        props->local_size[0] << ", " <<
-        props->local_size[1] << ", " <<
+      sstream << " {" <<
+        props->global_size[0] << "; " <<
+        props->global_size[1] << "; " <<
+        props->global_size[2] << "} {" <<
+        props->local_size[0] << "; " <<
+        props->local_size[1] << "; " <<
         props->local_size[2] << "}]";
     } else if (props->bytes_transferred > 0) {
       sstream << props->name << "[" <<
