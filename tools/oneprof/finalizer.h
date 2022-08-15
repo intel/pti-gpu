@@ -966,6 +966,7 @@ class Finalizer {
     PTI_ASSERT(reader != nullptr);
 
     for (const auto& kernel_interval : data_->kernel_interval_list) {
+      bool reported = false;
       const auto& device_interval_list = kernel_interval.device_interval_list;
       for (const auto& device_interval : device_interval_list) {
         uint32_t sub_device_id = device_interval.sub_device_id;
@@ -998,6 +999,7 @@ class Finalizer {
         PTI_ASSERT(report_count * report_size == report_list.size());
 
         if (report_count > 0) {
+          reported = true;
           std::stringstream header;
           header << "Kernel,";
           header << "SubDeviceId,";
@@ -1028,7 +1030,9 @@ class Finalizer {
         }
       }
 
-      logger_.Log("\n");
+      if (reported) {
+        logger_.Log("\n");
+      }
     }
 
     delete reader;
