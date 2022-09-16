@@ -336,7 +336,7 @@ macro(CheckForMDLibrary TARGET)
       endif()
     endif()
     find_library(MD_LIB_PATH
-      NAMES md
+      NAMES igdmd
       PATHS ${SEARCH_LIB_PATH})
     if(NOT MD_LIB_PATH)
       message(WARNING
