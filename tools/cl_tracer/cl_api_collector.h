@@ -248,13 +248,13 @@ class ClApiCollector {
         return;
       }
 
+      if (collector->options_.call_tracing) {
+        OnEnterFunction(function, callback_data, collector->GetTimestamp(), collector);
+      }
+
       uint64_t& start_time = *reinterpret_cast<uint64_t*>(
           callback_data->correlationData);
       start_time = collector->GetTimestamp();
-
-      if (collector->options_.call_tracing) {
-        OnEnterFunction(function, callback_data, start_time, collector);
-      }
     } else {
       uint64_t end_time = collector->GetTimestamp();
       uint64_t& start_time = *reinterpret_cast<uint64_t*>(

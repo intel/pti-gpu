@@ -280,6 +280,20 @@ class Finalizer {
         }
         return total;
       }
+      case ZET_VALUE_TYPE_BOOL8: {
+        // how to aggregate bool values?
+        zet_typed_value_t total;
+        total.type = ZET_VALUE_TYPE_BOOL8;
+        total.value.b8 = 0;
+
+        for (int j = 0; j < report_count; ++j) {
+          report = report_list.data() + j * report_size;
+          zet_typed_value_t value = report[metric_id];
+          PTI_ASSERT(value.type == ZET_VALUE_TYPE_BOOL8);
+          total.value.b8 |= value.value.b8;
+        }
+        return total;
+      }
       default: {
         PTI_ASSERT(0);
         break;
@@ -858,6 +872,7 @@ class Finalizer {
 
     for (const auto& kernel_interval : data_->kernel_interval_list) {
       const auto& device_interval_list = kernel_interval.device_interval_list;
+      bool reported = false;
       for (const auto& device_interval : device_interval_list) {
         uint32_t sub_device_id = device_interval.sub_device_id;
         PTI_ASSERT(sub_device_id < sub_device_list.size());
@@ -882,6 +897,7 @@ class Finalizer {
         PTI_ASSERT(report_count * report_size == report_list.size());
 
         if (report_count > 0) {
+          reported = true;
           std::stringstream header;
           header << "Kernel,";
           header << "SubDeviceId,";
@@ -907,7 +923,9 @@ class Finalizer {
         }
       }
 
-      logger_.Log("\n");
+      if (reported) {
+        logger_.Log("\n");
+      }
     }
 
     delete reader;
@@ -948,6 +966,7 @@ class Finalizer {
     PTI_ASSERT(reader != nullptr);
 
     for (const auto& kernel_interval : data_->kernel_interval_list) {
+      bool reported = false;
       const auto& device_interval_list = kernel_interval.device_interval_list;
       for (const auto& device_interval : device_interval_list) {
         uint32_t sub_device_id = device_interval.sub_device_id;
@@ -980,6 +999,7 @@ class Finalizer {
         PTI_ASSERT(report_count * report_size == report_list.size());
 
         if (report_count > 0) {
+          reported = true;
           std::stringstream header;
           header << "Kernel,";
           header << "SubDeviceId,";
@@ -1010,7 +1030,9 @@ class Finalizer {
         }
       }
 
-      logger_.Log("\n");
+      if (reported) {
+        logger_.Log("\n");
+      }
     }
 
     delete reader;

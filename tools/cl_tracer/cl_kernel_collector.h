@@ -22,6 +22,10 @@
 #include "correlator.h"
 #include "trace_guard.h"
 
+#ifdef PTI_KERNEL_INTERVALS
+#include "prof_utils.h"
+#endif /* PTI_KERNEL_INTERVALS */
+
 class ClKernelCollector;
 
 enum ClKernelType {
@@ -293,6 +297,10 @@ class ClKernelCollector {
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(correlator_ != nullptr);
 #ifdef PTI_KERNEL_INTERVALS
+    ze_device_ = GetZeDevice(device_);
+    PTI_ASSERT(ze_device_ != nullptr);
+    timer_mask_ = utils::ze::GetMetricTimestampMask(ze_device_);
+    timer_freq_ = utils::ze::GetMetricTimerFrequency(ze_device_);
     CreateDeviceMap();
 #endif // PTI_KERNEL_INTERVALS
   }
@@ -457,6 +465,7 @@ class ClKernelCollector {
           started, ended,
           host_queued, host_submitted,
           host_started, host_ended);
+
       AddKernelInfo(
         name,
         host_submitted - host_queued,
@@ -535,12 +544,12 @@ class ClKernelCollector {
       } else {
         sstream << props->simd_width;
       }
-      sstream << ", {" <<
-        props->global_size[0] << ", " <<
-        props->global_size[1] << ", " <<
-        props->global_size[2] << "}, {" <<
-        props->local_size[0] << ", " <<
-        props->local_size[1] << ", " <<
+      sstream << " {" <<
+        props->global_size[0] << "; " <<
+        props->global_size[1] << "; " <<
+        props->global_size[2] << "} {" <<
+        props->local_size[0] << "; " <<
+        props->local_size[1] << "; " <<
         props->local_size[2] << "}]";
     } else if (props->bytes_transferred > 0) {
       sstream << props->name << "[" <<
@@ -588,6 +597,53 @@ class ClKernelCollector {
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(started < ended);
 
+    cl_ulong cl_host_timestamp = 0;
+    cl_ulong cl_device_timestamp = 0;
+    utils::cl::GetTimestamps(device, &cl_host_timestamp, &cl_device_timestamp);
+
+    uint64_t ze_host_timestamp;
+    uint64_t ze_device_timestamp;
+    ze_device_handle_t ze_device;
+
+    uint64_t mask;
+    uint64_t freq;
+    if (device = device_) {
+      ze_device = ze_device_;
+      mask = timer_mask_;
+      freq = timer_freq_;
+    }
+    else {
+      ze_device = GetZeDevice(device);
+      PTI_ASSERT(ze_device != nullptr);
+      mask = utils::ze::GetMetricTimestampMask(ze_device);
+      freq = utils::ze::GetMetricTimerFrequency(ze_device);
+    }
+
+    zeDeviceGetGlobalTimestamps(ze_device, &ze_host_timestamp, &ze_device_timestamp);
+    ze_device_timestamp = ze_device_timestamp & mask;
+
+    cl_ulong elapsed;
+
+    elapsed = cl_device_timestamp - started;
+    elapsed += (ze_host_timestamp - cl_host_timestamp);
+
+    uint64_t ze_started;
+    uint64_t ze_ended;
+
+    uint64_t ns_per_cycle;
+    ns_per_cycle = static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+
+    ze_started = (ze_device_timestamp - (elapsed / ns_per_cycle)) & mask;
+    ze_ended = (ze_started + ((ended - started) / ns_per_cycle)) & mask;;
+
+    ze_started = ze_started * ns_per_cycle;
+    ze_ended = ze_ended * ns_per_cycle;
+
+    if (ze_ended < ze_started) {
+      ze_ended += ((mask + 1)* ns_per_cycle);
+    }
+
+#if 0
     uint64_t host_queued = 0, host_submitted = 0;
     uint64_t host_started = 0, host_ended = 0;
     ComputeHostTimestamps(
@@ -595,6 +651,7 @@ class ClKernelCollector {
         started, ended,
         host_queued, host_submitted,
         host_started, host_ended);
+#endif /* 0 */
 
     std::string name = instance->props.name;
     PTI_ASSERT(!name.empty());
@@ -610,7 +667,7 @@ class ClKernelCollector {
       std::vector<cl_device_id> sub_device_list = device_map_[device];
       for (size_t i = 0; i < sub_device_list.size(); ++i) {
         kernel_interval.device_interval_list.push_back(
-            {host_started, host_ended, static_cast<uint32_t>(i)});
+            {ze_started, ze_ended, static_cast<uint32_t>(i)});
       }
       kernel_interval_list_.push_back(kernel_interval);
     } else { // Explicit Scaling
@@ -627,7 +684,7 @@ class ClKernelCollector {
             ClKernelInterval kernel_interval{
                 name, parent, std::vector<ClDeviceInterval>()};
             kernel_interval.device_interval_list.push_back(
-                {host_started, host_ended, static_cast<uint32_t>(i)});
+                {ze_started, ze_ended, static_cast<uint32_t>(i)});
             kernel_interval_list_.push_back(kernel_interval);
             return;
           }
@@ -639,7 +696,7 @@ class ClKernelCollector {
         ClKernelInterval kernel_interval{
             name, device, std::vector<ClDeviceInterval>()};
         kernel_interval.device_interval_list.push_back(
-            {host_started, host_ended, 0});
+            {ze_started, ze_ended, 0});
         kernel_interval_list_.push_back(kernel_interval);
       }
     }
@@ -1406,6 +1463,9 @@ class ClKernelCollector {
   ClKernelInstanceList kernel_instance_list_;
 
 #ifdef PTI_KERNEL_INTERVALS
+  ze_device_handle_t ze_device_;
+  uint64_t timer_mask_;
+  uint64_t timer_freq_;
   ClDeviceMap device_map_;
   ClKernelIntervalList kernel_interval_list_;
 #endif // PTI_KERNEL_INTERVALS

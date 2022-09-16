@@ -185,7 +185,11 @@ extern "C"
 #if defined(_WIN32)
 __declspec(dllexport)
 #endif
-void SetToolEnv() {}
+void SetToolEnv() {
+  // tool itself does not need this
+  // this is for target application to check if tool is present
+  utils::SetEnv("CL_ENABLE_TRACING_LAYER", "1");
+}
 
 static TraceOptions ReadArgs() {
   std::string value;

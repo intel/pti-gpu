@@ -58,6 +58,7 @@ struct ZeKernelCommand {
 struct ZeKernelCall {
   ZeKernelCommand* command = nullptr;
   ze_command_queue_handle_t queue = nullptr;
+  ze_fence_handle_t fence;
   uint64_t submit_time = 0;
   uint64_t device_submit_time = 0;
   uint64_t call_id = 0;
@@ -514,6 +515,9 @@ class ZeKernelCollector {
     epilogue_callbacks.Event.pfnHostSynchronizeCb =
       OnExitEventHostSynchronize;
 
+    epilogue_callbacks.Fence.pfnHostSynchronizeCb =
+      OnExitFenceHostSynchronize;
+
     epilogue_callbacks.Context.pfnDestroyCb =
       OnExitContextDestroy;
 
@@ -562,7 +566,7 @@ class ZeKernelCollector {
     correlator_->AddCallId(command_list, call->call_id);
   }
 
-  void ProcessCall(ze_event_handle_t event) {
+  void ProcessCall(std::string callname, ze_event_handle_t event) {
     PTI_ASSERT(event != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
 
@@ -580,9 +584,44 @@ class ZeKernelCollector {
       PTI_ASSERT(command != nullptr);
 
       if (command->event == event) {
-        ProcessCall(call);
+        ProcessCall(callname, call);
         kernel_call_list_.erase(it);
         break;
+      }
+    }
+  }
+
+  void ProcessCall(std::string callname, ze_fence_handle_t fence) {
+    PTI_ASSERT(fence != nullptr);
+    const std::lock_guard<std::mutex> lock(lock_);
+
+    ze_result_t status = ZE_RESULT_SUCCESS;
+    status = zeFenceQueryStatus(fence);
+    if (status != ZE_RESULT_SUCCESS) {
+      return;
+    }
+
+    for (auto it = kernel_call_list_.begin(); it != kernel_call_list_.end();) {
+      ZeKernelCall* call = *it;
+      PTI_ASSERT(call != nullptr);
+      if ((call->fence != nullptr) && (call->fence == fence)) {
+        ZeKernelCommand* command = call->command;
+        PTI_ASSERT(command != nullptr);
+
+	if (event_cache_.QueryEvent(command->event)) {
+	  PTI_ASSERT(zeEventQueryStatus(command->event) == ZE_RESULT_SUCCESS);
+#if 0
+          if (zeEventQueryStatus(command->event) != ZE_RESULT_SUCCESS) {
+	    // this should not happen
+            zeEventHostSignal(command->event);
+	  }
+#endif /* 0 */
+        }
+        ProcessCall(callname, call);
+        it = kernel_call_list_.erase(it);
+      }
+      else {
+        it++;
       }
     }
   }
@@ -755,7 +794,7 @@ class ZeKernelCollector {
   }
 #endif // PTI_KERNEL_INTERVALS
 
-  void ProcessCall(const ZeKernelCall* call) {
+  void ProcessCall(std::string callname, const ZeKernelCall* call) {
     PTI_ASSERT(call != nullptr);
     ZeKernelCommand* command = call->command;
     PTI_ASSERT(command != nullptr);
@@ -809,11 +848,12 @@ class ZeKernelCollector {
 #endif // PTI_KERNEL_INTERVALS
     }
 
-    event_cache_.ResetEvent(command->event);
+    //DO NOT RESET EVENT 
+    //event_cache_.ResetEvent(command->event);
     delete call;
   }
 
-  void ProcessCalls() {
+  void ProcessCalls(std::string callname) {
     ze_result_t status = ZE_RESULT_SUCCESS;
     const std::lock_guard<std::mutex> lock(lock_);
 
@@ -825,11 +865,12 @@ class ZeKernelCollector {
       PTI_ASSERT(command != nullptr);
 
       PTI_ASSERT(command->event != nullptr);
+
       status = zeEventQueryStatus(command->event);
       if (status == ZE_RESULT_NOT_READY) {
         ++it;
       } else if (status == ZE_RESULT_SUCCESS) {
-        ProcessCall(call);
+        ProcessCall(callname, call);
         it = kernel_call_list_.erase(it);
       } else {
         PTI_ASSERT(0);
@@ -996,11 +1037,10 @@ class ZeKernelCollector {
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
     ZeCommandListInfo& info = command_list_map_[command_list];
     for (ZeKernelCommand* command : info.kernel_command_list) {
-      event_cache_.ReleaseEvent(command->event);
       for (ZeKernelCall* call : kernel_call_list_) {
         PTI_ASSERT(call->command != command);
       }
-
+      event_cache_.ReleaseEvent(command->event);
       delete command;
     }
     info.kernel_command_list.clear();
@@ -1033,7 +1073,7 @@ class ZeKernelCollector {
 
   void AddKernelCalls(
       ze_command_list_handle_t command_list,
-      ze_command_queue_handle_t queue, const ZeSyncPoint* submit_data) {
+      ze_command_queue_handle_t queue, ze_fence_handle_t fence, const ZeSyncPoint* submit_data) {
     PTI_ASSERT(command_list != nullptr);
 
     const std::lock_guard<std::mutex> lock(lock_);
@@ -1057,6 +1097,7 @@ class ZeKernelCollector {
       ++(command->call_count);
       call->call_id = command->call_count;
       call->need_to_process = correlator_->IsCollectionEnabled();
+      call->fence = fence;
 
       kernel_call_list_.push_back(call);
       correlator_->AddCallId(command_list, call->call_id);
@@ -1176,11 +1217,12 @@ class ZeKernelCollector {
   static void OnEnterEventDestroy(
       ze_event_destroy_params_t *params,
       ze_result_t result, void *global_data, void **instance_data) {
+
     if (*(params->phEvent) != nullptr) {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessCall(*(params->phEvent));
+      collector->ProcessCall("EventDestroy", *(params->phEvent));
     }
   }
 
@@ -1191,7 +1233,7 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessCall(*(params->phEvent));
+      collector->ProcessCall("EventHostReset", *(params->phEvent));
     }
   }
 
@@ -1203,7 +1245,19 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessCall(*(params->phEvent));
+      collector->ProcessCall("EventHostSynchronize", *(params->phEvent));
+    }
+  }
+
+  static void OnExitFenceHostSynchronize(
+      ze_fence_host_synchronize_params_t *params,
+      ze_result_t result, void *global_data, void **instance_data) {
+    if (result == ZE_RESULT_SUCCESS) {
+      PTI_ASSERT(*(params->phFence) != nullptr);
+      ZeKernelCollector* collector =
+        reinterpret_cast<ZeKernelCollector*>(global_data);
+      PTI_ASSERT(collector != nullptr);
+      collector->ProcessCall("FenceHostSynchronize", *(params->phFence));
     }
   }
 
@@ -1884,7 +1938,7 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessCalls();
+      collector->ProcessCalls("CommandListDestroy");
       collector->RemoveCommandList(*params->phCommandList);
     }
   }
@@ -1897,7 +1951,7 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessCalls();
+      collector->ProcessCalls("CommandListReset");
       collector->ResetCommandList(*params->phCommandList);
     }
   }
@@ -1956,6 +2010,7 @@ class ZeKernelCollector {
           collector->AddKernelCalls(
               command_lists[i],
               *(params->phCommandQueue),
+              *(params->phFence),
               &submit_data_list->at(i));
         }
       }
@@ -1971,7 +2026,7 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessCalls();
+      collector->ProcessCalls("CommandQueueSynchronize");
     }
   }
 
@@ -1982,7 +2037,7 @@ class ZeKernelCollector {
       ZeKernelCollector* collector =
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
-      collector->ProcessCalls();
+      collector->ProcessCalls("CommandQueueDestroy");
     }
   }
 

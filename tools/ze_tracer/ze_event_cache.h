@@ -13,6 +13,8 @@
 
 #include "ze_utils.h"
 
+#define EVENT_POOL_SIZE	1024
+
 struct ZeEventInfo {
   ze_event_pool_handle_t pool;
   ze_context_handle_t context;
@@ -25,22 +27,39 @@ class ZeEventCache {
   ~ZeEventCache() {
     for (auto& value : event_map_) {
       for (auto event : value.second) {
-        auto info = event_info_map_.find(event);
-        PTI_ASSERT(info != event_info_map_.end());
-
         ze_result_t status = ZE_RESULT_SUCCESS;
         status = zeEventDestroy(event);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        status = zeEventPoolDestroy(info->second.pool);
+      }
+    }
+    for (auto& value : event_pools_) {
+      for (auto pool : value.second) {
+        ze_result_t status = zeEventPoolDestroy(pool);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       }
     }
   }
 
+  bool QueryEvent(ze_event_handle_t event) {
+    if (event == nullptr) {
+      return false;
+    }
+
+    const std::lock_guard<std::mutex> lock(lock_);
+    auto info = event_info_map_.find(event);
+    if (info == event_info_map_.end()) {
+      return false;
+    }
+
+    return true;
+  }
+
+
   ze_event_handle_t GetEvent(ze_context_handle_t context) {
     PTI_ASSERT(context != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
     ze_event_handle_t event = nullptr;
+
 
     auto result = event_map_.find(context);
     if (result == event_map_.end()) {
@@ -54,27 +73,36 @@ class ZeEventCache {
       ze_event_pool_flags_t flags = ZE_EVENT_POOL_FLAG_HOST_VISIBLE | flags_;
       ze_event_pool_desc_t pool_desc = {
           ZE_STRUCTURE_TYPE_EVENT_POOL_DESC,
-          nullptr, flags, 1};
+          nullptr, flags, EVENT_POOL_SIZE};
       ze_event_pool_handle_t pool = nullptr;
       status = zeEventPoolCreate(context, &pool_desc, 0, nullptr, &pool);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-      ze_event_desc_t event_desc = {
-          ZE_STRUCTURE_TYPE_EVENT_DESC,
-          nullptr,
-          0,
-          ZE_EVENT_SCOPE_FLAG_HOST,
-          ZE_EVENT_SCOPE_FLAG_HOST};
-      status = zeEventCreate(pool, &event_desc, &event);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      auto pool_iter = event_pools_.find(context);
+      if (pool_iter == event_pools_.end()) {
+        pool_iter = event_pools_.emplace(std::make_pair(context, std::vector<ze_event_pool_handle_t>())).first;
+      }
+      pool_iter->second.push_back(pool);
 
-      PTI_ASSERT(event_info_map_.count(event) == 0);
-      event_info_map_[event] = {pool, context};
-    } else {
-      event = result->second.back();
-      result->second.pop_back();
-      PTI_ASSERT(zeEventQueryStatus(event) == ZE_RESULT_NOT_READY);
-    }
+      for (uint32_t i = 0; i < EVENT_POOL_SIZE; i++) {
+        ze_event_desc_t event_desc = {
+            ZE_STRUCTURE_TYPE_EVENT_DESC,
+            nullptr,
+            i,
+            ZE_EVENT_SCOPE_FLAG_HOST,
+            ZE_EVENT_SCOPE_FLAG_HOST};
+        status = zeEventCreate(pool, &event_desc, &event);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+        PTI_ASSERT(event_info_map_.count(event) == 0);
+        event_info_map_[event] = context;
+	result->second.push_back(event);
+      }
+    } 
+
+    event = result->second.back();
+    result->second.pop_back();
+    PTI_ASSERT(zeEventQueryStatus(event) == ZE_RESULT_NOT_READY);
 
     return event;
   }
@@ -99,38 +127,51 @@ class ZeEventCache {
       return;
     }
 
-    auto result = event_map_.find(info->second.context);
+    auto result = event_map_.find(info->second);
     PTI_ASSERT(result != event_map_.end());
-    result->second.push_back(event);
+    if (result != event_map_.end()) {
+      ze_result_t status = zeEventHostReset(event);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      result->second.push_back(event);
+    }
   }
 
   void ReleaseContext(ze_context_handle_t context) {
     PTI_ASSERT(context != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
 
+    // all events in the context should already be released
     auto result = event_map_.find(context);
     if (result != event_map_.end()) {
-      for (auto event : result->second) {
-        auto info = event_info_map_.find(event);
-        PTI_ASSERT(info != event_info_map_.end());
+      auto iter = event_pools_.find(context);
+      if (iter != event_pools_.end()) {
+        if (result->second.size() == (EVENT_POOL_SIZE * iter->second.size())) {
+          for (auto event : result->second) {
+            ze_result_t status = ZE_RESULT_SUCCESS;
+            status = zeEventDestroy(event);
+            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            event_info_map_.erase(event);
+          }
 
-        ze_result_t status = ZE_RESULT_SUCCESS;
-        status = zeEventDestroy(event);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        status = zeEventPoolDestroy(info->second.pool);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          event_map_.erase(result);
 
-        event_info_map_.erase(info);
+          for (auto pool: iter->second) {
+            ze_result_t status = ZE_RESULT_SUCCESS;
+            status = zeEventPoolDestroy(pool);
+            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          }
+          event_pools_.erase(iter);
+        }
       }
-
-      event_map_.erase(result);
     }
   }
+
 
  private:
   ze_event_pool_flags_t flags_ = 0;
   std::map<ze_context_handle_t, std::vector<ze_event_handle_t> > event_map_;
-  std::map<ze_event_handle_t, ZeEventInfo> event_info_map_;
+  std::map<ze_event_handle_t, ze_context_handle_t> event_info_map_;
+  std::map<ze_context_handle_t, std::vector<ze_event_pool_handle_t> > event_pools_;
   std::mutex lock_;
 };
 
