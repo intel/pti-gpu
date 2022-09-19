@@ -520,7 +520,10 @@ class Finalizer {
     PTI_ASSERT(metric_list.size() == report_size);
 
     size_t time_id = GetMetricId(metric_list, "QueryBeginTime");
-    PTI_ASSERT(time_id < metric_list.size());
+    if (time_id >= metric_list.size()) {
+      // QueryBeginTime metric does not exist
+      return 0;
+    }
 
     uint64_t max_time = (props.mask + 1ull) *
         static_cast<uint64_t>(NSEC_IN_SEC) / props.freq;
