@@ -205,9 +205,9 @@ class ZeMetricCollector {
             metric_streamer, UINT32_MAX, &data_size, storage.data());
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         storage.resize(data_size);
-        PTI_ASSERT(storage.size() > 0);
-
-        collector->AppendMetrics(storage);
+        //PTI_ASSERT(storage.size() > 0);
+	if(storage.size() > 0)
+            collector->AppendMetrics(storage);
       }
     }
 

@@ -1,5 +1,7 @@
 # Level Zero Metric Streamer
 
+Note: The sample currently does not support 2-Tiles GPU data collection
+
 ## Overview
 This sample is a simple LD_PRELOAD based tool that allows to collect such GPU hardware metrics as execution unit (EU) active, stall and idle ratios attributed to Level Zero kernels. The sample is based on continuous mode for metrics collection.
 
