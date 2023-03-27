@@ -86,6 +86,12 @@ class IgcBinaryDecoder {
       case IGFX_GEN12_CORE:
       case IGFX_GEN12LP_CORE:
         return IGA_GEN12p1;
+      case IGFX_XE_HP_CORE:
+        return IGA_XE_HP;
+      case IGFX_XE_HPG_CORE:
+        return IGA_XE_HPG;
+      case IGFX_XE_HPC_CORE:
+        return IGA_XE_HPC;
       default:
         break;
     }

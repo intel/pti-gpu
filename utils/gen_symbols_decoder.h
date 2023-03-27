@@ -14,7 +14,7 @@
 #include "elf_parser.h"
 
 #define IS_POWER_OF_TWO(X) (!((X - 1)&X))
-#define IGC_MAX_VALUE 1024
+#define IGC_MAX_VALUE 0x1400
 
 class GenSymbolsDecoder {
  public:
