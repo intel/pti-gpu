@@ -607,7 +607,7 @@ class ClKernelCollector {
 
     uint64_t mask;
     uint64_t freq;
-    if (device = device_) {
+    if (device == device_) {
       ze_device = ze_device_;
       mask = timer_mask_;
       freq = timer_freq_;
