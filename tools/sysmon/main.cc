@@ -755,7 +755,6 @@ void PrintMemoryInfo(
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       for (uint32_t i = 0; i < mem_props_count; ++i) {
-        PTI_ASSERT(mem_props_list[i].name != nullptr);
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           "Memory Name," <<
           mem_props_list[i].name << std::endl;
