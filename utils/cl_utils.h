@@ -222,15 +222,17 @@ inline cl_queue_properties* EnableQueueProfiling(
   } else {
     int queue_props_id = -1;
     int props_count = 0;
+    
+    // the end of the properties list is marked by 0 on the last even index
     while (props[props_count] != 0) {
       if (props[props_count] == CL_QUEUE_PROPERTIES) {
         queue_props_id = props_count;
-        ++props_count;
-      } else if (props[props_count] == CL_QUEUE_SIZE) {
-        ++props_count;
       }
-      ++props_count;
+      
+      // increase by 2 to always check even elements in properties list
+      props_count+=2;
     }
+    PTI_ASSERT(!(props_count&1));
     PTI_ASSERT(props[props_count] == 0);
 
     if (queue_props_id >= 0 && queue_props_id + 1 < props_count) {
