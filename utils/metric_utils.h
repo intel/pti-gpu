@@ -31,7 +31,7 @@ inline std::vector<std::string> GetMDLibraryName() {
   return{ "igdmd32.dll" };
 #  endif
 #elif defined(__gnu_linux__)
-  return{ "libmd.so" };
+  return{ "libigdmd.so", "libmd.so" };
 #elif defined(__APPLE__)
   return{ "libmd.dylib", "libigdmd.dylib" };
 #else

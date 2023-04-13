@@ -42,7 +42,7 @@ namespace md = MetricsDiscovery;
 
 // ...
 
-const char* name = "libmd.so";
+const char* name = "libigdmd.so";
 void* handle = dlopen(name, RTLD_NOW);
 assert(handle != nullptr);
 
@@ -298,7 +298,7 @@ Query-based metrics collection for Level Zero is described [here](./LevelZero.md
 ## Build and Run
 Since Intel(R) Metrics Discovery Application Programming Interface library is loaded dynamically at runtime, there is no need in any special build/run options. Just make sure Intel(R) Metrics Discovery Application Programming Interface library can be found correctly:
 ```sh
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path_to_libmd.so> ./<application>
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path_to_libigdmd.so> ./<application>
 ```
 
 ## Usage Details
