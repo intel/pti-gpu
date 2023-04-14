@@ -50,7 +50,7 @@ class MetricDevice {
 
     md::IAdapterGroupLatest* adapter_group = nullptr;
     md::TCompletionCode status = OpenAdapterGroup(&adapter_group);
-    PTI_ASSERT(status == md::CC_OK);
+    PTI_ASSERT(status == md::CC_OK || status == md::CC_ALREADY_INITIALIZED);
     PTI_ASSERT(adapter_group != nullptr);
 
     uint32_t sub_device_count = 0;
@@ -79,7 +79,7 @@ class MetricDevice {
 
     md::IAdapterGroupLatest* adapter_group = nullptr;
     status = OpenAdapterGroup(&adapter_group);
-    PTI_ASSERT(status == md::CC_OK);
+    PTI_ASSERT(status == md::CC_OK || status == md::CC_ALREADY_INITIALIZED);
     PTI_ASSERT(adapter_group != nullptr);
 
     if (adapter_group->GetParams()->AdapterCount == 0) {
@@ -114,7 +114,7 @@ class MetricDevice {
     status = adapter_->CloseMetricsDevice(device_);
     PTI_ASSERT(status == md::CC_OK);
     status = adapter_group_->Close();
-    PTI_ASSERT(status == md::CC_OK);
+    PTI_ASSERT(status == md::CC_OK || status == md::CC_STILL_INITIALIZED);
 
     delete lib_;
   }
