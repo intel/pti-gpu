@@ -130,14 +130,14 @@ class ZeMetricCollector {
       : device_(device), context_(context),
         max_kernel_count_(max_kernel_count),
         gpu_time_id_(utils::ze::GetMetricId(group, "GpuTime")),
-        eu_active_id_(utils::ze::GetMetricId(group, "EuActive")),
-        eu_stall_id_(utils::ze::GetMetricId(group, "EuStall")) {
+        eu_active_id_(utils::ze::GetMetricId(group, "XVE_ACTIVE")),
+        eu_stall_id_(utils::ze::GetMetricId(group, "XVE_STALL")) {
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(context_ != nullptr);
     PTI_ASSERT(max_kernel_count_ > 0);
     PTI_ASSERT(gpu_time_id_ != -1);
-    PTI_ASSERT(eu_active_id_ != -1);
-    PTI_ASSERT(eu_stall_id_ != -1);
+    PTI_ASSERT(eu_active_id_ != -1); // Note, the names of the same events might vary on different GPU models.
+    PTI_ASSERT(eu_stall_id_ != -1); // In case of this assert, check the corresponding events names (active, stall) using ze_metric_info sample tool.
   }
 
   void EnableTracing(zel_tracer_handle_t tracer) {
