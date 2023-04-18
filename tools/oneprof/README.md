@@ -7,7 +7,7 @@ The following capabilities are available:
 Usage: ./oneprof[.exe] [options] <application> <args>
 Options:
 --raw-metrics [-m]               Collect raw metric stream for the device
---kernel-intrevals [-i]          Collect raw kernel intervals for the device
+--kernel-intervals [-i]          Collect raw kernel intervals for the device
 --kernel-metrics [-k]            Collect over-time metrics for each kernel instance
 --aggregation [-a]               Collect aggregated metrics for each kernel instance in time-based mode
 --kernel-query [-q]              Collect aggregated metrics for each kernel instance in query-based mode

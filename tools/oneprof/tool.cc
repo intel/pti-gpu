@@ -28,7 +28,7 @@ void Usage() {
     "Collect raw metric stream for the device" <<
     std::endl;
   std::cout <<
-    "--kernel-intrevals [-i]          " <<
+    "--kernel-intervals [-i]          " <<
     "Collect raw kernel intervals for the device" <<
     std::endl;
   std::cout <<
