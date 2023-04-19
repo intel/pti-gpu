@@ -16,28 +16,19 @@ static std::chrono::steady_clock::time_point start;
 
 // External Tool Interface ////////////////////////////////////////////////////
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void Usage() {
   std::cout <<
     "Usage: ./ze_hot_kernels[.exe] <application> <args>" <<
     std::endl;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 int ParseArgs(int argc, char* argv[]) {
   return 1;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void SetToolEnv() {
   utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
 }

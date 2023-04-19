@@ -14,10 +14,7 @@ static Profiler* profiler = nullptr;
 
 void Finalize();
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void Usage() {
   std::cout <<
     "Usage: ./oneprof[.exe] [options] <application> <args>" <<
@@ -85,10 +82,7 @@ void Usage() {
     std::endl;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 int ParseArgs(int argc, char* argv[]) {
   bool metric_list = false;
   bool finalization = false;
@@ -215,10 +209,7 @@ int ParseArgs(int argc, char* argv[]) {
   return app_index;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void SetToolEnv() {
   utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
   utils::SetEnv("ZET_ENABLE_METRICS", "1");

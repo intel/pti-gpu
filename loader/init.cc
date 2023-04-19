@@ -13,7 +13,7 @@ void AtExit() {
   DisableProfiling();
 }
 
-extern "C" __declspec(dllexport)
+extern "C" PTI_EXPORT
 DWORD Init(void*) {
   atexit(AtExit);
   EnableProfiling();

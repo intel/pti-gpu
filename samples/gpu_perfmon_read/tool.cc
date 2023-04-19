@@ -10,28 +10,19 @@ static GpuPerfMonCollector* collector = nullptr;
 
 // External Tool Interface ////////////////////////////////////////////////////
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void Usage() {
   std::cout <<
     "Usage: ./gpu_perfmon_read[.exe] <application> <args>" <<
     std::endl;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 int ParseArgs(int argc, char* argv[]) {
   return 1;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void SetToolEnv() {
   utils::SetEnv("ZET_ENABLE_API_TRACING_EXP", "1");
   utils::SetEnv("ZET_ENABLE_PROGRAM_INSTRUMENTATION", "1");

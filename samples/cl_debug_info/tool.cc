@@ -10,28 +10,19 @@ static ClDebugInfoCollector* collector = nullptr;
 
 // External Tool Interface ////////////////////////////////////////////////////
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void Usage() {
   std::cout <<
     "Usage: ./cl_debug_info[.exe] <application> <args>" <<
     std::endl;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 int ParseArgs(int argc, char* argv[]) {
   return 1;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void SetToolEnv() {}
 
 // Internal Tool Functionality ////////////////////////////////////////////////

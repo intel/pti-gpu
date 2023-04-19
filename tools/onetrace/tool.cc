@@ -10,10 +10,7 @@
 
 static UnifiedTracer* tracer = nullptr;
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void Usage() {
   std::cout <<
     "Usage: ./onetrace[.exe] [options] <application> <args>" <<
@@ -89,10 +86,7 @@ void Usage() {
     std::endl;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 int ParseArgs(int argc, char* argv[]) {
   int app_index = 1;
   for (int i = 1; i < argc; ++i) {
@@ -187,10 +181,7 @@ int ParseArgs(int argc, char* argv[]) {
   return app_index;
 }
 
-extern "C"
-#if defined(_WIN32)
-__declspec(dllexport)
-#endif
+extern "C" PTI_EXPORT
 void SetToolEnv() {
   utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
 }
