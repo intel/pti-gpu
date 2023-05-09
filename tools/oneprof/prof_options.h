@@ -67,7 +67,7 @@ class ProfOptions {
 
     std::stringstream result;
 
-    size_t pos = log_file_.find_first_of('.');
+    size_t pos = log_file_.find_last_of('.');
     if (pos == std::string::npos) {
       result << log_file_;
     } else {

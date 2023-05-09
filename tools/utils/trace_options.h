@@ -56,7 +56,7 @@ class TraceOptions {
     }
 
     PTI_ASSERT(!log_file_.empty());
-    size_t pos = log_file_.find_first_of('.');
+    size_t pos = log_file_.find_last_of('.');
 
     std::stringstream result;
     if (pos == std::string::npos) {
