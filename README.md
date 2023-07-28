@@ -1,7 +1,5 @@
 # Profiling Tools Interfaces for GPU (PTI for GPU)
 
-
-
 ## Overview
 This repository describes the ways of collecting performance data for Intel(R) Processor Graphics and provides a set of samples that help to start.
 
@@ -74,8 +72,8 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - [gpu_inst_count](samples/gpu_inst_count) - prints GPU kernel assembly (GEN ISA) annotated by instruction execution count;
     - [gpu_perfmon_read](samples/gpu_perfmon_read) - prints GPU kernel assembly (GEN ISA) annotated by specific HW metric, which is accumulated in EU PerfMon register;
 - utilities:
-    - [dpc_info](samples/dpc_info) - prints information on avaialble platforms and devices in DPC++;
-    - [ze_info](samples/ze_info) - prints information on avaialble platforms and devices in Level Zero;
+    - [dpc_info](samples/dpc_info) - prints information on available platforms and devices in DPC++;
+    - [ze_info](samples/ze_info) - prints information on available platforms and devices in Level Zero;
     - [ze_metric_info](samples/ze_metric_info) - prints the list of HW metrics one can collect with the help of Level Zero;
     - [gpu_perfmon_set](samples/gpu_perfmon_set) - allows to choose HW metric for collection in EU PerfMon register;
 
@@ -83,7 +81,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 - [CMake](https://cmake.org/) (version 3.12 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
-- On Linux one have to be a part of `video` (Unbuntu 18 and below) or `render` (Ubuntu 19 and above) user group to do any computations on Intel(R) Processor Graphics:
+- On Linux one have to be a part of `video` (Ubuntu 18 and below) or `render` (Ubuntu 19 and above) user group to do any computations on Intel(R) Processor Graphics:
     ```sh
     sudo usermod -a -G video <username>
     # OR
@@ -145,7 +143,7 @@ It's also possible to test an exact sample or a group of samples, e.g.:
 python <pti_root>/tests/run.py -s cl_hot_functions # build and test an exact sample "cl_hot_functions"
 python <pti_root>/tests/run.py -s ze # build and test all L0 samples
 ```
-To run tesing in debug mode one may use `-d` option, e.g.:
+To run testing in debug mode one may use `-d` option, e.g.:
 ```sh
 python <pti_root>/tests/run.py -s ze_gemm -d
 ```
