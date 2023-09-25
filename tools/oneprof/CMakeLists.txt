@@ -44,6 +44,10 @@ CheckForMetricsLibrary()
 # Loader
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTOOL_NAME=oneprof_tool")
+#Folloing is fixing an issue with libstdc++, depending on libpthread, but not linked against libpthread.
+#Details: https://stackoverflow.com/questions/51209268/using-stdthread-in-a-library-loaded-with-dlopen-leads-to-a-sigsev
+#Bug submission: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=67791 (fixed from gcc 10.5 and later)
+add_link_options(-Wl,--no-as-needed -lpthread -Wl,--as-needed)
 add_executable(oneprof "${PROJECT_SOURCE_DIR}/../../loader/loader.cc")
 target_include_directories(oneprof
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
