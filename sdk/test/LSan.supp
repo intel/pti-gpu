@@ -1,0 +1,16 @@
+# File to suppress results from LeakSanitizer
+
+# Usage:
+#  * LSAN_OPTIONS=suppressions=<path_to_this_dir>/LSan.supp ./your-program
+
+# Additions should rarely be added, meant to suppress errors from libpti.so
+# dependencies.
+
+# libigc.so has a memory leak in strdup somewhere.
+leak:libigc.so
+
+# libmkl_sycl.so in zero_pool.cpp.
+leak:oneapi::mkl::gpu::calloc_device
+
+# libmkl_sycl.so (unknown file)
+leak:oneapi::mkl::gpu::cache_program

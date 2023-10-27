@@ -1,0 +1,10 @@
+# File to suppress results from AddressSanitizer
+
+# Usage:
+#  * ASAN_OPTIONS=suppressions=<path_to_this_dir>/ASan.supp ./your-program
+
+# Additions should rarely be added, meant to suppress errors from libpti.so
+# dependencies.
+
+# This does not seem to work. However, in spirit, we want it.
+interceptor_via_lib:libigc.so

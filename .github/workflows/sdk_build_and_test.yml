@@ -1,0 +1,46 @@
+name: sdk-build-and-test
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build-and-test:
+
+   runs-on: self-hosted
+
+   steps:
+    - name: Clean-up
+      run:  rm -rf .
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Build
+      run: |
+        cmake --preset default
+        cmake --build --preset default -j $(($(nproc)/2))
+      working-directory: sdk
+
+    - name: Test
+      run: ctest --output-on-failure --test-dir build
+
+    - name: BuildSanitized
+      run: |
+        cmake --preset asan
+        cmake --build --preset asan --parallel $(($(nproc)/2))
+      working-directory: sdk
+
+    - name: BuildFuzz
+      run: |
+        # To ensure it still builds, run build for fuzz targets until we have
+        # proper fuzz testing infrastructure in place.
+        cmake --preset fuzz
+        cmake --build --preset fuzz --parallel $(($(nproc)/2))
+      working-directory: sdk
+
+    - name: TestSanitized
+      run: ctest --preset asan --output-on-failure -L samples
+      working-directory: sdk
