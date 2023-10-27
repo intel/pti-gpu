@@ -13,7 +13,7 @@ jobs:
 
    steps:
     - name: Clean-up
-      run:  rm -rf .
+      run:  rm -rf *
 
     - name: Checkout
       uses: actions/checkout@v4
