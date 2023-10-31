@@ -24,6 +24,11 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-target_include_directories(dlworkload SYSTEM PUBLIC $ENV{DNNLROOT}/include $ENV{MKLROOT}/include)
-target_link_libraries(dlworkload -ldnnl -lmkl_sycl -lmkl_intel_ilp64 -lmkl_core -lmkl_tbb_thread oneDPL Pti::pti_view)
+if (NOT TARGET DNNL::dnnl)
+  find_package(dnnl REQUIRED)
+endif()
+
+target_include_directories(dlworkload SYSTEM PUBLIC $ENV{MKLROOT}/include)
+
+target_link_libraries(dlworkload PUBLIC DNNL::dnnl -lmkl_sycl -lmkl_intel_ilp64 -lmkl_core -lmkl_tbb_thread oneDPL Pti::pti_view)
 

@@ -1,6 +1,6 @@
 if (UNIX)
-  set(CMAKE_C_COMPILER $ENV{CMPLR_ROOT}/linux/bin/icx)
-  set(CMAKE_CXX_COMPILER $ENV{CMPLR_ROOT}/linux/bin/icpx)
+  set(CMAKE_C_COMPILER icx)
+  set(CMAKE_CXX_COMPILER icpx)
 endif()
 set(CMAKE_CXX_FLAGS_DEBUG_INIT "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls\
                                 -fsanitize-ignorelist=${PROJECT_SOURCE_DIR}/fuzz/ubsan-ignore.txt")

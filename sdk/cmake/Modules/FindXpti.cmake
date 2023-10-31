@@ -48,29 +48,33 @@ if(UNIX)
   find_path(
     Xpti_INCLUDE_DIR
     NAMES xpti/xpti_trace_framework.h
-    PATHS $ENV{CMPLR_ROOT}/linux/include
-          $ENV{CMPLR_ROOT}/include
-          $ENV{CMPLR_ROOT}/linux
-          /opt/intel/oneapi/compiler/latest/linux/include
+    HINTS ENV LD_LIBRARY_PATH
+          ENV CMPLR_ROOT
+    PATHS /opt/intel/oneapi/compiler/latest
           /opt/intel/oneapi/compiler/latest/linux
-          )
+    PATH_SUFFIXES include
+                  linux/include
+  )
   find_library(
     Xpti_STATIC_LIBRARY
     NAMES xpti
-    PATHS $ENV{CMPLR_ROOT}/linux/lib
-          $ENV{CMPLR_ROOT}/lib
-          $ENV{CMPLR_ROOT}/linux
-          /opt/intel/oneapi/compiler/latest/linux/lib
+    HINTS ENV LD_LIBRARY_PATH
+          ENV CMPLR_ROOT
+    PATHS /opt/intel/oneapi/compiler/latest
           /opt/intel/oneapi/compiler/latest/linux
-          )
+    PATH_SUFFIXES lib
+                  linux/lib
+  )
   find_library(
     Xpti_SHARED_LIBRARY
     NAMES xptifw
-    PATHS $ENV{CMPLR_ROOT}/linux/lib
-          $ENV{CMPLR_ROOT}/lib
-          $ENV{CMPLR_ROOT}/linux
-          /opt/intel/oneapi/compiler/latest/linux/lib
-          /opt/intel/oneapi/compiler/latest/linux)
+    HINTS ENV LD_LIBRARY_PATH
+          ENV CMPLR_ROOT
+    PATHS /opt/intel/oneapi/compiler/latest
+          /opt/intel/oneapi/compiler/latest/linux
+    PATH_SUFFIXES lib
+                  linux/lib
+  )
 endif()
 
 include(FindPackageHandleStandardArgs)

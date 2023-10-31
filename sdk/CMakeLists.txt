@@ -102,7 +102,7 @@ set(PTI_LINK_FLAGS_EXPR
 set(PTI_DEFINE_FLAGS_EXPR
     $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<NOT:$<BOOL:${PTI_SANITIZE}>>:_FORTIFY_SOURCE=2>>
     $<$<CXX_COMPILER_ID:Clang>:$<$<NOT:$<BOOL:${PTI_SANITIZE}>>:_FORTIFY_SOURCE=2>>
-    $<$<CXX_COMPILER_ID:GNU>:$<$<NOT:$<BOOL:${PTI_SANITIZE}>>_:FORTIFY_SOURCE=2>>
+    $<$<CXX_COMPILER_ID:GNU>:$<$<NOT:$<BOOL:${PTI_SANITIZE}>>:_FORTIFY_SOURCE=2>>
 )
 
 # https://cmake.org/cmake/help/latest/guide/importing-exporting/index.html
@@ -265,7 +265,9 @@ if(PTI_BUILD_SAMPLES)
       )
     endif()
 
-    if(DEFINED ENV{DNNLROOT})
+    find_package(dnnl REQUIRED)
+
+    if(TARGET DNNL::dnnl)
       set(ONEDNNL_IS_AVAILABLE TRUE)
     else()
       message(
