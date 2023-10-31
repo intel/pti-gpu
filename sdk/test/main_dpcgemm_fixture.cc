@@ -30,6 +30,7 @@ bool kernel_has_task_begin0_record = false;
 bool kernel_has_enqk_begin0_record = false;
 bool demangled_kernel_name = false;
 bool kernel_launch_func_name = false;
+uint64_t memory_bytes_copied = 0;
 uint64_t memory_view_record_count = 0;
 uint64_t kernel_view_record_count = 0;
 uint64_t kernel_has_sycl_file_count = 0;
@@ -149,6 +150,7 @@ class MainFixtureTest : public ::testing::Test {
     kernel_has_nonmonotonic_record = false;
     kernel_has_task_begin0_record = false;
     kernel_has_enqk_begin0_record = false;
+    memory_bytes_copied = 0;
     memory_view_record_count = 0;
     kernel_view_record_count = 0;
     kernel_has_sycl_file_count = 0;
@@ -253,6 +255,7 @@ class MainFixtureTest : public ::testing::Test {
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
+          memory_bytes_copied = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_bytes_copied;
           memory_view_record_created = true;
           memory_view_record_count += 1;
           break;
@@ -410,6 +413,7 @@ TEST_F(MainFixtureTest, MemoryViewRecordCreated) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_EQ(memory_view_record_created, true);
+  EXPECT_GT(memory_bytes_copied, 0);
 }
 
 TEST_F(MainFixtureTest, KernelViewRecordCreated) {

@@ -184,6 +184,7 @@ typedef struct pti_view_record_memory_copy {
   uint64_t _end_timestamp;                  //!< Timestamp of memory copy completion on device, ns
   uint64_t _submit_timestamp;               //!< Timestamp of memory copy command list submission
                                             //!< to device, ns
+  uint64_t _bytes_copied;                   //!< number of bytes copied
 } pti_view_record_memory_copy;
 
 /**

@@ -639,6 +639,7 @@ inline void MemCopyEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
   record._queue_handle = rec.queue_;
   record._device_handle = rec.device_;
   record._context_handle = rec.context_;
+  record._bytes_copied = rec.bytes_xfered_;
 
   GetDeviceId(record._pci_address, rec);
   SetMemCopyType(record, rec);

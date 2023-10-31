@@ -1,0 +1,8 @@
+build*/
+venv/
+.vscode/
+.vim/
+.cache/
+compile_commands.json
+CMakeUserPresets.json
+error_diff.txt
