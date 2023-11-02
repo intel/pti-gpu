@@ -2455,13 +2455,16 @@ overhead::Init();
     PTI_ASSERT(!name.empty());
 
     std::string direction;
+    ze_device_handle_t hSrcDevice = nullptr;
+    ze_device_handle_t hDstDevice = nullptr;
+    bool p2p = false;
 
     if (src_context != nullptr && src != nullptr) {
       ze_memory_allocation_properties_t props;
       props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
       props.pNext = nullptr;
       overhead::Init();
-      ze_result_t status = zeMemGetAllocProperties(src_context, src, &props, nullptr);
+      ze_result_t status = zeMemGetAllocProperties(src_context, src, &props, &hSrcDevice);
       {
         std::string o_api_string = "zeMemGetAllocProperties";
         overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
@@ -2472,17 +2475,22 @@ overhead::Init();
       switch (props.type) {
         case ZE_MEMORY_TYPE_UNKNOWN:
           direction.push_back('M');
+          p2p = false;
           break;
         case ZE_MEMORY_TYPE_HOST:
           direction.push_back('H');
+          p2p = false;
           break;
         case ZE_MEMORY_TYPE_DEVICE:
           direction.push_back('D');
+          p2p = true;
           break;
         case ZE_MEMORY_TYPE_SHARED:
           direction.push_back('S');
+          p2p = true;
           break;
         default:
+          p2p = false;
           break;
       }
     }
@@ -2493,7 +2501,7 @@ overhead::Init();
       props.pNext = nullptr;
       props.pNext = nullptr;
       overhead::Init();
-      ze_result_t status = zeMemGetAllocProperties(dst_context, dst, &props, nullptr);
+      ze_result_t status = zeMemGetAllocProperties(dst_context, dst, &props, &hDstDevice);
       {
         std::string o_api_string = "zeMemGetAllocProperties";
         overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
@@ -2505,9 +2513,11 @@ overhead::Init();
       switch (props.type) {
         case ZE_MEMORY_TYPE_UNKNOWN:
           direction.push_back('M');
+          p2p = false;
           break;
         case ZE_MEMORY_TYPE_HOST:
           direction.push_back('H');
+          p2p = false;
           break;
         case ZE_MEMORY_TYPE_DEVICE:
           direction.push_back('D');
@@ -2516,11 +2526,13 @@ overhead::Init();
           direction.push_back('S');
           break;
         default:
+          p2p = false;
           break;
       }
     }
 
     if (!direction.empty()) {
+      if (p2p && hSrcDevice && hDstDevice && (hSrcDevice != hDstDevice)) direction.append(" - P2P");
       name += "(" + direction + ")";
     }
 

@@ -496,7 +496,8 @@ inline void SetMemFillType(pti_view_record_memory_fill& mem_record,
 inline void SetMemCopyType(pti_view_record_memory_copy& mem_record,
                            const ZeKernelCommandExecutionRecord& rec) {
   std::size_t found_pos = rec.name_.find_last_of("(");
-  std::string tmp_str = rec.name_.substr(found_pos);
+  std::string tmp_str = rec.name_.substr(found_pos, 4);
+  tmp_str.push_back(')');
   if (tmp_str == "(M2M)") {
     mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2M;
     mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
