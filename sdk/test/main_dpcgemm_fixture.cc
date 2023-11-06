@@ -255,7 +255,7 @@ class MainFixtureTest : public ::testing::Test {
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
-          memory_bytes_copied = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_bytes_copied;
+          memory_bytes_copied = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_bytes;
           memory_view_record_created = true;
           memory_view_record_count += 1;
           break;
@@ -413,7 +413,7 @@ TEST_F(MainFixtureTest, MemoryViewRecordCreated) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_EQ(memory_view_record_created, true);
-  EXPECT_GT(memory_bytes_copied, 0);
+  EXPECT_EQ(memory_bytes_copied, 4194304);
 }
 
 TEST_F(MainFixtureTest, KernelViewRecordCreated) {
