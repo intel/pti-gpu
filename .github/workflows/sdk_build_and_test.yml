@@ -8,7 +8,7 @@ on:
 
 jobs:
   sdk-build-and-test:
-   if: github.repository != 'intel/pti-gpu'
+   if: github.repository != 'jfedorov/pti-gpu'
    runs-on: self-hosted
 
    steps:
