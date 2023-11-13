@@ -9,41 +9,74 @@ on:
 jobs:
   sdk-build-and-test:
 
-   runs-on: self-hosted
+    if: github.repository != 'intel/pti-gpu' # no run externally due to no required HW
+    runs-on: self-hosted
 
-   steps:
-    - name: Clean-up
-      run:  rm -rf *
+    steps:
+      - name: Clean-up
+        run:  rm -rf *
 
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Build
-      run: |
-        cd sdk
-        cmake --preset default
-        cmake --build --preset default -j $(($(nproc)/2))
+      - name: Build
+        run: |
+          cd sdk
+          cmake --preset default
+          cmake --build --preset default -j $(($(nproc)/2))
 
-    - name: Test
-      run: |
-        cd sdk
-        ctest --output-on-failure --test-dir build
+      - name: Test
+        run: |
+          cd sdk
+          ctest --output-on-failure --test-dir build
 
-    - name: BuildSanitized
-      run: |
-        cd sdk
-        cmake --preset asan
-        cmake --build --preset asan --parallel $(($(nproc)/2))
+      - name: BuildSanitized
+        run: |
+          cd sdk
+          cmake --preset asan
+          cmake --build --preset asan --parallel $(($(nproc)/2))
 
-    - name: BuildFuzz
-      run: |
-        # To ensure it still builds, run build for fuzz targets until we have
-        # proper fuzz testing infrastructure in place.
-        cd sdk
-        cmake --preset fuzz
-        cmake --build --preset fuzz --parallel $(($(nproc)/2))
+      - name: BuildFuzz
+        run: |
+          # To ensure it still builds, run build for fuzz targets until we have
+          # proper fuzz testing infrastructure in place.
+          cd sdk
+          cmake --preset fuzz
+          cmake --build --preset fuzz --parallel $(($(nproc)/2))
 
-    - name: TestSanitized
-      run: |
-        cd sdk
-        ctest --preset asan --output-on-failure -L samples
+      - name: TestSanitized
+        run: |
+          cd sdk
+          ctest --preset asan --output-on-failure -L samples
+
+
+  pti-tools-build-and-test:
+
+    if: github.repository != 'intel/pti-gpu' # no run externally due to no required HW
+    runs-on: self-hosted
+
+    steps:
+      - name: Clean-up
+        run:  rm -rf *
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build-and-test-onetrace
+        run: |
+          python ./tests/run.py -s onetrace
+
+      - name: Build-and-test-oneprof
+        if: always()
+        run: |
+          python ./tests/run.py -s oneprof
+
+      - name: Build-and-test-sysmon
+        if: always()
+        run: |
+          python ./tests/run.py -s sysmon
+
+      - name: Build-and-test-cl_gpu_metrics
+        if: always()
+        run: |
+          python ./tests/run.py -s cl_gpu_metrics

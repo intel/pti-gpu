@@ -340,7 +340,8 @@ def gen_enter_callback(f, func, params, enum_map):
     if type == "ze_ipc_mem_handle_t" or type == "ze_ipc_event_pool_handle_t":
       f.write("    stream << \" " + name + " = \" << (params->p" + name + ")->data;\n")
     else:
-      if type.find("char*") >= 0 and type.find("char*") == len(type) - len("char*"):
+      if ( (type.find("char*") >= 0 and type.find("char*") == len(type) - len("char*"))
+          or (type.find("ze_bool_t*") >= 0) ):
         if func == "zeModuleGetFunctionPointer" or func == "zeModuleGetGlobalPointer":
           f.write("    if (*(params->p" + name + ") == nullptr) {\n")
           f.write("      stream << \" " + name + " = \" << \"0\";\n")

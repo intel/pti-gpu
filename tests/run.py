@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import sys
+import traceback
 
 import utils
 
@@ -129,43 +130,51 @@ def test(f, name, option, istool = False):
     return True
 
 def main():
-  tmpl = ".+"
-  for i in range(1, len(sys.argv) - 1):
-    if sys.argv[i] == "-s":
-      tmpl = sys.argv[i + 1]
+  try:
+    tmpl = ".+"
+    for i in range(1, len(sys.argv) - 1):
+      if sys.argv[i] == "-s":
+        tmpl = sys.argv[i + 1]
 
-  for i in range(1, len(sys.argv)):
-    if sys.argv[i] == "-c":
-      clean()
-      return
+    for i in range(1, len(sys.argv)):
+      if sys.argv[i] == "-c":
+        clean()
+        return 0
 
-  f = open("stderr.log", "wt")
+    f = open("stderr.log", "wt")
 
-  tests_passed = 0
-  tests_failed = 0
-  for sample in samples:
-    name = sample[0]
-    if re.search(tmpl, name) == None:
-      continue
-    for i in range(1, len(sample)):
-      if test(f, name, sample[i]):
-        tests_passed += 1
-      else:
-        tests_failed += 1
+    tests_passed = 0
+    tests_failed = 0
 
-  for tool in tools:
-    name = tool[0]
-    if re.search(tmpl, name) == None:
-      continue
-    for i in range(1, len(tool)):
-      if test(f, name, tool[i], True):
-        tests_passed += 1
-      else:
-        tests_failed += 1
+    for sample in samples:
+      name = sample[0]
+      if re.search(tmpl, name) == None:
+        continue
+      for i in range(1, len(sample)):
+        if test(f, name, sample[i]):
+          tests_passed += 1
+        else:
+          tests_failed += 1
 
-  f.close()
+    for tool in tools:
+      name = tool[0]
+      if re.search(tmpl, name) == None:
+        continue
+      for i in range(1, len(tool)):
+        if test(f, name, tool[i], True):
+          tests_passed += 1
+        else:
+          tests_failed += 1
 
-  print("PASSED: " + str(tests_passed) + " / FAILED: " + str(tests_failed))
+    f.close()
+
+    print("PASSED: " + str(tests_passed) + " / FAILED: " + str(tests_failed))
+
+    return 0 if tests_failed == 0 else  1
+
+  except:
+    print(traceback.format_exc())
+    return 1
 
 if __name__ == "__main__":
-  main()
+  sys.exit( main() )
