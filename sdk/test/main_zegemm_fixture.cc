@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <math.h>
 #include <string.h>
@@ -583,4 +584,26 @@ TEST_F(GetNextRecordTestSuite, RegularParseRecordsTest) {
   EXPECT_EQ(number_of_overhead, 2 * kNumOhRecs);
   EXPECT_EQ(number_of_kernel, kNumKernelRecs);
   ASSERT_EQ(total_records, kTotalRecs);
+}
+
+TEST(PtiVersionTestSuite, TestVersionMacros) {
+  // Check against first public PTI version 0.1.0
+  EXPECT_GE(PTI_VERSION_MAJOR, 0);
+  EXPECT_GE(PTI_VERSION_MINOR, PTI_VERSION_MAJOR == 0 ? 1 : 0);
+  EXPECT_GE(PTI_VERSION_PATCH, 0);
+}
+
+TEST(PtiVersionTestSuite, TestVersionFunction) {
+  // Unit tests should be run against same version of header and lib
+  auto pti_ver = ptiVersion();
+  EXPECT_EQ(pti_ver._major, PTI_VERSION_MAJOR);
+  EXPECT_EQ(pti_ver._minor, PTI_VERSION_MINOR);
+  EXPECT_EQ(pti_ver._patch, PTI_VERSION_PATCH);
+}
+
+TEST(PtiVersionTestSuite, TestVersionString) {
+  using ::testing::ContainsRegex;
+  // Unit tests should be run against same version of header and lib
+  EXPECT_THAT(ptiVersionString(), ContainsRegex("^[0-9]+\\.[0-9]+\\.[0-9]+"));
+  EXPECT_STREQ(PTI_VERSION_STRING, ptiVersionString());
 }

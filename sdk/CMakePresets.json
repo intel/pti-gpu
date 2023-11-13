@@ -9,7 +9,7 @@
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/icpx_toolchain.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake"
       }
     },
     {
@@ -43,7 +43,7 @@
       "binaryDir": "${sourceDir}/build-${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/icpx_asan_toolchain.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_asan_toolchain.cmake",
         "PTI_SANITIZE": true
       },
       "environment": {
@@ -62,7 +62,7 @@
       "binaryDir": "${sourceDir}/build-${presetName}",
       "cacheVariables": {
         "PTI_FUZZ": true,
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/icpx_fuzz_toolchain.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_fuzz_toolchain.cmake"
       }
     },
     {
@@ -71,7 +71,7 @@
       "displayName": "ThreadSanitizer Test Config",
       "description": "Build configuration for thread sanitizer.",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/icpx_tsan_toolchain.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_tsan_toolchain.cmake"
       }
     },
     {
@@ -81,7 +81,7 @@
       "description": "Build Configuration for building PTI without ICPX",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/clang_toolchain.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang_toolchain.cmake"
       }
     }
   ],

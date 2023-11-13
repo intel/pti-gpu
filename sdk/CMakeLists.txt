@@ -56,7 +56,6 @@ if(PTI_FUZZ)
       CACHE BOOL "" FORCE)
 endif()
 
-
 include(GNUInstallDirs)
 set(PTI_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/pti")
 set(PTI_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}/pti")
@@ -105,6 +104,9 @@ set(PTI_DEFINE_FLAGS_EXPR
     $<$<CXX_COMPILER_ID:GNU>:$<$<NOT:$<BOOL:${PTI_SANITIZE}>>:_FORTIFY_SOURCE=2>>
 )
 
+configure_file(${PROJECT_SOURCE_DIR}/include/pti_version.h.in
+               ${PROJECT_BINARY_DIR}/include/pti_version.h)
+
 # https://cmake.org/cmake/help/latest/guide/importing-exporting/index.html
 add_library(pti SHARED "${PROJECT_SOURCE_DIR}/src/pti.cc")
 add_library(Pti::pti ALIAS pti)
@@ -117,6 +119,7 @@ generate_export_header(pti)
 target_include_directories(
   pti
   PUBLIC "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
+         "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
          "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
          "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
   PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
@@ -133,13 +136,15 @@ target_compile_options(pti PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
 target_link_options(pti PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
-add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc")
+add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
+                            "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
 add_library(Pti::pti_view ALIAS pti_view)
 # add_library(pti_callback SHARED "..") add_library(pti_event SHARED "..")
 # add_library(pti_metric SHARED "..") add_library(pti_profiling SHARED "..") ..
 target_include_directories(
   pti_view
   PUBLIC "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
+         "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
          "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
          "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
   PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/syclpi"
@@ -218,7 +223,7 @@ if(PTI_INSTALL)
   write_basic_package_version_file(
     "${PROJECT_BINARY_DIR}/PtiConfigVersion.cmake"
     VERSION "${PROJECT_VERSION}"
-    COMPATIBILITY SameMajorVersion)
+    COMPATIBILITY SameMinorVersion)
 
   install(FILES "${PROJECT_BINARY_DIR}/PtiConfig.cmake"
                 "${PROJECT_BINARY_DIR}/PtiConfigVersion.cmake"
@@ -239,8 +244,12 @@ if(PTI_INSTALL)
   install(FILES "${PROJECT_BINARY_DIR}/pti_export.h"
           DESTINATION "${PTI_INSTALL_INCLUDE_DIR}")
 
-  install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/"
+  install(FILES "${PROJECT_BINARY_DIR}/include/pti_version.h"
           DESTINATION "${PTI_INSTALL_INCLUDE_DIR}")
+
+  install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/"
+          DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
+          FILES_MATCHING PATTERN "*.h")
 
   install(
     EXPORT PtiTargets

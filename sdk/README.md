@@ -71,7 +71,7 @@ From `build` directory:
 ```console
 >> mkdir build
 >> cd build
->> cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../cmake/icpx_toolchain.cmake -DBUILD_TESTING=OFF ..
+>> cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/icpx_toolchain.cmake -DBUILD_TESTING=OFF ..
 >> make -j
 >> cmake --install . --config Release --prefix "../out"
 ```

@@ -6,11 +6,12 @@
 #ifndef INCLUDE_PTI_VIEW_H_
 #define INCLUDE_PTI_VIEW_H_
 
+#include <level_zero/layers/zel_tracing_api.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include "pti_export.h"
-#include <level_zero/layers/zel_tracing_api.h>
+#include "pti_version.h"
 
 #if defined(__cplusplus)
 extern "C" {
@@ -55,7 +56,7 @@ typedef enum _pti_view_memory_type {
   PTI_VIEW_MEMORY_TYPE_MEMORY = 0,  //!< Unknown memory type
   PTI_VIEW_MEMORY_TYPE_HOST = 1,    //!< Host memory
   PTI_VIEW_MEMORY_TYPE_DEVICE = 2,  //!< Device memory
-  PTI_VIEW_MEMORY_TYPE_SHARED= 3,   //!< Shared memory
+  PTI_VIEW_MEMORY_TYPE_SHARED = 3,  //!< Shared memory
 } pti_view_memory_type;
 
 /**

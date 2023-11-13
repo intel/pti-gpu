@@ -70,13 +70,12 @@ add_custom_command(
 findl0library(zegemm_suite)
 findl0headers(zegemm_suite)
 
-target_compile_options(zegemm_suite PRIVATE -gline-tables-only
-                                            ${PTI_COMPILE_FLAGS_EXPR})
-target_link_options(zegemm_suite PRIVATE -gline-tables-only
-                    ${PTI_LINK_FLAGS_EXPR})
+target_compile_options(zegemm_suite PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+target_link_options(zegemm_suite PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(zegemm_suite PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
-target_link_libraries(zegemm_suite PUBLIC Pti::pti_view GTest::gtest_main)
+target_link_libraries(zegemm_suite PUBLIC Pti::pti_view GTest::gtest_main
+                                          GTest::gmock)
 
 add_executable(view_record_test view_buffer_test.cc)
 
@@ -86,10 +85,8 @@ target_include_directories(
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
 
-target_compile_options(view_record_test PRIVATE -gline-tables-only
-                                                ${PTI_COMPILE_FLAGS_EXPR})
-target_link_options(view_record_test PRIVATE -gline-tables-only
-                    ${PTI_LINK_FLAGS_EXPR})
+target_compile_options(view_record_test PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+target_link_options(view_record_test PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(view_record_test PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
 target_link_libraries(view_record_test PUBLIC Pti::pti_view GTest::gtest_main
@@ -103,10 +100,8 @@ target_include_directories(
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
 
-target_compile_options(assert_exception_test PRIVATE -gline-tables-only
-                                                ${PTI_COMPILE_FLAGS_EXPR})
-target_link_options(assert_exception_test PRIVATE -gline-tables-only
-                    ${PTI_LINK_FLAGS_EXPR})
+target_compile_options(assert_exception_test PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+target_link_options(assert_exception_test PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(assert_exception_test PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
 target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_main
