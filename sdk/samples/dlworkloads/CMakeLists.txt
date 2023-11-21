@@ -17,18 +17,22 @@ add_link_options(-fsycl -gline-tables-only)
 add_executable(dlworkload ${SOURCES})
 target_include_directories(dlworkload PRIVATE ../samples_utilities)
 
-find_package(oneDPL REQUIRED)
-
 # Allow building in-source and out-of-source
 if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
+endif()
+
+if (NOT TARGET oneDPL)
+  find_package(oneDPL REQUIRED)
 endif()
 
 if (NOT TARGET DNNL::dnnl)
   find_package(dnnl REQUIRED)
 endif()
 
-target_include_directories(dlworkload SYSTEM PUBLIC $ENV{MKLROOT}/include)
+if (NOT TARGET MKL::MKL)
+  find_package(MKL REQUIRED)
+endif()
 
-target_link_libraries(dlworkload PUBLIC DNNL::dnnl -lmkl_sycl -lmkl_intel_ilp64 -lmkl_core -lmkl_tbb_thread oneDPL Pti::pti_view)
-
+target_include_directories(dlworkload SYSTEM PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(dlworkload DNNL::dnnl -lmkl_sycl -lmkl_intel_ilp64 -lmkl_core -lmkl_tbb_thread oneDPL Pti::pti_view)

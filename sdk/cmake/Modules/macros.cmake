@@ -767,7 +767,7 @@ endmacro()
 macro(GetSpdlog)
   find_package(spdlog 1.6.0 QUIET)
 
-  if(NOT spdlog::spdlog OR NOT spdlog::spdlog_header_only)
+  if(NOT TARGET spdlog::spdlog OR NOT TARGET spdlog::spdlog_header_only)
     include(FetchContent)
     FetchContent_Declare(
       fmt
@@ -803,7 +803,7 @@ macro(GetSpdlog)
 endmacro()
 
 macro(GetGTest)
-  if(NOT GTest::gtest OR NOT GTest::gtest_main)
+  if(NOT TARGET GTest::gtest OR NOT TARGET GTest::gtest_main)
     include(FetchContent)
     FetchContent_Declare(
       googletest

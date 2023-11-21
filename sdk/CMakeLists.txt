@@ -260,74 +260,40 @@ endif()
 
 if(PTI_BUILD_SAMPLES)
   if(HAVE_SYCL)
+    find_package(MKL CONFIG PATHS $ENV{MKLROOT} NO_DEFAULT_PATH)
+    message(STATUS "Imported oneMKL targets: ${MKL_IMPORTED_TARGETS}")
+    find_package(dnnl)
+    find_package(oneDPL)
+    find_package(TBB)
+    find_package(DevUtilities)
+
     add_subdirectory(samples/dpc_gemm)
     add_subdirectory(samples/dpc_gemm_threaded)
     add_subdirectory(samples/vector_sq_add)
-    # TODO(matthew.schilling@intel.com): A better way to do this is to write
-    # Find modules for each dependency. MKL, DNNL, DPL, etc..
-    if(DEFINED ENV{MKLROOT})
-      set(ONEMKL_IS_AVAILABLE TRUE)
-    else()
-      message(
-        WARNING
-          "Unable to detect oneMKL installation. All samples will not be built."
-      )
-    endif()
 
-    find_package(dnnl REQUIRED)
-
-    if(TARGET DNNL::dnnl)
-      set(ONEDNNL_IS_AVAILABLE TRUE)
-    else()
-      message(
-        WARNING
-          "Unable to detect oneDNNL installation. All samples will not be built."
-      )
-    endif()
-
-    find_package(oneDPL)
-
-    if(TARGET oneDPL)
-      set(ONEDPL_IS_AVAILABLE TRUE)
-    else()
-      message(
-        WARNING
-          "Unable to detect oneDPL installation. All samples will not be built."
-      )
-    endif()
-
-    find_package(TBB)
-
-    if(TARGET TBB::tbb)
-      set(TBB_IS_AVAILABLE TRUE)
-    else()
-      message(
-        WARNING
-          "Unable to detect tbb installation. All samples will not be built.")
-    endif()
-
-    if(DEFINED ENV{ONEAPI_ROOT})
-      set(ONEAPI_IS_AVAILABLE TRUE)
-    else()
-      message(
-        WARNING
-          "Unable to detect oneAPI installation. All samples will not be built."
-      )
-    endif()
-
-    if(DEFINED ONEMKL_IS_AVAILABLE)
-      add_subdirectory(samples/onemkl_gemm)
-    endif()
-
-    if(DEFINED ONEMKL_IS_AVAILABLE
-       AND DEFINED ONEDNNL_IS_AVAILABLE
-       AND DEFINED ONEDPL_IS_AVAILABLE
-       AND DEFINED TBB_IS_AVAILABLE)
-      add_subdirectory(samples/dlworkloads)
-    endif()
-
-    if(DEFINED ONEAPI_IS_AVAILABLE)
+    if(TARGET DevUtilities::utils)
       add_subdirectory(samples/iso3dfd_dpcpp)
+    endif()
+
+    if(TARGET MKL::MKL)
+      add_subdirectory(samples/onemkl_gemm)
+    else()
+      message(
+        WARNING
+        "Unable to build onemkl_gemm sample due to missing MKL installation"
+      )
+    endif()
+
+    if(TARGET MKL::MKL
+       AND TARGET DNNL::dnnl
+       AND TARGET oneDPL
+       AND TARGET TBB::tbb)
+      add_subdirectory(samples/dlworkloads)
+    else()
+      message(
+        WARNING
+        "Unable to build dlworkloads sample due to missing oneAPI component(s)"
+      )
     endif()
   endif()
 endif()

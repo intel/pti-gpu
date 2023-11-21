@@ -18,7 +18,7 @@ target_link_options(iso3dfd.exe PUBLIC -O3 -fsycl --std=c++17)
 target_include_directories(
   iso3dfd.exe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../samples_utilities
                       ${CMAKE_CURRENT_SOURCE_DIR}/../include)
-target_link_libraries(iso3dfd.exe PUBLIC Pti::pti_view sycl)
+target_link_libraries(iso3dfd.exe PUBLIC Pti::pti_view sycl DevUtilities::utils)
 
 if(SHARED_KERNEL)
   target_compile_definitions(iso3dfd.exe PUBLIC USED_SHARED)

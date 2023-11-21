@@ -5,7 +5,13 @@
 FindXpti
 -------
 
-Finds the Xpti library.
+Finds the Xpti library. Xpti is part of the Intel/LLVM project. It is also
+included as part of the standard oneAPI installation.
+
+`Intel/LLVM <https://github.com/intel/llvm>`_
+
+Further documentation on linking and using XPTI can be found here:
+https://github.com/intel/llvm/blob/sycl/xptifw/doc/XPTI_Framework.md.
 
 Imported Targets
 ^^^^^^^^^^^^^^^^
@@ -43,7 +49,6 @@ The following cache variables may also be set:
 
 # Based on tutorial found in CMake manual:
 # https://cmake.org/cmake/help/latest/manual/cmake-developer.7.html
-# TODO: Change the copyright?
 if(UNIX)
   find_path(
     Xpti_INCLUDE_DIR

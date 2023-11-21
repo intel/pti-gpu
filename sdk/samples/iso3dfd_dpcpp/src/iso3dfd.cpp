@@ -34,7 +34,7 @@
 #include <iostream>
 #include <string>
 #include "device_selector.hpp"
-#include "dpc_common.hpp"
+#include <dpc_common.hpp>
 #include "pti_view.h"
 #include "samples_utils.h"
 namespace oneapi {}
