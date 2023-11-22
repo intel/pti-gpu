@@ -52,6 +52,9 @@ jobs:
 
   pti-tools-build-and-test:
 
+    needs: sdk-build-and-test   # this is a workaround to ensure tests setup to pass on this runner
+                                # TODO make the workflow more generic
+
     if: github.repository != 'intel/pti-gpu' # no run externally due to no required HW
     runs-on: self-hosted
 
