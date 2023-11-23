@@ -19,8 +19,8 @@ endif()
 FindIGALibrary(gput_inst_count)
 GetIGAHeaders(gput_inst_count)
 
-FindGTPinLibrary(gput_inst_count)
-GetGTPinHeaders(gput_inst_count)
+FindGTPinLibrary_legacy(gput_inst_count)
+GetGTPinHeaders_legacy(gput_inst_count)
 
 # Loader
 

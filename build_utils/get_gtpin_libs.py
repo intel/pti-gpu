@@ -2,53 +2,50 @@ import sys
 import os
 
 import build_utils
+from get_gtpin import get_gtpin
 
-def main():
-  if len(sys.argv) < 3:
+def main(argv):
+  if len(argv) < 3:
     print("Usage: python get_gtpin_libs.py <lib_path> <build_path>")
-    return
+    return -1
 
-  dst_path = sys.argv[1]
+  dst_path = argv[1]
   if (not os.path.exists(dst_path)):
     os.mkdir(dst_path)
   dst_path = os.path.join(dst_path, "GTPIN")
   if (not os.path.exists(dst_path)):
     os.mkdir(dst_path)
-  
-  build_path = sys.argv[2]
-  if sys.platform == 'win32':
-    gtpin_package = "external-gtpin-2.19-win.zip"
-    download_link = "https://downloadmirror.intel.com/686382/"
+
+  build_path = argv[2]
+
+  platform = sys.platform
+
+  res = get_gtpin(build_path)
+  if res != 0:
+    return res
+
+  if platform.startswith('win32'):
+    gtpin_libs = ["gtpin.lib"]
+    gtpin_dlls = ["ged.dll",
+                  "gtpin.dll",
+                  "gtpin_core.dll",
+                  "iga_wrapper.dll"]
+  elif platform.startswith('linux'):
+    gtpin_libs = ["libged.so",
+                  "libgtpin_core.so",
+                  "libgtpin.so",
+                  "libiga_wrapper.so"]
+    gtpin_dlls = []
   else:
-    gtpin_package = "external-gtpin-2.19-linux.tar.xz"
-    download_link = "https://downloadmirror.intel.com/686383/"
-  build_utils.download(download_link + gtpin_package, build_path)
-  arch_file = os.path.join(build_path, gtpin_package)
-  build_utils.unpack(arch_file, build_path)
+    print("Platform not supported: ", platform)
+    return -2
 
-  src_path = os.path.join(build_path, "Profilers")
-  src_path = os.path.join(src_path, "Lib")
-  src_path = os.path.join(src_path, "intel64")
+  src_lib_path = os.path.join(build_path, "Profilers", "Lib", "intel64")
 
-  gtpin_libs = ["gtpin.lib"]\
-    if sys.platform == 'win32' else\
-    ["libgcc_s.so.1",
-     "libged.so",
-     "libgtpin.so",
-     "libgtpin_core.so",
-     "libiga_wrapper.so",
-     "libstdc++.so.6"]
+  build_utils.copy(src_lib_path, dst_path, gtpin_libs)
+  build_utils.copy(src_lib_path, build_path, gtpin_dlls)
 
-  build_utils.copy(src_path, dst_path, gtpin_libs)
-
-  if sys.platform == 'win32':
-    gtpin_dlls = [
-      "gtpin.dll",
-      "ged.dll",
-      "gtpin_core.dll",
-      "iga_wrapper.dll"]
-
-    build_utils.copy(src_path, build_path, gtpin_dlls)
+  return 0
 
 if __name__ == "__main__":
-  main()
+  sys.exit(main(sys.argv))

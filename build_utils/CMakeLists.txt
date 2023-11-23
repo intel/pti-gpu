@@ -372,7 +372,7 @@ macro(CheckForMetricsLibrary)
       NAMES igdml64
       PATHS ${SEARCH_LIB_PATH})
   endif()
-  
+
   if(NOT ML_LIB_PATH)
     message(WARNING
       "Metrics Library for Metrics Discovery API (Metrics Library for MD API) is not found. "
@@ -402,7 +402,7 @@ macro(GetMDHeaders TARGET)
   endif()
 endmacro()
 
-macro(FindGTPinLibrary TARGET)
+macro(FindGTPinLibrary_legacy TARGET)
   if(DEFINED GTPIN_PATH)
     find_library(GTPIN_LIB_PATH
       NAMES gtpin
@@ -432,7 +432,7 @@ macro(FindGTPinLibrary TARGET)
                                 ${GTPIN_LIB_PATH}/GTPIN/libgtpin_core.so
                                 ${GTPIN_LIB_PATH}/GTPIN/libiga_wrapper.so
                                 ${GTPIN_LIB_PATH}/GTPIN/libstdc++.so.6
-                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_libs.py" ${GTPIN_LIB_PATH} ${CMAKE_BINARY_DIR})
+                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_libs_legacy.py" ${GTPIN_LIB_PATH} ${CMAKE_BINARY_DIR})
 
       target_link_libraries(${TARGET}
         "${GTPIN_LIB_PATH}/GTPIN/libgtpin.so")
@@ -450,7 +450,7 @@ macro(FindGTPinLibrary TARGET)
                                 ${GTPIN_LIB_PATH}/gtpin.dll
                                 ${GTPIN_LIB_PATH}/gtpin_core.dll
                                 ${GTPIN_LIB_PATH}/iga_wrapper.dll
-                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_libs.py" ${GTPIN_LIB_PATH} ${CMAKE_BINARY_DIR})
+                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_libs_legacy.py" ${GTPIN_LIB_PATH} ${CMAKE_BINARY_DIR})
 
       target_link_libraries(${TARGET}
         "${GTPIN_LIB_PATH}/GTPIN/gtpin.lib")
@@ -462,7 +462,7 @@ macro(FindGTPinLibrary TARGET)
   endif()
 endmacro()
 
-macro(GetGTPinHeaders TARGET)
+macro(GetGTPinHeaders_legacy TARGET)
   if(DEFINED GTPIN_PATH)
     message(STATUS "Graphics Technology Pin (GT Pin) include path: ${GTPIN_PATH}/Include")
     target_include_directories(${TARGET}
@@ -520,13 +520,229 @@ macro(GetGTPinHeaders TARGET)
                               ${GTPIN_INC_PATH}/GTPIN/api/igt_core.h
                               ${GTPIN_INC_PATH}/GTPIN/api/gt_gpu_defs.h
                               ${GTPIN_INC_PATH}/GTPIN/api/gt_basic_utils.h
-                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_headers.py" ${GTPIN_INC_PATH} ${CMAKE_BINARY_DIR})
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_headers_legacy.py" ${GTPIN_INC_PATH} ${CMAKE_BINARY_DIR})
 
     target_include_directories(${TARGET}
       PUBLIC "${GTPIN_INC_PATH}/GTPIN"
       PUBLIC "${GTPIN_INC_PATH}/GTPIN/ged/intel64")
     add_dependencies(${TARGET}
       gtpin_headers)
+  endif()
+endmacro()
+
+macro(GetGTPinLibrary TARGET)
+  if(NOT DEFINED GTPIN_PATH)
+    set(GTPIN_LIB_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
+    if(UNIX)
+      add_custom_target(gtpin_libs ALL
+                        DEPENDS ${GTPIN_LIB_PATH}/GTPIN/libgcc_s.so.1
+                                ${GTPIN_LIB_PATH}/GTPIN/libged.so
+                                ${GTPIN_LIB_PATH}/GTPIN/libgtpin_core.so
+                                ${GTPIN_LIB_PATH}/GTPIN/libgtpin.so
+                                ${GTPIN_LIB_PATH}/GTPIN/libiga_wrapper.so)
+      add_custom_command(OUTPUT ${GTPIN_LIB_PATH}/GTPIN/libgcc_s.so.1
+                                ${GTPIN_LIB_PATH}/GTPIN/libged.so
+                                ${GTPIN_LIB_PATH}/GTPIN/libgtpin_core.so
+                                ${GTPIN_LIB_PATH}/GTPIN/libgtpin.so
+                                ${GTPIN_LIB_PATH}/GTPIN/libiga_wrapper.so
+                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_libs.py" ${GTPIN_LIB_PATH} ${CMAKE_BINARY_DIR})
+      target_link_libraries(${TARGET}
+        "${GTPIN_LIB_PATH}/GTPIN/libgtpin.so")
+      target_link_libraries(${TARGET}
+        "${GTPIN_LIB_PATH}/GTPIN/libged.so")
+      add_dependencies(${TARGET}
+        gtpin_libs)
+    elseif(WIN32)
+      add_custom_target(gtpin_libs ALL
+                        DEPENDS ${GTPIN_LIB_PATH}/GTPIN/gtpin.lib
+                                ${GTPIN_LIB_PATH}/ged.dll
+                                ${GTPIN_LIB_PATH}/gtpin.dll
+                                ${GTPIN_LIB_PATH}/gtpin_core.dll
+                                ${GTPIN_LIB_PATH}/iga_wrapper.dll)
+      add_custom_command(OUTPUT ${GTPIN_LIB_PATH}/GTPIN/gtpin.lib
+                                ${GTPIN_LIB_PATH}/ged.dll
+                                ${GTPIN_LIB_PATH}/gtpin.dll
+                                ${GTPIN_LIB_PATH}/gtpin_core.dll
+                                ${GTPIN_LIB_PATH}/iga_wrapper.dll
+                        COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_libs.py" ${GTPIN_LIB_PATH} ${CMAKE_BINARY_DIR})
+      target_link_libraries(${TARGET}
+        "${GTPIN_LIB_PATH}/GTPIN/gtpin.lib")
+      add_dependencies(${TARGET}
+        gtpin_libs)
+    else()
+      message(FATAL_ERROR "Graphics Technology Pin (GT Pin) path was not specified. Use -DGTPIN_PATH to set it")
+    endif()
+  endif()
+endmacro()
+
+macro(FindGTPinLibrary TARGET)
+  if(DEFINED GTPIN_PATH)
+    find_library(GTPIN_LIB_PATH
+      NAMES gtpin
+      HINTS "${GTPIN_PATH}/Lib/intel64")
+    find_library(GTPIN_GED_LIB_PATH
+      NAMES ged
+      HINTS "${GTPIN_PATH}/Lib/intel64")
+    if(GTPIN_LIB_PATH AND GTPIN_GED_LIB_PATH)
+      message(STATUS "Graphics Technology Pin (GT Pin) library path: ${GTPIN_LIB_PATH} & ${GTPIN_GED_LIB_PATH}")
+      target_link_libraries(${TARGET}
+        ${GTPIN_LIB_PATH})
+      target_link_libraries(${TARGET}
+        ${GTPIN_GED_LIB_PATH})
+    else()
+      message(FATAL_ERROR "Graphics Technology Pin (GT Pin) library was not found at ${GTPIN_PATH}/Lib/intel64")
+    endif()
+  else()
+    message(STATUS "Graphics Technology Pin (GT Pin) path was not defined - it will be downloaded automatically on build")
+    GetGTPinLibrary(${TARGET})
+  endif()
+endmacro()
+
+macro(GetGTPinHeaders TARGET)
+  if(NOT DEFINED GTPIN_PATH)
+    set(GTPIN_INC_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
+
+    add_custom_target(gtpin_headers ALL
+                      DEPENDS ${GTPIN_INC_PATH}/GTPIN/api/gt_basic_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_basic_utils.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_gen_procedure.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_gpu_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_hli_function.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_ins_fields.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_knob_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_knob.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gtpin_api.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_profile_array.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_profile_trace.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_reg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_cfg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_core.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_event.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_gen_arch.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_gen_coder.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_gen_procedure.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_hli_library.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_iarg_factory.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_iarg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_ins_factory.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_ins.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_kernel.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_knob_arg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_knob_registry.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_memory_mapper.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_profile_buffer.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_reg_allocator.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_tool.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_vreg_factory.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_vreg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_api_version.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged_basic_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged_enumerations.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged_enum_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged_ins_field.h)
+    add_custom_command(OUTPUT ${GTPIN_INC_PATH}/GTPIN/api/gt_basic_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_basic_utils.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_gen_procedure.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_gpu_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_hli_function.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_ins_fields.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_knob_defs.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_knob.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gtpin_api.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_profile_array.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_profile_trace.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_reg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_cfg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_core.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_event.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_gen_arch.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_gen_coder.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_gen_procedure.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_hli_library.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_iarg_factory.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_iarg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_ins_factory.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_ins.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_kernel.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_knob_arg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_knob_registry.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_memory_mapper.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_profile_buffer.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_reg_allocator.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_tool.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_vreg_factory.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/igt_vreg.h
+                              ${GTPIN_INC_PATH}/GTPIN/api/gt_api_version.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged_basic_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged_enumerations.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged_enum_types.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged.h
+                              ${GTPIN_INC_PATH}/GTPIN/ged/ged_ins_field.h
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_headers.py" ${GTPIN_INC_PATH} ${CMAKE_BINARY_DIR})
+    target_include_directories(${TARGET}
+      PUBLIC "${GTPIN_INC_PATH}/GTPIN"
+      PUBLIC "${GTPIN_INC_PATH}/GTPIN/api"
+      PUBLIC "${GTPIN_INC_PATH}/GTPIN/ged/intel64")
+    add_dependencies(${TARGET}
+      gtpin_headers)
+  endif()
+endmacro()
+
+macro(FindGTPinHeaders TARGET)
+  if(CMAKE_INCLUDE_PATH)
+    set(CMAKE_REQUIRED_INCLUDES ${CMAKE_INCLUDE_PATH})
+  endif()
+  if(DEFINED GTPIN_PATH)
+    message(STATUS "Graphics Technology Pin (GT Pin) include path: ${GTPIN_PATH}/Include, ${GTPIN_PATH}/Include/api, ${GTPIN_PATH}/Include/ged/intel64")
+    target_include_directories(${TARGET}
+      PUBLIC "${GTPIN_PATH}/Include"
+      PUBLIC "${GTPIN_PATH}/Include/api"
+      PUBLIC "${GTPIN_PATH}/Include/ged/intel64")
+  else()
+    message(STATUS "Graphics Technology Pin (GT Pin) path was not defined - it will be downloaded automatically on build")
+    GetGTPinHeaders(${TARGET})
+  endif()
+  set(CMAKE_REQUIRED_INCLUDES)
+endmacro()
+
+macro(GetGTPinUtil TARGET UTIL)
+  if(NOT DEFINED GTPIN_PATH)
+    set(GTPIN_UTIL_PATH "${CMAKE_BINARY_DIR}")
+    RequirePythonInterp()
+    add_custom_target(gtpin_${UTIL} ALL
+                      DEPENDS "${GTPIN_UTIL_PATH}/GTPIN/utils/${UTIL}.h"
+                              "${GTPIN_UTIL_PATH}/GTPIN/utils/${UTIL}.cpp")
+    add_custom_command(OUTPUT "${GTPIN_UTIL_PATH}/GTPIN/utils/${UTIL}.h"
+                              "${GTPIN_UTIL_PATH}/GTPIN/utils/${UTIL}.cpp"
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_util.py" ${GTPIN_UTIL_PATH} ${CMAKE_BINARY_DIR} ${UTIL})
+    target_sources(${TARGET} PRIVATE 
+      "${GTPIN_UTIL_PATH}/Examples/utils/${UTIL}.cpp")
+    target_include_directories(${TARGET}
+      PUBLIC "${GTPIN_UTIL_PATH}/GTPIN/utils")
+    add_dependencies(${TARGET}
+      gtpin_${UTIL})
+  endif()
+endmacro()
+
+macro(FindGTPinUtil TARGET UTIL)
+  if(DEFINED GTPIN_PATH)
+    find_file(GTPIN_${UTIL}_PATH
+      NAMES ${UTIL}.cpp
+      PATHS "${GTPIN_PATH}/Examples/utils")
+    if(GTPIN_${UTIL}_PATH)
+      target_sources(${TARGET} PRIVATE 
+        ${GTPIN_${UTIL}_PATH})
+      target_include_directories(${TARGET}
+        PUBLIC "${GTPIN_PATH}/Examples/utils")
+    else()
+      message(FATAL_ERROR "Graphics Technology Pin (GT Pin) ${UTIL} was not found at ${GTPIN_PATH}/Examples/utils")
+    endif()
+  else()
+    message(STATUS "Graphics Technology Pin (GT Pin) path was not defined - it will be downloaded automatically on build")
+    GetGTPinUtil(${TARGET} ${UTIL})
   endif()
 endmacro()
 

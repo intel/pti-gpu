@@ -2,77 +2,37 @@ import sys
 import os
 
 import build_utils
+from get_gtpin import get_gtpin
 
-def main():
-  if len(sys.argv) < 3:
+def main(argv):
+  if len(argv) != 3:
     print("Usage: python get_gtpin_headers.py <include_path> <build_path>")
-    return
+    return -1
 
-  dst_path = sys.argv[1]
+  dst_path = argv[1]
   if (not os.path.exists(dst_path)):
     os.mkdir(dst_path)
   dst_path = os.path.join(dst_path, "GTPIN")
   if (not os.path.exists(dst_path)):
     os.mkdir(dst_path)
-  
-  build_path = sys.argv[2]
-  if sys.platform == 'win32':
-    gtpin_package = "external-gtpin-2.19-win.zip"
-    download_link = "https://downloadmirror.intel.com/686382/"
-  else:
-    gtpin_package = "external-gtpin-2.19-linux.tar.xz"
-    download_link = "https://downloadmirror.intel.com/686383/"
-  build_utils.download(download_link + gtpin_package, build_path)
-  arch_file = os.path.join(build_path, gtpin_package)
-  build_utils.unpack(arch_file, build_path)
 
-  src_path = os.path.join(build_path, "Profilers")
-  src_path = os.path.join(src_path, "Include")
+  build_path = argv[2]
 
-  build_utils.copy(src_path, dst_path,
-    ["callbacks.h",
-     "client_knob.h",
-     "clientdb.h",
-     "ged_ops.h",
-     "gtpin.h",
-     "gtpin.hpp",
-     "gtpintool_types.h",
-     "init.h",
-     "kernel.h",
-     "send_exec_semantics.h"])
+  res = get_gtpin(build_path)
+  if res != 0:
+    return res
 
-  dst_path_ged = os.path.join(dst_path, "ged")
-  if (not os.path.exists(dst_path_ged)):
-    os.mkdir(dst_path_ged)
-  dst_path_ged = os.path.join(dst_path_ged, "intel64")
-  if (not os.path.exists(dst_path_ged)):
-    os.mkdir(dst_path_ged)
+  src_gtpin_headers_path = os.path.join(build_path, "Profilers", "Include", "api")
+  gtpin_headers = os.listdir(src_gtpin_headers_path)
+  dst_gtpin_path = os.path.join(dst_path, "api")
+  os.makedirs(dst_gtpin_path, exist_ok=True)
+  build_utils.copy(src_gtpin_headers_path, dst_gtpin_path, gtpin_headers)
 
-  src_path_ged = os.path.join(src_path, "ged")
-  src_path_ged = os.path.join(src_path_ged, "intel64")
-
-  build_utils.copy(src_path_ged, dst_path_ged,
-    ["ged_basic_types.h",
-     "ged_enumerations.h",
-     "ged_enum_types.h",
-     "ged.h",
-     "ged_ins_field.h"])
-
-  dst_path_api = os.path.join(dst_path, "api")
-  if (not os.path.exists(dst_path_api)):
-    os.mkdir(dst_path_api)
-
-  src_path_api = os.path.join(src_path, "api")
-
-  build_utils.copy(src_path_api, dst_path_api,
-    ["gt_knob.h",
-     "gt_knob_defs.h",
-     "igt_knob_arg.h",
-     "igt_knob_registry.h",
-     "gt_basic_defs.h",
-     "igt_core.h",
-     "gt_gpu_defs.h",
-     "gt_basic_utils.h"])
+  src_ged_headers_path = os.path.join(build_path, "Profilers", "Include", "ged", "intel64")
+  ged_headers = os.listdir(src_ged_headers_path)
+  dst_ged_path = os.path.join(dst_path, "ged", "intel64")
+  os.makedirs(dst_ged_path, exist_ok=True)
+  build_utils.copy(src_ged_headers_path, dst_ged_path, ged_headers)
 
 if __name__ == "__main__":
-  main()
+  sys.exit(main(sys.argv))
