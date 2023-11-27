@@ -35,8 +35,12 @@ class ClMetricCollector {
     uint32_t sub_device_id =
       sub_device_string.empty() ? 0 : std::stoul(sub_device_string);
 
+    std::string order_string = utils::GetEnv("PTI_DEVICE_PCI_ORDER");
+    bool respect_device_pci_order =
+      order_string.empty() ? false : true;
+
     MetricDevice* metric_device =
-      MetricDevice::Create(device_id, sub_device_id);
+      MetricDevice::Create(device_id, sub_device_id, respect_device_pci_order);
     if (metric_device == nullptr) {
       std::cerr << "[WARNING] Unable to find MD library" << std::endl;
       return nullptr;
@@ -150,6 +154,8 @@ class ClMetricCollector {
     return calculated_reports;
   }
 
+  const utils::DeviceUUID* GetDeviceUUID () { return device_uuid_; };
+
   ClMetricCollector(const ClMetricCollector& copy) = delete;
   ClMetricCollector& operator=(const ClMetricCollector& copy) = delete;
 
@@ -161,6 +167,7 @@ class ClMetricCollector {
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(group_ != nullptr);
     PTI_ASSERT(set_ != nullptr);
+    device_uuid_ = const_cast<utils::DeviceUUID*>(device->GetDeviceUUID());
     EnableMetrics();
   }
 
@@ -256,6 +263,7 @@ class ClMetricCollector {
   std::thread* collector_thread_ = nullptr;
 
   std::vector<uint8_t> metric_storage_;
+  utils::DeviceUUID* device_uuid_ = nullptr;
 };
 
 #endif // PTI_SAMPLES_CL_GPU_METRICS_CL_METRIC_COLLECTOR_H_

@@ -59,7 +59,7 @@ def run(path):
   app_folder = utils.get_sample_executable_path("cl_gemm")
   app_file = os.path.join(app_folder, "cl_gemm" + file_extention)
   command = [file_name_prefix + "cl_gpu_metrics" + file_extention,\
-    app_file, "gpu", "1024", "1"]
+    "--pci-order", app_file, "gpu", "1024", "1"]
   stdout, stderr = utils.run_process(command, path)
   if not stdout:
     return "stdout is empty"

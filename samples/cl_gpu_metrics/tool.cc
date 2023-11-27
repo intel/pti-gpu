@@ -49,13 +49,31 @@ static std::chrono::steady_clock::time_point start;
 extern "C" PTI_EXPORT
 void Usage() {
   std::cout <<
-    "Usage: ./cl_gpu_metrics[.exe] <application> <args>" <<
+    "Usage: ./cl_gpu_metrics[.exe] [options] <application> <args>" <<
     std::endl;
+  std::cout << "Options:" << std::endl;
+  std::cout <<
+    "--pci-order            " <<
+    "Enumerate devices in the order of their PCI addresses" <<
+    std::endl;
+  std::cout <<
+    "Set PTI_DEVICE_ID and PTI_SUB_DEVICE_ID to collect for specific device/sub-device" <<
+    std::endl;
+
 }
 
 extern "C" PTI_EXPORT
 int ParseArgs(int argc, char* argv[]) {
-  return 1;
+  int app_index = 1;
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--pci-order") == 0 ){
+      utils::SetEnv("PTI_DEVICE_PCI_ORDER", "1");
+      ++app_index;
+    } else {
+      break;
+    }
+  }
+  return app_index;
 }
 
 extern "C" PTI_EXPORT
@@ -83,9 +101,9 @@ static KernelMap GetKernelMap() {
 
   int gpu_timestamp_id = metric_collector->GetMetricId("QueryBeginTime");
   PTI_ASSERT(gpu_timestamp_id >= 0);
-  int eu_active_id = metric_collector->GetMetricId("EuActive");
+  int eu_active_id = metric_collector->GetMetricId("XVE_ACTIVE");
   PTI_ASSERT(eu_active_id >= 0);
-  int eu_stall_id = metric_collector->GetMetricId("EuStall");
+  int eu_stall_id = metric_collector->GetMetricId("XVE_STALL");
   PTI_ASSERT(eu_stall_id >= 0);
 
   uint32_t report_size = metric_collector->GetReportSize();
@@ -171,7 +189,23 @@ static void PrintResults() {
   }
 
   std::cerr << std::endl;
-  std::cerr << "=== Device Metrics: ===" << std::endl;
+  const utils::DeviceUUID* device_uuid = metric_collector->GetDeviceUUID();
+  if (device_uuid == nullptr) {
+    std::cerr << "=== Device Metrics: ===" << std::endl;
+  } else {
+    std::cerr << "=== Device ( bdf:" << std::hex
+              << (uint32_t)device_uuid->pciBus
+              << ":" << (uint32_t)device_uuid->pciDevice
+              << "." << (uint32_t)device_uuid->pciFunction
+              << std::dec;
+    if (device_uuid->subDeviceId == 0) {
+      std::cerr << " root device";
+    } else{
+      std::cerr << " sub-device: " << (uint32_t)(device_uuid->subDeviceId - 1);
+    }
+    std::cerr << ") Metrics: ===" << std::dec << std::endl;
+  }
+
   std::cerr << std::endl;
   std::cerr << "Total Execution Time (ns): " << time.count() << std::endl;
   std::cerr << "Total Kernel Time (ns): " << total_duration << std::endl;

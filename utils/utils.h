@@ -42,6 +42,18 @@
 
 namespace utils {
 
+struct DeviceUUID {
+  uint16_t vendorID;
+  uint16_t deviceID;
+  uint16_t revisionID;
+  uint16_t pciDomain;
+  uint8_t pciBus;
+  uint8_t pciDevice;
+  uint8_t pciFunction;
+  uint8_t reserved[4];
+  uint8_t subDeviceId;
+};
+
 struct Comparator {
   template<typename T>
   bool operator()(const T& left, const T& right) const {
@@ -49,6 +61,19 @@ struct Comparator {
       return left.second > right.second;
     }
     return left.first > right.first;
+  }
+};
+
+template<typename T>
+struct ComparatorPciAddress {
+  bool operator()(const T& left, const T& right) const {
+    if (left.BusNumber != right.BusNumber) {
+        return (left.BusNumber < right.BusNumber);
+    }
+    if (left.DeviceNumber != right.DeviceNumber) {
+        return (left.DeviceNumber < right.DeviceNumber);
+    }
+    return left.FunctionNumber < right.FunctionNumber;
   }
 };
 
