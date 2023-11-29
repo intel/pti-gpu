@@ -406,7 +406,9 @@ TEST_F(MainFixtureTest, SecondCallbackCalled) {
 TEST_F(MainFixtureTest, DeviceHandleValid) {
   ptiViewSetCallbacks(BufferRequested, BufferCompleted);
   RunGemm();
-  EXPECT_GT(number_of_subdevices, 0);
+  // TODO this test might need modification as it depends on
+  // how driver/environment present devices for SYCL: flat or hierarchical
+  EXPECT_EQ(number_of_subdevices, 0);
 }
 
 TEST_F(MainFixtureTest, MemoryViewRecordCreated) {
