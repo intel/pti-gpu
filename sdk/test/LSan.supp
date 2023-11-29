@@ -14,3 +14,5 @@ leak:oneapi::mkl::gpu::calloc_device
 
 # libmkl_sycl.so (unknown file)
 leak:oneapi::mkl::gpu::cache_program
+
+leak:libmkl_sycl.so
