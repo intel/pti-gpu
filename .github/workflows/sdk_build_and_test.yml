@@ -31,12 +31,14 @@ jobs:
           ctest --output-on-failure --test-dir build
 
       - name: BuildSanitized
+        if: always()
         run: |
           cd sdk
           cmake --preset asan
           cmake --build --preset asan --parallel $(($(nproc)/2))
 
       - name: BuildFuzz
+        if: always()
         run: |
           # To ensure it still builds, run build for fuzz targets until we have
           # proper fuzz testing infrastructure in place.
@@ -45,6 +47,7 @@ jobs:
           cmake --build --preset fuzz --parallel $(($(nproc)/2))
 
       - name: TestSanitized
+        if: always()
         run: |
           cd sdk
           ctest --preset asan --output-on-failure -L samples
@@ -52,10 +55,12 @@ jobs:
 
   pti-tools-build-and-test:
 
-    needs: sdk-build-and-test   # this is a workaround to ensure tests setup to pass on this runner
+    needs: sdk-build-and-test   # this is a workaround to ensure jobs run sequentially
                                 # TODO make the workflow more generic
 
-    if: github.repository != 'intel/pti-gpu' # no run externally due to no required HW
+    # run this job only if the previous one run and provided some result
+    if: (needs.sdk-build-and-test.result == 'success' || needs.sdk-build-and-test.result == 'failure' )
+
     runs-on: self-hosted
 
     steps:
