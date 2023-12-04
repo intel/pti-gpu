@@ -60,11 +60,7 @@ def add_env(env, name, val):
 def run_process(command, path, environ = None):
   shell = True if sys.platform == 'win32' else False
   p = subprocess.Popen(command, cwd = path, shell = shell,\
-    env = environ, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+    env = environ, stdout = subprocess.PIPE, stderr = subprocess.PIPE, encoding = "latin-1", text = True)
   stdout, stderr = p.communicate()
-  if sys.version_info.major > 2:
-    if stderr:
-      stderr = str(stderr, "utf-8")
-    if stdout:
-      stdout = str(stdout, "utf-8")
+
   return stdout, stderr

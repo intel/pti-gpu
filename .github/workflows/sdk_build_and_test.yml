@@ -70,7 +70,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Build-and-test-unitrace
+        run: |
+          python ./tests/run.py -s unitrace
+
       - name: Build-and-test-onetrace
+        if: always()
         run: |
           python ./tests/run.py -s onetrace
 

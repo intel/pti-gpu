@@ -51,6 +51,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - for [oneAPI Level Zero (Level Zero)](chapters/system_management/LevelZero.md)
 
 ## Profiling & Debug Tools
+ - [unitrace](tools/unitrace) - unified tracing and profiling tool. In addition to Level Zero and/or OpenCL, this tool is capable of profiling software layers in the software stack, for example, SYCL and plugins, oneCCL, MPI etc., for scale-up and scale-out applications. It also supports profiling hardware metrics (including instruction-level EU stalls) and software events at the same time.
  - [onetrace](tools/onetrace) - host and device tracing tool for OpenCL(TM) and Level Zero backends with support of DPC++ (both for CPU and GPU) and OpenMP* GPU offload;
  - [oneprof](tools/oneprof) - GPU HW metrics collection tool for OpenCL(TM) and Level Zero backends with support of DPC++ and OpenMP* GPU offload;
  - [ze_tracer](tools/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);

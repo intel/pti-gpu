@@ -29,6 +29,21 @@
 #define TRACE_PID                    13
 #define TRACE_LOG_TO_FILE            14
 #define TRACE_CONDITIONAL_COLLECTION 15
+#define TRACE_OUTPUT_DIR_PATH        16
+#define TRACE_KERNEL_NAME_FILTER     17
+#define TRACE_K_NAME_FILTER_FILE     18
+#define TRACE_K_NAME_FILTER_IN       19
+#define TRACE_K_NAME_FILTER_OUT      20
+#define TRACE_CHROME_KERNEL_LOGGING  21
+#define TRACE_CHROME_DEVICE_LOGGING  22
+#define TRACE_CHROME_SYCL_LOGGING    23
+#define TRACE_CHROME_ITT_LOGGING     24
+#define TRACE_OPENCL                 25
+#define TRACE_CHROME_NO_THREAD_ON_DEVICE	26
+#define TRACE_CHROME_NO_ENGINE_ON_DEVICE	27
+#define TRACE_METRIC_QUERY           28
+#define TRACE_METRIC_STREAM          29
+#define TRACE_CCL_SUMMARY_REPORT     30
 
 const char* kChromeTraceFileExt = "json";
 
@@ -67,7 +82,7 @@ class TraceOptions {
 
     result << "." + std::to_string(utils::GetPid());
 
-    std::string rank = utils::GetEnv("PMI_RANK");
+    std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
     if (!rank.empty()) {
       result << "." + rank;
     }
@@ -80,7 +95,7 @@ class TraceOptions {
   }
 
   static std::string GetChromeTraceFileName(const char* filename) {
-    std::string rank = utils::GetEnv("PMI_RANK");
+    std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
     if (!rank.empty()) {
       return
         std::string(filename) +
