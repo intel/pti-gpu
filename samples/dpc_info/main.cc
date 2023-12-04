@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include <CL/sycl.hpp>
+#include <sycl/sycl.hpp>
 
 #define TAB std::string("  ")
 
@@ -43,6 +43,134 @@ std::string ConvertBytesToString(size_t value) {
   return std::to_string(value / BYTES_IN_GB) + "GiB";
 }
 
+std::ostream& operator<<(std::ostream& out, sycl::aspect sycl_aspect) {
+  switch (sycl_aspect) {
+    case sycl::aspect::cpu:
+      out << "cpu";
+      break;
+    case sycl::aspect::gpu:
+      out << "gpu";
+      break;
+    case sycl::aspect::accelerator:
+      out << "accelerator";
+      break;
+    case sycl::aspect::custom:
+      out << "custom";
+      break;
+    case sycl::aspect::emulated:
+      out << "emulated";
+      break;
+    case sycl::aspect::host_debuggable:
+      out << "host_debuggable";
+      break;
+    case sycl::aspect::fp16:
+      out << "fp16";
+      break;
+    case sycl::aspect::fp64:
+      out << "fp64";
+      break;
+    case sycl::aspect::atomic64:
+      out << "atomic64";
+      break;
+    case sycl::aspect::image:
+      out << "image";
+      break;
+    case sycl::aspect::online_compiler:
+      out << "online_compiler";
+      break;
+    case sycl::aspect::online_linker:
+      out << "online_linker";
+      break;
+    case sycl::aspect::queue_profiling:
+      out << "queue_profiling";
+      break;
+    case sycl::aspect::usm_device_allocations:
+      out << "usm_device_allocations";
+      break;
+    case sycl::aspect::usm_host_allocations:
+      out << "usm_host_allocations";
+      break;
+    case sycl::aspect::usm_atomic_host_allocations:
+      out << "usm_atomic_host_allocations";
+      break;
+    case sycl::aspect::usm_shared_allocations:
+      out << "usm_shared_allocations";
+      break;
+    case sycl::aspect::usm_atomic_shared_allocations:
+      out << "usm_atomic_shared_allocations";
+      break;
+    case sycl::aspect::usm_system_allocations:
+      out << "usm_system_allocations";
+      break;
+#if defined(SYCL_IMPLEMENTATION_INTEL)
+    case sycl::aspect::ext_intel_pci_address:
+      out << "ext_intel_pci_address";
+      break;
+    case sycl::aspect::ext_intel_gpu_eu_count:
+      out << "ext_intel_gpu_eu_count";
+      break;
+    case sycl::aspect::ext_intel_gpu_eu_simd_width:
+      out << "ext_intel_gpu_eu_simd_width";
+      break;
+    case sycl::aspect::ext_intel_gpu_slices:
+      out << "ext_intel_gpu_slices";
+      break;
+    case sycl::aspect::ext_intel_gpu_subslices_per_slice:
+      out << "ext_intel_gpu_subslices_per_slice";
+      break;
+    case sycl::aspect::ext_intel_gpu_eu_count_per_subslice:
+      out << "ext_intel_gpu_eu_count_per_subslice";
+      break;
+    case sycl::aspect::ext_intel_max_mem_bandwidth:
+      out << "ext_intel_max_mem_bandwidth";
+      break;
+    case sycl::aspect::ext_intel_mem_channel:
+      out << "ext_intel_mem_channel";
+      break;
+    case sycl::aspect::ext_intel_device_info_uuid:
+      out << "ext_intel_device_info_uuid";
+      break;
+    case sycl::aspect::ext_intel_gpu_hw_threads_per_eu:
+      out << "ext_intel_gpu_hw_threads_per_eu";
+      break;
+    case sycl::aspect::ext_intel_free_memory:
+      out << "ext_intel_free_memory";
+      break;
+    case sycl::aspect::ext_intel_device_id:
+      out << "ext_intel_device_id";
+      break;
+    case sycl::aspect::ext_intel_memory_clock_rate:
+      out << "ext_intel_memory_clock_rate";
+      break;
+    case sycl::aspect::ext_intel_memory_bus_width:
+      out << "ext_intel_memory_bus_width";
+      break;
+#if __LIBSYCL_MAJOR_VERSION > 6
+    case sycl::aspect::ext_intel_legacy_image:
+      out << "ext_intel_legacy_image";
+      break;
+#endif
+#endif
+#if defined(SYCL_IMPLEMENTATION_ONEAPI)
+    case sycl::aspect::ext_oneapi_srgb:
+      out << "ext_oneapi_srgb";
+      break;
+    case sycl::aspect::ext_oneapi_native_assert:
+      out << "ext_oneapi_native_assert";
+      break;
+    case sycl::aspect::ext_oneapi_cuda_async_barrier:
+      out << "ext_oneapi_cuda_async_barrier";
+      break;
+    case sycl::aspect::ext_oneapi_bfloat16_math_functions:
+      out << "ext_oneapi_bfloat16_math_functions";
+      break;
+#endif
+    default:
+      out << "<unkown-aspect: " << static_cast<std::size_t>(sycl_aspect) << ">";
+      break;
+  }
+  return out;
+}
 
 int main(int argc, char* argv[]) {
   bool list_mode = false;
@@ -166,13 +294,14 @@ int main(int argc, char* argv[]) {
           (is_avilable ? "Yes" : "No") << std::endl;
 
         bool is_compiler_avilable =
-          device.get_info<sycl::info::device::is_compiler_available>();
+          device.has(sycl::aspect::online_compiler);
+
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "Compiler Available " <<
           (is_compiler_avilable ? "Yes" : "No") << std::endl;
 
         bool is_linker_avilable =
-          device.get_info<sycl::info::device::is_linker_available>();
+          device.has(sycl::aspect::online_linker);
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "Linker Available " <<
           (is_linker_avilable ? "Yes" : "No") << std::endl;
@@ -197,7 +326,7 @@ int main(int argc, char* argv[]) {
           max_work_item_dimensions << std::endl;
 
         sycl::id<3> sizes =
-          device.get_info<sycl::info::device::max_work_item_sizes>();
+          device.get_info<sycl::info::device::max_work_item_sizes<3>>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "Max work item sizes " <<
           sizes[0] << " x " << sizes[1] << " x " << sizes[2] << std::endl;
@@ -232,6 +361,9 @@ int main(int argc, char* argv[]) {
             std::cout << "Other" << std::endl;
         }
 
+        // TODO(matthew.schilling@intel.com): Deprecated, however, I do not
+        // know a drop-in replacement.
+        // https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html#_device_information_descriptors
         bool preferred_interop_user_sync =
           device.get_info<sycl::info::device::preferred_interop_user_sync>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
@@ -244,27 +376,43 @@ int main(int argc, char* argv[]) {
           TAB + "Profiling timer resolution " <<
           profiling_timer_resolution << "ns" << std::endl;
 
+        // TODO(matthew.schilling@intel.com): Deprecated, however, I do not
+        // know a drop-in replacement.
+        // https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html#_device_information_descriptors
         size_t printf_buffer_size =
           device.get_info<sycl::info::device::printf_buffer_size>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "printf() buffer size" << printf_buffer_size << " (" <<
           ConvertBytesToString(printf_buffer_size) << ")" << std::endl;
 
-        std::vector<std::string> built_in_kernels =
-          device.get_info<sycl::info::device::built_in_kernels>();
+        auto built_in_kernels =
+          device.get_info<sycl::info::device::built_in_kernel_ids>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "Built-in kernels ";
         for (size_t i = 0; i < built_in_kernels.size(); ++i) {
-          std::cout << built_in_kernels[i] << " ";
+          std::cout << built_in_kernels[i].get_name() << " ";
         }
         std::cout << std::endl;
 
+        // TODO(matthew.schilling@intel.com): Deprecated, however, the
+        // suggested replacement is not 1-for-1. I added the implementation
+        // using aspects below. Keeping this for now.
+        // https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html#_device_information_descriptors
         std::vector<std::string> device_extensions =
           device.get_info<sycl::info::device::extensions>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
           TAB + "Device Extensions ";
-        for (size_t i = 0; i < device_extensions.size(); ++i) {
-          std::cout << device_extensions[i] << " ";
+        for (const auto& device_extension : device_extensions) {
+          std::cout << device_extension << " ";
+        }
+        std::cout << std::endl;
+
+        auto device_aspects =
+          device.get_info<sycl::info::device::aspects>();
+        std::cout << std::setw(TEXT_WIDTH) << std::left <<
+          TAB + "Device Aspects ";
+        for (const auto& device_aspect : device_aspects) {
+          std::cout << device_aspect << " ";
         }
         std::cout << std::endl << std::endl;
       }
