@@ -1246,6 +1246,7 @@ class ZeKernelCollector {
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
       collector->ProcessCall("EventHostSynchronize", *(params->phEvent));
+      collector->ProcessCalls("EventHostSynchronize");
     }
   }
 
