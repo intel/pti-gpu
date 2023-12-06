@@ -423,9 +423,7 @@ macro(FindGTPinLibrary_legacy TARGET)
                         DEPENDS ${GTPIN_LIB_PATH}/GTPIN/libgcc_s.so.1
                                 ${GTPIN_LIB_PATH}/GTPIN/libged.so
                                 ${GTPIN_LIB_PATH}/GTPIN/libgtpin.so
-                                ${GTPIN_LIB_PATH}/GTPIN/libgtpin_core.so
-                                ${GTPIN_LIB_PATH}/GTPIN/libiga_wrapper.so
-                                ${GTPIN_LIB_PATH}/GTPIN/libstdc++.so.6)
+                                ${GTPIN_LIB_PATH}/GTPIN/libgtpin_core.so)
       add_custom_command(OUTPUT ${GTPIN_LIB_PATH}/GTPIN/libgcc_s.so.1
                                 ${GTPIN_LIB_PATH}/GTPIN/libged.so
                                 ${GTPIN_LIB_PATH}/GTPIN/libgtpin.so
@@ -542,13 +540,27 @@ macro(GetGTPinPackage TARGET)
       endif()
     endif()
     include(FetchContent)
-    FetchContent_Declare(
-      gtpin_package
-      URL ${GTPIN_LINK}
-    )
+    if(${CMAKE_VERSION} VERSION_LESS "3.24.0")
+      FetchContent_Declare(
+        gtpin_package
+        URL ${GTPIN_LINK}
+      )
+    else()
+      FetchContent_Declare(
+        gtpin_package
+        URL ${GTPIN_LINK}
+        DOWNLOAD_EXTRACT_TIMESTAMP YES
+      )
+    endif()
     message(STATUS "Download GTPin package link: ${GTPIN_LINK}")
     FetchContent_MakeAvailable(gtpin_package)
-    set(GTPIN_PATH ${gtpin_package_SOURCE_DIR})
+    if(UNIX)
+      set(GTPIN_PATH ${gtpin_package_SOURCE_DIR})
+    elseif(WIN32)
+      set(GTPIN_PATH ${gtpin_package_SOURCE_DIR}/Profilers)
+    else()
+      message(FATAL_ERROR "Graphics Technology Pin (GT Pin) is not supported for the platform")
+    endif()
     message(STATUS "GTPin Technology Pin (GT Pin) unpacked: ${GTPIN_PATH}")
   else()
     if(NOT IS_ABSOLUTE ${GTPIN_PATH})

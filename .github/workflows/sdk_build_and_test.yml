@@ -93,3 +93,8 @@ jobs:
         if: always()
         run: |
           python ./tests/run.py -s cl_gpu_metrics
+
+      - name: Build-and-test-gpu-inst-count
+        if: always()
+        run: |
+          python ./tests/run.py -s gpu_inst_count

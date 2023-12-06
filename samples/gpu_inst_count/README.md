@@ -1,9 +1,12 @@
 # GPU Instruction Count
+
 ## Overview
+
 This sample is a simple LD_PRELOAD based tool that allows to collect dynamic execution count for every OpenCL(TM) kernel instruction.
 
 As a result, assembly listing annotated with dynamic instruction count for each kernel will be printed.
-```
+
+```console
 === GEMM (runs 4 times) ===
 [     32768] 0x0000: (W)      mov (8|M0)               r5.0<1>:ud    r0.0<1;1,0>:ud
 [     32768] 0x0010: (W)      or (1|M0)                cr0.0<1>:ud   cr0.0<0;1,0>:ud   0x4C0:uw         {Switch}
@@ -72,19 +75,25 @@ As a result, assembly listing annotated with dynamic instruction count for each 
 [     32768] 0x0398:          illegal
 [     32768] 0x03A8:          illegal
 ```
+
 ## Supported OS
+
 - Linux
 - Windows (*under development*)
 
 ## Prerequisites
+
 - [CMake](https://cmake.org/) (version 3.12 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 2.7 and above)
 - [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html)
 
 ## Build and Run
+
 ### Linux
+
 Run the following commands to build the sample:
+
 ```sh
 cd <pti>/samples/gpu_inst_count
 mkdir build
@@ -92,41 +101,61 @@ cd build
 cmake -DCMAKE_BUILD_TYPE=Release [-DGTPIN_PATH=<gtpin>/Profilers] ..
 make
 ```
+
 Use this command line to run the tool:
+
 ```sh
 ./gpu_inst_count <target_application>
 ```
+
 One may use [cl_gemm](../cl_gemm), [ze_gemm](../ze_gemm) or [dpc_gemm](../dpc_gemm) as target application:
+
 ```sh
 ./gpu_inst_count ../../cl_gemm/build/cl_gemm
 ./gpu_inst_count ../../ze_gemm/build/ze_gemm
 ./gpu_inst_count ../../dpc_gemm/build/dpc_gemm
 ```
+
 ### Windows
+
 Use Microsoft* Visual Studio x64 command prompt to run the following commands and build the sample:
+
 ```sh
 cd <pti>\samples\gpu_inst_count
 mkdir build
 cd build
-cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DGTPIN_PATH=<gtpin>\Profilers -DCMAKE_LIBRARY_PATH=<iga_lib_path> ..
+cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release ..
 nmake
 ```
+
 Use this command line to run the tool:
+
 ```sh
 set PATH=%PATH%;<gtpin>\Profilers\Lib\intel64
 gpu_inst_count.exe <target_application>
 ```
+
+CMake unpacks GTPin into "_deps\gtpin_package-src\Profilers":
+
+```sh
+set PATH=%PATH%;_deps\gtpin_package-src\Profilers\Lib\intel64
+gpu_inst_count.exe <target_application>
+```
+
 One may use [cl_gemm](../cl_gemm), [ze_gemm](../ze_gemm) or [dpc_gemm](../dpc_gemm) as target application:
+
 ```sh
 set PATH=%PATH%;<gtpin>\Profilers\Lib\intel64
 gpu_inst_count.exe ..\..\cl_gemm\build\cl_gemm.exe
 gpu_inst_count.exe ..\..\ze_gemm\build\ze_gemm.exe
 gpu_inst_count.exe ..\..\dpc_gemm\build\dpc_gemm.exe
 ```
-**Note**: to build this sample one may need to generate *.lib file from IGA *.dll (see [here](https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll) for details) and provide the path to this *.lib to cmake with `-DCMAKE_LIBRARY_PATH`.
+
+**Note**: to build this sample one may need to generate \*.lib file from IGA \*.dll (see [here](https://stackoverflow.com/questions/9946322/how-to-generate-an-import-library-lib-file-from-a-dll) for details) and provide the path to this \*.lib to cmake with `-DCMAKE_LIBRARY_PATH`.
 
 Also one may need to add an actual path to IGA *.dll into PATH before sample run, e.g.:
-```
+
+```sh
 set PATH=%PATH%;<gtpin>\Profilers\Lib\intel64
 set PATH=%PATH%;<iga_dll_path>
 gpu_inst_count.exe ..\..\cl_gemm\build\cl_gemm.exe
