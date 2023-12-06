@@ -9,7 +9,7 @@ on:
 jobs:
   sdk-build-and-test:
 
-    if: github.repository != 'intel/pti-gpu' # no run externally due to no required HW
+    if: vars.PTI_RUN_TESTS == 1
     runs-on: self-hosted
 
     steps:
