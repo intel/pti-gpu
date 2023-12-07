@@ -21,13 +21,15 @@ def build(path):
     return stderr
   return None
 
-def parse(output):
+def parseTotal(output, countString=None):
   lines = output.split("\n")
   total_count = 0
   for line in lines:
     if line.find("[INFO]") != -1:
       continue
     if line.find("[") != 0:
+      continue
+    if countString != None and countString not in line:
       continue
     items = line.split("]")
     if len(items) == 2:
@@ -36,24 +38,26 @@ def parse(output):
         if count < 0:
           return False
         total_count += count
-  if total_count <= 0:
-    return False
-  return True
+  return total_count
 
-def run(path, option):
+def parse(output):
+  return False if parseTotal(output) <= 0 else True
+
+def getTestAppCommand(option, matrixSize, iterations):
   if option == "cl":
     app_folder = utils.get_sample_executable_path("cl_gemm")
     app_file = os.path.join(app_folder, "cl_gemm")
-    command = ["./gpu_inst_count", app_file, "gpu", "1024", "1"]
+    return ["./gpu_inst_count", app_file, "gpu", f"{matrixSize}", f"{iterations}"]
   elif option == "ze":
     app_folder = utils.get_sample_executable_path("ze_gemm")
     app_file = os.path.join(app_folder, "ze_gemm")
-    command = ["./gpu_inst_count", app_file, "1024", "1"]
+    return ["./gpu_inst_count", app_file, f"{matrixSize}", f"{iterations}"]
   else:
     app_folder = utils.get_sample_executable_path("dpc_gemm")
     app_file = os.path.join(app_folder, "dpc_gemm")
-    command = ["./gpu_inst_count", app_file, "gpu", "1024", "1"]
-  stdout, stderr = utils.run_process(command, path)
+    return ["./gpu_inst_count", app_file, "gpu",  f"{matrixSize}", f"{iterations}"]
+
+def isValidOutput(stdout, stderr):
   if not stdout:
     return "stdout is empty"
   if not stderr:
@@ -64,6 +68,42 @@ def run(path, option):
     return stderr
   if not parse(stderr):
     return stderr
+  return None
+
+def run(path, option):
+  # Smoke test
+  command = getTestAppCommand(option, 1024, 1)
+  stdout, stderr = utils.run_process(command, path)
+  res = isValidOutput(stdout, stderr)
+  if res != None: return res
+
+  # Correctness test
+  # Test is based on relative results of instruction count. Test appplicaiton
+  # has N^3 complexity. Correctness based on number of executed multiply instructions
+  # for matrix sizes {1, 2, 4} is checked as: (-12*r1-r2+r4)/44==(4*r1-r2)/-4:)
+
+  baseSize = 128
+  command = getTestAppCommand(option, baseSize * 1, 1)
+  stdout, stderr = utils.run_process(command, path)
+  res = isValidOutput(stdout, stderr)
+  if res != None: return res
+  r1 = parseTotal(stderr, 'mad')
+
+  command = getTestAppCommand(option, baseSize * 2, 1)
+  stdout, stderr = utils.run_process(command, path)
+  res = isValidOutput(stdout, stderr)
+  if res != None: return res
+  r2 = parseTotal(stderr, 'mad')
+
+  command = getTestAppCommand(option, baseSize * 4, 1)
+  stdout, stderr = utils.run_process(command, path)
+  res = isValidOutput(stdout, stderr)
+  if res != None: return res
+  r4 = parseTotal(stderr, 'mad')
+
+  if (-12*r1 -r2 +r4)/44 != (4*r1 - r2)/-4:
+    return f"Correctness check failed: {r1 * 8} != {r2}"
+
   return None
 
 def main(option):
