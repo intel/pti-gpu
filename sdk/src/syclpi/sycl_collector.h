@@ -179,17 +179,20 @@ class SyclCollector {
     */
 
     switch (trace_type) {
-      case xpti::trace_point_type_t::graph_create:
-        SyclCollector::Instance().sycl_pi_graph_created_ = true;
+      case xpti::trace_point_type_t::function_begin:
         // Until the user calls EnableTracing(), disable tracing when we are
         // able to capture the sycl runtime streams sycl and sycl.pi
-        if (!SyclCollector::Instance().enabled_) {
-          SyclCollector::Instance().DisableTracing();
+        // Empirically, we found the sycl.pi stream gets emitted after the sycl
+        // stream.
+        if(!SyclCollector::Instance().sycl_pi_graph_created_) {
+          SyclCollector::Instance().sycl_pi_graph_created_ = true;
+          if (!SyclCollector::Instance().enabled_) {
+            SyclCollector::Instance().DisableTracing();
+          }
         }
-        break;
-      case xpti::trace_point_type_t::function_begin:
         sycl_data_kview.cid_ = UniCorrId::GetUniCorrId();
         sycl_data_mview.cid_ = sycl_data_kview.cid_;
+
         if (UserData) {
           auto function_name = static_cast<const char*>(UserData);
           SPDLOG_DEBUG("\tSYCL.PI Function Begin: {}", function_name);
@@ -376,8 +379,6 @@ XPTI_CALLBACK_API void xptiTraceInit(unsigned int /*major_version*/, unsigned in
     SPDLOG_DEBUG("Registered callbacks for {}", stream_name);
   } else if (strcmp(stream_name, "sycl.pi") == 0) {
     stream_id = xptiRegisterStream(stream_name);
-    xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::graph_create),
-                         SyclCollector::TpCallback);
     xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::function_begin),
                          SyclCollector::TpCallback);
     xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::function_end),
