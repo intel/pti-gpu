@@ -155,7 +155,7 @@ static TraceOptions ReadArgs() {
 }
 
 std::string get_version() {
-  return std::string(VERSION) + " ("+ std::string(COMMIT_HASH) + ")";
+  return std::string(UNITRACE_VERSION) + " ("+ std::string(COMMIT_HASH) + ")";
 }
 
 void __attribute__((constructor)) Init(void) {
@@ -168,7 +168,7 @@ void __attribute__((constructor)) Init(void) {
   if (unitrace_version.size() > 0) {
     auto libunitrace_version = get_version();
     if (unitrace_version.compare(libunitrace_version) != 0) {
-      std::cerr << "[ERROR] Versions of Unitrace and libUnitrace_tool.so do not match." << std::endl;
+      std::cerr << "[ERROR] Versions of unitrace and libunitrace_tool.so do not match." << std::endl;
       exit(-1);
     }
   }

@@ -119,8 +119,8 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--verbose [-v]                 " <<
-    "Enable verbose mode to show more kernel information. For OpenCL backend only." << std::endl <<
-    "                               Verbose is always enabled for Level Zero backend" <<
+    "Enable verbose mode to show kernel shapes" << std::endl <<
+    "                               Kernel shapes are always enabled in timelines for Level Zero backend" <<
     std::endl;
   std::cout <<
     "--demangle                     " <<
@@ -384,7 +384,7 @@ int ParseArgs(int argc, char* argv[]) {
       show_metric_list = true;
       ++app_index;
     } else if (strcmp(argv[i], "--version") == 0) {
-      std::cout << VERSION << " (" << COMMIT_HASH << ")" << std::endl;
+      std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
       return 0;
     } else {
       break;
@@ -555,7 +555,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   // Set unitrace version
-  auto unitrace_version =  std::string(VERSION) + " (" +  std::string(COMMIT_HASH) + ")";
+  auto unitrace_version =  std::string(UNITRACE_VERSION) + " (" +  std::string(COMMIT_HASH) + ")";
   utils::SetEnv("UNITRACE_VERSION", unitrace_version.c_str());
 
   SetProfilingEnvironment();
@@ -589,11 +589,11 @@ int main(int argc, char *argv[]) {
   if (utils::GetEnv("UNITRACE_ChromeMpiLogging") == "1") {
     preload = preload + ":" + mpi_interceptor_path;
     // For tracing MPI calls from oneCCL, we need to set CCL_MPI_LIBRARY_PATH
-    // with Unitrace's MPI intercepter path, because oneCCL directly picks up
+    // with unitrace's MPI intercepter path, because oneCCL directly picks up
     // MPI functions with dlopen/dlsym, not through the dynamic linker. Thus,
     // LD_PRELOAD would not work.
     // TODO: We have to consider a case where CCL_MPI_LIBRARY_PATH is already
-    //       set. Unitrace will need to call the MPIs in the specified libs
+    //       set. In this case, unitrace needs to call MPIs in the specified libs
     //       before/after ITT annotation.
     utils::SetEnv("CCL_MPI_LIBRARY_PATH", mpi_interceptor_path.c_str());
   }

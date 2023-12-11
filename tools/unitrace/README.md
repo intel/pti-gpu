@@ -131,17 +131,25 @@ To trace/profile device and kernel activities, one can use one or more of the fo
 
 The **--device-timing [-d]** option outputs a timing summary of kernels and commands executed on the device:
 
-![Device Timing!](/tools/unitrace/doc/images/device-timing.png)
+
+![Device Timing With No Shape!](/tools/unitrace/doc/images/device-timing-with-no-shape.png)
 
 In addition, it also outputs kernel information that helps to identify kernel performance issues that relate to occupancy caused by shared local memory usage and register spilling.
 
-![Kernel Info!](/tools/unitrace/doc/images/kernel-info.png)
+![Kernel Info With No Shape!](/tools/unitrace/doc/images/kernel-info-with-no-shape.png)
 
 Here, the **"SLM Per Work Group"** shows the amount of shared local memory needed for each work group in bytes. This size can potentially affect occupancy.
 
 The **"Private Memory Per Thread"** is the private memory allocated for each thread in bytes. A non-zero value indicates that one or more thread private variables are not in registers.
 
 The **"Spill Memory Per Thread"** is the memory used for register spilled for each thread in bytes. A non-zero value indicates that one or more thread private variables are allocated in registers but are later spilled to memory.
+
+By default, the kernel timing is summarized regardless of shapes. In case the kernel has different shapes, using **-v** along with **-d** is strongly recommended:
+
+![Device Timing!](/tools/unitrace/doc/images/device-timing.png)
+
+![Kernel Info!](/tools/unitrace/doc/images/kernel-info.png)
+
 
 The **--kernel-submission [-s]** option outputs a time summary of kernels spent in queuing, submission and execution:
 ![Kernel Submissions!](/tools/unitrace/doc/images/kernel-submissions.png)

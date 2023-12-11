@@ -942,31 +942,33 @@ typedef void (*OnZeKernelFinishCallback)(uint64_t kid, uint64_t tid, uint64_t st
 
 ze_result_t (*zexKernelGetBaseAddress)(ze_kernel_handle_t hKernel, uint64_t *baseAddress) = nullptr;
 
-inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& group_count, size_t size) {
+inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& group_count, size_t size, bool detailed = true) {
   std::stringstream s;
   kernel_command_properties_mutex_.lock_shared();
   auto it = kernel_command_properties_->find(id);
   if (it != kernel_command_properties_->end()) {
     s << utils::Demangle(it->second.name_.c_str());
-    if (it->second.type_ == KERNEL_COMMAND_TYPE_COMPUTE) {
-      if (it->second.simd_width_ > 0) {
-        s << "[SIMD";
-        if (it->second.simd_width_ == 1) {
-          s << "_ANY";
-        } else {
-          s << it->second.simd_width_;
+    if (detailed) {
+      if (it->second.type_ == KERNEL_COMMAND_TYPE_COMPUTE) {
+        if (it->second.simd_width_ > 0) {
+          s << "[SIMD";
+          if (it->second.simd_width_ == 1) {
+            s << "_ANY";
+          } else {
+            s << it->second.simd_width_;
+          }
         }
+        s << " {" <<
+          group_count.groupCountX << "; " <<
+          group_count.groupCountY << "; " <<
+          group_count.groupCountZ << "} {" <<
+          it->second.group_size_.x << "; " <<
+          it->second.group_size_.y << "; " <<
+          it->second.group_size_.z << "}]";
       }
-      s << " {" <<
-        group_count.groupCountX << "; " <<
-        group_count.groupCountY << "; " <<
-        group_count.groupCountZ << "} {" <<
-        it->second.group_size_.x << "; " <<
-        it->second.group_size_.y << "; " <<
-        it->second.group_size_.z << "}]";
-    }
-    else if ((it->second.type_ == KERNEL_COMMAND_TYPE_MEMORY) && (size > 0)) {
-      s << "[" << size << "]";
+      else if ((it->second.type_ == KERNEL_COMMAND_TYPE_MEMORY) && (size > 0)) {
+        s << "[" << size << "]";
+      }
     }
   }
 
@@ -974,9 +976,9 @@ inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& g
   return s.str();
 }
 
-inline std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, size_t size) {
+inline std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, size_t size, bool detailed = true) {
   const ze_group_count_t& gcount = group_count;
-  return GetZeKernelCommandName(id, gcount, size);
+  return GetZeKernelCommandName(id, gcount, size, detailed);
 }
 
 inline ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device, int32_t *parent_device_id, int32_t *device_id, int32_t *subdevice_id){
@@ -1115,10 +1117,10 @@ class ZeCollector {
       total_time += it.second.execute_time_;
       std::string kname;
       if (it.first.tile_ >= 0) {
-        kname = "Tile #" + std::to_string(it.first.tile_) + ": " + GetZeKernelCommandName(it.first.kernel_command_id_, it.first.group_count_, it.first.mem_size_);
+        kname = "Tile #" + std::to_string(it.first.tile_) + ": " + GetZeKernelCommandName(it.first.kernel_command_id_, it.first.group_count_, it.first.mem_size_, options_.verbose);
       }
       else {
-        kname = GetZeKernelCommandName(it.first.kernel_command_id_, it.first.group_count_, it.first.mem_size_);
+        kname = GetZeKernelCommandName(it.first.kernel_command_id_, it.first.group_count_, it.first.mem_size_, options_.verbose);
       }
       if (kname.size() > max_name_size) {
         max_name_size = kname.size();
@@ -1204,10 +1206,10 @@ class ZeCollector {
       total_submit_time += it.second.submit_time_;
       std::string kname;
       if (it.first.tile_ >= 0) {
-        kname = "Tile #" + std::to_string(it.first.tile_) + ": " + GetZeKernelCommandName(it.first.kernel_command_id_, it.first.group_count_, it.first.mem_size_);
+        kname = "Tile #" + std::to_string(it.first.tile_) + ": " + GetZeKernelCommandName(it.first.kernel_command_id_, it.first.group_count_, it.first.mem_size_, options_.verbose);
       }
       else {
-        kname = GetZeKernelCommandName(it.first.kernel_command_id_, it.first.group_count_, it.first.mem_size_);
+        kname = GetZeKernelCommandName(it.first.kernel_command_id_, it.first.group_count_, it.first.mem_size_, options_.verbose);
       }
       if (kname.size() > max_name_size) {
         max_name_size = kname.size();
@@ -1615,37 +1617,6 @@ class ZeCollector {
   
                 sub_desc.driver_ = driver;
                 sub_desc.context_ = context;
-#if 0
-                if (options_.metric_query) {
-                  zet_metric_group_handle_t group = nullptr;
-                  uint32_t num_groups = 0;
-                  status = zetMetricGroupGet(sub_devices[j], &num_groups, nullptr);
-                  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-                  if (num_groups > 0) {
-                    std::vector<zet_metric_group_handle_t> groups(num_groups, nullptr);
-                    status = zetMetricGroupGet(sub_devices[j], &num_groups, groups.data());
-                    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-                    for (uint32_t k = 0; k < num_groups; ++k) {
-                      zet_metric_group_properties_t group_props{};
-                      group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
-                      status = zetMetricGroupGetProperties(groups[k], &group_props);
-                      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-                  
-                      if ((strcmp(group_props.name, utils::GetEnv("UNITRACE_MetricGroup").c_str()) == 0) && (group_props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED)) {
-                        group = groups[k];
-                        break;
-                      }
-                    }
-                  }
-                  status = zetContextActivateMetricGroups(context, sub_devices[j], 1, &group);
-                  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-                  metric_activations_.insert({context, sub_devices[j]});
-
-                  sub_desc.metric_group_ = group;
-                }
-#endif /* 0 */
             
                 sub_desc.metric_group_ = nullptr;
 

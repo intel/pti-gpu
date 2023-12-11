@@ -39,7 +39,7 @@ static uint32_t mpi_rank = std::atoi(rank.c_str());
 static std::string process_start_time = std::to_string(UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp()));
 static std::string pmi_hostname = GetHostName();
 
-std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, size_t size);
+std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, size_t size, bool detailed);
 ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device, int32_t *parent_device_id, int32_t *device_id, int32_t *subdevice_id);
 
 static Logger* logger_ = nullptr;
