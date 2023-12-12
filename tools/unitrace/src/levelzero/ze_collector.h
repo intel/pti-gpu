@@ -1110,6 +1110,9 @@ class ZeCollector {
     std::vector<std::string> knames;
     size_t max_name_size = 0;
     global_device_time_stats_mutex_.lock();
+
+    AggregateDeviceTimeStats();
+
     std::set<std::pair<ZeKernelCommandNameKey, ZeKernelCommandTime>, utils::Comparator> sorted_list(
         global_device_time_stats_->begin(), global_device_time_stats_->end());
 
@@ -1197,6 +1200,9 @@ class ZeCollector {
     std::vector<std::string> knames;
     size_t max_name_size = 0;
     global_device_time_stats_mutex_.lock();
+
+    AggregateDeviceTimeStats();
+
     std::set<std::pair<ZeKernelCommandNameKey, ZeKernelCommandTime>, utils::Comparator> sorted_list(
         global_device_time_stats_->begin(), global_device_time_stats_->end());
 
@@ -3978,6 +3984,49 @@ class ZeCollector {
 
   void CollectHostFunctionTimeStats(uint32_t id, uint64_t time) {
     local_device_submissions_.CollectHostFunctionTimeStats(id, time);
+  }
+
+  void AggregateDeviceTimeStats() const {
+    // do not acquire global_device_time_stats_mutex_. caller dos it.
+    for (auto it = global_device_time_stats_->begin(); it != global_device_time_stats_->end(); it++) {
+      std::string kname;
+      if (it->first.tile_ >= 0) {
+        kname = "Tile #" + std::to_string(it->first.tile_) + ": " + GetZeKernelCommandName(it->first.kernel_command_id_, it->first.group_count_, it->first.mem_size_, options_.verbose);
+      }
+      else {
+        kname = GetZeKernelCommandName(it->first.kernel_command_id_, it->first.group_count_, it->first.mem_size_, options_.verbose);
+      }
+
+      auto it2 = it;
+      it2++;
+
+      for (; it2 != global_device_time_stats_->end();) {
+        std::string kname2;
+        if (it2->first.tile_ >= 0) {
+          kname2 = "Tile #" + std::to_string(it2->first.tile_) + ": " + GetZeKernelCommandName(it2->first.kernel_command_id_, it2->first.group_count_, it2->first.mem_size_, options_.verbose);
+        }
+        else {
+          kname2 = GetZeKernelCommandName(it2->first.kernel_command_id_, it2->first.group_count_, it2->first.mem_size_, options_.verbose);
+        }
+
+        if (kname2 == kname) {
+          it->second.append_time_ += it2->second.append_time_;
+          it->second.submit_time_ += it2->second.submit_time_;
+          it->second.execute_time_ += it2->second.execute_time_;
+          if (it->second.min_time_ > it2->second.min_time_) {
+            it->second.min_time_ = it2->second.min_time_;
+          }
+          if (it->second.max_time_ < it2->second.max_time_) {
+            it->second.max_time_ = it2->second.max_time_;
+          }
+          it->second.call_count_ += it2->second.call_count_;
+          it2 = global_device_time_stats_->erase(it2);
+        }
+        else {
+          it2++;
+        }
+      }
+    }
   }
 
  private: // Data
