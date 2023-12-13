@@ -1259,6 +1259,7 @@ class ZeKernelCollector {
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
       collector->ProcessCall("FenceHostSynchronize", *(params->phFence));
+      collector->ProcessCalls("FenceHostSynchronize");
     }
   }
 
