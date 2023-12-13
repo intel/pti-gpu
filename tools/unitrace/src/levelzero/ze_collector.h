@@ -674,14 +674,13 @@ struct ZeCommand {
   ze_event_handle_t event_ = nullptr;
   ze_device_handle_t device_ = nullptr;
   uint64_t host_time_origin_;	// in ns
-  uint64_t device_time_origin_;	// in ns
-  uint64_t metric_time_origin_;	// in ns
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
   uint64_t metric_timer_frequency_;
   uint64_t metric_timer_mask_;
   uint64_t append_time_ = 0;
   uint64_t submit_time_ = 0;		//in ns
+  uint64_t submit_time_device_ = 0;	//in ns
   ze_command_list_handle_t command_list_ = nullptr;
   ze_command_queue_handle_t queue_ = nullptr;
   ze_fence_handle_t fence_;
@@ -889,10 +888,8 @@ struct ZeDevice {
   ze_device_handle_t device_;
   ze_device_handle_t parent_device_;
   uint64_t host_time_origin_;	// in ns
-  uint64_t device_time_origin_;	// in ns
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
-  uint64_t metric_time_origin_;
   uint64_t metric_timer_frequency_;
   uint64_t metric_timer_mask_;
   ze_driver_handle_t driver_;
@@ -922,8 +919,6 @@ struct ZeCommandList {
   ze_context_handle_t context_;
   ze_device_handle_t device_;
   uint64_t host_time_origin_;	// in ns
-  uint64_t device_time_origin_;	// in ns
-  uint64_t metric_time_origin_;	// in ns
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
   uint64_t metric_timer_frequency_;
@@ -1562,22 +1557,11 @@ class ZeCollector {
 
             uint64_t host_time;
             uint64_t ticks;
-            uint64_t device_time;
-            uint64_t metric_time;
 
-            zeDeviceGetGlobalTimestamps(device, &host_time, &ticks);
-            
-            device_time = ticks & desc.device_timer_mask_;
-            device_time = device_time * NSEC_IN_SEC / desc.device_timer_frequency_;
-
-            // zetMetricGroupGetGlobalTimestampsExp() is broken.
-            metric_time = ticks & desc.metric_timer_mask_;
-            metric_time = metric_time * NSEC_IN_SEC / desc.metric_timer_frequency_;
+            status = zeDeviceGetGlobalTimestamps(device, &host_time, &ticks);
+            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
             desc.host_time_origin_ = host_time;
-            desc.device_time_origin_ = device_time;
-            desc.metric_time_origin_ = metric_time;
-
 
             devices_->insert({device, std::move(desc)});
 
@@ -1608,18 +1592,10 @@ class ZeCollector {
   
                 uint64_t ticks;
                 uint64_t host_time;
-                uint64_t device_time;
-                uint64_t metric_time;
-                zeDeviceGetGlobalTimestamps(sub_devices[j], &host_time, &ticks);
-                device_time = ticks & sub_desc.device_timer_mask_;
-                device_time = device_time * NSEC_IN_SEC / sub_desc.device_timer_frequency_;
-  
-                metric_time = ticks & sub_desc.metric_timer_mask_;
-                metric_time = metric_time * NSEC_IN_SEC / sub_desc.metric_timer_frequency_;
+                status = zeDeviceGetGlobalTimestamps(sub_devices[j], &host_time, &ticks);
+                PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
                 sub_desc.host_time_origin_ = host_time;
-                sub_desc.device_time_origin_ = device_time;
-                sub_desc.metric_time_origin_ = metric_time;
   
                 sub_desc.driver_ = driver;
                 sub_desc.context_ = context;
@@ -2043,75 +2019,41 @@ class ZeCollector {
   inline uint64_t ComputeDuration(uint64_t start, uint64_t end, uint64_t freq, uint64_t mask) {
     uint64_t duration = 0;
     if (start <= end) {
-      duration = (end - start) *
-        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      duration = (end - start) * static_cast<uint64_t>(NSEC_IN_SEC) / freq;
     } else { // Timer Overflow
-      duration = ((mask + 1ull) + end - start) *
-        static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      duration = ((mask + 1ull) + end - start) * static_cast<uint64_t>(NSEC_IN_SEC) / freq;
     }
     return duration;
   }
 
   inline void GetHostTime(const ZeCommand *command, const ze_kernel_timestamp_result_t& ts, uint64_t& start, uint64_t& end) {
-
-
-    uint64_t device_freq = command->device_timer_frequency_; // command->timer_frequency;
-    uint64_t device_mask = command->device_timer_mask_; // command->timer_mask;
-
-    uint64_t metric_freq = command->metric_timer_frequency_; // command->timer_frequency;
-    uint64_t metric_mask = command->metric_timer_mask_; // command->timer_mask;
-    
+    uint64_t device_freq = command->device_timer_frequency_;
+    uint64_t device_mask = command->device_timer_mask_;
+    uint64_t tspan = (device_mask + 1ull) * NSEC_IN_SEC / device_freq;	// time span of universe
 
     uint64_t device_start = ts.global.kernelStart & device_mask;
     uint64_t device_end = ts.global.kernelEnd & device_mask;
 
-    uint64_t device_submit_time = (command->device_time_origin_ + command->submit_time_ - command->host_time_origin_) ;
-
     uint64_t start_ns = (device_start * NSEC_IN_SEC / device_freq);
-    int64_t time_shift;
-    while ((start_ns < device_submit_time) && ((int64_t)(device_submit_time - start_ns) >= (int64_t)((device_mask + 1) * NSEC_IN_SEC /device_freq))) {
-      device_start += device_mask + 1;
-      device_end += device_mask + 1;
-      start_ns = (device_start * NSEC_IN_SEC / device_freq);
-    }
+    uint64_t device_submit_time = command->submit_time_device_;
 
-    if (start_ns < device_submit_time) {
-      //device and host clocks out of sync
+    int64_t time_shift = start_ns - device_submit_time;
 
-      uint64_t host_time;
-      uint64_t device_time;
-      uint64_t metric_time;
-      uint64_t ticks;
-      zeDeviceGetGlobalTimestamps(command->device_, &host_time, &ticks);
-      device_time = ticks & device_mask;
-      device_time = device_time * NSEC_IN_SEC / device_freq;
-      metric_time = ticks & metric_mask;
-      metric_time = metric_time * NSEC_IN_SEC / metric_freq;
-
-
-      int64_t host_time_shift = host_time - command->submit_time_;
-      int64_t device_time_shift = device_time - device_submit_time;
-      device_submit_time -= (host_time_shift - device_time_shift);
-
-      devices_mutex_.lock();
-
-      auto it = devices_->find(command->device_);
-      if (it != devices_->end()) {
-        it->second.host_time_origin_ = host_time;
-        it->second.host_time_origin_ = host_time;
-        it->second.device_time_origin_ = device_time;
-        it->second.metric_time_origin_ = metric_time;
+    if (start_ns > device_submit_time) {
+      uint64_t diff = device_submit_time + tspan - start_ns;
+      if (diff < time_shift) {
+        // overflow
+        time_shift = -diff;
       }
-
-      devices_mutex_.unlock();
-    }
-    if (start_ns >= device_submit_time) {
-      time_shift = start_ns - device_submit_time;
     }
     else {
-      time_shift = 0;
+      uint64_t diff = start_ns + tspan - device_submit_time;
+      if (diff < (-time_shift)) {
+        // overflow
+        time_shift = diff;
+      }
     }
-    
+
     int64_t duration = ComputeDuration(device_start, device_end, device_freq, device_mask);
 
     start = command->submit_time_ + time_shift;
@@ -2161,11 +2103,11 @@ class ZeCollector {
     ze_result_t status = zeEventQueryKernelTimestamp(command->event_, &timestamp);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    uint64_t device_freq = command->device_timer_frequency_; // command->timer_frequency;
-    uint64_t device_mask = command->device_timer_mask_; // command->timer_mask;
+    uint64_t device_freq = command->device_timer_frequency_;
+    uint64_t device_mask = command->device_timer_mask_;
 
-    uint64_t metric_freq = command->metric_timer_frequency_; // command->timer_frequency;
-    uint64_t metric_mask = command->metric_timer_mask_; // command->timer_mask;
+    uint64_t metric_freq = command->metric_timer_frequency_;
+    uint64_t metric_mask = command->metric_timer_mask_;
 
     ZeKernelProfileRecord r;
     
@@ -2317,8 +2259,6 @@ class ZeCollector {
     auto it2 = devices_->find(device);
     if (it2 != devices_->end()) {
       desc->host_time_origin_ = it2->second.host_time_origin_;
-      desc->device_time_origin_ = it2->second.device_time_origin_;
-      desc->metric_time_origin_ = it2->second.metric_time_origin_;
       desc->device_timer_frequency_ = it2->second.device_timer_frequency_;
       desc->device_timer_mask_ = it2->second.device_timer_mask_;
       desc->metric_timer_frequency_ = it2->second.metric_timer_frequency_;
@@ -2406,10 +2346,23 @@ class ZeCollector {
               cmd_query = local_device_submissions_.GetCommandMetricQuery();
             }
             *cmd = *command;
+
+            uint64_t host_timestamp;
+            uint64_t ticks;
+            uint64_t device_timestamp;
+            ze_result_t status;
+
+            status = zeDeviceGetGlobalTimestamps(cmd->device_, &host_timestamp, &ticks);
+            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+            device_timestamp = ticks & cmd->device_timer_mask_;
+            device_timestamp = device_timestamp * NSEC_IN_SEC / cmd->device_timer_frequency_;
+
             cmd->engine_ordinal_ = qit->second.engine_ordinal_;
             cmd->engine_index_ = qit->second.engine_index_;
             cmd->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
-            cmd->submit_time_ = ts;		//in ns
+            cmd->submit_time_ = host_timestamp;		//in ns
+            cmd->submit_time_device_ = device_timestamp;//in ns
             cmd->tid_ = utils::GetTid();;
             cmd->fence_ = fence;
             event_cache_.ResetEvent(cmd->event_);
@@ -2697,8 +2650,6 @@ class ZeCollector {
       desc->engine_ordinal_ = it->second->engine_ordinal_;
       desc->engine_index_ = it->second->engine_index_;
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
-      desc->device_time_origin_ = it->second->device_time_origin_;	// in ns
-      desc->metric_time_origin_ = it->second->metric_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
       desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
@@ -2714,8 +2665,6 @@ class ZeCollector {
       desc->command_list_ = command_list;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
-      uint64_t host_timestamp = ze_instance_data.start_time_host;
-      desc->append_time_ = host_timestamp;
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -2729,9 +2678,22 @@ class ZeCollector {
       }
 
       if (it->second->immediate_) {
+        uint64_t host_timestamp;
+        uint64_t ticks;
+        uint64_t device_timestamp;
+        ze_result_t status;
+
+        status = zeDeviceGetGlobalTimestamps(desc->device_, &host_timestamp, &ticks);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+        device_timestamp = ticks & desc->device_timer_mask_;
+        device_timestamp = device_timestamp * NSEC_IN_SEC / desc->device_timer_frequency_;
+
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
+        desc->append_time_ = host_timestamp;
         desc->submit_time_ = host_timestamp;
+        desc->submit_time_device_ = device_timestamp;
         desc->command_metric_query_ = nullptr;		// don't care metric query in case of immediate command list
         local_device_submissions_.SubmitKernelCommand(desc);
         kids->push_back(desc->instance_id_);
@@ -2743,6 +2705,9 @@ class ZeCollector {
         }
       }
       else {
+        uint64_t host_timestamp = ze_instance_data.start_time_host;
+
+        desc->append_time_ = host_timestamp;
         desc->immediate_ = false;
         desc->command_metric_query_ = desc_query;	// need metric query upon submission
         command_lists_mutex_.lock();
@@ -2808,8 +2773,6 @@ class ZeCollector {
       desc->engine_ordinal_ = it->second->engine_ordinal_;
       desc->engine_index_ = it->second->engine_index_;
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
-      desc->device_time_origin_ = it->second->device_time_origin_;	// in ns
-      desc->metric_time_origin_ = it->second->metric_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
       desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
@@ -2824,8 +2787,6 @@ class ZeCollector {
       desc->queue_ = nullptr;
       desc->mem_size_ = size;
       desc->tid_ = utils::GetTid();
-      uint64_t host_timestamp = ze_instance_data.start_time_host;
-      desc->append_time_ = host_timestamp;
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -2839,9 +2800,22 @@ class ZeCollector {
       }
 
       if (it->second->immediate_) {
+        uint64_t host_timestamp;
+        uint64_t ticks;
+        uint64_t device_timestamp;
+        ze_result_t status;
+
+        status = zeDeviceGetGlobalTimestamps(desc->device_, &host_timestamp, &ticks);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+        device_timestamp = ticks & desc->device_timer_mask_;
+        device_timestamp = device_timestamp * NSEC_IN_SEC / desc->device_timer_frequency_;
+
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
+        desc->append_time_ = host_timestamp;
         desc->submit_time_ = host_timestamp;
+        desc->submit_time_device_ = device_timestamp;
         desc->command_metric_query_ = nullptr;	// do not care metric query in case of immediate command list
 
         local_device_submissions_.SubmitKernelCommand(desc);
@@ -2855,6 +2829,9 @@ class ZeCollector {
         }
       }
       else {
+        uint64_t host_timestamp = ze_instance_data.start_time_host;
+
+        desc->append_time_ = host_timestamp;
         desc->immediate_ = false;
         desc->command_metric_query_ = desc_query;
         command_lists_mutex_.lock();
@@ -2918,8 +2895,6 @@ class ZeCollector {
       desc->engine_ordinal_ = it->second->engine_ordinal_;
       desc->engine_index_ = it->second->engine_index_;
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
-      desc->device_time_origin_ = it->second->device_time_origin_;	// in ns
-      desc->metric_time_origin_ = it->second->metric_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
       desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
@@ -2934,8 +2909,6 @@ class ZeCollector {
       desc->queue_ = nullptr;
       desc->mem_size_ = size;
       desc->tid_ = utils::GetTid();
-      uint64_t host_timestamp = ze_instance_data.start_time_host;
-      desc->append_time_ = host_timestamp;
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
 
@@ -2946,9 +2919,22 @@ class ZeCollector {
         desc_query->metric_query_event_ = metric_query_event;
       }
       if (it->second->immediate_) {
+        uint64_t host_timestamp;
+        uint64_t ticks;
+        uint64_t device_timestamp;
+        ze_result_t status;
+
+        status = zeDeviceGetGlobalTimestamps(desc->device_, &host_timestamp, &ticks);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+        device_timestamp = ticks & desc->device_timer_mask_;
+        device_timestamp = device_timestamp * NSEC_IN_SEC / desc->device_timer_frequency_;
+
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
+        desc->append_time_ = host_timestamp;
         desc->submit_time_ = host_timestamp;
+        desc->submit_time_device_ = device_timestamp;
         desc->command_metric_query_ = nullptr;
 
         local_device_submissions_.SubmitKernelCommand(desc);
@@ -2961,6 +2947,9 @@ class ZeCollector {
         }
       }
       else {
+        uint64_t host_timestamp = ze_instance_data.start_time_host;
+
+        desc->append_time_ = host_timestamp;
         desc->immediate_ = false;
         desc->command_metric_query_ = desc_query;
         command_lists_mutex_.lock();
@@ -3028,8 +3017,6 @@ class ZeCollector {
       desc->engine_ordinal_ = it->second->engine_ordinal_;
       desc->engine_index_ = it->second->engine_index_;
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
-      desc->device_time_origin_ = it->second->device_time_origin_;	// in ns
-      desc->metric_time_origin_ = it->second->metric_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
       desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
@@ -3044,8 +3031,6 @@ class ZeCollector {
       desc->mem_size_ = size;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
-      uint64_t host_timestamp = ze_instance_data.start_time_host;
-      desc->append_time_ = host_timestamp;
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
 
@@ -3056,9 +3041,22 @@ class ZeCollector {
         desc_query->metric_query_event_ = metric_query_event;
       }
       if (it->second->immediate_) {
+        uint64_t host_timestamp;
+        uint64_t ticks;
+        uint64_t device_timestamp;
+        ze_result_t status;
+
+        status = zeDeviceGetGlobalTimestamps(desc->device_, &host_timestamp, &ticks);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+        device_timestamp = ticks & desc->device_timer_mask_;
+        device_timestamp = device_timestamp * NSEC_IN_SEC / desc->device_timer_frequency_;
+
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
+        desc->append_time_ = host_timestamp;
         desc->submit_time_ = host_timestamp;
+        desc->submit_time_device_ = device_timestamp;
         desc->command_metric_query_ = nullptr;
 
         local_device_submissions_.SubmitKernelCommand(desc);
@@ -3071,6 +3069,9 @@ class ZeCollector {
         }
       }
       else {
+        uint64_t host_timestamp = ze_instance_data.start_time_host;
+
+        desc->append_time_ = host_timestamp;
         desc->immediate_ = false;
         desc->command_metric_query_ = desc_query;
         command_lists_mutex_.lock();
@@ -3124,8 +3125,6 @@ class ZeCollector {
       desc->engine_ordinal_ = it->second->engine_ordinal_;
       desc->engine_index_ = it->second->engine_index_;
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
-      desc->device_time_origin_ = it->second->device_time_origin_;	// in ns
-      desc->metric_time_origin_ = it->second->metric_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
       desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
@@ -3140,7 +3139,6 @@ class ZeCollector {
       desc->command_list_ = command_list;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
-      desc->append_time_ = ze_instance_data.start_time_host;
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
 
@@ -3150,9 +3148,22 @@ class ZeCollector {
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       }
       if (it->second->immediate_) {
+        uint64_t host_timestamp;
+        uint64_t ticks;
+        uint64_t device_timestamp;
+        ze_result_t status;
+
+        status = zeDeviceGetGlobalTimestamps(desc->device_, &host_timestamp, &ticks);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+        device_timestamp = ticks & desc->device_timer_mask_;
+        device_timestamp = device_timestamp * NSEC_IN_SEC / desc->device_timer_frequency_;
+
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
-        desc->submit_time_ = ze_instance_data.start_time_host;
+        desc->append_time_ = host_timestamp;
+        desc->submit_time_ = host_timestamp;
+        desc->submit_time_device_ = device_timestamp;
         desc->command_metric_query_ = nullptr;
 
         local_device_submissions_.SubmitKernelCommand(desc);
@@ -3164,6 +3175,9 @@ class ZeCollector {
         }
       }
       else {
+        uint64_t host_timestamp = ze_instance_data.start_time_host;
+
+        desc->append_time_ = host_timestamp;
         desc->immediate_ = false;
         desc->command_metric_query_ = desc_query;
         command_lists_mutex_.lock();
