@@ -196,7 +196,7 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
  *
  */
 void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
-                            float *vel, const float *coeff, int nx, int nxy,
+                            const float *vel, const float *coeff, int nx, int nxy,
                             int bx, int by, int z_offset, int full_end_z) {
   // We compute the start and the end position in the grid
   // for each work-item.
@@ -381,17 +381,17 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
         if (i % 2 == 0)
           h.parallel_for(
               nd_range(global_nd_range, local_nd_range), [=](auto it) {
-                Iso3dfdIterationSLM(it, next.get_pointer(), prev.get_pointer(),
-                                    vel.get_pointer(), coeff.get_pointer(),
-                                    tab.get_pointer(), nx, nxy, bx, by,
+                Iso3dfdIterationSLM(it, next.get(), prev.get(),
+                                    vel.get(), coeff.get(),
+                                    tab.get(), nx, nxy, bx, by,
                                     n3_block, end_z);
               });
         else
           h.parallel_for(
               nd_range(global_nd_range, local_nd_range), [=](auto it) {
-                Iso3dfdIterationSLM(it, prev.get_pointer(), next.get_pointer(),
-                                    vel.get_pointer(), coeff.get_pointer(),
-                                    tab.get_pointer(), nx, nxy, bx, by,
+                Iso3dfdIterationSLM(it, prev.get(), next.get(),
+                                    vel.get(), coeff.get(),
+                                    tab.get(), nx, nxy, bx, by,
                                     n3_block, end_z);
               });
 
@@ -408,17 +408,25 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
         if (i % 2 == 0)
           h.parallel_for(
               nd_range(global_nd_range, local_nd_range), [=](auto it) {
-                Iso3dfdIterationGlobal(it, next.get_pointer(),
-                                       prev.get_pointer(), vel.get_pointer(),
-                                       coeff.get_pointer(), nx, nxy, bx, by,
+                auto next_ptr = next.template get_multi_ptr<sycl::access::decorated::no>();
+                auto prev_ptr = prev.template get_multi_ptr<sycl::access::decorated::no>();
+                auto vel_ptr = vel.template get_multi_ptr<sycl::access::decorated::no>();
+                auto coeff_ptr = coeff.template get_multi_ptr<sycl::access::decorated::no>();
+                Iso3dfdIterationGlobal(it, next_ptr.get(),
+                                       prev_ptr.get(), vel_ptr.get(),
+                                       coeff_ptr.get(), nx, nxy, bx, by,
                                        n3_block, end_z);
               });
         else
           h.parallel_for(
               nd_range(global_nd_range, local_nd_range), [=](auto it) {
-                Iso3dfdIterationGlobal(it, prev.get_pointer(),
-                                       next.get_pointer(), vel.get_pointer(),
-                                       coeff.get_pointer(), nx, nxy, bx, by,
+                auto next_ptr = next.template get_multi_ptr<sycl::access::decorated::no>();
+                auto prev_ptr = prev.template get_multi_ptr<sycl::access::decorated::no>();
+                auto vel_ptr = vel.template get_multi_ptr<sycl::access::decorated::no>();
+                auto coeff_ptr = coeff.template get_multi_ptr<sycl::access::decorated::no>();
+                Iso3dfdIterationGlobal(it, prev_ptr.get(),
+                                       next_ptr.get(), vel_ptr.get(),
+                                       coeff_ptr.get(), nx, nxy, bx, by,
                                        n3_block, end_z);
               });
 #endif

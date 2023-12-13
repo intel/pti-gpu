@@ -21,8 +21,7 @@ void PrintUsage()
   std::cout << "It is a largely simpilified application to demo mixed programming ";
   std::cout << "on Intel GPU for deep learning (PyTorch&TensorFlow) workloads (ITEX&IPEX) ";
   std::cout << "with direct dpcpp kernel, onednn, onemkl, onedpl, onemkl, eigen, etc." << std::endl;
-  std::cout << "IPEX: https://github.com/intel-innersource/frameworks.ai.pytorch.ipex-gpu" << std::endl;
-  std::cout << "ITEX: https://github.com/intel-innersource/frameworks.ai.infrastructure.intel-extension-for-tensorflow.intel-extension-for-tensorflow" << std::endl;
+  std::cout << "IPEX: https://github.com/intel/intel-extension-for-pytorch" << std::endl;
   std::cout << std::endl;
   std::cout << "The purpose of this application is to provide a basic rough requirement for sycl graph capture mode." << std::endl;
   std::cout << std::endl;
@@ -39,6 +38,9 @@ void PrintUsage()
   std::cout << std::endl;
   std::cout << "It is supposed that this application will be updated frequently, so this might be not the latest one." << std::endl;
   std::cout << std::endl;
+#if __LIBSYCL_MAJOR_VERSION >= 7
+  std::cerr << "Notice: A portion of this sample was not build. To build the whole sample, revert to older oneAPI release (<= 2023.2.0)" << std::endl;
+#endif
 }
 
 void run(sycl::queue *q)

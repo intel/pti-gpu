@@ -101,7 +101,10 @@ float RunAndCheck(sycl::queue queue, const std::vector<float>& a, const std::vec
       auto c_acc = c_buf.get_access<sycl::access::mode::write>(cgh);
 
       cgh.parallel_for<class __GEMM>(sycl::range<2>(size, size), [=](sycl::id<2> id) {
-        GEMM(a_acc.get_pointer(), b_acc.get_pointer(), c_acc.get_pointer(), size, id);
+        auto a_acc_ptr = a_acc.get_multi_ptr<sycl::access::decorated::no>();
+        auto b_acc_ptr = b_acc.get_multi_ptr<sycl::access::decorated::no>();
+        auto c_acc_ptr = c_acc.get_multi_ptr<sycl::access::decorated::no>();
+        GEMM(a_acc_ptr.get(), b_acc_ptr.get(), c_acc_ptr.get(), size, id);
       });
     });
     queue.wait_and_throw();

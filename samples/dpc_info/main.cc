@@ -166,7 +166,7 @@ std::ostream& operator<<(std::ostream& out, sycl::aspect sycl_aspect) {
       break;
 #endif
     default:
-      out << "<unkown-aspect: " << static_cast<std::size_t>(sycl_aspect) << ">";
+      out << "<unknown-aspect: " << static_cast<std::size_t>(sycl_aspect) << ">";
       break;
   }
   return out;

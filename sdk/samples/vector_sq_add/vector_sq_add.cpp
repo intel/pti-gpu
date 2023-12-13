@@ -245,7 +245,7 @@ int main(int argc, char *argv[]) {
     auto print_queue_info = [](const sycl::queue &sycl_queue) {
       auto queue_type =
           get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue);
-#if __LIBSYCL_MAJOR_VERSION >= 6 && __LIBSYCL_MINOR_VERSION >= 2
+#if __LIBSYCL_MAJOR_VERSION > 6 || (__LIBSYCL_MAJOR_VERSION == 6 && __LIBSYCL_MINOR_VERSION >= 2)
       // 1 (default)
       if (auto *ptr_queue_handle =
               std::get_if<ze_command_list_handle_t>(&queue_type)) {

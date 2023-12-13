@@ -10,7 +10,7 @@
 
 #include "utils.h"
 
-#include <CL/sycl.hpp>
+#include <sycl/sycl.hpp>
 
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
@@ -63,9 +63,12 @@ static float RunAndCheck(sycl::queue queue,
 
       cgh.parallel_for<class __GEMM>(sycl::range<2>(size, size),
                       [=](sycl::id<2> id) {
-                        GEMM(a_acc.get_pointer(),
-                             b_acc.get_pointer(),
-                             c_acc.get_pointer(),
+                        auto a_acc_ptr = a_acc.get_multi_ptr<sycl::access::decorated::no>();
+                        auto b_acc_ptr = b_acc.get_multi_ptr<sycl::access::decorated::no>();
+                        auto c_acc_ptr = c_acc.get_multi_ptr<sycl::access::decorated::no>();
+                        GEMM(a_acc_ptr.get(),
+                             b_acc_ptr.get(),
+                             c_acc_ptr.get(),
                              size, id);
                       });
     });
@@ -101,11 +104,21 @@ static void Compute(sycl::queue queue,
 }
 
 int main(int argc, char* argv[]) {
-  sycl::info::device_type device_type = sycl::info::device_type::gpu;
-  if (argc > 1 && strcmp(argv[1], "cpu") == 0) {
-    device_type = sycl::info::device_type::cpu;
-  } else if (argc > 1 && strcmp(argv[1], "host") == 0) {
-    device_type = sycl::info::device_type::host;
+  sycl::device dev;
+  try {
+    dev = sycl::device(sycl::gpu_selector_v);
+    if (argc > 1 && strcmp(argv[1], "cpu") == 0) {
+      dev = sycl::device(sycl::cpu_selector_v);
+    } else if (argc > 1 && strcmp(argv[1], "host") == 0) {
+      dev = sycl::device(sycl::default_selector_v);
+    }
+  } catch (const sycl::exception& e) {
+    std::cerr << "Error: Exception caught while executing SYCL " << e.what() << '\n';
+    std::cerr << "Unable to select valid sycl device" << '\n';
+    return EXIT_FAILURE;
+  } catch (...) {
+    std::cerr << "Unable to select valid sycl device" << '\n';
+    return EXIT_FAILURE;
   }
 
   unsigned size = 1024;
@@ -118,17 +131,8 @@ int main(int argc, char* argv[]) {
     repeat_count = std::stoul(argv[3]);
   }
 
-  std::unique_ptr<sycl::device_selector> selector(nullptr);
-  if (device_type == sycl::info::device_type::cpu) {
-    selector.reset(new sycl::cpu_selector);
-  } else if (device_type == sycl::info::device_type::gpu) {
-    selector.reset(new sycl::gpu_selector);
-  } else if (device_type == sycl::info::device_type::host) {
-    selector.reset(new sycl::host_selector);
-  }
-
   sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
-  sycl::queue queue(*selector.get(), sycl::async_handler{}, prop_list);
+  sycl::queue queue(dev, sycl::async_handler{}, prop_list);
 
   std::cout << "DPC++ Matrix Multiplication (matrix size: " << size <<
     " x " << size << ", repeats " << repeat_count << " times)" << std::endl;

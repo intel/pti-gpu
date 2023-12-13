@@ -15,10 +15,15 @@ TinyTensor run_model_mixedprogramming(TinyTensor inp, sycl::queue *q)
   TinyTensor outp = run_syclkernel_operation_scaledown(inp, q);
   GlobalDeviceMemoryManager().free(inp.data);
 
+  // TODO(matthew.schilling@intel.com): Fails when run with XPTI tracing. We
+  // need to figure out a way to uncomment this. It crashes PTI-SDK and
+  // Unitrace built with OneAPI/ICPX >= 2024.0.0 .
   // the next operation uses oneDNN for conv2d
+#if __LIBSYCL_MAJOR_VERSION < 7
   inp = outp;
   outp = run_onednn_operation_conv2d(inp, q);
   GlobalDeviceMemoryManager().free(inp.data);
+#endif
 
   // next operation uses oneMKL
   inp = outp;

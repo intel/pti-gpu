@@ -214,8 +214,6 @@ void RunExternalCorrIdTest(queue &q, const DoubleVector &a, const DoubleVector &
   vecAdd(q, a, b, sq_add);
   print_results(sq_add, vector_size);
 
-  // print_queue_info(q);
-
   StartTracing();
   vecAdd(q, c, d, sq_add2);
   StopTracing();
@@ -258,34 +256,6 @@ void RunVecsqadd(TestType a_test_type) {
 
   auto d_selector{gpu_selector_v};
   queue q(d_selector, NULL);
-
-  // Underlying queue handle object changes based on value of
-  // SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=?
-  auto print_queue_info = [](const sycl::queue &sycl_queue) {
-    auto queue_type = get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue);
-#if __LIBSYCL_MAJOR_VERSION >= 6 && __LIBSYCL_MINOR_VERSION >= 2
-    // 1 (default)
-    if (auto *ptr_queue_handle = std::get_if<ze_command_list_handle_t>(&queue_type)) {
-      printf("Queue  ptr: 0x%p, native queue: 0x%p, native device: 0x%p \n", &sycl_queue,
-             ptr_queue_handle,
-             get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue.get_device()));
-
-      // 0
-    } else if (auto *ptr_queue_handle = std::get_if<ze_command_queue_handle_t>(&queue_type)) {
-      printf("Queue  ptr: 0x%p, native queue: 0x%p, native device: 0x%p \n", &sycl_queue,
-             ptr_queue_handle,
-             get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue.get_device()));
-    } else {
-      std::cerr << "Underlying level zero queue handle could not be obtained." << '\n';
-    }
-#else
-    printf("Queue  ptr: 0x%p, native queue: 0x%p, native device: 0x%p \n", &sycl_queue,
-           get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue),
-           get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue.get_device()));
-#endif
-  };
-
-  print_queue_info(q);
 
   // Start Tests by Type
 
