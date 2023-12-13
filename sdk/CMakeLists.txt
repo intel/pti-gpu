@@ -61,6 +61,9 @@ set(PTI_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/pti")
 set(PTI_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}/pti")
 set(PTI_INSTALL_LIB_DIR "${CMAKE_INSTALL_LIBDIR}")
 set(PTI_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
+set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
+
+CheckSOVersion(${PTI_API_SOVERSION})
 
 set(PTI_COMPILE_FLAGS_EXPR
     $<$<CXX_COMPILER_ID:IntelLLVM>:-Wall
@@ -129,7 +132,7 @@ target_include_directories(
 set_target_properties(
   pti
   PROPERTIES VERSION "${PROJECT_VERSION}"
-             SOVERSION "${PROJECT_VERSION_MAJOR}"
+             SOVERSION "${PTI_API_SOVERSION}"
              POSITION_INDEPENDENT_CODE ON)
 
 target_compile_options(pti PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
@@ -154,7 +157,7 @@ target_include_directories(
 set_target_properties(
   pti_view
   PROPERTIES VERSION "${PROJECT_VERSION}"
-             SOVERSION "${PROJECT_VERSION_MAJOR}"
+             SOVERSION "${PTI_API_SOVERSION}"
              POSITION_INDEPENDENT_CODE ON)
 
 target_compile_options(pti_view PRIVATE ${PTI_COMPILE_FLAGS_EXPR})

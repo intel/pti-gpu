@@ -713,7 +713,7 @@ macro(GetGTPinUtil TARGET UTIL)
     add_custom_command(OUTPUT "${GTPIN_UTIL_PATH}/GTPIN/utils/${UTIL}.h"
                               "${GTPIN_UTIL_PATH}/GTPIN/utils/${UTIL}.cpp"
                       COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_gtpin_util.py" ${GTPIN_UTIL_PATH} ${CMAKE_BINARY_DIR} ${UTIL})
-    target_sources(${TARGET} PRIVATE 
+    target_sources(${TARGET} PRIVATE
       "${GTPIN_UTIL_PATH}/Examples/utils/${UTIL}.cpp")
     target_include_directories(${TARGET}
       PUBLIC "${GTPIN_UTIL_PATH}/GTPIN/utils")
@@ -728,7 +728,7 @@ macro(FindGTPinUtil TARGET UTIL)
       NAMES ${UTIL}.cpp
       PATHS "${GTPIN_PATH}/Examples/utils")
     if(GTPIN_${UTIL}_PATH)
-      target_sources(${TARGET} PRIVATE 
+      target_sources(${TARGET} PRIVATE
         ${GTPIN_${UTIL}_PATH})
       target_include_directories(${TARGET}
         PUBLIC "${GTPIN_PATH}/Examples/utils")
@@ -1040,5 +1040,27 @@ macro(GetGTest)
                                            "${EXTRA_COMPILE_OPTIONS}")
     set_target_properties(gtest_main PROPERTIES COMPILE_OPTIONS
                                                 "${EXTRA_COMPILE_OPTIONS}")
+  endif()
+endmacro()
+
+macro(CheckSOVersion PROJ_SOVERSION)
+  # Not automatically set because this should be done intentionally.
+  # PTI's rules for backwords compatibility should be re-evaluated upon first
+  # major / production release.
+  # PTI is following [semver](https://semver.org/) versioning and we are using
+  # the SOVERSION to denote backword compatibility.
+  if ("${PROJECT_VERSION}" VERSION_GREATER_EQUAL "1.0.0")
+    if("${PROJ_SOVERSION}" STREQUAL "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
+      message(AUTHOR_WARNING "${PROJECT_NAME} currently has the SOVERSION: "
+                    "${PROJ_SOVERSION}. After the first major release, ${PROJECT_NAME}"
+                    " should have the SOVERSION: ${PROJECT_VERSION_MAJOR}.")
+    endif()
+  else()
+    if("${PROJ_SOVERSION}" STREQUAL "${PROJECT_VERSION_MAJOR}")
+      message(AUTHOR_WARNING "${PROJECT_NAME} currently has the SOVERSION: "
+                    "${PROJ_SOVERSION}. During development, ${PROJECT_NAME}"
+                    " should have the SOVERSION:"
+                    " ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.")
+    endif()
   endif()
 endmacro()
