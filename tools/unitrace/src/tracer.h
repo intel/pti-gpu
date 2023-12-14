@@ -203,6 +203,13 @@ class UniTracer {
   ~UniTracer() {
     total_execution_time_ = correlator_.GetTimestamp();
 
+    if (ze_collector_ != nullptr) {
+      ze_collector_->DisableTracing();
+      delete ze_collector_;
+    }
+
+    // report after ze_collector_ is destructed
+    // local stats are sweeped in deconstructor
     Report();
 
     ClExtCollector::Destroy();
@@ -211,14 +218,6 @@ class UniTracer {
     }
     if (cl_gpu_collector_ != nullptr) {
       cl_gpu_collector_->DisableTracing();
-    }
-
-    if (ze_collector_ != nullptr) {
-      ze_collector_->DisableTracing();
-    }
-
-    if (ze_collector_ != nullptr) {
-      delete ze_collector_;
     }
 
     if (itt_collector != nullptr){

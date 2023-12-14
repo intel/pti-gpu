@@ -4001,7 +4001,7 @@ class ZeCollector {
   }
 
   void AggregateDeviceTimeStats() const {
-    // do not acquire global_device_time_stats_mutex_. caller dos it.
+    // do not acquire global_device_time_stats_mutex_. caller does it.
     for (auto it = global_device_time_stats_->begin(); it != global_device_time_stats_->end(); it++) {
       std::string kname;
       if (it->first.tile_ >= 0) {
