@@ -174,6 +174,8 @@ class ZeKernelCollector {
 
     prologue_callbacks.Event.pfnHostResetCb = OnEnterEventHostReset;
 
+    epilogue_callbacks.Event.pfnHostSynchronizeCb = OnExitEventHostSynchronize;
+
     prologue_callbacks.EventPool.pfnCreateCb = OnEnterEventPoolCreate;
     epilogue_callbacks.EventPool.pfnCreateCb = OnExitEventPoolCreate;
 
@@ -472,6 +474,19 @@ class ZeKernelCollector {
         reinterpret_cast<ZeKernelCollector*>(global_data);
       PTI_ASSERT(collector != nullptr);
       collector->ProcessCall(*(params->phEvent));
+    }
+  }
+
+  static void OnExitEventHostSynchronize(ze_event_host_synchronize_params_t *params,
+                                    ze_result_t result,
+                                    void *global_data,
+                                    void **instance_data) {
+    if (*(params->phEvent) != nullptr) {
+      ZeKernelCollector* collector =
+        reinterpret_cast<ZeKernelCollector*>(global_data);
+      PTI_ASSERT(collector != nullptr);
+    collector->ProcessCall(*(params->phEvent));
+    collector->ProcessCalls();
     }
   }
 
