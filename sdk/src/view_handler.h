@@ -42,6 +42,8 @@ using ViewInsert = std::function<void(void*, const ZeKernelCommandExecutionRecor
 
 inline void MemCopyEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
+inline void MemCopyP2PEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
 inline void MemFillEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void KernelEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
@@ -82,12 +84,17 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
         },
         {PTI_VIEW_DEVICE_GPU_MEM_COPY,
           {
-            ViewData{"zeCommandListAppendMemoryCopy", MemCopyEvent},
+            ViewData{"zeCommandListAppendMemoryCopy", MemCopyEvent}
           }
         },
         {PTI_VIEW_DEVICE_GPU_MEM_FILL,
           {
             ViewData{"zeCommandListAppendMemoryFill", MemFillEvent}
+          }
+        },
+        {PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P,
+          {
+            ViewData{"zeCommandListAppendMemoryCopyP2P", MemCopyP2PEvent},
           }
         },
       };
@@ -423,7 +430,7 @@ struct PtiViewRecordHandler {
 inline static auto& Instance() {
   static PtiViewRecordHandler data_container;
   return data_container;
-}
+};
 
 inline pti_result GetNextRecord(uint8_t* buffer, size_t valid_bytes,
                                 pti_view_record_base** record) {
@@ -493,8 +500,8 @@ inline void SetMemFillType(pti_view_record_memory_fill& mem_record,
 // TODO -- can we save on the string compare cost by optimizing at the source in
 // L0 collector?
 //
-inline void SetMemCopyType(pti_view_record_memory_copy& mem_record,
-                           const ZeKernelCommandExecutionRecord& rec) {
+template <typename T>
+inline void SetMemCopyType(T& mem_record, const ZeKernelCommandExecutionRecord& rec) {
   std::size_t found_pos = rec.name_.find_last_of("(");
   std::string tmp_str = rec.name_.substr(found_pos, 4);
   tmp_str.push_back(')');
@@ -596,12 +603,11 @@ inline void SetMemCopyType(pti_view_record_memory_copy& mem_record,
   }
 }
 
-inline void GetDeviceId(char* buf, const ZeKernelCommandExecutionRecord& rec) {
+inline void GetDeviceId(char* buf, const ze_pci_ext_properties_t& pci_prop_) {
   // determined by pti_view_record_kernel _pci_address
   constexpr auto kMaxDeviceIdLength = 16;
-  std::snprintf(buf, kMaxDeviceIdLength, "%x:%x:%x.%x", rec.pci_prop_.address.domain,
-                rec.pci_prop_.address.bus, rec.pci_prop_.address.device,
-                rec.pci_prop_.address.function);
+  std::snprintf(buf, kMaxDeviceIdLength, "%x:%x:%x.%x", pci_prop_.address.domain,
+                pci_prop_.address.bus, pci_prop_.address.device, pci_prop_.address.function);
 }
 
 inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRecord& rec) {
@@ -627,9 +633,41 @@ inline uint64_t ApplyTimeShift(uint64_t timestamp, int64_t time_shift) {
   return out_ts;
 }
 
-inline void MemCopyEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
-  pti_view_record_memory_copy record;
+template <typename T>
+inline void SetMemCpyIds(T& record, const ZeKernelCommandExecutionRecord& rec) {
+  if (rec.device_ != nullptr) {
+    GetDeviceId(record._pci_address, rec.pci_prop_);
+    std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
+    return;
+  } else if (rec.dst_device_ != nullptr)
+    GetDeviceId(record._pci_address, rec.dst_pci_prop_);
+  else
+    memset(record._pci_address, 0, PTI_MAX_PCI_ADDRESS_SIZE);
+
+  std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
+}
+
+template <typename T>
+inline void SetMemCpyIdsP2P(T& record, const ZeKernelCommandExecutionRecord& rec) {
+  if (rec.device_ != nullptr)
+    GetDeviceId(record._src_pci_address, rec.pci_prop_);
+  else
+    memset(record._src_pci_address, 0, PTI_MAX_PCI_ADDRESS_SIZE);
+  if (rec.dst_device_ != nullptr)
+    GetDeviceId(record._dst_pci_address, rec.dst_pci_prop_);
+  else
+    memset(record._dst_pci_address, 0, PTI_MAX_PCI_ADDRESS_SIZE);
+
+  std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._src_uuid);
+  std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._dst_uuid);
+}
+
+template <typename T>
+inline auto DoCommonMemCopy(bool p2p, const ZeKernelCommandExecutionRecord& rec) {
+  T record;
+
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY;
+  if (p2p) record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
 
   int64_t ts_shift = utils::ConvertionFactorMonotonicRawToReal();
 
@@ -638,18 +676,30 @@ inline void MemCopyEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
   record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
   record._submit_timestamp = ApplyTimeShift(rec.submit_time_, ts_shift);
   record._queue_handle = rec.queue_;
-  record._device_handle = rec.device_;
   record._context_handle = rec.context_;
   record._bytes = rec.bytes_xfered_;
-
-  GetDeviceId(record._pci_address, rec);
-  SetMemCopyType(record, rec);
 
   // We're storing it in a kernel map so this shouldn't go out of scope
   record._name = Instance().InsertKernel(rec.name_);
   record._thread_id = rec.tid_;
   record._mem_op_id = rec.cid_;
   record._correlation_id = rec.cid_;
+
+  return record;
+}
+
+inline void MemCopyP2PEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  bool p2p = true;
+  pti_view_record_memory_copy_p2p record =
+      DoCommonMemCopy<pti_view_record_memory_copy_p2p>(p2p, rec);
+  SetMemCpyIdsP2P(record, rec);
+  Instance().InsertRecord(record);
+}
+
+inline void MemCopyEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  bool p2p = false;
+  pti_view_record_memory_copy record = DoCommonMemCopy<pti_view_record_memory_copy>(p2p, rec);
+  SetMemCpyIds(record, rec);
   Instance().InsertRecord(record);
 }
 
@@ -664,12 +714,12 @@ inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
   record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
   record._submit_timestamp = ApplyTimeShift(rec.submit_time_, ts_shift);
   record._queue_handle = rec.queue_;
-  record._device_handle = rec.device_;
   record._context_handle = rec.context_;
   record._bytes = rec.bytes_xfered_;
   record._value_for_set = rec.value_set_;
 
-  GetDeviceId(record._pci_address, rec);
+  GetDeviceId(record._pci_address, rec.pci_prop_);
+  std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
   SetMemFillType(record, rec);
 
   // We're storing it in a kernel map so this shouldn't go out of scope
@@ -725,10 +775,10 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
   record._submit_timestamp = ApplyTimeShift(rec.submit_time_, ts_shift);
   record._queue_handle = rec.queue_;
-  record._device_handle = rec.device_;
   record._context_handle = rec.context_;
 
-  GetDeviceId(record._pci_address, rec);
+  GetDeviceId(record._pci_address, rec.pci_prop_);
+  std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
 
   // We're storing it in a kernel map so this shouldn't go out of scope
   record._name = Instance().InsertKernel(rec.name_);
@@ -757,7 +807,10 @@ inline void OverheadCollectionCallback(void* data, ZeKernelCommandExecutionRecor
 inline void ZeChromeKernelStagesCallback(void* data,
                                          std::vector<ZeKernelCommandExecutionRecord>& kcexecrec) {
   for (const auto& rec : kcexecrec) {
-    if (rec.name_.find("zeCommandListAppendMemoryCopy") != std::string::npos) {
+    if ((rec.name_.find("P2P)") != std::string::npos) &&
+        (rec.name_.find("zeCommandListAppendMemoryCopy") != std::string::npos)) {
+      Instance()("zeCommandListAppendMemoryCopyP2P", data, rec);
+    } else if (rec.name_.find("zeCommandListAppendMemoryCopy") != std::string::npos) {
       Instance()("zeCommandListAppendMemoryCopy", data, rec);
     } else if (rec.name_.find("zeCommandListAppendMemoryFill") != std::string::npos) {
       Instance()("zeCommandListAppendMemoryFill", data, rec);

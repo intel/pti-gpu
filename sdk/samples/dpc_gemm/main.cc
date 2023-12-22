@@ -195,7 +195,7 @@ int main(int argc, char *argv[]) {
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Memory Record" << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_copy *>(ptr));
+              samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_copy*>(ptr));
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';

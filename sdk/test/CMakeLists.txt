@@ -10,6 +10,7 @@ if(HAVE_SYCL)
     dpcgemm_suite
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+           "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
   target_compile_options(
@@ -44,7 +45,29 @@ if(HAVE_SYCL)
   target_link_libraries(vecsqadd_suite PUBLIC Pti::pti_view xptifw
                                               GTest::gtest_main)
 
+  add_executable(mem_ops_test mem_ops_test.cc)
+
+  target_include_directories(
+    mem_ops_test
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/src" 
+         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+         "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_compile_options(mem_ops_test PRIVATE -fsycl -gline-tables-only
+                                                ${PTI_COMPILE_FLAGS_EXPR})
+  target_link_options(mem_ops_test PRIVATE -fsycl -gline-tables-only
+                    ${PTI_LINK_FLAGS_EXPR})
+  target_compile_definitions(mem_ops_test PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
+  
+  target_link_libraries(mem_ops_test PUBLIC Pti::pti_view GTest::gtest_main)
+
   gtest_discover_tests(dpcgemm_suite PROPERTIES LABELS "unit")
+  gtest_discover_tests(
+    mem_ops_test
+    TEST_LIST MEM_OPS_TEST_LIST
+    PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
+    PROPERTIES LABELS "unit" )
   gtest_discover_tests(vecsqadd_suite PROPERTIES LABELS "functional")
 endif()
 

@@ -12,7 +12,7 @@
 #include "pti_view.h"
 
 inline constexpr auto kReserved = 0;
-inline constexpr auto kLastViewRecordEnumValue = PTI_VIEW_DEVICE_GPU_MEM_FILL;
+inline constexpr auto kLastViewRecordEnumValue = PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
 inline constexpr auto kSizeOfViewRecordTable = kLastViewRecordEnumValue + 1;
 
 // kViewSizeLookUpTable
@@ -24,15 +24,16 @@ inline constexpr auto kSizeOfViewRecordTable = kLastViewRecordEnumValue + 1;
 // clang-format off
 inline constexpr std::array<std::size_t, kSizeOfViewRecordTable> kViewSizeLookupTable{
     kReserved,                                        // PTI_VIEW_INVALID
-    sizeof(pti_view_record_kernel),                // PTI_VIEW_DEVICE_GPU_KERNEL
+    sizeof(pti_view_record_kernel),                   // PTI_VIEW_DEVICE_GPU_KERNEL
     kReserved,                                        // PTI_VIEW_DEVICE_CPU_KERNEL
     kReserved,                                        // PTI_VIEW_LEVEL_ZERO_CALLS
     kReserved,                                        // PTI_VIEW_OPENCL_CALLS
-    sizeof(pti_view_record_overhead),               // PTI_VIEW_COLLECTION_OVERHEAD
-    sizeof(pti_view_record_sycl_runtime),          // PTI_VIEW_SYCL_RUNTIME_CALLS
-    sizeof(pti_view_record_external_correlation), // PTI_VIEW_EXTERNAL_CORRELATION
-    sizeof(pti_view_record_memory_copy),                // PTI_VIEW_DEVICE_GPU_MEM_COPY
-    sizeof(pti_view_record_memory_fill),                // PTI_VIEW_DEVICE_GPU_MEM_FILL
+    sizeof(pti_view_record_overhead),                 // PTI_VIEW_COLLECTION_OVERHEAD
+    sizeof(pti_view_record_sycl_runtime),             // PTI_VIEW_SYCL_RUNTIME_CALLS
+    sizeof(pti_view_record_external_correlation),     // PTI_VIEW_EXTERNAL_CORRELATION
+    sizeof(pti_view_record_memory_copy),              // PTI_VIEW_DEVICE_GPU_MEM_COPY
+    sizeof(pti_view_record_memory_fill),              // PTI_VIEW_DEVICE_GPU_MEM_FILL
+    sizeof(pti_view_record_memory_copy_p2p),          // PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P
 };
 // clang-format on
 

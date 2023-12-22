@@ -62,8 +62,14 @@ struct ZeKernelCommandExecutionRecord {
   uint32_t engine_index_;
 
   ze_command_queue_handle_t queue_;
-  ze_device_handle_t device_;
-  ze_context_handle_t context_;
+  ze_device_handle_t device_;    // in case of memcpy -- represents source
+  ze_context_handle_t context_;  // in case of memcpy -- represents source
+
+  ze_device_handle_t dst_device_;  // in case of memcpy -- represents destination (nullptr else)
+  ze_pci_ext_properties_t dst_pci_prop_;  // in case of memcpy -- represents destination
+
+  uint8_t src_device_uuid[PTI_MAX_DEVICE_UUID_SIZE];
+  uint8_t dst_device_uuid[PTI_MAX_DEVICE_UUID_SIZE];
 
   bool implicit_scaling_;
   std::string name_;

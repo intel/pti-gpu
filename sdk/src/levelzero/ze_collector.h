@@ -286,7 +286,10 @@ struct ZeKernelCommand {
   ze_event_handle_t event = nullptr;
   zet_metric_query_handle_t metric_query = nullptr;
   ze_event_handle_t metric_query_event = nullptr;
-  ze_device_handle_t device = nullptr;
+  ze_device_handle_t device =
+      nullptr;  // Device where the operation is submitted, associated with command list
+  ze_device_handle_t src_device = nullptr;  // Device for p2p memcpy, source of copy data
+  ze_device_handle_t dst_device = nullptr;  // Device for p2p memcpy, destination of copy data
   uint64_t kernel_id = 0;
   uint64_t append_time = 0;
   ze_command_list_handle_t command_list = nullptr;
@@ -345,6 +348,8 @@ struct ZeCommandListInfo {
   std::vector<ZeKernelCommand*> kernel_commands;
   ze_context_handle_t context;
   ze_device_handle_t device;
+  ze_device_handle_t src_device = nullptr;  // source used for memcpy commands
+  ze_device_handle_t dst_device = nullptr;  // destination for memcpy commands
   bool immediate;
   std::pair<uint32_t, uint32_t> oi_pair;
 };
@@ -1497,20 +1502,35 @@ overhead::Init();
       rec.name_ = std::move(name);
       rec.queue_ = command->queue;
       rec.device_ = command->device;
+      std::copy_n(dev_uuid_map[command->src_device], ZE_MAX_DEVICE_UUID_SIZE, rec.src_device_uuid);
+      std::copy_n(dev_uuid_map[command->dst_device], ZE_MAX_DEVICE_UUID_SIZE, rec.dst_device_uuid);
+
       if ((tile >= 0) && (device_map_.count(command->device) == 1) &&
           !device_map_[command->device].empty()) {  // Implicit Scaling
         rec.implicit_scaling_ = true;
       } else {
         rec.implicit_scaling_ = false;
-      };
+      }
 
-      if ((command->props.type == KERNEL_COMMAND_TYPE_MEMORY) &&
-          (command->props.bytes_transferred > 0)) {
-        rec.bytes_xfered_ = command->props.bytes_transferred;
-      } else if ((command->props.type == KERNEL_COMMAND_TYPE_MEMORY) &&
-                 (command->props.value_size > 0)) {
-        rec.value_set_ = command->props.value_size;
-      };
+      if (command->props.type == KERNEL_COMMAND_TYPE_MEMORY) {
+        rec.device_ = command->src_device;
+        rec.dst_device_ = command->dst_device;
+        if (command->src_device != nullptr) {
+          auto it = device_descriptors_.find(command->src_device);
+          PTI_ASSERT(it != device_descriptors_.end());
+          rec.pci_prop_ = it->second.pci_properties;
+        }
+        if (command->dst_device != nullptr) {
+          auto it = device_descriptors_.find(command->dst_device);
+          PTI_ASSERT(it != device_descriptors_.end());
+          rec.dst_pci_prop_ = it->second.pci_properties;
+        }
+        if (command->props.bytes_transferred > 0) {
+          rec.bytes_xfered_ = command->props.bytes_transferred;
+        } else if (command->props.value_size > 0) {
+          rec.value_set_ = command->props.value_size;
+        }
+      }
 
       rec.context_ = command_list_map_[command->command_list].context;
 
@@ -1807,8 +1827,8 @@ overhead::Init();
 
     PTI_ASSERT(device_descriptors_.count(device) != 0);
 
-    command_list_map_[command_list] = {std::vector<ZeKernelCommand*>(), context, device, immediate,
-                                       oi_pair};
+    command_list_map_[command_list] = {
+        std::vector<ZeKernelCommand*>(), context, device, nullptr, nullptr, immediate, oi_pair};
 
     if (immediate) {
       if (queue_ordinal_index_map_.count((ze_command_queue_handle_t)command_list) == 0) {
@@ -2224,6 +2244,12 @@ overhead::Init();
     command->append_time = host_timestamp;
     command->kernel_id = UniKernelId::GetKernelId();
     if (command->props.type == KERNEL_COMMAND_TYPE_KERNEL) {
+      ze_device_properties_t dev_props;
+      dev_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+      dev_props.pNext = nullptr;
+      zeDeviceGetProperties(device, &dev_props);
+      std::copy_n(dev_props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE, dev_uuid_map[command->src_device]);
+
       command->sycl_node_id_ = sycl_data_kview.sycl_node_id_;
       command->sycl_invocation_id_ = sycl_data_kview.sycl_invocation_id_;
       command->sycl_task_begin_time_ = sycl_data_kview.sycl_task_begin_time_;
@@ -2237,6 +2263,9 @@ overhead::Init();
       else
         command->corr_id_ = UniCorrId::GetUniCorrId();
     } else if (command->props.type == KERNEL_COMMAND_TYPE_MEMORY) {
+      command->src_device = command_list_info.src_device;
+      command->dst_device = command_list_info.dst_device;
+
       sycl_data_mview.kid_ = command->kernel_id;
       sycl_data_mview.tid_ = command->tid;
       if (sycl_data_mview.cid_)
@@ -2329,12 +2358,39 @@ overhead::Init();
                            const void* pattern = nullptr, size_t pattern_size = 0) {
     PTI_ASSERT(command_list != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
+    ze_memory_allocation_properties_t mem_props;
+    mem_props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
+    mem_props.pNext = nullptr;
+
+    ze_device_properties_t dev_props;
+    dev_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+    dev_props.pNext = nullptr;
 
     PTI_ASSERT(command_list_map_.count(command_list) == 1);
     ZeCommandListInfo& command_list_info = command_list_map_[command_list];
 
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
+
+    command_list_info.src_device = nullptr;
+    command_list_info.dst_device = nullptr;
+
+    if (dst != nullptr) {
+      zeMemGetAllocProperties(context, dst, &mem_props, &command_list_info.dst_device);
+      if (command_list_info.dst_device) {
+        zeDeviceGetProperties(command_list_info.dst_device, &dev_props);
+        std::copy_n(dev_props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE,
+                    dev_uuid_map[command_list_info.dst_device]);
+      }
+    }
+    if (src != nullptr) {
+      zeMemGetAllocProperties(context, src, &mem_props, &command_list_info.src_device);
+      if (command_list_info.src_device) {
+        zeDeviceGetProperties(command_list_info.src_device, &dev_props);
+        std::copy_n(dev_props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE,
+                    dev_uuid_map[command_list_info.src_device]);
+      }
+    }
 
     ZeKernelCommandProps props =
         GetTransferProps(std::move(command), bytes_transferred, (src ? context : nullptr), src,
@@ -2531,8 +2587,17 @@ overhead::Init();
       }
     }
 
+    //
+    // TODO:  Redo the stringified -P2P propagation.
+    //
     if (!direction.empty()) {
-      if (p2p && hSrcDevice && hDstDevice && (hSrcDevice != hDstDevice)) direction.append(" - P2P");
+      ze_bool_t p2p_access = 0;
+      ze_result_t status;
+      if (p2p && hSrcDevice && hDstDevice && (hSrcDevice != hDstDevice)) {
+        status = zeDeviceCanAccessPeer(hSrcDevice, hDstDevice, &p2p_access);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        if (p2p_access) direction.append(" - P2P");
+      }
       name += "(" + direction + ")";
     }
 
@@ -3187,6 +3252,7 @@ overhead::Init();
 
   ZeFunctionInfoMap function_info_map_;
   std::map<ze_command_queue_handle_t, std::pair<uint32_t, uint32_t>> queue_ordinal_index_map_;
+  std::map<ze_device_handle_t, uint8_t[ZE_MAX_DEVICE_UUID_SIZE]> dev_uuid_map;
 
   std::set<std::pair<ze_context_handle_t, ze_device_handle_t>> metric_activations_;
   static const uint32_t kFunctionLength = 10;

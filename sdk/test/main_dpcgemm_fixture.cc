@@ -6,6 +6,7 @@
 #include <tuple>
 
 #include "pti_view.h"
+#include "samples_utils.h"
 #include "utils.h"
 #include "ze_utils.h"
 
@@ -15,7 +16,6 @@
 
 namespace {
 size_t requested_buffer_calls = 0;
-size_t number_of_subdevices = 0;
 size_t rejected_buffer_calls = 0;  // Buffer requests that are called and rejected by the API
 size_t completed_buffer_calls = 0;
 size_t completed_buffer_used_bytes = 0;
@@ -33,6 +33,7 @@ bool kernel_launch_func_name = false;
 uint64_t memory_bytes_copied = 0;
 uint64_t memory_view_record_count = 0;
 uint64_t kernel_view_record_count = 0;
+bool kernel_uuid_zero = true;
 uint64_t kernel_has_sycl_file_count = 0;
 uint64_t masked_by_last_id_records = 0;
 uint64_t last_pop_eid = 0;
@@ -139,7 +140,6 @@ class MainFixtureTest : public ::testing::Test {
 
   void SetUp() override {  // Called right after constructor before each test
     buffer_cb_registered_ = true;
-    number_of_subdevices = 0;
     requested_buffer_calls = 0;
     rejected_buffer_calls = 0;
     completed_buffer_calls = 0;
@@ -275,6 +275,7 @@ class MainFixtureTest : public ::testing::Test {
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
+          pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
           std::string kernel_name = reinterpret_cast<pti_view_record_kernel*>(ptr)->_name;
           if (kernel_name.find("RunAndCheck(") != std::string::npos) demangled_kernel_name = true;
           std::string kernel_source_filename =
@@ -288,10 +289,6 @@ class MainFixtureTest : public ::testing::Test {
           if (kernel_enqueue_ts > 0) kernel_has_sycl_enqk_info = true;
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
-          ze_device_handle_t dev_handle =
-              (reinterpret_cast<pti_view_record_kernel*>(ptr))->_device_handle;
-          std::vector<ze_device_handle_t> sub_device_list = utils::ze::GetSubDeviceList(dev_handle);
-          number_of_subdevices = sub_device_list.size();
           if (not(reinterpret_cast<pti_view_record_kernel*>(ptr)->_sycl_task_begin_timestamp <
                   reinterpret_cast<pti_view_record_kernel*>(ptr)->_sycl_enqk_begin_timestamp <
                   reinterpret_cast<pti_view_record_kernel*>(ptr)->_append_timestamp <
@@ -303,6 +300,9 @@ class MainFixtureTest : public ::testing::Test {
             kernel_has_task_begin0_record = true;
           if (reinterpret_cast<pti_view_record_kernel*>(ptr)->_sycl_enqk_begin_timestamp == 0)
             kernel_has_enqk_begin0_record = true;
+          if (samples_utils::stringify_uuid(rec->_device_uuid, "") !=
+              "00000000-0000-0000-0000-000000000000")
+            kernel_uuid_zero = false;
           break;
         }
         default: {
@@ -404,14 +404,6 @@ TEST_F(MainFixtureTest, SecondCallbackCalled) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_GT(completed_buffer_used_bytes, 0);
-}
-
-TEST_F(MainFixtureTest, DeviceHandleValid) {
-  ptiViewSetCallbacks(BufferRequested, BufferCompleted);
-  RunGemm();
-  // TODO this test might need modification as it depends on
-  // how driver/environment present devices for SYCL: flat or hierarchical
-  EXPECT_EQ(number_of_subdevices, 0);
 }
 
 TEST_F(MainFixtureTest, MemoryViewRecordCreated) {
@@ -599,6 +591,12 @@ TEST_F(MainFixtureTest, ValidateNullPtrPopExternalId) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   ASSERT_EQ(popNullPtrResult, PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY);
+}
+
+TEST_F(MainFixtureTest, KerneluuidDeviceNonZero) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunGemm();
+  ASSERT_EQ(kernel_uuid_zero, false);
 }
 
 namespace {

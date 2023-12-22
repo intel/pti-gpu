@@ -18,6 +18,12 @@ extern "C" {
 #endif
 
 /**
+ * @brief const defines.
+ */
+#define PTI_MAX_DEVICE_UUID_SIZE 16           //!< Size of uuid array.
+#define PTI_MAX_PCI_ADDRESS_SIZE 16           //!< Size of pci address array.
+
+/**
  * @brief Return/Error codes
  */
 typedef enum {
@@ -47,6 +53,7 @@ typedef enum _pti_view_kind {
   PTI_VIEW_EXTERNAL_CORRELATION = 7,      //!< Correlation of external operations
   PTI_VIEW_DEVICE_GPU_MEM_COPY = 8,       //!< Memory copies between Host and Device
   PTI_VIEW_DEVICE_GPU_MEM_FILL = 9,       //!< Device memory fills
+  PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P = 10,  //!< Peer to Peer Memory copies between Devices.
 } pti_view_kind;
 
 /**
@@ -120,29 +127,29 @@ typedef struct pti_view_record_base {
  * @brief Device Compute kernel View record type
  */
 typedef struct pti_view_record_kernel {
-  pti_view_record_base _view_kind;            //!< Base record
-  ze_command_queue_handle_t _queue_handle;    //!< Device back-end queue handle
-  ze_device_handle_t  _device_handle;         //!< Device handle
-  ze_context_handle_t _context_handle;        //!< Context handle
-  const char* _name;                          //!< Kernel name
-  const char* _source_file_name;              //!< Kernel source file,
-                                              //!< null if no information
-  uint64_t _source_line_number;               //!< Kernel beginning source line number,
-                                              //!< 0 if no information
-  uint64_t _kernel_id;                        //!< Kernel instance ID,
-                                              //!< unique among all device kernel instances
-  uint32_t _correlation_id;                   //!< ID that correlates this record with records
-                                              //!< of other Views
-  uint32_t _thread_id;                        //!< Thread ID of Function call
-  char _pci_address[16];                      //!< Device pci_address
-  uint64_t _append_timestamp;                 //!< Timestamp of kernel appending to
-                                              //!< back-end command list, ns
-  uint64_t _start_timestamp;                  //!< Timestamp of kernel start on device, ns
-  uint64_t _end_timestamp;                    //!< Timestamp of kernel completion on device, ns
-  uint64_t _submit_timestamp;                 //!< Timestamp of kernel command list submission
-                                              //!< of device, ns
-  uint64_t _sycl_task_begin_timestamp;        //!< Timestamp of kernel submission from SYCL layer,
-                                              //!< ns
+  pti_view_record_base _view_kind;                  //!< Base record
+  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
+  ze_context_handle_t _context_handle;              //!< Context handle
+  const char* _name;                                //!< Kernel name
+  const char* _source_file_name;                    //!< Kernel source file,
+                                                    //!< null if no information
+  uint64_t _source_line_number;                     //!< Kernel beginning source line number,
+                                                    //!< 0 if no information
+  uint64_t _kernel_id;                              //!< Kernel instance ID,
+                                                    //!< unique among all device kernel instances
+  uint32_t _correlation_id;                         //!< ID that correlates this record with records
+                                                    //!< of other Views
+  uint32_t _thread_id;                              //!< Thread ID of Function call
+  char _pci_address[PTI_MAX_PCI_ADDRESS_SIZE];      //!< Device pci_address
+  uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Device uuid
+  uint64_t _append_timestamp;                       //!< Timestamp of kernel appending to
+                                                    //!< back-end command list, ns
+  uint64_t _start_timestamp;                        //!< Timestamp of kernel start on device, ns
+  uint64_t _end_timestamp;                          //!< Timestamp of kernel completion on device, ns
+  uint64_t _submit_timestamp;                       //!< Timestamp of kernel command list submission
+                                                    //!< of device, ns
+  uint64_t _sycl_task_begin_timestamp;              //!< Timestamp of kernel submission from SYCL layer,
+                                                    //!< ns
   uint64_t _sycl_enqk_begin_timestamp;
   uint64_t _sycl_node_id;
   uint32_t _sycl_invocation_id;
@@ -165,53 +172,82 @@ typedef struct pti_view_record_sycl_runtime{
  * @brief Memory Copy Operation View record type
  */
 typedef struct pti_view_record_memory_copy {
-  pti_view_record_base _view_kind;          //!< Base record
-  pti_view_memcpy_type _memcpy_type;        //!< Memory copy type
-  pti_view_memory_type _mem_src;            //!< Memory type
-  pti_view_memory_type _mem_dst;            //!< Memory type
-  ze_command_queue_handle_t _queue_handle;  //!< Device back-end queue handle
-  ze_device_handle_t  _device_handle;       //!< Device handle
-  ze_context_handle_t _context_handle;      //!< Context handle
-  const char* _name;                        //!< Back-end API name making a memory copy
-  char _pci_address[16];                    //!< Device pci_address
-  uint64_t _mem_op_id;                      //!< Memory operation ID, unique among
-                                            //!< all memory operations instances
-  uint32_t _correlation_id;                 //!< ID that correlates this record with records
-                                            //!< of other Views
-  uint32_t _thread_id;                      //!< Thread ID from which operation submitted
-  uint64_t _append_timestamp;               //!< Timestamp of memory copy appending to
-                                            //!< back-end command list, ns
-  uint64_t _start_timestamp;                //!< Timestamp of memory copy start on device, ns
-  uint64_t _end_timestamp;                  //!< Timestamp of memory copy completion on device, ns
-  uint64_t _submit_timestamp;               //!< Timestamp of memory copy command list submission
-                                            //!< to device, ns
-  uint64_t _bytes;                          //!< number of bytes copied
+  pti_view_record_base _view_kind;                  //!< Base record
+  pti_view_memcpy_type _memcpy_type;                //!< Memory copy type
+  pti_view_memory_type _mem_src;                    //!< Memory type
+  pti_view_memory_type _mem_dst;                    //!< Memory type
+  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
+  ze_context_handle_t _context_handle;              //!< Context handle
+  const char* _name;                                //!< Back-end API name making a memory copy
+  char _pci_address[PTI_MAX_PCI_ADDRESS_SIZE];      //!< Source or Destination Device pci_address
+  uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Source or Destination Device uuid
+  uint64_t _mem_op_id;                              //!< Memory operation ID, unique among
+                                                    //!< all memory operations instances
+  uint32_t _correlation_id;                         //!< ID that correlates this record with records
+                                                    //!< of other Views
+  uint32_t _thread_id;                              //!< Thread ID from which operation submitted
+  uint64_t _append_timestamp;                       //!< Timestamp of memory copy appending to
+                                                    //!< back-end command list, ns
+  uint64_t _start_timestamp;                        //!< Timestamp of memory copy start on device, ns
+  uint64_t _end_timestamp;                          //!< Timestamp of memory copy completion on device, ns
+  uint64_t _submit_timestamp;                       //!< Timestamp of memory copy command list submission
+                                                    //!< to device, ns
+  uint64_t _bytes;                                  //!< number of bytes copied
 } pti_view_record_memory_copy;
+
+/**
+ * @brief Peer to Peer Memory Copy Operation View record type
+ */
+typedef struct pti_view_record_memory_copy_p2p {
+  pti_view_record_base _view_kind;                  //!< Base record
+  pti_view_memcpy_type _memcpy_type;                //!< Memory copy type
+  pti_view_memory_type _mem_src;                    //!< Memory type
+  pti_view_memory_type _mem_dst;                    //!< Memory type
+  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
+  ze_context_handle_t _context_handle;              //!< Context handle
+  const char* _name;                                //!< Back-end API name making a memory copy
+  char _src_pci_address[PTI_MAX_PCI_ADDRESS_SIZE];  //!< Source Device pci_address
+  char _dst_pci_address[PTI_MAX_PCI_ADDRESS_SIZE];  //!< Destination Device pci_address
+  uint8_t _src_uuid[PTI_MAX_DEVICE_UUID_SIZE];      //!< Source Device uuid
+  uint8_t _dst_uuid[PTI_MAX_DEVICE_UUID_SIZE];      //!< Destination Device uuid
+  uint64_t _mem_op_id;                              //!< Memory operation ID, unique among
+                                                    //!< all memory operations instances
+  uint32_t _correlation_id;                         //!< ID that correlates this record with records
+                                                    //!< of other Views
+  uint32_t _thread_id;                              //!< Thread ID from which operation submitted
+  uint64_t _append_timestamp;                       //!< Timestamp of memory copy appending to
+                                                    //!< back-end command list, ns
+  uint64_t _start_timestamp;                        //!< Timestamp of memory copy start on device, ns
+  uint64_t _end_timestamp;                          //!< Timestamp of memory copy completion on device, ns
+  uint64_t _submit_timestamp;                       //!< Timestamp of memory copy command list submission
+                                                    //!< to device, ns
+  uint64_t _bytes;                                  //!< number of bytes copied
+} pti_view_record_memory_copy_p2p;
 
 /**
  * @brief Device Memory Fill operation View record type
  */
 typedef struct pti_view_record_memory_fill {
-  pti_view_record_base _view_kind;          //!< Base record
-  pti_view_memory_type _mem_type;           //!< Type of memory filled
-  ze_command_queue_handle_t _queue_handle;  //!< Device back-end queue handle
-  ze_device_handle_t  _device_handle;       //!< Device handle
-  ze_context_handle_t _context_handle;      //!< Context handle
-  const char* _name;                        //!< Back-end API name making a memory fill
-  char _pci_address[16];                    //!< Device pci_address
-  uint64_t _mem_op_id;                      //!< Memory operation ID,
-                                            //!< unique among all memory operations instances
-  uint32_t _correlation_id;                 //!< ID provided by user, marking some external
-                                            //!< to PTI operations
-  uint32_t _thread_id;                      //!< Thread ID from which operation submitted
-  uint64_t _append_timestamp;               //!< Timestamp of memory fill appending
-                                            //!< to back-end command list, ns
-  uint64_t _start_timestamp;                //!< Timestamp of memory fill start on device, ns
-  uint64_t _end_timestamp;                  //!< Timestamp of memory fill completion on device, ns
-  uint64_t _submit_timestamp;               //!< Timestamp of memory fill command list submission
-                                            //!< to device, ns
-  uint64_t _bytes;                          //!< number of bytes filled
-  uint64_t _value_for_set;                  //!< value filled
+  pti_view_record_base _view_kind;                  //!< Base record
+  pti_view_memory_type _mem_type;                   //!< Type of memory filled
+  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
+  ze_context_handle_t _context_handle;              //!< Context handle
+  const char* _name;                                //!< Back-end API name making a memory fill
+  char _pci_address[PTI_MAX_PCI_ADDRESS_SIZE];      //!< Device pci_address
+  uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Device uuid
+  uint64_t _mem_op_id;                              //!< Memory operation ID,
+                                                    //!< unique among all memory operations instances
+  uint32_t _correlation_id;                         //!< ID provided by user, marking some external
+                                                    //!< to PTI operations
+  uint32_t _thread_id;                              //!< Thread ID from which operation submitted
+  uint64_t _append_timestamp;                       //!< Timestamp of memory fill appending
+                                                    //!< to back-end command list, ns
+  uint64_t _start_timestamp;                        //!< Timestamp of memory fill start on device, ns
+  uint64_t _end_timestamp;                          //!< Timestamp of memory fill completion on device, ns
+  uint64_t _submit_timestamp;                       //!< Timestamp of memory fill command list submission
+                                                    //!< to device, ns
+  uint64_t _bytes;                                  //!< number of bytes filled
+  uint64_t _value_for_set;                          //!< value filled
 } pti_view_record_memory_fill;
 
 /**

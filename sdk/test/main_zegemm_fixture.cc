@@ -29,7 +29,6 @@ constexpr size_t kPtiDeviceId = 0;  // run on first device
 
 size_t requested_buffer_calls = 0;
 size_t rejected_buffer_calls = 0;  // Buffer requests that are called and rejected by the API
-size_t number_of_subdevices = 0;
 size_t completed_buffer_calls = 0;
 size_t completed_buffer_used_bytes = 0;
 bool memory_view_record_created = false;
@@ -264,7 +263,6 @@ class MainZeFixtureTest : public ::testing::Test {
       GTEST_SKIP();
     }
     buffer_cb_registered = true;
-    number_of_subdevices = 0;
     requested_buffer_calls = 0;
     rejected_buffer_calls = 0;
     completed_buffer_calls = 0;
@@ -323,10 +321,6 @@ class MainZeFixtureTest : public ::testing::Test {
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
-          ze_device_handle_t dev_handle =
-              (reinterpret_cast<pti_view_record_kernel*>(ptr))->_device_handle;
-          std::vector<ze_device_handle_t> sub_device_list = utils::ze::GetSubDeviceList(dev_handle);
-          number_of_subdevices = sub_device_list.size();
           break;
         }
         default: {
@@ -446,14 +440,6 @@ TEST_F(MainZeFixtureTest, SecondCallbackCalled) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_GT(completed_buffer_used_bytes, 0);
-}
-
-TEST_F(MainZeFixtureTest, DeviceHandleValid) {
-  ptiViewSetCallbacks(BufferRequested, BufferCompleted);
-  RunGemm();
-  // TODO this test might need modification as it depends on
-  // how driver/environment present devices for SYCL: flat or hierarchical
-  EXPECT_EQ(number_of_subdevices, 0);
 }
 
 TEST_F(MainZeFixtureTest, MemoryViewRecordCreated) {
