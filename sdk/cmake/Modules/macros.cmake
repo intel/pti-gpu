@@ -872,10 +872,16 @@ macro(FindL0HeadersPath TARGET L0_GEN_SCRIPT)
     ze_gen_headers)
 endmacro()
 
-macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target)
+macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET)
   RequirePythonInterp()
+
+  # Use the target that links level zero to find the level zero library
+  get_target_property(L0_TARGET_PATH ${L0_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+
+  # HINTS before PATHS
   find_path(L0_INC_PATH
     NAMES level_zero
+    HINTS ${L0_TARGET_PATH}
     PATHS ENV CPATH)
   if (NOT L0_INC_PATH)
     message(FATAL_ERROR

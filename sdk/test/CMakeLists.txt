@@ -42,7 +42,7 @@ if(HAVE_SYCL)
   target_compile_definitions(vecsqadd_suite PUBLIC PTI_LEVEL_ZERO=1
                                                    ${PTI_DEFINE_FLAGS_EXPR})
 
-  target_link_libraries(vecsqadd_suite PUBLIC Pti::pti_view xptifw
+  target_link_libraries(vecsqadd_suite PUBLIC Pti::pti_view
                                               GTest::gtest_main)
 
   add_executable(mem_ops_test mem_ops_test.cc)
@@ -90,15 +90,14 @@ add_custom_command(
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
           ${PROJECT_SOURCE_DIR}/test/gemm.cl ${CMAKE_BINARY_DIR}/test/gemm.cl)
 
-findl0library(zegemm_suite)
-findl0headers(zegemm_suite)
+find_package(LevelZero REQUIRED)
 
 target_compile_options(zegemm_suite PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
 target_link_options(zegemm_suite PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(zegemm_suite PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
 target_link_libraries(zegemm_suite PUBLIC Pti::pti_view GTest::gtest_main
-                                          GTest::gmock)
+                                          GTest::gmock LevelZero::level-zero)
 
 add_executable(view_record_test view_buffer_test.cc)
 

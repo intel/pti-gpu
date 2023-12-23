@@ -139,6 +139,10 @@ target_compile_options(pti PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
 target_link_options(pti PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
+find_package(Threads REQUIRED)
+find_package(LevelZero REQUIRED)
+find_package(Xpti)
+
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
 add_library(Pti::pti_view ALIAS pti_view)
@@ -165,43 +169,34 @@ target_link_options(pti_view PRIVATE ${PTI_LINK_FLAGS_EXPR})
 
 target_compile_definitions(
   pti_view
-  PUBLIC PTI_LEVEL_ZERO=1
-  PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
-
-if(NOT PTI_ENABLE_LOGGING)
-  target_compile_definitions(pti_view
-                             PRIVATE SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_OFF)
-else()
-  target_compile_definitions(pti_view
-                             PRIVATE SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
-endif()
+  PUBLIC
+    $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
+    $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
+  PRIVATE
+    ${PTI_DEFINE_FLAGS_EXPR}
+    $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
+        SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
+        SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_OFF>
+)
 
 if(PTI_DEBUG)
   add_compile_definitions(PTI_DEBUG)
 endif()
 
-find_package(Threads REQUIRED)
-find_package(Xpti)
-
-if(TARGET Xpti::xpti)
-  target_compile_definitions(pti_view PUBLIC PTI_TRACE_SYCL)
-  target_link_libraries(pti_view PUBLIC Xpti::xpti)
-endif()
-
 target_link_libraries(
   pti_view
-  PUBLIC Threads::Threads
-  PRIVATE spdlog::spdlog_header_only)
-
-FindL0Library(pti_view)
-FindL0Headers(pti_view)
+  PUBLIC
+    Threads::Threads LevelZero::level-zero
+    $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
+  PRIVATE
+    spdlog::spdlog_header_only)
 
 FindHeadersPath(
   pti_view "${PROJECT_SOURCE_DIR}/src/gen_tracing_common_header.py"
-  "common_header.gen" gen_common_header)
+  "common_header.gen" gen_common_header LevelZero::level-zero)
 FindHeadersPath(
   pti_view "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
-  "tracing.gen" gen_tracing_header)
+  "tracing.gen" gen_tracing_header LevelZero::level-zero)
 
 target_link_libraries(pti PUBLIC pti_view)
 
