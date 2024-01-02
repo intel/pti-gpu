@@ -2247,7 +2247,8 @@ overhead::Init();
       ze_device_properties_t dev_props;
       dev_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
       dev_props.pNext = nullptr;
-      zeDeviceGetProperties(device, &dev_props);
+      ze_result_t status = zeDeviceGetProperties(device, &dev_props);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       std::copy_n(dev_props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE, dev_uuid_map[command->src_device]);
 
       command->sycl_node_id_ = sycl_data_kview.sycl_node_id_;
@@ -2376,17 +2377,23 @@ overhead::Init();
     command_list_info.dst_device = nullptr;
 
     if (dst != nullptr) {
-      zeMemGetAllocProperties(context, dst, &mem_props, &command_list_info.dst_device);
+      ze_result_t status =
+          zeMemGetAllocProperties(context, dst, &mem_props, &command_list_info.dst_device);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       if (command_list_info.dst_device) {
-        zeDeviceGetProperties(command_list_info.dst_device, &dev_props);
+        ze_result_t status = zeDeviceGetProperties(command_list_info.dst_device, &dev_props);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         std::copy_n(dev_props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE,
                     dev_uuid_map[command_list_info.dst_device]);
       }
     }
     if (src != nullptr) {
-      zeMemGetAllocProperties(context, src, &mem_props, &command_list_info.src_device);
+      ze_result_t status =
+          zeMemGetAllocProperties(context, src, &mem_props, &command_list_info.src_device);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       if (command_list_info.src_device) {
-        zeDeviceGetProperties(command_list_info.src_device, &dev_props);
+        ze_result_t status = zeDeviceGetProperties(command_list_info.src_device, &dev_props);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         std::copy_n(dev_props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE,
                     dev_uuid_map[command_list_info.src_device]);
       }

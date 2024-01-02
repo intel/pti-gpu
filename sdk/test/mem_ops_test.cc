@@ -12,15 +12,20 @@
 
 using namespace sycl;
 
+namespace {
 bool p2p_d2d_record = false;
 bool p2p_d2s_record = false;
 bool p2p_s2d_record = false;
 bool p2p_s2s_record = false;
 bool uuid_non_unique = false;
 bool memfill_uuid_zero = false;
+bool memcopy_type_valid = false;
+bool memsrc_type_valid = false;
+bool memdst_type_valid = false;
 bool non_p2p_d2d_exists = false;
 bool atleast_2_devices = false;
 bool p2p_device_access = false;
+}  // namespace
 
 void StartTracing() {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
@@ -81,6 +86,13 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         std::string memcpy_name = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_name;
         if (memcpy_name.find("D2D)") != std::string::npos) {
           non_p2p_d2d_exists = true;
+          pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+          if (rec->_memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2D)
+            memcopy_type_valid = true;
+          if (rec->_mem_src == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE)
+            memsrc_type_valid = true;
+          if (rec->_mem_dst == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE)
+            memdst_type_valid = true;
         }
         break;
       }
@@ -94,6 +106,14 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
             reinterpret_cast<pti_view_record_memory_copy_p2p*>(ptr);
         if (memcmp(rec->_src_uuid, rec->_dst_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
           uuid_non_unique = true;
+        }
+        if (p2p_d2s_record) {
+          if (rec->_memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2S)
+            memcopy_type_valid = true;
+          if (rec->_mem_src == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE)
+            memsrc_type_valid = true;
+          if (rec->_mem_dst == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED)
+            memdst_type_valid = true;
         }
         break;
       }
@@ -216,7 +236,20 @@ void p2pTest() {
 
 class MemoryOperationFixtureTest : public ::testing::Test {
  protected:
-  void SetUp() override {}
+  void SetUp() override {
+    p2p_d2d_record = false;
+    p2p_d2s_record = false;
+    p2p_s2d_record = false;
+    p2p_s2s_record = false;
+    uuid_non_unique = false;
+    memfill_uuid_zero = false;
+    memcopy_type_valid = false;
+    memsrc_type_valid = false;
+    memdst_type_valid = false;
+    non_p2p_d2d_exists = false;
+    atleast_2_devices = false;
+    p2p_device_access = false;
+  }
 
   void TearDown() override {}
 };
@@ -255,4 +288,40 @@ TEST_F(MemoryOperationFixtureTest, MemFilluuidDeviceNonZero) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   p2pTest();
   ASSERT_EQ(memfill_uuid_zero, false);
+}
+
+TEST_F(MemoryOperationFixtureTest, MemCopyTypeDevice) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memcopy_type_valid, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, MemSrcTypeDevice) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memsrc_type_valid, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, MemDstTypeDevice) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memdst_type_valid, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, MemCopyTypeP2PDevice) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memcopy_type_valid, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, MemSrcTypeShared) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memsrc_type_valid, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, MemDstTypeShared) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memdst_type_valid, true);
 }

@@ -638,6 +638,7 @@ inline void SetMemCpyIds(T& record, const ZeKernelCommandExecutionRecord& rec) {
   if (rec.device_ != nullptr) {
     GetDeviceId(record._pci_address, rec.pci_prop_);
     std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
+    SetMemCopyType<T>(record, rec);
     return;
   } else if (rec.dst_device_ != nullptr)
     GetDeviceId(record._pci_address, rec.dst_pci_prop_);
@@ -645,6 +646,7 @@ inline void SetMemCpyIds(T& record, const ZeKernelCommandExecutionRecord& rec) {
     memset(record._pci_address, 0, PTI_MAX_PCI_ADDRESS_SIZE);
 
   std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
+  SetMemCopyType<T>(record, rec);
 }
 
 template <typename T>
@@ -660,6 +662,7 @@ inline void SetMemCpyIdsP2P(T& record, const ZeKernelCommandExecutionRecord& rec
 
   std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._src_uuid);
   std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._dst_uuid);
+  SetMemCopyType<T>(record, rec);
 }
 
 template <typename T>
