@@ -16,6 +16,7 @@ Intel(R) GPU applications.
 - cmake 3.22 or above (cmake versions prior to 3.22 are not fully tested or validated)
 - C++ compiler with C++17 support
 - Intel(R) oneAPI Base Toolkits
+- Python
 - Intel(R) MPI (optional)
 
 ## Build
@@ -219,6 +220,8 @@ Similarly, one can use **--chrome-dnn-logging** for oneDNN.
 The **--ccl-summary-report  [-r]** option outputs CCL call timing summary:
 ![CCL Call Timing!](/tools/unitrace/doc/images/ccl_summary_report.png)
 
+If the application is a PyTorch workload, presence of **--chrome-mpi-logging** or **--chrome-ccl-logging** or **--chrome-dnn-logging** also enables PyTorch profiling(see **Profile PyTorch** section for more information).
+
 ## Location of Trace Data
 
 By default, all output data are written in the current working directory. However, one can specify a different directory for output:
@@ -301,6 +304,84 @@ https://ui.perfetto.dev/.
 python mergetrace.py -o <output-trace-file> <input-trace-file-1> <input-trace-file-2> <input-trace-file-3> ...
 ```
 ![Multiple MPI Ranks Host-Device Timelines!](/tools/unitrace/doc/images/multipl-ranks-timelines.png)
+
+## Profile PyTorch
+
+To profile PyTorch, you need to enclose the code to be profiled with
+
+```sh
+with torch.autograd.profiler.emit_itt():
+    ......
+```
+
+For example:
+
+```sh
+with torch.autograd.profiler.emit_itt(record_shapes=False):
+    for batch_idx, (data, target) in enumerate(train_loader):
+        optimizer.zero_grad()
+        data = data.to("xpu")
+        target = target.to("xpu")
+        with torch.xpu.amp.autocast(enabled=True, dtype=torch.bfloat16):
+            output = model(data)
+            loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+```
+
+To profile PyTorch, option **--chrome-mpi-logging** or **--chrome-ccl-logging** or **--chrome-dnn-logging** must be present. For example:
+
+```sh
+unitrace --chrome-kernel-logging --chrome-dnn-logging --chrome-ccl-logging python ./rn50.py
+```
+
+![PyTorch Profiling!](/tools/unitrace/doc/images/pytorch.png)
+
+You can use **PTI_ENABLE_COLLECTION** environment variable to selectively enable/disable profiling.
+
+```sh
+with torch.autograd.profiler.emit_itt(record_shapes=False):
+    os.environ["PTI_ENABLE_COLLECTION"] = "1"
+    for batch_idx, (data, target) in enumerate(train_loader):
+        optimizer.zero_grad()
+        data = data.to("xpu")
+        target = target.to("xpu")
+        with torch.xpu.amp.autocast(enabled=True, dtype=torch.bfloat16):
+            output = model(data)
+            loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+        if (batch_idx == 2):
+            os.environ["PTI_ENABLE_COLLECTION"] = "0"
+```
+Alternatively, you can use itt-python to do selective profiling as well. The itt-python can be installed from conda-forge
+
+```sh
+conda install -c conda-forge --override-channels itt-python
+```
+
+```sh
+import itt
+......
+
+with torch.autograd.profiler.emit_itt(record_shapes=False):
+    itt.resume()
+    for batch_idx, (data, target) in enumerate(train_loader):
+        optimizer.zero_grad()
+        data = data.to("xpu")
+        target = target.to("xpu")
+        with torch.xpu.amp.autocast(enabled=True, dtype=torch.bfloat16):
+            output = model(data)
+            loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+        if (batch_idx == 2):
+            itt.pause()
+```
+
+```sh
+unitrace --chrome-kernel-logging --chrome-dnn-logging --conditional-collection python ./rn50.py
+```
 
 ## View Large Traces
 
