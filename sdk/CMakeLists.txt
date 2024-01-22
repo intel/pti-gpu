@@ -169,10 +169,9 @@ target_link_options(pti_view PRIVATE ${PTI_LINK_FLAGS_EXPR})
 
 target_compile_definitions(
   pti_view
-  PUBLIC
-    $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
-    $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
   PRIVATE
+    $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
+    $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
     ${PTI_DEFINE_FLAGS_EXPR}
     $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
         SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
@@ -186,9 +185,10 @@ endif()
 target_link_libraries(
   pti_view
   PUBLIC
-    Threads::Threads LevelZero::level-zero
-    $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
+    Threads::Threads
   PRIVATE
+    LevelZero::level-zero
+    $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
     spdlog::spdlog_header_only)
 
 FindHeadersPath(
@@ -213,47 +213,48 @@ export(
 if(PTI_INSTALL)
   include(CMakePackageConfigHelpers)
 
-  configure_package_config_file(
-    "${PROJECT_SOURCE_DIR}/PtiConfig.cmake.in"
-    "${PROJECT_BINARY_DIR}/PtiConfig.cmake"
-    INSTALL_DESTINATION "${PTI_INSTALL_CMAKE_DIR}")
-
   write_basic_package_version_file(
     "${PROJECT_BINARY_DIR}/PtiConfigVersion.cmake"
     VERSION "${PROJECT_VERSION}"
     COMPATIBILITY SameMinorVersion)
 
-  install(FILES "${PROJECT_BINARY_DIR}/PtiConfig.cmake"
+  install(FILES "${PROJECT_SOURCE_DIR}/PtiConfig.cmake"
                 "${PROJECT_BINARY_DIR}/PtiConfigVersion.cmake"
-          DESTINATION "${PTI_INSTALL_CMAKE_DIR}")
-
-  install(FILES "${PROJECT_SOURCE_DIR}/cmake/Modules/FindXpti.cmake"
+          COMPONENT Pti_Development
           DESTINATION "${PTI_INSTALL_CMAKE_DIR}")
 
   install(
     TARGETS pti pti_view
     EXPORT PtiTargets
     LIBRARY DESTINATION ${PTI_INSTALL_LIB_DIR}
+    COMPONENT Pti_Runtime
+    NAMELINK_COMPONENT Pti_Development
     ARCHIVE DESTINATION ${PTI_INSTALL_LIB_DIR}
+    COMPONENT Pti_Development
     RUNTIME DESTINATION ${PTI_INSTALL_BIN_DIR}
-    INCLUDES
-    DESTINATION "${PTI_INSTALL_INCLUDE_DIR}")
+    COMPONENT Pti_Runtime
+    )
 
   install(FILES "${PROJECT_BINARY_DIR}/pti_export.h"
-          DESTINATION "${PTI_INSTALL_INCLUDE_DIR}")
+          DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
+          COMPONENT Pti_Development)
 
   install(FILES "${PROJECT_BINARY_DIR}/include/pti_version.h"
-          DESTINATION "${PTI_INSTALL_INCLUDE_DIR}")
+          DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
+          COMPONENT Pti_Development)
 
   install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/"
           DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
-          FILES_MATCHING PATTERN "*.h")
+          COMPONENT Pti_Development
+          FILES_MATCHING PATTERN "*.h"
+          )
 
   install(
     EXPORT PtiTargets
     FILE PtiTargets.cmake
     NAMESPACE Pti::
-    DESTINATION "${PTI_INSTALL_CMAKE_DIR}")
+    DESTINATION "${PTI_INSTALL_CMAKE_DIR}"
+    COMPONENT Pti_Development)
 endif()
 
 if(PTI_BUILD_SAMPLES)

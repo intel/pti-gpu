@@ -50,7 +50,7 @@ if(HAVE_SYCL)
   target_include_directories(
     mem_ops_test
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
-         "${PROJECT_SOURCE_DIR}/src" 
+         "${PROJECT_SOURCE_DIR}/src"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -59,8 +59,9 @@ if(HAVE_SYCL)
   target_link_options(mem_ops_test PRIVATE -fsycl -gline-tables-only
                     ${PTI_LINK_FLAGS_EXPR})
   target_compile_definitions(mem_ops_test PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
-  
-  target_link_libraries(mem_ops_test PUBLIC Pti::pti_view GTest::gtest_main)
+
+  target_link_libraries(mem_ops_test PUBLIC Pti::pti_view GTest::gtest_main
+                                            LevelZero::level-zero)
 
   gtest_discover_tests(dpcgemm_suite PROPERTIES LABELS "unit")
   gtest_discover_tests(
@@ -112,7 +113,8 @@ target_link_options(view_record_test PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(view_record_test PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
 target_link_libraries(view_record_test PUBLIC Pti::pti_view GTest::gtest_main
-                                              spdlog::spdlog_header_only)
+                                              spdlog::spdlog_header_only
+                                              LevelZero::level-zero)
 
 add_executable(assert_exception_test assert_exception_test.cc)
 
@@ -127,7 +129,8 @@ target_link_options(assert_exception_test PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(assert_exception_test PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
 target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_main
-                                              spdlog::spdlog_header_only)
+                                                   spdlog::spdlog_header_only
+                                                   LevelZero::level-zero)
 
 gtest_discover_tests(
   zegemm_suite
