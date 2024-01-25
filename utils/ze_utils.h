@@ -356,7 +356,8 @@ inline uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
   ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
   ze_result_t status = zeDeviceGetProperties(device, &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  return (1ull << props.kernelTimestampValidBits) - 1ull;
+  return ((props.kernelTimestampValidBits == 64) ? std::numeric_limits<uint64_t>::max()
+              : ((1ull << props.kernelTimestampValidBits) - 1ull));
 }
 
 inline uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
@@ -371,7 +372,8 @@ inline uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
       return (1ull << (props.kernelTimestampValidBits - 1)) - 1ull;
   }
   else {
-      return (1ull << props.kernelTimestampValidBits) - 1ull;
+      return ((props.kernelTimestampValidBits == 64) ? std::numeric_limits<uint64_t>::max()
+                  : ((1ull << props.kernelTimestampValidBits) - 1ull));
   }
 #endif
 }
