@@ -91,6 +91,10 @@
     "configurePreset": "default"
   },
   {
+    "name": "make",
+    "configurePreset": "make"
+  },
+  {
     "name": "asan",
     "configurePreset": "asan"
   },
@@ -106,19 +110,38 @@
   "testPresets": [
   {
     "name": "default",
-    "configurePreset": "default"
+    "configurePreset": "default",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build/lib:$penv{LD_LIBRARY_PATH}"
+    }
+  },
+  {
+    "name": "make",
+    "configurePreset": "make",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build/lib:$penv{LD_LIBRARY_PATH}"
+    }
   },
   {
     "name": "asan",
-    "configurePreset": "asan"
+    "configurePreset": "asan",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
+    }
   },
   {
     "name": "fuzz",
-    "configurePreset": "fuzz"
+    "configurePreset": "fuzz",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
+    }
   },
   {
     "name": "tsan",
-    "configurePreset": "tsan"
+    "configurePreset": "tsan",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
+    }
   }
   ]
 }

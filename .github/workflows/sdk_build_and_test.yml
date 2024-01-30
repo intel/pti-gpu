@@ -28,7 +28,7 @@ jobs:
       - name: Test
         run: |
           cd sdk
-          ctest --output-on-failure --test-dir build
+          ctest --output-on-failure --preset default
 
       - name: BuildSanitized
         if: always()
@@ -52,6 +52,17 @@ jobs:
           cd sdk
           ctest --preset asan --output-on-failure -L samples
 
+      - name: Install SDK
+        working-directory: sdk
+        run: |
+          cmake --install build --config Release --prefix out
+
+      - name: Upload SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: "PTI-SDK"
+          path: |
+            sdk/out
 
   pti-tools-build-and-test:
 

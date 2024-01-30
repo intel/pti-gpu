@@ -91,7 +91,9 @@ add_custom_command(
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
           ${PROJECT_SOURCE_DIR}/test/gemm.cl ${CMAKE_BINARY_DIR}/test/gemm.cl)
 
-find_package(LevelZero REQUIRED)
+if (NOT TARGET LevelZero::level-zero)
+  find_package(LevelZero REQUIRED)
+endif()
 
 target_compile_options(zegemm_suite PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
 target_link_options(zegemm_suite PRIVATE ${PTI_LINK_FLAGS_EXPR})

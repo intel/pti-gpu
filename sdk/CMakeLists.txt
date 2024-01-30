@@ -139,8 +139,13 @@ target_compile_options(pti PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
 target_link_options(pti PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
+find_package(LevelZero 1.0.0)
+
+if(NOT TARGET LevelZero::level-zero)
+    GetLevelZero()
+endif()
+
 find_package(Threads REQUIRED)
-find_package(LevelZero REQUIRED)
 find_package(Xpti)
 
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
@@ -187,8 +192,8 @@ target_link_libraries(
   PUBLIC
     Threads::Threads
   PRIVATE
-    LevelZero::level-zero
     $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
+    LevelZero::level-zero
     spdlog::spdlog_header_only)
 
 FindHeadersPath(

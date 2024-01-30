@@ -1070,3 +1070,74 @@ macro(CheckSOVersion PROJ_SOVERSION)
     endif()
   endif()
 endmacro()
+
+macro(GetLevelZero)
+  if (NOT TARGET LevelZero::level-zero)
+    # Need zelEnableTracingLayer
+    set(LZ_VER_MAJOR "1")
+    set(LZ_VER_MINOR "15")
+    set(LZ_VER_PATCH "8")
+    set(LZ_VER "${LZ_VER_MAJOR}.${LZ_VER_MINOR}.${LZ_VER_PATCH}")
+
+    include(FetchContent)
+    FetchContent_Declare(
+        LevelZero
+        URL
+        https://github.com/oneapi-src/level-zero/archive/refs/tags/v${LZ_VER}.tar.gz
+        URL_HASH
+        SHA256=80663DBD4D01D9519185C6E568F2E836BFEA7484363F4DA8CF5CF77C3BF58602
+    )
+    # Prevent content from automatically being installed with PTI
+    FetchContent_GetProperties(LevelZero)
+    if(NOT LevelZero_POPULATED)
+        FetchContent_Populate(LevelZero)
+        # Add patch to L0 build
+        file(WRITE "${levelzero_SOURCE_DIR}/VERSION_PATCH" ${LZ_VER_PATCH})
+        add_subdirectory(${levelzero_SOURCE_DIR} ${levelzero_BINARY_DIR} EXCLUDE_FROM_ALL)
+    endif()
+
+    # Create new target to treat level zero loader as an external dependency.
+    # This prevents it from being added to the export set.
+    # (Basically treat as if including via find_package)
+    add_library(pti_ze_loader INTERFACE IMPORTED)
+    add_dependencies(pti_ze_loader ze_tracing_layer)
+
+    # Pull Headers out of source tree and add them to level_zero/
+    # This allows us to keep the normal way to include level zero
+    # TODO(matthew.schilling@intel.com): Should we move PTI headers to
+    # <proj_dir>/include/pti/?
+    file(GLOB_RECURSE L0_DL_HEADERS
+        LIST_DIRECTORIES TRUE
+        "${CMAKE_CURRENT_BINARY_DIR}/_deps/levelzero-src/include/*")
+
+    file(COPY ${L0_DL_HEADERS}
+        DESTINATION
+        ${CMAKE_CURRENT_BINARY_DIR}/_deps/levelzero-headers/include/level_zero/)
+
+    # Add new header path to our new target
+    find_path(LZ_INCLUDE_DIR
+      NAMES level_zero/ze_api.h
+      HINTS ${CMAKE_CURRENT_BINARY_DIR}/_deps/levelzero-headers
+      PATH_SUFFIXES include
+      NO_PACKAGE_ROOT_PATH
+      NO_CMAKE_PATH
+      NO_CMAKE_ENVIRONMENT_PATH
+      NO_SYSTEM_ENVIRONMENT_PATH
+      NO_CMAKE_SYSTEM_PATH
+      NO_CMAKE_SYSTEM_PATH
+      NO_CMAKE_FIND_ROOT_PATH
+    )
+
+    set_target_properties(pti_ze_loader PROPERTIES
+                            INTERFACE_INCLUDE_DIRECTORIES ${LZ_INCLUDE_DIR})
+
+    target_link_libraries(pti_ze_loader INTERFACE
+                            $<BUILD_INTERFACE:ze_loader>)
+    message(WARNING "Linking different version of Level Zero Loader, please set"
+                    " $LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}/path/to/l0/:$LD_LIBRARY_PATH "
+                    "Or Install Level Zero Loader Version >= ${LZ_VER} on your"
+                    "system")
+    # Add Alias target to treat it as if we found it via find_packge
+    add_library(LevelZero::level-zero ALIAS pti_ze_loader)
+  endif()
+endmacro()
