@@ -472,9 +472,15 @@ int ParseArgs(int argc, char* argv[]) {
   return app_index;
 }
 
-void SetProfilingEnvironment() {
+void SetTracingEnvironment() {
   utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
+}
+
+void SetProfilingEnvironment() {
   utils::SetEnv("ZET_ENABLE_METRICS", "1");
+}
+
+void SetSysmanEnvironment() {
   utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
 }
 
@@ -558,7 +564,6 @@ int main(int argc, char *argv[]) {
   auto unitrace_version =  std::string(UNITRACE_VERSION) + " (" +  std::string(COMMIT_HASH) + ")";
   utils::SetEnv("UNITRACE_VERSION", unitrace_version.c_str());
 
-  SetProfilingEnvironment();
   int app_index = ParseArgs(argc, argv);
   if (app_index <= 0 || app_index >= argc) {
     if (app_index >= argc) {
@@ -599,10 +604,19 @@ int main(int argc, char *argv[]) {
   }
 #endif
 
+  SetTracingEnvironment();
+  if (utils::GetEnv("UNITRACE_MetricQuery") == "1") {
+    // UNITRACE_RawMetrics or UNITRACE_KernelMetrics is not set
+    SetProfilingEnvironment();
+  }
+
   utils::SetEnv("LD_PRELOAD", preload.c_str());
   utils::SetEnv("PTI_ENABLE", "1");
 
   if ((utils::GetEnv("UNITRACE_RawMetrics") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
+
+    // UNITRACE_MetricQuery is not set
+    SetProfilingEnvironment();
 
     data_dir = mkdtemp(pattern);
     if (data_dir == nullptr) {
