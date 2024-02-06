@@ -92,6 +92,10 @@ void Usage(char * progname) {
     "Trace device activities" <<
     std::endl;
   std::cout <<
+    "--chrome-itt-logging           " <<
+    "Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs" <<
+    std::endl;
+  std::cout <<
     "--chrome-no-thread-on-device   " <<
     "Trace device activities without per-thread info." << std::endl << 
     "                               Device activities are traced per thread if this option is not present" <<
@@ -386,6 +390,9 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--version") == 0) {
       std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
       return 0;
+    } else if (strcmp(argv[i], "--chrome-itt-logging") == 0 ) {
+      utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
+      ++app_index;
     } else {
       break;
     }

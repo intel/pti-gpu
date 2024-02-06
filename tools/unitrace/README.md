@@ -56,6 +56,7 @@ The options can be one or more of the following:
 --chrome-sycl-logging          Trace SYCL runtime and plugin
 --chrome-ccl-logging           Trace oneCCL
 --chrome-dnn-logging           Trace oneDNN
+--chrome-itt-logging           Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs
 --chrome-call-logging          Trace Level Zero and/or OpenCL host calls
 --chrome-kernel-logging        Trace device and host kernel activities
 --chrome-device-logging        Trace device activities
@@ -216,6 +217,10 @@ The **--chrome-ccl-logging** traces CCL runtime activities
 ![CCL Logging!](/tools/unitrace/doc/images/ccl_logging.png)
 
 Similarly, one can use **--chrome-dnn-logging** for oneDNN. 
+
+The **--chrome-itt-logging** traces activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs
+
+![ITT logging!](/tools/unitrace/doc/images/chrome_itt_logging.png)
 
 The **--ccl-summary-report  [-r]** option outputs CCL call timing summary:
 ![CCL Call Timing!](/tools/unitrace/doc/images/ccl_summary_report.png)
