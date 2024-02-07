@@ -2363,6 +2363,13 @@ class ZeCollector {
     if (qit != command_queues_.end()) {
       command_lists_mutex_.lock_shared();
 
+      uint64_t host_timestamp;
+      uint64_t device_timestamp;
+      ze_result_t status;
+
+      status = zeDeviceGetGlobalTimestamps(qit->second.device_, &host_timestamp, &device_timestamp);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
       for (uint32_t i = 0; i < count; i++) {
         ze_command_list_handle_t cmdlist = cmdlists[i];
       
@@ -2384,13 +2391,6 @@ class ZeCollector {
               cmd_query = local_device_submissions_.GetCommandMetricQuery();
             }
             *cmd = *command;
-
-            uint64_t host_timestamp;
-            uint64_t device_timestamp;
-            ze_result_t status;
-
-            status = zeDeviceGetGlobalTimestamps(cmd->device_, &host_timestamp, &device_timestamp);
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
             cmd->engine_ordinal_ = qit->second.engine_ordinal_;
             cmd->engine_index_ = qit->second.engine_index_;
