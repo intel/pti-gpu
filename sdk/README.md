@@ -1,4 +1,4 @@
-# Performance Tools Interfaces SDK 
+# Profiling Tools Interfaces SDK 
 
 ## Overview
 
@@ -48,7 +48,7 @@ Build the pti library + tests and samples
 >> cd sdk
 >> mkdir build
 >> cd build
->> cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=../cmake/icpx_toolchain.cmake ..
+>> cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/icpx_toolchain.cmake ..
 >> make -j
 ```
 
