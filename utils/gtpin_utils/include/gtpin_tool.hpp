@@ -1,5 +1,11 @@
-#ifndef GTPIN_TOOL_H
-#define GTPIN_TOOL_H
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+#ifndef PTI_GTPIN_TOOL_H
+#define PTI_GTPIN_TOOL_H
 
 #include <memory>
 #include <vector>
@@ -28,9 +34,8 @@
 //      tool-specific, delivered versions with extended fields. This class-tree
 //      is passed to writer to save results of profiling.
 
+namespace gtpin {
 namespace gtpin_prof {
-
-using namespace gtpin;
 
 class IToolFactory;
 
@@ -212,8 +217,8 @@ class GTPinTool : public gtpin::IGtTool {
   uint32_t ApiVersion() const final {
 // Implementation should be in header to catch if special version is requered by
 // tool
-#ifdef PLGG_GTPIN_API_VERSION
-    return PLGG_GTPIN_API_VERSION;
+#ifdef PTI_GTPIN_GTPIN_API_VERSION
+    return PTI_GTPIN_GTPIN_API_VERSION;
 #else
     return GTPIN_API_VERSION;
 #endif
@@ -257,5 +262,6 @@ class IToolFactory {
 };
 
 }  // namespace gtpin_prof
+}  // namespace gtpin
 
-#endif  // GTPIN_TOOL_H
+#endif  // PTI_GTPIN_TOOL_H

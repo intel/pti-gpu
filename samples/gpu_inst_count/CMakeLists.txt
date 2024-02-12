@@ -21,9 +21,9 @@ if(CMAKE_INCLUDE_PATH)
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
 
-add_subdirectory(gtpin_dev_kit)
-FindGTPinDevKitHeaders(gput_inst_count)
-target_link_libraries(gput_inst_count gtpin_dev_kit)
+add_subdirectory("${PROJECT_SOURCE_DIR}/../../utils/gtpin_utils" gtpin_tool_utils)
+FindGTPinToolUtilsHeaders(gput_inst_count)
+target_link_libraries(gput_inst_count gtpin_tool_utils)
 
 FindGTPinLibrary(gput_inst_count)
 FindGTPinHeaders(gput_inst_count)

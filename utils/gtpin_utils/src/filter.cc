@@ -1,3 +1,8 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 #include "filter.hpp"
 
@@ -7,8 +12,7 @@
  * @file Implementaion of DefaultGTPinFilter
  */
 
-using namespace gtpin;
-
+namespace gtpin {
 namespace gtpin_prof {
 
 KnobVector<int> knobKernelRun("kernel-run", {}, "Kernel run to profile");
@@ -32,3 +36,4 @@ bool DefaultGTPinFilter::ShouldProfile(const GTPinKernelExecDesriptor& descr) co
 HWProfileMask DefaultGTPinFilter::GetHWProfileMask() const { return HWProfileMask(); }
 
 }  // namespace gtpin_prof
+}  // namespace gtpin

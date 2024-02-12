@@ -1,5 +1,11 @@
-#ifndef PLGG_GTPIN_CAPSULES_H
-#define PLGG_GTPIN_CAPSULES_H
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+#ifndef PTI_GTPIN_CAPSULES_H
+#define PTI_GTPIN_CAPSULES_H
 
 #include "def_gpu_gtpin.hpp"
 #include "gen_send_decoder.h"
@@ -10,12 +16,8 @@
 #define EXEC_MASK_1_0 GtExecMask(GtExecSize(1), GtChannelOffset(0))
 #define INVALID_NUM static_cast<size_t>(-1)
 
-using namespace gtpin;
+namespace gtpin {
 namespace gtpin_prof {
-
-/// suffix "Reg" for registers.
-/// suffix "Proc" for procedures.
-/// suffix "Analysis" for analyses that stores meaningfull data into memory
 
 /// Get HW & instrumentation info
 /* inline */ bool Is64BitCountersSupport(IGtKernelInstrument& instrumentor);
@@ -31,7 +33,20 @@ namespace gtpin_prof {
 /* inline */ GED_DATA_TYPE GetGedIntDataTypeSigned(size_t sizeBites);
 /* inline */ GED_DATA_TYPE GetGedIntDataTypeSigned(size_t sizeBytes);
 
-/// Procedures. Just do the stuff, just capsules. No vreg allocations inside.
+/// Simple instructions
+// namespace instr {
+// GtGenProcedure Mov(IGtKernelInstrument& instrumentor, GtReg dst, GtReg src,
+//                      GtPredicate predicate = GtPredicate::MakeNone());
+// GtGenProcedure Mov(IGtKernelInstrument& instrumentor, GtReg dst, int64_t src,
+//                      GtPredicate predicate = GtPredicate::MakeNone());
+// }
+
+GtGenProcedure Mov64(IGtKernelInstrument& instrumentor, GtReg dst, GtReg src,
+                     GtPredicate predicate = GtPredicate::MakeNone());
+GtGenProcedure Mov64(IGtKernelInstrument& instrumentor, GtReg dst, int64_t srci,
+                     GtPredicate predicate = GtPredicate::MakeNone());
+
+/// Procedures
 GtGenProcedure CounterIncProc(IGtKernelInstrument& instrumentor, GtProfileArray& profileArray,
                               GtReg baseAddrReg, GtReg tempAddrReg, uint64_t dataOffsetBytes,
                               GtReg offserBytesReg = NullReg(),
@@ -81,11 +96,6 @@ GtGenProcedure CacheLinesCountProc(IGtKernelInstrument& instrumentor, GtReg clCo
                                                 GtReg clCounterReg, GtReg simdMaskReg,
                                                 const IGtIns& gtpinIns, GtReg flagReg = FlagReg(0));
 
-GtGenProcedure Mov64(IGtKernelInstrument& instrumentor, GtReg dst, GtReg src,
-                     GtPredicate predicate = GtPredicate::MakeNone());
-GtGenProcedure Mov64(IGtKernelInstrument& instrumentor, GtReg dst, int64_t srci,
-                     GtPredicate predicate = GtPredicate::MakeNone());
-
 /** Helper functions which is used in instrumentation process. */
 inline bool Is64BitCountersSupport(IGtKernelInstrument& instrumentor) {
   return (instrumentor.Coder().InstructionFactory().CanAccessAtomically(GED_DATA_TYPE_uq));
@@ -108,9 +118,11 @@ inline uint32_t GetNumTiles(IGtKernelInstrument& instrumentor) {
   // return ((instrumentor.Coder().IsTileIdSupported()) ?
   //         GTPin_GetCore()->GenArch().MaxTiles(instrumentor.Kernel().GpuPlatform())
   //         : 1);
+  // TODO: enable after fix MUL operation
   return 1;
 }
 inline GtVregType GetVregDataType(size_t sizeBits) {
+  PTI_ASSERT(((sizeBits || 0b111) == 0) && "Incorrect size");
   return GtVregType::MakeBySize((sizeBits >> 3));  // sizeBits // 8
 }
 inline GtVregType GetVregDataTypeBytes(size_t sizeBytes) {
@@ -129,8 +141,8 @@ inline GED_DATA_TYPE GetGedIntDataType(size_t sizeBits) {
     default:
       PTI_ASSERT(false &&
                  (std::string("Incorrect data size in Bits: ") + std::to_string(sizeBits)).c_str());
-      return GED_DATA_TYPE_INVALID;
   }
+  return GED_DATA_TYPE_INVALID;
 }
 inline GED_DATA_TYPE GetGedIntDataTypeBytes(size_t sizeBytes) {
   return GetGedIntDataType(sizeBytes * 8);
@@ -148,8 +160,8 @@ inline GED_DATA_TYPE GetGedIntDataTypeSigned(size_t sizeBits) {
     default:
       PTI_ASSERT(false &&
                  (std::string("Incorrect data size in Bits: ") + std::to_string(sizeBits)).c_str());
-      return GED_DATA_TYPE_INVALID;
   }
+  return GED_DATA_TYPE_INVALID;
 }
 inline GED_DATA_TYPE GetGedIntDataTypeBytesSigned(size_t sizeBytes) {
   return GetGedIntDataTypeSigned(sizeBytes * 8);
@@ -197,11 +209,16 @@ class PointOfInterest {
  public:
   PointOfInterest(IGtKernelInstrument& instrumentor, GtProfileArray& profileArray,
                   size_t recordIndex);
-  void ClosePOI(GtGenProcedure& proc);
+  void FinishPOI(GtGenProcedure& proc);
   ~PointOfInterest() = default;
 
   void AppendProcedure(GtGenProcedure& proc);
   // operator +
+
+  bool IsInit();
+  bool IsFinalized();
+  bool ResetPOI();
+  GtGenProcedure GetProcedure();
 
   /// getters
   size_t GetNumTiles();
@@ -251,5 +268,6 @@ class PointOfInterest {
 };
 
 }  // namespace gtpin_prof
+}  // namespace gtpin
 
-#endif  // PLGG_GTPIN_CAPSULES_H
+#endif  // PTI_GTPIN_CAPSULES_H

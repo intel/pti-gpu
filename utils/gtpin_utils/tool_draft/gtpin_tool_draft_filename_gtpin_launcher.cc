@@ -1,10 +1,15 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 #include <fstream>
 
 #include "gtpin_tool_draft_filename.hpp"
 
-using namespace gtpin_prof;
-using namespace gtpin;
+namespace gtpin {
+namespace gtpin_prof {
 
 /* =============================================================================================
  */
@@ -136,3 +141,6 @@ EXPORT_C_FUNC void GTPin_Entry(int argc, const char* argv[]) {
     std::cout << GTPIN_LAST_ERROR_STR << std::endl;
   }
 }
+
+}  // namespace gtpin_prof
+}  // namespace gtpin

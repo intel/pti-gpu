@@ -1,4 +1,5 @@
-## GTPin tool draft
+
+# GTPin tool draft
 
 This directory contains files with basic Array-based GTPin tool implementation.
 

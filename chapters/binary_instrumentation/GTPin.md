@@ -1,4 +1,7 @@
 # Binary Instrumentation with Graphics Technology Pin (GT Pin)
+
+This chapter is outdated and describes deprecated interface GTPin v2. [Actual GTPin documentation](http://pin.iil.intel.com/pin/gtpin/Doxygen/html/)
+
 ## Overview
 This chapter describes **Graphics Technology Pin (GT Pin)** -  the solution for binary code instrumentation on Intel(R) Processor Graphics. It is a [Pin](http://pintool.intel.com/) like system that instruments Gen execution unit (EU) binaries and is used to build architectural and software tools to analyze shaders or compute kernels running on Gen EUs.
 

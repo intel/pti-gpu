@@ -2,7 +2,7 @@
 
 ## Overview
 
-This sample is a simple LD_PRELOAD based tool that allows to collect dynamic execution count for every OpenCL(TM) kernel instruction.
+This sample is a simple LD_PRELOAD based tool that allows to collect dynamic execution count for every GPU kernel instruction. The sample uses common code from utils/gtpin_utils.
 
 As a result, assembly listing annotated with dynamic instruction count for each kernel will be printed.
 
@@ -83,10 +83,9 @@ As a result, assembly listing annotated with dynamic instruction count for each 
 
 ## Prerequisites
 
-- [CMake](https://cmake.org/) (version 3.12 and above)
+- [CMake](https://cmake.org/) (version 3.16 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
-- [Python](https://www.python.org/) (version 2.7 and above)
-- [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html)
+- [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html) (version 3.7 and above)
 
 ## Build and Run
 

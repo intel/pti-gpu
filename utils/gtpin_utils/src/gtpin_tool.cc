@@ -1,3 +1,8 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 #include "gtpin_tool.hpp"
 
@@ -7,7 +12,7 @@
  * @file Implementation of GTPin tool classes
  */
 
-using namespace gtpin;
+namespace gtpin {
 namespace gtpin_prof {
 
 /**
@@ -363,3 +368,4 @@ PROF_STATUS GTPinProfileKernel::PostProcData(std::shared_ptr<InvocationData> inv
 };
 
 }  // namespace gtpin_prof
+}  // namespace gtpin

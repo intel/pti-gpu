@@ -1,3 +1,9 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
 #ifndef PLGG_GPU_INST_COUNT_H
 #define PLGG_GPU_INST_COUNT_H
 
@@ -12,9 +18,8 @@
  * @file Header file for GTPin-based tool draft
  */
 
+namespace gtpin {
 namespace gtpin_prof {
-
-using namespace gtpin;
 
 /**
  * RESULTS classes
@@ -146,5 +151,6 @@ class GpuInstCountProfiler : public GTPinProfilerBase {
 };
 
 }  // namespace gtpin_prof
+}
 
 #endif  // PLGG_GPU_INST_COUNT_H

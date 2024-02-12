@@ -1,5 +1,11 @@
-#ifndef DEF_GPU_GTPIN_H
-#define DEF_GPU_GTPIN_H
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+#ifndef PTI_GTPIN_UTILS_H
+#define PTI_GTPIN_UTILS_H
 
 #include <api/gtpin_api.h>
 #include <stdint.h>
@@ -25,14 +31,13 @@
 #define MAX_SIMD_WIDTH 8 * MAX_SIMD_WIDTH_BYTES
 #define MAX_SIMD_WIDTH_STR STR(MAX_SIMD_WIDTH)
 
-using namespace gtpin;
-
+namespace gtpin {
 namespace gtpin_prof {
 
 enum PROF_STATUS { PROF_STATUS_SUCCESS = 0, PROF_STATUS_ERROR, PROF_STATUS_NOTHING_TO_INSTRUMENT };
 
 typedef uint32_t KernelRun;
-typedef uint32_t KernelId;
+typedef uint32_t KernelId;  // TODO: rename into GTPin kernel ID
 typedef uint32_t InstructionOffset;
 
 /**
@@ -88,18 +93,14 @@ struct GTPinKernelExecDesriptor : public KernelExecDesriptor {
 
   GTPinKernelExecDesriptor(const IGtKernelDispatch& dispatcher, KernelRun runGlobalIdx,
                            KernelRun runIdx = -1)
-      :  /// TODO: check that bug fixed, use next gtpinDispatchId instead of
-         /// enqueue-based one gtpinDispatchId(dispatcher.DispatchId()),
-        KernelExecDesriptor(dispatcher.Kernel().Name().Get(), dispatcher.Kernel().Id(),
-                            runGlobalIdx, runIdx) {
-    GtKernelExecDesc execDesc;
-    dispatcher.GetExecDescriptor(execDesc);
-    gtpinDispatchId = execDesc.l0ExecDesc.enqueue_index;
-  };
+      : KernelExecDesriptor(dispatcher.Kernel().Name().Get(), dispatcher.Kernel().Id(),
+                            runGlobalIdx, runIdx),
+        gtpinDispatchId(dispatcher.DispatchId()){};
 
   uint64_t gtpinDispatchId = -1;
 };
 
 }  // namespace gtpin_prof
+}  // namespace gtpin
 
-#endif  // DEF_GPU_GTPIN_H
+#endif  // PTI_GTPIN_UTILS_H

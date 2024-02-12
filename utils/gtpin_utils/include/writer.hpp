@@ -1,5 +1,11 @@
-#ifndef PLGG_WRITER_H
-#define PLGG_WRITER_H
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+#ifndef PTI_GTPIN_WRITER_H
+#define PTI_GTPIN_WRITER_H
 
 #include <api/gtpin_api.h>
 
@@ -12,8 +18,7 @@
  * can be exetended for tool specific output
  */
 
-using namespace gtpin;
-
+namespace gtpin {
 namespace gtpin_prof {
 
 class GTPinDataWriterBase {
@@ -125,5 +130,6 @@ class DefaultCsvGTPinWriter : public StreamGTPinDataWriter {
 };
 
 }  // namespace gtpin_prof
+}  // namespace gtpin
 
-#endif  // PLGG_WRITER_H
+#endif  // PTI_GTPIN_WRITER_H

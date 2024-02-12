@@ -1,5 +1,11 @@
-#ifndef RESULTS_GTPIN_H
-#define RESULTS_GTPIN_H
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+#ifndef PTI_GTPIN_RESULTS_H
+#define PTI_GTPIN_RESULTS_H
 
 #include <api/gtpin_api.h>
 
@@ -15,9 +21,8 @@
  * classses add tool-specific information
  */
 
+namespace gtpin {
 namespace gtpin_prof {
-
-using namespace gtpin;
 
 /// Per point of interest(instrumentation point) data
 struct ResultData {
@@ -73,5 +78,6 @@ struct ProfilerData {
 };
 
 }  // namespace gtpin_prof
+}  // namespace gtpin
 
-#endif  // RESULTS_GTPIN_H
+#endif  // PTI_GTPIN_RESULTS_H

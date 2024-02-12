@@ -1,12 +1,17 @@
-#ifndef PLGG_FILTER_H
-#define PLGG_FILTER_H
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+#ifndef PTI_GTPIN_FILTER_H
+#define PTI_GTPIN_FILTER_H
 
 #include <api/gtpin_api.h>
 
 #include "def_gpu_gtpin.hpp"
 
-using namespace gtpin;
-
+namespace gtpin {
 namespace gtpin_prof {
 
 /**
@@ -35,5 +40,6 @@ class DefaultGTPinFilter : public GTPinFilterBase {
 };
 
 }  // namespace gtpin_prof
+}  // namespace gtpin
 
-#endif  // PLGG_FILTER_H
+#endif  // PTI_GTPIN_FILTER_H

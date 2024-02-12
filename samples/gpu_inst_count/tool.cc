@@ -11,8 +11,8 @@
 #include "gpu_inst_count.hpp"
 #include "utils.h"
 
-using namespace gtpin_prof;
 using namespace gtpin;
+using namespace gtpin_prof;
 
 class GpuInstCountTxtWriter : public StreamGTPinDataWriter {
  public:

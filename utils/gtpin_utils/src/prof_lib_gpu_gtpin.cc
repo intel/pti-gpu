@@ -1,3 +1,8 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 #include "prof_lib_gpu_gtpin.hpp"
 
@@ -7,9 +12,8 @@
  * @file Implementaion of profiler classes
  */
 
+namespace gtpin {
 namespace gtpin_prof {
-
-using namespace gtpin;
 
 GTPinProfilerBase::GTPinProfilerBase(std::shared_ptr<GTPinDataWriterBase> const writer,
                                      std::shared_ptr<GTPinFilterBase> const filter)
@@ -53,9 +57,5 @@ PROF_STATUS GTPinProfilerBase::Stop() {
   return PROF_STATUS_SUCCESS;
 }
 
-PROF_STATUS GTPinProfilerBase::GetStatus() {
-  /// TODO: remove or implement status functionality
-  return PROF_STATUS_SUCCESS;
-}
-
 }  // namespace gtpin_prof
+}  // namespace gtpin

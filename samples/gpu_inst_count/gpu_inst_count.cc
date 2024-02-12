@@ -1,8 +1,13 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 #include "gpu_inst_count.hpp"
 
-using namespace gtpin_prof;
-using namespace gtpin;
+namespace gtpin {
+namespace gtpin_prof {
 
 /********************
  * Requered functions - should be implemented
@@ -61,7 +66,7 @@ PROF_STATUS GpuInstCountKernel::Instrument(IGtKernelInstrument& instrumentor) {
     GtGenProcedure proc;
     PointOfInterest poi(instrumentor, m_profileArray, bblIdx);
     poi.InstructionCounterAnalysis(offsetof(GpuInstCountRecord, count));
-    poi.ClosePOI(proc);
+    poi.FinishPOI(proc);
     instrumentor.InstrumentInstruction(it->second, GtIpoint::Before(), proc);
   }
 
@@ -130,3 +135,6 @@ std::shared_ptr<InvocationData> GpuInstCountFactory::MakeInvocationData(
 std::shared_ptr<ResultData> GpuInstCountFactory::MakeResultData() {
   return std::make_shared<GpuInstCountResultData>();
 };
+
+}
+}

@@ -1,10 +1,16 @@
-#ifndef PLGG_GTPIN_TOOL_DRAFT_H
-#define PLGG_GTPIN_TOOL_DRAFT_H
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
-/// Uncomment PLGG_GTPIN_API_VERSION definition if tool requeres GTPin SDK with
+#ifndef PTI_GTPIN_GTPIN_TOOL_DRAFT_H
+#define PTI_GTPIN_GTPIN_TOOL_DRAFT_H
+
+/// Uncomment PTI_GTPIN_GTPIN_API_VERSION definition if tool requeres GTPin SDK with
 /// specific API version. GTPin SDK version constant (GTPIN_API_VERSION) is used
-/// during tool registration in case of undefined PLGG_GTPIN_API_VERSION
-// #define PLGG_GTPIN_API_VERSION 1007
+/// during tool registration in case of undefined PTI_GTPIN_GTPIN_API_VERSION
+// #define PTI_GTPIN_GTPIN_API_VERSION 1007
 
 #include "prof_lib_gpu_gtpin.hpp"
 
@@ -12,9 +18,8 @@
  * @file Header file for GTPin-based tool draft
  */
 
+namespace gtpin {
 namespace gtpin_prof {
-
-using namespace gtpin;
 
 /**
  * RESULTS classes
@@ -139,5 +144,6 @@ class GtpinToolDraftProfiler : public GTPinProfilerBase {
 };
 
 }  // namespace gtpin_prof
+}  // namespace gtpin
 
-#endif  // PLGG_GTPIN_TOOL_DRAFT_H
+#endif  // PTI_GTPIN_GTPIN_TOOL_DRAFT_H

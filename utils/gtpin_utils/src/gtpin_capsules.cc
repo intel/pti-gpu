@@ -1,8 +1,12 @@
-
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 #include "gtpin_capsules.hpp"
 
-using namespace gtpin;
+namespace gtpin {
 namespace gtpin_prof {
 
 GtGenProcedure CounterIncProc(IGtKernelInstrument& instrumentor, GtProfileArray& profileArray,
@@ -335,7 +339,7 @@ PointOfInterest::PointOfInterest(IGtKernelInstrument& instrumentor, GtProfileArr
   GetNumTiles();
 }
 
-void PointOfInterest::ClosePOI(GtGenProcedure& proc) {
+void PointOfInterest::FinishPOI(GtGenProcedure& proc) {
   proc += m_proc;
   m_proc.Clear();
 }
@@ -471,3 +475,4 @@ void PointOfInterest::CacheLineCounterAnalysis(const IGtIns& gtpinIns, uint64_t 
 void StrideDistrCalc(const IGtIns& gtpinIns, uint64_t dataOffsetBytes) {}
 
 }  // namespace gtpin_prof
+}  // namespace gtpin

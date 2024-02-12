@@ -1,3 +1,8 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 #include "writer.hpp"
 
@@ -7,8 +12,7 @@
  * @file Implementaion of default writers
  */
 
-using namespace gtpin;
-
+namespace gtpin {
 namespace gtpin_prof {
 
 /**
@@ -161,3 +165,4 @@ void DefaultCsvGTPinWriter::Write(const std::shared_ptr<ProfilerData> res) {
 }
 
 }  // namespace gtpin_prof
+}  // namespace gtpin

@@ -1,8 +1,13 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
 
 #include "gtpin_tool_draft_filename.hpp"
 
-using namespace gtpin_prof;
-using namespace gtpin;
+namespace gtpin {
+namespace gtpin_prof {
 
 /********************
  * Requered functions - should be implemented
@@ -148,3 +153,6 @@ std::shared_ptr<InvocationData> GtpinToolDraftFactory::MakeInvocationData(
 std::shared_ptr<ResultData> GtpinToolDraftFactory::MakeResultData() {
   return std::make_shared<GtpinToolDraftResultData>();
 };
+
+}  // namespace gtpin_prof
+}  // namespace gtpin

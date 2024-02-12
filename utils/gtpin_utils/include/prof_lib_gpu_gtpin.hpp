@@ -1,5 +1,11 @@
-#ifndef PROF_LIB_GPU_GTPIN_H
-#define PROF_LIB_GPU_GTPIN_H
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+#ifndef PTI_GTPIN_PROFILER_H
+#define PTI_GTPIN_PROFILER_H
 
 #include <api/gtpin_api.h>
 
@@ -13,8 +19,7 @@
 #include "results_gtpin.hpp"
 #include "writer.hpp"
 
-using namespace gtpin;
-
+namespace gtpin {
 namespace gtpin_prof {
 
 /**
@@ -30,7 +35,6 @@ class GTPinProfilerBase {
 
   PROF_STATUS Start();
   PROF_STATUS Stop();
-  PROF_STATUS GetStatus();
 
  protected:
   std::shared_ptr<GTPinTool> tool;
@@ -48,5 +52,5 @@ class GTPinProfilerBase {
 };
 
 }  // namespace gtpin_prof
-
-#endif  // PROF_LIB_GPU_GTPIN_H
+}  // namespace gtpin
+#endif  // PTI_GTPIN_PROFILER_H
