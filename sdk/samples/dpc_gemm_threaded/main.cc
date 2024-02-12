@@ -10,7 +10,7 @@
 
 #include <string.h>
 
-#include <CL/sycl.hpp>
+#include <sycl/sycl.hpp>
 #include <cstdlib>
 #include <memory>
 #include <thread>
@@ -23,6 +23,8 @@
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
 #define MAX_EPS 1.0e-4f
+
+static bool verbose = false;
 
 static float Check(const std::vector<float>& a, float value) {
   assert(value > MAX_EPS);
@@ -86,7 +88,9 @@ static float RunAndCheck(sycl::queue queue, const std::vector<float>& a,
     throw;
   }
 
-  std::cout << "\tMatrix multiplication time: " << time << " sec" << std::endl;
+  if (verbose) {
+    std::cout << "\tMatrix multiplication time: " << time << " sec" << std::endl;
+  }
 
   return Check(c, expected_result);
 }
@@ -97,8 +101,10 @@ static void Compute(sycl::queue queue, const std::vector<float>& a,
                     float expected_result) {
   for (unsigned i = 0; i < repeat_count; ++i) {
     float eps = RunAndCheck(queue, a, b, c, size, expected_result);
-    std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN")
+    if (verbose) {
+      std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN")
               << "CORRECT with accuracy: " << eps << std::endl;
+    }
   }
 }
 
@@ -122,45 +128,61 @@ const unsigned max_thread_count = 64;
 const unsigned max_size = 8192;
 const unsigned min_size = 32;
 
+const unsigned default_size = 1024;
+const unsigned default_thread_count = 2;
+const unsigned default_repetition_per_thread = 4;
+
 void Usage(const char* name) {
 
-  std::cout << " Calculating floating point matrix multiply on gpu, submitting the work from many CPU threads\n";
-  std::cout << name << " [ [number of threads, default=2, max=" << max_thread_count
-            << "],  [matrix size, default=1024, max=" << max_size << "], [repetition count, default=4]] \n";
+  std::cout << " Calculating floating point matrix multiply on gpu, submitting the work from many CPU threads\n"
+            << "  Usage " << name << "  [ options ]" << std::endl;
+  std::cout <<
+    "--threads [-t]  integer         " <<
+    "Threads number, default: " << default_thread_count << std::endl;
+  std::cout <<
+    "--size [-s]     integer        " <<
+    "Matrix size, default: " << default_size << std::endl;
+  std::cout <<
+    "--repeat [-r]   integer         " <<
+    "Repetition number per thread, default: " << default_repetition_per_thread << std::endl;
+  std::cout <<
+    "--verbose [-v]                 " <<
+    "Enable verbose mode to report the app progress, default: off" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
 
   int exit_code = EXIT_SUCCESS;
-  unsigned thread_count = 2;
-  unsigned repeat_count = 4;
-  unsigned size = 1024;
-
-  if (argc == 2 &&
-      ( strcmp(argv[1], "-?") == 0 or strcmp(argv[1], "-h") == 0  or strcmp(argv[1], "--help" ) == 0) ){
-    Usage(argv[0]);
-    return EXIT_SUCCESS;
-  }
+  unsigned thread_count = default_thread_count;
+  unsigned repeat_count = default_repetition_per_thread;
+  unsigned size = default_size;
 
   try {
     unsigned temp;
-    if (argc > 1) {
-      temp = std::stoul(argv[1]);
-      thread_count = (temp < 1) ? 1 :
-                    (temp > max_thread_count) ?  max_thread_count : temp;
-    }
-    if (argc > 2) {
-      temp = std::stoul(argv[2]);
-      size = (temp < min_size) ? min_size :
-                    (temp > max_size) ?  max_size : temp;
-    }
-
-    if (argc > 3) {
-      temp = std::stoul(argv[3]);
-      repeat_count = (temp < 1) ? 1 : temp;
+    for (uint32_t i=1; i < argc; i++) {
+      if (strcmp(argv[i], "-s" ) == 0 || strcmp(argv[i], "--size") == 0 ){
+        i++;
+        temp = std::stoul(argv[i]);
+        size = (temp < min_size) ? min_size : (temp > max_size) ?  max_size : temp;
+      } else if (strcmp(argv[i], "-t" ) == 0 || strcmp(argv[i], "--threads") == 0 ){
+        i++;
+        temp = std::stoul(argv[i]);
+        thread_count = (temp < 1) ? 1 : (temp > max_thread_count) ?  max_thread_count : temp;
+      } else if (strcmp(argv[i], "-r" ) == 0 || strcmp(argv[i], "--repeat") == 0 ){
+        i++;
+        temp = std::stoul(argv[i]);
+        repeat_count = (temp < 1) ? 1 : temp;
+      } else if (strcmp(argv[i], "-v" ) == 0 || strcmp(argv[i], "--verbose") == 0 ){
+        // verbosity off makes minimal the sample self output -
+        // so profiling output won't be intermixed with the sample output
+        // and could be analyzed by tests
+        verbose = true;
+      } else {
+        Usage(argv[0]);
+        return EXIT_SUCCESS;
+      }
     }
   }
-
   catch(...) {
     Usage(argv[0]);
     return EXIT_FAILURE;
@@ -328,7 +350,9 @@ int main(int argc, char* argv[]) {
       auto end = std::chrono::steady_clock::now();
       std::chrono::duration<float> time = end - start;
 
-      std::cout << "\t-- Total execution time: " << time.count() << " sec" << std::endl;
+      if (verbose) {
+        std::cout << "\t-- Total execution time: " << time.count() << " sec" << std::endl;
+      }
     };
 
     std::cout << "DPC++ Matrix Multiplication (CPU threads: " << thread_count << ", matrix size: " << size << " x "
@@ -336,7 +360,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Target device: "
               << queue.get_info<sycl::info::queue::device>()
                     .get_info<sycl::info::device::name>()
-              << std::endl;
+              << std::endl << std::flush;
 
     std::vector<std::thread> the_threads;
     for (unsigned i=0; i<thread_count; i++) {

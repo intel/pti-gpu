@@ -45,6 +45,27 @@ if(HAVE_SYCL)
   target_link_libraries(vecsqadd_suite PUBLIC Pti::pti_view
                                               GTest::gtest_main)
 
+  add_executable(no_kernel_overlap no_kernel_overlap.cc)
+  target_include_directories(
+    no_kernel_overlap
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+#           "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+
+  target_compile_options(
+    no_kernel_overlap
+    PUBLIC -fsycl -gline-tables-only
+    PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+
+  target_link_options(no_kernel_overlap PUBLIC -fsycl -gline-tables-only PRIVATE
+                      ${PTI_LINK_FLAGS_EXPR})
+
+  target_compile_definitions(no_kernel_overlap PUBLIC PTI_LEVEL_ZERO=1
+                                                   ${PTI_DEFINE_FLAGS_EXPR})
+
+  target_link_libraries(no_kernel_overlap PUBLIC Pti::pti_view
+                                              GTest::gtest_main)
+
   add_executable(mem_ops_test mem_ops_test.cc)
 
   target_include_directories(
@@ -70,6 +91,11 @@ if(HAVE_SYCL)
     PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
     PROPERTIES LABELS "unit" )
   gtest_discover_tests(vecsqadd_suite PROPERTIES LABELS "functional")
+  gtest_discover_tests(
+    no_kernel_overlap
+    TEST_LIST TIMESTAMPS_CORRECTNESS_LIST
+    PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
+  PROPERTIES LABELS "functional")
 endif()
 
 add_executable(zegemm_suite main_zegemm_fixture.cc)
@@ -159,12 +185,24 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
     set(TEST_THREADS 2)
   endif()
   set(MT_AWK_TEST_OUT "${CMAKE_BINARY_DIR}/mt-awk-test.out")
+  set(MT_AWK_TEST_OUT_IMMEDIATE "${CMAKE_BINARY_DIR}/mt-awk-test-immediate.out")
   add_test(
     NAME mt-awk-test
     COMMAND
       bash -c
-      "${CMAKE_BINARY_DIR}/samples/dpc_gemm_threaded/dpc_gemm_threaded ${TEST_THREADS} > ${MT_AWK_TEST_OUT} && awk -f ${CMAKE_CURRENT_SOURCE_DIR}/multi_thread_correlation.awk ${MT_AWK_TEST_OUT}"
+      "${CMAKE_BINARY_DIR}/samples/dpc_gemm_threaded/dpc_gemm_threaded -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT} &&
+          awk -f ${CMAKE_CURRENT_SOURCE_DIR}/multi_thread_correlation.awk ${MT_AWK_TEST_OUT}"
   )
+  add_test(
+    NAME mt-awk-test-immediate
+    COMMAND
+      bash -c
+      "${CMAKE_BINARY_DIR}/samples/dpc_gemm_threaded/dpc_gemm_threaded -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT_IMMEDIATE} &&
+          awk -f ${CMAKE_CURRENT_SOURCE_DIR}/multi_thread_correlation.awk ${MT_AWK_TEST_OUT_IMMEDIATE}"
+  )
+  set_property(TEST mt-awk-test-immediate PROPERTY ENVIRONMENT SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=1)
+  set_property(TEST mt-awk-test PROPERTY ENVIRONMENT SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=0)
+
   add_test(NAME run-dlworkload COMMAND dlworkload)
   add_test(NAME run-dpc_gemm COMMAND dpc_gemm)
   add_test(NAME run-onemkl_gemm_exe COMMAND onemkl_gemm_exe)
@@ -172,6 +210,6 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   add_test(NAME run-iso COMMAND iso3dfd.exe 256 256 256 32 8 64 10 gpu)
 
   set_tests_properties(
-    mt-awk-test run-dlworkload run-dpc_gemm run-onemkl_gemm_exe run-vec_sqadd
+    mt-awk-test mt-awk-test-immediate run-dlworkload run-dpc_gemm run-onemkl_gemm_exe run-vec_sqadd
     run-iso PROPERTIES LABELS "functional;samples")
 endif()

@@ -81,6 +81,10 @@ END {
 		  print("Sycl end time:      ",sycl_end_time[corrId]);
 		}
 	}
+	if (length(kthreads) == 0) {
+		print("No threads. It could be due to the test wrong output");
+		exit 1
+	}
 	if (!corrErr) {
 		print("All correlation Ids match Kernel Id Threads");
 		exit 0

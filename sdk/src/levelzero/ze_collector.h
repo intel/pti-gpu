@@ -27,6 +27,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -215,6 +216,8 @@ struct ZeMetricQueryPools {
 
 struct ZeInstanceData {
   uint64_t start_time_host;
+  uint64_t timestamp_host;	// in ns
+  uint64_t timestamp_device;	// in ticks
   uint64_t end_time_host;
   uint64_t kid;  // passing kid from enter callback to exit callback
 };
@@ -279,23 +282,26 @@ struct ZeKernelCommandProps {
   uint32_t size;
   size_t value_size;
   std::byte* value_array;
+  ze_device_handle_t src_device = nullptr;  // Device for p2p memcpy, source of copy data
+  ze_device_handle_t dst_device = nullptr;  // Device for p2p memcpy, destination of copy data
 };
 
 struct ZeKernelCommand {
   ZeKernelCommandProps props;
+  uint64_t device_timer_frequency_;
+  uint64_t device_timer_mask_;
   ze_event_handle_t event = nullptr;
   zet_metric_query_handle_t metric_query = nullptr;
   ze_event_handle_t metric_query_event = nullptr;
   ze_device_handle_t device =
       nullptr;  // Device where the operation is submitted, associated with command list
-  ze_device_handle_t src_device = nullptr;  // Device for p2p memcpy, source of copy data
-  ze_device_handle_t dst_device = nullptr;  // Device for p2p memcpy, destination of copy data
   uint64_t kernel_id = 0;
   uint64_t append_time = 0;
   ze_command_list_handle_t command_list = nullptr;
   ze_command_queue_handle_t queue = nullptr;
   ze_fence_handle_t fence;
-  uint64_t submit_time = 0;
+  uint64_t submit_time = 0;		//in ns
+  uint64_t submit_time_device_ = 0;	//in ticks
   uint64_t tid = 0;
   uint64_t sycl_node_id_ = 0;
   uint32_t sycl_invocation_id_ = 0;
@@ -344,12 +350,18 @@ struct ZeKernelInfo {
   }
 };
 
+struct ZeCommandQueue {
+  ze_command_queue_handle_t queue_;
+  ze_context_handle_t context_;
+  ze_device_handle_t device_;
+  uint32_t engine_ordinal_;
+  uint32_t engine_index_;
+};
+
 struct ZeCommandListInfo {
   std::vector<ZeKernelCommand*> kernel_commands;
   ze_context_handle_t context;
   ze_device_handle_t device;
-  ze_device_handle_t src_device = nullptr;  // source used for memcpy commands
-  ze_device_handle_t dst_device = nullptr;  // destination for memcpy commands
   bool immediate;
   std::pair<uint32_t, uint32_t> oi_pair;
 };
@@ -1252,6 +1264,46 @@ overhead::Init();
     kernel_profiles_.clear();
   }
 
+  const ZeCommandListInfo& GetCommandListInfoConst(ze_command_list_handle_t clist_handle) {
+    std::shared_lock lock(command_list_map_mutex_);
+    PTI_ASSERT(command_list_map_.count(clist_handle) == 1);
+    return command_list_map_[clist_handle];
+  }
+
+  ZeCommandListInfo& GetCommandListInfo(ze_command_list_handle_t clist_handle) {
+    std::shared_lock lock(command_list_map_mutex_);
+    PTI_ASSERT(command_list_map_.count(clist_handle) == 1);
+    return command_list_map_[clist_handle];
+  }
+
+  auto FindCommandListInfo(ze_command_list_handle_t clist_handle) {
+    std::shared_lock lock(command_list_map_mutex_);
+    return command_list_map_.find(clist_handle);
+  }
+
+  bool IsDeviceExist(ze_device_handle_t device_handle) {
+    std::shared_lock lock(dev_uuid_map_mutex_);
+    return dev_uuid_map_.find(device_handle) != dev_uuid_map_.end();
+  }
+
+  bool CopyDeviceUUIDTo(ze_device_handle_t device_handle, uint8_t* ptr) {
+    std::shared_lock lock(dev_uuid_map_mutex_);
+    if (dev_uuid_map_.find(device_handle) != dev_uuid_map_.end()) {
+      std::copy_n(dev_uuid_map_[device_handle], ZE_MAX_DEVICE_UUID_SIZE, ptr);
+      return true;
+    }
+    return false;
+  }
+
+  bool SaveDeviceUUID(ze_device_handle_t device_handle, uint8_t* ptr) {
+    if (!IsDeviceExist(device_handle)) {
+      std::unique_lock lock(dev_uuid_map_mutex_);
+      std::copy_n(ptr, ZE_MAX_DEVICE_UUID_SIZE, dev_uuid_map_[device_handle]);
+      return true;
+    }
+    return false;
+  }
+
   void ProcessCall(ze_event_handle_t event, std::vector<uint64_t>* kids,
                    std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
     // lock is acquired in caller
@@ -1368,82 +1420,48 @@ overhead::Init();
 
   uint64_t GetDeviceTimeNs(uint64_t cycles, uint64_t freq) { return cycles * NSEC_IN_SEC / freq; }
 
-  void GetHostTime(const ZeKernelCommand* command, const ze_kernel_timestamp_result_t& timestamp,
-                   uint64_t& host_start, uint64_t& host_end) {
-    uint64_t device_freq =
-        device_descriptors_[command->device].device_timer_frequency;  // command->timer_frequency;
-    uint64_t device_mask =
-        device_descriptors_[command->device].device_timer_mask;  // command->timer_mask;
+  inline void GetHostTime(const ZeKernelCommand *command, const ze_kernel_timestamp_result_t& ts,
+		  uint64_t& start, uint64_t& end) {
+    uint64_t device_freq = command->device_timer_frequency_;
+    uint64_t device_mask = command->device_timer_mask_;
 
-    uint64_t metric_freq =
-        device_descriptors_[command->device].metric_timer_frequency;  // command->timer_frequency;
-    uint64_t metric_mask =
-        device_descriptors_[command->device].metric_timer_mask;  // command->timer_mask;
+    uint64_t device_start = ts.global.kernelStart & device_mask;
+    uint64_t device_end = ts.global.kernelEnd & device_mask;
 
-    uint64_t start = timestamp.global.kernelStart & device_mask;
-    uint64_t end = timestamp.global.kernelEnd & device_mask;
+    // Why submit_time_device_ and time_shift ?
+    //
+    // - All times reported by PTI_VIEW in CPU (aka Host) timescale
+    // - However GPU "commands" (kernel & memory transfers) start/end reported in GPU timescale
+    // - There is significant time drift between CPU and GPU, so to cope wth it - need to
+    // "sync" often calling zeDeviceGetGlobalTimestamps,
+    //  where command->submit_time_device_ comes with GPU time
+    //        command->submit_time         comes with CPU time
+    //
+    // "sync" points are made around "command(s)" submit to GPU:
+    // - at Enter to CommandListAppendLaunch<...>  time for an Immediate Command List
+    // - at Enter to CommandQueueExecuteCommandLists for not Immediate CommandLists
 
-    uint64_t device_submit_time =
-        (device_descriptors_.at(command->device).device_time_origin + command->submit_time -
-         device_descriptors_.at(command->device).host_time_origin);
+    //  GPU time mask applied to the GPU time to remove some spiritous bits (in case they made there)
+    uint64_t device_submit_time = (command->submit_time_device_ & device_mask);
 
-    uint64_t start_ns = (start * NSEC_IN_SEC / device_freq);
-    int64_t time_shift;
-    while ((start_ns < device_submit_time) &&
-           ((int64_t)(device_submit_time - start_ns) >=
-            (int64_t)((device_mask + 1) * NSEC_IN_SEC / device_freq))) {
-      start += device_mask + 1;
-      end += device_mask + 1;
-      start_ns = (start * NSEC_IN_SEC / device_freq);
+    // time_shift calculated in GPU scale between sync point and GPU command start,
+    // then it recalculated to CPU timescale units
+    uint64_t time_shift;
+
+    if (device_start > device_submit_time) {
+      time_shift = (device_start - device_submit_time) * NSEC_IN_SEC / device_freq;
+    }
+    else {
+      // overflow
+      time_shift = (device_mask - device_submit_time + 1 + device_start) * NSEC_IN_SEC / device_freq;
     }
 
-    if (start_ns < device_submit_time) {
-      // device and host clocks out of sync
+    // GPU command duration recalculated to CPU time scale units
+    uint64_t duration = ComputeDuration(device_start, device_end, device_freq, device_mask);
 
-      uint64_t host_time;
-      uint64_t device_time;
-      uint64_t metric_time;
-      uint64_t ticks;
-      overhead::Init();
-      zeDeviceGetGlobalTimestamps(command->device, &host_time, &ticks);
-      {
-        std::string o_api_string = "zeDeviceGetGlobalTimestamps";
-        overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                             o_api_string.c_str());
-      };
-      device_time = ticks & device_mask;
-      device_time = device_time * NSEC_IN_SEC / device_freq;
-      metric_time = ticks & metric_mask;
-      metric_time = metric_time * NSEC_IN_SEC / metric_freq;
-
-      int64_t host_time_shift = static_cast<int64_t>(host_time - command->submit_time);
-      int64_t device_time_shift = static_cast<int64_t>(device_time - device_submit_time);
-      device_submit_time = static_cast<uint64_t>(static_cast<int64_t>(device_submit_time) -
-                                                 (host_time_shift - device_time_shift));
-
-      device_descriptors_[command->device].host_time_origin = host_time;
-      device_descriptors_[command->device].device_time_origin = device_time;
-      device_descriptors_[command->device].metric_time_origin = metric_time;
-    }
-    if (start_ns < device_submit_time) {
-      time_shift = static_cast<int64_t>(start_ns - device_submit_time);
-    } else {
-      time_shift = 0;
-    }
-
-    uint64_t duration = ComputeDuration(start, end, device_freq, device_mask);
-
-    // use the high order bit to ensure we won't lose a bit when casting submit_time value to int64.
-    const uint64_t min_high_order_set_integer = 1ULL << 63;
-
-    // Ensure high order bit not set.
-    PTI_ASSERT(command->submit_time < min_high_order_set_integer);
-
-    // cast to int64 for submit_time needed since time_shift is implicitly uintized otherwise.
-    host_start = static_cast<uint64_t>(static_cast<int64_t>(command->submit_time) + time_shift);
-    if (time_shift < 0) PTI_ASSERT(host_start > command->submit_time);
-    PTI_ASSERT(UINT64_MAX - duration >= host_start);
-    host_end = host_start + duration;
+    // here GPU command start and end (on GPU) are calculated in CPU timescale
+    start = command->submit_time + time_shift;
+    end = start + duration;
   }
 
   void ProcessCall(const ZeKernelCommand* command, const ze_kernel_timestamp_result_t& timestamp,
@@ -1495,8 +1513,8 @@ overhead::Init();
       rec.name_ = std::move(name);
       rec.queue_ = command->queue;
       rec.device_ = command->device;
-      std::copy_n(dev_uuid_map[command->src_device], ZE_MAX_DEVICE_UUID_SIZE, rec.src_device_uuid);
-      std::copy_n(dev_uuid_map[command->dst_device], ZE_MAX_DEVICE_UUID_SIZE, rec.dst_device_uuid);
+      CopyDeviceUUIDTo(command->props.src_device, rec.src_device_uuid);
+      CopyDeviceUUIDTo(command->props.dst_device, rec.dst_device_uuid);
 
       if ((tile >= 0) && (device_map_.count(command->device) == 1) &&
           !device_map_[command->device].empty()) {  // Implicit Scaling
@@ -1506,15 +1524,15 @@ overhead::Init();
       }
 
       if (command->props.type == KERNEL_COMMAND_TYPE_MEMORY) {
-        rec.device_ = command->src_device;
-        rec.dst_device_ = command->dst_device;
-        if (command->src_device != nullptr) {
-          auto it = device_descriptors_.find(command->src_device);
+        rec.device_ = command->props.src_device;
+        rec.dst_device_ = command->props.dst_device;
+        if (command->props.src_device != nullptr) {
+          auto it = device_descriptors_.find(command->props.src_device);
           PTI_ASSERT(it != device_descriptors_.end());
           rec.pci_prop_ = it->second.pci_properties;
         }
-        if (command->dst_device != nullptr) {
-          auto it = device_descriptors_.find(command->dst_device);
+        if (command->props.dst_device != nullptr) {
+          auto it = device_descriptors_.find(command->props.dst_device);
           PTI_ASSERT(it != device_descriptors_.end());
           rec.dst_pci_prop_ = it->second.pci_properties;
         }
@@ -1810,6 +1828,9 @@ overhead::Init();
     }
 #endif /* 0 */
 
+    // exclusive lock of command_list_map_   as we are changing it ("writing" to it)
+    // all other accesses to it ("reading") would be protected by shared_lock
+    command_list_map_mutex_.lock();
     if (command_list_map_.count(command_list)) {
       ZeCommandListInfo& command_list_info = command_list_map_[command_list];
       if (command_list_info.immediate) {
@@ -1821,7 +1842,8 @@ overhead::Init();
     PTI_ASSERT(device_descriptors_.count(device) != 0);
 
     command_list_map_[command_list] = {
-        std::vector<ZeKernelCommand*>(), context, device, nullptr, nullptr, immediate, oi_pair};
+        std::vector<ZeKernelCommand*>(), context, device, immediate, oi_pair};
+    command_list_map_mutex_.unlock();
 
     if (immediate) {
       if (queue_ordinal_index_map_.count((ze_command_queue_handle_t)command_list) == 0) {
@@ -1871,64 +1893,80 @@ overhead::Init();
   }
 #endif /* 0 */
 
-  void SubmitKernelCommands(ze_command_list_handle_t* command_lists, uint32_t command_list_count,
-                            ze_command_queue_handle_t queue, ze_fence_handle_t fence,
-                            const uint64_t host_sync, std::vector<uint64_t>* kids) {
+  void PrepareToExecuteCommandLists(ze_command_list_handle_t* command_lists, uint32_t command_list_count,
+                            ze_command_queue_handle_t queue, ze_fence_handle_t fence) {
     const std::lock_guard<std::mutex> lock(lock_);
+    uint64_t host_time_sync = 0;
+    uint64_t device_time_sync = 0;
+    auto it = command_queues_.find(queue);
+    PTI_ASSERT(it != command_queues_.end());
+    ze_device_handle_t device = it->second.device_; // this should be only one device, as queue created on specific device
+    PTI_ASSERT(nullptr != device);
+    ze_result_t status = zeDeviceGetGlobalTimestamps(device, &host_time_sync, &device_time_sync);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
 
     for (uint32_t i = 0; i < command_list_count; ++i) {
       ze_command_list_handle_t clist = command_lists[i];
       PTI_ASSERT(clist != nullptr);
-      PTI_ASSERT(command_list_map_.count(clist) == 1);
-      ZeCommandListInfo& info = command_list_map_[clist];
-      if (!info.immediate) {
-        for (ZeKernelCommand* command : info.kernel_commands) {
-          if (!command->tid) command->tid = utils::GetTid();
-          command->queue = queue;
-          command->submit_time = host_sync;
 
-          PTI_ASSERT(command->append_time <= command->submit_time);
-          command->fence = fence;
+      const ZeCommandListInfo& info = command_list_map_[clist];
+
+      // as all command lists submitted to the execution into queue - they are not immediate
+      PTI_ASSERT(!info.immediate);
+
+      for (ZeKernelCommand* command : info.kernel_commands) {
+        if (!command->tid) command->tid = utils::GetTid();
+        command->queue = queue;
+        //command->submit_time = host_sync;
+        command->submit_time = host_time_sync;
+        command->submit_time_device_ = device_time_sync;
+
+        PTI_ASSERT(command->append_time <= command->submit_time);
+        command->fence = fence;
 
           // if (queue_ordinal_index_map_.count(queue) != 0) {
           //   std::pair<uint32_t, uint32_t> oi = queue_ordinal_index_map_[queue];
           // }
 
-          if (kids) {
-            kids->push_back(command->kernel_id);
-          }
-          kernel_command_list_.push_back(command);
-        }
-        info.kernel_commands.clear();
       }
+    }
+  }
+
+  void PostSubmitKernelCommands(ze_command_list_handle_t* command_lists, uint32_t command_list_count,
+                             std::vector<uint64_t>* kids) {
+    const std::lock_guard<std::mutex> lock(lock_);
+
+    for (uint32_t i = 0; i < command_list_count; ++i) {
+      ze_command_list_handle_t clist = command_lists[i];
+      PTI_ASSERT(clist != nullptr);
+      ZeCommandListInfo& info = GetCommandListInfo(clist);
+      // as all command lists submitted to the execution into queue - they are not immediate
+      PTI_ASSERT(!info.immediate);
+      for (ZeKernelCommand* command : info.kernel_commands) {
+        if (kids) {
+          kids->push_back(command->kernel_id);
+        }
+        kernel_command_list_.push_back(command);
+      }
+      info.kernel_commands.clear();
     }
   }
 
   ze_context_handle_t GetCommandListContext(ze_command_list_handle_t command_list) {
     PTI_ASSERT(command_list != nullptr);
-    // const std::lock_guard<std::mutex> lock(lock_);
-
-    if (command_list_map_.count(command_list) != 1) {
-      std::cout << "ERROR: command list " << command_list << " not created" << std::endl;
-      PTI_ASSERT(0);
-    }
-
-    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+    const ZeCommandListInfo& command_list_info = GetCommandListInfoConst(command_list);
     return command_list_info.context;
   }
 
   ze_device_handle_t GetCommandListDevice(ze_command_list_handle_t command_list) {
-    // PTI_ASSERT(command_list != nullptr);
-    const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+    PTI_ASSERT(command_list != nullptr);
+    const ZeCommandListInfo& command_list_info = GetCommandListInfoConst(command_list);
     return command_list_info.device;
   }
 
   bool IsCommandListImmediate(ze_command_list_handle_t command_list) {
-    const std::lock_guard<std::mutex> lock(lock_);
-    PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+    const ZeCommandListInfo& command_list_info = GetCommandListInfoConst(command_list);
     return command_list_info.immediate;
   }
 
@@ -1977,7 +2015,7 @@ overhead::Init();
   }
 
  private:  // Callbacks
-  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t* params, ze_result_t, void*,
+  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t* params, void*,
                                      void** instance_data) {
     const ze_event_pool_desc_t* desc = *(params->pdesc);
     if (desc == nullptr) {
@@ -2010,7 +2048,7 @@ overhead::Init();
     }
   }
 
-  static void OnEnterEventDestroy(ze_event_destroy_params_t* params, ze_result_t /*result*/,
+  static void OnEnterEventDestroy(ze_event_destroy_params_t* params,
                                   void* global_data, void** /*instance_data*/,
                                   std::vector<uint64_t>* kids) {
     if (*(params->phEvent) != nullptr) {
@@ -2029,7 +2067,7 @@ overhead::Init();
     }
   }
 
-  static void OnEnterEventHostReset(ze_event_host_reset_params_t* params, ze_result_t /*result*/,
+  static void OnEnterEventHostReset(ze_event_host_reset_params_t* params,
                                     void* global_data, void** /*instance_data*/,
                                     std::vector<uint64_t>* kids) {
     if (*(params->phEvent) != nullptr) {
@@ -2162,6 +2200,8 @@ overhead::Init();
 
     const std::lock_guard<std::mutex> lock(collector->lock_);
     ze_context_handle_t context = collector->GetCommandListContext(command_list);
+    ze_device_handle_t device = collector->GetCommandListDevice(command_list);
+
     if (signal_event == nullptr) {
       signal_event = collector->event_cache_.GetEvent(context);
       PTI_ASSERT(signal_event != nullptr);
@@ -2169,8 +2209,10 @@ overhead::Init();
 
     zet_metric_query_handle_t query = nullptr;
     if (collector->options_.metric_query && iskernel) {
-      auto it = collector->command_list_map_.find(command_list);
+
+      const auto it = collector->FindCommandListInfo(command_list);
       PTI_ASSERT(it != collector->command_list_map_.end());
+
       auto it2 = collector->device_descriptors_.find(it->second.device);
       PTI_ASSERT(it2 != collector->device_descriptors_.end());
       query =
@@ -2186,6 +2228,15 @@ overhead::Init();
       };
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
+    uint64_t host_timestamp;
+    uint64_t device_timestamp;	// in ticks
+
+    ze_result_t status = zeDeviceGetGlobalTimestamps(device, &host_timestamp, &device_timestamp);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    ze_instance_data.timestamp_host = host_timestamp;
+    ze_instance_data.timestamp_device = device_timestamp;
+
     return query;
   }
 
@@ -2236,13 +2287,15 @@ overhead::Init();
     uint64_t host_timestamp = ze_instance_data.start_time_host;
     command->append_time = host_timestamp;
     command->kernel_id = UniKernelId::GetKernelId();
+    command->device_timer_frequency_ = device_descriptors_[command->device].device_timer_frequency;
+    command->device_timer_mask_ = device_descriptors_[command->device].device_timer_mask;
     if (command->props.type == KERNEL_COMMAND_TYPE_KERNEL) {
       ze_device_properties_t dev_props;
       dev_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
       dev_props.pNext = nullptr;
       ze_result_t status = zeDeviceGetProperties(device, &dev_props);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      std::copy_n(dev_props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE, dev_uuid_map[command->src_device]);
+      SaveDeviceUUID(command->props.src_device, dev_props.uuid.id);
 
       command->sycl_node_id_ = sycl_data_kview.sycl_node_id_;
       command->sycl_invocation_id_ = sycl_data_kview.sycl_invocation_id_;
@@ -2257,8 +2310,8 @@ overhead::Init();
       else
         command->corr_id_ = UniCorrId::GetUniCorrId();
     } else if (command->props.type == KERNEL_COMMAND_TYPE_MEMORY) {
-      command->src_device = command_list_info.src_device;
-      command->dst_device = command_list_info.dst_device;
+      command->props.src_device = props.src_device;
+      command->props.dst_device = props.dst_device;
 
       sycl_data_mview.kid_ = command->kernel_id;
       sycl_data_mview.tid_ = command->tid;
@@ -2278,6 +2331,7 @@ overhead::Init();
     if (command_list_info.immediate) {
       // command->tid = utils::GetTid();
       command->submit_time = command->append_time;
+      command->submit_time_device_ = ze_instance_data.timestamp_device;	// append time and submit time are the same
       command->queue = reinterpret_cast<ze_command_queue_handle_t>(command_list);
       kernel_command_list_.push_back(command);
       kids->push_back(command->kernel_id);
@@ -2338,8 +2392,7 @@ overhead::Init();
     }
 #endif /* 0 */
 
-    PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+    ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
     AppendKernelCommandCommon(collector, props, signal_event, query, command_list,
                               command_list_info, instance_data, kids);
@@ -2351,7 +2404,6 @@ overhead::Init();
                            void** instance_data, std::vector<uint64_t>* kids,
                            const void* pattern = nullptr, size_t pattern_size = 0) {
     PTI_ASSERT(command_list != nullptr);
-    const std::lock_guard<std::mutex> lock(lock_);
     ze_memory_allocation_properties_t mem_props;
     mem_props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
     mem_props.pNext = nullptr;
@@ -2360,35 +2412,35 @@ overhead::Init();
     dev_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
     dev_props.pNext = nullptr;
 
-    PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+    ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
 
-    command_list_info.src_device = nullptr;
-    command_list_info.dst_device = nullptr;
+    ze_device_handle_t src_device = nullptr;
+    ze_device_handle_t dst_device = nullptr;
 
+    // TODO: (julia.fedorova@intel.com) zeMemGetAllocProperties called here and then
+    //  in below GetTransferProperties => so twice for src and dst.
+    //  this should be avoided
     if (dst != nullptr) {
       ze_result_t status =
-          zeMemGetAllocProperties(context, dst, &mem_props, &command_list_info.dst_device);
+          zeMemGetAllocProperties(context, dst, &mem_props, &dst_device);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      if (command_list_info.dst_device) {
-        ze_result_t status = zeDeviceGetProperties(command_list_info.dst_device, &dev_props);
+      if (dst_device) {
+        ze_result_t status = zeDeviceGetProperties(dst_device, &dev_props);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        std::copy_n(dev_props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE,
-                    dev_uuid_map[command_list_info.dst_device]);
+        SaveDeviceUUID(dst_device, dev_props.uuid.id);
       }
     }
     if (src != nullptr) {
       ze_result_t status =
-          zeMemGetAllocProperties(context, src, &mem_props, &command_list_info.src_device);
+          zeMemGetAllocProperties(context, src, &mem_props, &src_device);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      if (command_list_info.src_device) {
-        ze_result_t status = zeDeviceGetProperties(command_list_info.src_device, &dev_props);
+      if (src_device) {
+        ze_result_t status = zeDeviceGetProperties(src_device, &dev_props);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        std::copy_n(dev_props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE,
-                    dev_uuid_map[command_list_info.src_device]);
+        SaveDeviceUUID(src_device, dev_props.uuid.id);
       }
     }
 
@@ -2407,10 +2459,7 @@ overhead::Init();
                                   ze_command_list_handle_t command_list, void** instance_data,
                                   std::vector<uint64_t>* kids) {
     PTI_ASSERT(command_list != nullptr);
-    const std::lock_guard<std::mutex> lock(lock_);
-
-    PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+    ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
@@ -2430,11 +2479,8 @@ overhead::Init();
                                     ze_command_list_handle_t command_list, void** instance_data,
                                     std::vector<uint64_t>* kids) {
     PTI_ASSERT(command_list != nullptr);
-    const std::lock_guard<std::mutex> lock(lock_);
 
-    PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
-
+    ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
 
@@ -2454,10 +2500,8 @@ overhead::Init();
                      zet_metric_query_handle_t& query, ze_command_list_handle_t command_list,
                      void** instance_data, std::vector<uint64_t>* kids) {
     PTI_ASSERT(command_list != nullptr);
-    const std::lock_guard<std::mutex> lock(lock_);
 
-    PTI_ASSERT(command_list_map_.count(command_list) == 1);
-    ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+    ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
@@ -2606,6 +2650,8 @@ overhead::Init();
     props.bytes_transferred = bytes_transferred;
     props.value_size = pattern_size;
     props.type = KERNEL_COMMAND_TYPE_MEMORY;
+    props.src_device = hSrcDevice;
+    props.src_device = hDstDevice;
     return props;
   }
 
@@ -2619,9 +2665,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendLaunchKernel(
-      ze_command_list_append_launch_kernel_params_t* params, ze_result_t result, void* global_data,
+      ze_command_list_append_launch_kernel_params_t* params, void* global_data,
       void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), true);
@@ -2647,9 +2693,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendLaunchCooperativeKernel(
-      ze_command_list_append_launch_cooperative_kernel_params_t* params, ze_result_t result,
+      ze_command_list_append_launch_cooperative_kernel_params_t* params,
       void* global_data, void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), true);
@@ -2675,9 +2721,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendLaunchKernelIndirect(
-      ze_command_list_append_launch_kernel_indirect_params_t* params, ze_result_t result,
+      ze_command_list_append_launch_kernel_indirect_params_t* params,
       void* global_data, void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), true);
@@ -2703,9 +2749,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendMemoryCopy(
-      ze_command_list_append_memory_copy_params_t* params, ze_result_t result, void* global_data,
+      ze_command_list_append_memory_copy_params_t* params, void* global_data,
       void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -2732,9 +2778,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendMemoryFill(
-      ze_command_list_append_memory_fill_params_t* params, ze_result_t result, void* global_data,
+      ze_command_list_append_memory_fill_params_t* params, void* global_data,
       void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -2761,9 +2807,8 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendBarrier(ze_command_list_append_barrier_params_t* params,
-                                              ze_result_t result, void* global_data,
-                                              void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+                                              void* global_data, void** instance_data) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -2788,9 +2833,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendMemoryRangesBarrier(
-      ze_command_list_append_memory_ranges_barrier_params_t* params, ze_result_t result,
+      ze_command_list_append_memory_ranges_barrier_params_t* params,
       void* global_data, void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -2816,9 +2861,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendMemoryCopyRegion(
-      ze_command_list_append_memory_copy_region_params_t* params, ze_result_t result,
+      ze_command_list_append_memory_copy_region_params_t* params,
       void* global_data, void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -2855,9 +2900,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendMemoryCopyFromContext(
-      ze_command_list_append_memory_copy_from_context_params_t* params, ze_result_t result,
+      ze_command_list_append_memory_copy_from_context_params_t* params,
       void* global_data, void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -2886,9 +2931,8 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendImageCopy(ze_command_list_append_image_copy_params_t* params,
-                                                ze_result_t result, void* global_data,
-                                                void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+                                                void* global_data, void** instance_data) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -2914,9 +2958,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendImageCopyRegion(
-      ze_command_list_append_image_copy_region_params_t* params, ze_result_t result,
+      ze_command_list_append_image_copy_region_params_t* params,
       void* global_data, void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -2942,9 +2986,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendImageCopyToMemory(
-      ze_command_list_append_image_copy_to_memory_params_t* params, ze_result_t result,
+      ze_command_list_append_image_copy_to_memory_params_t* params,
       void* global_data, void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -2971,9 +3015,9 @@ overhead::Init();
   }
 
   static void OnEnterCommandListAppendImageCopyFromMemory(
-      ze_command_list_append_image_copy_from_memory_params_t* params, ze_result_t result,
+      ze_command_list_append_image_copy_from_memory_params_t* params,
       void* global_data, void** instance_data) {
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       zet_metric_query_handle_t query = PrepareToAppendKernelCommand(
           collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -3091,6 +3135,26 @@ overhead::Init();
     }
   }
 
+  static void OnEnterCommandQueueExecuteCommandLists(
+      ze_command_queue_execute_command_lists_params_t* params,
+      void* global_data, void** /*instance_data*/) {
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+
+    if (UniController::IsCollectionEnabled()) {
+      uint32_t command_list_count = *params->pnumCommandLists;
+      if (command_list_count == 0) {
+        return;
+      }
+
+      ze_command_list_handle_t* command_lists = *params->pphCommandLists;
+      if (command_lists == nullptr) {
+        return;
+      }
+
+      collector->PrepareToExecuteCommandLists(command_lists, command_list_count,
+                                *(params->phCommandQueue), *(params->phFence));
+    }
+  }
   static void OnExitCommandQueueExecuteCommandLists(
       ze_command_queue_execute_command_lists_params_t* params, ze_result_t result,
       void* global_data, void** /*instance_data*/, std::vector<uint64_t>* kids) {
@@ -3108,13 +3172,11 @@ overhead::Init();
           return;
         }
 
-        uint64_t host_timestamp = ze_instance_data.start_time_host;
-        collector->SubmitKernelCommands(command_lists, command_list_count,
-                                        *(params->phCommandQueue), *(params->phFence),
-                                        host_timestamp, kids);
+        collector->PostSubmitKernelCommands(command_lists, command_list_count, kids);
       }
     }
   }
+
 
   static void OnExitCommandQueueSynchronize(ze_command_queue_synchronize_params_t* /*params*/,
                                             ze_result_t result, void* global_data,
@@ -3139,8 +3201,8 @@ overhead::Init();
                                        ze_result_t /*result*/, void* global_data,
                                        void** /*instance_data*/) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    ze_device_handle_t* hDevice = params->phDevice;
-    if (hDevice == nullptr) {
+    ze_device_handle_t* device = params->phDevice;
+    if (device == nullptr) {
       return;
     }
     const ze_command_queue_desc_t* queue_desc = *params->pdesc;
@@ -3157,6 +3219,16 @@ overhead::Init();
       collector->queue_ordinal_index_map_[*command_queue] =
           std::make_pair(queue_desc->ordinal, queue_desc->index);
     }
+
+    ZeCommandQueue desc;
+    desc.queue_ = *command_queue;
+    desc.context_ = *(params->phContext);
+    desc.device_ = *device;
+    desc.engine_ordinal_ = queue_desc->ordinal;
+    desc.engine_index_ = queue_desc->index;;
+
+    collector->command_queues_.erase(*command_queue);
+    collector->command_queues_.insert({*command_queue, std::move(desc)});
   }
 
   static void OnExitCommandQueueDestroy(ze_command_queue_destroy_params_t* params,
@@ -3168,6 +3240,7 @@ overhead::Init();
       collector->lock_.lock();
       collector->ProcessCalls(nullptr, &kcexec);
       collector->queue_ordinal_index_map_.erase(*params->phCommandQueue);
+      collector->command_queues_.erase(*params->phCommandQueue);
       collector->lock_.unlock();
 
       if (collector->kcallback_ != nullptr) {
@@ -3240,6 +3313,8 @@ overhead::Init();
 
   ZeKernelInfoMap kernel_info_map_;
   std::list<ZeKernelCommand*> kernel_command_list_;
+
+  mutable std::shared_mutex command_list_map_mutex_;
   ZeCommandListMap command_list_map_;
   ZeImageSizeMap image_size_map_;
   ZeKernelGroupSizeMap kernel_group_size_map_;
@@ -3252,8 +3327,11 @@ overhead::Init();
 
   ZeFunctionInfoMap function_info_map_;
   std::map<ze_command_queue_handle_t, std::pair<uint32_t, uint32_t>> queue_ordinal_index_map_;
-  std::map<ze_device_handle_t, uint8_t[ZE_MAX_DEVICE_UUID_SIZE]> dev_uuid_map;
 
+  mutable std::shared_mutex dev_uuid_map_mutex_;
+  std::map<ze_device_handle_t, uint8_t[ZE_MAX_DEVICE_UUID_SIZE]> dev_uuid_map_;
+
+  std::map<ze_command_queue_handle_t, ZeCommandQueue> command_queues_;
   std::set<std::pair<ze_context_handle_t, ze_device_handle_t>> metric_activations_;
   static const uint32_t kFunctionLength = 10;
   static const uint32_t kKernelLength = 10;

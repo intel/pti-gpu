@@ -366,7 +366,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
   if (cb != ""):
     f.write("  if (collector->options_.kernel_tracing) { \n")
     if (func in synchronize_func_list):
-      f.write("    " + cb + "(params, result, global_data, instance_user_data, &kids); \n")
+      f.write("    " + cb + "(params, global_data, instance_user_data, &kids); \n")
       f.write("    if (kids.size() != 0) {\n")
       f.write("        ze_instance_data.kid = kids[0];\n") # pass kid to the exit callback
       f.write("    }\n")
@@ -374,7 +374,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
       f.write("        ze_instance_data.kid = (uint64_t)(-1);\n")
       f.write("    }\n")
     else:
-      f.write("    " + cb + "(params, result, global_data, instance_user_data); \n")
+      f.write("    " + cb + "(params, global_data, instance_user_data); \n")
     f.write("  }\n")
     f.write("\n")
   f.write("\n")
