@@ -396,14 +396,7 @@ class GlobalZeInitializer {
  public:
   inline static ze_result_t Initialize() {
     utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
-    overhead::Init();
-    ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
-    {
-      std::string o_api_string = "zeInit";
-      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                           o_api_string.c_str());
-    };
-    return status;
+    return zeInit(ZE_INIT_FLAG_GPU_ONLY);
   }
 
   inline static ze_result_t result_ = Initialize();

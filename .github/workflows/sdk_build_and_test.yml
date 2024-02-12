@@ -23,37 +23,50 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build
+        working-directory: sdk
         run: |
-          cd sdk
           cmake --preset default
           cmake --build --preset default -j $(($(nproc)/2))
 
       - name: Test
+        working-directory: sdk
         run: |
-          cd sdk
           ctest --output-on-failure --preset default
 
-      - name: BuildSanitized
+      - name: Build AddressSanitizer
         if: always()
+        working-directory: sdk
         run: |
-          cd sdk
           cmake --preset asan
           cmake --build --preset asan --parallel $(($(nproc)/2))
 
-      - name: BuildFuzz
+      - name: Build ThreadSanitizer
         if: always()
+        working-directory: sdk
+        run: |
+          cmake --preset tsan
+          cmake --build --preset tsan --parallel $(($(nproc)/2))
+
+      - name: Build libFuzzer
+        if: always()
+        working-directory: sdk
         run: |
           # To ensure it still builds, run build for fuzz targets until we have
           # proper fuzz testing infrastructure in place.
-          cd sdk
           cmake --preset fuzz
           cmake --build --preset fuzz --parallel $(($(nproc)/2))
 
-      - name: TestSanitized
+      - name: Test AddressSanitizer
         if: always()
+        working-directory: sdk
         run: |
-          cd sdk
           ctest --preset asan --output-on-failure -L samples
+
+      - name: Test ThreadSanitizer
+        if: always()
+        working-directory: sdk
+        run: |
+          ctest --preset tsan --output-on-failure -L samples
 
       - name: Install SDK
         working-directory: sdk

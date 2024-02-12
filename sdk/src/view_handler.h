@@ -107,27 +107,27 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
 }
 
 constexpr auto kDefaultBufferQueueDepth = 50UL;
-static std::atomic<bool> external_collection_enabled = false;
+inline static std::atomic<bool> external_collection_enabled = false;
 
 struct PtiViewRecordHandler {
  public:
   using ViewBuffer = pti::view::utilities::ViewBuffer;
   using ViewBufferQueue = pti::view::utilities::ViewBufferQueue;
   using ViewBufferTable = pti::view::utilities::ViewBufferTable<std::thread::id>;
-  using ViewEventTable = pti::view::utilities::ThreadSafeHashTable<std::string, ViewInsert>;
+  using ViewEventTable = pti::view::utilities::GuardedUnorderedMap<std::string, ViewInsert>;
   using KernelNameStorageQueue =
       pti::view::utilities::ViewRecordBufferQueue<std::unique_ptr<std::string>>;
 
   PtiViewRecordHandler()
       : get_new_buffer_(pti::view::defaults::DefaultBufferAllocation),
-        deliver_buffer_(pti::view::defaults::DefaultRecordParser),
-        buffer_consumer_([this]() { return BufferConsumer(); }) {
+        deliver_buffer_(pti::view::defaults::DefaultRecordParser) {
     // Set queue depth based on number of hardware threads supported.
     constexpr auto kBufQueueDepthMult = 2UL;
     const auto threads_supported = std::thread::hardware_concurrency();
     if (threads_supported) {
       buffer_queue_.SetBufferDepth(kBufQueueDepthMult * threads_supported);
     }
+    buffer_consumer_ = std::thread(&PtiViewRecordHandler::BufferConsumer, this);
 
     if (!collector_) {
       CollectorOptions collector_options;
@@ -230,7 +230,7 @@ struct PtiViewRecordHandler {
     } else {
       get_new_buffer_(&raw_buffer, &raw_buffer_size);
     }
-    auto* buffer_to_replace = view_buffers_.TryFindElement(std::this_thread::get_id());
+    auto buffer_to_replace = view_buffers_.TryTakeElement(std::this_thread::get_id());
 
     if (buffer_to_replace) {
       DeliverBuffer(std::move(*buffer_to_replace));
@@ -293,7 +293,7 @@ struct PtiViewRecordHandler {
     try {
       if (type != pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION) {
         for (const auto& view_types : GetViewNameAndCallback(type)) {
-          view_event_map_[view_types.fn_name] = view_types.callback;
+          view_event_map_.Add(view_types.fn_name, view_types.callback);
         }
       }
     } catch (const std::out_of_range&) {
@@ -366,7 +366,7 @@ struct PtiViewRecordHandler {
 
   inline void operator()(const std::string& key, void* data,
                          const ZeKernelCommandExecutionRecord& rec) {
-    auto* view_event_callback = view_event_map_.TryFindElement(key);
+    auto view_event_callback = view_event_map_.TryFindElement(key);
     if (view_event_callback) {
       (*view_event_callback)(data, rec);
     }
@@ -428,9 +428,9 @@ struct PtiViewRecordHandler {
 
 // Required to access buffer from ze_collector callbacks
 inline static auto& Instance() {
-  static PtiViewRecordHandler data_container;
+  static PtiViewRecordHandler data_container{};
   return data_container;
-};
+}
 
 inline pti_result GetNextRecord(uint8_t* buffer, size_t valid_bytes,
                                 pti_view_record_base** record) {

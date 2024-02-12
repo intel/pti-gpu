@@ -33,10 +33,14 @@
 #include "iso3dfd.h"
 #include <iostream>
 #include <string>
+#include <mutex>
 #include "device_selector.hpp"
 #include <dpc_common.hpp>
 #include "pti_view.h"
 #include "samples_utils.h"
+
+std::mutex global_cout_mtx;
+
 namespace oneapi {}
 using namespace oneapi;
 
@@ -54,14 +58,16 @@ void StopTracing() {
   assert(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS) == pti_result::PTI_SUCCESS);
 }
 
-
 /*
  * Host-Code
  * Function used for initialization
  */
 void Initialize(float* ptr_prev, float* ptr_next, float* ptr_vel, size_t n1,
                 size_t n2, size_t n3) {
-  std::cout << "Initializing ... \n";
+  {
+    const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);
+    std::cout << "Initializing ... \n";
+  }
   size_t dim2 = n2 * n1;
 
   for (size_t i = 0; i < n3; i++) {
@@ -212,6 +218,7 @@ int main(int argc, char* argv[]) {
         while (true) {
           auto buf_status =
               ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
+          const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);
           if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
             std::cout << "Reached End of buffer" << '\n';
             break;
@@ -231,7 +238,7 @@ int main(int argc, char* argv[]) {
                         << '\n';
               std::cout << "Found Sycl Runtime Record" << '\n';
               samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
-            break;
+              break;
             }
             case pti_view_kind:: PTI_VIEW_DEVICE_GPU_MEM_COPY: {
               std::cout << "---------------------------------------------------"
@@ -278,15 +285,16 @@ int main(int argc, char* argv[]) {
 
                  ((reinterpret_cast<pti_view_record_kernel *>(ptr) ->_start_timestamp) <=
                   (reinterpret_cast<pti_view_record_kernel *>(ptr) ->_end_timestamp))) {
-                std::cout << "------------>     All Monotonic" << std::endl;
-	      } else {
-                std::cout << "------------>     Something wrong: NOT All monotonic" << std::endl;
-	      };
-	      if ( reinterpret_cast<pti_view_record_kernel *>(ptr)->_sycl_task_begin_timestamp == 0)
-                 std::cout << "------------>     Something wrong: Sycl Task Begin Time is 0" << std::endl;
-	      if ( reinterpret_cast<pti_view_record_kernel *>(ptr)->_sycl_enqk_begin_timestamp == 0)
+                  std::cout << "------------>     All Monotonic" << std::endl;
+                } else {
+                  std::cout << "------------>     Something wrong: NOT All monotonic" << std::endl;
+	              }
+	              if (reinterpret_cast<pti_view_record_kernel *>(ptr)->_sycl_task_begin_timestamp == 0) {
+                  std::cout << "------------>     Something wrong: Sycl Task Begin Time is 0" << std::endl;
+                }
+	              if ( reinterpret_cast<pti_view_record_kernel *>(ptr)->_sycl_enqk_begin_timestamp == 0) {
                  std::cout << "------------>     Something wrong: Sycl Enq Launch Kernel Time is 0" << std::endl;
-
+                }
               break;
             }
             default: {
@@ -368,18 +376,24 @@ int main(int argc, char* argv[]) {
     coeff[i] = coeff[i] / (dxyz * dxyz);
   }
 
-  std::cout << "Grid Sizes: " << n1 - 2 * kHalfLength << " "
-            << n2 - 2 * kHalfLength << " " << n3 - 2 * kHalfLength << "\n";
-  std::cout << "Memory Usage: " << ((3 * nsize * sizeof(float)) / (1024 * 1024))
-            << " MB\n";
+  {
+    const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);
+    std::cout << "Grid Sizes: " << n1 - 2 * kHalfLength << " "
+              << n2 - 2 * kHalfLength << " " << n3 - 2 * kHalfLength << "\n";
+    std::cout << "Memory Usage: " << ((3 * nsize * sizeof(float)) / (1024 * 1024))
+              << " MB\n";
+  }
 
   // Check if running OpenMP OR Serial version on CPU
   if (omp) {
+    {
+      const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);
 #if defined(_OPENMP)
-    std::cout << " ***** Running OpenMP variant *****\n";
+      std::cout << " ***** Running OpenMP variant *****\n";
 #else
-    std::cout << " ***** Running C++ Serial variant *****\n";
+      std::cout << " ***** Running C++ Serial variant *****\n";
 #endif
+    }
 
     // Initialize arrays and introduce initial conditions (source)
     Initialize(prev_base, next_base, vel_base, n1, n2, n3);
@@ -409,7 +423,10 @@ int main(int argc, char* argv[]) {
   // Check if running SYCL version
   if (sycl) {
     try {
-      std::cout << " ***** Running SYCL variant *****\n";
+      {
+        const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);
+        std::cout << " ***** Running SYCL variant *****\n";
+      }
       // Initialize arrays and introduce initial conditions (source)
       Initialize(prev_base, next_base, vel_base, n1, n2, n3);
 
@@ -473,13 +490,17 @@ int main(int argc, char* argv[]) {
       error = WithinEpsilon(prev_base, temp, n1, n2, n3, kHalfLength, 0, 0.1f);
     }
     if (error) {
-      std::cout << "Final wavefields from SYCL device and CPU are not "
+      std::cerr << "Final wavefields from SYCL device and CPU are not "
                 << "equivalent: Fail\n";
     } else {
+      const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);
       std::cout << "Final wavefields from SYCL device and CPU are equivalent:"
                 << " Success\n";
     }
-    std::cout << "--------------------------------------\n";
+    {
+      const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);
+      std::cout << "--------------------------------------\n";
+    }
     delete[] temp;
   }
 

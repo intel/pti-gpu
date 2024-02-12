@@ -38,7 +38,7 @@ typedef enum _pti_view_overhead_view_kind {
 } pti_view_overhead_view_kind;
 
 // TODO: redo this approach to enable/disable state tracking.
-static std::atomic<bool> overhead_collection_enabled = false;
+inline static std::atomic<bool> overhead_collection_enabled = false;
 
 inline constexpr auto kOhThreshold =
     1.00;  // 1ns threshhold by default -- TODO -- make this setAttributable
@@ -144,8 +144,8 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
         ocallback_(&overhead_it->second, overhead_data);
       }
       ResetRecord();
-    };
-  };
+    }
+  }
 }
 
 inline void FiniSycl(OverheadRuntimeType runtime_type) {
@@ -173,8 +173,8 @@ inline void FiniSycl(OverheadRuntimeType runtime_type) {
         ocallback_(&overhead_it->second, overhead_data);
       }
       ResetRecord();
-    };
-  };
+    }
+  }
 }
 
 }  // namespace overhead

@@ -49,8 +49,8 @@
       "environment": {
         "NEOReadDebugKeys": "1",
         "DisableDeepBind": "1",
-        "ASAN_OPTIONS": "suppressions=${sourceDir}/test/ASan.supp,detect_leaks=1,check_initialization_order=1,alloc_dealloc_mismatch=0,new_delete_type_mismatch=0,halt_on_error=1,use_sigaltstack=0",
-        "LSAN_OPTIONS": "suppressions=${sourceDir}/test/LSan.supp,use_unaligned=1",
+        "ASAN_OPTIONS": "suppressions=${sourceDir}/test/suppressions/ASan.supp,detect_leaks=1,check_initialization_order=1,alloc_dealloc_mismatch=0,new_delete_type_mismatch=0,halt_on_error=1,use_sigaltstack=0",
+        "LSAN_OPTIONS": "suppressions=${sourceDir}/test/suppressions/LSan.supp,use_unaligned=1",
         "UBSAN_OPTIONS": "print_stacktrace=1"
       }
     },
@@ -70,6 +70,9 @@
       "inherits": "asan",
       "displayName": "ThreadSanitizer Test Config",
       "description": "Build configuration for thread sanitizer.",
+      "environment": {
+        "TSAN_OPTIONS": "suppressions=${sourceDir}/test/suppressions/TSan.supp"
+      },
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_tsan_toolchain.cmake"
       }

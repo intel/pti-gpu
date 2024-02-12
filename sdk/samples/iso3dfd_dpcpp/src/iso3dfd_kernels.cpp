@@ -320,7 +320,10 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
     // Iterate over time steps
     for (auto i = 0; i < nIterations; i += 1) {
       // Submit command group for execution
-      std::cout << "Q Submitting at: " << i << ": " << std::dec << GetTime() << std::endl;
+      {
+        const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);
+        std::cout << "Q Submitting at: " << i << ": " << std::dec << GetTime() << std::endl;
+      }
       q.submit([&](auto &h) {
         // Create accessors
         accessor next(b_ptr_next, h);

@@ -201,9 +201,9 @@ TEST_F(ViewBufferFixtureTest, QueueMultithreadedWaitUntilEmptyOr) {
   push_thread.join();
 }
 
-TEST(ThreadSafeHashTableTest, ForEach) {
-  using pti::view::utilities::ThreadSafeHashTable;
-  ThreadSafeHashTable<int, std::string> table = {};
+TEST(GuardedUnorderedMapTest, ForEach) {
+  using pti::view::utilities::GuardedUnorderedMap;
+  GuardedUnorderedMap<int, std::string> table = {};
   table[100] = "hello";
   table[101] = ",";
   table[102] = "world";

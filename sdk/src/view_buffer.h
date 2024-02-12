@@ -12,9 +12,7 @@
 
 #include <array>
 #include <condition_variable>
-#include <cstdint>
 #include <cstring>
-#include <functional>
 #include <mutex>
 #include <optional>
 #include <queue>
@@ -206,45 +204,133 @@ struct ViewRecordBufferQueue {
   std::optional<std::size_t> buffer_depth_;
 };
 
-// This is not a perfect abstraction.
-// User beware. TODO(matthew.schilling@intel.com): Boost? Make more robust?
+/**
+ * \internal
+ * \brief An hash map class with a mutex. Thread safety not guarenteed.
+ *
+ * This is not a perfect abstraction. It may not make complete sense. There are
+ * several places we want something like this though. If you add a member
+ * function to this, please note whether it is thread safe or not.
+ * User beware.
+ * Functions not thread safe,
+ * - `operator[]`
+ * - `ForEach`
+ * TODO(matthew.schilling@intel.com): Boost? TBB? Make more robust?
+ */
 template <typename KeyT, typename ValueT>
-struct ThreadSafeHashTable {
+struct GuardedUnorderedMap {
  public:
-  ThreadSafeHashTable() = default;
-  ThreadSafeHashTable& operator=(const ThreadSafeHashTable&) = delete;
-  ThreadSafeHashTable& operator=(ThreadSafeHashTable&& other) = delete;
-  ThreadSafeHashTable(const ThreadSafeHashTable&) = delete;
-  ThreadSafeHashTable(ThreadSafeHashTable&& other) = delete;
-  virtual ~ThreadSafeHashTable() = default;
+  GuardedUnorderedMap() = default;
+  GuardedUnorderedMap& operator=(const GuardedUnorderedMap&) = delete;
+  GuardedUnorderedMap& operator=(GuardedUnorderedMap&& other) = delete;
+  GuardedUnorderedMap(const GuardedUnorderedMap&) = delete;
+  GuardedUnorderedMap(GuardedUnorderedMap&& other) = delete;
+  virtual ~GuardedUnorderedMap() = default;
 
-  inline auto& operator[](const KeyT& key) {
+  /**
+   * \internal
+   * Locked pass through to operator[]
+   *
+   * \param key a key to a hash map
+   * \return reference to element in map associated with that key.
+   *
+   * \warning  NOT thread safe
+   */
+  template <typename T>
+  inline auto& operator[](T&& key) {
     std::lock_guard<std::mutex> lock_table(hash_table_mtx_);
-    return hash_table_[key];
+    return hash_table_[std::forward<T>(key)];
   }
 
+  /**
+   * \internal
+   * Add an element to a hash map without providing a reference.
+   *
+   * \param key a key to a hash map
+   * \param value to add to a hash map
+   *
+   */
+  inline void Add(const KeyT& key, const ValueT& val) {
+    std::lock_guard<std::mutex> lock_table(hash_table_mtx_);
+    hash_table_[key] = val;
+  }
+
+  /**
+   * \internal
+   * Erase an element in a hash map
+   *
+   * \param key a key to a hash map
+   *
+   */
   inline void Erase(const KeyT& key) {
     std::lock_guard<std::mutex> lock_table(hash_table_mtx_);
     hash_table_.erase(key);
   }
 
+  /**
+   * \internal
+   * Check whether map is empty
+   *
+   * \param key a key to a hash map
+   *
+   */
   bool Empty() const {
     std::lock_guard<std::mutex> lock_table(hash_table_mtx_);
     return hash_table_.empty();
   }
 
-  inline ValueT* TryFindElement(const KeyT& key) {
+  /**
+   * \internal
+   * Try to find an element in a map
+   *
+   * \param key a key to a hash map
+   * \return std::optional copy of element
+   *
+   * \warning returns a COPY otherwise would not be thread safe
+   *
+   */
+  inline std::optional<ValueT> TryFindElement(const KeyT& key) {
     std::lock_guard<std::mutex> lock_table(hash_table_mtx_);
     if (hash_table_.find(key) != hash_table_.end()) {
-      return &hash_table_[key];
+      return hash_table_[key];
     }
-    return nullptr;
+    return std::nullopt;
   }
 
-  template <typename Callable>
-  inline void ForEach(Callable&& user_function) {
+  /**
+   * \internal
+   * Try to find an element in a map
+   *
+   * \param key a key to a hash map
+   * \return std::optional of element (move)
+   *
+   * \warning returns by VALUE otherwise would not be thread safe
+   *
+   */
+  inline std::optional<ValueT> TryTakeElement(const KeyT& key) {
     std::lock_guard<std::mutex> lock_table(hash_table_mtx_);
-    auto user_callable = std::forward<Callable>(user_function);
+    if (hash_table_.find(key) != hash_table_.end()) {
+      return std::move(hash_table_[key]);
+    }
+    return std::nullopt;
+  }
+
+  /**
+   * \internal
+   * Iterates over map and calls a callable the user provides.
+   *
+   * This function is for iterating over the map while holding the lock. This
+   * prevents the iterators from being invalidated.
+   *
+   * \param a_callable user provided callable (lambda, functor, function)
+   *
+   * \warning NOT thread safe (user parameters can be references)
+   *
+   */
+  template <typename Callable>
+  inline void ForEach(Callable&& a_callable) {
+    std::lock_guard<std::mutex> lock_table(hash_table_mtx_);
+    auto user_callable = std::forward<Callable>(a_callable);
     for (auto&& [key, value] : hash_table_) {
       user_callable(key, value);
     }
@@ -258,7 +344,7 @@ struct ThreadSafeHashTable {
 using ViewBuffer = ViewRecordBuffer<unsigned char>;
 using ViewBufferQueue = ViewRecordBufferQueue<ViewBuffer>;
 template <typename KeyT>
-using ViewBufferTable = ThreadSafeHashTable<KeyT, ViewBuffer>;
+using ViewBufferTable = GuardedUnorderedMap<KeyT, ViewBuffer>;
 
 }  // namespace utilities
 }  // namespace view

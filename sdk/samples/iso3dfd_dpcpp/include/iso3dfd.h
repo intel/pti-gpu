@@ -7,6 +7,7 @@
 #include <sycl/sycl.hpp>
 using namespace sycl;
 
+#include <mutex>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -22,6 +23,8 @@ using namespace sycl;
 constexpr float dt = 0.002f;
 constexpr float dxyz = 50.0f;
 constexpr unsigned int kHalfLength = 8;
+
+extern std::mutex global_cout_mtx;
 
 /*
  * Padding to test and eliminate shared local memory bank conflicts for

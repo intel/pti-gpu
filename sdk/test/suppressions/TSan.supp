@@ -1,0 +1,22 @@
+# File to suppress results from ThreadSanitizer
+
+# Usage:
+#  * TSAN_OPTIONS=suppressions=<path_to_this_dir>/TSan.supp ./your-program
+
+# Additions should rarely be added, meant to suppress errors from libpti.so
+# dependencies.
+
+# TODO(matthew.schilling@intel.com): Fixed in compiler >= 2024.0.0? Definitely an issue on == 2023.2.1
+race:libxpti*
+
+# compute-runtime bug
+# I believe I saw recent fixes for this in the repository. They may not have
+# been released yet or added to our test machines.
+mutex:*ze_intel_gpu.so*
+deadlock:*ze_intel_gpu.so*
+
+# Need to file a bug, might be related to above.
+called_from_lib:libigdgmm.so*
+
+#TODO(matthew.schilling@intel.com): Fixed in compiler >= 2024.0.0? Definitely an issue on == 2023.2.1
+deadlock:libigdrcl*
