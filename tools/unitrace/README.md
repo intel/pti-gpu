@@ -68,8 +68,7 @@ The options can be one or more of the following:
 --chrome-device-timeline       DEPRECATED - use --chrome-kernel-logging instead
 --chrome-kernel-timeline       DEPRECATED - use --chrome-kernel-logging instead
 --chrome-device-stages         DEPRECATED - use --chrome-kernel-logging instead
---verbose [-v]                 Enable verbose mode to show more kernel information. For OpenCL backend only.
-                               Verbose is always enabled for Level Zero backend
+--verbose [-v]                 Enable verbose mode to show more kernel information.
 --demangle                     Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend
 --kernels-per-tile             DEPRECATED - use --seperate-tiles instead
 --seperate-tiles               Trace each tile seperately in case of implicit scaling
@@ -449,6 +448,14 @@ The **--stall-sampling** works on Intel(R) Data Center GPU Max Series and later 
 ![Metric Query!](/tools/unitrace/doc/images/stall-sampling.png)
 
 To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be changed using **--sampling-interval [-i]** option.
+
+## Query Trace Events
+
+Search in https://ui.perfetto.dev/ can be done in command or SQL. After loading the trace file user can switch to SQL mode by typing ":" in the search box, then the user can type in the SQL query statement(s) and navigate to the events of interest from the query result, as shown below.
+
+Please refer to https://perfetto.dev/docs/ for more information,
+
+![Query Trace Events!](/tools/unitrace/doc/images/event_query.png)
 
 ## Recommended Usage
 
