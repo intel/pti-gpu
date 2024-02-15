@@ -19,6 +19,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cmath>
 #include <dlfcn.h>
 
 #include <level_zero/ze_api.h>
@@ -991,37 +992,38 @@ typedef void (*OnZeKernelFinishCallback)(uint64_t kid, uint64_t tid, uint64_t st
 ze_result_t (*zexKernelGetBaseAddress)(ze_kernel_handle_t hKernel, uint64_t *baseAddress) = nullptr;
 
 inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& group_count, size_t size, bool detailed = true) {
-  std::stringstream s;
+  std::string str;
   kernel_command_properties_mutex_.lock_shared();
   auto it = kernel_command_properties_->find(id);
   if (it != kernel_command_properties_->end()) {
-    s << utils::Demangle(it->second.name_.c_str());
+    str = std::move(utils::Demangle(it->second.name_.c_str()));
     if (detailed) {
       if (it->second.type_ == KERNEL_COMMAND_TYPE_COMPUTE) {
         if (it->second.simd_width_ > 0) {
-          s << "[SIMD";
+          str += "[SIMD";
           if (it->second.simd_width_ == 1) {
-            s << "_ANY";
+            str += "_ANY";
           } else {
-            s << it->second.simd_width_;
+            str += std::to_string(it->second.simd_width_);
           }
         }
-        s << " {" <<
-          group_count.groupCountX << "; " <<
-          group_count.groupCountY << "; " <<
-          group_count.groupCountZ << "} {" <<
-          it->second.group_size_.x << "; " <<
-          it->second.group_size_.y << "; " <<
-          it->second.group_size_.z << "}]";
+        str = str + " {" +
+          std::to_string(group_count.groupCountX) + "; " +
+          std::to_string(group_count.groupCountY) + "; " +
+          std::to_string(group_count.groupCountZ) + "} {" +
+          std::to_string(it->second.group_size_.x) + "; " +
+          std::to_string(it->second.group_size_.y) + "; " +
+          std::to_string(it->second.group_size_.z) + "}]";
       }
       else if ((it->second.type_ == KERNEL_COMMAND_TYPE_MEMORY) && (size > 0)) {
-        s << "[" << size << "]";
+        str = str + "[" + std::to_string(size) + "]";
       }
     }
   }
 
   kernel_command_properties_mutex_.unlock_shared();
-  return s.str();
+
+  return str;
 }
 
 inline std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, size_t size, bool detailed = true) {
@@ -1180,15 +1182,18 @@ class ZeCollector {
     }
 
     if (total_time != 0) {
-      std::stringstream stream;
-      stream << std::setw(max_name_size) << "Kernel" << "," <<
-        std::setw(kCallsLength) << "Calls" << "," <<
-        std::setw(kTimeLength) << "Time (ns)" << "," <<
-        std::setw(sizeof("Time (%)")) << "Time (%)" << "," <<
-        std::setw(kTimeLength) << "Average (ns)" << "," <<
-        std::setw(kTimeLength) << "Min (ns)" << "," <<
-        std::setw(kTimeLength) << "Max (ns)" << std::endl;
-  
+      // sizeof("Kernel") is 7, not 6 
+      std::string str(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ');
+      str += "Kernel, " +
+        std::string(std::max(int(kCallsLength - sizeof("Calls") + 1), 0), ' ') + "Calls, " +
+        std::string(std::max(int(kTimeLength - sizeof("Time (ns)") + 1), 0), ' ') + "Time (ns), " +
+        "    Time (%), " +
+        std::string(std::max(int(kTimeLength - sizeof("Average (ns)") + 1), 0), ' ') + "Average (ns), " +
+        std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') + "Min (ns), " +
+        std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') + "Max (ns)\n"; 
+        
+      correlator_->Log(str);
+
       int i = 0;
       for (auto& it : sorted_list) {
         uint64_t call_count = it.second.call_count_;
@@ -1196,25 +1201,26 @@ class ZeCollector {
         uint64_t avg_time = time / call_count;
         uint64_t min_time = it.second.min_time_;
         uint64_t max_time = it.second.max_time_;
-        float percent_time = 100.0f * time / total_time;
-        stream << std::setw(max_name_size) << knames[i] << "," <<
-          std::setw(kCallsLength) << call_count << "," <<
-          std::setw(kTimeLength) << time << "," <<
-          std::setw(sizeof("Time (%)")) << std::setprecision(2) <<
-            std::fixed << percent_time << "," <<
-          std::setw(kTimeLength) << avg_time << "," <<
-          std::setw(kTimeLength) << min_time << "," <<
-          std::setw(kTimeLength) << max_time << std::endl;
+        float percent_time = (100.0f * time / total_time);
+        
+        str = std::string(std::max(int(max_name_size - knames[i].length()), 0), ' ');
+        str += knames[i] + ", " +
+          std::string(std::max(int(kCallsLength - std::to_string(call_count).length()), 0), ' ') +  std::to_string(call_count) + ", " +
+          std::string(std::max(int(kTimeLength - std::to_string(time).length()), 0), ' ') + std::to_string(time) + ", " +
+          std::string(std::max(int(sizeof("   Time (%)") - std::to_string(percent_time).length()), 0), ' ') +
+          std::to_string(percent_time) + ", " +
+          std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
+          std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
+          std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
+        correlator_->Log(str);
         i++;
       }
   
       
-      stream << std::endl << std::endl << "=== Kernel Properties ===" << std::endl << std::endl;
-      stream << std::setw(max_name_size) << "Kernel" << "," <<
-        std::setw(sizeof("Number of Arguments")) << "Number of Arguments" << "," <<
-        std::setw(sizeof("SLM Per Work Group")) << "SLM Per Work Group" << "," <<
-        std::setw(sizeof("Private Memory Per Thread")) << "Private Memory Per Thread" << "," <<
-        std::setw(sizeof("Spill Memory Per Thread")) << "Spill Memory Per Thread" << std::endl;
+      str = "\n\n=== Kernel Properties ===\n\n";
+      str = str + std::string(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ') +
+        "Kernel,  Number of Arguments,  SLM Per Work Group,  Private Memory Per Thread,  Spill Memory Per Thread\n";
+      correlator_->Log(str);
   
       i = -1; 
       for (auto& it : sorted_list) {
@@ -1227,14 +1233,18 @@ class ZeCollector {
           continue;
         }
         
-        stream << std::setw(max_name_size) << knames[i] << "," <<
-          std::setw(sizeof("Number of Arguments")) << kit->second.nargs_ <<
-          std::setw(sizeof("SLM Per Work Group")) << kit->second.slmsize_ <<
-          std::setw(sizeof("Private Memory Per Thread")) <<  kit->second.private_mem_size_ <<
-          std::setw(sizeof("Spill Memory Per Thread")) << kit->second.spill_mem_size_ <<
-          std::endl;
+        str = std::string(std::max(int(max_name_size - knames[i].length()), 0), ' ');
+        str = str + knames[i] + ", " +
+          std::string(std::max(int(sizeof("Number of Arguments") - std::to_string(kit->second.nargs_).length()), 0), ' ') +
+          std::to_string(kit->second.nargs_) + ", " +
+          std::string(std::max(int(sizeof("SLM Per Work Group") - std::to_string(kit->second.slmsize_).length()), 0), ' ') + 
+          std::to_string(kit->second.slmsize_) + ", " +
+          std::string(std::max(int(sizeof("Private Memory Per Thread") - std::to_string(kit->second.private_mem_size_).length()), 0), ' ') + 
+          std::to_string(kit->second.private_mem_size_) + ", " +
+          std::string(std::max(int(sizeof("Spill Memory Per Thread") - std::to_string(kit->second.spill_mem_size_).length()), 0), ' ') +
+          std::to_string(kit->second.spill_mem_size_) + "\n";
+        correlator_->Log(str);
       }
-      correlator_->Log(stream.str());
     }
 
     global_device_time_stats_mutex_.unlock();
@@ -1273,37 +1283,42 @@ class ZeCollector {
 
     if (total_device_time != 0) {
 
-      std::stringstream stream;
-      stream << std::setw(max_name_size) << "Kernel" << "," <<
-        std::setw(kCallsLength) << "Calls" << "," <<
-        std::setw(kTimeLength) << "Append (ns)" << "," <<
-        std::setw(sizeof("Append (%)")) << "Append (%)" << "," <<
-        std::setw(kTimeLength) << "Submit (ns)" << "," <<
-        std::setw(sizeof("Submit (%)")) << "Submit (%)" << "," <<
-        std::setw(kTimeLength) << "Execute (ns)" << "," <<
-        std::setw(sizeof("Execute (%)")) << "Execute (%)" << "," <<
-        std::endl;
-  
+      //sizeof("Kernel") is 7, not 6
+      std::string str(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ');
+      
+      str += "Kernel, " + std::string(std::max(int(kCallsLength - sizeof("Calls") + 1), 0), ' ') +
+             "Calls, " + std::string(std::max(int(kTimeLength - sizeof("Append (ns)") + 1), 0), ' ') +
+             "Append (ns),  Append (%), " +
+             std::string(std::max(int(kTimeLength - sizeof("Submit (ns)") + 1), 0), ' ') +
+             "Submit (ns),  Submit (%), " +
+             std::string(std::max(int(kTimeLength - sizeof("Execute (ns)") + 1), 0), ' ') +
+             "Execute (ns),  Execute (%)\n";
+     
+      correlator_->Log(str);
+
       int i = 0;
       for (auto& it : sorted_list) {
         uint64_t call_count = it.second.call_count_;
         float append_percent = 100.0f * it.second.append_time_ / total_append_time;
         float submit_percent = 100.0f * it.second.submit_time_ / total_submit_time;
         float device_percent = 100.0f * it.second.execute_time_ / total_device_time;
-        stream << std::setw(max_name_size) << knames[i] << "," <<
-          std::setw(kCallsLength) << call_count << "," <<
-          std::setw(kTimeLength) << it.second.append_time_ << "," <<
-          std::setw(sizeof("Append (%)")) << std::setprecision(2) <<
-          std::fixed << append_percent << "," <<
-          std::setw(kTimeLength) << it.second.submit_time_ << "," <<
-          std::setw(sizeof("Submit (%)")) << std::setprecision(2) <<
-          std::fixed << submit_percent << "," <<
-          std::setw(kTimeLength) << it.second.execute_time_ << "," <<
-          std::setw(sizeof("Execute (%)")) << std::setprecision(2) <<
-          std::fixed << device_percent << "," << std::endl;
+        str = std::string(std::max(int(max_name_size - knames[i].length()), 0), ' ') + knames[i] + ", ";
+        str += std::string(std::max(int(kCallsLength - std::to_string(call_count).length()), 0), ' ') + std::to_string(call_count) + ", " +
+               std::string(std::max(int(kTimeLength - std::to_string(it.second.append_time_).length()), 0), ' ') +
+               std::to_string(it.second.append_time_) + ", " +
+               std::string(std::max(int(sizeof("Append (%)") - std::to_string(append_percent).length()), 0), ' ') +
+               std::to_string(append_percent) + ", " +
+               std::string(std::max(int(kTimeLength - std::to_string(it.second.submit_time_).length()), 0), ' ') +
+               std::to_string(it.second.submit_time_) + ", " +
+               std::string(std::max(int(sizeof("Submit (%)") - std::to_string(submit_percent).length()), 0), ' ') +
+               std::to_string(submit_percent) + ", " +
+               std::string(std::max(int(kTimeLength - std::to_string(it.second.execute_time_).length()), 0), ' ') +
+               std::to_string(it.second.execute_time_) + ", " +
+               std::string(std::max(int(sizeof("Execute (%)") - std::to_string(device_percent).length()), 0), ' ') +
+               std::to_string(device_percent) + "\n";
+        correlator_->Log(str);
         i++;
       }
-      correlator_->Log(stream.str());
     }
 
     global_device_time_stats_mutex_.unlock();
@@ -1343,14 +1358,14 @@ class ZeCollector {
     }
 
     if (total_time != 0) {
-      std::stringstream stream;
-      stream << std::setw(max_name_size) << "Function" << "," <<
-        std::setw(kCallsLength) << "Calls" << "," <<
-        std::setw(kTimeLength) << "Time (ns)" << "," <<
-        std::setw(sizeof("Time (%)")) << "Time (%)" << "," <<
-        std::setw(kTimeLength) << "Average (ns)" << "," <<
-        std::setw(kTimeLength) << "Min (ns)" << "," <<
-        std::setw(kTimeLength) << "Max (ns)" << std::endl;
+      std::string str(std::max(int(max_name_size - sizeof("Function") + 1), 0), ' ');
+      str += "Function, " + std::string(std::max(int(kCallsLength - sizeof("Calls") + 1), 0), ' ') +
+             "Calls, " + std::string(std::max(int(kTimeLength - sizeof("Time (ns)") + 1), 0), ' ') +
+             "Time (ns),      Time (%), " + std::string(std::max(int(kTimeLength - sizeof("Average (ns)") + 1), 0), ' ') +
+             "Average (ns), " + std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') +
+             "Min (ns), " + std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') +
+             "Max (ns)\n";
+      correlator_->Log(str);
   
       for (auto& stat : sorted_list) {
         const std::string function = get_symbol(API_TRACING_ID(stat.first));
@@ -1360,16 +1375,16 @@ class ZeCollector {
         uint64_t min_time = stat.second.min_time_;
         uint64_t max_time = stat.second.max_time_;
         float percent_time = 100.0f * time / total_time;
-        stream << std::setw(max_name_size) << function << "," <<
-          std::setw(kCallsLength) << call_count << "," <<
-          std::setw(kTimeLength) << time << "," <<
-          std::setw(sizeof("Time (%)")) << std::setprecision(2) <<
-          std::fixed << percent_time << "," <<
-          std::setw(kTimeLength) << avg_time << "," <<
-          std::setw(kTimeLength) << min_time << "," <<
-          std::setw(kTimeLength) << max_time << std::endl;
+        str = std::string(std::max(int(max_name_size - function.length()), 0), ' ') + function + ", " +
+              std::string(std::max(int(kCallsLength - std::to_string(call_count).length()), 0), ' ') + std::to_string(call_count) + ", " +
+              std::string(std::max(int(kTimeLength - std::to_string(time).length()), 0), ' ') + std::to_string(time) + ", " +
+              std::string(std::max(int(sizeof("    Time (%)") - std::to_string(percent_time).length()), 0), ' ') +
+              std::to_string(percent_time) + ", " + 
+              std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
+              std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
+              std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
+        correlator_->Log(str);
       }
-      correlator_->Log(stream.str());
     }
     global_host_time_stats_mutex_.unlock();
   }
@@ -1665,23 +1680,18 @@ class ZeCollector {
     }
   }
 
-  static void PrintTypedValue(std::stringstream& stream, const zet_typed_value_t& typed_value) {
+  static std::string PrintTypedValue(const zet_typed_value_t& typed_value) {
     switch (typed_value.type) {
       case ZET_VALUE_TYPE_UINT32:
-        stream << typed_value.value.ui32;
-        break;
+        return std::to_string(typed_value.value.ui32);
       case ZET_VALUE_TYPE_UINT64:
-        stream << typed_value.value.ui64;
-        break;
+        return std::to_string(typed_value.value.ui64);
       case ZET_VALUE_TYPE_FLOAT32:
-        stream << typed_value.value.fp32;
-        break;
+        return std::to_string(typed_value.value.fp32);
       case ZET_VALUE_TYPE_FLOAT64:
-        stream << typed_value.value.fp64;
-        break;
+        return std::to_string(typed_value.value.fp64);
       case ZET_VALUE_TYPE_BOOL8:
-        stream << static_cast<uint32_t>(typed_value.value.b8);
-        break;
+        return std::to_string(static_cast<uint32_t>(typed_value.value.b8));
       default:
         PTI_ASSERT(0);
         break;
@@ -1908,6 +1918,7 @@ class ZeCollector {
       }
 
       std::string kname = GetZeKernelCommandName(it->second.kernel_command_id_, it->second.group_count_, it->second.mem_size_);
+
       if (device != it->second.device_) {
         device = it->second.device_;
         auto it2 = devices_->find(it->second.device_);
@@ -1940,35 +1951,31 @@ class ZeCollector {
           samples.data(), metrics.data());
 
         if (status == ZE_RESULT_SUCCESS) {
-          std::stringstream header;
-          header << std::endl;
-          header << "Kernel,";
-          header << "Device,";
-          header << "SubDeviceId,";
+          std::string header("\nKernel,Device,SubDeviceId,");
           for (auto& metric : metric_names) {
-            header << metric << ",";
+            header += metric + ",";
           }
-          header << std::endl;
-          correlator_->Log(header.str());
+          header += "\n";
+          correlator_->Log(header);
     
-          std::stringstream stream;
+          std::string str;
           for (uint32_t i = 0; i < num_samples; ++i) {
-            stream << kname << ",";
-            stream << did << ",";
-            stream << i << ",";
+            str = kname + ",";
+            str += std::to_string(did) + ",";
+            str += std::to_string(i) + ",";
     
             uint32_t size = samples[i];
             PTI_ASSERT(size == metric_names.size());
     
             const zet_typed_value_t *value = metrics.data() + i * size;
             for (int j = 0; j < size; ++j) {
-              PrintTypedValue(stream, value[j]);
-              stream << ",";
+              str += PrintTypedValue(value[j]);
+              str += ",";
             }
-            stream << std::endl;
+            str += "\n";
           }
     
-          correlator_->Log(stream.str());
+          correlator_->Log(str);
         }
         else {
           std::cerr << "[WARNING] Not able to calculate metrics" << std::endl;
@@ -2105,14 +2112,14 @@ class ZeCollector {
   }
 
   void PrintCommandCompleted(const ZeCommand *command, uint64_t kernel_start, uint64_t kernel_end) {
-    std::stringstream stream;
-    stream << "Thread " << command->tid_ << " Device " << command->device_ <<
-      " : " << GetZeKernelCommandName(command->kernel_command_id_, command->group_count_, command->mem_size_) << " [ns] " <<
-      command->append_time_ << " (append) " <<
-      command->submit_time_ << " (submit) " <<
-      kernel_start << " (start) " <<
-      kernel_end << " (end)" << std::endl;
-    correlator_->Log(stream.str());
+    std::string str("Thread ");
+    str += std::to_string(command->tid_)  + " Device " + std::to_string((unsigned long)(command->device_)) +
+      " : " + GetZeKernelCommandName(command->kernel_command_id_, command->group_count_, command->mem_size_) + " [ns] " +
+      std::to_string(command->append_time_) + " (append) " +
+      std::to_string(command->submit_time_) + " (submit) " +
+      std::to_string(kernel_start) + " (start) " +
+      std::to_string(kernel_end) + " (end)\n";
+    correlator_->Log(str);
   }
 
   inline void LogCommandCompleted(const ZeCommand *command, const ze_kernel_timestamp_result_t& timestamp, int tile) {
@@ -4070,8 +4077,8 @@ class ZeCollector {
 
   std::vector<ze_context_handle_t> metric_contexts_;
 
-  constexpr static uint32_t kCallsLength = 12;
-  constexpr static uint32_t kTimeLength = 20;
+  constexpr static size_t kCallsLength = 12;
+  constexpr static size_t kTimeLength = 20;
 
   std::string data_dir_name_;
 };

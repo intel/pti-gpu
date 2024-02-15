@@ -220,25 +220,25 @@ class ZeMetricProfiler {
     if (!logfile.empty()) {
       size_t pos = logfile.find_first_of('.');
 
-      std::stringstream filename;
+      std::string filename;
       if (pos == std::string::npos) {
-        filename << logfile;
+        filename = logfile;
       } else {
-        filename << logfile.substr(0, pos);
+        filename = logfile.substr(0, pos);
       }
 
-      filename << ".metrics." + std::to_string(utils::GetPid());
+      filename = filename + ".metrics." + std::to_string(utils::GetPid());
 
       std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
       if (!rank.empty()) {
-        filename << "." + rank;
+        filename = filename + "." + rank;
       }
 
       if (pos != std::string::npos) {
-        filename << logfile.substr(pos);
+        filename = filename + logfile.substr(pos);
       }
 
-      log_name_ = filename.str();
+      log_name_ = filename;
     }
     else {
       log_name_ = logfile;
@@ -338,9 +338,6 @@ class ZeMetricProfiler {
               exit(-1);
             }
 
-            //status = zetContextActivateMetricGroups(context, device, 1, &group);
-            //PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
             desc->driver_ = driver;
             desc->context_ = context;
             desc->metric_group_ = group;
@@ -355,8 +352,6 @@ class ZeMetricProfiler {
             device_time = ticks & desc->device_timer_mask_;
             device_time = device_time * NSEC_IN_SEC / desc->device_timer_frequency_;
 
-            // zetMetricGroupGetGlobalTimestampsExp() is broken.
-            // zeDeviceGetGlobalTimestamps(device, &host_time2, &metric_time);
             metric_time = ticks & desc->metric_timer_mask_;
             metric_time = metric_time * NSEC_IN_SEC / desc->metric_timer_frequency_;
 
@@ -624,7 +619,7 @@ class ZeMetricProfiler {
 
             const zet_typed_value_t *value = metrics.data();
             for (uint32_t i = 0; i < num_samples; ++i) {
-              std::stringstream stream;
+              std::string str;
   
               uint32_t size = samples[i];
                   
@@ -674,39 +669,51 @@ class ZeMetricProfiler {
           max_kname_size = metric_list[0].size();
         }
 
-        std::stringstream header;
+        std::string header("\n=== Device #");
 
-        header << std::endl << "=== Device #" << it->second->device_id_ << " Metrics ===" << std::endl << std::endl;
+        header += std::to_string(it->second->device_id_) + " Metrics ===\n\n";
         int field_sizes[10];
         field_sizes[0] = max_kname_size; 
-        header << std::setw(field_sizes[0] + sizeof("!0x0000000")) << metric_list[0] << ",";
+        // sizeof("!0x00000000") is 12, not 11
+        header += std::string(std::max(int(field_sizes[0] + sizeof("!0x00000000") - 1 - metric_list[0].length()), 0), ' ') +
+                  metric_list[0] + ", ";
         for (int i = 1; i <  metric_list.size(); i++) {
           field_sizes[i] = metric_list[i].size();
-          header << std::setw(field_sizes[i]) << metric_list[i] << ",";
+          header += std::string(std::max(int(field_sizes[i] - metric_list[i].length()), 0), ' ') + metric_list[i] + ", ";
         }
         
-        header << std::endl;
+        header += "\n";
         
-        logger_->Log(header.str());
+        logger_->Log(header);
 
         for (auto it = eustalls.begin(); it != eustalls.end(); it++) {
           for (auto rit = kprops.crbegin(); rit != kprops.crend(); ++rit) {
             if ((rit->first <= it->first) && ((it->first - rit->first) < rit->second.second)) {
-              std::stringstream line;
+              std::string line;
 
-              line << std::setw(field_sizes[0]) << rit->second.first << "!0x" <<  std::hex <<
-                std::setw(sizeof("0000000")) << std::setfill('0') << (it->first - rit->first) << std::setfill(' ') << std::dec << "," <<
-                std::setw(field_sizes[1]) << it->second.active_ << "," <<
-                std::setw(field_sizes[2]) << it->second.control_ << "," <<
-                std::setw(field_sizes[3]) << it->second.pipe_ << "," <<
-                std::setw(field_sizes[4]) << it->second.send_ << "," <<
-                std::setw(field_sizes[5]) << it->second.dist_ << "," <<
-                std::setw(field_sizes[6]) << it->second.sbid_ << "," <<
-                std::setw(field_sizes[7]) << it->second.sync_ << "," <<
-                std::setw(field_sizes[8]) << it->second.insfetch_ << "," <<
-                std::setw(field_sizes[9]) << it->second.other_ << "," << 
-                std::endl;
-              logger_->Log(line.str());
+              char offset[128];
+              snprintf(offset, sizeof(offset), "%08lx", (it->first - rit->first));
+              line = std::string(std::max(int(field_sizes[0] - rit->second.first.length()), 0), ' ') + rit->second.first + "!0x" +
+                     std::string(offset) + ", " +
+                     std::string(std::max(int(field_sizes[1] - std::to_string(it->second.active_).length()), 0), ' ') +
+                     std::to_string(it->second.active_) + ", " +
+                     std::string(std::max(int(field_sizes[2] - std::to_string(it->second.control_).length()), 0), ' ') +
+                     std::to_string(it->second.control_) + ", " +
+                     std::string(std::max(int(field_sizes[3] - std::to_string(it->second.pipe_).length()), 0), ' ') +
+                     std::to_string(it->second.pipe_) + ", " +
+                     std::string(std::max(int(field_sizes[4] - std::to_string(it->second.send_).length()), 0), ' ') +
+                     std::to_string(it->second.send_) + ", " +
+                     std::string(std::max(int(field_sizes[5] - std::to_string(it->second.dist_).length()), 0), ' ') +
+                     std::to_string(it->second.dist_) + ", " +
+                     std::string(std::max(int(field_sizes[6] - std::to_string(it->second.sbid_).length()), 0), ' ') +
+                     std::to_string(it->second.sbid_) + ", " +
+                     std::string(std::max(int(field_sizes[7] - std::to_string(it->second.sync_).length()), 0), ' ') +
+                     std::to_string(it->second.sync_) + ", " +
+                     std::string(std::max(int(field_sizes[8] - std::to_string(it->second.insfetch_).length()), 0), ' ') +
+                     std::to_string(it->second.insfetch_) + ", " +
+                     std::string(std::max(int(field_sizes[9] - std::to_string(it->second.other_).length()), 0), ' ') +
+                     std::to_string(it->second.other_) + ", \n";  
+              logger_->Log(line);
               break;
             }
           }
@@ -782,17 +789,17 @@ class ZeMetricProfiler {
 
         std::array<uint8_t, MAX_METRIC_BUFFER + 512> raw_metrics;
   
-        std::stringstream header;
+        std::string header("\n=== Device #");
 
-        header << std::endl << "=== Device #" << it->second->device_id_ << " Metrics ===" << std::endl << std::endl;
-        header << "Kernel, ";
+        header += std::to_string(it->second->device_id_) + " Metrics ===\n\n";
+        header += "Kernel, ";
         for (int i = 0; i <  metric_list.size(); i++) {
-          header << metric_list[i] << ", ";
+          header += metric_list[i] + ", ";
         }
         
-        header << std::endl;
+        header += "\n";
         
-        logger_->Log(header.str());
+        logger_->Log(header);
 
         uint64_t cur_sampling_ts = 0;
         auto kit = kinfo.begin();
@@ -826,7 +833,7 @@ class ZeMetricProfiler {
             const zet_typed_value_t *value = metrics.data();
             bool kernelsampled = false;
             for (uint32_t i = 0; i < num_samples; ++i) {
-              std::stringstream stream;
+              std::string str;
   
               uint32_t size = samples[i];
 
@@ -842,22 +849,22 @@ class ZeMetricProfiler {
                 if ((ts >= kit->metric_start) && (ts < kit->metric_end)) {
                   // belong to this kernel
                   kernelsampled = true;
-                  stream << kit->kernel_name << ", ";
+                  str = kit->kernel_name + ", ";
                   for (int k = 0; k < metric_list.size(); k++) {
                     if (k == ts_idx) {
-                      stream << ts;
+                      str += std::to_string(ts);
                     }
                     else{
-                      PrintTypedValue(stream, v[k]);
+                      str += PrintTypedValue(v[k]);
                     }
-                    stream << ", ";
+                    str += ", ";
                   }
-                  stream << std::endl;
+                  str += "\n";
                 }
                 else {
                   if (ts > kit->metric_end) {
                     if (kernelsampled) {
-                      stream << std::endl;
+                      str += "\n";
                       kernelsampled = false;	// reset for next kernel
                     }
                     kit++;	// move to next kernel
@@ -868,7 +875,7 @@ class ZeMetricProfiler {
                   continue;
                 }
               }
-              logger_->Log(stream.str());
+              logger_->Log(str);
               value += samples[i];
             }
           }
@@ -880,23 +887,18 @@ class ZeMetricProfiler {
 
  private:
 
-    static void PrintTypedValue(std::stringstream& stream, const zet_typed_value_t& typed_value) {
+    static std::string PrintTypedValue(const zet_typed_value_t& typed_value) {
     switch (typed_value.type) {
       case ZET_VALUE_TYPE_UINT32:
-        stream << typed_value.value.ui32;
-        break;
+        return std::to_string(typed_value.value.ui32);
       case ZET_VALUE_TYPE_UINT64:
-        stream << typed_value.value.ui64;
-        break;
+        return std::to_string(typed_value.value.ui64);
       case ZET_VALUE_TYPE_FLOAT32:
-        stream << typed_value.value.fp32;
-        break;
+        return std::to_string(typed_value.value.fp32);
       case ZET_VALUE_TYPE_FLOAT64:
-        stream << typed_value.value.fp64;
-        break;
+        return std::to_string(typed_value.value.fp64);
       case ZET_VALUE_TYPE_BOOL8:
-        stream << static_cast<uint32_t>(typed_value.value.b8);
-        break;
+        return std::to_string(static_cast<uint32_t>(typed_value.value.b8));
       default:
         PTI_ASSERT(0);
         break;

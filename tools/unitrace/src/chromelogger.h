@@ -153,7 +153,7 @@ struct ZeDevicePidKey {
 };
 
 struct ZeDeviceTidKey {
-  ze_pci_address_ext_t pci_addr;
+  ze_pci_address_ext_t pci_addr_;
   int32_t parent_device_id_;
   int32_t device_id_; 
   int32_t subdevice_id_; 
@@ -234,7 +234,7 @@ struct ClDevicePidKey {
 };
 
 struct ClDeviceTidKey {
-  cl_device_pci_bus_info_khr pci_addr;
+  cl_device_pci_bus_info_khr pci_addr_;
   cl_device_id device_;
   cl_command_queue queue_;
   int32_t host_pid_;
@@ -790,10 +790,8 @@ class ChromeLogger {
       }
       logger_ = new Logger(chrome_trace_file_name_.c_str(), true, true);
       UniMemory::ExitIfOutOfMemory((void *)(logger_));
-      std::stringstream stream;
-      stream << "{ \"traceEvents\":[" << std::endl;
 
-      logger_->Log(stream.str());
+      logger_->Log("{ \"traceEvents\":[\n");
       logger_->Flush();
     };
   public:
@@ -819,113 +817,129 @@ class ChromeLogger {
 
         logger_lock_.unlock();
 
-        std::stringstream stream;
+        std::string str("{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": ");
 
-        stream << "{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " <<
-          std::to_string(utils::GetPid()) << ", \"ts\": "<< process_start_time <<", \"args\": {\"name\": \"";
+        str += std::to_string(utils::GetPid()) + ", \"ts\": " + process_start_time + ", \"args\": {\"name\": \"";
 
         if (rank.empty()) {
-          stream << "HOST<" << pmi_hostname << ">\"}}";
+          str += "HOST<" + pmi_hostname + ">\"}}";
         }
         else {
-          stream << "RANK " << mpi_rank << " HOST<" << pmi_hostname << ">\"}}";
+          str += "RANK " + std::to_string(mpi_rank) + " HOST<" + pmi_hostname + ">\"}}";
         }
             
         const std::lock_guard<std::mutex> lock(device_pid_tid_map_lock_);
 
         for (auto it = device_pid_map_.cbegin(); it != device_pid_map_.cend(); it++) {
           uint32_t device_pid = std::get<0>(it->second);
-          stream << "," << std::endl << "{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " << device_pid
-            << ", \"ts\": "<< std::get<1>(it->second) << ", \"args\": {\"name\": \"";
+          str += ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
+                 ", \"ts\": " + std::to_string(std::get<1>(it->second)) + ", \"args\": {\"name\": \"";
           if (rank.empty()) {
-            stream << "DEVICE<" << pmi_hostname << ">";
+            str += "DEVICE<" + pmi_hostname + ">";
           }
           else {
-            stream << "RANK " << mpi_rank << " DEVICE<" << pmi_hostname << ">";
-          }
-          stream << std::hex << it->first.pci_addr_.domain
-            << ":" << it->first.pci_addr_.bus
-            << ":" << it->first.pci_addr_.device
-            << ":" << it->first.pci_addr_.function;
-          if (it->first.parent_device_id_ >= 0) {
-            stream << " #" << it->first.parent_device_id_ << "." << it->first.subdevice_id_;
-          }
-          else {
-            stream << " #" << it->first.device_id_;
+            str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
           }
 
-          stream << "\"}}" << std::dec; 
+          char str2[128];
+          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.domain);
+          str += std::string(str2) + ":";
+          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.bus);
+          str += std::string(str2) + ":";
+          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.device);
+          str += std::string(str2) + ":";
+          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.function);
+          str += std::string(str2);
+
+          if (it->first.parent_device_id_ >= 0) {
+            str += " #" + std::to_string(it->first.parent_device_id_) + "." + std::to_string(it->first.subdevice_id_);
+          }
+          else {
+            str += " #" + std::to_string(it->first.device_id_);
+          }
+
+          str += "\"}}"; 
         }
         for (auto it = device_tid_map_.cbegin(); it != device_tid_map_.cend(); it++) {
           uint32_t device_pid = std::get<0>(it->second);
           uint32_t device_tid = std::get<1>(it->second);
-          stream << "," << std::endl << "{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " << device_pid << ", \"tid\": " << device_tid
-            << ", \"ts\": " << std::get<2>(it->second) << ", \"args\": {\"name\": \"";
+          str += ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) + ", \"tid\": " +
+                 std::to_string(device_tid) + ", \"ts\": " + std::to_string(std::get<2>(it->second)) + ", \"args\": {\"name\": \"";
           if (device_logging_no_thread_) {
             if (device_logging_no_engine_) {
-              stream << "L0\"}}";
+              str += "L0\"}}";
             }
             else {
-              stream << "L0 Engine<"
-                << it->first.engine_ordinal_ << "," << it->first.engine_index_ << ">\"}}"; 
+              str += "L0 Engine<" + std::to_string(it->first.engine_ordinal_) + "," + std::to_string(it->first.engine_index_) + ">\"}}"; 
             }
           }
           else {
             if (device_logging_no_engine_) {
-              stream << "Thread " << it->first.host_tid_ << " L0\"}}"; 
+              str += "Thread " + std::to_string(it->first.host_tid_) + " L0\"}}"; 
             }
             else {
-              stream << "Thread " << it->first.host_tid_ << " L0 Engine<"
-                << it->first.engine_ordinal_ << "," << it->first.engine_index_ << ">\"}}"; 
+              str += "Thread " + std::to_string(it->first.host_tid_) + " L0 Engine<" + std::to_string(it->first.engine_ordinal_) +
+                     "," + std::to_string(it->first.engine_index_) + ">\"}}"; 
             }
           }
         }
     
         for (auto it = cl_device_pid_map_.cbegin(); it != cl_device_pid_map_.cend(); it++) {
           uint32_t device_pid = std::get<0>(it->second);
-          stream << "," << std::endl << "{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " << device_pid
-            << ", \"ts\": " << std::get<1>(it->second) << ", \"args\": {\"name\": \"";
+          str += ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
+                 ", \"ts\": " + std::to_string(std::get<1>(it->second)) + ", \"args\": {\"name\": \"";
           if (rank.empty()) {
-            stream << "DEVICE<" << pmi_hostname << ">";
+            str += "DEVICE<" + pmi_hostname + ">";
           }
           else {
-            stream << "RANK " << mpi_rank << " DEVICE<" << pmi_hostname << ">";
+            str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
           }
-          stream << std::hex << it->first.pci_addr_.pci_domain
-            << ":" << it->first.pci_addr_.pci_bus
-            << ":" << it->first.pci_addr_.pci_device
-            << ":" << it->first.pci_addr_.pci_function;
 
-          stream << "\"}}" << std::dec; 
+          char str2[128];
+          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.pci_domain);
+          str += std::string(str2) + ":";
+          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.pci_bus);
+          str += std::string(str2) + ":";
+          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.pci_device);
+          str += std::string(str2) + ":";
+          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.pci_function);
+          str += std::string(str2);
+
+          str += "\"}}"; 
         }
         for (auto it = cl_device_tid_map_.cbegin(); it != cl_device_tid_map_.cend(); it++) {
           uint32_t device_pid = std::get<0>(it->second);
           uint32_t device_tid = std::get<1>(it->second);
-          stream << "," << std::endl << "{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " << device_pid << ", \"tid\": " << device_tid
-            << ", \"ts\": " << std::get<2>(it->second) << ", \"args\": {\"name\": \"";
+          str += ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) +
+                 ", \"tid\": " + std::to_string(device_tid) +
+                 ", \"ts\": " + std::to_string(std::get<2>(it->second)) + ", \"args\": {\"name\": \"";
           if (device_logging_no_thread_) {
             if (device_logging_no_engine_) {
-              stream << "CL\"}}";
+              str += "CL\"}}";
             }
             else {
-              stream << "CL Queue<"
-                << it->first.queue_ << ">\"}}"; 
+              char str2[128];
+
+              snprintf(str2, sizeof(str2), "%p", it->first.queue_);
+              str += "CL Queue<" + std::string(str2) + ">\"}}"; 
             }
           }
           else {
             if (device_logging_no_engine_) {
-              stream << "Thread " << it->first.host_tid_ << " CL\"}}"; 
+              str += "Thread " + std::to_string(it->first.host_tid_) + " CL\"}}"; 
             }
             else {
-              stream << "Thread " << it->first.host_tid_ << " CL Queue<"
-                << it->first.queue_ << ">\"}}"; 
+              char str2[128];
+
+              snprintf(str2, sizeof(str2), "%p", it->first.queue_);
+              str += "Thread " + std::to_string(it->first.host_tid_) + " CL Queue<" + std::string(str2) + ">\"}}"; 
             }
           }
         }
     
-        stream << std::endl << "]" << std::endl << "}" << std::endl;
+        str += "\n]\n}\n";
       
-        logger_->Log(stream.str());
+        logger_->Log(str);
         delete logger_;
         std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
       }

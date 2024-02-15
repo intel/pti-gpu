@@ -302,11 +302,9 @@ class UniTracer {
 
     uint64_t total_duration = CalculateTotalFunctionTime(collector);
     if (total_duration > 0) {
-      std::stringstream stream;
-      stream << std::endl;
-      stream << "== " << device_type << " Backend ==" << std::endl;
-      stream << std::endl;
-      correlator_.Log(stream.str());
+      std::string str("\n== ");
+      str += std::string(device_type) + " Backend ==\n\n";
+      correlator_.Log(str);
       collector->PrintFunctionsTable();
     }
   }
@@ -318,11 +316,9 @@ class UniTracer {
 
     uint64_t total_duration = CalculateTotalKernelTime(collector);
     if (total_duration > 0) {
-      std::stringstream stream;
-      stream << std::endl;
-      stream << "== " << device_type << " Backend ==" << std::endl;
-      stream << std::endl;
-      correlator_.Log(stream.str());
+      std::string str("\n== ");
+      str += std::string(device_type) + " Backend ==\n\n";
+      correlator_.Log(str);
       collector->PrintKernelsTable();
     }
   }
@@ -334,11 +330,9 @@ class UniTracer {
 
     uint64_t total_duration = CalculateTotalFunctionTime(collector);
     if (total_duration > 0) {
-      std::stringstream stream;
-      stream << std::endl;
-      stream << "== " << device_type << " Backend ==" << std::endl;
-      stream << std::endl;
-      correlator_.Log(stream.str());
+      std::string str("\n== ");
+      str += std::string(device_type) + " Backend ==\n\n";
+      correlator_.Log(str);
       collector->PrintFunctionsTable();
     }
   }
@@ -350,11 +344,9 @@ class UniTracer {
 
     uint64_t total_duration = CalculateTotalKernelTime(collector);
     if (total_duration > 0) {
-      std::stringstream stream;
-      stream << std::endl;
-      stream << "== " << device_type << " Backend ==" << std::endl;
-      stream << std::endl;
-      correlator_.Log(stream.str());
+      std::string str("\n== ");
+      str += std::string(device_type) + " Backend ==\n\n";
+      correlator_.Log(str);
       collector->PrintKernelsTable();
     }
   }
@@ -366,11 +358,9 @@ class UniTracer {
 
     uint64_t total_duration = CalculateTotalKernelTime(collector);
     if (total_duration > 0) {
-      std::stringstream stream;
-      stream << std::endl;
-      stream << "== " << device_type << " Backend ==" << std::endl;
-      stream << std::endl;
-      correlator_.Log(stream.str());
+      std::string str("\n== ");
+      str += std::string(device_type) + " Backend ==\n\n";
+      correlator_.Log(str);
       collector->PrintSubmissionTable();
     }
   }
@@ -382,11 +372,9 @@ class UniTracer {
 
     uint64_t total_duration = CalculateTotalKernelTime(collector);
     if (total_duration > 0) {
-      std::stringstream stream;
-      stream << std::endl;
-      stream << "== " << device_type << " Backend ==" << std::endl;
-      stream << std::endl;
-      correlator_.Log(stream.str());
+      std::string str("\n== ");
+      str += std::string(device_type) + " Backend ==\n\n";
+      correlator_.Log(str);
       collector->PrintSubmissionTable();
     }
   }
@@ -417,12 +405,13 @@ class UniTracer {
     title_width = std::max(title_width, ze_title.size());
     const size_t time_width = 20;
 
-    std::stringstream stream;
-    stream << std::endl;
-    stream << "=== " << stype << " Timing Summary ===" << std::endl;
-    stream << std::endl;
-    stream << std::setw(title_width) << "Total Execution Time (ns): " <<
-      std::setw(time_width) << total_execution_time_ << std::endl;
+    std::string str("\n=== ");
+    str += stype + " Timing Summary ===\n\n" + 
+           std::string(std::max(int(title_width - sizeof("Total Execution Time (ns): ") + 1), 0), ' ') +
+           "Total Execution Time (ns): " +
+           std::string(std::max(int(time_width - std::to_string(total_execution_time_).length()), 0), ' ') +
+           std::to_string(total_execution_time_) + 
+           "\n";
 
     if (ze_collector != nullptr) {
       uint64_t total_time = 0;
@@ -433,9 +422,9 @@ class UniTracer {
         total_time = CalculateTotalKernelTime(ze_collector);
       }
       if (total_time > 0) {
-        stream << std::setw(title_width) << ze_title <<
-          std::setw(time_width) << total_time <<
-          std::endl;
+        str += std::string(std::max(int(title_width - ze_title.length()), 0), ' ') + ze_title +
+               std::string(std::max(int(time_width - std::to_string(total_time).length()), 0), ' ') + std::to_string(total_time) +
+               "\n";
       }
     }
 
@@ -448,9 +437,9 @@ class UniTracer {
         total_time = CalculateTotalKernelTime(cl_cpu_collector);
       }
       if (total_time > 0) {
-        stream << std::setw(title_width) << cl_cpu_title <<
-          std::setw(time_width) << total_time <<
-          std::endl;
+        str += std::string(std::max(int(title_width - cl_cpu_title.length()), 0), ' ') +  cl_cpu_title +
+               std::string(std::max(int(time_width - std::to_string(total_time).length()), 0), ' ') + std::to_string(total_time) +
+               "\n";
       }
     }
 
@@ -463,13 +452,13 @@ class UniTracer {
         total_time = CalculateTotalKernelTime(cl_gpu_collector);
       }
       if (total_time > 0) {
-        stream << std::setw(title_width) << cl_gpu_title <<
-          std::setw(time_width) << total_time <<
-          std::endl;
+        str += std::string(std::max(int(title_width - cl_gpu_title.length()), 0), ' ') + cl_gpu_title +
+               std::string(std::max(int(time_width - std::to_string(total_time).length()), 0), ' ') + std::to_string(total_time) +
+               "\n";
       }
     }
 
-    correlator_.Log(stream.str());
+    correlator_.Log(str);
 
     if (ze_collector != nullptr) {
       if (stype == "API") {
@@ -522,39 +511,36 @@ class UniTracer {
     title_width = std::max(title_width, ze_title.size());
     const size_t time_width = 20;
 
-    std::stringstream stream;
-    stream << std::endl;
-    stream << "=== Kernel Submission Summary ===" << std::endl;
-    stream << std::endl;
-    stream << std::setw(title_width) << "Total Execution Time (ns): " <<
-      std::setw(time_width) << total_execution_time_ << std::endl;
+    std::string str("\n=== Kernel Submission Summary ===\n\n");
+    str += std::string(std::max(int(title_width - sizeof("Total Execution Time (ns): ") + 1), 0), ' ') + "Total Execution Time (ns): " +
+           std::string(std::max(int(time_width - std::to_string(total_execution_time_).length()), 0), ' ') + std::to_string(total_execution_time_)           + "\n";
 
     if (ze_collector != nullptr) {
       uint64_t total_time = CalculateTotalKernelTime(ze_collector);
       if (total_time > 0) {
-        stream << std::setw(title_width) << ze_title <<
-          std::setw(time_width) << total_time <<
-          std::endl;
+        str += std::string(std::max(int(title_width - ze_title.length()), 0), ' ') + ze_title +
+               std::string(std::max(int(time_width - std::to_string(total_time).length()), 0), ' ') + std::to_string(total_time) +
+               "\n";
       }
     }
     if (cl_cpu_collector != nullptr) {
       uint64_t total_time = CalculateTotalKernelTime(cl_cpu_collector);
       if (total_time > 0) {
-        stream << std::setw(title_width) << cl_cpu_title <<
-          std::setw(time_width) << total_time <<
-          std::endl;
+        str += std::string(std::max(int(title_width - cl_cpu_title.length()), 0), ' ') + cl_cpu_title +
+               std::string(std::max(int(time_width - std::to_string(total_time).length()), 0), ' ') + std::to_string(total_time) +
+               "\n";
       }
     }
     if (cl_gpu_collector != nullptr) {
       uint64_t total_time = CalculateTotalKernelTime(cl_gpu_collector);
       if (total_time > 0) {
-        stream << std::setw(title_width) << cl_gpu_title <<
-          std::setw(time_width) << total_time <<
-          std::endl;
+        str += std::string(std::max(int(title_width - cl_gpu_title.length()), 0), ' ') + cl_gpu_title +
+               std::string(std::max(int(time_width - std::to_string(total_time).length()), 0), ' ') + std::to_string(total_time) +
+               "\n";
       }
     }
 
-    correlator_.Log(stream.str());
+    correlator_.Log(str);
 
     if (ze_collector != nullptr) {
       PrintSubmissionTable(ze_collector, "L0");
@@ -592,58 +578,6 @@ class UniTracer {
           "Device");
     }
     correlator_.Log("\n");
-  }
-
-  static void ZeDeviceTimelineCallback(
-      void* data,
-      const std::string& queue,
-      const std::string& id,
-      const std::string& name,
-      uint64_t appended,
-      uint64_t submitted,
-      uint64_t started,
-      uint64_t ended) {
-    UniTracer* tracer = reinterpret_cast<UniTracer*>(data);
-    PTI_ASSERT(tracer != nullptr);
-
-    std::stringstream stream;
-    if (tracer->CheckOption(TRACE_PID)) {
-      stream << "<PID:" << utils::GetPid() << "> ";
-    }
-    stream << "Device Timeline (queue: " << queue <<
-      "): " << name << "<" << id << "> [ns] = " <<
-      appended << " (append) " <<
-      submitted << " (submit) " <<
-      started << " (start) " <<
-      ended << " (end)" << std::endl;
-
-    tracer->correlator_.Log(stream.str());
-  }
-
-  static void ClDeviceTimelineCallback(
-      void* data,
-      const std::string& queue,
-      const std::string& id,
-      const std::string& name,
-      uint64_t queued,
-      uint64_t submitted,
-      uint64_t started,
-      uint64_t ended) {
-    UniTracer* tracer = reinterpret_cast<UniTracer*>(data);
-    PTI_ASSERT(tracer != nullptr);
-
-    std::stringstream stream;
-    if (tracer->CheckOption(TRACE_PID)) {
-      stream << "<PID:" << utils::GetPid() << "> ";
-    }
-    stream << "Device Timeline (queue: " << queue <<
-      "): " << name << "<" << id << "> [ns] = " <<
-      queued << " (queued) " <<
-      submitted << " (submit) " <<
-      started << " (start) " <<
-      ended << " (end)" << std::endl;
-
-    tracer->correlator_.Log(stream.str());
   }
 
  private:
