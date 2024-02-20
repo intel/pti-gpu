@@ -8,6 +8,7 @@
 
 #include "operation_onednn.h"
 #include "utils.h"
+#include "device_memory.h"
 
 // code as simple as possible for the demo
 namespace {
@@ -15,7 +16,7 @@ inline auto& Conv2dWeightsInstance() {
     static TinyTensor conv2d_weights(0, 0, 0, 0);
     return conv2d_weights;
 }
-} // namespace 
+} // namespace
 
 void onednn_prepare_weights(int oc, int ic, int ks, sycl::queue *q)
 {
@@ -84,6 +85,7 @@ TinyTensor run_onednn_operation_conv2d(const TinyTensor& inp, sycl::queue *q)
     );
 
     dnnl::primitive_attr pattr;
+    pattr.set_scratchpad_mode(dnnl::scratchpad_mode::user);
     auto conv_pd = dnnl::convolution_forward::primitive_desc(
                 eng,
                 dnnl::prop_kind::forward_inference,
@@ -119,21 +121,18 @@ TinyTensor run_onednn_operation_conv2d(const TinyTensor& inp, sycl::queue *q)
     assert(conv_pd.dst_desc() == dst_mem.get_desc());
     assert(conv_pd.weights_desc() == weights_mem.get_desc());
 
-    int scratchpad_size = conv_pd.scratchpad_desc().get_size();
-    static bool warning_shown = false;
-    if (scratchpad_size == 0) {
-        if (!warning_shown) {
-            warning_shown = true;
-            // std::cout << __FILE__ << ":" << __LINE__;
-            // std::cout << " we need a onednn case that scratchpad_size > 0, to verify if it can be allocated within onednn for sycl grapch capture mode" << std::endl;
-        }
-    }
+    dnnl::memory::desc scratchpad_md = conv_pd.scratchpad_desc();
+    auto scratchpad_size = scratchpad_md.get_size();
+    auto* scratchpad_ptr = GlobalDeviceMemoryManager().alloc(scratchpad_size/sizeof(float)+1);
+    dnnl::memory scratchpad(scratchpad_md, eng, scratchpad_ptr);
 
     auto conv = dnnl::convolution_forward(conv_pd);
     conv.execute(s,
                 {{DNNL_ARG_SRC, src_mem},
                  {DNNL_ARG_WEIGHTS, weights_mem},
-                 {DNNL_ARG_DST, dst_mem}});
+                 {DNNL_ARG_DST, dst_mem},
+                 {DNNL_ARG_SCRATCHPAD, scratchpad}});
 
+    GlobalDeviceMemoryManager().free(scratchpad_ptr);
     return outp;
 }

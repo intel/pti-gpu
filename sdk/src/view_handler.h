@@ -146,8 +146,10 @@ struct PtiViewRecordHandler {
   virtual ~PtiViewRecordHandler() {
     overhead::overhead_collection_enabled = false;
     DisableTracing();
-    collector_->DisableTracing();
-    delete collector_;
+    if (collector_) {
+      collector_->DisableTracing();
+      delete collector_;
+    }
     stop_consumer_thread_ = true;
     buffer_queue_.ResetBufferDepth();
     buffer_queue_.Push(ViewBuffer{});  // Stop consumer

@@ -38,9 +38,6 @@ void PrintUsage()
   std::cout << std::endl;
   std::cout << "It is supposed that this application will be updated frequently, so this might be not the latest one." << std::endl;
   std::cout << std::endl;
-#if __LIBSYCL_MAJOR_VERSION >= 7
-  std::cerr << "Notice: A portion of this sample was not build. To build the whole sample, revert to older oneAPI release (<= 2023.2.0)" << std::endl;
-#endif
 }
 
 void run(sycl::queue *q)
