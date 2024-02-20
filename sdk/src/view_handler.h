@@ -668,6 +668,7 @@ inline void SetMemCpyIdsP2P(T& record, const ZeKernelCommandExecutionRecord& rec
 template <typename T>
 inline auto DoCommonMemCopy(bool p2p, const ZeKernelCommandExecutionRecord& rec) {
   T record;
+  utils::Zeroize(record);
 
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY;
   if (p2p) record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;

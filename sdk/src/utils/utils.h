@@ -16,6 +16,7 @@
 #include <unistd.h>
 #endif
 
+#include <cstring>
 #include <stdint.h>
 
 #include <fstream>
@@ -38,6 +39,17 @@
 #define NSEC_IN_SEC 1000000000
 
 namespace utils {
+
+// Duplicated from test/utils --- there are some useful methods there that can be pulled here as
+// needed.
+//-----
+template <typename T>
+inline void Zeroize(T& item) {
+  static_assert(std::is_trivially_copyable<T>::value,
+                "Can't zeroize an object that's not trivially copyable");
+  std::memset(&item, 0, sizeof(T));
+}
+//-----
 
 struct Comparator {
   template <typename T>
