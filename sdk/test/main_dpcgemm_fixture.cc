@@ -25,7 +25,7 @@ bool memory_view_record_created = false;
 bool kernel_view_record_created = false;
 bool kernel_has_sycl_file_info = false;
 bool kernel_has_sycl_enqk_info = false;
-bool kernel_has_nonmonotonic_record = false;
+bool kernel_timestamps_monotonic = false;
 bool kernel_has_task_begin0_record = false;
 bool kernel_has_enqk_begin0_record = false;
 bool demangled_kernel_name = false;
@@ -150,7 +150,7 @@ class MainFixtureTest : public ::testing::Test {
     kernel_view_record_created = false;
     kernel_has_sycl_file_info = false;
     kernel_has_sycl_enqk_info = false;
-    kernel_has_nonmonotonic_record = false;
+    kernel_timestamps_monotonic = false;
     kernel_has_task_begin0_record = false;
     kernel_has_enqk_begin0_record = false;
     memory_bytes_copied = 0;
@@ -289,16 +289,19 @@ class MainFixtureTest : public ::testing::Test {
           if (kernel_enqueue_ts > 0) kernel_has_sycl_enqk_info = true;
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
-          if (not(reinterpret_cast<pti_view_record_kernel*>(ptr)->_sycl_task_begin_timestamp <
-                  reinterpret_cast<pti_view_record_kernel*>(ptr)->_sycl_enqk_begin_timestamp <
-                  reinterpret_cast<pti_view_record_kernel*>(ptr)->_append_timestamp <
-                  reinterpret_cast<pti_view_record_kernel*>(ptr)->_submit_timestamp <
-                  reinterpret_cast<pti_view_record_kernel*>(ptr)->_start_timestamp <
-                  reinterpret_cast<pti_view_record_kernel*>(ptr)->_end_timestamp))
-            kernel_has_nonmonotonic_record = true;
-          if (reinterpret_cast<pti_view_record_kernel*>(ptr)->_sycl_task_begin_timestamp == 0)
+          kernel_timestamps_monotonic = samples_utils::isMonotonic(
+                                  {
+                                    rec->_sycl_task_begin_timestamp ,
+                                    rec->_sycl_enqk_begin_timestamp ,
+                                    rec->_append_timestamp ,
+                                    rec->_submit_timestamp ,
+                                    rec->_start_timestamp ,
+                                    rec->_end_timestamp
+                                  }
+                                );
+          if (rec->_sycl_task_begin_timestamp == 0)
             kernel_has_task_begin0_record = true;
-          if (reinterpret_cast<pti_view_record_kernel*>(ptr)->_sycl_enqk_begin_timestamp == 0)
+          if (rec->_sycl_enqk_begin_timestamp == 0)
             kernel_has_enqk_begin0_record = true;
           if (samples_utils::stringify_uuid(rec->_device_uuid, "") !=
               "00000000-0000-0000-0000-000000000000")
@@ -435,7 +438,7 @@ TEST_F(MainFixtureTest, KernelViewRecordHasSyclPiEnqLaunchKernel) {
 TEST_F(MainFixtureTest, KernelViewRecordHasMonotonicRecords) {
   ptiViewSetCallbacks(BufferRequested, BufferCompleted);
   RunGemm();
-  EXPECT_EQ(kernel_has_nonmonotonic_record, false);
+  EXPECT_EQ(kernel_timestamps_monotonic, true);
 }
 
 TEST_F(MainFixtureTest, KernelViewRecordHasNonZeroTaskBeginRecords) {

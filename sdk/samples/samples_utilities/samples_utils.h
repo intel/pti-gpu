@@ -12,6 +12,23 @@
 
 namespace samples_utils {
 
+//
+// Returns:    True  - if a_list passed in is a monotonically increasing sequence.
+//             False - if not.
+// Assumption: Operator <= is well defined for this type already.
+//
+template<typename T>
+inline bool isMonotonic(std::initializer_list<T> a_list) {
+  bool current_state=true;
+  T previous=a_list.begin()[0];
+  for (auto item: a_list) {
+    current_state = current_state && (previous <= item);
+    if (!current_state) return false;
+    previous=item;
+  }
+  return true;
+}
+
 std::string stringify_uuid(uint8_t* uuid, std::string additional_string) {
   std::stringstream sstream;
   sstream << additional_string;
@@ -26,7 +43,7 @@ std::string stringify_uuid(uint8_t* uuid, std::string additional_string) {
 }
 
 void print_uuid(uint8_t* uuid, std::string additional_string) {
-  std::cout << stringify_uuid(uuid,additional_string) << std::endl;
+  std::cout << stringify_uuid(uuid,std::move(additional_string)) << std::endl;
 }
 
 void dump_record(pti_view_record_kernel* record) {

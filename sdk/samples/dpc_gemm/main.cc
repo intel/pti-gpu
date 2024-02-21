@@ -213,53 +213,37 @@ int main(int argc, char *argv[]) {
               break;
             }
             case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
+              pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Kernel Record" << '\n';
-              samples_utils::dump_record(
-                  reinterpret_cast<pti_view_record_kernel *>(ptr));
+              samples_utils::dump_record(rec);
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
-              if (((reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_sycl_task_begin_timestamp) <=
-                   (reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_sycl_enqk_begin_timestamp)) &&
-
-                  ((reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_sycl_enqk_begin_timestamp) <=
-                   (reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_append_timestamp)) &&
-
-                  ((reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_append_timestamp) <=
-                   (reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_submit_timestamp)) &&
-
-                  ((reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_submit_timestamp) <=
-                   (reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_start_timestamp)) &&
-
-                  ((reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_start_timestamp) <=
-                   (reinterpret_cast<pti_view_record_kernel *>(ptr)
-                        ->_end_timestamp))) {
+              if (samples_utils::isMonotonic(
+                                  {
+                                    rec->_sycl_task_begin_timestamp ,
+                                    rec->_sycl_enqk_begin_timestamp ,
+                                    rec->_append_timestamp ,
+                                    rec->_submit_timestamp ,
+                                    rec->_start_timestamp ,
+                                    rec->_end_timestamp
+                                  }
+                                )) {
                 std::cout << "------------>     All Monotonic" << std::endl;
               } else {
                 std::cerr
                     << "------------>     Something wrong: NOT All monotonic"
                     << std::endl;
               }
-              if (reinterpret_cast<pti_view_record_kernel *>(ptr)
-                      ->_sycl_task_begin_timestamp == 0) {
+              if (rec->_sycl_task_begin_timestamp == 0) {
                 std::cerr << "------------>     Something wrong: Sycl Task "
                              "Begin Time is 0"
                           << std::endl;
               }
-              if (reinterpret_cast<pti_view_record_kernel *>(ptr)
-                      ->_sycl_enqk_begin_timestamp == 0) {
+              if (rec->_sycl_enqk_begin_timestamp == 0) {
                 std::cerr << "------------>     Something wrong: Sycl Enq "
                              "Launch Kernel Time is 0"
                           << std::endl;
