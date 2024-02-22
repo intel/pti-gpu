@@ -84,18 +84,29 @@ if(HAVE_SYCL)
   target_link_libraries(mem_ops_test PUBLIC Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
 
-  gtest_discover_tests(dpcgemm_suite PROPERTIES LABELS "unit")
+  gtest_discover_tests(
+    dpcgemm_suite
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS "unit")
+
   gtest_discover_tests(
     mem_ops_test
+    DISCOVERY_TIMEOUT 60
     TEST_LIST MEM_OPS_TEST_LIST
     PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
     PROPERTIES LABELS "unit" )
-  gtest_discover_tests(vecsqadd_suite PROPERTIES LABELS "functional")
+
+  gtest_discover_tests(
+    vecsqadd_suite
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS "functional")
+
   gtest_discover_tests(
     no_kernel_overlap
+    DISCOVERY_TIMEOUT 60
     TEST_LIST TIMESTAMPS_CORRECTNESS_LIST
     PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
-  PROPERTIES LABELS "functional")
+    PROPERTIES LABELS "functional")
 endif()
 
 add_executable(zegemm_suite main_zegemm_fixture.cc)
@@ -162,14 +173,17 @@ target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_ma
 
 gtest_discover_tests(
   zegemm_suite
+  DISCOVERY_TIMEOUT 60
   TEST_LIST ZEGEMM_SUITE_TEST_LIST
   PROPERTIES LABELS "unit")
 gtest_discover_tests(
   view_record_test
+  DISCOVERY_TIMEOUT 60
   TEST_LIST VIEW_RECORD_TEST_LIST
   PROPERTIES LABELS "unit")
 gtest_discover_tests(
   assert_exception_test
+  DISCOVERY_TIMEOUT 60
   TEST_LIST ASSERT_EXCEPTION_TEST_LIST
   PROPERTIES LABELS "unit")
 

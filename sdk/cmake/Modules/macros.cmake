@@ -997,20 +997,18 @@ macro(GetSpdlog)
       URL_HASH
       SHA256=78B8C0A72B1C35E4443A7E308DF52498252D1CEFC2B08C9A97BC9EE6CFE61F8B
     )
-    set(FMT_SYSTEM_HEADERS
-        ON
-        CACHE BOOL "" FORCE)
-    set(FMT_INSTALL
-        OFF
-        CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(fmt)
-
     FetchContent_Declare(
       spdlog
       URL https://github.com/gabime/spdlog/archive/refs/tags/v1.12.0.tar.gz
       URL_HASH
       SHA256=4DCCF2D10F410C1E2FEAFF89966BFC49A1ABB29EF6F08246335B110E001E09A9
       )
+    set(FMT_SYSTEM_HEADERS
+        ON
+        CACHE BOOL "" FORCE)
+    set(FMT_INSTALL
+        OFF
+        CACHE BOOL "" FORCE)
     set(SPDLOG_FMT_EXTERNAL_HO
         ON
         CACHE BOOL "" FORCE)
@@ -1020,7 +1018,7 @@ macro(GetSpdlog)
     set(SPDLOG_BUILD_WARNINGS
         OFF
         CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(spdlog)
+    FetchContent_MakeAvailable(fmt spdlog)
   endif()
 endmacro()
 
@@ -1029,9 +1027,9 @@ macro(GetGTest)
     include(FetchContent)
     FetchContent_Declare(
       googletest
-      URL https://github.com/google/googletest/archive/refs/tags/v1.13.0.tar.gz
+      URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
       URL_HASH
-      SHA256=AD7FDBA11EA011C1D925B3289CF4AF2C66A352E18D4C7264392FEAD75E919363
+      SHA256=8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7
       )
     set(INSTALL_GTEST
         OFF
@@ -1040,12 +1038,6 @@ macro(GetGTest)
         ON
         CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
-    set(EXTRA_COMPILE_OPTIONS
-        "$<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-tautological-constant-compare>")
-    set_target_properties(gtest PROPERTIES COMPILE_OPTIONS
-                                           "${EXTRA_COMPILE_OPTIONS}")
-    set_target_properties(gtest_main PROPERTIES COMPILE_OPTIONS
-                                                "${EXTRA_COMPILE_OPTIONS}")
   endif()
 endmacro()
 
