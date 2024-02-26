@@ -238,7 +238,7 @@ class ZeMetricProfiler {
         filename = filename + logfile.substr(pos);
       }
 
-      log_name_ = filename;
+      log_name_ = std::move(filename);
     }
     else {
       log_name_ = logfile;
