@@ -242,6 +242,7 @@ class ResultReader {
     file_.read( // Metic Group Name Size
         reinterpret_cast<char*>(&metric_group_size),
         sizeof(size_t));
+    PTI_ASSERT(metric_group_size < FILENAME_MAX);
 
     std::vector<char> metric_group(metric_group_size);
     file_.read( // Metric Group Name
