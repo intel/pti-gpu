@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "ze_utils.h"
+#include "metric_utils.h"
 
 enum CollectorState {
   COLLECTOR_STATE_IDLE = 0,
@@ -32,6 +33,11 @@ class ZeMetricCollector {
     PTI_ASSERT(driver != nullptr);
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(group_name != nullptr);
+
+    if(!utils::metrics::SufficientPrivilegesForMetrics()) {
+      std::cerr << "[WARNING] Insufficent or indeterminate privileges for perf "
+        << "metrics" << std::endl;
+    }
 
     zet_metric_group_handle_t group = utils::ze::FindMetricGroup(
         device, group_name, ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED);

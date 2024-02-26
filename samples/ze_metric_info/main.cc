@@ -9,6 +9,7 @@
 
 #include "utils.h"
 #include "ze_utils.h"
+#include "metric_utils.h"
 
 static void PrintMetricsInfo(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);

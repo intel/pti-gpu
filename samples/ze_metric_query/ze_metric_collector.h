@@ -15,6 +15,7 @@
 
 #include <level_zero/layers/zel_tracing_api.h>
 
+#include "metric_utils.h"
 #include "ze_utils.h"
 
 #define MAX_KERNEL_COUNT 16384
@@ -47,6 +48,11 @@ class ZeMetricCollector {
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(group_name != nullptr);
     PTI_ASSERT(max_kernel_count > 0);
+
+    if(!utils::metrics::SufficientPrivilegesForMetrics()) {
+      std::cerr << "[WARNING] Insufficent or indeterminate privileges for perf "
+        << "metrics" << std::endl;
+    }
 
     zet_metric_group_handle_t group = utils::ze::FindMetricGroup(
         device, group_name, ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED);

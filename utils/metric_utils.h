@@ -12,6 +12,9 @@
 #else
 #include <cerrno>
 #include <dlfcn.h>
+#include <fstream>
+#include <iterator>
+#include <algorithm>
 #endif
 
 #include <memory>
@@ -22,6 +25,27 @@
 
 namespace utils {
 namespace metrics {
+
+inline constexpr const char* const kProcFilePerfLocation =
+  "/proc/sys/dev/i915/perf_stream_paranoid";
+
+using ProcFileResultType = char;
+inline constexpr ProcFileResultType kProcFileExpectedValue = '0';
+inline constexpr ProcFileResultType kProcFileBadValue = '1';
+
+inline bool SufficientPrivilegesForMetrics() {
+#if defined(__gnu_linux__)
+  std::ifstream setting {kProcFilePerfLocation};
+  if (setting.fail()) {
+    return false;
+  }
+  auto value = kProcFileBadValue;
+  std::copy_n(std::istream_iterator<char>(setting), sizeof value, &value);
+
+  return value == kProcFileExpectedValue;
+#endif
+  return true;
+}
 
 inline std::vector<std::string> GetMDLibraryName() {
 #if defined(_WIN32)
