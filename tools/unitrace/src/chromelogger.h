@@ -485,11 +485,11 @@ class TraceBuffer {
     }
 
     void FlushDeviceBuffer() {
+      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       if (device_event_buffer_flushed_) {
         return;
       }
 
-      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       for (int i = 0; i < current_device_event_buffer_slice_; i++) {
         for (int j = 0; j < slice_capacity_; j++) {
           FlushDeviceEvent(device_event_buffer_[i][j]);
@@ -573,11 +573,11 @@ class TraceBuffer {
     }
 
     void FlushHostBuffer() {
+      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       if (host_event_buffer_flushed_) {
         return;
       }
 
-      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       for (int i = 0; i < current_host_event_buffer_slice_; i++) {
         for (int j = 0; j < slice_capacity_; j++) {
           FlushHostEvent(host_event_buffer_[i][j]);
@@ -714,11 +714,11 @@ class ClTraceBuffer {
     uint32_t GetPid() { return pid_; }
 
     void FlushBuffer() {
+      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       if (flushed_) {
         return;
       }
 
-      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       for(auto& ele : buffer_) {
         logger_->Log(ele.Stringify());
       }

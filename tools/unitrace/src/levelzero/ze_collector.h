@@ -1496,6 +1496,7 @@ class ZeCollector {
   }
 
   void InitializeKernelCommandProperties(void) {
+    kernel_command_properties_mutex_.lock();
     if (active_command_properties_ == nullptr) {
       active_command_properties_ = new std::map<uint64_t, ZeKernelCommandProperties>;
       UniMemory::ExitIfOutOfMemory((void *)(active_command_properties_));
@@ -1527,6 +1528,7 @@ class ZeCollector {
       active_command_properties_->insert({uint64_t(i), std::move(desc)});
       kernel_command_properties_->insert({desc2.id_, std::move(desc2)});
     }
+    kernel_command_properties_mutex_.unlock();
   }
 
   void EnumerateAndSetupDevices() {

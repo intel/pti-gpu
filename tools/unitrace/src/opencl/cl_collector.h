@@ -1196,7 +1196,7 @@ class ClCollector {
     ClKernelInstance* instance = new ClKernelInstance;
     PTI_ASSERT(instance != nullptr);
     instance->event = *event;
-    instance->props.name = name;
+    instance->props.name = std::move(name);
 
     instance->props.simd_width = 0;
     instance->props.bytes_transferred = bytes_transferred;
