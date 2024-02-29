@@ -1223,9 +1223,10 @@ class ZeCollector {
       correlator_->Log(str);
   
       i = -1; 
+      kernel_command_properties_mutex_.lock_shared();
       for (auto& it : sorted_list) {
         ++i;
-        auto kit = kernel_command_properties_->find(it.first.kernel_command_id_);
+        const auto kit = kernel_command_properties_->find(it.first.kernel_command_id_);
         if (kit == kernel_command_properties_->end()) {
           continue;
         }
@@ -1245,6 +1246,7 @@ class ZeCollector {
           std::to_string(kit->second.spill_mem_size_) + "\n";
         correlator_->Log(str);
       }
+      kernel_command_properties_mutex_.unlock_shared();
     }
 
     global_device_time_stats_mutex_.unlock();
