@@ -172,7 +172,7 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--sampling-interval [-i] <interval> " <<
-    "Hardware performance metric sampling interval in us (default is 1000 us) in time-based mode" <<
+    "Hardware performance metric sampling interval in us (default is 100 us) in time-based mode" <<
     std::endl;
   std::cout <<
     "--device-list                  " <<
@@ -428,16 +428,16 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_MetricGroup", "ComputeBasic");
     }
 
-    // default sampling interval is 1000 us
+    // default sampling interval is 100 us
     // does not hurt to set UNITRACE_SamplingInterval in query mode
     if (utils::GetEnv("UNITRACE_SamplingInterval").empty()) {
-      utils::SetEnv("UNITRACE_SamplingInterval", "1000");
+      utils::SetEnv("UNITRACE_SamplingInterval", "100");
     }
   }
 
   if (!utils::GetEnv("UNITRACE_SamplingInterval").empty() || !utils::GetEnv("UNITRACE_MetricGroup").empty()) {
     if (utils::GetEnv("UNITRACE_DeviceTiming").empty() && utils::GetEnv("UNITRACE_ChromeKernelLogging").empty() && utils::GetEnv("UNITRACE_ChromeDeviceLogging").empty()) {
-      std::cerr << "[ERROR] No time-based hardware performance metric sampling option (-m/-k/--stall-sampling) specified" << std::endl;
+      std::cerr << "[ERROR] No time-based hardware performance metric sampling option (-k/--stall-sampling) specified" << std::endl;
     }
   }
 
@@ -493,7 +493,8 @@ void SetSysmanEnvironment() {
 
 void EnableProfiling(char *dir, std::string& logfile) {
   if (zeInit(ZE_INIT_FLAG_GPU_ONLY) != ZE_RESULT_SUCCESS) {
-    std::cout << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
+    std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
+    std::cerr << "Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
     exit(-1);
   }
   metric_profiler = ZeMetricProfiler::Create(dir, logfile);
@@ -516,7 +517,7 @@ void CleanUp(int sig) {
     std::filesystem::remove_all(e.path());
   }
   if (remove(data_dir)) {
-    std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it.";
+    std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
   }
   _Exit(-1);
 }
@@ -574,10 +575,10 @@ int main(int argc, char *argv[]) {
   int app_index = ParseArgs(argc, argv);
   if (app_index <= 0 || app_index >= argc) {
     if (app_index >= argc) {
-      std::cout << "[ERROR] Application is missing" << std::endl;
+      std::cerr << "[ERROR] Application is missing" << std::endl;
       Usage(argv[0]);
     } else if (app_index < 0) {
-      std::cout << "[ERROR] Invalid command line" << std::endl;
+      std::cerr << "[ERROR] Invalid command line" << std::endl;
       Usage(argv[0]);
     }
     return 0;
@@ -627,7 +628,7 @@ int main(int argc, char *argv[]) {
 
     data_dir = mkdtemp(pattern);
     if (data_dir == nullptr) {
-      std::cout << "[ERROR] Failed to create data folder" << std::endl;
+      std::cerr << "[ERROR] Failed to create data folder" << std::endl;
       exit(-1);
     }
 
@@ -652,7 +653,7 @@ int main(int argc, char *argv[]) {
       // child process
       utils::SetEnv("UNITRACE_DataDir", data_dir);
       if (execvp(app_args[0], app_args.data())) {
-        std::cout << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
+        std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
         Usage(argv[0]);
        
         std::_Exit(-1);
@@ -668,10 +669,10 @@ int main(int argc, char *argv[]) {
         std::filesystem::remove_all(e.path());
       }
       if (remove(data_dir)) {
-        std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it.";
+        std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
       }
     } else {
-      std::cout << "[ERROR] Failed to create child process" << std::endl;
+      std::cerr << "[ERROR] Failed to create child process" << std::endl;
       DisableProfiling();
       for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir))) {
         std::filesystem::remove_all(e.path());
@@ -681,7 +682,7 @@ int main(int argc, char *argv[]) {
   }
   else {
     if (execvp(app_args[0], app_args.data())) {
-      std::cout << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
+      std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
       Usage(argv[0]);
     }
   }

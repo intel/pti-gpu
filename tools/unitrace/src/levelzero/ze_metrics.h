@@ -1014,7 +1014,7 @@ class ZeMetricProfiler {
     zet_metric_streamer_desc_t streamer_desc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr, MAX_METRIC_SAMPLES, interval};
     status = zetMetricStreamerOpen(context, device, group, &streamer_desc, event, &streamer);
     if (status != ZE_RESULT_SUCCESS) {
-      std::cerr << "[ERROR] Failed to open metric streamer (" << status << ")" << std::endl;
+      std::cerr << "[ERROR] Failed to open metric streamer (" << status << "). The sampling interval might be too small." << std::endl;
 
       status = zeEventDestroy(event);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
