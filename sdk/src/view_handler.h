@@ -6,22 +6,19 @@
 #ifndef SRC_API_VIEW_HANDLER_H_
 #define SRC_API_VIEW_HANDLER_H_
 
-#include <array>
 #include <atomic>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdio>
 #include <functional>
-#include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <unordered_map>
 
 #include "common.h"
+#include "consumer_thread.h"
 #include "default_buffer_callbacks.h"
 #include "pti_view.h"
 #include "spdlog/spdlog.h"
@@ -106,7 +103,6 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
   return result->second;
 }
 
-constexpr auto kDefaultBufferQueueDepth = 50UL;
 inline static std::atomic<bool> external_collection_enabled = false;
 
 struct PtiViewRecordHandler {
@@ -121,14 +117,6 @@ struct PtiViewRecordHandler {
   PtiViewRecordHandler()
       : get_new_buffer_(pti::view::defaults::DefaultBufferAllocation),
         deliver_buffer_(pti::view::defaults::DefaultRecordParser) {
-    // Set queue depth based on number of hardware threads supported.
-    constexpr auto kBufQueueDepthMult = 2UL;
-    const auto threads_supported = std::thread::hardware_concurrency();
-    if (threads_supported) {
-      buffer_queue_.SetBufferDepth(kBufQueueDepthMult * threads_supported);
-    }
-    buffer_consumer_ = std::thread(&PtiViewRecordHandler::BufferConsumer, this);
-
     if (!collector_) {
       CollectorOptions collector_options;
       collector_options.kernel_tracing = true;
@@ -150,28 +138,18 @@ struct PtiViewRecordHandler {
       collector_->DisableTracing();
       delete collector_;
     }
-    stop_consumer_thread_ = true;
-    buffer_queue_.ResetBufferDepth();
-    buffer_queue_.Push(ViewBuffer{});  // Stop consumer
-    if (buffer_consumer_.joinable()) {
-      buffer_consumer_.join();
-    }
-  }
-
-  void BufferConsumer() {
-    while (!stop_consumer_thread_) {
-      auto consume_buffer = buffer_queue_.Pop();
-      if (!consume_buffer.IsNull()) {
-        DeliverBuffer(std::move(consume_buffer));
-      }
-    }
   }
 
   inline pti_result FlushBuffers() {
-    view_buffers_.ForEach(
-        [this](const auto&, auto&& buffer) { buffer_queue_.Push(std::move(buffer)); });
+    auto result = consumer_.Push([this]() mutable {
+      view_buffers_.ForEach([this](const auto&, auto&& buffer) {
+        if (!buffer.IsNull()) {
+          DeliverBuffer(std::move(buffer));
+        }
+      });
+    });
 
-    buffer_queue_.WaitUntilEmptyOr(stop_consumer_thread_);
+    result.wait();
 
     return PTI_SUCCESS;
   }
@@ -193,8 +171,11 @@ struct PtiViewRecordHandler {
       // There's space to insert more records. No need for swap.
       return;
     }
-
-    buffer_queue_.Push(std::move(buffer));
+    consumer_.PushAndForget([this, buffer = std::move(buffer)]() mutable {
+      if (!buffer.IsNull()) {
+        DeliverBuffer(std::move(buffer));
+      }
+    });
   }
 
   inline pti_result RegisterBufferCallbacks(AskForBufferEvent&& get_new_buf,
@@ -413,11 +394,8 @@ struct PtiViewRecordHandler {
     collection_enabled_ = false;
   }
   ZeCollector* collector_ = nullptr;
-  std::atomic<bool> flush_operation_ = false;
-  std::atomic<bool> stop_consumer_thread_ = false;
   std::atomic<bool> collection_enabled_ = false;
   std::atomic<bool> callbacks_set_ = false;
-  ViewBufferQueue buffer_queue_ = ViewBufferQueue{kDefaultBufferQueueDepth};
   AskForBufferEvent get_new_buffer_;
   ReturnBufferEvent deliver_buffer_;
   mutable std::mutex get_new_buffer_mtx_;
@@ -425,7 +403,7 @@ struct PtiViewRecordHandler {
   ViewEventTable view_event_map_;
   KernelNameStorageQueue kernel_name_storage_;
   ViewBufferTable view_buffers_;
-  std::thread buffer_consumer_;
+  pti::view::BufferConsumer consumer_ = {};  // Starts thread
 };
 
 // Required to access buffer from ze_collector callbacks
