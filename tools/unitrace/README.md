@@ -145,6 +145,8 @@ The **"Private Memory Per Thread"** is the private memory allocated for each thr
 
 The **"Spill Memory Per Thread"** is the memory used for register spilled for each thread in bytes. A non-zero value indicates that one or more thread private variables are allocated in registers but are later spilled to memory.
 
+In addition, the **"Compiled"** indicates the kernel compilation mode: just-in-time(JIT) or ahead-of-time(AOT). 
+
 By default, the kernel timing is summarized regardless of shapes. In case the kernel has different shapes, using **-v** along with **-d** is strongly recommended:
 
 ![Device Timing!](/tools/unitrace/doc/images/device-timing.png)

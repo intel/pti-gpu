@@ -926,6 +926,7 @@ struct ZeKernelCommandProperties {
   uint32_t spill_mem_size_;	// spill memory size for each thread
   ZeKernelGroupSize group_size_;	// group size
   ZeKernelCommandType type_;
+  bool aot_;		// AOT or JIT
   std::string name_;	// kernel or command name
 };
 
@@ -935,8 +936,14 @@ static std::map<uint64_t, ZeKernelCommandProperties> *kernel_command_properties_
 static std::map<ze_kernel_handle_t, ZeKernelCommandProperties> *active_kernel_properties_ = nullptr;
 static std::map<uint64_t, ZeKernelCommandProperties> *active_command_properties_ = nullptr;
 
+struct ZeModule {
+  ze_device_handle_t device_;
+  size_t size_;
+  bool aot_;	// AOT or JIT
+};
+
 static std::shared_mutex modules_on_devices_mutex_;
-static std::map<ze_module_handle_t, std::pair<ze_device_handle_t, size_t>> modules_on_devices_; //module to <device, native binary size> map
+static std::map<ze_module_handle_t, ZeModule> modules_on_devices_; //module to ZeModule map
 
 struct ZeDevice {
   ze_device_handle_t device_;
@@ -1219,14 +1226,13 @@ class ZeCollector {
       
       str = "\n\n=== Kernel Properties ===\n\n";
       str = str + std::string(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ') +
-        "Kernel,  Number of Arguments,  SLM Per Work Group,  Private Memory Per Thread,  Spill Memory Per Thread\n";
+        "Kernel, Compiled, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread\n";
       correlator_->Log(str);
   
       i = -1; 
-      kernel_command_properties_mutex_.lock_shared();
       for (auto& it : sorted_list) {
         ++i;
-        const auto kit = kernel_command_properties_->find(it.first.kernel_command_id_);
+        auto kit = kernel_command_properties_->find(it.first.kernel_command_id_);
         if (kit == kernel_command_properties_->end()) {
           continue;
         }
@@ -1235,18 +1241,19 @@ class ZeCollector {
         }
         
         str = std::string(std::max(int(max_name_size - knames[i].length()), 0), ' ');
-        str = str + knames[i] + ", " +
+        str = str + knames[i] + "," +
+          std::string(sizeof("Compiled") - sizeof("AOT") + 1, ' ') +
+          (kit->second.aot_ ? "AOT" : "JIT") + "," +
           std::string(std::max(int(sizeof("Number of Arguments") - std::to_string(kit->second.nargs_).length()), 0), ' ') +
-          std::to_string(kit->second.nargs_) + ", " +
+          std::to_string(kit->second.nargs_) + "," +
           std::string(std::max(int(sizeof("SLM Per Work Group") - std::to_string(kit->second.slmsize_).length()), 0), ' ') + 
-          std::to_string(kit->second.slmsize_) + ", " +
+          std::to_string(kit->second.slmsize_) + "," +
           std::string(std::max(int(sizeof("Private Memory Per Thread") - std::to_string(kit->second.private_mem_size_).length()), 0), ' ') + 
-          std::to_string(kit->second.private_mem_size_) + ", " +
+          std::to_string(kit->second.private_mem_size_) + "," +
           std::string(std::max(int(sizeof("Spill Memory Per Thread") - std::to_string(kit->second.spill_mem_size_).length()), 0), ' ') +
           std::to_string(kit->second.spill_mem_size_) + "\n";
         correlator_->Log(str);
       }
-      kernel_command_properties_mutex_.unlock_shared();
     }
 
     global_device_time_stats_mutex_.unlock();
@@ -3846,8 +3853,15 @@ class ZeCollector {
       if (zeModuleGetNativeBinary(mod, &binary_size, nullptr) != ZE_RESULT_SUCCESS) {
         binary_size = (size_t)(-1);
       }
+
+      ZeModule m;
+      
+      m.device_ = device;
+      m.size_ = binary_size;
+      m.aot_ = (*(params->pdesc))->format;
+    
       modules_on_devices_mutex_.lock();
-      modules_on_devices_.insert({mod, {device, binary_size}});
+      modules_on_devices_.insert({mod, std::move(m)});
       modules_on_devices_mutex_.unlock();
     }
   }
@@ -3868,11 +3882,13 @@ class ZeCollector {
       ze_module_handle_t mod = *(params->phModule);
       ze_device_handle_t device = nullptr;
       size_t module_binary_size = (size_t)(-1);
+      bool aot = false;
       modules_on_devices_mutex_.lock_shared();
       auto mit = modules_on_devices_.find(mod);
       if (mit != modules_on_devices_.end()) {
-        device = mit->second.first; 
-        module_binary_size = mit->second.second;
+        device = mit->second.device_; 
+        module_binary_size = mit->second.size_;
+        aot = mit->second.aot_;
       }
       modules_on_devices_mutex_.unlock_shared();
 
@@ -3895,6 +3911,7 @@ class ZeCollector {
       ZeKernelCommandProperties desc;
 
       desc.type_ = KERNEL_COMMAND_TYPE_COMPUTE;
+      desc.aot_ = aot;
 
       ze_result_t status;
 
