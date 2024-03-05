@@ -7,7 +7,7 @@
 #include <thread>
 #include <vector>
 
-#include "pti_view.h"
+#include "pti/pti_view.h"
 #include "utils/test_helpers.h"
 #include "view_handler.h"
 

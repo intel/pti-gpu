@@ -8,7 +8,7 @@
 #define INTERNAL_HELPER_H_
 #include <type_traits>
 
-#include "pti_view.h"
+#include "pti/pti_view.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 /// @brief Helper functions to detect wrong value converted to specific enum

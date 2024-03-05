@@ -10,8 +10,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "pti_export.h"
-#include "pti_version.h"
+#include "pti/pti_export.h"
+#include "pti/pti_version.h"
 
 #if defined(__cplusplus)
 extern "C" {

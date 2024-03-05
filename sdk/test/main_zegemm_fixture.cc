@@ -14,7 +14,7 @@
 #include <iostream>
 #include <vector>
 
-#include "pti_view.h"
+#include "pti/pti_view.h"
 #include "utils.h"
 #include "utils/test_helpers.h"
 #include "ze_utils.h"

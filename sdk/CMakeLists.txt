@@ -58,7 +58,7 @@ endif()
 
 include(GNUInstallDirs)
 set(PTI_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/pti")
-set(PTI_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}/pti")
+set(PTI_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}")
 set(PTI_INSTALL_LIB_DIR "${CMAKE_INSTALL_LIBDIR}")
 set(PTI_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
 set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
@@ -107,8 +107,8 @@ set(PTI_DEFINE_FLAGS_EXPR
     $<$<CXX_COMPILER_ID:GNU>:$<$<NOT:$<BOOL:${PTI_SANITIZE}>>:_FORTIFY_SOURCE=2>>
 )
 
-configure_file(${PROJECT_SOURCE_DIR}/include/pti_version.h.in
-               ${PROJECT_BINARY_DIR}/include/pti_version.h)
+configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
+               ${PROJECT_BINARY_DIR}/include/pti/pti_version.h)
 
 # https://cmake.org/cmake/help/latest/guide/importing-exporting/index.html
 add_library(pti SHARED "${PROJECT_SOURCE_DIR}/src/pti.cc")
@@ -117,7 +117,7 @@ add_library(Pti::pti ALIAS pti)
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
 include(GenerateExportHeader)
-generate_export_header(pti)
+generate_export_header(pti EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/include/pti/pti_export.h)
 
 target_include_directories(
   pti
@@ -240,13 +240,12 @@ if(PTI_INSTALL)
     COMPONENT Pti_Runtime
     )
 
-  install(FILES "${PROJECT_BINARY_DIR}/pti_export.h"
-          DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
-          COMPONENT Pti_Development)
 
-  install(FILES "${PROJECT_BINARY_DIR}/include/pti_version.h"
+  install(DIRECTORY "${PROJECT_BINARY_DIR}/include/pti"
           DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
-          COMPONENT Pti_Development)
+          COMPONENT Pti_Development
+          FILES_MATCHING PATTERN "*.h"
+          )
 
   install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/"
           DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"

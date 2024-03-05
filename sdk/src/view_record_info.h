@@ -9,7 +9,7 @@
 #include <array>
 #include <cstddef>
 
-#include "pti_view.h"
+#include "pti/pti_view.h"
 
 inline constexpr auto kReserved = 0;
 inline constexpr auto kLastViewRecordEnumValue = PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;

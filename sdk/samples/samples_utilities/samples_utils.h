@@ -8,7 +8,7 @@
 #include <iomanip>
 #include <iostream>
 
-#include "pti_view.h"
+#include "pti/pti_view.h"
 
 namespace samples_utils {
 

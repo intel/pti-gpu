@@ -13,7 +13,7 @@
 #include "model_mixedprogramming.h"
 #include "utils.h"
 #include "operation_onednn.h"
-#include "pti_view.h"
+#include "pti/pti_view.h"
 #include "samples_utils.h"
 
 void PrintUsage()

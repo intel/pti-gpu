@@ -10,7 +10,7 @@
 #include <sycl/sycl.hpp>
 #include <vector>
 
-#include "pti_view.h"
+#include "pti/pti_view.h"
 #include "utils.h"
 
 using namespace sycl;

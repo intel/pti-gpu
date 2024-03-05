@@ -10,7 +10,7 @@
 #include <cstdlib>
 #include <memory>
 
-#include "pti_view.h"
+#include "pti/pti_view.h"
 #include "utils.h"
 #include "samples_utils.h"
 

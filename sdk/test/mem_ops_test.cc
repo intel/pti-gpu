@@ -6,7 +6,7 @@
 #include <thread>
 #include <vector>
 
-#include "pti_view.h"
+#include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
 

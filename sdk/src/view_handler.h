@@ -20,7 +20,7 @@
 #include "common.h"
 #include "consumer_thread.h"
 #include "default_buffer_callbacks.h"
-#include "pti_view.h"
+#include "pti/pti_view.h"
 #include "spdlog/spdlog.h"
 
 #if defined(PTI_TRACE_SYCL)

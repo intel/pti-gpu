@@ -5,7 +5,7 @@
 #include <sycl/sycl.hpp>
 #include <tuple>
 
-#include "pti_view.h"
+#include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
 #include "ze_utils.h"
