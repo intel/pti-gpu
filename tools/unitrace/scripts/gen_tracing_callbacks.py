@@ -426,6 +426,24 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
           if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
             f.write("      stream << \" (" + name[1:] + " = \" << (*(params->p" + name + "))->data << \")\";\n")
+          elif type == "ze_event_handle_t*" and func != "zeEventCreate":
+            prev_name = ''
+            for n,t in params:
+              if n == name:
+                break
+              prev_name = n
+            if prev_name == "numEvents" or prev_name == "numWaitEvents":
+              f.write("      stream << \" (" + name[1:] + " = [\";\n")
+              f.write("      auto phWaitEvents = *(params->p"+ name + ");\n")
+              f.write("      auto numWaitEvents = *(params->p" + prev_name + ");\n")
+              f.write("      while(numWaitEvents > 0) {\n")
+              f.write("        stream << *phWaitEvents;\n")
+              f.write("        numWaitEvents--;\n")
+              f.write("        if (numWaitEvents > 0)\n")
+              f.write("          stream <<\", \";\n")
+              f.write("        phWaitEvents = phWaitEvents + 1;\n")
+              f.write("      }\n")
+              f.write("      stream << \"])\";\n")
           else:
             f.write("      stream << \" (" + name[1:] + " = \" << **(params->p" + name + ") << \")\";\n")
           f.write("    }\n")
