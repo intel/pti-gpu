@@ -117,7 +117,7 @@ add_library(Pti::pti ALIAS pti)
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
 include(GenerateExportHeader)
-generate_export_header(pti EXPORT_FILE_NAME ${CMAKE_BINARY_DIR}/include/pti/pti_export.h)
+generate_export_header(pti EXPORT_FILE_NAME ${PROJECT_BINARY_DIR}/include/pti/pti_export.h)
 
 target_include_directories(
   pti
