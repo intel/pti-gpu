@@ -60,7 +60,7 @@ class ProfOptions {
   }
 
   std::string GetLogFileName(
-      uint32_t pid = std::numeric_limits<uint32_t>::max()) const {
+      uint32_t pid = (std::numeric_limits<uint32_t>::max)()) const {
     if (log_file_.empty()) {
       return std::string();
     }
@@ -74,7 +74,7 @@ class ProfOptions {
       result << log_file_.substr(0, pos);
     }
 
-    if (pid == std::numeric_limits<uint32_t>::max()) {
+    if (pid == (std::numeric_limits<uint32_t>::max)()) {
       pid = utils::GetPid();
     }
     result << "." + std::to_string(pid);
