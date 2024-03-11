@@ -118,19 +118,18 @@ class IttCollector {
     if (total_duration == 0) {
       return "";
     }
+    std::string str;
+    str += "************************************************************\n";
+    str += "*  Process ID : " + std::to_string(utils::GetPid()) + " | Rank ID : " + rank_mpi + "\n";
+    str += "************************************************************\n";
 
-    std::stringstream stream;
-    stream<< "************************************************************\n";
-    stream<< "*  Process ID : "<< utils::GetPid()<<" | Rank ID : "<<rank_mpi;
-    stream<<"\n************************************************************\n";
-
-    stream << std::setw(max_name_length) << "Function" << "," <<
-      std::setw(kCallsLength) << "Calls" << "," <<
-      std::setw(kTimeLength) << "Time (ns)" << "," <<
-      std::setw(kPercentLength) << "Time (%)" << "," <<
-      std::setw(kTimeLength) << "Average (ns)" << "," <<
-      std::setw(kTimeLength) << "Min (ns)" << "," <<
-      std::setw(kTimeLength) << "Max (ns)" << std::endl;
+    str += std::string(std::max(int(max_name_length - sizeof("Function") + 1), 0), ' ') + "Function, " +
+      std::string(std::max(int(kCallsLength - sizeof("Calls") + 1), 0), ' ') + "Calls, " +
+      std::string(std::max(int(kTimeLength - sizeof("Time (ns)") + 1), 0), ' ') + "Time (ns), " +
+      std::string(std::max(int(kPercentLength - sizeof("Time (%)") + 1), 0), ' ') + "Time (%), " +
+      std::string(std::max(int(kTimeLength - sizeof("Average (ns)") + 1), 0), ' ') + "Average (ns), " +
+      std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') + "Min (ns), " +
+      std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') + "Max (ns)\n";
 
     for (auto& value : sorted_list) {
       const std::string& function = value.first;
@@ -139,17 +138,18 @@ class IttCollector {
       uint64_t avg_duration = duration / call_count;
       uint64_t min_duration = value.second.min_time;
       uint64_t max_duration = value.second.max_time;
-      float percent_duration = 100.0f * duration / total_duration;
-      stream << std::setw(max_name_length) << function << "," <<
-        std::setw(kCallsLength) << call_count << "," <<
-        std::setw(kTimeLength) << duration << "," <<
-        std::setw(kPercentLength) << std::setprecision(2) <<
-          std::fixed << percent_duration << "," <<
-        std::setw(kTimeLength) << avg_duration << "," <<
-        std::setw(kTimeLength) << min_duration << "," <<
-        std::setw(kTimeLength) << max_duration << std::endl;
+      float percent_duration = (100.0f * duration / total_duration);
+      str += std::string(std::max(int(max_name_length - function.length()), 0), ' ') + function + ", " +
+              std::string(std::max(int(kCallsLength - std::to_string(call_count).length()), 0), ' ') + std::to_string(call_count) + ", " +
+              std::string(std::max(int(kTimeLength - std::to_string(duration).length()), 0), ' ') + std::to_string(duration) + ", " +
+
+              std::string(std::max(int(kPercentLength - std::to_string(percent_duration).length()), 0), ' ') +
+              std::to_string(percent_duration) + ", " +
+              std::string(std::max(int(kTimeLength - std::to_string(avg_duration).length()), 0), ' ') + std::to_string(avg_duration) + ", " +
+              std::string(std::max(int(kTimeLength - std::to_string(min_duration).length()), 0), ' ') + std::to_string(min_duration) + ", " +
+              std::string(std::max(int(kTimeLength - std::to_string(max_duration).length()), 0), ' ') + std::to_string(max_duration) + "\n";
     }
-    return stream.str();
+    return str;
   }
 
  private: // Implementation
