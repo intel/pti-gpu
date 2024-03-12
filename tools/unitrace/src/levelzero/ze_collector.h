@@ -926,6 +926,7 @@ struct ZeKernelCommandProperties {
   uint32_t spill_mem_size_;	// spill memory size for each thread
   ZeKernelGroupSize group_size_;	// group size
   ZeKernelCommandType type_;
+  uint32_t regsize_;	// GRF size per thread
   bool aot_;		// AOT or JIT
   std::string name_;	// kernel or command name
 };
@@ -1226,7 +1227,7 @@ class ZeCollector {
       
       str = "\n\n=== Kernel Properties ===\n\n";
       str = str + std::string(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ') +
-        "Kernel, Compiled, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread\n";
+        "Kernel, Compiled, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread\n";
       correlator_->Log(str);
   
       i = -1; 
@@ -1251,7 +1252,17 @@ class ZeCollector {
           std::string(std::max(int(sizeof("Private Memory Per Thread") - std::to_string(kit->second.private_mem_size_).length()), 0), ' ') + 
           std::to_string(kit->second.private_mem_size_) + "," +
           std::string(std::max(int(sizeof("Spill Memory Per Thread") - std::to_string(kit->second.spill_mem_size_).length()), 0), ' ') +
-          std::to_string(kit->second.spill_mem_size_) + "\n";
+          std::to_string(kit->second.spill_mem_size_) + ",";
+        if (kit->second.regsize_) {
+          // report size if size is available
+          str += std::string(std::max(int(sizeof("Register File Size Per Thread") - std::to_string(kit->second.regsize_).length()), 0), ' ') +
+                 std::to_string(kit->second.regsize_) + "\n";
+          }
+        else {
+          // report "unknown" otherwise
+          str += std::string(sizeof("Register File Size Per Thread") - sizeof("unknown") + 1, ' ') +
+                 "unknown\n";
+        }
         correlator_->Log(str);
       }
     }
@@ -3874,6 +3885,17 @@ class ZeCollector {
     modules_on_devices_mutex_.unlock();
   }
 
+#if !defined(ZEX_STRUCTURE_KERNEL_REGISTER_FILE_SIZE_EXP)
+
+#define ZEX_STRUCTURE_KERNEL_REGISTER_FILE_SIZE_EXP (ze_structure_type_t)0x00030012
+typedef struct _zex_kernel_register_file_size_exp_t {
+    ze_structure_type_t stype = ZEX_STRUCTURE_KERNEL_REGISTER_FILE_SIZE_EXP; ///< [in] type of this structure
+    const void *pNext = nullptr;                                             ///< [in, out][optional] pointer to extension-specific structure
+    uint32_t registerFileSize;                                               ///< [out] Register file size used in kernel
+} zex_kernel_register_file_size_exp_t;
+
+#endif /* !defined(ZEX_STRUCTURE_KERNEL_REGISTER_FILE_SIZE_EXP) */
+
   static void OnExitKernelCreate(ze_kernel_create_params_t *params, ze_result_t result, void* global_data, void** instance_user_data) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
@@ -3939,6 +3961,10 @@ class ZeCollector {
       desc.device_ = device;
 
       ze_kernel_properties_t kprops{};
+
+      zex_kernel_register_file_size_exp_t regsize{};
+      kprops.pNext = (void *)&regsize;
+
       status = zeKernelGetProperties(kernel, &kprops);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       desc.simd_width_ = kprops.maxSubgroupSize;
@@ -3949,6 +3975,7 @@ class ZeCollector {
       desc.spill_mem_size_ = kprops.spillMemSize;
       ZeKernelGroupSize group_size{kprops.requiredGroupSizeX, kprops.requiredGroupSizeY, kprops.requiredGroupSizeZ};
       desc.group_size_ = group_size;
+      desc.regsize_ = regsize.registerFileSize;
 
       // for stall sampling
       uint64_t base_addr = 0;
