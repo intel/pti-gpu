@@ -1,6 +1,6 @@
 //
 //-- copied here from root of this project -- <pti-gpu/utils> directory to facilitate independent
-//ptisdk build
+// ptisdk build
 //
 #ifndef PTI_UTILS_DEMANGLE_H_
 #define PTI_UTILS_DEMANGLE_H_

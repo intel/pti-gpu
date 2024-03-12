@@ -2,7 +2,6 @@
 #define UTILS_TEST_HELPERS_H_
 
 #include <cstring>
-#include <tuple>
 #include <type_traits>
 #include <vector>
 

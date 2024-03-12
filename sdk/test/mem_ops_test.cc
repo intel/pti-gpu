@@ -1,14 +1,10 @@
 #include <gtest/gtest.h>
 
-#include <array>
 #include <cstring>
 #include <sycl/sycl.hpp>
-#include <thread>
 #include <vector>
 
 #include "pti/pti_view.h"
-#include "samples_utils.h"
-#include "utils.h"
 
 using namespace sycl;
 
@@ -87,12 +83,15 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         if (memcpy_name.find("D2D)") != std::string::npos) {
           non_p2p_d2d_exists = true;
           pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
-          if (rec->_memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2D)
+          if (rec->_memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2D) {
             memcopy_type_valid = true;
-          if (rec->_mem_src == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE)
+          }
+          if (rec->_mem_src == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE) {
             memsrc_type_valid = true;
-          if (rec->_mem_dst == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE)
+          }
+          if (rec->_mem_dst == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE) {
             memdst_type_valid = true;
+          }
         }
         break;
       }
@@ -190,15 +189,15 @@ void p2pTest() {
         ze_result_t status;
         if (hSrcDevice && hDstDevice && (hSrcDevice != hDstDevice)) {
           status = zeDeviceCanAccessPeer(hSrcDevice, hDstDevice, &p2p_access);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          ASSERT_EQ(status, ZE_RESULT_SUCCESS);
           if (p2p_access) {
             p2p_device_access = true;
             connected_dev1 = i;
             connected_dev2 = j;
             break;
-          };
-        };
-      };
+          }
+        }
+      }
       if (p2p_device_access) {
         std::cout << "Connected devices: " << connected_dev1 << ":" << connected_dev2 << std::endl;
         break;

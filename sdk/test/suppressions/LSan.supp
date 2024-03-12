@@ -16,3 +16,5 @@ leak:oneapi::mkl::gpu::calloc_device
 leak:oneapi::mkl::gpu::cache_program
 
 leak:libmkl_sycl.so
+
+leak:libze_intel_gpu.so.1*

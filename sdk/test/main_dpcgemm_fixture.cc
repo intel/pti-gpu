@@ -8,7 +8,6 @@
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
-#include "ze_utils.h"
 
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f

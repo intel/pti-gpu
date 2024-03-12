@@ -1,11 +1,7 @@
 #include <gtest/gtest.h>
 #include <stdarg.h>
 
-#include <chrono>
-#include <condition_variable>
 #include <iostream>
-#include <mutex>
-#include <string>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
 #include <vector>

@@ -15,27 +15,9 @@
  */
 
 #include "unikernel.h"
-#include "unitimer.h"
+#include "utils.h"
 
 namespace overhead {
-
-// TODO --- add the below view_kind as a field in the pti_view_record_overhead
-// to breakdown into category of api call by api_func_name in fini
-//
-// Category of overhead view kind.
-//
-typedef enum _pti_view_overhead_view_kind {
-  PTI_VIEW_OVERHEAD_VIEW_KIND_INVALID = 0,
-  PTI_VIEW_OVERHEAD_VIEW_KIND_UNKNOWN = 1,
-  PTI_VIEW_OVERHEAD_VIEW_KIND_DEVICE = 2,
-  PTI_VIEW_OVERHEAD_VIEW_KIND_CONTEXT = 3,
-  PTI_VIEW_OVERHEAD_VIEW_KIND_EVENT = 4,
-  PTI_VIEW_OVERHEAD_VIEW_KIND_FENCE = 5,
-  PTI_VIEW_OVERHEAD_VIEW_KIND_MODULE = 6,
-  PTI_VIEW_OVERHEAD_VIEW_KIND_TRACER = 7,
-  PTI_VIEW_OVERHEAD_VIEW_KIND_METRIC = 8,
-  PTI_VIEW_OVERHEAD_VIEW_KIND_MEMORY = 9,
-} pti_view_overhead_view_kind;
 
 // TODO: redo this approach to enable/disable state tracking.
 inline static std::atomic<bool> overhead_collection_enabled = false;
@@ -68,27 +50,28 @@ inline static void SetOverheadCallback(OnZeOverheadFinishCallback callback) {
 //
 
 inline void Init() {
-  if (!overhead_collection_enabled)
+  if (!overhead_collection_enabled) {
     return;
-  else {
-    if (map_overhead_per_kind.empty()) {
-      pti_view_record_overhead overhead_rec = pti_view_record_overhead();
-      overhead_rec._overhead_kind = pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME;
-      overhead_rec._view_kind._view_kind = pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD;
-      overhead_rec._overhead_start_timestamp_ns = 0;
-      overhead_rec._overhead_end_timestamp_ns = 0;
-      overhead_rec._overhead_count = 0;
-      map_overhead_per_kind[{pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME}] = overhead_rec;
-    };
-  };
+  }
+  if (map_overhead_per_kind.empty()) {
+    pti_view_record_overhead overhead_rec = pti_view_record_overhead();
+    overhead_rec._overhead_kind = pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME;
+    overhead_rec._view_kind._view_kind = pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD;
+    overhead_rec._overhead_start_timestamp_ns = 0;
+    overhead_rec._overhead_end_timestamp_ns = 0;
+    overhead_rec._overhead_count = 0;
+    map_overhead_per_kind[{pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME}] = overhead_rec;
+  }
 
   uint64_t tid = utils::GetTid();
-  uint64_t start_time_ns = UniTimer::GetHostTimestamp();
+  uint64_t start_time_ns = utils::GetTime();
   auto overhead_it =
       map_overhead_per_kind.find({pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME});
   init_ref_count++;
   if (overhead_it != map_overhead_per_kind.cend()) {
-    if (overhead_it->second._overhead_start_timestamp_ns != 0) return;
+    if (overhead_it->second._overhead_start_timestamp_ns != 0) {
+      return;
+    }
     overhead_it->second._overhead_start_timestamp_ns = start_time_ns;
   } else {
     pti_view_record_overhead overhead_rec = pti_view_record_overhead();
@@ -97,7 +80,7 @@ inline void Init() {
     overhead_rec._overhead_start_timestamp_ns = start_time_ns;
     overhead_rec._overhead_thread_id = tid;
     map_overhead_per_kind[{pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME}] = overhead_rec;
-  };
+  }
 }
 
 inline void ResetRecord() {
@@ -109,31 +92,35 @@ inline void ResetRecord() {
     overhead_it->second._overhead_end_timestamp_ns = 0;
     overhead_it->second._overhead_count = 0;
     PTI_ASSERT(init_ref_count == 0);
-  };
+  }
 }
 
 inline void FiniLevel0(OverheadRuntimeType runtime_type,
                        [[maybe_unused]] const char* api_func_name) {
-  if (!overhead_collection_enabled) return;
+  if (!overhead_collection_enabled) {
+    return;
+  }
 
   if (init_ref_count > 1) {  // we are not done if there is more than 1 ref
-                             // count for this object per thread basis.
-    init_ref_count--;
+    init_ref_count--;        // count for this object per thread basis.
     return;
-  } else
-    init_ref_count--;
+  }
 
-  uint64_t end_time_ns = UniTimer::GetHostTimestamp();
+  init_ref_count--;
+
+  uint64_t end_time_ns = utils::GetTime();
   auto overhead_it =
       map_overhead_per_kind.find({pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME});
 
   if (overhead_it != map_overhead_per_kind.cend()) {
     uint64_t duration = end_time_ns - overhead_it->second._overhead_start_timestamp_ns;
     overhead_it->second._overhead_duration_ns += duration;
-    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_SYCL)
+    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_SYCL) {
       overhead_it->second._overhead_count += 1;
-    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0)
+    }
+    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0) {
       overhead_it->second._overhead_count += 1;
+    }
     if ((overhead_it->second._overhead_duration_ns / kOhThreshold) > 1) {
       overhead_it->second._overhead_end_timestamp_ns = end_time_ns;
       overhead_it->second._overhead_thread_id = utils::GetTid();
@@ -152,19 +139,21 @@ inline void FiniSycl(OverheadRuntimeType runtime_type) {
   if (init_ref_count > 1) {
     init_ref_count--;
     return;
-  } else
-    init_ref_count--;
+  }
+  init_ref_count--;
 
-  uint64_t end_time_ns = UniTimer::GetHostTimestamp();
+  uint64_t end_time_ns = utils::GetTime();
   auto overhead_it =
       map_overhead_per_kind.find({pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME});
   if (overhead_it != map_overhead_per_kind.cend()) {
     uint64_t duration = end_time_ns - overhead_it->second._overhead_start_timestamp_ns;
     overhead_it->second._overhead_duration_ns += duration;
-    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_SYCL)
+    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_SYCL) {
       overhead_it->second._overhead_count += 1;
-    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0)
+    }
+    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0) {
       overhead_it->second._overhead_count += 1;
+    }
     if ((overhead_it->second._overhead_duration_ns / kOhThreshold) > 1) {
       overhead_it->second._overhead_end_timestamp_ns = end_time_ns;
       overhead_it->second._overhead_thread_id = utils::GetTid();

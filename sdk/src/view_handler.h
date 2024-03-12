@@ -6,6 +6,8 @@
 #ifndef SRC_API_VIEW_HANDLER_H_
 #define SRC_API_VIEW_HANDLER_H_
 
+#include <spdlog/spdlog.h>
+
 #include <atomic>
 #include <cstddef>
 #include <cstdio>
@@ -17,11 +19,9 @@
 #include <string>
 #include <thread>
 
-#include "common.h"
 #include "consumer_thread.h"
 #include "default_buffer_callbacks.h"
 #include "pti/pti_view.h"
-#include "spdlog/spdlog.h"
 
 #if defined(PTI_TRACE_SYCL)
 #include "sycl_collector.h"
@@ -120,8 +120,7 @@ struct PtiViewRecordHandler {
     if (!collector_) {
       CollectorOptions collector_options;
       collector_options.kernel_tracing = true;
-      collector_ = ZeCollector::Create(collector_options, ZeChromeKernelStagesCallback, nullptr,
-                                       nullptr, nullptr);
+      collector_ = ZeCollector::Create(collector_options, ZeChromeKernelStagesCallback, nullptr);
       overhead::SetOverheadCallback(OverheadCollectionCallback);
     }
   }

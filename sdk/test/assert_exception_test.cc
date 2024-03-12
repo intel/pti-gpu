@@ -1,9 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <array>
 #include <cstring>
-#include <thread>
-#include <vector>
 
 #include "view_handler.h"
 

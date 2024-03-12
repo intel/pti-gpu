@@ -16,9 +16,9 @@
 #include <unistd.h>
 #endif
 
-#include <cstring>
 #include <stdint.h>
 
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <type_traits>
@@ -69,6 +69,8 @@ inline uint64_t GetTime(clockid_t id) {
   PTI_ASSERT(status == 0);
   return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
 }
+
+inline uint64_t GetTime() { return GetTime(CLOCK_MONOTONIC_RAW); }
 
 inline uint64_t ConvertClockMonotonicToRaw(uint64_t clock_monotonic) {
   uint64_t raw = GetTime(CLOCK_MONOTONIC_RAW);

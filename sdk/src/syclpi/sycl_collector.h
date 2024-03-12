@@ -12,16 +12,14 @@
 
 #include <array>
 #include <atomic>
-#include <chrono>
 #include <cstdio>
 #include <ctime>
+#ifdef PTI_DEBUG
 #include <iostream>
 #include <map>
 #include <memory>
-#include <mutex>
+#endif
 #include <string>
-#include <thread>
-#include <unordered_map>
 #include <xpti/xpti_trace_framework.hpp>
 
 #include "unikernel.h"
@@ -79,8 +77,8 @@ struct SyclPiFuncT {
   uint32_t func_tid;
 };
 
-thread_local bool framework_finalized = false;
-thread_local SyclPiFuncT current_func_task_info;
+inline thread_local bool framework_finalized = false;
+inline thread_local SyclPiFuncT current_func_task_info;
 
 inline constexpr static std::array<const char* const, 12> kSTraceType = {
     "TaskBegin",           "TaskEnd",  "Signal",    "NodeCreate", "FunctionWithArgsBegin",
@@ -184,7 +182,7 @@ class SyclCollector {
         // able to capture the sycl runtime streams sycl and sycl.pi
         // Empirically, we found the sycl.pi stream gets emitted after the sycl
         // stream.
-        if(!SyclCollector::Instance().sycl_pi_graph_created_) {
+        if (!SyclCollector::Instance().sycl_pi_graph_created_) {
           SyclCollector::Instance().sycl_pi_graph_created_ = true;
           if (!SyclCollector::Instance().enabled_) {
             SyclCollector::Instance().DisableTracing();
@@ -194,7 +192,7 @@ class SyclCollector {
         sycl_data_mview.cid_ = sycl_data_kview.cid_;
 
         if (UserData) {
-          auto function_name = static_cast<const char*>(UserData);
+          const auto* function_name = static_cast<const char*>(UserData);
           SPDLOG_DEBUG("\tSYCL.PI Function Begin: {}", function_name);
           if ((strlen(function_name) + 1) < kMaxFuncNameLen) {
             strcpy(current_func_task_info.func_name.data(), function_name);
@@ -218,7 +216,7 @@ class SyclCollector {
         break;
       case xpti::trace_point_type_t::function_end:
         if (UserData) {
-          auto function_name = static_cast<const char*>(UserData);
+          const auto* function_name = static_cast<const char*>(UserData);
           SPDLOG_DEBUG("\tSYCL.PI Function End: {}", function_name);
           PTI_ASSERT(strcmp(current_func_task_info.func_name.data(), function_name) == 0);
           PTI_ASSERT(current_func_task_info.func_pid == pid);

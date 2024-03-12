@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "pti/pti_view.h"
-#include "utils.h"
 
 using namespace sycl;
 

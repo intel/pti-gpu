@@ -26,6 +26,9 @@ CheckIfSyclIsAvailable()
 GetSpdlog()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(CMAKE_EXPORT_COMPILE_COMMANDS)
+    set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -110,6 +113,8 @@ set(PTI_DEFINE_FLAGS_EXPR
 configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
                ${PROJECT_BINARY_DIR}/include/pti/pti_version.h)
 
+find_package(Xpti)
+
 # https://cmake.org/cmake/help/latest/guide/importing-exporting/index.html
 add_library(pti SHARED "${PROJECT_SOURCE_DIR}/src/pti.cc")
 add_library(Pti::pti ALIAS pti)
@@ -126,7 +131,7 @@ target_include_directories(
          "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
          "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
   PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
-          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils"
+          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils"
           "${PROJECT_SOURCE_DIR}/src/loader")
 
 set_target_properties(
@@ -137,7 +142,8 @@ set_target_properties(
 
 target_compile_options(pti PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
 target_link_options(pti PRIVATE ${PTI_LINK_FLAGS_EXPR})
-target_compile_definitions(pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
+target_compile_definitions(pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR}
+    $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>)
 
 find_package(LevelZero 1.0.0)
 
@@ -146,7 +152,6 @@ if(NOT TARGET LevelZero::level-zero)
 endif()
 
 find_package(Threads REQUIRED)
-find_package(Xpti)
 
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
@@ -197,13 +202,10 @@ target_link_libraries(
     spdlog::spdlog_header_only)
 
 FindHeadersPath(
-  pti_view "${PROJECT_SOURCE_DIR}/src/gen_tracing_common_header.py"
-  "common_header.gen" gen_common_header LevelZero::level-zero)
-FindHeadersPath(
   pti_view "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
   "tracing.gen" gen_tracing_header LevelZero::level-zero)
 
-target_link_libraries(pti PUBLIC pti_view)
+target_link_libraries(pti PUBLIC pti_view PRIVATE spdlog::spdlog_header_only $<TARGET_NAME_IF_EXISTS:Xpti::xpti>)
 
 include(CTest)
 if(BUILD_TESTING AND PTI_BUILD_TESTING)

@@ -10,8 +10,12 @@
 #include <level_zero/layers/zel_tracing_api.h>
 
 #include <atomic>
-#include <iostream>
+#include <cstring>
+#include <map>
 #include <stack>
+#include <string>
+
+#include "pti/pti_view.h"
 
 class UniCorrId {
  public:
@@ -31,12 +35,6 @@ class UniKernelId {
 
  private:
   inline static std::atomic<uint64_t> kernel_id_ = 1;  // start with 1
-};
-
-enum FLOW_DIR {
-  FLOW_NUL = 0,
-  FLOW_D2H = 1,
-  FLOW_H2D = 2,
 };
 
 struct ZeKernelCommandExecutionRecord {
@@ -92,7 +90,7 @@ struct ExternalCorrIdKey {
 
 struct ExternalKeyCompare {
   bool operator()(const ExternalCorrIdKey& lhs, const ExternalCorrIdKey& rhs) const {
-    return (memcmp((char*)(&lhs), (char*)(&rhs), sizeof(ExternalCorrIdKey)) < 0);
+    return (std::memcmp((char*)(&lhs), (char*)(&rhs), sizeof(ExternalCorrIdKey)) < 0);
   }
 };
 
@@ -102,7 +100,7 @@ struct OverheadKindKey {
 
 struct OverheadKeyCompare {
   bool operator()(const OverheadKindKey& lhs, const OverheadKindKey& rhs) const {
-    return (memcmp((char*)(&lhs), (char*)(&rhs), sizeof(OverheadKindKey)) < 0);
+    return (std::memcmp((char*)(&lhs), (char*)(&rhs), sizeof(OverheadKindKey)) < 0);
   }
 };
 

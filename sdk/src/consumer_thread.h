@@ -74,7 +74,7 @@ class BufferConsumer {
     auto delivery = std::packaged_task<void()>(std::move(callable));
     auto delivery_future = delivery.get_future();
     queue_.Push(std::move(delivery));
-    return std::move(delivery_future);
+    return delivery_future;
   }
 
   /**
