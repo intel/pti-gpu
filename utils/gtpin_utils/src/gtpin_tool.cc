@@ -360,6 +360,9 @@ PROF_STATUS GTPinProfileKernel::ReadProfileData(IGtKernelDispatch& dispatcher,
   error = this->PostProcData(m_kernelData->invocations[execDescr.gtpinDispatchId]);
   PTI_ASSERT((PROF_STATUS_SUCCESS == error) && "Fail to read data");
 
+  delete record;
+  record = nullptr;
+
   return PROF_STATUS_SUCCESS;
 }
 

@@ -23,6 +23,10 @@ StreamGTPinDataWriter::StreamGTPinDataWriter(std::ostream& stream) {
   sh = new StreamHolder(stream);
 };
 
+StreamGTPinDataWriter::~StreamGTPinDataWriter() {
+  delete sh;
+};
+
 // std::ostream& StreamGTPinDataWriter::GetStream() {
 //     if (sh == nullptr) {
 //         bool result = this->Init();

@@ -41,7 +41,7 @@ class StreamGTPinDataWriter : public GTPinDataWriterBase {
   /// call
   StreamGTPinDataWriter() = default;
   StreamGTPinDataWriter(std::ostream& stream);
-  virtual ~StreamGTPinDataWriter() = default;
+  virtual ~StreamGTPinDataWriter();
 
  protected:
   // virtual std::ostream& GetStream();
