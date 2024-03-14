@@ -64,6 +64,7 @@ set(PTI_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/pti")
 set(PTI_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}")
 set(PTI_INSTALL_LIB_DIR "${CMAKE_INSTALL_LIBDIR}")
 set(PTI_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
+set(PTI_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
 set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
 CheckSOVersion(${PTI_API_SOVERSION})
@@ -261,6 +262,25 @@ if(PTI_INSTALL)
     NAMESPACE Pti::
     DESTINATION "${PTI_INSTALL_CMAKE_DIR}"
     COMPONENT Pti_Development)
+
+  install(
+    FILES "../LICENSE"
+    DESTINATION "${PTI_INSTALL_LIC_DIR}"
+    RENAME "LICENSE.txt"
+    COMPONENT Pti_Doc)
+
+
+  #
+  # This file is only installed in oneAPI drops
+  #
+  if ("${PTI_PRESET_USED}" STREQUAL "oneAPI" )
+    install(
+      FILES "env/vars.sh"
+      DESTINATION "env/"
+      COMPONENT Pti_oneAPI)
+  endif()
+
+
 endif()
 
 if(PTI_BUILD_SAMPLES)

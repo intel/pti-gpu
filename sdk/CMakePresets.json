@@ -36,6 +36,17 @@
       "generator": "Unix Makefiles"
     },
     {
+      "name": "oneAPI",
+      "inherits": "default",
+      "displayName": "Build pti for oneAPI",
+      "description": "OneAPI has its libraries under lib opposed to lib64",
+      "binaryDir": "${sourceDir}/build-${presetName}",
+      "cacheVariables": {
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "PTI_PRESET_USED": "${presetName}"
+      }
+    },
+    {
       "name": "asan",
       "inherits": "default",
       "displayName": "AddressSanitizer Test Config",

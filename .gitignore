@@ -8,3 +8,4 @@ venv/
 compile_commands.json
 CMakeUserPresets.json
 error_diff.txt
+*.swp
