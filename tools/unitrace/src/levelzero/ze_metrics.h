@@ -32,9 +32,11 @@
 #include "ze_utils.h"
 #include "pti_assert.h"
 
-#define MAX_METRIC_SIZE  512
-#define MAX_METRIC_SAMPLES 32768
-#define MAX_METRIC_BUFFER  (MAX_METRIC_SAMPLES * MAX_METRIC_SIZE * 2)
+
+constexpr static uint32_t max_metric_size = 512;
+static uint32_t max_metric_samples = 32768;
+
+#define MAX_METRIC_BUFFER  (max_metric_samples * max_metric_size* 2)
 
 inline void PrintDeviceList() {
   ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
@@ -583,7 +585,7 @@ class ZeMetricProfiler {
         }
   
         std::ifstream inf = std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
-        std::array<uint8_t, MAX_METRIC_BUFFER + 512> raw_metrics;
+        std::vector<uint8_t> raw_metrics(MAX_METRIC_BUFFER + 512);
   
         if (!inf.is_open()) {
           continue;
@@ -787,12 +789,14 @@ class ZeMetricProfiler {
           continue;
         }
 
-        std::array<uint8_t, MAX_METRIC_BUFFER + 512> raw_metrics;
+        std::vector<uint8_t> raw_metrics(MAX_METRIC_BUFFER + 512);
   
         std::string header("\n=== Device #");
 
-        header += std::to_string(it->second->device_id_) + " Metrics ===\n\n";
-        header += "Kernel, ";
+        header += std::to_string(it->second->device_id_) + " Metrics ===\n";
+        logger_->Log(header);
+
+        header = "\nKernel, ";
         for (int i = 0; i <  metric_list.size(); i++) {
           header += metric_list[i] + ", ";
         }
@@ -833,11 +837,11 @@ class ZeMetricProfiler {
             const zet_typed_value_t *value = metrics.data();
             bool kernelsampled = false;
             for (uint32_t i = 0; i < num_samples; ++i) {
-              std::string str;
   
               uint32_t size = samples[i];
 
               for (int j = 0; j < (size / metric_list.size()); ++j) {
+                std::string str;
                 const zet_typed_value_t *v = value + j * metric_list.size();
                 uint64_t ts = v[ts_idx].value.ui64;
                 if (cur_sampling_ts != 0) {
@@ -860,11 +864,12 @@ class ZeMetricProfiler {
                     str += ", ";
                   }
                   str += "\n";
+                  logger_->Log(str);
                 }
                 else {
                   if (ts > kit->metric_end) {
                     if (kernelsampled) {
-                      str += "\n";
+                      logger_->Log("\n");
                       kernelsampled = false;	// reset for next kernel
                     }
                     kit++;	// move to next kernel
@@ -872,10 +877,8 @@ class ZeMetricProfiler {
                       break;	// we are done
                     }
                   }
-                  continue;
                 }
               }
-              logger_->Log(str);
               value += samples[i];
             }
           }
@@ -1011,7 +1014,7 @@ class ZeMetricProfiler {
     zet_metric_streamer_handle_t streamer = nullptr;
     uint32_t interval = std::stoi(utils::GetEnv("UNITRACE_SamplingInterval")) * 1000;	// convert us to ns
 
-    zet_metric_streamer_desc_t streamer_desc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr, MAX_METRIC_SAMPLES, interval};
+    zet_metric_streamer_desc_t streamer_desc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr, max_metric_samples, interval};
     status = zetMetricStreamerOpen(context, device, group, &streamer_desc, event, &streamer);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Failed to open metric streamer (" << status << "). The sampling interval might be too small." << std::endl;
@@ -1027,7 +1030,9 @@ class ZeMetricProfiler {
       return;
     }
   
-    PTI_ASSERT(streamer_desc.notifyEveryNReports == MAX_METRIC_SAMPLES);
+    if (streamer_desc.notifyEveryNReports > max_metric_samples) {
+      max_metric_samples = streamer_desc.notifyEveryNReports;
+    }
   
     std::vector<std::string> metrics_list;
     metrics_list = GetMetricList(group);
@@ -1079,3 +1084,4 @@ class ZeMetricProfiler {
 };
 
 #endif // PTI_TOOLS_UNITRACE_LEVEL_ZERO_METRICS_H_
+

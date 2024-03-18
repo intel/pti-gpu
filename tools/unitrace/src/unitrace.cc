@@ -172,7 +172,7 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--sampling-interval [-i] <interval> " <<
-    "Hardware performance metric sampling interval in us (default is 100 us) in time-based mode" <<
+    "Hardware performance metric sampling interval in us (default is 50 us) in time-based mode" <<
     std::endl;
   std::cout <<
     "--device-list                  " <<
@@ -428,10 +428,10 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_MetricGroup", "ComputeBasic");
     }
 
-    // default sampling interval is 100 us
+    // default sampling interval is 50 us
     // does not hurt to set UNITRACE_SamplingInterval in query mode
     if (utils::GetEnv("UNITRACE_SamplingInterval").empty()) {
-      utils::SetEnv("UNITRACE_SamplingInterval", "100");
+      utils::SetEnv("UNITRACE_SamplingInterval", "50");
     }
   }
 

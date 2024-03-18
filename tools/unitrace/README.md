@@ -80,7 +80,7 @@ The options can be one or more of the following:
 --metric-query [-q]            Query hardware metrics for each kernel instance
 --metric-sampling [-k]         Sample hardware performance metrics for each kernel instance in time-based mode
 --group [-g] <metric-group>    Hardware metric group (ComputeBasic by default)
---sampling-interval [-i] <interval> Hardware performance metric sampling interval in us (default is 1000 us) in time-based mode
+--sampling-interval [-i] <interval> Hardware performance metric sampling interval in us (default is 50 us) in time-based mode
 --device-list                  Print available devices
 --metric-list                  Print available metric groups and metrics
 --stall-sampling               Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs
