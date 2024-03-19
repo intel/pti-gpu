@@ -1004,7 +1004,7 @@ inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& g
   kernel_command_properties_mutex_.lock_shared();
   auto it = kernel_command_properties_->find(id);
   if (it != kernel_command_properties_->end()) {
-    str = std::move(utils::Demangle(it->second.name_.c_str()));
+    str = "\"" + std::move(utils::Demangle(it->second.name_.c_str()));	// quote kernel name which may contain ","
     if (detailed) {
       if (it->second.type_ == KERNEL_COMMAND_TYPE_COMPUTE) {
         if (it->second.simd_width_ > 0) {
@@ -1027,6 +1027,7 @@ inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& g
         str = str + "[" + std::to_string(size) + "]";
       }
     }
+    str += "\"";	// quoate kernel name
   }
 
   kernel_command_properties_mutex_.unlock_shared();
@@ -1858,7 +1859,8 @@ class ZeCollector {
         std::ofstream kpfs = std::ofstream(fpath, std::ios::out | std::ios::trunc);
         uint64_t prev_base = 0;
         for (auto it = props.second.crbegin(); it != props.second.crend(); it++) {
-          kpfs << utils::Demangle(it->second->name_.c_str()) << std::endl;
+          // quote kernel name which may contain "," 
+          kpfs << "\"" << utils::Demangle(it->second->name_.c_str()) << "\"" << std::endl;
           kpfs << it->second->base_addr_ << std::endl;
           if (prev_base == 0) {
             kpfs << it->second->size_ << std::endl;

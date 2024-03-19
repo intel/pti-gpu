@@ -90,11 +90,7 @@ inline void PrintMetricList(uint32_t device_id) {
     return;
   }
 
-  if (device_id >= device_list.size()) {
-    std::cout << "Device #" << device_id << " is not found" << std::endl;
-    return;
-  }
-
+  PTI_ASSERT(device_id < device_list.size());
   ze_device_handle_t device = device_list[device_id];
 
   uint32_t group_count = 0;
@@ -671,21 +667,17 @@ class ZeMetricProfiler {
           continue;
         }
 
-        if (max_kname_size < metric_list[0].size()) {
-          max_kname_size = metric_list[0].size();
-        }
-
         std::string header("\n=== Device #");
 
         header += std::to_string(it->second->device_id_) + " Metrics ===\n\n";
-        int field_sizes[10];
+        int field_sizes[11];
         field_sizes[0] = max_kname_size; 
-        // sizeof("!0x00000000") is 12, not 11
-        header += std::string(std::max(int(field_sizes[0] + sizeof("!0x00000000") - 1 - metric_list[0].length()), 0), ' ') +
-                  metric_list[0] + ", ";
+        field_sizes[1] = std::max(sizeof("0x00000000") - 1, metric_list[0].size());
+        header += std::string(std::max(int(field_sizes[0] + 1 - sizeof("Kernel")), 0), ' ') + "Kernel, ";
+        header += std::string(std::max(int(field_sizes[1] - metric_list[0].length()), 0), ' ') + metric_list[0] + ", ";
         for (int i = 1; i <  metric_list.size(); i++) {
-          field_sizes[i] = metric_list[i].size();
-          header += std::string(std::max(int(field_sizes[i] - metric_list[i].length()), 0), ' ') + metric_list[i] + ", ";
+          field_sizes[i + 1] = metric_list[i].size();
+          header += metric_list[i] + ", ";
         }
         
         header += "\n";
@@ -698,26 +690,28 @@ class ZeMetricProfiler {
               std::string line;
 
               char offset[128];
-              snprintf(offset, sizeof(offset), "%08lx", (it->first - rit->first));
-              line = std::string(std::max(int(field_sizes[0] - rit->second.first.length()), 0), ' ') + rit->second.first + "!0x" +
+              snprintf(offset, sizeof(offset), "0x%08lx", (it->first - rit->first));
+              line = std::string(std::max(int(field_sizes[0] - rit->second.first.length()), 0), ' ') +
+                     rit->second.first + ", " +
+                     std::string(std::max(int(field_sizes[1] - std::string(offset).length()), 0), ' ') +
                      std::string(offset) + ", " +
-                     std::string(std::max(int(field_sizes[1] - std::to_string(it->second.active_).length()), 0), ' ') +
+                     std::string(std::max(int(field_sizes[2] - std::to_string(it->second.active_).length()), 0), ' ') +
                      std::to_string(it->second.active_) + ", " +
-                     std::string(std::max(int(field_sizes[2] - std::to_string(it->second.control_).length()), 0), ' ') +
+                     std::string(std::max(int(field_sizes[3] - std::to_string(it->second.control_).length()), 0), ' ') +
                      std::to_string(it->second.control_) + ", " +
-                     std::string(std::max(int(field_sizes[3] - std::to_string(it->second.pipe_).length()), 0), ' ') +
+                     std::string(std::max(int(field_sizes[4] - std::to_string(it->second.pipe_).length()), 0), ' ') +
                      std::to_string(it->second.pipe_) + ", " +
-                     std::string(std::max(int(field_sizes[4] - std::to_string(it->second.send_).length()), 0), ' ') +
+                     std::string(std::max(int(field_sizes[5] - std::to_string(it->second.send_).length()), 0), ' ') +
                      std::to_string(it->second.send_) + ", " +
-                     std::string(std::max(int(field_sizes[5] - std::to_string(it->second.dist_).length()), 0), ' ') +
+                     std::string(std::max(int(field_sizes[6] - std::to_string(it->second.dist_).length()), 0), ' ') +
                      std::to_string(it->second.dist_) + ", " +
-                     std::string(std::max(int(field_sizes[6] - std::to_string(it->second.sbid_).length()), 0), ' ') +
+                     std::string(std::max(int(field_sizes[7] - std::to_string(it->second.sbid_).length()), 0), ' ') +
                      std::to_string(it->second.sbid_) + ", " +
-                     std::string(std::max(int(field_sizes[7] - std::to_string(it->second.sync_).length()), 0), ' ') +
+                     std::string(std::max(int(field_sizes[8] - std::to_string(it->second.sync_).length()), 0), ' ') +
                      std::to_string(it->second.sync_) + ", " +
-                     std::string(std::max(int(field_sizes[8] - std::to_string(it->second.insfetch_).length()), 0), ' ') +
+                     std::string(std::max(int(field_sizes[9] - std::to_string(it->second.insfetch_).length()), 0), ' ') +
                      std::to_string(it->second.insfetch_) + ", " +
-                     std::string(std::max(int(field_sizes[9] - std::to_string(it->second.other_).length()), 0), ' ') +
+                     std::string(std::max(int(field_sizes[10] - std::to_string(it->second.other_).length()), 0), ' ') +
                      std::to_string(it->second.other_) + ", \n";  
               logger_->Log(line);
               break;
