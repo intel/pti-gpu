@@ -90,7 +90,11 @@ inline void PrintMetricList(uint32_t device_id) {
     return;
   }
 
-  PTI_ASSERT(device_id < device_list.size());
+  if (device_id >= device_list.size()) {
+    std::cout << "Device #" << device_id << " is not found" << std::endl;
+    return;
+  }
+
   ze_device_handle_t device = device_list[device_id];
 
   uint32_t group_count = 0;

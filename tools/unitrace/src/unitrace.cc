@@ -210,6 +210,18 @@ void Usage(char * progname) {
     std::endl;
 }
 
+void SetTracingEnvironment() {
+  utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
+}
+
+void SetProfilingEnvironment() {
+  utils::SetEnv("ZET_ENABLE_METRICS", "1");
+}
+
+void SetSysmanEnvironment() {
+  utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
+}
+
 int ParseArgs(int argc, char* argv[]) {
   bool show_metric_list = false;
   bool stall_sampling = false;
@@ -382,6 +394,7 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_SamplingInterval", argv[i]);
       app_index += 2;
     } else if (strcmp(argv[i], "--device-list") == 0) {
+      SetSysmanEnvironment();	// enable ZES_ENABLE_SYSMAN
       PrintDeviceList();
       return 0;
     } else if (strcmp(argv[i], "--metric-list") == 0) {
@@ -467,6 +480,7 @@ int ParseArgs(int argc, char* argv[]) {
 
 
   if (show_metric_list) {
+    SetProfilingEnvironment();	// enable ZET_ENABLE_METRICS
     std::string value = utils::GetEnv("UNITRACE_DeviceId");
     uint32_t device_id = value.empty() ? 0 : std::stoul(value);
     PrintMetricList(device_id);
@@ -477,18 +491,6 @@ int ParseArgs(int argc, char* argv[]) {
   utils::SetEnv("INTEL_LIBITTNOTIFY64", "libunitrace_tool.so");
 
   return app_index;
-}
-
-void SetTracingEnvironment() {
-  utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
-}
-
-void SetProfilingEnvironment() {
-  utils::SetEnv("ZET_ENABLE_METRICS", "1");
-}
-
-void SetSysmanEnvironment() {
-  utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
 }
 
 void EnableProfiling(char *dir, std::string& logfile) {
