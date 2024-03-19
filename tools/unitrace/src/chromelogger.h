@@ -93,10 +93,22 @@ typedef struct TraceDataPacket_ {
       }
     }
     if (!name.empty()) {
-      str += ", \"name\": \"" + name + "\"";
+      if (name[0] == '\"') {
+        // name is already quoted
+        str += ", \"name\": " + name;
+      }
+      else {
+        str += ", \"name\": \"" + name + "\"";
+      }
     }
     if (!cname.empty()) {
-      str += ", \"cname\": \"" + cname + "\"";
+      if (cname[0] == '\"') {
+        // cname is already quoted
+        str += ", \"cname\": " + cname;
+      }
+      else {
+        str += ", \"cname\": \"" + cname + "\"";
+      }
     }
 
     if (cat == cpu_op) {
