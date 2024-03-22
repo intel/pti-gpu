@@ -135,7 +135,6 @@ struct PtiViewRecordHandler {
     DisableTracing();
     if (collector_) {
       collector_->DisableTracing();
-      delete collector_;
     }
   }
 
@@ -392,7 +391,7 @@ struct PtiViewRecordHandler {
     }
     collection_enabled_ = false;
   }
-  ZeCollector* collector_ = nullptr;
+  std::unique_ptr<ZeCollector> collector_ = nullptr;
   std::atomic<bool> collection_enabled_ = false;
   std::atomic<bool> callbacks_set_ = false;
   AskForBufferEvent get_new_buffer_;

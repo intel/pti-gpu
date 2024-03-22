@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <list>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -152,8 +153,9 @@ class ZeCollector {
   ZeCollector(ZeCollector&&) = delete;
   ZeCollector& operator=(ZeCollector&&) = delete;
 
-  static ZeCollector* Create(CollectorOptions options, OnZeKernelFinishCallback acallback = nullptr,
-                             void* callback_data = nullptr) {
+  static std::unique_ptr<ZeCollector> Create(CollectorOptions options,
+                                             OnZeKernelFinishCallback acallback = nullptr,
+                                             void* callback_data = nullptr) {
     if (GlobalZeInitializer::result_ != ZE_RESULT_SUCCESS) {
       SPDLOG_WARN("Unable to initialize ZeCollector, error code {0:x}",
                   static_cast<std::size_t>(GlobalZeInitializer::result_));
@@ -163,11 +165,12 @@ class ZeCollector {
     ze_api_version_t version = utils::ze::GetVersion();
     PTI_ASSERT(ZE_MAJOR_VERSION(version) >= 1 && ZE_MINOR_VERSION(version) >= 2);
 
-    ZeCollector* collector = new ZeCollector(options, acallback, callback_data);
+    auto collector =
+        std::unique_ptr<ZeCollector>(new ZeCollector(options, acallback, callback_data));
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    zel_tracer_desc_t tracer_desc = {ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
+    zel_tracer_desc_t tracer_desc = {ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector.get()};
     zel_tracer_handle_t tracer = nullptr;
     overhead::Init();
     status = zelTracerCreate(&tracer_desc, &tracer);
@@ -180,8 +183,6 @@ class ZeCollector {
     if (status != ZE_RESULT_SUCCESS) {
       SPDLOG_WARN("Unable to create Level Zero tracer, error code {0:x}",
                   static_cast<std::size_t>(status));
-
-      delete collector;
       return nullptr;
     }
 
@@ -230,175 +231,56 @@ class ZeCollector {
   }
 
   void CreateDeviceMap() {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    uint32_t num_drivers = 0;
+    const auto drivers = utils::ze::GetDriverList();
+    for (auto* const driver : drivers) {
+      const auto devices = utils::ze::GetDeviceList(driver);
+      for (auto* const device : devices) {
+        device_descriptors_[device] = GetZeDeviceDescriptor(device);
+
+        const auto sub_devices = utils::ze::GetSubDeviceList(device);
+        device_map_[device] = sub_devices;
+        for (auto* const sub_device : sub_devices) {
+          device_descriptors_[sub_device] = GetZeDeviceDescriptor(sub_device);
+        }
+      }
+    }
+  }
+
+  static ZeDeviceDescriptor GetZeDeviceDescriptor(const ze_device_handle_t device) {
+    ZeDeviceDescriptor desc = {};
+    desc.device_timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
+    desc.device_timer_mask = utils::ze::GetDeviceTimestampMask(device);
+    ze_pci_ext_properties_t pci_device_properties;
+
     overhead::Init();
-    status = zeDriverGet(&num_drivers, nullptr);
+    ze_result_t status = zeDevicePciGetPropertiesExt(device, &pci_device_properties);
     {
-      std::string o_api_string = "zeDriverGet";
+      std::string o_api_string = "zeDevicePciGetPropertiesExt";
       overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
                            o_api_string.c_str());
     }
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    if (num_drivers > 0) {
-      std::vector<ze_driver_handle_t> drivers(num_drivers);
-      std::vector<ze_context_handle_t> contexts;
-      overhead::Init();
-      status = zeDriverGet(&num_drivers, drivers.data());
-      {
-        std::string o_api_string = "zeDriverGet";
-        overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                             o_api_string.c_str());
-      }
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      for (auto* driver : drivers) {
-        uint32_t num_devices = 0;
-        overhead::Init();
-        status = zeDeviceGet(driver, &num_devices, nullptr);
-        {
-          std::string o_api_string = "zeDeviceGet";
-          overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                               o_api_string.c_str());
-        }
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        if (num_devices) {
-          std::vector<ze_device_handle_t> devices(num_devices);
-          overhead::Init();
-          status = zeDeviceGet(driver, &num_devices, devices.data());
-          {
-            std::string o_api_string = "zeDeviceGet";
-            overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                                 o_api_string.c_str());
-          }
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-          for (auto* device : devices) {
-            ZeDeviceDescriptor desc;
 
-            desc.device_timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
-            desc.device_timer_mask = utils::ze::GetDeviceTimestampMask(device);
+    desc.pci_properties = pci_device_properties;
+    uint64_t host_time = 0;
+    uint64_t ticks = 0;
+    uint64_t device_time = 0;
 
-            ze_pci_ext_properties_t pci_device_properties;
-            overhead::Init();
-            ze_result_t status = zeDevicePciGetPropertiesExt(device, &pci_device_properties);
-            {
-              std::string o_api_string = "zeDevicePciGetPropertiesExt";
-              overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                                   o_api_string.c_str());
-            }
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-            desc.pci_properties = pci_device_properties;
-
-            uint64_t host_time = 0;
-            uint64_t ticks = 0;
-            uint64_t device_time = 0;
-            overhead::Init();
-            zeDeviceGetGlobalTimestamps(device, &host_time, &ticks);
-            {
-              std::string o_api_string = "zeDeviceGetGlobalTimestamps";
-              overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                                   o_api_string.c_str());
-            }
-
-            device_time = ticks & desc.device_timer_mask;
-            if (desc.device_timer_frequency) {
-              device_time = device_time * NSEC_IN_SEC / desc.device_timer_frequency;
-            }
-            desc.host_time_origin = host_time;
-            desc.device_time_origin = device_time;
-
-            device_descriptors_[device] = desc;
-
-            uint32_t num_sub_devices = 0;
-            overhead::Init();
-            status = zeDeviceGetSubDevices(device, &num_sub_devices, nullptr);
-            {
-              std::string o_api_string = "zeDeviceGetSubDevices";
-              overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                                   o_api_string.c_str());
-            }
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-            if (num_sub_devices) {
-              std::vector<ze_device_handle_t> sub_devices(num_sub_devices);
-
-              overhead::Init();
-              status = zeDeviceGetSubDevices(device, &num_sub_devices, sub_devices.data());
-              {
-                std::string o_api_string = "zeDeviceGetSubDevices";
-                overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                                     o_api_string.c_str());
-              }
-              PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-              device_map_[device] = sub_devices;
-
-              for (uint32_t j = 0; j < num_sub_devices; j++) {
-                ZeDeviceDescriptor sub_desc = {};
-
-                sub_desc.device_timer_frequency =
-                    utils::ze::GetDeviceTimerFrequency(sub_devices[j]);
-                sub_desc.device_timer_mask = utils::ze::GetDeviceTimestampMask(sub_devices[j]);
-
-                ze_pci_ext_properties_t pci_device_properties;
-                overhead::Init();
-                ze_result_t status =
-                    zeDevicePciGetPropertiesExt(sub_devices[j], &pci_device_properties);
-                {
-                  std::string o_api_string = "zeDevicePciGetPropertiesExt";
-                  overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                                       o_api_string.c_str());
-                }
-                PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-                sub_desc.pci_properties = pci_device_properties;
-
-                uint64_t ticks = 0;
-                uint64_t host_time = 0;
-                uint64_t device_time = 0;
-                overhead::Init();
-                zeDeviceGetGlobalTimestamps(sub_devices[j], &host_time, &ticks);
-                {
-                  std::string o_api_string = "zeDeviceGetGlobalTimestamps";
-                  overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                                       o_api_string.c_str());
-                }
-                device_time = ticks & sub_desc.device_timer_mask;
-                if (sub_desc.device_timer_frequency) {
-                  device_time = device_time * NSEC_IN_SEC / sub_desc.device_timer_frequency;
-                }
-
-                sub_desc.host_time_origin = host_time;
-                sub_desc.device_time_origin = device_time;
-                device_descriptors_[sub_devices[j]] = sub_desc;
-              }
-            }
-          }
-        }
-      }
+    overhead::Init();
+    status = zeDeviceGetGlobalTimestamps(device, &host_time, &ticks);
+    {
+      std::string o_api_string = "zeDeviceGetGlobalTimestamps";
+      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
+                           o_api_string.c_str());
     }
-  }
-
-  int GetSubDeviceId(ze_device_handle_t sub_device) const {
-    for (const auto& it : device_map_) {
-      const std::vector<ze_device_handle_t>& sub_device_list = it.second;
-      for (size_t i = 0; i < sub_device_list.size(); ++i) {
-        if (sub_device_list[i] == sub_device) {
-          return static_cast<int>(i);
-        }
-      }
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    device_time = ticks & desc.device_timer_mask;
+    if (desc.device_timer_frequency) {
+      device_time = device_time * NSEC_IN_SEC / desc.device_timer_frequency;
     }
-    return -1;
-  }
-
-  ze_device_handle_t GetDeviceForSubDevice(ze_device_handle_t sub_device) const {
-    for (auto it : device_map_) {
-      std::vector<ze_device_handle_t>& sub_device_list = it.second;
-      for (size_t i = 0; i < sub_device_list.size(); ++i) {
-        if (sub_device_list[i] == sub_device) {
-          return it.first;
-        }
-      }
-    }
-    return nullptr;
+    desc.host_time_origin = host_time;
+    desc.device_time_origin = device_time;
+    return desc;
   }
 
   const ZeCommandListInfo& GetCommandListInfoConst(ze_command_list_handle_t clist_handle) {
