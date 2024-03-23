@@ -70,8 +70,8 @@ The options can be one or more of the following:
 --chrome-device-stages         DEPRECATED - use --chrome-kernel-logging instead
 --verbose [-v]                 Enable verbose mode to show more kernel information.
 --demangle                     Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend
---kernels-per-tile             DEPRECATED - use --seperate-tiles instead
---seperate-tiles               Trace each tile seperately in case of implicit scaling
+--kernels-per-tile             DEPRECATED - use --separate-tiles instead
+--separate-tiles               Trace each tile separately in case of implicit scaling
 --tid                          Output TID in host API trace
 --pid                          Output PID in host API and device activity trace
 --output [-o] <filename>       Output profiling result to file
@@ -198,7 +198,7 @@ or both to suppress thread and engine and/or queue data at the same time:
 
 ### Tile Activities in Implicit Scaling
 
-In case of implicit scaling, the hardware partitions the load of each kernel and distributes portions to each tile. By default, the tool treats the whole device as a unit. To trace activities on each tile seperately, one can use **--seperate-tiles** together with **--chrome-kernel-logging/--chrome-device-logging** options:
+In case of implicit scaling, the hardware partitions the load of each kernel and distributes portions to each tile. By default, the tool treats the whole device as a unit. To trace activities on each tile separately, one can use **--separate-tiles** together with **--chrome-kernel-logging/--chrome-device-logging** options:
 
 ![Tile Activities Logging!](/tools/unitrace/doc/images/implicit-per-tile-kernel-logging.png)
 
@@ -421,7 +421,7 @@ One way to run the external trace processor on Windows is to use Windows Subsyst
    ```
 ## Profile Hardware Performance Metrics
 
-Hardware performance metric counter can be profiled at the same time while host/device activites are profiled in the same run or they can be done in seperate runs.
+Hardware performance metric counter can be profiled at the same time while host/device activites are profiled in the same run or they can be done in separate runs.
 
 Please note that device timing is also enabled if hardware performance metric counter profiling is enabled. The device timing information will guide you to the hot kernels so you know which kernel's peformance counters are of most interest.
 

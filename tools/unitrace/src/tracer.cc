@@ -104,7 +104,7 @@ static TraceOptions ReadArgs() {
     flags |= (1 << TRACE_DEMANGLE);
   }
 
-  value = utils::GetEnv("UNITRACE_KernelOnSeperateTiles");
+  value = utils::GetEnv("UNITRACE_KernelOnSeparateTiles");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_KERNELS_PER_TILE);
   }

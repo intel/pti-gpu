@@ -132,11 +132,11 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--kernels-per-tile             " <<
-    "DEPRECATED - use --seperate-tiles instead" <<
+    "DEPRECATED - use --separate-tiles instead" <<
     std::endl;
   std::cout <<
-    "--seperate-tiles               " <<
-    "Trace each tile seperately in case of implicit scaling" <<
+    "--separate-tiles               " <<
+    "Trace each tile separately in case of implicit scaling" <<
     std::endl;
   std::cout <<
     "--tid                          " <<
@@ -310,11 +310,11 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_Demangle", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--kernels-per-tile") == 0) {
-      std::cerr << "Deprecated: --kernels-per-tile is deprecated, using --seperate-tiles" << std::endl;
-      utils::SetEnv("UNITRACE_KernelOnSeperateTiles", "1");
+      std::cerr << "Deprecated: --kernels-per-tile is deprecated, using --separate-tiles" << std::endl;
+      utils::SetEnv("UNITRACE_KernelOnSeparateTiles", "1");
       ++app_index;
-    } else if (strcmp(argv[i], "--seperate-tiles") == 0) {
-      utils::SetEnv("UNITRACE_KernelOnSeperateTiles", "1");
+    } else if (strcmp(argv[i], "--separate-tiles") == 0) {
+      utils::SetEnv("UNITRACE_KernelOnSeparateTiles", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--tid") == 0) {
       utils::SetEnv("UNITRACE_Tid", "1");
