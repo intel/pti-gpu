@@ -17,14 +17,14 @@ namespace samples_utils {
 //             False - if not.
 // Assumption: Operator <= is well defined for this type already.
 //
-template<typename T>
+template <typename T>
 inline bool isMonotonic(std::initializer_list<T> a_list) {
-  bool current_state=true;
-  T previous=a_list.begin()[0];
-  for (auto item: a_list) {
+  bool current_state = true;
+  T previous = a_list.begin()[0];
+  for (auto item : a_list) {
     current_state = current_state && (previous <= item);
     if (!current_state) return false;
-    previous=item;
+    previous = item;
   }
   return true;
 }
@@ -36,14 +36,14 @@ std::string stringify_uuid(uint8_t* uuid, std::string additional_string) {
   for (uint32_t i = 1; i <= PTI_MAX_DEVICE_UUID_SIZE; ++i) {
     sstream << std::setw(2);
     sstream << static_cast<uint16_t>(uuid[PTI_MAX_DEVICE_UUID_SIZE - i]);
-    if (i==4 || i==6 || i==8 || i==10) sstream << "-";
+    if (i == 4 || i == 6 || i == 8 || i == 10) sstream << "-";
   }
   sstream << std::setfill(' ') << std::dec;
   return sstream.str();
 }
 
 void print_uuid(uint8_t* uuid, std::string additional_string) {
-  std::cout << stringify_uuid(uuid,std::move(additional_string)) << std::endl;
+  std::cout << stringify_uuid(uuid, std::move(additional_string)) << std::endl;
 }
 
 void dump_record(pti_view_record_kernel* record) {
@@ -98,9 +98,12 @@ void dump_record(pti_view_record_memory_copy* record) {
   std::cout << "Memory Bytes Copied: " << std::dec << record->_bytes << '\n';
   std::cout << "Memory Op Thread Id : " << std::dec << record->_thread_id << '\n';
   std::cout << "Correlation Id : " << std::dec << record->_correlation_id << '\n';
-  std::cout << "Memory Copy Type: " << std::dec << record->_memcpy_type << '\n';
-  std::cout << "Memory Copy Source: " << std::dec << record->_mem_src << '\n';
-  std::cout << "Memory Copy Destination: " << std::dec << record->_mem_dst << '\n';
+  std::cout << "Memory Copy Type: " << std::dec << ptiViewMemcpyTypeToString(record->_memcpy_type)
+            << '\n';
+  std::cout << "Memory Copy Source: " << std::dec << ptiViewMemoryTypeToString(record->_mem_src)
+            << '\n';
+  std::cout << "Memory Copy Destination: " << std::dec
+            << ptiViewMemoryTypeToString(record->_mem_dst) << '\n';
 }
 
 void dump_record(pti_view_record_memory_copy_p2p* record) {
@@ -127,9 +130,12 @@ void dump_record(pti_view_record_memory_copy_p2p* record) {
   std::cout << "Memory Bytes Copied: " << std::dec << record->_bytes << '\n';
   std::cout << "Memory Op Thread Id : " << std::dec << record->_thread_id << '\n';
   std::cout << "Correlation Id : " << std::dec << record->_correlation_id << '\n';
-  std::cout << "Memory Copy Type: " << std::dec << record->_memcpy_type << '\n';
-  std::cout << "Memory Copy Source: " << std::dec << record->_mem_src << '\n';
-  std::cout << "Memory Copy Destination: " << std::dec << record->_mem_dst << '\n';
+  std::cout << "Memory Copy Type: " << std::dec << ptiViewMemcpyTypeToString(record->_memcpy_type)
+            << '\n';
+  std::cout << "Memory Copy Source: " << std::dec << ptiViewMemoryTypeToString(record->_mem_src)
+            << '\n';
+  std::cout << "Memory Copy Destination: " << std::dec
+            << ptiViewMemoryTypeToString(record->_mem_dst) << '\n';
 }
 
 void dump_record(pti_view_record_memory_fill* record) {
@@ -170,7 +176,7 @@ void dump_record(pti_view_record_sycl_runtime* record) {
 
 void dump_record(pti_view_record_overhead* record) {
   if (NULL == record) return;
-  std::cout << "Overhead Kind : " << record->_overhead_kind << '\n';
+  std::cout << "Overhead Kind : " << ptiViewOverheadKindToString(record->_overhead_kind) << '\n';
   std::cout << "Overhead Time Duration(ns): " << record->_overhead_duration_ns << '\n';
   std::cout << "Overhead Count: " << record->_overhead_count << '\n';
   std::cout << "Overhead Start Timestamp(ns): " << record->_overhead_start_timestamp_ns << '\n';

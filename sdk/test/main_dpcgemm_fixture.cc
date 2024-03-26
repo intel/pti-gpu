@@ -41,6 +41,7 @@ double perf_time_with_tracing = 0;
 double perf_time_without_tracing = 0;
 double perf_time = 0;
 uint64_t num_of_overhead_recs = 0;
+bool overhead_kind_stringified = false;
 uint64_t num_of_overhead_counts = 0;
 bool buffer_size_atleast_largest_record = false;
 
@@ -158,6 +159,7 @@ class MainFixtureTest : public ::testing::Test {
     kernel_has_sycl_file_count = 0;
     masked_by_last_id_records = 0;
     num_of_overhead_recs = 0;
+    overhead_kind_stringified = false;
     num_of_overhead_counts = 0;
     last_pop_eid = 0;
     last_id_records = 0;
@@ -254,6 +256,9 @@ class MainFixtureTest : public ::testing::Test {
           pti_view_record_overhead* record = reinterpret_cast<pti_view_record_overhead*>(ptr);
           num_of_overhead_counts += record->_overhead_count;
           num_of_overhead_recs++;
+          overhead_kind_stringified =
+              (std::strcmp(ptiViewOverheadKindToString(record->_overhead_kind), "BUFFER_TIME") ==
+               0);
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
@@ -289,19 +294,11 @@ class MainFixtureTest : public ::testing::Test {
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
           kernel_timestamps_monotonic = samples_utils::isMonotonic(
-                                  {
-                                    rec->_sycl_task_begin_timestamp ,
-                                    rec->_sycl_enqk_begin_timestamp ,
-                                    rec->_append_timestamp ,
-                                    rec->_submit_timestamp ,
-                                    rec->_start_timestamp ,
-                                    rec->_end_timestamp
-                                  }
-                                );
-          if (rec->_sycl_task_begin_timestamp == 0)
-            kernel_has_task_begin0_record = true;
-          if (rec->_sycl_enqk_begin_timestamp == 0)
-            kernel_has_enqk_begin0_record = true;
+              {rec->_sycl_task_begin_timestamp, rec->_sycl_enqk_begin_timestamp,
+               rec->_append_timestamp, rec->_submit_timestamp, rec->_start_timestamp,
+               rec->_end_timestamp});
+          if (rec->_sycl_task_begin_timestamp == 0) kernel_has_task_begin0_record = true;
+          if (rec->_sycl_enqk_begin_timestamp == 0) kernel_has_enqk_begin0_record = true;
           if (samples_utils::stringify_uuid(rec->_device_uuid, "") !=
               "00000000-0000-0000-0000-000000000000")
             kernel_uuid_zero = false;
@@ -553,6 +550,13 @@ TEST_F(MainFixtureTest, OverheadRecordsPresentViewRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_GT(num_of_overhead_recs, 0);
+}
+
+// Tests for overhead records have stringified enum types in stream.
+TEST_F(MainFixtureTest, OverheadRecordsKindTypeStringified) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunGemm();
+  EXPECT_EQ(overhead_kind_stringified, true);
 }
 
 // Tests for overhead records present in stream.

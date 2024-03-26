@@ -71,49 +71,49 @@ typedef enum _pti_view_memory_type {
  * where M=Memory(unknown), D=Device, H=Host
  */
 typedef enum _pti_view_memcpy_type {
-  PTI_VIEW_MEMCPY_TYPE_M2M = 0,
-  PTI_VIEW_MEMCPY_TYPE_M2H = 1,
-  PTI_VIEW_MEMCPY_TYPE_M2D = 2,
-  PTI_VIEW_MEMCPY_TYPE_M2S = 3,
+  PTI_VIEW_MEMCPY_TYPE_M2M = 0,     //!< Memory to Memory type
+  PTI_VIEW_MEMCPY_TYPE_M2H = 1,     //!< Memory to Host type
+  PTI_VIEW_MEMCPY_TYPE_M2D = 2,     //!< Memory to Device type
+  PTI_VIEW_MEMCPY_TYPE_M2S = 3,     //!< Memory to Shared type
 
-  PTI_VIEW_MEMCPY_TYPE_H2M = 4,
-  PTI_VIEW_MEMCPY_TYPE_H2H = 5,
-  PTI_VIEW_MEMCPY_TYPE_H2D = 6,
-  PTI_VIEW_MEMCPY_TYPE_H2S = 7,
+  PTI_VIEW_MEMCPY_TYPE_H2M = 4,     //!< Host to Memory type
+  PTI_VIEW_MEMCPY_TYPE_H2H = 5,     //!< Host to Host type
+  PTI_VIEW_MEMCPY_TYPE_H2D = 6,     //!< Host to Device type
+  PTI_VIEW_MEMCPY_TYPE_H2S = 7,     //!< Host to Shared type
 
-  PTI_VIEW_MEMCPY_TYPE_D2M = 8,
-  PTI_VIEW_MEMCPY_TYPE_D2H = 9,
-  PTI_VIEW_MEMCPY_TYPE_D2D = 10,
-  PTI_VIEW_MEMCPY_TYPE_D2S = 11,
+  PTI_VIEW_MEMCPY_TYPE_D2M = 8,     //!< Device to Memory type
+  PTI_VIEW_MEMCPY_TYPE_D2H = 9,     //!< Device to Host type
+  PTI_VIEW_MEMCPY_TYPE_D2D = 10,    //!< Device to Device type
+  PTI_VIEW_MEMCPY_TYPE_D2S = 11,    //!< Device to Shared type
 
-  PTI_VIEW_MEMCPY_TYPE_S2M = 12,
-  PTI_VIEW_MEMCPY_TYPE_S2H = 13,
-  PTI_VIEW_MEMCPY_TYPE_S2D = 14,
-  PTI_VIEW_MEMCPY_TYPE_S2S = 15,
+  PTI_VIEW_MEMCPY_TYPE_S2M = 12,    //!< Shared to Memory type
+  PTI_VIEW_MEMCPY_TYPE_S2H = 13,    //!< Shared to Host type
+  PTI_VIEW_MEMCPY_TYPE_S2D = 14,    //!< Shared to Device type
+  PTI_VIEW_MEMCPY_TYPE_S2S = 15,    //!< Shared to Shared type
 } pti_view_memcpy_type;
 
 /**
  *  @brief External correlation kind
  */
 typedef enum _pti_view_external_kind {
-  PTI_VIEW_EXTERNAL_KIND_INVALID = 0,
-  PTI_VIEW_EXTERNAL_KIND_UNKNOWN = 1,
-  PTI_VIEW_EXTERNAL_KIND_CUSTOM_0 = 2,
-  PTI_VIEW_EXTERNAL_KIND_CUSTOM_1 = 3,
-  PTI_VIEW_EXTERNAL_KIND_CUSTOM_2 = 4,
-  PTI_VIEW_EXTERNAL_KIND_CUSTOM_3 = 5,
+  PTI_VIEW_EXTERNAL_KIND_INVALID = 0,   //!< Invalid external kind
+  PTI_VIEW_EXTERNAL_KIND_UNKNOWN = 1,   //!< Unknown external kind
+  PTI_VIEW_EXTERNAL_KIND_CUSTOM_0 = 2,  //!< Custom external kind
+  PTI_VIEW_EXTERNAL_KIND_CUSTOM_1 = 3,  //!< Custom external kind
+  PTI_VIEW_EXTERNAL_KIND_CUSTOM_2 = 4,  //!< Custom external kind
+  PTI_VIEW_EXTERNAL_KIND_CUSTOM_3 = 5,  //!< Custom external kind
 } pti_view_external_kind;
 
 /**
  *  @brief Collection Overhead kind
  */
-typedef enum _pti_view_overhead_kind {
-  PTI_VIEW_OVERHEAD_KIND_INVALID = 0,
-  PTI_VIEW_OVERHEAD_KIND_UNKNOWN = 1,
-  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,
-  PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,
-  PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,
-  PTI_VIEW_OVERHEAD_KIND_TIME = 5,
+typedef enum _pti_view_overhead_kind { 
+  PTI_VIEW_OVERHEAD_KIND_INVALID = 0,        //!< Invalid overhead kind
+  PTI_VIEW_OVERHEAD_KIND_UNKNOWN = 1,        //!< Unknown overhead kind
+  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< overhead due to a resource 
+  PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,   //!< overhead due to a buffer flush
+  PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,         //!< overhead due to driver
+  PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< overhead due to L0 api processing time
 } pti_view_overhead_kind;
 
 /**
@@ -349,6 +349,29 @@ ptiViewPushExternalCorrelationId(pti_view_external_kind external_kind, uint64_t 
 pti_result PTI_EXPORT
 ptiViewPopExternalCorrelationId(pti_view_external_kind external_kind, uint64_t* p_external_id);
 
+/**
+ * @brief Helper function to return stringified enum types for pti_view_overhead_kind.
+ *
+ * @return const char*
+ */
+PTI_EXPORT const char* 
+ptiViewOverheadKindToString( pti_view_overhead_kind type );
+
+/**
+ * @brief Helper function to return stringified enum types for pti_view_memory_type.
+ *
+ * @return const char*
+ */
+PTI_EXPORT const char*
+ptiViewMemoryTypeToString( pti_view_memory_type type );
+
+/**
+ * @brief Helper function to return stringified enum types for pti_view_memcpy_type.
+ *
+ * @return const char*
+ */
+PTI_EXPORT const char*
+ptiViewMemcpyTypeToString( pti_view_memcpy_type type );
 
 #if defined(__cplusplus)
 }

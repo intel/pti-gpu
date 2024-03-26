@@ -21,6 +21,12 @@ bool memdst_type_valid = false;
 bool non_p2p_d2d_exists = false;
 bool atleast_2_devices = false;
 bool p2p_device_access = false;
+bool memcopy_type_stringified = false;
+bool memcopy_type_p2p_stringified = false;
+bool memory_src_type_stringified = false;
+bool memory_src_type_p2p_stringified = false;
+bool memory_dst_type_stringified = false;
+bool memory_dst_type_p2p_stringified = false;
 }  // namespace
 
 void StartTracing() {
@@ -85,12 +91,18 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
           pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
           if (rec->_memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2D) {
             memcopy_type_valid = true;
+            memcopy_type_stringified =
+                (std::strcmp(ptiViewMemcpyTypeToString(rec->_memcpy_type), "D2D") == 0);
           }
           if (rec->_mem_src == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE) {
             memsrc_type_valid = true;
+            memory_src_type_stringified =
+                (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_src), "DEVICE") == 0);
           }
           if (rec->_mem_dst == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE) {
             memdst_type_valid = true;
+            memory_dst_type_stringified =
+                (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_dst), "DEVICE") == 0);
           }
         }
         break;
@@ -107,12 +119,21 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
           uuid_non_unique = true;
         }
         if (p2p_d2s_record) {
-          if (rec->_memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2S)
+          if (rec->_memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2S) {
             memcopy_type_valid = true;
-          if (rec->_mem_src == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE)
+            memcopy_type_p2p_stringified =
+                (std::strcmp(ptiViewMemcpyTypeToString(rec->_memcpy_type), "D2S") == 0);
+          }
+          if (rec->_mem_src == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE) {
             memsrc_type_valid = true;
-          if (rec->_mem_dst == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED)
+            memory_src_type_p2p_stringified =
+                (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_src), "DEVICE") == 0);
+          }
+          if (rec->_mem_dst == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED) {
             memdst_type_valid = true;
+            memory_dst_type_p2p_stringified =
+                (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_dst), "SHARED") == 0);
+          }
         }
         break;
       }
@@ -248,6 +269,12 @@ class MemoryOperationFixtureTest : public ::testing::Test {
     non_p2p_d2d_exists = false;
     atleast_2_devices = false;
     p2p_device_access = false;
+    memcopy_type_stringified = false;
+    memcopy_type_p2p_stringified = false;
+    memory_src_type_stringified = false;
+    memory_src_type_p2p_stringified = false;
+    memory_dst_type_stringified = false;
+    memory_dst_type_p2p_stringified = false;
   }
 
   void TearDown() override {}
@@ -281,6 +308,15 @@ TEST_F(MemoryOperationFixtureTest, NonP2PD2D) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   p2pTest();
   ASSERT_EQ(non_p2p_d2d_exists, true);
+}
+
+// Detect the nonp2p -- device to same device memcpy stringified types
+TEST_F(MemoryOperationFixtureTest, NonP2PD2DStringified) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memcopy_type_stringified, true);
+  ASSERT_EQ(memory_src_type_stringified, true);
+  ASSERT_EQ(memory_dst_type_stringified, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, MemFilluuidDeviceNonZero) {
@@ -323,4 +359,12 @@ TEST_F(MemoryOperationFixtureTest, MemDstTypeShared) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   p2pTest();
   ASSERT_EQ(memdst_type_valid, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, P2PD2DStringified) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memcopy_type_p2p_stringified, true);
+  ASSERT_EQ(memory_src_type_p2p_stringified, true);
+  ASSERT_EQ(memory_dst_type_p2p_stringified, true);
 }
