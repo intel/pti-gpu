@@ -33,6 +33,7 @@
 
 #include "collector_options.h"
 #include "overhead_kinds.h"
+#include "pti/pti_view.h"
 #include "unikernel.h"
 #include "utils.h"
 #include "ze_event_cache.h"
@@ -89,6 +90,8 @@ struct ZeKernelCommand {
   uint64_t submit_time_device_ = 0;  // in ticks
   uint64_t tid = 0;
   uint64_t sycl_node_id_ = 0;
+  uint64_t sycl_queue_id_ =
+      PTI_INVALID_QUEUE_ID;  // default to invalid till we determine otherwise.
   uint32_t sycl_invocation_id_ = 0;
   uint64_t sycl_task_begin_time_ = 0;
   uint64_t sycl_enqk_begin_time_ = 0;
@@ -544,6 +547,7 @@ class ZeCollector {
 
       if (command->props.type == KernelCommandType::kKernel) {
         rec.sycl_node_id_ = command->sycl_node_id_;
+        rec.sycl_queue_id_ = command->sycl_queue_id_;
         rec.sycl_invocation_id_ = command->sycl_invocation_id_;
         rec.sycl_task_begin_time_ = command->sycl_task_begin_time_;
         // rec.sycl_task_end_time_ = command->sycl_task_end_time_;
@@ -556,6 +560,7 @@ class ZeCollector {
       }
       if (command->props.type == KernelCommandType::kMemory) {
         rec.sycl_node_id_ = command->sycl_node_id_;
+        rec.sycl_queue_id_ = command->sycl_queue_id_;
         rec.sycl_invocation_id_ = command->sycl_invocation_id_;
         rec.sycl_task_begin_time_ = command->sycl_task_begin_time_;
         // rec.sycl_task_end_time_ = command->sycl_task_end_time_;
@@ -988,6 +993,7 @@ class ZeCollector {
       SaveDeviceUUID(command->props.src_device, static_cast<uint8_t*>(dev_props.uuid.id));
 
       command->sycl_node_id_ = sycl_data_kview.sycl_node_id_;
+      command->sycl_queue_id_ = sycl_data_kview.sycl_queue_id_;
       command->sycl_invocation_id_ = sycl_data_kview.sycl_invocation_id_;
       command->sycl_task_begin_time_ = sycl_data_kview.sycl_task_begin_time_;
       command->sycl_enqk_begin_time_ = sycl_data_kview.sycl_enqk_begin_time_;
@@ -1013,6 +1019,7 @@ class ZeCollector {
       }
 
       command->sycl_node_id_ = sycl_data_mview.sycl_node_id_;
+      command->sycl_queue_id_ = sycl_data_mview.sycl_queue_id_;
       command->sycl_invocation_id_ = sycl_data_mview.sycl_invocation_id_;
       command->sycl_task_begin_time_ = sycl_data_mview.sycl_task_begin_time_;
       command->source_file_name_ = sycl_data_mview.source_file_name_;

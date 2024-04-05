@@ -84,6 +84,24 @@ if(HAVE_SYCL)
   target_link_libraries(mem_ops_test PUBLIC Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
 
+  add_executable(sycl_queue_id sycl_queue_id.cc)
+
+  target_include_directories(
+    sycl_queue_id
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/src"
+         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+         "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_compile_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only
+                                                ${PTI_COMPILE_FLAGS_EXPR})
+  target_link_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only
+                    ${PTI_LINK_FLAGS_EXPR})
+  target_compile_definitions(sycl_queue_id PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
+
+  target_link_libraries(sycl_queue_id PUBLIC Pti::pti_view GTest::gtest_main
+                                            LevelZero::level-zero)
+
   gtest_discover_tests(
     dpcgemm_suite
     DISCOVERY_TIMEOUT 60
@@ -100,6 +118,12 @@ if(HAVE_SYCL)
     vecsqadd_suite
     DISCOVERY_TIMEOUT 60
     PROPERTIES LABELS "functional")
+
+  gtest_discover_tests(
+    sycl_queue_id
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS "functional")
+
 
   gtest_discover_tests(
     no_kernel_overlap

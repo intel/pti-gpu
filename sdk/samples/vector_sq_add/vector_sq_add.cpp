@@ -222,6 +222,8 @@ int main(int argc, char *argv[]) {
     }
 
     auto d_selector{gpu_selector_v};
+    //sycl::property_list prop{sycl::property::queue::in_order()};
+    //queue q(d_selector, prop);
     queue q(d_selector, NULL);
 
     // Underlying queue handle object changes based on value of

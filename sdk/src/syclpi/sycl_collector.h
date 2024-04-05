@@ -24,6 +24,8 @@
 
 #include "unikernel.h"
 #include "utils.h"
+using StashedFuncPtr = xpti::result_t (*)(
+    char**, uint64_t&);  // signature of xpti function to get queue_id (xptiGetStashedTuple)
 
 // Work-around for ensuring XPTI_SUBSCRIBERS and XPTI_FRAMEWORK_DISPATCHER are
 // set before xptiTraceInit() is called.
@@ -44,6 +46,7 @@ class GlobalSyclInitializer {
 };
 
 inline constexpr auto kMaxFuncNameLen = 2048;
+inline constexpr uint64_t kDefaultQueueId = PTI_INVALID_QUEUE_ID;
 
 typedef void (*OnSyclRuntimeViewCallback)(void* data, ZeKernelCommandExecutionRecord& kcexec);
 
@@ -71,6 +74,7 @@ thread_local std::map<uint64_t, std::unique_ptr<sycl_node_t>> s_node_map = {};
 
 #endif
 
+thread_local std::map<uint64_t, uint64_t> node_q_map = {};
 struct SyclPiFuncT {
   std::array<char, kMaxFuncNameLen> func_name;
   uint32_t func_pid;
@@ -80,10 +84,10 @@ struct SyclPiFuncT {
 inline thread_local bool framework_finalized = false;
 inline thread_local SyclPiFuncT current_func_task_info;
 
-inline constexpr static std::array<const char* const, 12> kSTraceType = {
-    "TaskBegin",           "TaskEnd",  "Signal",    "NodeCreate", "FunctionWithArgsBegin",
-    "FunctionWithArgsEnd", "Metadata", "WaitBegin", "WaitEnd",    "FunctionBegin",
-    "FunctionEnd",         "Other"};
+inline constexpr static std::array<const char* const, 13> kSTraceType = {
+    "TaskBegin",           "TaskEnd",     "Signal",    "NodeCreate", "FunctionWithArgsBegin",
+    "FunctionWithArgsEnd", "Metadata",    "WaitBegin", "WaitEnd",    "FunctionBegin",
+    "FunctionEnd",         "QueueCreate", "Other"};
 
 inline const char* GetTracePointTypeString(xpti::trace_point_type_t trace_type) {
   switch (trace_type) {
@@ -109,8 +113,10 @@ inline const char* GetTracePointTypeString(xpti::trace_point_type_t trace_type) 
       return kSTraceType[9];
     case xpti::trace_point_type_t::function_end:
       return kSTraceType[10];
-    default:
+    case xpti::trace_point_type_t::queue_create:
       return kSTraceType[11];
+    default:
+      return kSTraceType[12];
   }
 }
 
@@ -141,6 +147,24 @@ class SyclCollector {
     }
   }
 
+  // This function detects ability of oneapi version used to build this code, to issue the new api
+  // call xptiGetStashedTuple.
+  //   If the new api is not present -- checked via dlsym using handle of shared object that would
+  //   contain it if present. Return nullptr or the actual function pointer to the
+  //   xptiGetStashedTuple.
+
+  template <typename T>
+  inline StashedFuncPtr GetStashedFuncPtrFromSharedObject(T address) {
+    auto lib_name = utils::GetPathToSharedObject(address);
+    auto xpti_handle_ = dlopen(lib_name.c_str(), RTLD_LAZY);
+    if (!xpti_handle_) return nullptr;
+    std::string xpti_sym = "xptiGetStashedTuple";
+    auto xptiGetStashedTuple =
+        reinterpret_cast<StashedFuncPtr>(dlsym(xpti_handle_, xpti_sym.c_str()));
+    dlclose(xpti_handle_);
+    return xptiGetStashedTuple;
+  }
+
   inline void SetCallback(const OnSyclRuntimeViewCallback callback) { acallback_ = callback; }
 
   static XPTI_CALLBACK_API void TpCallback(uint16_t TraceType, xpti::trace_event_data_t* /*Parent*/,
@@ -166,15 +190,6 @@ class SyclCollector {
     SPDLOG_DEBUG("{}: TraceType: {}", Time, GetTracePointTypeString(trace_type));
     SPDLOG_DEBUG(" Event_id: {}, Instance_id: {}, pid: {}, tid: {} name: {}", ID, Instance_ID, pid,
                  tid, Name.c_str());
-    /*
-    if (Event) {
-      xpti::metadata_t *Metadata = xptiQueryMetadata(Event);
-      for (const auto &Item : *Metadata) {
-          std::cout << "    " << xptiLookupString(Item.first) << ": ";
-          std::cout << xpti::readMetadata(Item) << "\n";
-      }
-    }
-    */
 
     switch (trace_type) {
       case xpti::trace_point_type_t::function_begin:
@@ -227,6 +242,8 @@ class SyclCollector {
           SyclCollector::Instance().sycl_runtime_rec_.cid_ = sycl_data_kview.cid_;
           if (strcmp(function_name, "piEnqueueKernelLaunch") == 0) {
             SyclCollector::Instance().sycl_runtime_rec_.kid_ = sycl_data_kview.kid_;
+            SyclCollector::Instance().sycl_runtime_rec_.sycl_queue_id_ =
+                sycl_data_kview.sycl_queue_id_;
           }
           if ((strcmp(function_name, "piextUSMEnqueueMemcpy") == 0) ||
               (strcmp(function_name, "piextUSMEnqueueMemcpy2d") == 0) ||
@@ -234,6 +251,8 @@ class SyclCollector {
               (strcmp(function_name, "piEnqueueMemBufferWrite") == 0)) {
             SyclCollector::Instance().sycl_runtime_rec_.kid_ = sycl_data_mview.kid_;
             SyclCollector::Instance().sycl_runtime_rec_.tid_ = sycl_data_mview.tid_;
+            SyclCollector::Instance().sycl_runtime_rec_.sycl_queue_id_ =
+                sycl_data_mview.sycl_queue_id_;
           }
           SyclCollector::Instance().sycl_runtime_rec_.end_time_ = Time;
           if (SyclCollector::Instance().acallback_ != nullptr) {
@@ -270,9 +289,11 @@ class SyclCollector {
                 sycl_data_kview.source_line_number_ = Payload->line_no;
               }
               sycl_data_kview.sycl_node_id_ = ID;
+              sycl_data_kview.sycl_queue_id_ = node_q_map[ID];
               sycl_data_kview.sycl_invocation_id_ = Instance_ID;
               sycl_data_kview.sycl_task_begin_time_ = Time;
-              break;
+            } else if (strcmp(xptiLookupString(Item.first), "memory_object") == 0) {
+              sycl_data_mview.sycl_queue_id_ = node_q_map[ID];
             }
           }
         }
@@ -286,7 +307,30 @@ class SyclCollector {
         }
 #endif
         break;
+      case xpti::trace_point_type_t::queue_create:
+        break;
       case xpti::trace_point_type_t::node_create:
+        if (Event) {
+          char* key = nullptr;
+          uint64_t value = 0;
+          if (SyclCollector::Instance().xptiGetStashedKV) {
+            if (SyclCollector::Instance().xptiGetStashedKV(&key, value) ==
+                xpti::result_t::XPTI_RESULT_SUCCESS) {
+              if (strcmp(key, "queue_id") == 0) {
+                node_q_map[ID] = value;
+              }
+            }
+          } else {
+            node_q_map[ID] = kDefaultQueueId;
+          }
+          xpti::metadata_t* Metadata = xptiQueryMetadata(Event);
+          for (const auto& Item : *Metadata) {
+            if (strcmp(xptiLookupString(Item.first), "sym_function_name") == 0)
+              sycl_data_kview.sycl_queue_id_ = node_q_map[ID];
+            if (strcmp(xptiLookupString(Item.first), "memory_object") == 0)
+              sycl_data_mview.sycl_queue_id_ = node_q_map[ID];
+          }
+        }
 #ifdef PTI_DEBUG
         const char* source_file_name = nullptr;
         if (Payload) {
@@ -321,12 +365,15 @@ class SyclCollector {
   }
 
  private:
-  SyclCollector(OnSyclRuntimeViewCallback buffer_callback) : acallback_(buffer_callback){};
+  SyclCollector(OnSyclRuntimeViewCallback buffer_callback)
+      : acallback_(buffer_callback),
+        xptiGetStashedKV(GetStashedFuncPtrFromSharedObject(xptiReset)){};
 
   inline static thread_local ZeKernelCommandExecutionRecord sycl_runtime_rec_;
   std::atomic<OnSyclRuntimeViewCallback> acallback_ = nullptr;
   bool sycl_pi_graph_created_ = false;
   std::atomic<bool> enabled_ = false;
+  StashedFuncPtr xptiGetStashedKV = nullptr;
 };
 
 XPTI_CALLBACK_API void xptiTraceInit(unsigned int /*major_version*/, unsigned int /*minor_version*/,
@@ -341,6 +388,8 @@ XPTI_CALLBACK_API void xptiTraceInit(unsigned int /*major_version*/, unsigned in
     stream_id = xptiRegisterStream(stream_name);
     // Register our lone callback to all pre-defined trace point types
     xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::node_create),
+                         SyclCollector::TpCallback);
+    xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::queue_create),
                          SyclCollector::TpCallback);
     xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::edge_create),
                          SyclCollector::TpCallback);

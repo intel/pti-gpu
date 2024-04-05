@@ -58,7 +58,12 @@ void oneMKLGemm(void) {
     };
 
     // Create sycl queue
-    sycl::queue main_queue(my_device, my_exception_handler);
+#if __INTEL_LLVM_COMPILER >= 20240000
+    sycl::property_list prop{sycl::property::queue::in_order()};
+#else
+    sycl::property_list prop{};
+#endif
+    sycl::queue main_queue(my_device, my_exception_handler, prop);
     // Create sycl context
     auto main_context = main_queue.get_context();
     int m = 16;

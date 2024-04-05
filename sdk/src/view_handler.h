@@ -658,6 +658,7 @@ inline auto DoCommonMemCopy(bool p2p, const ZeKernelCommandExecutionRecord& rec)
   record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
   record._submit_timestamp = ApplyTimeShift(rec.submit_time_, ts_shift);
   record._queue_handle = rec.queue_;
+  record._sycl_queue_id = rec.sycl_queue_id_;
   record._context_handle = rec.context_;
   record._bytes = rec.bytes_xfered_;
 
@@ -771,6 +772,7 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   record._source_line_number =
       rec.source_line_number_ != UINT32_MAX ? rec.source_line_number_ : 0ULL;
   record._sycl_node_id = rec.sycl_node_id_;
+  record._sycl_queue_id = rec.sycl_queue_id_;
   record._sycl_invocation_id = rec.sycl_invocation_id_;
   record._sycl_enqk_begin_timestamp = ApplyTimeShift(rec.sycl_enqk_begin_time_, ts_shift);
   record._sycl_task_begin_timestamp = ApplyTimeShift(rec.sycl_task_begin_time_, ts_shift);

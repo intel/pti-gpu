@@ -20,8 +20,9 @@ extern "C" {
 /**
  * @brief const defines.
  */
-#define PTI_MAX_DEVICE_UUID_SIZE 16           //!< Size of uuid array.
-#define PTI_MAX_PCI_ADDRESS_SIZE 16           //!< Size of pci address array.
+#define PTI_MAX_DEVICE_UUID_SIZE 16                         //!< Size of uuid array.
+#define PTI_MAX_PCI_ADDRESS_SIZE 16                         //!< Size of pci address array.
+#define PTI_INVALID_QUEUE_ID 0xFFFFFFFFFFFFFFFF-1           //!< For oneapi versions earlier than 2024.1.1 -- UINT64_MAX-1
 
 /**
  * @brief Return/Error codes
@@ -152,6 +153,7 @@ typedef struct pti_view_record_kernel {
                                                     //!< ns
   uint64_t _sycl_enqk_begin_timestamp;
   uint64_t _sycl_node_id;
+  uint64_t _sycl_queue_id;                               //!< Device front-end queue id
   uint32_t _sycl_invocation_id;
 } pti_view_record_kernel;
 
@@ -193,6 +195,7 @@ typedef struct pti_view_record_memory_copy {
   uint64_t _submit_timestamp;                       //!< Timestamp of memory copy command list submission
                                                     //!< to device, ns
   uint64_t _bytes;                                  //!< number of bytes copied
+  uint64_t _sycl_queue_id;                          //!< Device front-end queue id
 } pti_view_record_memory_copy;
 
 /**
@@ -222,6 +225,7 @@ typedef struct pti_view_record_memory_copy_p2p {
   uint64_t _submit_timestamp;                       //!< Timestamp of memory copy command list submission
                                                     //!< to device, ns
   uint64_t _bytes;                                  //!< number of bytes copied
+  uint64_t _sycl_queue_id;                          //!< Device front-end queue id
 } pti_view_record_memory_copy_p2p;
 
 /**
@@ -248,6 +252,7 @@ typedef struct pti_view_record_memory_fill {
                                                     //!< to device, ns
   uint64_t _bytes;                                  //!< number of bytes filled
   uint64_t _value_for_set;                          //!< value filled
+  uint64_t _sycl_queue_id;                          //!< Device front-end queue id
 } pti_view_record_memory_fill;
 
 /**

@@ -27,6 +27,8 @@ bool memory_src_type_stringified = false;
 bool memory_src_type_p2p_stringified = false;
 bool memory_dst_type_stringified = false;
 bool memory_dst_type_p2p_stringified = false;
+bool queue_id_memp2p_records = false;
+inline constexpr uint64_t kMaxQueueId = (uint64_t)-1;
 }  // namespace
 
 void StartTracing() {
@@ -34,6 +36,7 @@ void StartTracing() {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
 }
 
 void StopTracing() {
@@ -41,6 +44,7 @@ void StopTracing() {
   ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
   ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P);
   ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
+  ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS);
 }
 
 static void BufferRequested(unsigned char** buf, size_t* buf_size) {
@@ -115,6 +119,7 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         if (memcpy_name.find("S2S - P2P") != std::string::npos) p2p_s2s_record = true;
         pti_view_record_memory_copy_p2p* rec =
             reinterpret_cast<pti_view_record_memory_copy_p2p*>(ptr);
+        if (rec->_sycl_queue_id != kMaxQueueId) queue_id_memp2p_records = true;
         if (memcmp(rec->_src_uuid, rec->_dst_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
           uuid_non_unique = true;
         }
@@ -176,6 +181,7 @@ void p2pTest() {
   try {
     std::vector<device> gpu_devices = platform.get_devices();
     num_root_devices = gpu_devices.size();
+    std::cout << "Number of Root Devices: " << num_root_devices << "\n";
     for (uint32_t i = 0; i < num_root_devices; i++) {
       gpu_context.push_back(context(gpu_devices[i]));
       gpu_queues.push_back(queue(gpu_context[i], gpu_devices[i]));
@@ -275,6 +281,7 @@ class MemoryOperationFixtureTest : public ::testing::Test {
     memory_src_type_p2p_stringified = false;
     memory_dst_type_stringified = false;
     memory_dst_type_p2p_stringified = false;
+    queue_id_memp2p_records = false;
   }
 
   void TearDown() override {}
@@ -364,7 +371,17 @@ TEST_F(MemoryOperationFixtureTest, MemDstTypeShared) {
 TEST_F(MemoryOperationFixtureTest, P2PD2DStringified) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   p2pTest();
+  if (!atleast_2_devices)
+    GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
   ASSERT_EQ(memcopy_type_p2p_stringified, true);
   ASSERT_EQ(memory_src_type_p2p_stringified, true);
   ASSERT_EQ(memory_dst_type_p2p_stringified, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, P2PQueueIdPresent) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  if (!atleast_2_devices)
+    GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
+  ASSERT_EQ(queue_id_memp2p_records, true);
 }

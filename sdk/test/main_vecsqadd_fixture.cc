@@ -254,7 +254,8 @@ void RunVecsqadd(TestType a_test_type) {
   }
 
   auto d_selector{gpu_selector_v};
-  queue q(d_selector, NULL);
+  sycl::property_list prop{sycl::property::queue::in_order()};
+  queue q(d_selector, prop);
 
   // Start Tests by Type
 

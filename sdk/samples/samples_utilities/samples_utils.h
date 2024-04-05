@@ -58,6 +58,7 @@ void dump_record(pti_view_record_kernel* record) {
             << '\n';
   std::cout << "                  Ze Kernel End Time: " << record->_end_timestamp << " ns" << '\n';
   std::cout << "Kernel Queue Handle: " << record->_queue_handle << '\n';
+  std::cout << "Kernel Queue ID: " << record->_sycl_queue_id << '\n';
   std::cout << "Kernel CommandList Context Handle: " << record->_context_handle << '\n';
   std::cout << "Kernel Id : " << std::dec << record->_kernel_id << '\n';
   std::cout << "Correlation Id : " << std::dec << record->_correlation_id << '\n';
@@ -93,6 +94,7 @@ void dump_record(pti_view_record_memory_copy* record) {
   std::cout << "                  Memory Op End Time: " << std::dec << record->_end_timestamp
             << " ns" << '\n';
   std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
+  std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
   std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
   std::cout << "Memory Op Id : " << std::dec << record->_mem_op_id << '\n';
   std::cout << "Memory Bytes Copied: " << std::dec << record->_bytes << '\n';
@@ -125,6 +127,7 @@ void dump_record(pti_view_record_memory_copy_p2p* record) {
   std::cout << "                  Memory Op End Time: " << std::dec << record->_end_timestamp
             << " ns" << '\n';
   std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
+  std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
   std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
   std::cout << "Memory Op Id : " << std::dec << record->_mem_op_id << '\n';
   std::cout << "Memory Bytes Copied: " << std::dec << record->_bytes << '\n';
@@ -155,6 +158,7 @@ void dump_record(pti_view_record_memory_fill* record) {
   std::cout << "                  Memory Op End Time: " << std::dec << record->_end_timestamp
             << " ns" << '\n';
   std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
+  std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
   std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
   std::cout << "Memory Op Id : " << std::dec << record->_mem_op_id << '\n';
   std::cout << "Memory Op Thread Id : " << std::dec << record->_thread_id << '\n';

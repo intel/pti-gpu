@@ -58,6 +58,44 @@ void GEMM(const float *a, const float *b, float *c, unsigned size,
   c[i * size + j] = sum;
 }
 
+static void InitKernelA(sycl::queue queue, std::vector<float> &a, unsigned size) {
+  PTI_ASSERT(size > 0);
+  PTI_ASSERT(a.size() == size * size);
+  try {
+    sycl::buffer<float, 1> a_buf(a.data(), a.size());
+    sycl::range<1> num_items{a.size()};
+    sycl::event event = queue.submit([&](sycl::handler &cgh) {
+      auto a_acc = a_buf.get_access<sycl::access::mode::write>(cgh);
+      cgh.parallel_for(num_items, [=](auto i) {
+        a_acc[i]=i;
+      });
+    });
+    queue.wait_and_throw();
+  } catch (const sycl::exception& e) {
+    std::cout << "[ERROR] " << e.what() << std::endl;
+    throw;
+  }
+}
+
+static void InitKernelB(sycl::queue queue, std::vector<float> &a, unsigned size) {
+  PTI_ASSERT(size > 0);
+  PTI_ASSERT(a.size() == size * size);
+  try {
+    sycl::buffer<float, 1> a_buf(a.data(), a.size());
+    sycl::range<1> num_items{a.size()};
+    sycl::event event = queue.submit([&](sycl::handler &cgh) {
+      auto a_acc = a_buf.get_access<sycl::access::mode::write>(cgh);
+      cgh.parallel_for(num_items, [=](auto i) {
+        a_acc[i]=i;
+      });
+    });
+    queue.wait_and_throw();
+  } catch (const sycl::exception& e) {
+    std::cout << "[ERROR] " << e.what() << std::endl;
+    throw;
+  }
+}
+
 static float RunAndCheck(sycl::queue queue, const std::vector<float> &a,
                          const std::vector<float> &b, std::vector<float> &c,
                          unsigned size, float expected_result) {
@@ -267,7 +305,7 @@ int main(int argc, char *argv[]) {
   ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid+50);
   ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, eid+30);
   ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_2, eid+40);
-  unsigned repeat_count = 4;
+  unsigned repeat_count = 1;
   unsigned size = 1024;
   sycl::device dev;
   try {
@@ -303,8 +341,11 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
-  sycl::queue queue(dev, sycl::async_handler{}, prop_list);
+  sycl::property_list prop_list{sycl::property::queue::enable_profiling(), sycl::property::queue::in_order()};
+  sycl::queue queue(dev, sycl::async_handler{}, prop_list);   //Main runandcheck kernel
+  sycl::queue queue1(dev, sycl::async_handler{}, prop_list);  //Main runandcheck kernel
+  sycl::queue queue2(dev, sycl::async_handler{}, prop_list);  //init kernel a
+  sycl::queue queue3(dev, sycl::async_handler{}, prop_list);  //init kernel b
 
   ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid);
   ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid);
@@ -327,7 +368,8 @@ int main(int argc, char *argv[]) {
   try {
     auto start = std::chrono::steady_clock::now();
     float expected_result = A_VALUE * B_VALUE * size;
-    Compute(queue, a, b, c, size, repeat_count, expected_result);
+    Compute(queue1, a, b, c, size, repeat_count, expected_result);
+    InitKernelA(queue2,a,size);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
     std::cout << "Total execution time with tracing: " << time.count() << " sec"
@@ -338,7 +380,9 @@ int main(int argc, char *argv[]) {
 
     ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1, &eid);
 
-    Compute(std::move(queue), a, b, c, size, repeat_count, expected_result);
+    Compute(queue, a, b, c, size, repeat_count, expected_result);
+    Compute(queue2, a, b, c, size, repeat_count, expected_result);
+    InitKernelB(queue3,a,size);
     end = std::chrono::steady_clock::now();
     time = end - start;
 

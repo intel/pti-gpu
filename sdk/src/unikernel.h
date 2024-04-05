@@ -39,6 +39,7 @@ class UniKernelId {
 
 struct ZeKernelCommandExecutionRecord {
   uint64_t sycl_node_id_;
+  uint64_t sycl_queue_id_ = PTI_INVALID_QUEUE_ID;
   uint32_t sycl_invocation_id_;
   uint64_t sycl_task_begin_time_;
   uint64_t sycl_enqk_begin_time_;
