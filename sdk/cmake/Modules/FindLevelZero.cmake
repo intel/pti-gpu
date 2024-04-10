@@ -45,7 +45,6 @@ The following cache variables may also be set:
 # https://cmake.org/cmake/help/latest/manual/cmake-developer.7.html
 
 # Level Zero provides
-#   * level-zero.pc
 #   * libze_loader.pc
 find_package(PkgConfig)
 pkg_check_modules(PC_level_zero QUIET level-zero)
@@ -81,7 +80,7 @@ get_filename_component(LevelZero_LIBRARY_DIR ${LevelZero_LIBRARY} DIRECTORY)
 # zero install.
 find_path(
   LevelZero_PkgConfig_DIR
-  NAMES level-zero.pc
+  NAMES libze_loader.pc
   HINTS ${LevelZero_LIBRARY_DIR}
   PATH_SUFFIXES pkgconfig
                 lib/pkgconfig
@@ -96,7 +95,7 @@ find_path(
 )
 
 if(LevelZero_PkgConfig_DIR)
-  file(READ "${LevelZero_PkgConfig_DIR}/level-zero.pc" LevelZero_PkgConfig)
+  file(READ "${LevelZero_PkgConfig_DIR}/libze_loader.pc" LevelZero_PkgConfig)
   string(REGEX MATCH "[0-9]+\.[0-9]+\.[0-9]+" LEVEL_ZERO_VER_FOUND "${LevelZero_PkgConfig}")
   set(LevelZero_VERSION ${LEVEL_ZERO_VER_FOUND})
 endif()

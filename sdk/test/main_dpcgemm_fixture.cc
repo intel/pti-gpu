@@ -588,9 +588,10 @@ TEST_F(MainFixtureTest, NegTestNullBufferSize) {
 
 TEST_F(MainFixtureTest, ValidateNotImplementedViewReturn) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_OPENCL_CALLS), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
+  EXPECT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
+  EXPECT_EQ(ptiViewEnable(PTI_VIEW_OPENCL_CALLS), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_CPU_KERNEL), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
+  EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
 }
 
 TEST_F(MainFixtureTest, ValidateNullPtrPopExternalId) {
