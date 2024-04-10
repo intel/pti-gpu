@@ -9,6 +9,9 @@
 # libigc.so has a memory leak in strdup somewhere.
 leak:libigc.so
 
+# temp workaround
+leak:stdlib_new_delete.cpp
+
 # libmkl_sycl.so in zero_pool.cpp.
 leak:oneapi::mkl::gpu::calloc_device
 

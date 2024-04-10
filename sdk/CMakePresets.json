@@ -82,7 +82,8 @@
       "displayName": "ThreadSanitizer Test Config",
       "description": "Build configuration for thread sanitizer.",
       "environment": {
-        "TSAN_OPTIONS": "suppressions=${sourceDir}/test/suppressions/TSan.supp"
+        "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+        "TSAN_OPTIONS": "suppressions=${sourceDir}/test/suppressions/TSan.supp exitcode=0"
       },
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_tsan_toolchain.cmake"

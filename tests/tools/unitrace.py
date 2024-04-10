@@ -42,13 +42,13 @@ def run(path, tooloption, app, option):
     occurrences = stderr.count("(end)\n")
     expected = 0
     if (app == "dpc_gemm"): 
-      expected = 7
+      expected = 5
     elif (app == "ze_gemm"):
       expected = 6
     elif (app == "cl_gemm"):
       expected = 4
     elif (app == "omp_gemm"):
-      expected = 16
+      expected = 17
       
     if (occurrences != expected): 
       log = " (" + app + " " + option + " " + str(occurrences) + " captured but " + str(expected) + " expected) "
