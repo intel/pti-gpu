@@ -298,7 +298,6 @@ int main(int argc, char *argv[]) {
       });
   // start tracing early enables to capture nodes creation at piProgramCreate
   //  and Kernel Task sycl file/line info is captured, as exampple shows at a Node Creation
-  StartTracing();
   // Emit external correlation id records by marking section of code by ptiViewPushExternalCorrelationId / ptiViewPopExternalCorrelationId
   //   Each of the enabled activity view records (sycl runtime, kernel launches) will be *preceeded* by 1 external correlation id record per kind.
   ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid);
@@ -380,9 +379,8 @@ int main(int argc, char *argv[]) {
 
     ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1, &eid);
 
-    Compute(queue, a, b, c, size, repeat_count, expected_result);
-    Compute(queue2, a, b, c, size, repeat_count, expected_result);
-    InitKernelB(queue3,a,size);
+  StartTracing();
+    Compute(std::move(queue), a, b, c, size, repeat_count, expected_result);
     end = std::chrono::steady_clock::now();
     time = end - start;
 

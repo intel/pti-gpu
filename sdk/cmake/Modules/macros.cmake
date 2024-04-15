@@ -1067,8 +1067,8 @@ macro(GetLevelZero)
   if (NOT TARGET LevelZero::level-zero)
     # Need zelEnableTracingLayer
     set(LZ_VER_MAJOR "1")
-    set(LZ_VER_MINOR "15")
-    set(LZ_VER_PATCH "8")
+    set(LZ_VER_MINOR "16")
+    set(LZ_VER_PATCH "1")
     set(LZ_VER "${LZ_VER_MAJOR}.${LZ_VER_MINOR}.${LZ_VER_PATCH}")
 
     include(FetchContent)
@@ -1077,7 +1077,7 @@ macro(GetLevelZero)
         URL
         https://github.com/oneapi-src/level-zero/archive/refs/tags/v${LZ_VER}.tar.gz
         URL_HASH
-        SHA256=80663DBD4D01D9519185C6E568F2E836BFEA7484363F4DA8CF5CF77C3BF58602
+        SHA256=f341dd6355d8da6ee9c29031642b8e8e4259f91c13c72d318c81663af048817e
     )
     # Prevent content from automatically being installed with PTI
     FetchContent_GetProperties(LevelZero)

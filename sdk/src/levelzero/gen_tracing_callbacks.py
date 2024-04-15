@@ -240,7 +240,56 @@ def get_enum_map(include_path):
 
   return enum_map
 
+# These two functions are temporal implementation to make zeCommandListHostSynchronize Epilog callback
+# Moving forward PTI should use new way of setting up Level-Zero callbacks -
+# via functions like this zelTracer<api_name_here>RegisterCallback
+# see Level-Zero source/layers/tracing/README.md
+def gen_new_callbacks(f):
+  f.write("static void zeCommandListHostSynchronizeOnExit(\n")
+  f.write("    [[maybe_unused]] ze_command_list_host_synchronize_params_t* params,\n")
+  f.write("    [[maybe_unused]]ze_result_t result,\n")
+  f.write("    [[maybe_unused]]void* global_data,\n")
+  f.write("    [[maybe_unused]]void** instance_user_data) {\n")
+  f.write("\n")
+
+  f.write("  [[maybe_unused]] ZeCollector* collector =\n")
+  f.write("    static_cast<ZeCollector*>(global_data);\n")
+
+  f.write("  if (collector->options_.hybrid_mode) return;\n")
+
+  f.write("  [[maybe_unused]] uint64_t end_time_host = 0;\n")
+  f.write("  end_time_host = utils::GetTime();\n")
+
+  f.write("  std::vector<uint64_t> kids;\n")
+
+  f.write("  if (ze_instance_data.kid != (uint64_t)(-1)) {\n")
+  f.write("      kids.push_back(ze_instance_data.kid);\n")
+  f.write("  }\n")
+
+  f.write("  if (collector->options_.kernel_tracing) {\n")
+  f.write("    OnExitCommandListHostSynchronize(params, result, global_data, instance_user_data, &kids);\n")
+  f.write("  }\n")
+
+  f.write("\n")
+
+  f.write("\n")
+  f.write("  uint64_t start_time_host = ze_instance_data.start_time_host;\n")
+  f.write("\n")
+  f.write("  if (start_time_host == 0) {\n")
+  f.write("    return;\n")
+  f.write("  }\n")
+  f.write("\n")
+  f.write("}\n")
+  f.write("\n")
+
+
 # Generate Callbacks ##########################################################
+
+def gen_new_apis_set_callbacks(f):
+  f.write("  status = zelTracerCommandListHostSynchronizeRegisterCallback(\n")
+  f.write("                 tracer, ZEL_REGISTER_EPILOGUE,\n")
+  f.write("                 zeCommandListHostSynchronizeOnExit);\n")
+  f.write("\n")
 
 def gen_api(f, func_list, kfunc_list, group_map):
   f.write("void EnableTracing(zel_tracer_handle_t tracer) {\n")
@@ -270,6 +319,8 @@ def gen_api(f, func_list, kfunc_list, group_map):
     if not func in group_map:
       continue
 
+
+    #print ("== Generating for func: ", func)
     group, callback = group_map[func]
     group_name = group[0]
     group_cond = group[1]
@@ -290,6 +341,9 @@ def gen_api(f, func_list, kfunc_list, group_map):
   f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
   f.write("  status = zelTracerSetEpilogues(tracer, &epilogue);\n")
   f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
+  f.write("\n")
+  gen_new_apis_set_callbacks(f)
+  f.write("\n")
   f.write("  status = zelTracerSetEnabled(tracer, true);\n")
   f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
   #f.write("  {std::string o_api_string = \"zelTracerSet*\";overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,o_api_string.c_str());};\n")
@@ -358,9 +412,11 @@ def get_kernel_tracing_callback(func):
     fp.close()
     return cb
 
-def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list, synchronize_func_list, params, enum_map):
+def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list, synchronize_func_list, hybrid_mode_func_list, params, enum_map):
   f.write("  [[maybe_unused]] ZeCollector* collector =\n")
   f.write("    static_cast<ZeCollector*>(global_data);\n")
+  if (func not in hybrid_mode_func_list):
+    f.write("  if (collector->options_.hybrid_mode) return;\n")
 
   if (func in synchronize_func_list):
     f.write("  std::vector<uint64_t> kids;\n")
@@ -392,9 +448,11 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
 
   f.write("  ze_instance_data.start_time_host = start_time_host;\n")
 
-def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, params, enum_map):
+def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, hybrid_mode_func_list, params, enum_map):
   f.write("  [[maybe_unused]] ZeCollector* collector =\n")
   f.write("    static_cast<ZeCollector*>(global_data);\n")
+  if (func not in hybrid_mode_func_list):
+    f.write("  if (collector->options_.hybrid_mode) return;\n")
 
   f.write("  [[maybe_unused]] uint64_t end_time_host = 0;\n")
   #f.write("  uint64_t end_time_device = 0;\n")
@@ -450,11 +508,14 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
   f.write("  }\n")
   f.write("\n")
 
-def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, group_map, param_map, enum_map):
+
+def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, hybrid_mode_func_list, group_map, param_map, enum_map):
   for func in func_list:
     if not func in group_map:
+      #print ("Function not in group_map: ", func)
       continue
 
+    #print ("+++ Function : ", func)
     assert func in param_map
     group, callback = group_map[func]
     callback_name = callback[0]
@@ -466,7 +527,7 @@ def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list,
     f.write("    [[maybe_unused]]ze_result_t result,\n")
     f.write("    [[maybe_unused]]void* global_data,\n")
     f.write("    [[maybe_unused]]void** instance_user_data) {\n")
-    gen_enter_callback(f, func, command_list_func_list, command_queue_func_list, synchronize_func_list_on_enter, param_map[func], enum_map)
+    gen_enter_callback(f, func, command_list_func_list, command_queue_func_list, synchronize_func_list_on_enter, hybrid_mode_func_list, param_map[func], enum_map)
     f.write("}\n")
     f.write("\n")
     f.write("static void " + func + "OnExit(\n")
@@ -474,10 +535,11 @@ def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list,
     f.write("    [[maybe_unused]]ze_result_t result,\n")
     f.write("    [[maybe_unused]]void* global_data,\n")
     f.write("    [[maybe_unused]]void** instance_user_data) {\n")
-    gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map[func], enum_map)
+    gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, hybrid_mode_func_list, param_map[func], enum_map)
     f.write("}\n")
     if callback_cond:
       f.write("#endif //" + callback_cond + "\n")
+    f.write("\n")
     f.write("\n")
 
 def main():
@@ -557,6 +619,10 @@ def main():
 
   submission_func_list.append("zeCommandQueueExecuteCommandLists")
 
+  hybrid_mode_func_list = [
+      "zeEventPoolCreate"
+      ]
+
   synchronize_func_list_on_enter = [
       "zeEventDestroy",
       "zeEventHostReset"]
@@ -573,7 +639,8 @@ def main():
 
   gen_result_converter(dst_file, enum_map)
   gen_structure_type_converter(dst_file, enum_map)
-  gen_callbacks(dst_file, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, group_map, param_map, enum_map)
+  gen_callbacks(dst_file, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, hybrid_mode_func_list, group_map, param_map, enum_map)
+  gen_new_callbacks(dst_file)
   gen_api(dst_file, func_list, kfunc_list, group_map)
 
   l0_file.close()

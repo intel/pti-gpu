@@ -403,12 +403,6 @@ class MainZeFixtureTest : public ::testing::Test {
   }
 };
 
-TEST_F(MainZeFixtureTest, ZeEnableTracingLayer) {
-  std::string value = utils::GetEnv("ZE_ENABLE_TRACING_LAYER");
-  if (value.empty()) ze_tracing_enabled_env = false;
-  ASSERT_TRUE(ze_tracing_enabled_env);
-}
-
 TEST_F(MainZeFixtureTest, ZeInitializationSucceeded) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();

@@ -27,11 +27,7 @@ inline std::vector<ze_driver_handle_t> GetDriverList() {
   uint32_t driver_count = 0;
   overhead::Init();
   status = zeDriverGet(&driver_count, nullptr);
-  {
-    std::string o_api_string = "zeDriverGet";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDriverGet");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (driver_count == 0) {
@@ -41,11 +37,7 @@ inline std::vector<ze_driver_handle_t> GetDriverList() {
   std::vector<ze_driver_handle_t> driver_list(driver_count);
   overhead::Init();
   status = zeDriverGet(&driver_count, driver_list.data());
-  {
-    std::string o_api_string = "zeDriverGet";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDriverGet");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return driver_list;
@@ -58,11 +50,7 @@ inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) 
   uint32_t device_count = 0;
   overhead::Init();
   status = zeDeviceGet(driver, &device_count, nullptr);
-  {
-    std::string o_api_string = "zeDeviceGet";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDriverGet");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (device_count == 0) {
@@ -72,11 +60,7 @@ inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) 
   std::vector<ze_device_handle_t> device_list(device_count);
   overhead::Init();
   status = zeDeviceGet(driver, &device_count, device_list.data());
-  {
-    std::string o_api_string = "zeDeviceGet";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDriverGet");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return device_list;
@@ -99,11 +83,7 @@ inline std::vector<ze_device_handle_t> GetSubDeviceList(ze_device_handle_t devic
   uint32_t sub_device_count = 0;
   overhead::Init();
   status = zeDeviceGetSubDevices(device, &sub_device_count, nullptr);
-  {
-    std::string o_api_string = "zeDeviceGetSubDevices";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDeviceGetSubDevices");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (sub_device_count == 0) {
@@ -113,11 +93,7 @@ inline std::vector<ze_device_handle_t> GetSubDeviceList(ze_device_handle_t devic
   std::vector<ze_device_handle_t> sub_device_list(sub_device_count);
   overhead::Init();
   status = zeDeviceGetSubDevices(device, &sub_device_count, sub_device_list.data());
-  {
-    std::string o_api_string = "zeDeviceGetSubDevices";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDeviceGetSubDevices");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return sub_device_list;
@@ -133,11 +109,7 @@ inline ze_driver_handle_t GetGpuDriver(std::size_t pti_device_id) {
       props.pNext = nullptr;
       overhead::Init();
       ze_result_t status = zeDeviceGetProperties(device, &props);
-      {
-        std::string o_api_string = "zeDeviceGetProperties";
-        overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                             o_api_string.c_str());
-      }
+      overhead_fini("zeDeviceGetProperties");
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       if (props.type == ZE_DEVICE_TYPE_GPU) {
         driver_list.push_back(driver);
@@ -166,11 +138,7 @@ inline ze_device_handle_t GetGpuDevice(std::size_t pti_device_id) {
       props.pNext = nullptr;
       overhead::Init();
       ze_result_t status = zeDeviceGetProperties(device, &props);
-      {
-        std::string o_api_string = "zeDeviceGetProperties";
-        overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                             o_api_string.c_str());
-      }
+      overhead_fini("zeDeviceGetProperties");
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       if (props.type == ZE_DEVICE_TYPE_GPU) {
         device_list.push_back(device);
@@ -218,11 +186,7 @@ inline ze_context_handle_t GetContext(ze_driver_handle_t driver) {
 
   overhead::Init();
   status = zeContextCreate(driver, &context_desc, &context);
-  {
-    std::string o_api_string = "zeContextCreate";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeContextCreate");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return context;
 }
@@ -235,11 +199,7 @@ inline std::string GetDeviceName(ze_device_handle_t device) {
   props.pNext = nullptr;
   overhead::Init();
   status = zeDeviceGetProperties(device, &props);
-  {
-    std::string o_api_string = "zeDeviceGetProperties";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDeviceGetProperties");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return static_cast<char*>(props.name);
 }
@@ -249,11 +209,7 @@ inline size_t GetKernelMaxSubgroupSize(ze_kernel_handle_t kernel) {
   ze_kernel_properties_t props{};
   overhead::Init();
   ze_result_t status = zeKernelGetProperties(kernel, &props);
-  {
-    std::string o_api_string = "zeKernelGetProperties";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeKernelGetProperties");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return props.maxSubgroupSize;
 }
@@ -264,22 +220,14 @@ inline std::string GetKernelName(ze_kernel_handle_t kernel, bool demangle = fals
   size_t size = 0;
   overhead::Init();
   ze_result_t status = zeKernelGetName(kernel, &size, nullptr);
-  {
-    std::string o_api_string = "zeKernelGetName";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeKernelGetName");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   PTI_ASSERT(size > 0);
 
   std::vector<char> name(size);
   overhead::Init();
   status = zeKernelGetName(kernel, &size, name.data());
-  {
-    std::string o_api_string = "zeKernelGetName";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeKernelGetName");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   PTI_ASSERT(name[size - 1] == '\0');
 
@@ -296,11 +244,7 @@ inline void GetDeviceTimestamps(ze_device_handle_t device, uint64_t* host_timest
   PTI_ASSERT(device_timestamp != nullptr);
   overhead::Init();
   ze_result_t status = zeDeviceGetGlobalTimestamps(device, host_timestamp, device_timestamp);
-  {
-    std::string o_api_string = "zeDeviceGetGlobalTimestamps";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  };
+  overhead_fini("zeDeviceGetGlobalTimestamps");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 }
 
@@ -311,11 +255,7 @@ inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
   props.pNext = nullptr;
   overhead::Init();
   ze_result_t status = zeDeviceGetProperties(device, &props);
-  {
-    std::string o_api_string = "zeDeviceGetProperties";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDeviceGetProperties");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return props.timerResolution;
 }
@@ -327,11 +267,7 @@ inline uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
   props.pNext = nullptr;
   overhead::Init();
   ze_result_t status = zeDeviceGetProperties(device, &props);
-  {
-    std::string o_api_string = "zeDeviceGetProperties";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDeviceGetProperties");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return ((props.kernelTimestampValidBits == 64)
@@ -345,14 +281,32 @@ inline ze_api_version_t GetDriverVersion(ze_driver_handle_t driver) {
   ze_api_version_t version = ZE_API_VERSION_FORCE_UINT32;
   overhead::Init();
   ze_result_t status = zeDriverGetApiVersion(driver, &version);
-  {
-    std::string o_api_string = "zeDriverGetApiVersion";
-    overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                         o_api_string.c_str());
-  }
+  overhead_fini("zeDriverGetApiVersion");
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return version;
+}
+
+inline bool GetDeviceTimerFrequency_TimestampMask_UUID(ze_device_handle_t device,
+                                                       uint64_t& timer_frequency,
+                                                       uint64_t& timestamp_mask,
+                                                       ze_device_uuid_t& uuid) {
+  PTI_ASSERT(device != nullptr);
+
+  ze_device_properties_t props;
+  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
+  props.pNext = nullptr;
+  overhead::Init();
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  overhead_fini("zeDeviceGetProperties");
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  timer_frequency = props.timerResolution;
+  timestamp_mask = (props.kernelTimestampValidBits == 64)
+                       ? std::numeric_limits<uint64_t>::max()
+                       : ((1ULL << props.kernelTimestampValidBits) - 1ULL);
+  std::copy_n(props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE, uuid.id);
+  return true;
 }
 
 inline ze_api_version_t GetVersion() {

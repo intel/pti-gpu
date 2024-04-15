@@ -139,7 +139,9 @@ class ZeEventCache {
   }
 
   void ResetEvent(ze_event_handle_t event) {
-    PTI_ASSERT(event != nullptr);
+    if (event == nullptr) {
+      return;
+    }
     const std::lock_guard<std::mutex> lock(lock_);
 
     auto info = event_info_map_.find(event);
@@ -156,14 +158,18 @@ class ZeEventCache {
   }
 
   void ReleaseEvent(ze_event_handle_t event) {
-    PTI_ASSERT(event != nullptr);
+    if (event == nullptr) {
+      return;
+    }
     const std::lock_guard<std::mutex> lock(lock_);
 
+    // get context by event
     auto info = event_info_map_.find(event);
     if (info == event_info_map_.end()) {
       return;
     }
 
+    // event vector by the context
     auto result = event_map_.find(info->second);
     PTI_ASSERT(result != event_map_.end());
     if (result != event_map_.end()) {
@@ -175,6 +181,7 @@ class ZeEventCache {
                              o_api_string.c_str());
       }
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      // returning event to vector of available events
       result->second.push_back(event);
     }
   }

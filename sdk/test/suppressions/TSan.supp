@@ -6,7 +6,7 @@
 # Additions should rarely be added, meant to suppress errors from libpti.so
 # dependencies.
 
-# TODO(matthew.schilling@intel.com): Fixed in compiler >= 2024.0.0? Definitely an issue on == 2023.2.1
+# TODO: Fixed in compiler >= 2024.0.0? Definitely an issue on == 2023.2.1
 race:libxpti*
 race:libsycl.so.6*
 
@@ -19,5 +19,5 @@ deadlock:*ze_intel_gpu.so*
 # Need to file a bug, might be related to above.
 called_from_lib:libigdgmm.so*
 
-#TODO(matthew.schilling@intel.com): Fixed in compiler >= 2024.0.0? Definitely an issue on == 2023.2.1
+#TODO: Fixed in compiler >= 2024.0.0? Definitely an issue on == 2023.2.1
 deadlock:libigdrcl*

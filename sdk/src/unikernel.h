@@ -113,4 +113,6 @@ inline thread_local std::map<ExternalCorrIdKey, std::stack<pti_view_record_exter
 inline thread_local std::map<OverheadKindKey, pti_view_record_overhead, OverheadKeyCompare>
     map_overhead_per_kind;
 
+// Tracks on a per thread basis if a L0 view_kind has been activated/enabled.
+inline thread_local std::map<pti_view_kind, bool> map_view_kind_enabled;
 #endif  // PTI_TOOLS_UNITRACE_UNIKERNEL_H

@@ -31,7 +31,7 @@ using StashedFuncPtr = xpti::result_t (*)(
 // set before xptiTraceInit() is called.
 // Warning: Do not add a dependency on another static variable or there is a
 // risk of undefined behavior.
-// TODO(matthew.schilling@intel.com): Fix when there's a better solution.
+// TODO: Fix when there's a better solution.
 class GlobalSyclInitializer {
  public:
   inline static bool Initialize() {
@@ -187,8 +187,8 @@ class SyclCollector {
 
     const auto trace_type = static_cast<xpti::trace_point_type_t>(TraceType);
 
-    SPDLOG_DEBUG("{}: TraceType: {}", Time, GetTracePointTypeString(trace_type));
-    SPDLOG_DEBUG(" Event_id: {}, Instance_id: {}, pid: {}, tid: {} name: {}", ID, Instance_ID, pid,
+    SPDLOG_TRACE("{}: TraceType: {}", Time, GetTracePointTypeString(trace_type));
+    SPDLOG_TRACE(" Event_id: {}, Instance_id: {}, pid: {}, tid: {} name: {}", ID, Instance_ID, pid,
                  tid, Name.c_str());
 
     switch (trace_type) {
@@ -208,7 +208,7 @@ class SyclCollector {
 
         if (UserData) {
           const auto* function_name = static_cast<const char*>(UserData);
-          SPDLOG_DEBUG("\tSYCL.PI Function Begin: {}", function_name);
+          SPDLOG_TRACE("\tSYCL.PI Function Begin: {}", function_name);
           if ((strlen(function_name) + 1) < kMaxFuncNameLen) {
             strcpy(current_func_task_info.func_name.data(), function_name);
           } else {
@@ -232,11 +232,11 @@ class SyclCollector {
       case xpti::trace_point_type_t::function_end:
         if (UserData) {
           const auto* function_name = static_cast<const char*>(UserData);
-          SPDLOG_DEBUG("\tSYCL.PI Function End: {}", function_name);
+          SPDLOG_TRACE("\tSYCL.PI Function End: {}", function_name);
           PTI_ASSERT(strcmp(current_func_task_info.func_name.data(), function_name) == 0);
           PTI_ASSERT(current_func_task_info.func_pid == pid);
           PTI_ASSERT(current_func_task_info.func_tid == tid);
-          SPDLOG_DEBUG("\tVerified: func: {} - Pid: {} - Tid: {}",
+          SPDLOG_TRACE("\tVerified: func: {} - Pid: {} - Tid: {}",
                        current_func_task_info.func_name.data(), current_func_task_info.func_pid,
                        current_func_task_info.func_tid);
           SyclCollector::Instance().sycl_runtime_rec_.cid_ = sycl_data_kview.cid_;
@@ -380,7 +380,6 @@ XPTI_CALLBACK_API void xptiTraceInit(unsigned int /*major_version*/, unsigned in
                                      const char* /*version_str*/, const char* stream_name) {
   static uint8_t stream_id = 0;
 
-  spdlog::set_pattern("[%H:%M:%S] [thread %t] %v");
   if (strcmp(stream_name, "sycl") == 0) {
     // Register this stream to get the stream ID; This stream may already have
     // been registered by the framework and will return the previously

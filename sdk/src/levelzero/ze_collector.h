@@ -16,6 +16,8 @@
 
 #include <dlfcn.h>
 #include <level_zero/layers/zel_tracing_api.h>
+#include <level_zero/layers/zel_tracing_register_cb.h>
+#include <level_zero/loader/ze_loader.h>
 #include <level_zero/ze_api.h>
 #include <spdlog/spdlog.h>
 
@@ -37,11 +39,15 @@
 #include "unikernel.h"
 #include "utils.h"
 #include "ze_event_cache.h"
+#include "ze_local_collection_helpers.h"
 #include "ze_utils.h"
 
 struct CallbacksEnabled {
   std::atomic<bool> acallback = false;
 };
+
+std::atomic<uint64_t> global_ref_count = 0;  // Keeps track of zelEnable/zelDisable TracingLayer()
+                                             // calls issued. 0 => truely disabled tracing.
 
 struct ZeInstanceData {
   uint64_t start_time_host;
@@ -72,17 +78,21 @@ struct ZeKernelCommandProps {
   std::byte* value_array;
   ze_device_handle_t src_device = nullptr;  // Device for p2p memcpy, source of copy data
   ze_device_handle_t dst_device = nullptr;  // Device for p2p memcpy, destination of copy data
+  void* dst = nullptr;                      // Addressess for MemorCopy or Fill
+  void* src = nullptr;
 };
 
 struct ZeKernelCommand {
   ZeKernelCommandProps props;
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
-  ze_event_handle_t event = nullptr;
+  ze_event_handle_t event_self = nullptr;  // in Local mode this evet goes to the Bridge kernel
+  ze_event_handle_t event_swap = nullptr;  // event created in Local collection mode
   ze_device_handle_t device =
       nullptr;  // Device where the operation is submitted, associated with command list
   uint64_t kernel_id = 0;
   uint64_t append_time = 0;
+  ze_context_handle_t context = nullptr;
   ze_command_list_handle_t command_list = nullptr;
   ze_command_queue_handle_t queue = nullptr;
   ze_fence_handle_t fence;
@@ -109,7 +119,7 @@ struct ZeCommandQueue {
 };
 
 struct ZeCommandListInfo {
-  std::vector<ZeKernelCommand*> kernel_commands;
+  std::vector< std::unique_ptr<ZeKernelCommand> > kernel_commands;
   ze_context_handle_t context;
   ze_device_handle_t device;
   bool immediate;
@@ -124,6 +134,7 @@ struct ZeDeviceDescriptor {
   ze_driver_handle_t driver = nullptr;
   ze_context_handle_t context = nullptr;
   ze_pci_ext_properties_t pci_properties{};
+  ze_device_uuid_t uuid;
 };
 
 using ZeKernelGroupSizeMap = std::map<ze_kernel_handle_t, ZeKernelGroupSize>;
@@ -132,22 +143,6 @@ using ZeImageSizeMap = std::map<ze_image_handle_t, size_t>;
 using ZeDeviceMap = std::map<ze_device_handle_t, std::vector<ze_device_handle_t>>;
 
 using OnZeKernelFinishCallback = void (*)(void*, std::vector<ZeKernelCommandExecutionRecord>&);
-
-// Work-around for ensuring ZE_ENABLE_TRACING_LAYER=1 is set before zeInit() is
-// called. Not guarenteed to work if user calls zeInit() before main() in their
-// program.
-// Warning: Do not add a dependency on another static variable or there is a
-// risk of undefined behavior.
-// TODO: Fix when there's a better solution.
-class GlobalZeInitializer {
- public:
-  inline static ze_result_t Initialize() {
-    utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
-    return zeInit(ZE_INIT_FLAG_GPU_ONLY);
-  }
-
-  inline static ze_result_t result_ = Initialize();
-};
 
 class ZeCollector {
  public:  // Interface
@@ -159,45 +154,62 @@ class ZeCollector {
   static std::unique_ptr<ZeCollector> Create(CollectorOptions options,
                                              OnZeKernelFinishCallback acallback = nullptr,
                                              void* callback_data = nullptr) {
-    if (GlobalZeInitializer::result_ != ZE_RESULT_SUCCESS) {
-      SPDLOG_WARN("Unable to initialize ZeCollector, error code {0:x}",
-                  static_cast<std::size_t>(GlobalZeInitializer::result_));
-      return nullptr;
+    SPDLOG_DEBUG("In {}", __FUNCTION__);
+    ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_CRITICAL(
+          "zeInit() returned: {}. There might be Level-Zero Loader "
+          "and Tracing library mismatch. Cannot continue",
+          static_cast<uint32_t>(status));
     }
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_api_version_t version = utils::ze::GetVersion();
-    PTI_ASSERT(ZE_MAJOR_VERSION(version) >= 1 && ZE_MINOR_VERSION(version) >= 2);
+    PTI_ASSERT(ZE_MAJOR_VERSION(version) >= 1 && ZE_MINOR_VERSION(version) >= 3);
 
     auto collector =
         std::unique_ptr<ZeCollector>(new ZeCollector(options, acallback, callback_data));
     PTI_ASSERT(collector != nullptr);
 
-    ze_result_t status = ZE_RESULT_SUCCESS;
+    collector->collection_mode_ =
+        SelectCollectionMode(collector->driver_introspection_capable_,
+                             collector->options_.disabled_mode, collector->options_.hybrid_mode);
+    SPDLOG_DEBUG("\tCollection_mode: {}", (uint32_t)collector->collection_mode_);
+
     zel_tracer_desc_t tracer_desc = {ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector.get()};
     zel_tracer_handle_t tracer = nullptr;
     overhead::Init();
     status = zelTracerCreate(&tracer_desc, &tracer);
-    {
-      std::string o_api_string = "zelTracerCreate";
-      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                           o_api_string.c_str());
-    }
+    overhead_fini("zelTracerCreate");
 
     if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_WARN("Unable to create Level Zero tracer, error code {0:x}",
-                  static_cast<std::size_t>(status));
+      SPDLOG_CRITICAL("Unable to create Level Zero tracer, error code {}",
+                      static_cast<std::size_t>(status));
       return nullptr;
     }
 
     collector->EnableTracing(tracer);
 
-    collector->tracer_ = tracer;
+    // collector->EnableTracer();
 
+    status = zelEnableTracingLayer();
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    global_ref_count++;
+
+    if (collector->options_.disabled_mode) {
+      SPDLOG_DEBUG("\tRunning in disabled mode");
+      status = zelDisableTracingLayer();
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      global_ref_count--;
+    } else {
+      SPDLOG_DEBUG("\tRunning in enabled mode");
+    }
+
+    collector->tracer_ = tracer;
     return collector;
   }
 
   ~ZeCollector() {
-    ProcessCalls(nullptr, nullptr);
     if (tracer_ != nullptr) {
 #if !defined(_WIN32)
       ze_result_t status = zelTracerDestroy(tracer_);
@@ -205,21 +217,103 @@ class ZeCollector {
 #endif
     }
   }
+  enum CollectionMode { FullAPI = 0, Hybrid = 1, Local = 2 };
 
-  void EnableTracer() { cb_enabled_.acallback = true; }
+  static CollectionMode SelectCollectionMode(bool introspection_capable, bool& disabled_mode,
+                                             bool& hybrid_mode) {
+    ZeCollector::CollectionMode mode = FullAPI;
+    disabled_mode = false;
+    hybrid_mode = false;
+    SPDLOG_TRACE("In {}", __FUNCTION__);
 
-  void DisableTracer() { cb_enabled_.acallback = false; }
+    SPDLOG_DEBUG("\tIntrospectable?: {}", introspection_capable);
+    std::cout << "Introspectable?: " << introspection_capable << "\n";
+    SPDLOG_DEBUG("\tChecking if the mode enforced by PTI_COLLECTION_MODE environment variable");
+    std::cout << "Checking if the mode enforced by PTI_COLLECTION_MODE environment variable"
+              << std::endl;
+    try {
+      std::string env_string = utils::GetEnv("PTI_COLLECTION_MODE");
+      int32_t env_value = -1;
+      if (!env_string.empty()) {
+        env_value = std::stoi(env_string);
+        SPDLOG_DEBUG("\tDetected var: {}", env_value);
+        switch (env_value) {
+          case 0:  // FullAPI collection mode
+            std::cout << "Forced FullAPI collection\n";
+            SPDLOG_DEBUG("\tForced FullAPI collection");
+            disabled_mode = false;
+            hybrid_mode = false;
+            mode = FullAPI;
+            break;
+          case 1:  // Asking for Hybrid collection mode
+            if (introspection_capable) {
+              std::cout
+                  << "Level-Zero Introspection API available: Forced fallback to hybrid mode.\n";
+              SPDLOG_DEBUG(
+                  "\tLevel-Zero Introspection API available: Forced fallback to hybrid mode.");
+              disabled_mode = false;
+              hybrid_mode = true;
+              mode = Hybrid;
+              break;
+            } else {
+              std::cout << "Level-Zero Introspection API not available: Cannot do Hybrid mode.\n";
+              SPDLOG_WARN("\tLevel-Zero Introspection API not available: Cannot do Hybrid mode.");
+            }
+            break;
+          case 2:  // Asking for Local collection mode
+            if (introspection_capable) {
+              std::cout << "Forced fallback to Local mode.\n";
+              SPDLOG_DEBUG("\tForced fallback to Local mode.");
+              disabled_mode = true;
+              hybrid_mode = false;
+              mode = Local;
+            } else {
+              SPDLOG_WARN("\tLevel-Zero Introspection API not available: Cannot do Local mode.");
+            }
+            break;
+        }
+      } else {
+        if (introspection_capable) {
+          mode = Local;
+          disabled_mode = true;
+          hybrid_mode = false;
+        }
+      }
+    } catch (std::invalid_argument const& ex) {
+      hybrid_mode = false;
+      disabled_mode = false;
+      mode = FullAPI;
+    } catch (std::out_of_range const& ex) {
+      hybrid_mode = false;
+      disabled_mode = false;
+      mode = FullAPI;
+    }
+    return mode;
+  }
+
+  // We get here on StartTracing/enable of L0 related view kinds.
+  // The caller needs to ensure duplicated enable of view_kinds do not happen on a per thread basis.
+  void EnableTracer() {
+    // switches to full/hybrid api mode - only if we are not already in full/hybrid api mode.  Else
+    // records another view_kind active in region.
+    startstop_mode_changer.ToStartTracing();
+  }
+
+  // We get here on StopTracing/disable of L0 related view kinds.
+  // The caller needs to ensure duplicated disables of view_kinds do not happen on a per thread
+  // basis.
+  void DisableTracer() {
+    // disables full/hybrid api mode - only if all previously active view_kinds are disabled
+    // across all threads. Else records another view_kind deactivated in region.
+    startstop_mode_changer.ToStopTracing();
+  }
 
   void DisableTracing() {
     // PTI_ASSERT(tracer_ != nullptr);
 #if !defined(_WIN32)
     overhead::Init();
     ze_result_t status = zelTracerSetEnabled(tracer_, false);
-    {
-      std::string o_api_string = "zelTracerSetEnabled";
-      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                           o_api_string.c_str());
-    }
+    overhead_fini("zelTracerSetEnabled");
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 #endif
   }
@@ -229,17 +323,62 @@ class ZeCollector {
       : options_(options),
         acallback_(acallback),
         callback_data_(callback_data),
-        event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP) {
+        event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP),
+        swap_event_pool_(512),
+        startstop_mode_changer(this) {
     CreateDeviceMap();
+    MarkIntrospection();
+  }
+
+  ze_result_t DetectIntrospectionApis(const ze_driver_handle_t& driver) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    // Create Context
+    ze_context_handle_t context = nullptr;
+    ze_context_desc_t cdesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC, nullptr, 0};
+
+    overhead::Init();
+    ze_result_t status = zeContextCreate(driver, &cdesc, &context);
+    overhead_fini("zeContextCreate");
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    // Create Event Pool
+    ze_event_pool_handle_t event_pool = nullptr;
+    ze_event_pool_desc_t event_pool_desc = {
+        ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
+        ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP | ZE_EVENT_POOL_FLAG_HOST_VISIBLE, 1};
+
+    overhead::Init();
+    status = zeEventPoolCreate(context, &event_pool_desc, 0, nullptr, &event_pool);
+    overhead_fini("zeEventPoolCreate");
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    // IntrospectionAPI --- return status determines if api's available on this driver.
+    ze_event_pool_flags_t event_pool_flags;
+    overhead::Init();
+    status = zeEventPoolGetFlags(event_pool, &event_pool_flags);
+    overhead_fini("zeEventPoolGetFlags");
+
+    // Cleanup
+    overhead::Init();
+    ze_result_t status1 = zeEventPoolDestroy(event_pool);
+    overhead_fini("zeEventPoolDestroy");
+    PTI_ASSERT(status1 == ZE_RESULT_SUCCESS);
+
+    overhead::Init();
+    status1 = zeContextDestroy(context);
+    overhead_fini("zeContextDestroy");
+    PTI_ASSERT(status1 == ZE_RESULT_SUCCESS);
+
+    return status;
   }
 
   void CreateDeviceMap() {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     const auto drivers = utils::ze::GetDriverList();
     for (auto* const driver : drivers) {
       const auto devices = utils::ze::GetDeviceList(driver);
       for (auto* const device : devices) {
         device_descriptors_[device] = GetZeDeviceDescriptor(device);
-
         const auto sub_devices = utils::ze::GetSubDeviceList(device);
         device_map_[device] = sub_devices;
         for (auto* const sub_device : sub_devices) {
@@ -249,19 +388,47 @@ class ZeCollector {
     }
   }
 
+  void MarkIntrospection() {
+    const auto drivers = utils::ze::GetDriverList();
+    for (auto const driver : drivers) {
+      const auto devices = utils::ze::GetDeviceList(driver);
+      for (auto const device : devices) {
+        ze_device_properties_t device_properties = {};
+        device_properties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+        overhead::Init();
+        ze_result_t status = zeDeviceGetProperties(device, &device_properties);
+        overhead_fini("zeDeviceGetProperties");
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+        // Checking only on one driver for GPU device
+        const ze_device_type_t type = ZE_DEVICE_TYPE_GPU;
+        if (type == device_properties.type) {
+          // Issue api call here and detect if introspection apis are supported by underlying
+          // rolling driver.
+          status = DetectIntrospectionApis(driver);
+          if (status == ze_result_t::ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
+            driver_introspection_capable_ = false;
+          } else if (status == ze_result_t::ZE_RESULT_SUCCESS) {
+            driver_introspection_capable_ = true;
+          }
+          break;
+        }
+      }
+    }
+  }
+
   static ZeDeviceDescriptor GetZeDeviceDescriptor(const ze_device_handle_t device) {
     ZeDeviceDescriptor desc = {};
-    desc.device_timer_frequency = utils::ze::GetDeviceTimerFrequency(device);
-    desc.device_timer_mask = utils::ze::GetDeviceTimestampMask(device);
+
+    bool ret = utils::ze::GetDeviceTimerFrequency_TimestampMask_UUID(
+        device, desc.device_timer_frequency, desc.device_timer_mask, desc.uuid);
+    PTI_ASSERT(ret);
+
     ze_pci_ext_properties_t pci_device_properties;
 
     overhead::Init();
     ze_result_t status = zeDevicePciGetPropertiesExt(device, &pci_device_properties);
-    {
-      std::string o_api_string = "zeDevicePciGetPropertiesExt";
-      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                           o_api_string.c_str());
-    }
+    overhead_fini("zeDevicePciGetPropertiesExt");
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     desc.pci_properties = pci_device_properties;
@@ -271,12 +438,9 @@ class ZeCollector {
 
     overhead::Init();
     status = zeDeviceGetGlobalTimestamps(device, &host_time, &ticks);
-    {
-      std::string o_api_string = "zeDeviceGetGlobalTimestamps";
-      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                           o_api_string.c_str());
-    }
+    overhead_fini("zeDeviceGetGlobalTimestamps");
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
     device_time = ticks & desc.device_timer_mask;
     if (desc.device_timer_frequency) {
       device_time = device_time * NSEC_IN_SEC / desc.device_timer_frequency;
@@ -284,6 +448,41 @@ class ZeCollector {
     desc.host_time_origin = host_time;
     desc.device_time_origin = device_time;
     return desc;
+  }
+
+  ze_result_t ReBuildCommandListInfo([[maybe_unused]] ze_command_list_handle_t command_list) {
+    SPDLOG_DEBUG("In {}", __FUNCTION__);
+    ze_result_t status = ZE_RESULT_SUCCESS;
+
+    ze_bool_t isImmediate = true;
+    ze_context_handle_t hContext;
+    ze_device_handle_t hDevice;
+    uint32_t ordinal = -1;
+    uint32_t index = -1;
+
+    status = zeCommandListGetDeviceHandle(command_list, &hDevice);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    status = zeCommandListGetContextHandle(command_list, &hContext);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    status = zeCommandListIsImmediate(command_list, &isImmediate);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SPDLOG_DEBUG("\tIs CmdList immediate?  {}", isImmediate);
+    if (isImmediate) {
+      status = zeCommandListImmediateGetIndex(command_list, &index);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      status = zeCommandListGetOrdinal(command_list, &ordinal);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    }
+
+    std::pair<uint32_t, uint32_t> oi(ordinal, index);
+    CreateCommandList(command_list, hContext, hDevice, oi, isImmediate);
+
+    return status;
+  }
+
+  bool CommandListInfoExists(ze_command_list_handle_t clist_handle) {
+    std::shared_lock lock(command_list_map_mutex_);
+    return command_list_map_.find(clist_handle) != command_list_map_.end();
   }
 
   const ZeCommandListInfo& GetCommandListInfoConst(ze_command_list_handle_t clist_handle) {
@@ -303,117 +502,100 @@ class ZeCollector {
     return command_list_map_.find(clist_handle);
   }
 
-  bool IsDeviceExist(ze_device_handle_t device_handle) {
-    std::shared_lock lock(dev_uuid_map_mutex_);
-    return dev_uuid_map_.find(device_handle) != dev_uuid_map_.end();
-  }
-
-  bool CopyDeviceUUIDTo(ze_device_handle_t device_handle, uint8_t* ptr) {
-    std::shared_lock lock(dev_uuid_map_mutex_);
-    if (dev_uuid_map_.find(device_handle) != dev_uuid_map_.end()) {
-      std::copy_n(dev_uuid_map_[device_handle], ZE_MAX_DEVICE_UUID_SIZE, ptr);
-      return true;
+  void CopyDeviceUUIDTo(ze_device_handle_t device_handle, uint8_t* ptr) {
+    SPDLOG_TRACE("In {} device_handle: {}", __FUNCTION__, (void*)device_handle);
+    if (device_descriptors_.find(device_handle) != device_descriptors_.end()) {
+      std::copy_n(device_descriptors_[device_handle].uuid.id, ZE_MAX_DEVICE_UUID_SIZE, ptr);
+      return;
     }
-    return false;
+    return;
   }
 
-  bool SaveDeviceUUID(ze_device_handle_t device_handle, uint8_t* ptr) {
-    if (!IsDeviceExist(device_handle)) {
-      std::unique_lock lock(dev_uuid_map_mutex_);
-      std::copy_n(ptr, ZE_MAX_DEVICE_UUID_SIZE, dev_uuid_map_[device_handle]);
-      return true;
-    }
-    return false;
-  }
-
-  void ProcessCall(ze_event_handle_t event, std::vector<uint64_t>* kids,
-                   std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
+  void ProcessCallEvent(ze_event_handle_t event, std::vector<uint64_t>* kids,
+                        std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
     // lock is acquired in caller
     // const std::lock_guard<std::mutex> lock(lock_);
+    SPDLOG_TRACE("In {}, event: {}", __FUNCTION__, (void*)event);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
     overhead::Init();
     status = zeEventQueryStatus(event);
-    {
-      std::string o_api_string = "zeEventQueryStatus";
-      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                           o_api_string.c_str());
-    }
+    overhead_fini("zeEventQueryStatus");
     if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_WARN("\tIn {} EventQueryStatus returned: {}, Returning...", __FUNCTION__,
+                  (uint32_t)status);
       return;
     }
 
-    bool done = false;
+    [[maybe_unused]] uint32_t idx = 0;
     for (auto it = kernel_command_list_.begin(); it != kernel_command_list_.end();) {
-      ZeKernelCommand* command = *it;
+      ZeKernelCommand* command = (*it).get();
       PTI_ASSERT(command != nullptr);
-      if (command->event != nullptr) {
+
+      if (command->event_self != nullptr) {
+        SPDLOG_TRACE("\tChecking event status idx: {}", idx);
         overhead::Init();
-        status = zeEventQueryStatus(command->event);
-        {
-          std::string o_api_string = "zeEventQueryStatus";
-          overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                               o_api_string.c_str());
-        }
+        status = zeEventQueryStatus(command->event_self);
+        overhead_fini("zeEventQueryStatus");
+        idx++;
         if (status == ZE_RESULT_SUCCESS) {
-          if (command->event == event) {
-            ProcessCall(command, kids, kcexecrec);
-            done = true;
+          SPDLOG_TRACE("\tEvent SIGNALED!");
+          if (command->event_self == event) {
+            SPDLOG_TRACE("\tKNOWN EVENT!");
+            ProcessCallCommand(command, kids, kcexecrec);
+            it = kernel_command_list_.erase(it);
+            // TODO: this could be good check in Debug
+            /*if (collection_mode_ == Local && command->event_swap != nullptr) {
+              status = zeEventHostReset(command->event_swap);
+              PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            }*/
+            break;
           } else {
-            ProcessCall(command, nullptr, kcexecrec);
+            SPDLOG_TRACE("\tUNKNOWN EVENT!");
+            ProcessCallCommand(command, nullptr, kcexecrec);
+            it = kernel_command_list_.erase(it);
           }
+        } else {
+          it++;
         }
-      }
-      if (command->event == nullptr) {
-        delete command;
-        it = kernel_command_list_.erase(it);
       } else {
-        it++;
-      }
-      if (done) {
-        break;
+        SPDLOG_WARN("\tDeleting of unexpected command {} containing zero event.", (void*)command);
+        it = kernel_command_list_.erase(it);
       }
     }
   }
 
-  void ProcessCall(ze_fence_handle_t fence, std::vector<uint64_t>* kids,
-                   std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
+  void ProcessCallFence(ze_fence_handle_t fence, std::vector<uint64_t>* kids,
+                        std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
     // lock is acquired in the caller
     // const std::lock_guard<std::mutex> lock(lock_);
+    SPDLOG_TRACE("In {}, fence: {}", __FUNCTION__, (void*)fence);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
     overhead::Init();
     status = zeFenceQueryStatus(fence);
-    {
-      std::string o_api_string = "zeFenceQueryStatus";
-      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                           o_api_string.c_str());
-    }
+    overhead_fini("zeFenceQueryStatus");
     if (status != ZE_RESULT_SUCCESS) {
       return;
     }
 
     bool done = false;
     for (auto it = kernel_command_list_.begin(); it != kernel_command_list_.end();) {
-      ZeKernelCommand* command = *it;
+      ZeKernelCommand* command = (*it).get();
       PTI_ASSERT(command != nullptr);
       if ((command->fence != nullptr) && (command->fence == fence)) {
-        ProcessCall(command, kids, kcexecrec);
+        ProcessCallCommand(command, kids, kcexecrec);
         done = true;
       } else {
         overhead::Init();
-        status = zeEventQueryStatus(command->event);
-        {
-          std::string o_api_string = "zeEventQueryStatus";
-          overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                               o_api_string.c_str());
-        }
-        if ((command->event != nullptr) && (status == ZE_RESULT_SUCCESS)) {
-          ProcessCall(command, nullptr, kcexecrec);
+        status = zeEventQueryStatus(command->event_self);
+        overhead_fini("zeEventQueryStatus");
+        if ((command->event_self != nullptr) && (status == ZE_RESULT_SUCCESS)) {
+          ProcessCallCommand(command, nullptr, kcexecrec);
         }
       }
-      if (command->event == nullptr) {
-        delete command;
+      if (command->event_self == nullptr) {
+        SPDLOG_WARN("\tDeleting of unexpected command {} containing zero event.", (void*)command);
         it = kernel_command_list_.erase(it);
       } else {
         it++;
@@ -479,9 +661,11 @@ class ZeCollector {
     end = start + duration;
   }
 
-  void ProcessCall(const ZeKernelCommand* command, const ze_kernel_timestamp_result_t& timestamp,
-                   int tile, bool /*in_summary*/,
-                   std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
+  void ProcessCallTimestamp(const ZeKernelCommand* command,
+                            const ze_kernel_timestamp_result_t& timestamp, int tile,
+                            bool /*in_summary*/,
+                            std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     uint64_t host_start = 0;
     uint64_t host_end = 0;
     GetHostTime(command, timestamp, host_start, host_end);
@@ -513,8 +697,12 @@ class ZeCollector {
       rec.name_ = std::move(name);
       rec.queue_ = command->queue;
       rec.device_ = command->device;
-      CopyDeviceUUIDTo(command->props.src_device, static_cast<uint8_t*>(rec.src_device_uuid));
-      CopyDeviceUUIDTo(command->props.dst_device, static_cast<uint8_t*>(rec.dst_device_uuid));
+      if (command->props.src_device != nullptr) {
+        CopyDeviceUUIDTo(command->props.src_device, static_cast<uint8_t*>(rec.src_device_uuid));
+      }
+      if (command->props.dst_device != nullptr) {
+        CopyDeviceUUIDTo(command->props.dst_device, static_cast<uint8_t*>(rec.dst_device_uuid));
+      }
 
       if ((tile >= 0) && (device_map_.count(command->device) == 1) &&
           !device_map_[command->device].empty()) {  // Implicit Scaling
@@ -557,6 +745,9 @@ class ZeCollector {
 
         rec.source_file_name_ = command->source_file_name_;
         rec.source_line_number_ = command->source_line_number_;
+        if (command->device != nullptr) {
+          CopyDeviceUUIDTo(command->device, static_cast<uint8_t*>(rec.src_device_uuid));
+        }
       }
       if (command->props.type == KernelCommandType::kMemory) {
         rec.sycl_node_id_ = command->sycl_node_id_;
@@ -572,58 +763,70 @@ class ZeCollector {
     }
   }
 
-  void ProcessCall(ZeKernelCommand* command, std::vector<uint64_t>* kids,
-                   std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
+  void ProcessCallCommand(ZeKernelCommand* command, std::vector<uint64_t>* kids,
+                          std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
+    SPDLOG_TRACE("In {} command kid: {}", __FUNCTION__, command->kernel_id);
     if (kids) {
       kids->push_back(command->kernel_id);
     }
 
     ze_kernel_timestamp_result_t timestamp{};
-    overhead::Init();
-    ze_result_t status = zeEventQueryKernelTimestamp(command->event, &timestamp);
-    {
-      std::string o_api_string = "zeEventQueryKernelTimestamp";
-      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                           o_api_string.c_str());
+
+    ze_event_handle_t event_to_query = command->event_self;
+    if (collection_mode_ == Local && command->event_swap != nullptr) {
+      event_to_query = command->event_swap;
     }
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    SPDLOG_TRACE("\tQuery KernelTimestamp on event: {}", (void*)event_to_query);
+    overhead::Init();
+    ze_result_t status = zeEventQueryKernelTimestamp(event_to_query, &timestamp);
+    overhead_fini("zeEventQueryKernelTimestamp");
+    if (status != ZE_RESULT_SUCCESS) {
+      // sporadic - smth wrong with event from time to time
+      SPDLOG_WARN("In {}, zeEventQueryKernelTimestamp returted: {}", __FUNCTION__,
+                  static_cast<uint32_t>(status));
+    }
 
-    ProcessCall(command, timestamp, -1, true, kcexecrec);
+    ProcessCallTimestamp(command, timestamp, -1, true, kcexecrec);
 
-    event_cache_.ReleaseEvent(command->event);
-    command->event = nullptr;
-    // DO NOT RESET EVENT
-    // event_cache_.ResetEvent(command->event);
+    if (collection_mode_ != Local) {
+      event_cache_.ReleaseEvent(command->event_self);
+      command->event_self = nullptr;
+    }
   }
 
   void ProcessCalls(std::vector<uint64_t>* kids,
                     std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
+    SPDLOG_TRACE("In {} Kernel command list size: {}", __FUNCTION__, kernel_command_list_.size());
     ze_result_t status = ZE_RESULT_SUCCESS;
     // lock is acquired in the caller
     // const std::lock_guard<std::mutex> lock(lock_);
 
     auto it = kernel_command_list_.begin();
     while (it != kernel_command_list_.end()) {
-      ZeKernelCommand* command = *it;
+      ZeKernelCommand* command = (*it).get();
 
-      if (command->event != nullptr) {
+      if (command->event_self != nullptr) {
+        SPDLOG_TRACE("\tChecking status of event {}", (void*)command->event_self);
         overhead::Init();
-        status = zeEventQueryStatus(command->event);
-        {
-          std::string o_api_string = "zeEventQueryStatus";
-          overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                               o_api_string.c_str());
-        }
+        status = zeEventQueryStatus(command->event_self);
+        overhead_fini("zeEventQueryStatus");
         if (status == ZE_RESULT_SUCCESS) {
-          ProcessCall(command, kids, kcexecrec);
+          /* if (collection_mode_ == Local) { // TODO this should be in Debug only
+            if (command->event_swap != nullptr) {
+              overhead::Init();
+              status = zeEventQueryStatus(command->event_swap);
+              overhead_fini("zeEventQueryStatus");
+              PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            }
+          }*/
+          ProcessCallCommand(command, kids, kcexecrec);
+          it = kernel_command_list_.erase(it);
+        } else {
+          ++it;
         }
-      }
-
-      if (command->event == nullptr) {
-        delete command;
-        it = kernel_command_list_.erase(it);
       } else {
-        ++it;
+        SPDLOG_WARN("\tDeleting of unexpected command {} containing zero event.", (void*)command);
+        it = kernel_command_list_.erase(it);
       }
     }
   }
@@ -646,8 +849,8 @@ class ZeCollector {
 
     PTI_ASSERT(device_descriptors_.count(device) != 0);
 
-    command_list_map_[command_list] = {std::vector<ZeKernelCommand*>(), context, device, immediate,
-                                       oi_pair};
+    command_list_map_[command_list] = {std::vector<std::unique_ptr<ZeKernelCommand> >(),
+                                       context, device, immediate, oi_pair};
     command_list_map_mutex_.unlock();
 
     if (immediate) {
@@ -663,15 +866,21 @@ class ZeCollector {
                                     uint32_t command_list_count, ze_command_queue_handle_t queue,
                                     ze_fence_handle_t fence) {
     const std::lock_guard<std::mutex> lock(lock_);
+    uint32_t q_index;
+    uint32_t q_ordinal;
     uint64_t host_time_sync = 0;
     uint64_t device_time_sync = 0;
-    auto it = command_queues_.find(queue);
-    PTI_ASSERT(it != command_queues_.end());
-    ze_device_handle_t device =
-        it->second.device_;  // this should be only one device, as queue created on specific device
-    PTI_ASSERT(nullptr != device);
-    ze_result_t status = zeDeviceGetGlobalTimestamps(device, &host_time_sync, &device_time_sync);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    // TODO Consider taking only one Timestamp for all command lists
+    // as all those are in one queue and on one device
+    /*
+        auto it = command_queues_.find(queue);
+        PTI_ASSERT(it != command_queues_.end());
+        ze_device_handle_t device = it->second.device_;
+        PTI_ASSERT(nullptr != device);
+        ze_result_t status = zeDeviceGetGlobalTimestamps(device, &host_time_sync,
+       &device_time_sync); PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    */
 
     for (uint32_t i = 0; i < command_list_count; ++i) {
       ze_command_list_handle_t clist = command_lists[i];
@@ -681,8 +890,19 @@ class ZeCollector {
 
       // as all command lists submitted to the execution into queue - they are not immediate
       PTI_ASSERT(!info.immediate);
+      PTI_ASSERT(info.device != nullptr);
+      ze_result_t status =
+          zeDeviceGetGlobalTimestamps(info.device, &host_time_sync, &device_time_sync);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-      for (ZeKernelCommand* command : info.kernel_commands) {
+      if (queue_ordinal_index_map_.count(queue) == 0) {
+        zeCommandQueueGetIndex(queue, &q_index);
+        zeCommandQueueGetOrdinal(queue, &q_ordinal);
+        queue_ordinal_index_map_[queue] = std::make_pair(q_ordinal, q_index);
+      }
+
+      for (auto it = info.kernel_commands.begin(); it != info.kernel_commands.end(); it++) {
+        ZeKernelCommand* command = (*it).get();
         if (!command->tid) {
           command->tid = utils::GetTid();
         }
@@ -707,11 +927,12 @@ class ZeCollector {
       ZeCommandListInfo& info = GetCommandListInfo(clist);
       // as all command lists submitted to the execution into queue - they are not immediate
       PTI_ASSERT(!info.immediate);
-      for (ZeKernelCommand* command : info.kernel_commands) {
+      for (auto it = info.kernel_commands.begin(); it != info.kernel_commands.end(); it++) {
+        ZeKernelCommand* command = (*it).get();
         if (kids) {
           kids->push_back(command->kernel_id);
         }
-        kernel_command_list_.push_back(command);
+        kernel_command_list_.push_back(std::move(*it));
       }
       info.kernel_commands.clear();
     }
@@ -779,13 +1000,18 @@ class ZeCollector {
   }
 
   // Callbacks
-  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t* params, void* /*global_data*/,
+  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t* params, void* global_data,
                                      void** instance_data) {
     const ze_event_pool_desc_t* desc = *(params->pdesc);
     if (desc == nullptr) {
       return;
     }
     if (desc->flags & ZE_EVENT_POOL_FLAG_IPC) {
+      return;
+    }
+
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+    if (collector->collection_mode_ == Local) {
       return;
     }
 
@@ -801,41 +1027,60 @@ class ZeCollector {
 
     *(params->pdesc) = profiling_desc;
     *instance_data = profiling_desc;
+    SPDLOG_DEBUG("In {} over-wrote profiling_desc -- onenter", __FUNCTION__);
   }
 
   static void OnExitEventPoolCreate(ze_event_pool_create_params_t* /*params*/,
-                                    ze_result_t /*result*/, void* /*global_data*/,
+                                    ze_result_t /*result*/, void* global_data,
                                     void** instance_data) {
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+    if (collector->collection_mode_ == Local) {
+      return;
+    }
     ze_event_pool_desc_t* desc = static_cast<ze_event_pool_desc_t*>(*instance_data);
+    SPDLOG_DEBUG("In {} cleaned up profiling_desc -- onexit", __FUNCTION__);
     delete desc;
   }
 
   static void OnEnterEventDestroy(ze_event_destroy_params_t* params, void* global_data,
-                                  void** /*instance_data*/, std::vector<uint64_t>* kids) {
+                                  void** /*instance_data*/, std::vector<uint64_t>* /*kids*/) {
+    SPDLOG_TRACE("In {} event", __FUNCTION__, (void*)*(params->phEvent));
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      collector->lock_.lock();
-      collector->ProcessCall(*(params->phEvent), kids, &kcexec);
-      collector->lock_.unlock();
-
-      if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
-        collector->acallback_(collector->callback_data_, kcexec);
+      // only events that managed by collector should be taken care
+      if (collector->collection_mode_ == Local) {
+        ze_event_handle_t swap_event =
+            collector->swap_event_pool_.RemoveKeyEventFromShadowCache(*(params->phEvent));
+        if (swap_event != nullptr) {
+          collector->swap_event_pool_.ReturnSwapEvent(swap_event);
+        }
       }
     }
   }
 
   static void OnEnterEventHostReset(ze_event_host_reset_params_t* params, void* global_data,
-                                    void** /*instance_data*/, std::vector<uint64_t>* kids) {
+                                    void** /*instance_data*/,
+                                    [[maybe_unused]] std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      collector->lock_.lock();
-      collector->ProcessCall(*(params->phEvent), kids, &kcexec);
-      collector->lock_.unlock();
 
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
         collector->acallback_(collector->callback_data_, kcexec);
+      }
+
+      if (collector->collection_mode_ == Local) {
+        ze_event_handle_t swap_event =
+            collector->swap_event_pool_.GetSwapEventFromShadowCache(*(params->phEvent));
+        SPDLOG_TRACE("--- In {} , self_event: {}, swap_event: {}", __FUNCTION__,
+                     (void*)(*(params->phEvent)), (void*)(swap_event));
+        if (nullptr != swap_event) {
+          ze_result_t status = zeEventHostReset(swap_event);
+          if (status != ZE_RESULT_SUCCESS) {
+            SPDLOG_WARN("\tIn {} zeEventHostReset returned: {}, ", __FUNCTION__, (uint32_t)status);
+          }
+        }
       }
     }
   }
@@ -843,11 +1088,12 @@ class ZeCollector {
   static void OnExitEventHostSynchronize(ze_event_host_synchronize_params_t* params,
                                          ze_result_t result, void* global_data,
                                          void** /*instance_data*/, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
       collector->lock_.lock();
-      collector->ProcessCall(*(params->phEvent), kids, &kcexec);
+      collector->ProcessCallEvent(*(params->phEvent), kids, &kcexec);
       collector->lock_.unlock();
 
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
@@ -856,32 +1102,43 @@ class ZeCollector {
     }
   }
 
-  static void OnExitEventQueryStatus(ze_event_query_status_params_t* params, ze_result_t result,
-                                     void* global_data, void** /*instance_data*/,
-                                     std::vector<uint64_t>* kids) {
+  static void OnExitCommandListHostSynchronize(
+      ze_command_list_host_synchronize_params_t* /*params*/, ze_result_t result, void* global_data,
+      void** /*instance_data*/, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     if (result == ZE_RESULT_SUCCESS) {
-      PTI_ASSERT(*(params->phEvent) != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
       collector->lock_.lock();
-      collector->ProcessCall(*(params->phEvent), kids, &kcexec);
+      collector->ProcessCalls(kids, &kcexec);
       collector->lock_.unlock();
 
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
         collector->acallback_(collector->callback_data_, kcexec);
       }
     }
+  }
+
+  static void OnExitEventQueryStatus([[maybe_unused]] ze_event_query_status_params_t* params,
+                                     [[maybe_unused]] ze_result_t result, void* /*global_data*/,
+                                     void** /*instance_data*/, std::vector<uint64_t>* /*kids*/) {
+    SPDLOG_TRACE("In {}, result {} event: {} ", __FUNCTION__, (uint32_t)result,
+                 (void*)*(params->phEvent));
+    // this call-back is useful to see if we are re-entering to it via Tracing level
+    // this should not happen when we are inside of Tracing layer..
+    // but things can get weird..
   }
 
   static void OnExitFenceHostSynchronize(ze_fence_host_synchronize_params_t* params,
                                          ze_result_t result, void* global_data,
                                          void** /*instance_data*/, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result {} ", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*(params->phFence) != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
       collector->lock_.lock();
-      collector->ProcessCall(*(params->phFence), kids, &kcexec);
+      collector->ProcessCallFence(*(params->phFence), kids, &kcexec);
       collector->lock_.unlock();
 
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
@@ -892,6 +1149,7 @@ class ZeCollector {
 
   static void OnExitImageCreate(ze_image_create_params_t* params, ze_result_t result,
                                 void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result {} ", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
 
@@ -932,24 +1190,84 @@ class ZeCollector {
 
   static void OnExitImageDestroy(ze_image_destroy_params_t* params, ze_result_t result,
                                  void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result {} ", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       collector->RemoveImage(*(params->phImage));
     }
   }
 
-  static void PrepareToAppendKernelCommand(ZeCollector* collector, ze_event_handle_t& signal_event,
+  static void PrepareToAppendKernelCommand(ZeCollector* collector,
                                            ze_command_list_handle_t command_list,
-                                           bool /*iskernel*/) {
+                                           KernelCommandType kernel_type,
+                                           ze_event_handle_t& signal_event,
+                                           void** instance_data) {
     PTI_ASSERT(command_list != nullptr);
+    PTI_ASSERT(instance_data != nullptr);
+    SPDLOG_TRACE("In {} Collection mode: {}, Cmdl: {}, signal_event: {}, kernel_type: {}",
+                 __FUNCTION__, (uint32_t)collector->collection_mode_, (void*)command_list,
+                 (void*)signal_event, (uint32_t)kernel_type);
 
+    if (!collector->CommandListInfoExists(command_list)) {
+      collector->ReBuildCommandListInfo(command_list);
+    }
     const std::lock_guard<std::mutex> lock(collector->lock_);
     ze_context_handle_t context = collector->GetCommandListContext(command_list);
     ze_device_handle_t device = collector->GetCommandListDevice(command_list);
 
-    if (signal_event == nullptr) {
-      signal_event = collector->event_cache_.GetEvent(context);
-      PTI_ASSERT(signal_event != nullptr);
+    ZeKernelCommand* command = new ZeKernelCommand;
+
+    SPDLOG_TRACE("\tCreated New ZeKernelCommand: {}, passes via instance data", (void*)command);
+    PTI_ASSERT(command != nullptr);
+    *instance_data = command;
+
+    command->props.type = kernel_type;
+    command->command_list = command_list;
+    command->device = device;
+    command->context = context;
+    SPDLOG_TRACE("\tcontext: {}, device: {}", (void*)context, (void*)device);
+
+    command->event_swap = nullptr;
+    if (collector->collection_mode_ != Local) {
+      if (signal_event == nullptr) {
+        signal_event = collector->event_cache_.GetEvent(context);
+        PTI_ASSERT(signal_event != nullptr);
+        SPDLOG_DEBUG("In {} created Signal event from event_cache", __FUNCTION__);
+      }
+      command->event_self = signal_event;
+    } else {
+      // Setting up data for later submission Bridge Kernel (or Memory Op)
+      // the Bridge kernel will be submitted after the Target Kernel
+      // Swapping the events:
+      // Target kernel will signal the new ("swap") event with Timestamp enabled
+      // Bridge Kernel will signal the Target Kernel initial event
+      if (signal_event != nullptr) {
+        ze_event_handle_t swap_event =
+            collector->swap_event_pool_.GetSwapEventFromShadowCache(signal_event);
+        SPDLOG_TRACE("\t\tContext: {}, Device: {}, self_event: {}, swap_event: {}", (void*)context,
+                     (void*)device, (void*)(signal_event), (void*)(swap_event));
+        command->event_self = signal_event;
+        if (nullptr == swap_event) {
+          swap_event = collector->swap_event_pool_.GetEvent(context);
+          PTI_ASSERT(swap_event != nullptr);
+          collector->swap_event_pool_.StoreEventsToShadowCache(command->event_self, swap_event);
+          SPDLOG_TRACE("\t\tCreated swap_event: {}", (void*)swap_event);
+        }
+        // both should not be signalled.
+        // this verifies that EventReset handled properly, as a lot of events might re-used
+        PTI_ASSERT(ZE_RESULT_NOT_READY == zeEventQueryStatus(signal_event));
+        PTI_ASSERT(ZE_RESULT_NOT_READY == zeEventQueryStatus(swap_event));
+
+        command->event_swap = swap_event;
+        signal_event = command->event_swap;
+        SPDLOG_TRACE("\t\t swap event: {}", (void*)command->event_swap);
+      } else {
+        signal_event = collector->event_cache_.GetEvent(context);
+        PTI_ASSERT(signal_event != nullptr);
+        SPDLOG_DEBUG("\tCollection mode: {} created Signal event from event_cache: {}",
+                     (uint32_t)collector->collection_mode_, (void*)signal_event);
+        command->event_self = signal_event;
+      }
     }
 
     uint64_t host_timestamp = 0;
@@ -962,22 +1280,16 @@ class ZeCollector {
     ze_instance_data.timestamp_device = device_timestamp;
   }
 
-  void AppendKernelCommandCommon(ZeCollector* /*collector*/, ZeKernelCommandProps& props,
-                                 ze_event_handle_t& signal_event,
-                                 ze_command_list_handle_t command_list,
-                                 ZeCommandListInfo& command_list_info, void** /*instance_data*/,
-                                 std::vector<uint64_t>* kids) {
-    ZeKernelCommand* command = new ZeKernelCommand;
+  void PostAppendKernelCommandCommon(ZeCollector* /*collector*/,
+                                     ZeKernelCommand* command,
+                                     ZeKernelCommandProps& props, ze_event_handle_t& signal_event,
+                                     ZeCommandListInfo& command_list_info,
+                                     std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, command: {}", __FUNCTION__, (void*)command);
     PTI_ASSERT(command != nullptr);
     command->props = props;
-    command->command_list = command_list;
-
-    ze_device_handle_t device = command_list_info.device;
-    PTI_ASSERT(device != nullptr);
-    command->device = device;
 
     PTI_ASSERT(signal_event != nullptr);
-    command->event = signal_event;
     command->tid = utils::GetTid();
     uint64_t host_timestamp = ze_instance_data.start_time_host;
     command->append_time = host_timestamp;
@@ -985,13 +1297,6 @@ class ZeCollector {
     command->device_timer_frequency_ = device_descriptors_[command->device].device_timer_frequency;
     command->device_timer_mask_ = device_descriptors_[command->device].device_timer_mask;
     if (command->props.type == KernelCommandType::kKernel) {
-      ze_device_properties_t dev_props;
-      dev_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
-      dev_props.pNext = nullptr;
-      ze_result_t status = zeDeviceGetProperties(device, &dev_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      SaveDeviceUUID(command->props.src_device, static_cast<uint8_t*>(dev_props.uuid.id));
-
       command->sycl_node_id_ = sycl_data_kview.sycl_node_id_;
       command->sycl_queue_id_ = sycl_data_kview.sycl_queue_id_;
       command->sycl_invocation_id_ = sycl_data_kview.sycl_invocation_id_;
@@ -1006,6 +1311,7 @@ class ZeCollector {
       } else {
         command->corr_id_ = UniCorrId::GetUniCorrId();
       }
+
     } else if (command->props.type == KernelCommandType::kMemory) {
       command->props.src_device = props.src_device;
       command->props.dst_device = props.dst_device;
@@ -1027,26 +1333,63 @@ class ZeCollector {
     } else {
       command->corr_id_ = UniCorrId::GetUniCorrId();
     }
+
+    // creating unique ptr here so command will be properly deleted when removed from
+    // the container it stored
+    std::unique_ptr<ZeKernelCommand> p_command(command);
+
     if (command_list_info.immediate) {
-      // command->tid = utils::GetTid();
       command->submit_time = command->append_time;
       command->submit_time_device_ =
           ze_instance_data.timestamp_device;  // append time and submit time are the same
-      command->queue = reinterpret_cast<ze_command_queue_handle_t>(command_list);
-      kernel_command_list_.push_back(command);
+      command->queue = reinterpret_cast<ze_command_queue_handle_t>(command->command_list);
+      kernel_command_list_.push_back(std::move(p_command));
+      SPDLOG_TRACE("\tcommand: {} pushed to kernel_command_list_", (void*)command);
       kids->push_back(command->kernel_id);
     } else {
-      command_list_info.kernel_commands.push_back(command);
+      command_list_info.kernel_commands.push_back(std::move(p_command));
+      SPDLOG_TRACE("\tcommand: {} pushed to command_list_info", (void*)command);
+    }
+
+    // it could be that event swap was not needed  - in this case event_swap would be 0
+    // and we can not append Bridge kernel
+    if (nullptr != command->event_swap && collection_mode_ == Local) {
+      SPDLOG_DEBUG("\t\t Will be appending Bridge command!");
+      bool append_res = true;
+      if (command->props.type == KernelCommandType::kKernel) {
+        ze_kernel_handle_t kernel =
+            bridge_kernel_pool_.GetMarkKernel(command->context, command->device);
+        PTI_ASSERT(kernel != nullptr);
+        append_res = A2AppendBridgeKernel(kernel, command->command_list, command->event_self,
+                                          command->event_swap);
+      } else if (command->props.type == KernelCommandType::kMemory) {
+        SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
+                     (void*)command->props.src_device, (void*)command->props.dst_device);
+        bool is_two_devices =
+            (command->props.src_device != command->props.dst_device &&
+             command->props.src_device != nullptr && command->props.dst_device != nullptr)
+                ? true
+                : false;
+        append_res = A2AppendBridgeMemoryCopyOrFill(
+            command->command_list, command->event_self, command->event_swap, command->props.dst,
+            command->props.src, command->props.bytes_transferred, command->props.value_size,
+            is_two_devices);
+      } else if (command->props.type == KernelCommandType::kCommand) {
+        append_res =
+            A2AppendBridgeBarrier(command->command_list, command->event_self, command->event_swap);
+      }
+      PTI_ASSERT(append_res);
     }
   }
 
-  void AppendKernel(ZeCollector* collector, ze_kernel_handle_t kernel,
-                    const ze_group_count_t* group_count, ze_event_handle_t& signal_event,
-                    ze_command_list_handle_t command_list, void** instance_data,
-                    std::vector<uint64_t>* kids) {
+  void PostAppendKernel(ZeCollector* collector, ze_kernel_handle_t kernel,
+                        const ze_group_count_t* group_count, ze_event_handle_t& signal_event,
+                        ze_command_list_handle_t command_list, void** instance_data,
+                        std::vector<uint64_t>* kids) {
     PTI_ASSERT(command_list != nullptr);
     PTI_ASSERT(kernel != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
+    SPDLOG_TRACE("In {}", __FUNCTION__);
 
     ZeKernelCommandProps props{};
 
@@ -1074,15 +1417,20 @@ class ZeCollector {
 
     ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
-    AppendKernelCommandCommon(collector, props, signal_event, command_list, command_list_info,
-                              instance_data, kids);
+    PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props, signal_event,
+                                  command_list_info, kids);
   }
 
-  void AppendMemoryCommand(ZeCollector* collector, std::string command, size_t bytes_transferred,
-                           const void* src, const void* dst, ze_event_handle_t& signal_event,
-                           ze_command_list_handle_t command_list, void** instance_data,
-                           std::vector<uint64_t>* kids, const void* pattern = nullptr,
-                           size_t pattern_size = 0) {
+  void PostAppendMemoryCommand(ZeCollector* collector, std::string command_name,
+                               size_t bytes_transferred, const void* src, const void* dst,
+                               ze_event_handle_t& signal_event,
+                               ze_command_list_handle_t command_list, void** instance_data,
+                               std::vector<uint64_t>* kids, size_t pattern_size = 0) {
+    SPDLOG_TRACE(
+        "In: {}, CmdList: {}, Signal event: {}, dst: {}, src: {}, \
+                 bytes_transferred: {}, pattern_size: {}",
+        __FUNCTION__, (void*)command_list, (void*)signal_event, dst, src, bytes_transferred,
+        pattern_size);
     PTI_ASSERT(command_list != nullptr);
     ze_memory_allocation_properties_t mem_props;
     mem_props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
@@ -1097,37 +1445,12 @@ class ZeCollector {
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
 
-    ze_device_handle_t src_device = nullptr;
-    ze_device_handle_t dst_device = nullptr;
-
-    // TODO(julia.fedorova@intel.com): zeMemGetAllocProperties called here and then
-    //  in below GetTransferProperties => so twice for src and dst.
-    //  this should be avoided
-    if (dst != nullptr) {
-      ze_result_t status = zeMemGetAllocProperties(context, dst, &mem_props, &dst_device);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      if (dst_device) {
-        ze_result_t status = zeDeviceGetProperties(dst_device, &dev_props);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        SaveDeviceUUID(dst_device, static_cast<uint8_t*>(dev_props.uuid.id));
-      }
-    }
-    if (src != nullptr) {
-      ze_result_t status = zeMemGetAllocProperties(context, src, &mem_props, &src_device);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      if (src_device) {
-        ze_result_t status = zeDeviceGetProperties(src_device, &dev_props);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        SaveDeviceUUID(src_device, static_cast<uint8_t*>(dev_props.uuid.id));
-      }
-    }
-
     ZeKernelCommandProps props =
-        GetTransferProps(std::move(command), bytes_transferred, (src ? context : nullptr), src,
-                         (dst ? context : nullptr), dst, pattern, pattern_size);
+        GetTransferProps(std::move(command_name), bytes_transferred, (src ? context : nullptr), src,
+                         (dst ? context : nullptr), dst, pattern_size);
 
-    AppendKernelCommandCommon(collector, props, signal_event, command_list, command_list_info,
-                              instance_data, kids);
+    PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props, signal_event,
+                                  command_list_info, kids);
   }
 
   void AppendMemoryCommandContext(ZeCollector* collector, std::string command,
@@ -1136,6 +1459,7 @@ class ZeCollector {
                                   ze_event_handle_t& signal_event,
                                   ze_command_list_handle_t command_list, void** instance_data,
                                   std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     PTI_ASSERT(command_list != nullptr);
     ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
@@ -1146,8 +1470,8 @@ class ZeCollector {
         GetTransferProps(std::move(command), bytes_transferred, src_context, src,
                          (dst_context ? dst_context : context), dst);
 
-    AppendKernelCommandCommon(collector, props, signal_event, command_list, command_list_info,
-                              instance_data, kids);
+    PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props, signal_event,
+                                  command_list_info, kids);
   }
 
   void AppendImageMemoryCopyCommand(ZeCollector* collector, std::string command,
@@ -1155,6 +1479,7 @@ class ZeCollector {
                                     ze_event_handle_t& signal_event,
                                     ze_command_list_handle_t command_list, void** instance_data,
                                     std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     PTI_ASSERT(command_list != nullptr);
 
     ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
@@ -1169,13 +1494,17 @@ class ZeCollector {
     ZeKernelCommandProps props =
         GetTransferProps(std::move(command), bytes_transferred, context, src, context, dst);
 
-    AppendKernelCommandCommon(collector, props, signal_event, command_list, command_list_info,
-                              instance_data, kids);
+    // TODO implement image copy support in Local collection model
+    if (collector->collection_mode_ != Local) {
+      PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props,
+                                    signal_event, command_list_info, kids);
+    }
   }
 
-  void AppendCommand(ZeCollector* collector, std::string command, ze_event_handle_t& signal_event,
-                     ze_command_list_handle_t command_list, void** instance_data,
-                     std::vector<uint64_t>* kids) {
+  void PostAppendCommand(ZeCollector* collector, std::string command,
+                         ze_event_handle_t& signal_event, ze_command_list_handle_t command_list,
+                         void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     PTI_ASSERT(command_list != nullptr);
 
     ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
@@ -1187,15 +1516,15 @@ class ZeCollector {
     props.name = std::move(command);
     props.type = KernelCommandType::kCommand;
 
-    AppendKernelCommandCommon(collector, props, signal_event, command_list, command_list_info,
-                              instance_data, kids);
+    PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props, signal_event,
+                                  command_list_info, kids);
   }
 
   static ZeKernelCommandProps GetTransferProps(std::string name, size_t bytes_transferred,
                                                ze_context_handle_t src_context, const void* src,
                                                ze_context_handle_t dst_context, const void* dst,
-                                               [[maybe_unused]] const void* pattern = nullptr,
                                                size_t pattern_size = 0) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     PTI_ASSERT(!name.empty());
 
     std::string direction;
@@ -1209,11 +1538,7 @@ class ZeCollector {
       props.pNext = nullptr;
       overhead::Init();
       ze_result_t status = zeMemGetAllocProperties(src_context, src, &props, &hSrcDevice);
-      {
-        std::string o_api_string = "zeMemGetAllocProperties";
-        overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                             o_api_string.c_str());
-      }
+      overhead_fini("zeMemGetAllocProperties");
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       switch (props.type) {
@@ -1245,11 +1570,7 @@ class ZeCollector {
       props.pNext = nullptr;
       overhead::Init();
       ze_result_t status = zeMemGetAllocProperties(dst_context, dst, &props, &hDstDevice);
-      {
-        std::string o_api_string = "zeMemGetAllocProperties";
-        overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                             o_api_string.c_str());
-      }
+      overhead_fini("zeMemGetAllocProperties");
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       direction.push_back('2');
@@ -1296,6 +1617,8 @@ class ZeCollector {
     props.type = KernelCommandType::kMemory;
     props.src_device = hSrcDevice;
     props.dst_device = hDstDevice;
+    props.dst = const_cast<void*>(dst);
+    props.src = const_cast<void*>(src);
     return props;
   }
 
@@ -1310,20 +1633,22 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendLaunchKernel(
       ze_command_list_append_launch_kernel_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 true);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kKernel,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendLaunchKernel(
       ze_command_list_append_launch_kernel_params_t* params, ze_result_t result, void* global_data,
       void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendKernel(collector, *(params->phKernel), *(params->ppLaunchFuncArgs),
-                              *(params->phSignalEvent), *(params->phCommandList), instance_data,
-                              kids);
+      collector->PostAppendKernel(collector, *(params->phKernel), *(params->ppLaunchFuncArgs),
+                                  *(params->phSignalEvent), *(params->phCommandList), instance_data,
+                                  kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
@@ -1331,20 +1656,22 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendLaunchCooperativeKernel(
       ze_command_list_append_launch_cooperative_kernel_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 true);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kKernel,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendLaunchCooperativeKernel(
       ze_command_list_append_launch_cooperative_kernel_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendKernel(collector, *(params->phKernel), *(params->ppLaunchFuncArgs),
-                              *(params->phSignalEvent), *(params->phCommandList), instance_data,
-                              kids);
+      collector->PostAppendKernel(collector, *(params->phKernel), *(params->ppLaunchFuncArgs),
+                                  *(params->phSignalEvent), *(params->phCommandList), instance_data,
+                                  kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
@@ -1352,20 +1679,22 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendLaunchKernelIndirect(
       ze_command_list_append_launch_kernel_indirect_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 true);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kKernel,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendLaunchKernelIndirect(
       ze_command_list_append_launch_kernel_indirect_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendKernel(collector, *(params->phKernel), *(params->ppLaunchArgumentsBuffer),
-                              *(params->phSignalEvent), *(params->phCommandList), instance_data,
-                              kids);
+      collector->PostAppendKernel(collector, *(params->phKernel),
+                                  *(params->ppLaunchArgumentsBuffer), *(params->phSignalEvent),
+                                  *(params->phCommandList), instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
@@ -1373,21 +1702,25 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryCopy(
       ze_command_list_append_memory_copy_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
+    SPDLOG_TRACE("In {}, new (swapped)  signal event: {}", __FUNCTION__,
+                 (void*)(*(params->phSignalEvent)));
   }
 
   static void OnExitCommandListAppendMemoryCopy(ze_command_list_append_memory_copy_params_t* params,
                                                 ze_result_t result, void* global_data,
                                                 void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendMemoryCommand(collector, "zeCommandListAppendMemoryCopy", *(params->psize),
-                                     *(params->psrcptr), *(params->pdstptr),
-                                     *(params->phSignalEvent), *(params->phCommandList),
-                                     instance_data, kids);
+      collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryCopy",
+                                         *(params->psize), *(params->psrcptr), *(params->pdstptr),
+                                         *(params->phSignalEvent), *(params->phCommandList),
+                                         instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
@@ -1395,40 +1728,45 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryFill(
       ze_command_list_append_memory_fill_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendMemoryFill(ze_command_list_append_memory_fill_params_t* params,
                                                 ze_result_t result, void* global_data,
                                                 void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendMemoryCommand(collector, "zeCommandListAppendMemoryFill", *(params->psize),
-                                     *(params->pptr), nullptr, *(params->phSignalEvent),
-                                     *(params->phCommandList), instance_data, kids,
-                                     *(params->ppattern), *(params->ppattern_size));
+      collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryFill",
+                                         *(params->psize), *(params->ppattern), *(params->pptr),
+                                         *(params->phSignalEvent), *(params->phCommandList),
+                                         instance_data, kids, *(params->ppattern_size));
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
 
   static void OnEnterCommandListAppendBarrier(ze_command_list_append_barrier_params_t* params,
-                                              void* global_data, void** /*instance_data*/) {
+                                              void* global_data, void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kCommand,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendBarrier(ze_command_list_append_barrier_params_t* params,
                                              ze_result_t result, void* global_data,
                                              void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendCommand(collector, "zeCommandListAppendBarrier", *(params->phSignalEvent),
-                               *(params->phCommandList), instance_data, kids);
+      collector->PostAppendCommand(collector, "zeCommandListAppendBarrier",
+                                   *(params->phSignalEvent), *(params->phCommandList),
+                                   instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
@@ -1436,10 +1774,11 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryRangesBarrier(
       ze_command_list_append_memory_ranges_barrier_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kCommand,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendMemoryRangesBarrier(
@@ -1447,9 +1786,9 @@ class ZeCollector {
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendCommand(collector, "zeCommandListAppendMemoryRangesBarrier",
-                               *(params->phSignalEvent), *(params->phCommandList), instance_data,
-                               kids);
+      collector->PostAppendCommand(collector, "zeCommandListAppendMemoryRangesBarrier",
+                                   *(params->phSignalEvent), *(params->phCommandList),
+                                   instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
@@ -1457,15 +1796,17 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryCopyRegion(
       ze_command_list_append_memory_copy_region_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendMemoryCopyRegion(
       ze_command_list_append_memory_copy_region_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       size_t bytes_transferred = 0;
@@ -1478,10 +1819,10 @@ class ZeCollector {
         }
       }
 
-      collector->AppendMemoryCommand(collector, "zeCommandListAppendMemoryCopyRegion",
-                                     bytes_transferred, *(params->psrcptr), *(params->pdstptr),
-                                     *(params->phSignalEvent), *(params->phCommandList),
-                                     instance_data, kids);
+      collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryCopyRegion",
+                                         bytes_transferred, *(params->psrcptr), *(params->pdstptr),
+                                         *(params->phSignalEvent), *(params->phCommandList),
+                                         instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
@@ -1489,15 +1830,17 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryCopyFromContext(
       ze_command_list_append_memory_copy_from_context_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendMemoryCopyFromContext(
       ze_command_list_append_memory_copy_from_context_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       ze_context_handle_t src_context = *(params->phContextSrc);
@@ -1512,15 +1855,17 @@ class ZeCollector {
   }
 
   static void OnEnterCommandListAppendImageCopy(ze_command_list_append_image_copy_params_t* params,
-                                                void* global_data, void** /*instance_data*/) {
+                                                void* global_data, void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendImageCopy(ze_command_list_append_image_copy_params_t* params,
                                                ze_result_t result, void* global_data,
                                                void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       collector->AppendImageMemoryCopyCommand(
@@ -1533,15 +1878,17 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendImageCopyRegion(
       ze_command_list_append_image_copy_region_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendImageCopyRegion(
       ze_command_list_append_image_copy_region_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       collector->AppendImageMemoryCopyCommand(
@@ -1554,15 +1901,17 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendImageCopyToMemory(
       ze_command_list_append_image_copy_to_memory_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendImageCopyToMemory(
       ze_command_list_append_image_copy_to_memory_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       collector->AppendImageMemoryCopyCommand(collector, "zeCommandListAppendImageCopyRegion",
@@ -1576,15 +1925,17 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendImageCopyFromMemory(
       ze_command_list_append_image_copy_from_memory_params_t* params, void* global_data,
-      void** /*instance_data*/) {
+      void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList),
-                                 false);
+    PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
+                                 *(params->phSignalEvent), instance_data);
   }
 
   static void OnExitCommandListAppendImageCopyFromMemory(
       ze_command_list_append_image_copy_from_memory_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       size_t bytes_transferred = 0;
@@ -1597,10 +1948,13 @@ class ZeCollector {
         }
       }
 
-      collector->AppendMemoryCommand(collector, "zeCommandListAppendImageCopyFromMemory",
-                                     bytes_transferred, *(params->psrcptr), nullptr,
-                                     *(params->phSignalEvent), *(params->phCommandList),
-                                     instance_data, kids);
+      // TODO implement image copy support in Local collection model
+      if (collector->collection_mode_ != Local) {
+        collector->PostAppendMemoryCommand(collector, "zeCommandListAppendImageCopyFromMemory",
+                                           bytes_transferred, *(params->psrcptr), nullptr,
+                                           *(params->phSignalEvent), *(params->phCommandList),
+                                           instance_data, kids);
+      }
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
@@ -1608,6 +1962,7 @@ class ZeCollector {
 
   static void OnExitCommandListCreate(ze_command_list_create_params_t* params, ze_result_t result,
                                       void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(**params->pphCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
@@ -1622,6 +1977,7 @@ class ZeCollector {
   static void OnExitCommandListCreateImmediate(ze_command_list_create_immediate_params_t* params,
                                                ze_result_t result, void* global_data,
                                                void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(**params->pphCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
@@ -1649,6 +2005,7 @@ class ZeCollector {
 
   static void OnExitCommandListDestroy(ze_command_list_destroy_params_t* params, ze_result_t result,
                                        void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*params->phCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
@@ -1666,6 +2023,7 @@ class ZeCollector {
 
   static void OnExitCommandListReset(ze_command_list_reset_params_t* params, ze_result_t result,
                                      void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*params->phCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
@@ -1684,6 +2042,7 @@ class ZeCollector {
   static void OnEnterCommandQueueExecuteCommandLists(
       ze_command_queue_execute_command_lists_params_t* params, void* global_data,
       void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
 
     uint32_t command_list_count = *params->pnumCommandLists;
@@ -1699,9 +2058,11 @@ class ZeCollector {
     collector->PrepareToExecuteCommandLists(command_lists, command_list_count,
                                             *(params->phCommandQueue), *(params->phFence));
   }
+
   static void OnExitCommandQueueExecuteCommandLists(
       ze_command_queue_execute_command_lists_params_t* params, ze_result_t result,
       void* global_data, void** /*instance_data*/, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       uint32_t command_list_count = *params->pnumCommandLists;
@@ -1721,22 +2082,25 @@ class ZeCollector {
   static void OnExitCommandQueueSynchronize(ze_command_queue_synchronize_params_t* /*params*/,
                                             ze_result_t result, void* global_data,
                                             void** /*instance_data*/, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      collector->lock_.lock();
-      collector->ProcessCalls(kids, &kcexec);
-      collector->lock_.unlock();
+      {
+        std::unique_lock lock(collector->lock_);
+        std::vector<ZeKernelCommandExecutionRecord> kcexec;
+        collector->ProcessCalls(kids, &kcexec);
 
-      if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
-        collector->acallback_(collector->callback_data_, kcexec);
+        if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+          collector->acallback_(collector->callback_data_, kcexec);
+        }
       }
     }
   }
 
   static void OnExitCommandQueueCreate(ze_command_queue_create_params_t* params,
-                                       ze_result_t /*result*/, void* global_data,
+                                       [[maybe_unused]] ze_result_t result, void* global_data,
                                        void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     ze_device_handle_t* device = params->phDevice;
     if (device == nullptr) {
@@ -1771,6 +2135,7 @@ class ZeCollector {
   static void OnExitCommandQueueDestroy(ze_command_queue_destroy_params_t* params,
                                         ze_result_t result, void* global_data,
                                         void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
@@ -1789,6 +2154,7 @@ class ZeCollector {
   static void OnExitKernelSetGroupSize(ze_kernel_set_group_size_params_t* params,
                                        ze_result_t result, void* global_data,
                                        void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       ZeKernelGroupSize group_size{*(params->pgroupSizeX), *(params->pgroupSizeY),
@@ -1799,6 +2165,7 @@ class ZeCollector {
 
   static void OnExitKernelDestroy(ze_kernel_destroy_params_t* params, ze_result_t result,
                                   void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       collector->RemoveKernelGroupSize(*(params->phKernel));
@@ -1807,6 +2174,7 @@ class ZeCollector {
 
   static void OnExitContextDestroy(ze_context_destroy_params_t* params, ze_result_t result,
                                    void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       collector->ProcessCalls(nullptr, nullptr);
@@ -1818,12 +2186,16 @@ class ZeCollector {
 
   zel_tracer_handle_t tracer_ = nullptr;
   CollectorOptions options_ = {};
+  bool driver_introspection_capable_ = false;
   CallbacksEnabled cb_enabled_ = {};
   OnZeKernelFinishCallback acallback_ = nullptr;
   void* callback_data_ = nullptr;
   std::mutex lock_;
 
-  std::list<ZeKernelCommand*> kernel_command_list_;
+  // mode=0 implies full apis; mode=1 implies hybrid apis only (eventpool); mode=2 is Local
+  CollectionMode collection_mode_ = FullAPI;
+
+  std::list<std::unique_ptr<ZeKernelCommand> > kernel_command_list_;
 
   mutable std::shared_mutex command_list_map_mutex_;
   ZeCommandListMap command_list_map_;
@@ -1836,10 +2208,82 @@ class ZeCollector {
 
   std::map<ze_command_queue_handle_t, std::pair<uint32_t, uint32_t>> queue_ordinal_index_map_;
 
-  mutable std::shared_mutex dev_uuid_map_mutex_;
-  std::map<ze_device_handle_t, uint8_t[ZE_MAX_DEVICE_UUID_SIZE]> dev_uuid_map_;
-
   std::map<ze_command_queue_handle_t, ZeCommandQueue> command_queues_;
+
+  A2BridgeKernelPool bridge_kernel_pool_;
+  A2EventPool swap_event_pool_;
+
+  class ZeStartStopModeChanger {
+   private:
+    // Track enable/disable tracing layer calls on a global basis - in order to swap apis.
+    // zelEnableTracingLayer and zelDisableTracingLayer are not thread specific -- and act globally.
+    //      We use ref_count to track how many L0 view_kinds are enabled/disabled on a global basis.
+
+    std::atomic<uint64_t> ref_count = 0;
+    ZeCollector* parent_collector_;
+    std::mutex ss_lock_;
+
+   public:
+    ZeStartStopModeChanger(const ZeStartStopModeChanger&) = delete;
+    ZeStartStopModeChanger& operator=(const ZeStartStopModeChanger&) = delete;
+    ZeStartStopModeChanger(ZeStartStopModeChanger&&) = delete;
+    ZeStartStopModeChanger& operator=(ZeStartStopModeChanger&&) = delete;
+    ZeStartStopModeChanger() = delete;
+    ZeStartStopModeChanger(ZeCollector* collector) {
+      parent_collector_ = collector;
+      ref_count = 0;
+    }
+
+    // switches to fully start tracing mode - only if we are not already in start mode.  Else
+    // records another view_kind active in region.
+    inline uint64_t ToStartTracing() {
+      const std::lock_guard<std::mutex> lock(ss_lock_);
+      if (ref_count) {
+        ref_count++;
+        return ref_count;
+      }
+      if (parent_collector_->options_.disabled_mode) {
+        PTI_ASSERT(global_ref_count == 0);
+        ze_result_t status = zelEnableTracingLayer();
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        global_ref_count++;
+        SPDLOG_DEBUG(" --- In {}, Tracing ON, tid: {}", __FUNCTION__, utils::GetTid());
+      }
+      parent_collector_->cb_enabled_.acallback = true;
+      if (parent_collector_->collection_mode_ == Hybrid)
+        parent_collector_->options_.hybrid_mode = false;
+      ref_count++;
+      return ref_count;
+    }
+
+    // switches to fully stopped tracing mode - only if all previously active view_kinds are
+    // disabled across all threads(ref_count drops to 0). Else records another view_kind deactivated
+    // in region.
+    inline uint64_t ToStopTracing() {
+      SPDLOG_TRACE("In {}", __FUNCTION__);
+      const std::lock_guard<std::mutex> lock(ss_lock_);
+      if (ref_count > 0) ref_count--;
+      if (ref_count) {
+        return ref_count;
+      }
+
+      // ref_count hit 0 -- we need to ensure tracing is fully disabled
+      if (parent_collector_->options_.disabled_mode) {
+        // no any collector ProcessCalls or similar here -
+        // all finsihed tasks data should be captured and handled by proper callbacks by this point
+        ze_result_t status = zelDisableTracingLayer();
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        global_ref_count--;
+        PTI_ASSERT(global_ref_count == 0);
+        SPDLOG_DEBUG(" --- In {}, Tracing OFF, tid: {}", __FUNCTION__, utils::GetTid());
+      }
+      parent_collector_->cb_enabled_.acallback = false;
+      if (parent_collector_->collection_mode_ == Hybrid)
+        parent_collector_->options_.hybrid_mode = true;
+      return ref_count;
+    }
+  };
+  ZeStartStopModeChanger startstop_mode_changer;
 };
 
 #endif  // PTI_TOOLS_PTI_LEVEL_ZERO_COLLECTOR_H_

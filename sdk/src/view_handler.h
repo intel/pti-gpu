@@ -7,6 +7,7 @@
 #define SRC_API_VIEW_HANDLER_H_
 
 #include <spdlog/spdlog.h>
+#include <spdlog/cfg/env.h>
 
 #include <atomic>
 #include <cstddef>
@@ -117,6 +118,14 @@ struct PtiViewRecordHandler {
   PtiViewRecordHandler()
       : get_new_buffer_(pti::view::defaults::DefaultBufferAllocation),
         deliver_buffer_(pti::view::defaults::DefaultRecordParser) {
+
+    // Read Logging level required
+    // set environment variable SPDLOG_LEVEL=<level>, where level=TRACE/DEBUG/INFO..
+    // Logs appear only when PTI_ENABLE_LOGGING=ON => SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
+    spdlog::cfg::load_env_levels();
+    // https://github.com/gabime/spdlog/wiki/3.-Custom-formatting
+    spdlog::set_pattern("[%H:%M][%^-%l-%$]%P:%t %s:%# %v");
+
     if (!collector_) {
       CollectorOptions collector_options;
       collector_options.kernel_tracing = true;
@@ -132,10 +141,10 @@ struct PtiViewRecordHandler {
 
   virtual ~PtiViewRecordHandler() {
     overhead::overhead_collection_enabled = false;
-    DisableTracing();
     if (collector_) {
       collector_->DisableTracing();
     }
+    DisableTracing();
   }
 
   inline pti_result FlushBuffers() {
@@ -227,6 +236,10 @@ struct PtiViewRecordHandler {
     if (!callbacks_set_) return pti_result::PTI_ERROR_NO_CALLBACKS_SET;
     auto result = pti_result::PTI_SUCCESS;
     bool collection_enabled = collection_enabled_;
+    bool l0_collection_type = ((type == pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL) ||
+                               (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
+                               (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
+                               (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
 
     //
     // TBD --- implement and remove the checks for below pti_view_kinds
@@ -261,8 +274,14 @@ struct PtiViewRecordHandler {
     }
 
     if (collector_) {
-      collector_->EnableTracer();
       collection_enabled = true;
+      if (l0_collection_type) {
+        auto it = map_view_kind_enabled.find(type);
+        if (it == map_view_kind_enabled.cend() || map_view_kind_enabled[type] == false) {
+          map_view_kind_enabled[type] = true;
+          collector_->EnableTracer();
+        }
+      }
     }
 
     collection_enabled_ = collection_enabled;
@@ -285,6 +304,11 @@ struct PtiViewRecordHandler {
 
   inline pti_result Disable(pti_view_kind type) {
     pti_result result = pti_result::PTI_SUCCESS;
+    bool l0_collection_type = ((type == pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL) ||
+                               (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
+                               (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
+                               (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
+
     if (type == pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD) {
       overhead::overhead_collection_enabled = false;
     }
@@ -299,6 +323,16 @@ struct PtiViewRecordHandler {
     if (type == pti_view_kind::PTI_VIEW_INVALID) {
       return pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
+    if (collector_) {
+      if (l0_collection_type) {
+        auto it = map_view_kind_enabled.find(type);
+        if (it != map_view_kind_enabled.cend() && map_view_kind_enabled[type] == true) {
+          map_view_kind_enabled[type] = false;
+          collector_->DisableTracer();
+        }
+      }
+    }
+
     try {
       for (const auto& view_types : GetViewNameAndCallback(type)) {
         view_event_map_.Erase(view_types.fn_name);
@@ -386,9 +420,9 @@ struct PtiViewRecordHandler {
 #if defined(PTI_TRACE_SYCL)
     SyclCollector::Instance().DisableTracing();
 #endif
-    if (collector_) {
-      collector_->DisableTracer();
-    }
+    // if (collector_) {
+    // collector_->DisableTracer();
+    //}
     collection_enabled_ = false;
   }
   std::unique_ptr<ZeCollector> collector_ = nullptr;

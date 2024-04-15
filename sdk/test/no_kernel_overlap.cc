@@ -119,6 +119,9 @@ uint32_t validate_timestamps(uint64_t count, ...) {
 }
 }  // namespace
 
+bool compare_pair(std::pair<uint64_t, uint64_t> a_stamps, std::pair<uint64_t, uint64_t> b_stamps) {
+  return a_stamps.first < b_stamps.first;
+}
 class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<bool> {
  protected:
   NoKernelOverlapParametrizedTestFixture() {
@@ -133,8 +136,10 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
   static std::vector<uint64_t> kernel_device_timestamps;
   static std::vector<uint64_t> kernel_host_timestamps;
 
+  static std::vector<std::pair<uint64_t, uint64_t> >kernel_device_timestamps_pairs;
+
   void SetUp() override {  // Called right after constructor before each test
-    kernel_device_timestamps.clear();
+    kernel_device_timestamps_pairs.clear();
     kernel_host_timestamps.clear();
     times_buffer_completed = 0;
   }
@@ -146,23 +151,54 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
   // This function is for workaround to have every test to run in a separate process
   void ExitFunction() { _exit(0); }
 
-  bool TestForDeviceKernelsOverlap(std::vector<uint64_t>& timestamps) {
+  bool TestForDeviceKernelsOverlap(std::vector<std::pair<uint64_t, uint64_t> >& timestamps) {
     if (timestamps.size() == 0) {
       std::cerr << "--->  ERROR: Empty kernel timestamps array - Not expected " << std::endl;
       return false;
     }
     std::cout << "In " << __FUNCTION__ << " timestamps array size: " << timestamps.size()
               << std::endl;
+    // pair is kernel start and kernel end
+    // vector comes sorted by the first value in pair, which is kernel_start
     for (uint32_t item = 1; item < timestamps.size(); item++) {
-      if (timestamps[item] <= timestamps[item - 1]) {
+      /*
+      std::cout << "Stamps: i-1 start: " << timestamps[item-1].first
+                << ", end: " << timestamps[item-1].second << std::endl
+                << "        i   start: " << timestamps[item].first
+                << ", end: " << timestamps[item].second
+                << std::endl;
+      */
+      if (timestamps[item].first <= timestamps[item - 1].second) {
         std::cerr << "--->  ERROR: Device timestamps overlaps t(i) < t(i-1), at i: " << item
-                  << ", t(i): " << timestamps[item] << ", t(i-1): " << timestamps[item - 1]
+                  << ", t(i): " << timestamps[item].first
+                  << ", t(i-1): " << timestamps[item - 1].second
                   << std::endl;
         return false;
       }
     }
     return true;
   }
+
+
+  bool TestForDeviceKernelDurationNonZero(std::vector<std::pair<uint64_t, uint64_t> >& timestamps) {
+    if (timestamps.size() == 0) {
+      std::cerr << "--->  ERROR: Empty kernel timestamps array - Not expected " << std::endl;
+      return false;
+    }
+    std::cout << "In " << __FUNCTION__ << " timestamps array size: " << timestamps.size()
+              << std::endl;
+    // pair is kernel start and kernel end
+    for (uint32_t item = 0; item < timestamps.size(); item++) {
+      if ((timestamps[item].second - timestamps[item].first) < 100 ) {
+        std::cerr << "--->  ERROR: Device kernel duration is less than 100 ns, timestamps at kernel i: " << item
+                  << ", end: " << timestamps[item].second << ", start: " << timestamps[item].first
+                  << std::endl;
+        return false;
+      }
+    }
+    return true;
+  }
+
 
   bool TestForAppendSubmitAtImmediate(std::vector<uint64_t>& timestamps) {
     if (timestamps.size() == 0) {
@@ -244,8 +280,8 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
           kernel_host_timestamps.push_back(p_kernel_rec->_append_timestamp);
           kernel_host_timestamps.push_back(p_kernel_rec->_submit_timestamp);
 
-          kernel_device_timestamps.push_back(p_kernel_rec->_start_timestamp);
-          kernel_device_timestamps.push_back(p_kernel_rec->_end_timestamp);
+          kernel_device_timestamps_pairs.push_back(std::pair<uint64_t, uint64_t> {
+                                p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp});
           break;
         }
         default: {
@@ -266,8 +302,9 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
 
 // static members initialization
 uint32_t NoKernelOverlapParametrizedTestFixture::times_buffer_completed = 0;
-std::vector<uint64_t> NoKernelOverlapParametrizedTestFixture::kernel_device_timestamps{};
 std::vector<uint64_t> NoKernelOverlapParametrizedTestFixture::kernel_host_timestamps{};
+std::vector<std::pair<uint64_t, uint64_t> > NoKernelOverlapParametrizedTestFixture::
+                                                              kernel_device_timestamps_pairs{};
 
 TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   bool do_immediate = GetParam();
@@ -277,7 +314,14 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
 
   RunTest();
 
-  EXPECT_EQ(TestForDeviceKernelsOverlap(kernel_device_timestamps), true);
+  // order of records is not garantie the order of submission and execution of kernels -
+  // so let's  sort kernel stamp pairs by device start stamp
+  std::sort(kernel_device_timestamps_pairs.begin(),
+            kernel_device_timestamps_pairs.end(),
+            compare_pair);
+
+  EXPECT_EQ(TestForDeviceKernelsOverlap(kernel_device_timestamps_pairs), true);
+  EXPECT_EQ(TestForDeviceKernelDurationNonZero(kernel_device_timestamps_pairs), true);
   if (do_immediate) {
     EXPECT_EQ(TestForAppendSubmitAtImmediate(kernel_host_timestamps), true);
   }

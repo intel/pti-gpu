@@ -17,8 +17,10 @@
       "inherits": "default",
       "displayName": "Default Ninja Config",
       "description": "Default Debug build using Ninja generator and OneAPI",
+      "binaryDir": "${sourceDir}/build-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PTI_ENABLE_LOGGING": "ON"
       }
     },
     {
@@ -54,12 +56,14 @@
       "binaryDir": "${sourceDir}/build-${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "PTI_ENABLE_LOGGING": "ON",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_asan_toolchain.cmake",
         "PTI_SANITIZE": true
       },
       "environment": {
         "NEOReadDebugKeys": "1",
         "DisableDeepBind": "1",
+        "ZE_ENABLE_TRACING_LAYER": "1",
         "ASAN_SYMBOLIZER_PATH": "$penv{CMPLR_ROOT}/bin/compiler/llvm-symbolizer",
         "LSAN_SYMBOLIZER_PATH": "$penv{CMPLR_ROOT}/bin/compiler/llvm-symbolizer",
         "ASAN_OPTIONS": "suppressions=${sourceDir}/test/suppressions/ASan.supp,detect_leaks=1,check_initialization_order=1,alloc_dealloc_mismatch=0,new_delete_type_mismatch=0,halt_on_error=1,use_sigaltstack=0",
@@ -108,6 +112,10 @@
     "configurePreset": "default"
   },
   {
+    "name": "default-debug",
+    "configurePreset": "default-debug"
+  },
+  {
     "name": "make",
     "configurePreset": "make"
   },
@@ -130,6 +138,13 @@
     "configurePreset": "default",
     "environment": {
       "LD_LIBRARY_PATH": "${sourceDir}/build/lib:$penv{LD_LIBRARY_PATH}"
+    }
+  },
+  {
+    "name": "default-debug",
+    "configurePreset": "default-debug",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-debug/lib:$penv{LD_LIBRARY_PATH}"
     }
   },
   {

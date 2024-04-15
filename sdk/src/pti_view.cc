@@ -1,3 +1,11 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+#include <spdlog/spdlog.h>
+
 #include "pti/pti_view.h"
 
 #include "internal_helper.h"
@@ -8,6 +16,7 @@
 // different error code.
 //
 pti_result ptiViewEnable(pti_view_kind view_kind) {
+  SPDLOG_DEBUG("In {}, view_kind:  {}", __FUNCTION__, (uint32_t)view_kind);
   try {
     if (!(IsPtiViewKindEnum(view_kind))) {
       return pti_result::PTI_ERROR_BAD_ARGUMENT;

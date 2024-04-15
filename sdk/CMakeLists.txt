@@ -146,7 +146,12 @@ target_link_options(pti PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR}
     $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>)
 
-find_package(LevelZero 1.0.0)
+# Why version 1.16.X?
+# loader 1.15.8 supports ze[Enable/Disable]TracingLayer
+# Level-Zero core Introspection API introduced in Spec 1.9
+# Loder and Tracing layer 1.16.X correctly handle situation
+# when Instrospection API prpvided or not by Level-Zero
+find_package(LevelZero 1.16.0)
 
 if(NOT TARGET LevelZero::level-zero)
     GetLevelZero()

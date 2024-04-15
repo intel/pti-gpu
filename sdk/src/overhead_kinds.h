@@ -167,4 +167,11 @@ inline void FiniSycl(OverheadRuntimeType runtime_type) {
 }
 
 }  // namespace overhead
+
+static inline void overhead_fini(std::string o_api_string) {
+  // std::string o_api_string = l0_api;
+  overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
+                       o_api_string.c_str());
+}
+
 #endif  // PTI_TOOLS_OVERHEAD_H_

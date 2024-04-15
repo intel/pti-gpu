@@ -66,6 +66,28 @@ if(HAVE_SYCL)
   target_link_libraries(no_kernel_overlap PUBLIC Pti::pti_view
                                               GTest::gtest_main)
 
+  add_executable(startstop_suite main_startstop_fixture.cc)
+  target_compile_features(startstop_suite PUBLIC cxx_std_20)
+  target_include_directories(
+    startstop_suite
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_compile_options(
+    startstop_suite
+    PUBLIC -fsycl -gline-tables-only
+    PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+
+  target_link_options(startstop_suite PUBLIC -fsycl -gline-tables-only PRIVATE
+                      ${PTI_LINK_FLAGS_EXPR})
+
+  target_compile_definitions(startstop_suite PUBLIC PTI_LEVEL_ZERO=1
+                                                   ${PTI_DEFINE_FLAGS_EXPR})
+
+  target_link_libraries(startstop_suite PUBLIC Pti::pti_view
+                                              GTest::gtest_main)
+
   add_executable(mem_ops_test mem_ops_test.cc)
 
   target_include_directories(
@@ -124,6 +146,10 @@ if(HAVE_SYCL)
     DISCOVERY_TIMEOUT 60
     PROPERTIES LABELS "functional")
 
+  gtest_discover_tests(
+    startstop_suite
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS "functional")
 
   gtest_discover_tests(
     no_kernel_overlap
@@ -211,7 +237,7 @@ gtest_discover_tests(
   TEST_LIST ASSERT_EXCEPTION_TEST_LIST
   PROPERTIES LABELS "unit")
 
-# TODO(matthew.schilling@intel.com): Organize this better? Where to put
+# TODO: Organize this better? Where to put
 # functional tests?
 # Runs all samples
 if(PTI_BUILD_SAMPLES AND HAVE_SYCL)

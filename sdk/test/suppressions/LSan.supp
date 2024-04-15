@@ -9,6 +9,8 @@
 # libigc.so has a memory leak in strdup somewhere.
 leak:libigc.so
 
+# strange leak reported - nothing of app on the stack, compiler LSAN issue?
+# while it might hide other leaks
 # temp workaround
 leak:stdlib_new_delete.cpp
 

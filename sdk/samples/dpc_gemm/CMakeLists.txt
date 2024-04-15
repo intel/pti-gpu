@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 
 project(PTI_Samples_DPC_GEMM CXX)
 
-# TODO(matthew.schilling@intel.com): find_package(IntelSYCL)?
+# TODO: find_package(IntelSYCL)?
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fsycl" has_sycl)
 
