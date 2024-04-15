@@ -388,7 +388,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
   f.write("      str += \"<PID:\" + std::to_string(utils::GetPid()) + \"> \";\n")
   f.write("    }\n")
   f.write("    if (collector->options_.need_tid) {\n")
-  f.write("      str += \"<TID:\" + std::to_string(utils::GetTid()) + \"> \";\n")
+  f.write("      str += \"<TID:\" + std::to_string((unsigned int)utils::GetTid()) + \"> \";\n")
   f.write("    }\n")
   f.write("    str += \"" + func + ":\";\n")
   for name, type in params:
@@ -705,7 +705,7 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
   f.write("      str += \"<PID:\" + std::to_string(utils::GetPid()) + \"> \";\n")
   f.write("    }\n")
   f.write("    if (collector->options_.need_tid) {\n")
-  f.write("      str += \"<TID:\" + std::to_string(utils::GetTid()) + \"> \";\n")
+  f.write("      str += \"<TID:\" + std::to_string((unsigned int)utils::GetTid()) + \"> \";\n")
   f.write("    }\n")
   f.write("    str +=\""+ func + "\";\n")
   f.write("    str += \" [\" + std::to_string(time) + \" ns]\";\n")
