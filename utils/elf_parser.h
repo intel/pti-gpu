@@ -21,7 +21,7 @@ class ElfParser {
   ElfParser(const uint8_t* data, uint32_t size) : data_(data), size_(size) {}
 
   bool IsValid() const {
-    if (data_ == nullptr || size_ < sizeof(Elf64Header)) {
+    if (data_ == nullptr || size_ != sizeof(Elf64Header)) {
       return false;
     }
 
@@ -150,13 +150,22 @@ class ElfParser {
                   const uint8_t** section,
                   uint64_t* section_size) const {
     PTI_ASSERT(section != nullptr && section_size != nullptr);
+    if (data_ == nullptr || size_ != sizeof(Elf64Header)) {
+      return;
+    }
 
     const Elf64Header* header = reinterpret_cast<const Elf64Header*>(data_);
+    PTI_ASSERT(data_ + (header->shoff*sizeof(Elf64SectionHeader)) <= data_ + size_);
     const Elf64SectionHeader* section_header =
       reinterpret_cast<const Elf64SectionHeader*>(data_ + header->shoff);
+
+    PTI_ASSERT(header->shnum * sizeof(Elf64SectionHeader) < size_);
+    PTI_ASSERT(header->shstrndx != 0 && header->shstrndx < header->shnum);
+    PTI_ASSERT(section_header[header->shstrndx].offset <= size_);
+
     const char* name_section = reinterpret_cast<const char*>(
         data_ + section_header[header->shstrndx].offset);
-    
+
     for (uint32_t i = 1; i < header->shnum; ++i) {
       const char* section_name = name_section + section_header[i].name;
       if (strcmp(section_name, name) == 0) {

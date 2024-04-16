@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <vector>
+#include <string>
 
 #include <stdio.h>
 #include <string.h>
@@ -138,25 +140,16 @@ int GetPerfConfigId(int fd, int card, const char* guid) {
   snprintf(file_path, sizeof(file_path),
            "/sys/class/drm/card%d/metrics/%s/id", card, guid);
 
-  int file = open(file_path, O_RDONLY);
-  if (file < 0) {
+  std::ifstream file {file_path};
+  if (!file) {
     return -1;
   }
 
-  off_t offset = lseek(file, 0, SEEK_END);
-  std::vector<char> buffer(offset);
+  std::string buffer;
+  std::getline(file, buffer);
+  PTI_ASSERT(buffer.size() > 0);
 
-  offset = lseek(file, 0, SEEK_SET);
-  PTI_ASSERT(offset == 0);
-
-  int read_bytes = read(file, buffer.data(), buffer.size() - 1);
-  PTI_ASSERT(read_bytes > 1 && read_bytes < buffer.size());
-  buffer[read_bytes - 1] = '\0';
-
-  int status = close(file);
-  PTI_ASSERT(status == 0);
-
-  return strtol(buffer.data(), 0, 0);
+  return strtol(buffer.c_str(), 0, 0);
 }
 
 int main(int argc, char* argv[]) {
