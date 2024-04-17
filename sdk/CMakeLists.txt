@@ -283,6 +283,10 @@ if(PTI_INSTALL)
       FILES "env/vars.sh"
       DESTINATION "env/"
       COMPONENT Pti_oneAPI)
+    install(
+      FILES "../third-party-programs.txt"
+      DESTINATION "${PTI_INSTALL_LIC_DIR}"
+      COMPONENT Pti_oneAPI)
   endif()
 
 
