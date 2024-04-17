@@ -120,6 +120,10 @@
     "configurePreset": "make"
   },
   {
+    "name": "oneAPI",
+    "configurePreset": "oneAPI"
+  },
+  {
     "name": "asan",
     "configurePreset": "asan"
   },

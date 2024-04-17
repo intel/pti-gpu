@@ -262,5 +262,9 @@ CPATH=$(prepend_path "${component_root}/include" "${CPATH:-}") ; export CPATH
 
 CMAKE_PREFIX_PATH=$(prepend_path "${component_root}/lib/cmake/pti" "${CMAKE_PREFIX_PATH:-}") ; export CMAKE_PREFIX_PATH
 
+LD_LIBRARY_PATH=$(prepend_path "${component_root}/lib" "${LD_LIBRARY_PATH:-}") ; export LD_LIBRARY_PATH
+
+LIBRARY_PATH=$(prepend_path "${component_root}/lib" "${LIBRARY_PATH:-}") ; export LIBRARY_PATH
+
 # Add component man pages to MANPATH, using prepend_manpath() function.
 #MANPATH=$(prepend_manpath "${component_root}/man" "${MANPATH:-}") ; export MANPATH
