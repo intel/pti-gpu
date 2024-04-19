@@ -155,6 +155,8 @@ if(NOT LOWER_CMAKE_BUILD_TYPE STREQUAL "debug")
 endif()
 
 configure_file(${PROJECT_SOURCE_DIR}/scripts/mergetrace.py mergetrace.py COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/scripts/analyzeperfmetrics.py analyzeperfmetrics.py COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/scripts/addrasm.py addrasm.py COPYONLY)
 
 # Installation
 

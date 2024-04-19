@@ -17,6 +17,8 @@ Intel(R) GPU applications.
 - C++ compiler with C++17 support
 - Intel(R) oneAPI Base Toolkits
 - Python
+- Matplotlib 3.8 or later (https://matplotlib.org/)
+- Pandas 2.2.1 or later (https://pandas.pydata.org/)
 - Intel(R) MPI (optional)
 
 ## Build
@@ -29,12 +31,12 @@ cd <....>/tools/unitrace
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
-or 
+or
 cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=0 ..
 make
 ```
 
-The MPI support is not enabled if **BUILD_WITH_MPI=0** is defined. 
+The MPI support is not enabled if **BUILD_WITH_MPI=0** is defined.
 
 ## Run
 
@@ -93,7 +95,7 @@ By default, only Level Zero tracing/profiling is enabled. To enable OpenCL traci
 
 ## View Event Trace
 
-If one of more of the **--chrome-** options are present, a .json trace file will be generated. To view the event trace, one can load 
+If one of more of the **--chrome-** options are present, a .json trace file will be generated. To view the event trace, one can load
 the .json trace file to **https://ui.perfetto.dev/** in either Google Chrome or Microsoft Edge browser.
 
 ![Host-Device Timelines!](/tools/unitrace/doc/images/host-device-times.png)
@@ -104,7 +106,7 @@ Do **NOT** use **chrome://tracing/** to view the event trace!
 
 To trace/profile Level Zero and/or OpenCL host activies, one can use one or more of the following options:
 
---call-logging [-c] 
+--call-logging [-c]
 --host-timing  [-h]
 --chrome-call-logging
 
@@ -147,7 +149,7 @@ The **"Spill Memory Per Thread"** is the memory used for register spilled for ea
 
 The **"Register File Size Per Thread"** is the number of registers available to each thread. In case the Level Zero runtime is not up-to-date, this column may be shown as **"unknown"**.
 
-In addition, the **"Compiled"** indicates the kernel compilation mode: just-in-time(JIT) or ahead-of-time(AOT). 
+In addition, the **"Compiled"** indicates the kernel compilation mode: just-in-time(JIT) or ahead-of-time(AOT).
 
 By default, the kernel timing is summarized regardless of shapes. In case the kernel has different shapes, using **-v** along with **-d** is strongly recommended:
 
@@ -163,7 +165,7 @@ The **--device-timeline [-t]** option outputs timestamps of each kernel instance
 
 ![Device Timeline Text!](/tools/unitrace/doc/images/device-timeline-text.png)
 
-Both **--chrome-kernel-logging** and **--chrome-device-logging** create device event trace and store it in a .json file. However, **--chrome-kernel-logging** also traces host-device interactions and dependencies in addition to device events. 
+Both **--chrome-kernel-logging** and **--chrome-device-logging** create device event trace and store it in a .json file. However, **--chrome-kernel-logging** also traces host-device interactions and dependencies in addition to device events.
 
 Kernel Loggging:
 
@@ -219,7 +221,7 @@ The **--chrome-sycl-logging** traces SYCL runtime and SYCL Plugins activities
 The **--chrome-ccl-logging** traces CCL runtime activities
 ![CCL Logging!](/tools/unitrace/doc/images/ccl_logging.png)
 
-Similarly, one can use **--chrome-dnn-logging** for oneDNN. 
+Similarly, one can use **--chrome-dnn-logging** for oneDNN.
 
 The **--chrome-itt-logging** traces activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs
 
@@ -247,7 +249,7 @@ dynamically activate and deactivate tracing at runtime. One can do so by using *
 unsetting environment varible **"PTI_ENABLE_COLLECTION"** in the application:
 
 ```cpp
-// activate tracing 
+// activate tracing
 setenv("PTI_ENABLE_COLLECTION", "1", 1);
 // tracing is now activated
 
@@ -277,14 +279,14 @@ __itt_resume();
 // tracing is now activated
 ```
 
-If both environment variable **PTI_ENABLE_COLLECTION** and **__itt_pause()/__itt_resume()** are present, **__itt_pause()/__itt_resume()** takes precedence. 
- 
+If both environment variable **PTI_ENABLE_COLLECTION** and **__itt_pause()/__itt_resume()** are present, **__itt_pause()/__itt_resume()** takes precedence.
+
 By default, collection is disabled when the application is started. To change the default, you can start the application with  **PTI_ENABLE_COLLECTION** set to 1, for example:
 
 ```sh
 PTI_ENABLE_COLLECTION=1 unitrace --chrome-call-logging --chrome-kernel-logging --conditional-collection <application> [args]
 ```
- 
+
 If **--conditional-collection** option is not specified, however, PTI_ENABLE_COLLECTION settings or __itt_pause()/__itt_resume() calls have **no** effect and the application is traced/profiled from the start to the end.
 
 ## Profile MPI Workloads
@@ -304,7 +306,7 @@ The result .json file has the rank id embedded as **<application>.<pid>.<rank>.j
 
 ### View Event Timelines of Multiple MPI Ranks
 
-You can view the result files rank by rank. But often you may want to view the traces from multiple ranks at the same time. 
+You can view the result files rank by rank. But often you may want to view the traces from multiple ranks at the same time.
 To view traces from multiple MPI ranks, you can use **mergetrace.py** script to merge them first and then load the merged trace into
 https://ui.perfetto.dev/.
 
@@ -399,14 +401,14 @@ One way to run the external trace processor on Windows is to use Windows Subsyst
 
 1. Start your Linux distribution (Ubuntu 22.02.2 LTS, for example) on Windows.
 2. Inside Linux, download and run trace_processor:
-   
+  
    ```sh
    curl -LO https://get.perfetto.dev/trace_processor
    chmod +x ./trace_processor
    trace_processor --httpd
    ```
 3. Start the browser in Windows, load https://ui.perfetto.dev/ and open the trace file. If the trace is loaded successfully, inside Linux, you
-   should see something like: 
+   should see something like:
 
 
    ```sh
@@ -429,7 +431,12 @@ Please also note that FLAT device hierarchy is required for hardware metric prof
 
 ### Query Metrics for Each Kernel Instance
 
-The **--metric-query [-q]** option enables metric query for each kernel instance. 
+The **--metric-query [-q]** option enables metric query for each kernel instance.
+
+   ```sh
+   unitrace -q -o perfquery.csv myapp
+   ```
+Performance metrics data will be stored in **perfquery.<pid>.csv** file.
 
 ![Metric Query!](/tools/unitrace/doc/images/metric-query.png)
 
@@ -437,11 +444,21 @@ By default, counters in **ComputeBasic** metric group are profiled. One can use 
 
 ### Time-based Metric Sampling
 
-Differnt from **--metric-query [-q]** option, the **--metric-sampling [-k]** option profile hardware metrics in time-based sampling mode. 
+Different from **--metric-query [-q]** option, the **--metric-sampling [-k]** option profile hardware metrics in time-based sampling mode.
+
+   ```sh
+   unitrace -k -o perfmetrics.csv myapp
+   ```
+Performance metrics data will be stored in **perfmetrics.<pid>.csv** file.
 
 ![Metric Sampling!](/tools/unitrace/doc/images/metric-sampling.png)
 
-To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be changed using **--sampling-interval [-i]** option.
+To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be changed using **--sampling-interval [-i]** option, for example:
+
+
+   ```sh
+   unitrace -k -i 20 -o perfmetrics.csv myapp
+   ```
 
 By default, counters in **ComputeBasic** metric group are profiled. One can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
 
@@ -452,6 +469,48 @@ The **--stall-sampling** works on Intel(R) Data Center GPU Max Series and later 
 ![Metric Query!](/tools/unitrace/doc/images/stall-sampling.png)
 
 To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be changed using **--sampling-interval [-i]** option.
+
+### Analyze Performance Metrics
+
+Once you have the hardware performance metrics data collected, you can use the script **analyzeperfmetrics.py** to analyze the metrics. This script plots a performance chart stored in either .png or .pdf file, depending on the output format you choose.
+
+   ```sh
+   python analyzeperfmetrics.py -d 1 -k mykernel -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.png perfmetrics.12345.csv
+   ```
+
+This command plots a chart of XVE stall and function unit utilizations for the **second** instance of kernel **mykernel** executed on device **1**and store it in file **perfchart.png**.
+
+![Analyze Performance Metrics!](/tools/unitrace/doc/images/perfchart.png)
+
+If the input metric data file has stall sampling events collected using **--stall-sampling** option, the chart generated shows stall events and instruction addresses.
+
+![Analyze Stall Metrics!](/tools/unitrace/doc/images/stallchart.png)
+
+From this chart, we can easily see that the most stalls are **SbidStalls** at instruction **0x000001B8**. To reduce or eliminate the stalls, we need to dive into the instructions to find out the cause of the stalls.
+
+The assembly in the shader dump do not contain instruction addresses. So first we need to add address to each instruction using **addrasm.py**.
+
+
+   ```sh
+   python addrasm.py -o kernel.pc.asm kernel.asm
+   ```
+
+Here, **kernel.asm** is the kernel assembly as input and **kernel.pc.asm** is the new assembly generated with address prefixed to each instruction.
+
+In the **kernel.pc.asm**, we can easily locate the instruction at **0x000001B8** and find out why this instruction is stalled.
+
+If compilation option **-gline-tables-only** is present, the source lines are also embedded in the assembly and we can easily map instructions to source lines.
+
+For more information on the command line options, please run
+
+   ```sh
+   python analyzeperfmetrics.py -h
+   ```
+and
+ 
+   ```sh
+   python addrasm.py -h
+   ```
 
 ## Query Trace Events
 
@@ -471,7 +530,7 @@ Similarly, if you care about just the device activities, you can use the options
 
 Typically, you need options to enable profiling both host activities and device activities to understand how host and device are utilized and interacted. Ideally, you want both the concurrencies or overlappings between host actitives and device activities and the concurrencies or overlappings between device engines maximized for best performance. Turning on profiling both host and device will give you the timelines of both and help you identify concurrency issues.
 
-It is also recommended to start with device timing (**-d**) and/or host timing (**-h**) summaries. From the summaries, you can quickly spot the hot spots or the expensive kernels on device or calls on host. From the device summary, you will also learn if each kernel has occupancy and/or register spilling issues. Next, from the detailed timelines you will determine if these expensive device kernels or host calls are indeed performance bottlenecks to the overall peformance. 
+It is also recommended to start with device timing (**-d**) and/or host timing (**-h**) summaries. From the summaries, you can quickly spot the hot spots or the expensive kernels on device or calls on host. From the device summary, you will also learn if each kernel has occupancy and/or register spilling issues. Next, from the detailed timelines you will determine if these expensive device kernels or host calls are indeed performance bottlenecks to the overall peformance.
 
 Once a kernel is determined to be a performance bottlneck, it is time to figure out why its perforamnce is not optimal. There can be multiple reasons why the kernel is not performant: cache misses, low occupnacy, low ALU utilizations, execution unit stalls, etc. You can get answers from metric profiles using **-q** option. In case of execution unit stall analysis, the **--stall-sampling** will give you instruction addresses and reasons of stalls.
 
