@@ -9,6 +9,7 @@
 
 #include <string.h>
 
+#include <limits>
 #include <vector>
 
 #include "elf.h"
@@ -21,7 +22,7 @@ class ElfParser {
   ElfParser(const uint8_t* data, uint32_t size) : data_(data), size_(size) {}
 
   bool IsValid() const {
-    if (data_ == nullptr || size_ != sizeof(Elf64Header)) {
+    if (data_ == nullptr || size_ < sizeof(Elf64Header)) {
       return false;
     }
 
@@ -150,12 +151,14 @@ class ElfParser {
                   const uint8_t** section,
                   uint64_t* section_size) const {
     PTI_ASSERT(section != nullptr && section_size != nullptr);
-    if (data_ == nullptr || size_ != sizeof(Elf64Header)) {
+    if (data_ == nullptr || size_ < sizeof(Elf64Header)) {
+      *section = nullptr;
+      *section_size = 0;
       return;
     }
 
     const Elf64Header* header = reinterpret_cast<const Elf64Header*>(data_);
-    PTI_ASSERT(data_ + (header->shoff*sizeof(Elf64SectionHeader)) <= data_ + size_);
+    PTI_ASSERT(data_ + header->shoff + sizeof(Elf64SectionHeader) <= data_ + size_);
     const Elf64SectionHeader* section_header =
       reinterpret_cast<const Elf64SectionHeader*>(data_ + header->shoff);
 

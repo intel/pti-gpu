@@ -98,6 +98,10 @@ As a result, listing like the following will be printed for each kernel (once pe
 - [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime)
 
 ## Build and Run
+
+**Note**: This sample does not support IGC's latest binary format (ZEBinary).
+To use this sample, run `export IGC_EnableZEBinary=0` before running the sample.
+
 ### Linux
 Run the following commands to build the sample:
 ```sh

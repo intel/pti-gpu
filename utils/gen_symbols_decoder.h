@@ -66,6 +66,8 @@ class GenSymbolsDecoder {
       reinterpret_cast<const iOpenCL::SProgramDebugDataHeaderIGC*>(ptr);
     ptr += sizeof(iOpenCL::SProgramDebugDataHeaderIGC);
 
+    PTI_ASSERT(header->NumberOfKernels <= IGC_MAX_VALUE);
+
     for (uint32_t i = 0; i < header->NumberOfKernels; ++i) {
       const iOpenCL::SKernelDebugDataHeaderIGC* kernel_header =
         reinterpret_cast<const iOpenCL::SKernelDebugDataHeaderIGC*>(ptr);

@@ -9,6 +9,7 @@
 
 #include <string.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -87,6 +88,8 @@ class DebugLineParser {
 
     ptr += sizeof(Dwarf32LineNumberProgramHeader);
 
+    // Each decode parses sizeof(uint32_t) bytes and moves ptr
+    PTI_ASSERT(sizeof(uint32_t)*header->opcode_base < size_ + sizeof(uint32_t));
     // standard_opcode_lengths
     for (uint8_t i = 1; i < header->opcode_base; ++i) {
       uint32_t value = 0;

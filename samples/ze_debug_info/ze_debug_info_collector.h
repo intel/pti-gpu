@@ -43,6 +43,10 @@ using KernelDebugInfoMap = std::map<std::string, KernelDebugInfo>;
 class ZeDebugInfoCollector {
  public: // User Interface
   static ZeDebugInfoCollector* Create() {
+    std::cout << "[INFO] At the moment, this sample is incompatible with" <<
+      " IGC's ZE binary format." << std::endl;
+    std::cout << "Run `export IGC_EnableZEBinary=0` to use old format." << std::endl;
+
     ZeDebugInfoCollector* collector = new ZeDebugInfoCollector();
     PTI_ASSERT(collector != nullptr);
 
