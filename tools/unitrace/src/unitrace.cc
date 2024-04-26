@@ -248,7 +248,8 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--device-timeline") == 0 || strcmp(argv[i], "-t") == 0) {
       utils::SetEnv("UNITRACE_DeviceTimeline", "1");
       ++app_index;
-    } else if (strcmp(argv[i], "--opencl") == 0) { utils::SetEnv("UNITRACE_OpenCLTracing", "1");
+    } else if (strcmp(argv[i], "--opencl") == 0) {
+      utils::SetEnv("UNITRACE_OpenCLTracing", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-mpi-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeMpiLogging", "1");
@@ -615,6 +616,12 @@ int main(int argc, char *argv[]) {
 #endif
 
   SetTracingEnvironment();
+  
+  if (utils::GetEnv("UNITRACE_OpenCLTracing") == "1") {
+    // opencl tracing requires sysman enabled for device enumeration
+    SetSysmanEnvironment();
+  }
+
   if (utils::GetEnv("UNITRACE_MetricQuery") == "1") {
     // UNITRACE_RawMetrics or UNITRACE_KernelMetrics is not set
     SetProfilingEnvironment();
@@ -667,19 +674,25 @@ int main(int argc, char *argv[]) {
       while (wait(nullptr) > 0);
 
       DisableProfiling();
-      for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir))) {
-        std::filesystem::remove_all(e.path());
-      }
-      if (remove(data_dir)) {
-        std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
+      if (std::filesystem::exists(std::filesystem::path(data_dir))) {
+        for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir))) {
+          std::filesystem::remove_all(e.path());
+        }
+        if (remove(data_dir)) {
+          std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
+        }
       }
     } else {
       std::cerr << "[ERROR] Failed to create child process" << std::endl;
       DisableProfiling();
-      for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir))) {
-        std::filesystem::remove_all(e.path());
+      if (std::filesystem::exists(std::filesystem::path(data_dir))) {
+        for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir))) {
+          std::filesystem::remove_all(e.path());
+        }
+        if (remove(data_dir)) {
+          std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
+        }
       }
-      remove(data_dir);
     }
   }
   else {
