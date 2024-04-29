@@ -63,7 +63,6 @@
       "environment": {
         "NEOReadDebugKeys": "1",
         "DisableDeepBind": "1",
-        "ZE_ENABLE_TRACING_LAYER": "1",
         "ASAN_SYMBOLIZER_PATH": "$penv{CMPLR_ROOT}/bin/compiler/llvm-symbolizer",
         "LSAN_SYMBOLIZER_PATH": "$penv{CMPLR_ROOT}/bin/compiler/llvm-symbolizer",
         "ASAN_OPTIONS": "suppressions=${sourceDir}/test/suppressions/ASan.supp,detect_leaks=1,check_initialization_order=1,alloc_dealloc_mismatch=0,new_delete_type_mismatch=0,halt_on_error=1,use_sigaltstack=0",
