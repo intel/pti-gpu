@@ -53,7 +53,7 @@ def AnalyzeStallMetrics(args, header, last):
                     ax.set_xticks(df2.index, labels = df2["IP[Address]"], rotation = 90, fontsize = 4)
                     plt.grid(visible = True, which = 'both', axis = 'y')
                     plt.legend(loc = 'best', fontsize = 4)
-                    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8)
+                    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
                     plt.tight_layout()
                     fig = ax.get_figure()
                     if (p == None):
@@ -75,7 +75,7 @@ def AnalyzeStallMetrics(args, header, last):
         ax.set_xticks(df2.index, labels = df2["IP[Address]"], rotation = 90, fontsize = 6)
         plt.grid(visible = True, which = 'both', axis = 'y')
         plt.legend(loc = 'best', fontsize = 4)
-        plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8)
+        plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
         plt.tight_layout()
         fig = ax.get_figure()
         if (p == None):
@@ -117,7 +117,7 @@ def AnalyzeStallMetrics(args, header, last):
         ax.set_xticks(df2.index, labels = df2["IP[Address]"], rotation = 90, fontsize = 4)
         plt.grid(visible = True, which = 'both', axis = 'y')
         plt.legend(loc = 'best', fontsize = 4)
-        plt.title(label = args.title, loc = 'center', fontsize = 8)
+        plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
         plt.tight_layout()
         plt.savefig(args.output)
         print("Stall metric chart " + args.output + " has been successfully generated.")
@@ -156,7 +156,7 @@ def PlotKernelInstancePerfMetrics(args, kernel, df, metrics):
     ax = df3.plot(y = metrics, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
     plt.grid(visible = True, which = 'both', axis = 'y')
     plt.legend(loc = 'best', fontsize = 4)
-    plt.title(label = args.title + "\(" + kernel + ")", loc = 'center', fontsize = 8)
+    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
     plt.tight_layout()
     
     return ax
@@ -192,7 +192,7 @@ def AnalyzePerfMetrics(args, header, last):
                     ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
                     plt.grid(visible = True, which = 'both', axis = 'y')
                     plt.legend(loc = 'best', fontsize = 4)
-                    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8)
+                    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
                     plt.tight_layout()
                     if (p == None):
                         p = pdf(args.output)
@@ -259,7 +259,7 @@ def AnalyzePerfMetrics(args, header, last):
                         ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
                         plt.grid(visible = True, which = 'both', axis = 'y')
                         plt.legend(loc = 'best', fontsize = 4)
-                        plt.title(label = args.title + "\(" + args.kernel + ")", loc = 'center', fontsize = 8)
+                        plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
                         plt.tight_layout()
                         if (p == None):
                             p = pdf(args.output)
@@ -283,7 +283,7 @@ def AnalyzePerfMetrics(args, header, last):
                 ax = df3.plot(y = metrics, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
                 plt.grid(visible = True, which = 'both', axis = 'y')
                 plt.legend(loc = 'best', fontsize = 4)
-                plt.title(label = args.title + "\(" + args.kernel + ")", loc = 'center', fontsize = 8)
+                plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
                 plt.tight_layout()
                 if (p == None):
                     p = pdf(args.output)
