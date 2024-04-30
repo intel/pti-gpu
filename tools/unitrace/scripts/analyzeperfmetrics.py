@@ -213,7 +213,7 @@ def AnalyzePerfMetrics(args, header, last):
                 print("No performance metric data for any kernel")
                 
         else:
-            # speicified instance of all kernels
+            # specified instance of all kernels
             kernels = df['Kernel'].unique()
             p = None
             for kernel in kernels:
