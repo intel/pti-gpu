@@ -8,16 +8,18 @@
 
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages as pdf
+
 import os
 import argparse
 
 def ParseArguments():
-    argparser = argparse.ArgumentParser(description = "GPU Kernel Performance Hardware Metrics Viewer")
+    argparser = argparse.ArgumentParser(description = "GPU Kernel Performance Hardware Metrics Analyzer")
     argparser.add_argument('-d', '--device', type = int, default = 0, help = "GPU device (default is device 0)")
-    argparser.add_argument('-k', '--kernel', required = True, help = "kernel name with shape")
-    argparser.add_argument('-i', '--instance', type = int, default = 1, help = "kernel instance (default is 1, the first instance)")
+    argparser.add_argument('-k', '--kernel', help = "kernel name with shape, all kernels if this option is not specified")
+    argparser.add_argument('-i', '--instance', type = int, default = 1, help = "kernel instance. all instances if < 1 (default is 1 or the first instance)")
     argparser.add_argument('-m', '--metrics', help = "list of comma-separated metric names")
-    argparser.add_argument('-o', '--output', required = True, help = "output file name with for extension (for example, png, pdf)")
+    argparser.add_argument('-o', '--output', required = True, help = "output file name with extension (for example, png, pdf), output in PDF format regardless of the extension if -k is not specified or instance < 1")
     argparser.add_argument('-y', '--ylabel', help = "label for Y axis")
     argparser.add_argument('-x', '--xlabel', default = "Time", help = "label for X axis (defaut is \"Time\")")
     argparser.add_argument('-t', '--title', default = "Performance Metrics", help = "performance metric plot title")
@@ -29,39 +31,136 @@ def AnalyzeStallMetrics(args, header, last):
     # only read lines from headerlinenumber to lastline
     df = pd.read_csv(args.input, skiprows = header, nrows = last - header - 1, skip_blank_lines = False, skipinitialspace = True)
 
+    stalls = ["Active[Events]", "ControlStall[Events]", "PipeStall[Events]", "SendStall[Events]", "DistStall[Events]", "SbidStall[Events]", "SyncStall[Events]", "InstrFetchStall[Events]", "OtherStall[Events]"]
+
+    if (args.kernel is None):
+        # all kernels
+        start = 0
+        stop = -1
+        kernel = ""
+        p = None
+        for index, row in df.iterrows():
+            if (kernel == ""):
+                kernel = row['Kernel']
+                start = index
+            else:
+                if (kernel != row['Kernel']):
+                    stop = index
+                    df2 = df[start:stop]    # data frame of the kernel of interest
+                    df3 = df2[stalls]
+
+                    ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                    ax.set_xticks(df2.index, labels = df2["IP[Address]"], rotation = 90, fontsize = 4)
+                    plt.grid(visible = True, which = 'both', axis = 'y')
+                    plt.legend(loc = 'best', fontsize = 4)
+                    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8)
+                    plt.tight_layout()
+                    fig = ax.get_figure()
+                    if (p == None):
+                        p = pdf(args.output)
+                    fig.savefig(p, format = 'pdf')
+                    plt.close(fig)	# close figure to save memory
+                    print("Analyzed kernel " + kernel)
+    
+                    kernel = row['Kernel']
+                    start = index
+
+        # last kernel
+        stop = df.shape[0]
+        df2 = df[start : stop]    # data frame of the kernel of interest
+        df3 = df2[stalls]
+
+        #fig = plt.figure()
+        ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+        ax.set_xticks(df2.index, labels = df2["IP[Address]"], rotation = 90, fontsize = 6)
+        plt.grid(visible = True, which = 'both', axis = 'y')
+        plt.legend(loc = 'best', fontsize = 4)
+        plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8)
+        plt.tight_layout()
+        fig = ax.get_figure()
+        if (p == None):
+            p = pdf(args.output)
+        fig.savefig(p, format = 'pdf')
+        plt.close(fig)	# close figure to save memory
+        print("Analyzed kernel " + kernel)
+        if (p != None):
+            p.close()
+            print("Stall metric charts are stored in " + args.output + " in PDF format") 
+
+    else:
+        counting = True
+        start = -1
+        stop = -1
+        kernelfound = False
+    
+        for index, row in df.iterrows():
+            if (row['Kernel'] == args.kernel):
+                if (kernelfound == False):
+                    start = index
+                    kernelfound = True
+            else:
+                if (kernelfound == True):
+                    stop = index
+                    break
+    
+        if (kernelfound == False):
+            print("No metric data for kernel " + args.kernel)
+            return
+    
+        if (stop == -1):
+            stop = df.shape[0]
+    
+        df2 = df[start : stop]    # data frame of the kernel of interest
+        df3 = df2[stalls]
+    
+        ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+        ax.set_xticks(df2.index, labels = df2["IP[Address]"], rotation = 90, fontsize = 4)
+        plt.grid(visible = True, which = 'both', axis = 'y')
+        plt.legend(loc = 'best', fontsize = 4)
+        plt.title(label = args.title, loc = 'center', fontsize = 8)
+        plt.tight_layout()
+        plt.savefig(args.output)
+        print("Stall metric chart " + args.output + " has been successfully generated.")
+    
+def PlotKernelInstancePerfMetrics(args, kernel, df, metrics):
+    k = 0
     counting = True
     start = -1
     stop = -1
-    kernelfound = False
-
+    instancefound = False
+        
     for index, row in df.iterrows():
-        if (row['Kernel'] == args.kernel):
-            if (kernelfound == False):
-                start = index
-                kernelfound = True
+        if (pd.isna(row['Kernel']) == False):
+            if ((row['Kernel'] == kernel) and (counting == True)):
+                k = k + 1			# found kernel of interest
+                counting = False		# set to false so this block will not enter again for this instance
+                if (k == args.instance):	# found instance of interest
+                    start = index
+                    instancefound = True
         else:
-            if (kernelfound == True):
-                stop = index - 1
+            counting = True			# a new kernel and/or a new instance starts in the data frame
+            if (instancefound == True):
+                stop = index
                 break
 
-    if (kernelfound == False):
-        print("No metric data for kernel " + args.kernel)
-        return
-
-
-    df2 = df[start:stop + 1]    # data frame of the kernel of interest
-    stalls = ["Active[Events]", "ControlStall[Events]", "PipeStall[Events]", "SendStall[Events]", "DistStall[Events]", "SbidStall[Events]", "SyncStall[Events]", "InstrFetchStall[Events]", "OtherStall[Events]"]
-    df3 = df2[stalls]
-
-    ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-    ax.set_xticks(df2.index, labels = df2["IP[Address]"], rotation = 90, fontsize = 6)
+    if ((instancefound == True) and (stop == -1)):	# the instance of interest is at the end of data frame
+        stop = df.shape[0]
+    
+    if (instancefound == False):
+        print("No metric data for instance " + str(args.instance) + " of kernel " + kernel)
+        return None
+         
+    df2 = df[start : stop]	# data frame of the instance of interest
+    df3 = df2[metrics]
+    
+    ax = df3.plot(y = metrics, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
     plt.grid(visible = True, which = 'both', axis = 'y')
     plt.legend(loc = 'best', fontsize = 4)
-    plt.title(label = args.title, loc = 'center', fontsize = 8)
+    plt.title(label = args.title + "\(" + kernel + ")", loc = 'center', fontsize = 8)
     plt.tight_layout()
-    plt.savefig(args.output)
-    print("Stall metric chart " + args.output + " has been successfully generated.")
     
+    return ax
+
 def AnalyzePerfMetrics(args, header, last):
 
     # only read lines from headerlinenumber to lastline
@@ -77,43 +176,137 @@ def AnalyzePerfMetrics(args, header, last):
         else:
             metrics_cleansed.append(me)
 
-    k = 0
-    counting = True
-    start = -1
-    stop = -1
-    instancefound = False
+    if (args.kernel is None):
+        if (args.instance < 1):
+            # all kernels and all instances
+            start = 0
+            stop = -1
+            kernel = ""
+            p = None
+            for index, row in df.iterrows():
+                if (pd.isna(row['Kernel']) == True):
+                    stop = index	# current kernel instance ends
+        
+                    df2 = df[start : stop]	# data frame of the instance of interest
+                    df3 = df2[metrics_cleansed]
+                    ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
+                    plt.grid(visible = True, which = 'both', axis = 'y')
+                    plt.legend(loc = 'best', fontsize = 4)
+                    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8)
+                    plt.tight_layout()
+                    if (p == None):
+                        p = pdf(args.output)
+                    fig = ax.get_figure()
+                    fig.savefig(p, format = 'pdf')
+                    plt.close(fig)	# close figure to save memory
+                    print("Analyzed kernel " + kernel)
+                    kernel = ""	# reset kernel name to empty
+                else:
+                    if (kernel == ""):
+                        start = index	# a new kernel instance starts
+                        kernel = row['Kernel']
     
-    for index, row in df.iterrows():
-        if (pd.isna(row['Kernel']) == False):
-            if ((row['Kernel'] == args.kernel) and (counting == True)):
-                k = k + 1			# found kernel of interest
-                counting = False		# set to false so this block will not enter again for this instance
-                if (k == args.instance):	# found instance of interest
-                    start = index
-                    instancefound = True
+            if (p != None):
+                p.close()
+                print("Performance metric charts are successfully generated in PDF format")
+            else:
+                print("No performance metric data for any kernel")
+                
         else:
-            counting = True			# a new kernel and/or a new instance starts in the data frame
-            if (instancefound == True):
-                stop = index - 1
-                break
-    if ((instancefound == True) and (stop == -1)):	# the instance of interest is at the end of data frame
-        stop = df.shape(0)
+            # speicified instance of all kernels
+            kernels = df['Kernel'].unique()
+            p = None
+            for kernel in kernels:
+                if (pd.isna(kernel) == True):
+                    continue 
 
-    if (instancefound == False):
-        print("No metric data for kernel " + args.kernel)
-        return
-     
+                ax = PlotKernelInstancePerfMetrics(args, kernel, df, metrics_cleansed)
+                if (ax == None):
+                    continue
 
-    df2 = df[start:stop + 1]	# data frame of the instance of interest
-    df3 = df2[metrics_cleansed]
+                if (p == None):
+                    p = pdf(args.output)
+                fig = ax.get_figure()
+                fig.savefig(p, format = 'pdf')
+                plt.close(fig)	# close figure to save memory
+                print("Analyzed kernel " + kernel)
 
-    df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
-    plt.grid(visible = True, which = 'both', axis = 'y')
-    plt.legend(loc = 'best', fontsize = 4)
-    plt.title(label = args.title, loc = 'center', fontsize = 8)
-    plt.tight_layout()
-    plt.savefig(args.output)
-    print("Performance metric chart " + args.output + " has been successfully generated.")
+            if (p != None):
+                p.close()
+                print("Performance metric charts are successfully generated in PDF format")
+            else:
+                print("No performance metric data for instance " + str(args.instance) + " for any kernel")
+    else:
+        if (args.instance < 1):
+            # specified kernel all instances
+            counting = True
+            start = -1
+            stop = -1
+            p = None
+            instance = 0
+            for index, row in df.iterrows():
+                if (pd.isna(row['Kernel']) == False):
+                    if ((row['Kernel'] == args.kernel) and (counting == True)):
+                        start = index			# found kernel of interest
+                        counting = False		# set to false so this block will not enter again for this instance
+                else:
+                    if (counting == False):
+                        # instance ends
+                        stop = index
+                        df2 = df[start : stop]	# data frame of the instance of interest
+                        df3 = df2[metrics_cleansed]
+            
+                        ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
+                        plt.grid(visible = True, which = 'both', axis = 'y')
+                        plt.legend(loc = 'best', fontsize = 4)
+                        plt.title(label = args.title + "\(" + args.kernel + ")", loc = 'center', fontsize = 8)
+                        plt.tight_layout()
+                        if (p == None):
+                            p = pdf(args.output)
+                        fig = ax.get_figure()
+                        fig.savefig(p, format = 'pdf')
+                        plt.close(fig)	# close figure to save memory
+                        instance = instance + 1
+                        print("Analyzed instance " + str(instance) + " of kernel " + args.kernel)
+
+                        # continue scan for next instance
+                        counting = True			# a new kernel and/or a new instance starts in the data frame
+                        start = -1
+                        stop = -1
+        
+            if ((start != -1) and (stop == -1)):	# the instance of interest is at the end of data frame
+                stop = df.shape[0]
+            
+                df2 = df[start : stop]	# data frame of the instance of interest
+                df3 = df2[metrics]
+            
+                ax = df3.plot(y = metrics, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
+                plt.grid(visible = True, which = 'both', axis = 'y')
+                plt.legend(loc = 'best', fontsize = 4)
+                plt.title(label = args.title + "\(" + args.kernel + ")", loc = 'center', fontsize = 8)
+                plt.tight_layout()
+                if (p == None):
+                    p = pdf(args.output)
+                fig = ax.get_figure()
+                fig.savefig(p, format = 'pdf')
+                plt.close(fig)	# close figure to save memory
+                instance = instance + 1
+                print("Analyzed instance " + str(instance) + " of kernel " + args.kernel)
+
+            if (p != None):
+                p.close()
+                print("Performance metric chart for kernel " + args.kernel + " is successfully generated in PDF format") 
+            else:
+                print("No performance data for kernel " + args.kernel)
+      
+        else:
+            # specified kernel specified instance
+            ax = PlotKernelInstancePerfMetrics(args, args.kernel, df, metrics_cleansed)
+            if (ax != None):
+                plt.savefig(args.output)
+                print("Performance metric chart for instance " + str(args.instance) + " of kernel " + args.kernel + " successfully generated") 
+            else:
+                print("No performance data for instance " + str(args.instance) + " of kernel " + args.kernel)
 
 def main(args):
     if (os.path.isfile(args.input) == False):
@@ -155,9 +348,6 @@ def main(args):
         return
     
     if (eustall == False):
-        if (args.instance < 1):
-            print("Kernel instance has to be greater than 0")
-            return
         if (args.metrics is None):
             print("-m option is missing")
             return
