@@ -67,7 +67,6 @@ if(HAVE_SYCL)
                                               GTest::gtest_main)
 
   add_executable(startstop_suite main_startstop_fixture.cc)
-  target_compile_features(startstop_suite PUBLIC cxx_std_20)
   target_include_directories(
     startstop_suite
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"

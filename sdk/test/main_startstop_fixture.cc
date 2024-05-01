@@ -13,11 +13,10 @@
 #include <sycl/sycl.hpp>
 #include <thread>
 #include <vector>
-#include <barrier>
 
 #include "pti/pti_view.h"
-#include "utils.h"
 #include "samples_utils.h"
+#include "utils.h"
 
 using namespace sycl;
 
@@ -59,8 +58,13 @@ uint64_t kernel_stop_ts = 0;
 uint64_t number_of_kernel_recs = 0;
 uint64_t number_of_sycl_recs = 0;
 uint64_t expected_sycl_recs = 0;
-uint64_t eid = 11;  // external correlation id base.
-const uint64_t epsilon=100; // min in kernel duration in nanoseconds
+uint64_t eid = 11;             // external correlation id base.
+const uint64_t epsilon = 100;  // min in kernel duration in nanoseconds
+
+// sync variables
+std::mutex common_m;
+std::condition_variable main_cv;
+std::atomic<size_t> shared_thread_counter[arb_start_stop_counter] = {0};
 
 //************************************
 // Vector square in SYCL on device: modifies each input vector
@@ -214,21 +218,16 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
           kernel_append_time[kernel_idx] = a_kernel_rec->_append_timestamp;
           kernel_idx++;
         }
-        //std::cout << "KernelTimestamp for vecAdd: " << a_kernel_rec->_append_timestamp << ":"
-        //          << a_kernel_rec->_thread_id << "\n";
+        // std::cout << "KernelTimestamp for vecAdd: " << a_kernel_rec->_append_timestamp << ":"
+        //           << a_kernel_rec->_thread_id << "\n";
         timestamps_nonzero_duration =
-            timestamps_nonzero_duration && ((a_kernel_rec->_end_timestamp - a_kernel_rec->_start_timestamp)>epsilon);
+            timestamps_nonzero_duration &&
+            ((a_kernel_rec->_end_timestamp - a_kernel_rec->_start_timestamp) > epsilon);
 
         kernel_timestamps_monotonic = samples_utils::isMonotonic(
-                                  {
-                                    a_kernel_rec->_sycl_task_begin_timestamp ,
-                                    a_kernel_rec->_sycl_enqk_begin_timestamp ,
-                                    a_kernel_rec->_append_timestamp ,
-                                    a_kernel_rec->_submit_timestamp ,
-                                    a_kernel_rec->_start_timestamp ,
-                                    a_kernel_rec->_end_timestamp
-                                  }
-                                );
+            {a_kernel_rec->_sycl_task_begin_timestamp, a_kernel_rec->_sycl_enqk_begin_timestamp,
+             a_kernel_rec->_append_timestamp, a_kernel_rec->_submit_timestamp,
+             a_kernel_rec->_start_timestamp, a_kernel_rec->_end_timestamp});
         break;
       }
       default: {
@@ -257,11 +256,12 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
   }
 }
 
-inline void DummyBarrier() {
-  return;
+[[maybe_unused]] void arrive_and_wait(unsigned int index) {
+  std::unique_lock<std::mutex> lk(common_m);
+  shared_thread_counter[index]++;
+  main_cv.wait(lk, [&] { return (shared_thread_counter[index] == thread_count); });
+  main_cv.notify_all();
 }
-
-std::barrier sync_threads(thread_count, DummyBarrier);
 
 void RunArbStartStopTestMultiThreaded(queue &q, const DoubleVector &a, const DoubleVector &b,
                                       TestType a_test_type) {
@@ -279,7 +279,7 @@ void RunArbStartStopTestMultiThreaded(queue &q, const DoubleVector &a, const Dou
           StartTracingNonL0();
       }
       vecSq(q, a, b);
-      sync_threads.arrive_and_wait();
+      arrive_and_wait(i);
       if (i % 2) {
         if (a_test_type != TestType::ARB_START_STOP_MT_SYCL)
           StopTracingL0(a_test_type);
@@ -348,9 +348,8 @@ void RunVecsqadd(TestType a_test_type) {
   }
 
   auto d_selector{gpu_selector_v};
-  sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
+  sycl::property_list prop_list{sycl::property::queue::in_order()};
   sycl::queue q(d_selector, sycl::async_handler{}, prop_list);
-  //queue q(d_selector, NULL);
 
   // Start Tests by Type
   if (a_test_type == TestType::ARB_START_STOP) RunArbStartStopTest(q, a, b, a_test_type);
@@ -385,7 +384,7 @@ void RunVecsqadd(TestType a_test_type) {
 
   ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid);
   ptiFlushAllViews();
-  //ptiFlushAllViews();
+  // ptiFlushAllViews();
 }
 
 }  // namespace
@@ -410,6 +409,7 @@ class StartStopFixtureTest : public ::testing::TestWithParam<bool> {
     number_of_kernel_recs = 0;
     number_of_sycl_recs = 0;
     expected_sycl_recs = 0;
+    for (unsigned int i = 0; i < arb_start_stop_counter; i++) shared_thread_counter[i] = 0;
   }
 
   void TearDown() override {
@@ -417,19 +417,21 @@ class StartStopFixtureTest : public ::testing::TestWithParam<bool> {
   }
 };
 
-// MT - StartTracing / StopTracing have matching enable/disable of gpu_kernels every other iteration.
+// MT - StartTracing / StopTracing have matching enable/disable of gpu_kernels every other
+// iteration.
 TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedBalanced) {
   bool do_immediate = GetParam();
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::ARB_START_STOP_MT);
-  EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter * thread_count / 2 );
+  EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter * thread_count / 2);
   EXPECT_EQ(timestamps_nonzero_duration, true);
   EXPECT_EQ(kernel_timestamps_monotonic, true);
 }
 
-// MT - Enable gpu_kernels multiple times when we start / stop disables it once.   Should have no effect on expected kernels.
+// MT - Enable gpu_kernels multiple times when we start / stop disables it once.   Should have no
+// effect on expected kernels.
 TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedKernelsDuplicatedEnables) {
   bool do_immediate = GetParam();
   // use SetEnv until
@@ -439,7 +441,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedKernelsDuplicatedEnab
   EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter * thread_count / 2);
 }
 
-// MT - Enable gpu_kernels once when we start / stop disables it multiple times.   Should have no effect on expected kernels.
+// MT - Enable gpu_kernels once when we start / stop disables it multiple times.   Should have no
+// effect on expected kernels.
 TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedKernelsDuplicatedDisables) {
   bool do_immediate = GetParam();
   // use SetEnv until
@@ -460,7 +463,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedSycls) {
   EXPECT_EQ(number_of_kernel_recs, 0);
 }
 
-// MT - StartTracing does *not* enable gpu_kernel view kind,  StopTracing has disable for it -- so expect 0 kernel recs.
+// MT - StartTracing does *not* enable gpu_kernel view kind,  StopTracing has disable for it -- so
+// expect 0 kernel recs.
 TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedNoStartKernelWithStopKernel) {
   bool do_immediate = GetParam();
   // use SetEnv until
@@ -470,7 +474,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedNoStartKernelWithStop
   EXPECT_EQ(number_of_kernel_recs, 0);
 }
 
-// MT - StartTracing enable gpu_kernel view kind,  StopTracing does not disable it -- so span of tracing is 1st start to end of prog.
+// MT - StartTracing enable gpu_kernel view kind,  StopTracing does not disable it -- so span of
+// tracing is 1st start to end of prog.
 TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedNoStopKernelWithStartKernel) {
   bool do_immediate = GetParam();
   // use SetEnv until
@@ -478,12 +483,13 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedNoStopKernelWithStart
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::ARB_START_STOP_MT_NO_KERNEL_STOP);
   if (do_immediate)
-    EXPECT_EQ(number_of_kernel_recs, (arb_start_stop_counter-1) * thread_count);
+    EXPECT_EQ(number_of_kernel_recs, (arb_start_stop_counter - 1) * thread_count);
   else
-    EXPECT_EQ(number_of_kernel_recs, (arb_start_stop_counter-1) * thread_count);
+    EXPECT_EQ(number_of_kernel_recs, (arb_start_stop_counter - 1) * thread_count);
 }
 
-// Enable gpu_kernels once when we start / stop disables it multiple times.   Should have no effect on expected kernels.
+// Enable gpu_kernels once when we start / stop disables it multiple times.   Should have no effect
+// on expected kernels.
 TEST_P(StartStopFixtureTest, ArbStartStopCountKernelsDuplicatedDisables) {
   bool do_immediate = GetParam();
   // use SetEnv until
@@ -493,7 +499,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountKernelsDuplicatedDisables) {
   EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter / 2);
 }
 
-// Enable gpu_kernels multiple times when we start / stop disables it once.   Should have no effect on expected kernels.
+// Enable gpu_kernels multiple times when we start / stop disables it once.   Should have no effect
+// on expected kernels.
 TEST_P(StartStopFixtureTest, ArbStartStopCountKernelsDuplicatedEnables) {
   bool do_immediate = GetParam();
   // use SetEnv until
@@ -526,7 +533,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountSycls) {
   EXPECT_EQ(number_of_kernel_recs, 0);
 }
 
-// StartTracing does *not* enable gpu_kernel view kind,  StopTracing has disable it -- so expect 0 kernel recs.
+// StartTracing does *not* enable gpu_kernel view kind,  StopTracing has disable it -- so expect 0
+// kernel recs.
 TEST_P(StartStopFixtureTest, ArbStartStopCountNoStartKernelWithStopKernel) {
   bool do_immediate = GetParam();
   // use SetEnv until
@@ -536,7 +544,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountNoStartKernelWithStopKernel) {
   EXPECT_EQ(number_of_kernel_recs, 0);
 }
 
-// StartTracing enable gpu_kernel view kind,  StopTracing does not disable it -- so span of tracing is 1st start to end of prog.
+// StartTracing enable gpu_kernel view kind,  StopTracing does not disable it -- so span of tracing
+// is 1st start to end of prog.
 TEST_P(StartStopFixtureTest, ArbStartStopCountNoStopKernelWithStartKernel) {
   bool do_immediate = GetParam();
   // use SetEnv until
@@ -546,5 +555,4 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountNoStopKernelWithStartKernel) {
   EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter);
 }
 
-INSTANTIATE_TEST_SUITE_P(StartStopTests, StartStopFixtureTest,
-                         ::testing::Values(false, true));
+INSTANTIATE_TEST_SUITE_P(StartStopTests, StartStopFixtureTest, ::testing::Values(false, true));
