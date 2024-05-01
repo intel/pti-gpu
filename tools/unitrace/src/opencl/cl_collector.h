@@ -662,8 +662,10 @@ class ClCollector {
       utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_SUBMIT);
     PTI_ASSERT(submitted > 0);
 
-    PTI_ASSERT(instance->device_sync <= queued);
-    uint64_t time_shift = queued - instance->device_sync;
+    //PTI_ASSERT(instance->device_sync <= queued);
+    // This is workaround due to driver bug. In some cases driver does not give right timestamp
+    int64_t time_diff = queued - instance->device_sync;
+    uint64_t time_shift = ((time_diff > 0) ? time_diff : 0);
 
     host_queued = instance->host_sync + time_shift;
     PTI_ASSERT(queued <= submitted);
@@ -1809,7 +1811,7 @@ class ClCollector {
         }
 
         collector->fcallback_(
-            &kernel_id, flow_dir,
+            (kernel_id.empty() ? nullptr: &kernel_id), flow_dir,
             callback_data->functionName, start_time, end_time);
       }
     }

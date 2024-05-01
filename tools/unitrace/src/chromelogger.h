@@ -216,24 +216,41 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
   props = GetZeDevicePciPropertiesAndId(device, &parent_device_id, &device_id, &subdevice_id);
   PTI_ASSERT(props != nullptr);
   
-  auto it = device_tid_map_.find({props->address, parent_device_id, device_id, subdevice_id, engine_ordinal, engine_index, host_pid, host_tid});
+  ZeDeviceTidKey tid_key; memset(&tid_key, 0, sizeof(ZeDeviceTidKey));
+  tid_key.pci_addr_ = props->address;
+  tid_key.parent_device_id_ = parent_device_id;
+  tid_key.device_id_ = device_id;
+  tid_key.subdevice_id_ = subdevice_id;
+  tid_key.engine_ordinal_ = engine_ordinal;
+  tid_key.engine_index_ = engine_index;
+  tid_key.host_pid_ = host_pid;
+  tid_key.host_tid_ = host_tid;
+
+  auto it = device_tid_map_.find(tid_key);
   if (it != device_tid_map_.cend()) {
     device_pid = std::get<0>(it->second);
     device_tid = std::get<1>(it->second);
   }
   else {
-    auto it2 = device_pid_map_.find({props->address, parent_device_id, device_id, subdevice_id, host_pid});
+    ZeDevicePidKey pid_key; memset(&pid_key, 0, sizeof(ZeDevicePidKey));
+    pid_key.pci_addr_ = props->address;
+    pid_key.parent_device_id_ = parent_device_id;
+    pid_key.device_id_ = device_id;
+    pid_key.subdevice_id_ = subdevice_id;
+    pid_key.host_pid_ = host_pid;
+
+    auto it2 = device_pid_map_.find(pid_key);
     if (it2 != device_pid_map_.cend()) {
       device_pid = std::get<0>(it2->second);
     }
     else {
       device_pid = next_device_pid_--;
       auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
-      device_pid_map_.insert({{props->address, parent_device_id, device_id, subdevice_id, host_pid}, std::make_tuple(device_pid, start_time)});
+      device_pid_map_.insert({pid_key, std::make_tuple(device_pid, start_time)});
     }
     device_tid = next_device_tid_--;
     auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
-    device_tid_map_.insert({{props->address, parent_device_id, device_id, subdevice_id, engine_ordinal, engine_index, host_pid, host_tid}, std::make_tuple(device_pid, device_tid,start_time)});
+    device_tid_map_.insert({tid_key, std::make_tuple(device_pid, device_tid,start_time)});
   }
 
   return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
@@ -281,25 +298,36 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
   uint32_t device_pid;
   uint32_t device_tid;
   const std::lock_guard<std::mutex> lock(device_pid_tid_map_lock_);
-   
-  auto it = cl_device_tid_map_.find({pci, device, queue, host_pid, host_tid});
+  
+  ClDeviceTidKey tid_key; memset(&tid_key, 0, sizeof(ClDeviceTidKey));
+  tid_key.pci_addr_ = pci;
+  tid_key.device_ = device;
+  tid_key.queue_ = queue;
+  tid_key.host_pid_ = host_pid;
+  tid_key.host_tid_ = host_tid;
+
+  auto it = cl_device_tid_map_.find(tid_key);
   if (it != cl_device_tid_map_.cend()) {
     device_pid = std::get<0>(it->second);
     device_tid = std::get<1>(it->second);
   }
   else {
-    auto it2 = cl_device_pid_map_.find({pci, device, host_pid});
+    ClDevicePidKey pid_key; memset(&pid_key, 0, sizeof(ClDevicePidKey));
+    pid_key.pci_addr_ = pci;
+    pid_key.device_ = device;
+    pid_key.host_pid_ = host_pid;
+    auto it2 = cl_device_pid_map_.find(pid_key);
     if (it2 != cl_device_pid_map_.cend()) {
       device_pid = std::get<0>(it2->second);
     }
     else {
       device_pid = next_device_pid_--;
       auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
-      cl_device_pid_map_.insert({{pci, device, host_pid}, std::make_tuple(device_pid, start_time)});
+      cl_device_pid_map_.insert({pid_key, std::make_tuple(device_pid, start_time)});
     }
     device_tid = next_device_tid_--;
     auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
-    cl_device_tid_map_.insert({{pci, device, queue, host_pid, host_tid}, std::make_tuple(device_pid, device_tid, start_time)});
+    cl_device_tid_map_.insert({tid_key, std::make_tuple(device_pid, device_tid, start_time)});
   }
 
   return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
@@ -1043,92 +1071,52 @@ class ChromeLogger {
       auto [device_pid, device_tid] = ClGetDevicePidTid(pci, device, queue, utils::GetPid(), utils::GetTid());
   
       PTI_ASSERT(ended > started);
-      if (implicit) {
-        {
-          TraceDataPacket pkt;
-          pkt.ph = 'X';
-          pkt.tid = device_tid,
-          pkt.pid = device_pid;
+
+      {
+        TraceDataPacket pkt;
+        pkt.ph = 'X';
+        pkt.tid = device_tid;
+        pkt.pid = device_pid;
+        if(implicit) {
           pkt.name = "Tile #" + std::to_string(tile) + ": " + name;
-          pkt.ts = UniTimer::GetEpochTimeInUs(started);
-          //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started);
-          pkt.dur = UniTimer::GetTimeInUs(ended - started);
-          pkt.args = "\"id\": \""+std::to_string(id)+"\"";
-          pkt.cat = gpu_op;
-          pkt.api_id = ClKernelTracingId;
-          cl_thread_local_buffer_.Buffer(pkt);
         }
-
-        {
-          TraceDataPacket pkt;
-          pkt.ph = 's';
-          pkt.tid = device_tid;
-          pkt.pid = device_pid;
-          pkt.api_id = DepTracingId;
-          pkt.id = id;
-          pkt.ts = UniTimer::GetEpochTimeInUs(started);
-          pkt.dur = (uint64_t)(-1);
-          pkt.cat = cl_data_flow;
-          pkt.rank = mpi_rank;
-          cl_thread_local_buffer_.Buffer(pkt);
-        }
-
-        {
-          TraceDataPacket pkt;
-          pkt.ph = 's';
-          pkt.tid = device_tid;
-          pkt.pid = device_pid;
-          pkt.api_id = DepTracingId;
-          pkt.id = id;
-          pkt.ts = UniTimer::GetEpochTimeInUs(started);
-          pkt.dur = (uint64_t)(-1);
-          pkt.cat = cl_data_flow_sync;
-          pkt.rank = mpi_rank;
-          cl_thread_local_buffer_.Buffer(pkt);
-        }
-      }
-      else {
-        {
-          TraceDataPacket pkt;
-          pkt.ph = 'X';
-          pkt.tid = device_tid;
-          pkt.pid = device_pid;
+        else {
           pkt.name = name;
-          pkt.ts = UniTimer::GetEpochTimeInUs(started);
-          //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started)
-          pkt.dur = UniTimer::GetTimeInUs(ended - started);
-          pkt.args = "\"id\": \""+std::to_string(id)+"\"";
-          pkt.cat = gpu_op;
-          pkt.api_id = ClKernelTracingId;
-          cl_thread_local_buffer_.Buffer(pkt);
         }
-        {
-          TraceDataPacket pkt;
-          pkt.ph = 's';
-          pkt.tid = device_tid;
-          pkt.pid = device_pid;
-          pkt.api_id = DepTracingId;
-          pkt.id = id;
-          pkt.ts = UniTimer::GetEpochTimeInUs(started);
-          pkt.dur = (uint64_t)(-1);
-          pkt.cat = cl_data_flow;
-          pkt.rank = mpi_rank;
-          cl_thread_local_buffer_.Buffer(pkt);
-        }
+        pkt.ts = UniTimer::GetEpochTimeInUs(started);
+        //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started)
+        pkt.dur = UniTimer::GetTimeInUs(ended - started);
+        pkt.args = "\"id\": \""+std::to_string(id)+"\"";
+        pkt.cat = gpu_op;
+        pkt.api_id = ClKernelTracingId;
+        cl_thread_local_buffer_.Buffer(pkt);
+      }
+      {
+        TraceDataPacket pkt;
+        pkt.ph = 't';
+        pkt.tid = device_tid;
+        pkt.pid = device_pid;
+        pkt.api_id = DepTracingId;
+        pkt.id = id;
+        pkt.ts = UniTimer::GetEpochTimeInUs(started);
+        pkt.dur = (uint64_t)(-1);
+        pkt.cat = cl_data_flow;
+        pkt.rank = mpi_rank;
+        cl_thread_local_buffer_.Buffer(pkt);
+      }
 
-        {
-          TraceDataPacket pkt;
-          pkt.ph = 's';
-          pkt.tid = device_tid;
-          pkt.pid = device_pid;
-          pkt.api_id = DepTracingId;
-          pkt.id = id;
-          pkt.ts = UniTimer::GetEpochTimeInUs(started);
-          pkt.dur = (uint64_t)(-1);
-          pkt.cat = cl_data_flow_sync;
-          pkt.rank = mpi_rank;
-          cl_thread_local_buffer_.Buffer(pkt);
-        }
+      {
+        TraceDataPacket pkt;
+        pkt.ph = 's';
+        pkt.tid = device_tid;
+        pkt.pid = device_pid;
+        pkt.api_id = DepTracingId;
+        pkt.id = id;
+        pkt.ts = UniTimer::GetEpochTimeInUs(started);
+        pkt.dur = (uint64_t)(-1);
+        pkt.cat = cl_data_flow_sync;
+        pkt.rank = mpi_rank;
+        cl_thread_local_buffer_.Buffer(pkt);
       }
     }
 
@@ -1219,7 +1207,7 @@ class ChromeLogger {
           pkt.id = id;
           pkt.ts = UniTimer::GetEpochTimeInUs(started);
           pkt.dur = (uint64_t)(-1);
-          pkt.cat = data_flow;
+          pkt.cat = cl_data_flow;
           pkt.rank = mpi_rank;
           cl_thread_local_buffer_.Buffer(pkt);
         }
@@ -1235,7 +1223,7 @@ class ChromeLogger {
           pkt.id = id;
           pkt.ts = UniTimer::GetEpochTimeInUs(started);
           pkt.dur = (uint64_t)(-1);
-          pkt.cat = data_flow_sync;
+          pkt.cat = cl_data_flow_sync;
           pkt.rank = mpi_rank;
           cl_thread_local_buffer_.Buffer(pkt);
         }

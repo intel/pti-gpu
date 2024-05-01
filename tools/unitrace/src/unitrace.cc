@@ -208,6 +208,10 @@ void Usage(char * progname) {
     "--version                      " <<
     "Print version" <<
     std::endl;
+  std::cout <<
+    "--help                         " <<
+    "Show the help message and exit" <<
+    std::endl;
 }
 
 void SetTracingEnvironment() {
@@ -403,6 +407,9 @@ int ParseArgs(int argc, char* argv[]) {
       ++app_index;
     } else if (strcmp(argv[i], "--version") == 0) {
       std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
+      return 0;
+    } else if (strcmp(argv[i], "--help") == 0) {
+      Usage(argv[0]);
       return 0;
     } else if (strcmp(argv[i], "--chrome-itt-logging") == 0 ) {
       utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
