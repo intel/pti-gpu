@@ -11,16 +11,8 @@ project(
   VERSION ${PTI_VERSION}
   LANGUAGES C CXX)
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM" OR CMAKE_CXX_COMPILER_ID MATCHES
-                                                "Clang")
-  # One must make sure -DNDEBUG is not set if using XPTI filename/linenumber
-  # https://stackoverflow.com/questions/22140520/how-to-enable-assert-in-cmake-release-mode
-  string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE
-                 "${CMAKE_CXX_FLAGS_RELEASE}")
-  string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO
-                 "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
-endif()
-
+ProjectIsTopLevel()
+RemoveNDebugFlag()
 SetBuildType()
 CheckIfSyclIsAvailable()
 GetSpdlog()
@@ -42,22 +34,13 @@ set(CMAKE_C_VISIBILITY_PRESET "hidden")
 
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
-option(PTI_BUILD_TESTING "Build PTI tests" ON)
-option(PTI_BUILD_SAMPLES "Build samples with library" ON)
+option(PTI_BUILD_TESTING "Build PTI tests" ${PROJECT_IS_TOP_LEVEL})
+option(PTI_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_INSTALL "Install library when invoking --install" ON)
 option(PTI_ENABLE_LOGGING "Enable logging for Pti" OFF)
 option(PTI_DEBUG "Enable code helping to debug Pti" OFF)
 option(PTI_SANITIZE "Enable Sanitizer Pti" OFF)
 option(PTI_FUZZ "Enable Fuzz Pti" OFF)
-
-if(PTI_FUZZ)
-  set(PTI_BUILD_SAMPLES
-      OFF
-      CACHE BOOL "" FORCE)
-  set(PTI_BUILD_TESTING
-      OFF
-      CACHE BOOL "" FORCE)
-endif()
 
 include(GNUInstallDirs)
 set(PTI_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/pti")
@@ -75,25 +58,25 @@ set(PTI_COMPILE_FLAGS_EXPR
     -Wformat
     -Wformat-security
     $<$<CONFIG:Debug>:-fstack-protector>
-    $<$<CONFIG:Release>:-Werror
-    -fstack-protector-strong
-    -Werror=format-security>>
+    $<$<CONFIG:Release>:
+    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror -Werror=format-security>
+    -fstack-protector-strong>>
     $<$<CXX_COMPILER_ID:Clang>:-Wall
     -Wextra
     -Wformat
     -Wformat-security
     $<$<CONFIG:Debug>:-fstack-protector>
-    $<$<CONFIG:Release>:-Werror
-    -fstack-protector-strong
-    -Werror=format-security>>
+    $<$<CONFIG:Release>:
+    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror -Werror=format-security>
+    -fstack-protector-strong>>
     $<$<CXX_COMPILER_ID:GNU>:-Wall
     -Wextra
     -Wformat
     -Wformat-security
     $<$<CONFIG:Debug>:-fstack-protector>
-    $<$<CONFIG:Release>:-Werror
-    -fstack-protector-strong
-    -Werror=format-security>>)
+    $<$<CONFIG:Release>:
+    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror -Werror=format-security>
+    -fstack-protector-strong>>)
 
 set(PTI_LINK_FLAGS_EXPR
     $<$<CXX_COMPILER_ID:IntelLLVM>:
@@ -151,10 +134,16 @@ target_compile_definitions(pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR}
 # Level-Zero core Introspection API introduced in Spec 1.9
 # Loder and Tracing layer 1.16.X correctly handle situation
 # when Instrospection API prpvided or not by Level-Zero
-find_package(LevelZero 1.16.0)
+# Level Zero Loader >= 1.16.15 desired for critical bug
+# fixes. However, on Ubuntu, it reports itself as 1.16.0.
+if(NOT PROJECT_IS_TOP_LEVEL)
+  find_package(LevelZero 1.16.0 REQUIRED)
+else()
+  find_package(LevelZero 1.16.0)
+endif()
 
 if(NOT TARGET LevelZero::level-zero)
-    GetLevelZero()
+  GetLevelZero()
 endif()
 
 find_package(Threads REQUIRED)
@@ -248,7 +237,6 @@ if(PTI_INSTALL)
     COMPONENT Pti_Runtime
     )
 
-
   install(DIRECTORY "${PROJECT_BINARY_DIR}/include/pti"
           DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
           COMPONENT Pti_Development
@@ -274,7 +262,6 @@ if(PTI_INSTALL)
     RENAME "LICENSE.txt"
     COMPONENT Pti_Doc)
 
-
   #
   # This file is only installed in oneAPI drops
   #
@@ -288,47 +275,43 @@ if(PTI_INSTALL)
       DESTINATION "${PTI_INSTALL_LIC_DIR}"
       COMPONENT Pti_oneAPI)
   endif()
-
-
 endif()
 
-if(PTI_BUILD_SAMPLES)
-  if(HAVE_SYCL)
-    find_package(MKL CONFIG PATHS $ENV{MKLROOT} NO_DEFAULT_PATH)
-    message(STATUS "Imported oneMKL targets: ${MKL_IMPORTED_TARGETS}")
-    find_package(dnnl)
-    find_package(oneDPL)
-    find_package(TBB)
-    find_package(DevUtilities)
+if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
+  find_package(MKL CONFIG PATHS $ENV{MKLROOT} NO_DEFAULT_PATH)
+  message(STATUS "Imported oneMKL targets: ${MKL_IMPORTED_TARGETS}")
+  find_package(dnnl)
+  find_package(oneDPL)
+  find_package(TBB)
+  find_package(DevUtilities)
 
-    add_subdirectory(samples/dpc_gemm)
-    add_subdirectory(samples/dpc_gemm_threaded)
-    add_subdirectory(samples/vector_sq_add)
+  add_subdirectory(samples/dpc_gemm)
+  add_subdirectory(samples/dpc_gemm_threaded)
+  add_subdirectory(samples/vector_sq_add)
 
-    if(TARGET DevUtilities::utils)
-      add_subdirectory(samples/iso3dfd_dpcpp)
-    endif()
+  if(TARGET DevUtilities::utils)
+    add_subdirectory(samples/iso3dfd_dpcpp)
+  endif()
 
-    if(TARGET MKL::MKL)
-      add_subdirectory(samples/onemkl_gemm)
-    else()
-      message(
-        WARNING
-        "Unable to build onemkl_gemm sample due to missing MKL installation"
-      )
-    endif()
+  if(TARGET MKL::MKL)
+    add_subdirectory(samples/onemkl_gemm)
+  else()
+    message(
+      WARNING
+      "Unable to build onemkl_gemm sample due to missing MKL installation"
+    )
+  endif()
 
-    if(TARGET MKL::MKL
-       AND TARGET DNNL::dnnl
-       AND TARGET oneDPL
-       AND TARGET TBB::tbb)
-      add_subdirectory(samples/dlworkloads)
-    else()
-      message(
-        WARNING
-        "Unable to build dlworkloads sample due to missing oneAPI component(s)"
-      )
-    endif()
+  if(TARGET MKL::MKL
+     AND TARGET DNNL::dnnl
+     AND TARGET oneDPL
+     AND TARGET TBB::tbb)
+    add_subdirectory(samples/dlworkloads)
+  else()
+    message(
+      WARNING
+      "Unable to build dlworkloads sample due to missing oneAPI component(s)"
+    )
   endif()
 endif()
 

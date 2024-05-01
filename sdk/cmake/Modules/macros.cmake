@@ -1133,3 +1133,25 @@ macro(GetLevelZero)
     add_library(LevelZero::level-zero ALIAS pti_ze_loader)
   endif()
 endmacro()
+
+macro(RemoveNDebugFlag)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM" OR CMAKE_CXX_COMPILER_ID MATCHES
+                                                  "Clang")
+    # One must make sure -DNDEBUG is not set if using XPTI filename/linenumber
+    # https://stackoverflow.com/questions/22140520/how-to-enable-assert-in-cmake-release-mode
+    string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELEASE
+                   "${CMAKE_CXX_FLAGS_RELEASE}")
+    string(REPLACE "-DNDEBUG" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO
+                   "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+  endif()
+endmacro()
+
+macro(ProjectIsTopLevel)
+  if(NOT DEFINED PROJECT_IS_TOP_LEVEL)
+    set(PROJECT_IS_TOP_LEVEL FALSE)
+    get_property(PTI_PROJ_PARENT DIRECTORY PROPERTY PARENT_DIRECTORY)
+    if(PTI_PROJ_PARENT STREQUAL "")
+      set(PROJECT_IS_TOP_LEVEL TRUE)
+    endif()
+  endif()
+endmacro()
