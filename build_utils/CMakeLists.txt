@@ -110,7 +110,7 @@ macro(FindOpenCLHeaders TARGET)
     target_include_directories (${TARGET} PUBLIC ${OpenCL_INCLUDE_DIRS})
   endif()
   target_compile_options(${TARGET}
-    PRIVATE -DCL_TARGET_OPENCL_VERSION=210)
+    PRIVATE -DCL_TARGET_OPENCL_VERSION=300)
 endmacro()
 
 macro(GetOpenCLTracingHeaders TARGET)

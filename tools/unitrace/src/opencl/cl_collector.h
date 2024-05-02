@@ -26,10 +26,6 @@
 #include "unikernel.h"
 #include "unicontrol.h"
 
-#ifdef PTI_KERNEL_INTERVALS
-#include "prof_utils.h"
-#endif 
-
 class ClCollector;
 
 struct ClInstanceApiData {
@@ -105,25 +101,12 @@ using ClKernelMemInfoMap = std::map<uint64_t, ClKernelMemInfo>;
 using ClKernelInfoMap = std::map<std::string, ClKernelInfo>;
 using ClKernelInstanceList = std::list<ClKernelInstance*>;
 
-#ifdef PTI_KERNEL_INTERVALS
-
-struct ClDeviceInterval {
-  uint64_t start;
-  uint64_t end;
-  uint32_t sub_device_id;
+struct ClDevice {
+  cl_device_id id_;
+  bool isroot_;
+  cl_device_id parent_;
+  std::vector<cl_device_id> subdevs_;
 };
-
-struct ClKernelInterval {
-  std::string kernel_name;
-  cl_device_id device;
-  std::vector<ClDeviceInterval> device_interval_list;
-};
-
-using ClKernelIntervalList = std::vector<ClKernelInterval>;
-
-#endif // PTI_KERNEL_INTERVALS
-
-using ClDeviceMap = std::map< cl_device_id, std::vector<cl_device_id> >;
 
 typedef void (*OnClKernelFinishCallback)(
     cl_device_pci_bus_info_khr& pci,
@@ -211,29 +194,19 @@ class ClCollector {
   }
 
   ~ClCollector() {
-//#ifdef PTI_KERNEL_INTERVALS
     ReleaseDeviceMap();
-//#endif // PTI_KERNEL_INTERVALS
     if (tracer_ != nullptr) {
       delete tracer_;
     }
   }
 
   void DisableTracing() {
-    PTI_ASSERT(tracer_ != nullptr);
-    bool disabled = tracer_->Disable();
-    PTI_ASSERT(disabled);
+    // nothing to do for now
   }
 
   const ClKernelInfoMap& GetKernelInfoMap() const {
     return kernel_info_map_;
   }
-
-#ifdef PTI_KERNEL_INTERVALS
-  const ClKernelIntervalList& GetKernelIntervalList() const {
-    return kernel_interval_list_;
-  }
-#endif // PTI_KERNEL_INTERVALS
 
   ClCollector(const ClCollector& copy) = delete;
   ClCollector& operator=(const ClCollector& copy) = delete;
@@ -443,38 +416,79 @@ class ClCollector {
         callback_data_(callback_data){
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(correlator_ != nullptr);
-#ifdef PTI_KERNEL_INTERVALS
-    ze_device_ = GetZeDevice(device_);
-    PTI_ASSERT(ze_device_ != nullptr);
-    timer_mask_ = utils::ze::GetMetricTimestampMask(ze_device_);
-    timer_freq_ = utils::ze::GetMetricTimerFrequency(ze_device_);
-#endif // PTI_KERNEL_INTERVALS
+
     device_type_ = utils::cl::GetDeviceType(device);
     PTI_ASSERT( device_type_ == CL_DEVICE_TYPE_CPU || device_type_ == CL_DEVICE_TYPE_GPU);
     CreateDeviceMap();
   }
 
-//#ifdef PTI_KERNEL_INTERVALS
   void CreateDeviceMap() {
     cl_device_type type = utils::cl::GetDeviceType(device_);
 
-    std::vector<cl_device_id> device_list = utils::cl::GetDeviceList(type);
-    for (auto device : device_list) {
-      std::vector<cl_device_id> sub_device_list =
-        utils::cl::CreateSubDeviceList(device);
-      PTI_ASSERT(device_map_.count(device) == 0);
-      device_map_[device] = std::move(sub_device_list);
+    cl_int status = CL_SUCCESS;
+    cl_uint pcount = 0;
+    status = clGetPlatformIDs(0, nullptr, &pcount);
+    
+    if ((status != CL_SUCCESS) || (pcount == 0)) {
+      return; 
+    }
+
+    std::vector<cl_platform_id> platforms(pcount, nullptr);
+    status = clGetPlatformIDs(pcount, platforms.data(), nullptr);
+    PTI_ASSERT(status == CL_SUCCESS);
+
+    for (auto plat : platforms) {
+      cl_uint dcount = 0;
+
+      status = clGetDeviceIDs(plat, type, 0, nullptr, &dcount);
+      if ((status != CL_SUCCESS) || (dcount == 0)) 
+        continue;
+
+      std::vector<cl_device_id> devs(dcount, nullptr);
+      status = clGetDeviceIDs(plat, type, dcount, devs.data(), nullptr);
+      PTI_ASSERT(status == CL_SUCCESS);
+
+      for (auto dev : devs) {
+        ClDevice cd;
+
+        cd.isroot_ = true;
+        cd.id_ = dev;
+        cd.parent_ = (cl_device_id)(-1);
+        cl_device_partition_property props[] = {CL_DEVICE_PARTITION_BY_AFFINITY_DOMAIN, CL_DEVICE_AFFINITY_DOMAIN_NEXT_PARTITIONABLE, 0};
+        cl_uint subcount = 0;
+        status = clCreateSubDevices(dev, props, 0, nullptr, &subcount);
+        if ((status != CL_SUCCESS) || (subcount == 0)) {
+          cd.subdevs_ = std::vector<cl_device_id>();
+        }
+        else {
+          std::vector<cl_device_id> subdevs(subcount);
+          status = clCreateSubDevices(dev, props, subcount, subdevs.data(), nullptr);
+          PTI_ASSERT(status == CL_SUCCESS);
+          for (auto subdev : subdevs) {
+            ClDevice subcd;
+
+            subcd.id_ = subdev;
+            subcd.isroot_ = false;
+            subcd.parent_ = dev;
+            subcd.subdevs_ = std::vector<cl_device_id>();
+            device_map_.insert({subdev, subcd});
+          }
+          cd.subdevs_ = std::move(subdevs);
+        }
+        device_map_.insert({dev, cd});
+      }
     }
   }
 
   void ReleaseDeviceMap() {
-    for (auto& it : device_map_) {
-      if (!it.second.empty()) {
-        utils::cl::ReleaseSubDeviceList(it.second);
+    for (auto dev : device_map_) {
+      if (dev.second.isroot_) {
+        for (auto subdev : dev.second.subdevs_) {
+          clReleaseDevice(subdev);
+        }
       }
     }
   }
-//#endif // PTI_KERNEL_INTERVALS
 
   void SetKernelTracingPoints() {
     for (int i = 0; i < CL_FUNCTION_COUNT; i++) {
@@ -598,7 +612,6 @@ class ClCollector {
     PTI_ASSERT(instance != nullptr);
     const std::lock_guard<std::mutex> lock(lock_);
 
-    // =======================================================PUT the snippet HERE
     cl_event event = instance->event;
     cl_int event_status = utils::cl::GetEventStatus(event);
     //PTI_ASSERT(event_status == CL_COMPLETE);
@@ -607,36 +620,28 @@ class ClCollector {
     cl_device_id device = utils::cl::GetDevice(queue);
     PTI_ASSERT(device != nullptr);
 
-    if (device_map_.count(device) == 1 && !device_map_[device].empty()) { // Implicit Scaling
-      //ClKernelInterval kernel_interval{ name, device, std::vector<ClDeviceInterval>()};
-      std::vector<cl_device_id> sub_device_list = device_map_[device];
-      for (size_t i = 0; i < sub_device_list.size(); ++i) {
-	instance->device=device;
-	instance->sub_device_list.push_back(i);
-      }
-    } else { // Explicit Scaling
-      if (device_map_.count(device) == 0) { // Subdevice
-        cl_device_id parent = utils::cl::GetDeviceParent(device);
-        PTI_ASSERT(parent != nullptr);
-  
-        PTI_ASSERT(device_map_.count(parent) == 1);
-        std::vector<cl_device_id> sub_device_list = device_map_[parent];
-        PTI_ASSERT(!sub_device_list.empty());
-
-        for (size_t i = 0; i < sub_device_list.size(); ++i) {
-          if (sub_device_list[i] == device) {
-	    instance->device=device;
-	    instance->sub_device_list.push_back(i);
-            return;
+    auto it = device_map_.find(device); 
+    if (it != device_map_.end()) {
+      if (it->second.isroot_) {
+        //ClKernelInterval kernel_interval{ name, device, std::vector<ClDeviceInterval>()};
+        int i = 0;
+        if (it->second.subdevs_.size() > 0) {
+          // implicit scaling in COMPOSITE mode
+          for (auto subdev : it->second.subdevs_) {
+            instance->device = subdev;
+            instance->sub_device_list.push_back(i++);
           }
-
-          PTI_ASSERT(0);
         }
-      } else { // Device with no subdevices
-        PTI_ASSERT(device_map_[device].empty());
+        else {
+          // FLAT mode
+          instance->device = device;
+        }
+      }
+      else {
+        // explicit scaling in COMPOSITE mode
+        instance->device = device;
       }
     }
-   //======================
     kernel_instance_list_.push_back(instance);
     AddKernelMemInfo(instance->props.name, instance->props.base_addr, instance->props.size);
   }
@@ -719,11 +724,6 @@ class ClCollector {
       PTI_ASSERT(device != nullptr);
       cl_device_pci_bus_info_khr pciInfo = GetDevicePciInfo(device);
 
-#ifdef PTI_KERNEL_INTERVALS
-      AddKernelInterval(instance, device, started, ended);
-#else // PTI_KERNEL_INTERVALS
-      //
-        
       std::string name = instance->props.name;
       PTI_ASSERT(!name.empty());
 
@@ -746,10 +746,15 @@ class ClCollector {
         host_ended - host_started);
 
       bool implicit = false;
+
       if (tile >= 0) {
-        if (device_map_.count(device) == 1 && !device_map_[device].empty()) { // Implicit Scaling
-          implicit = true;
-        };
+        auto it = device_map_.find(device);
+        if (it != device_map_.end()) {
+          if (it->second.isroot_ && (it->second.subdevs_.size() > 0)) {
+            // implicit scaling in COMPOSITE mode
+            implicit = true;
+          }
+        }
       }
 
       if (options_.device_timeline) {
@@ -763,7 +768,6 @@ class ClCollector {
             host_queued, host_submitted,
             host_started, host_ended);
       }
-#endif // PTI_KERNEL_INTERVALS
     }
 
     //cl_int status = clReleaseEvent(event);
@@ -885,120 +889,6 @@ class ClCollector {
     }
   }
 
-#ifdef PTI_KERNEL_INTERVALS
-  void AddKernelInterval(
-      const ClKernelInstance* instance,
-      cl_device_id device,
-      uint64_t started, uint64_t ended) {
-    PTI_ASSERT(instance != nullptr);
-    PTI_ASSERT(device != nullptr);
-    PTI_ASSERT(started < ended);
-
-    cl_ulong cl_host_timestamp = 0;
-    cl_ulong cl_device_timestamp = 0;
-    utils::cl::GetTimestamps(device, &cl_host_timestamp, &cl_device_timestamp);
-
-    uint64_t ze_host_timestamp;
-    uint64_t ze_device_timestamp;
-    ze_device_handle_t ze_device;
-
-    uint64_t mask;
-    uint64_t freq;
-    if (device = device_) {
-      ze_device = ze_device_;
-      mask = timer_mask_;
-      freq = timer_freq_;
-    }
-    else {
-      ze_device = GetZeDevice(device);
-      PTI_ASSERT(ze_device != nullptr);
-      mask = utils::ze::GetMetricTimestampMask(ze_device);
-      freq = utils::ze::GetMetricTimerFrequency(ze_device);
-    }
-
-    zeDeviceGetGlobalTimestamps(ze_device, &ze_host_timestamp, &ze_device_timestamp);
-    ze_device_timestamp = ze_device_timestamp & mask;
-
-    cl_ulong elapsed;
-
-    elapsed = cl_device_timestamp - started;
-    elapsed += (ze_host_timestamp - cl_host_timestamp);
-
-    uint64_t ze_started;
-    uint64_t ze_ended;
-
-    uint64_t ns_per_cycle;
-    ns_per_cycle = static_cast<uint64_t>(NSEC_IN_SEC) / freq;
-
-    ze_started = (ze_device_timestamp - (elapsed / ns_per_cycle)) & mask;
-    ze_ended = (ze_started + ((ended - started) / ns_per_cycle)) & mask;;
-
-    ze_started = ze_started * ns_per_cycle;
-    ze_ended = ze_ended * ns_per_cycle;
-
-    if (ze_ended < ze_started) {
-      ze_ended += ((mask + 1)* ns_per_cycle);
-    }
-
-#if 0
-    uint64_t host_queued = 0, host_submitted = 0;
-    uint64_t host_started = 0, host_ended = 0;
-    ComputeHostTimestamps(
-        instance,
-        started, ended,
-        host_queued, host_submitted,
-        host_started, host_ended);
-#endif /* 0 */
-
-    std::string name = instance->props.name;
-    PTI_ASSERT(!name.empty());
-
-    if (options_.verbose) {
-      name = GetVerboseName(&instance->props);
-    }
-
-    if (device_map_.count(device) == 1 &&
-        !device_map_[device].empty()) { // Implicit Scaling
-      ClKernelInterval kernel_interval{
-          name, device, std::vector<ClDeviceInterval>()};
-      std::vector<cl_device_id> sub_device_list = device_map_[device];
-      for (size_t i = 0; i < sub_device_list.size(); ++i) {
-        kernel_interval.device_interval_list.push_back(
-            {ze_started, ze_ended, static_cast<uint32_t>(i)});
-      }
-      kernel_interval_list_.push_back(kernel_interval);
-    } else { // Explicit Scaling
-      if (device_map_.count(device) == 0) { // Subdevice
-        cl_device_id parent = utils::cl::GetDeviceParent(device);
-        PTI_ASSERT(parent != nullptr);
-
-        PTI_ASSERT(device_map_.count(parent) == 1);
-        std::vector<cl_device_id> sub_device_list = device_map_[parent];
-        PTI_ASSERT(!sub_device_list.empty());
-
-        for (size_t i = 0; i < sub_device_list.size(); ++i) {
-          if (sub_device_list[i] == device) {
-            ClKernelInterval kernel_interval{
-                name, parent, std::vector<ClDeviceInterval>()};
-            kernel_interval.device_interval_list.push_back(
-                {ze_started, ze_ended, static_cast<uint32_t>(i)});
-            kernel_interval_list_.push_back(kernel_interval);
-            return;
-          }
-
-          PTI_ASSERT(0);
-        }
-      } else { // Device with no subdevices
-        PTI_ASSERT(device_map_[device].empty());
-        ClKernelInterval kernel_interval{
-            name, device, std::vector<ClDeviceInterval>()};
-        kernel_interval.device_interval_list.push_back(
-            {ze_started, ze_ended, 0});
-        kernel_interval_list_.push_back(kernel_interval);
-      }
-    }
-  }
-#endif // PTI_KERNEL_INTERVALS
 
   void CalculateKernelLocalSize(
       const cl_params_clEnqueueNDRangeKernel* params,
@@ -1059,23 +949,50 @@ class ClCollector {
     PTI_ASSERT(data != nullptr);
 
     const cl_params_clCreateCommandQueueWithProperties* params =
-      reinterpret_cast<const cl_params_clCreateCommandQueueWithProperties*>(
-          data->functionParams);
+      reinterpret_cast<const cl_params_clCreateCommandQueueWithProperties*>(data->functionParams);
     PTI_ASSERT(params != nullptr);
 
-    cl_queue_properties* props =
-      utils::cl::EnableQueueProfiling(*(params->properties));
+    data->correlationData[0] = reinterpret_cast<cl_ulong>(nullptr);
+    cl_queue_properties *props = (cl_queue_properties *)(*(params->properties));
+    if (props == nullptr) {
+      props = new cl_queue_properties[3];
+      props[0] = CL_QUEUE_PROPERTIES;
+      props[1] = CL_QUEUE_PROFILING_ENABLE;
+      props[2] = 0;
+      data->correlationData[0] = reinterpret_cast<cl_ulong>(props);
+    } else {
+      cl_queue_properties *p = props;
+      int i;
+      
+      for (i = 0; p[i]; i += 2) {
+        if (p[i] == CL_QUEUE_PROPERTIES) {
+          p[i + 1] |= CL_QUEUE_PROFILING_ENABLE;
+          break;
+        }
+      }
+      if (p[i] == 0) {
+        p = props;
+        props = new cl_queue_properties[i + 3];
+        for (int j = 0; j < i; j++) {
+          props[j] = p[j];
+        }
+        props[i++] = CL_QUEUE_PROPERTIES;
+        props[i++] = CL_QUEUE_PROFILING_ENABLE;
+        props[i] = 0;
+        data->correlationData[0] = reinterpret_cast<cl_ulong>(props);
+      }
+    }
+
     *(params->properties) = props;
-    data->correlationData[0] = reinterpret_cast<cl_ulong>(props);
   }
 
   static void OnExitCreateCommandQueueWithProperties(cl_callback_data* data, ClCollector* collector) {
     PTI_ASSERT(data != nullptr);
 
-    cl_queue_properties* props =
-      reinterpret_cast<cl_queue_properties*>(data->correlationData[0]);
-    PTI_ASSERT(props != nullptr);
-    delete[] props;
+    cl_queue_properties* props = reinterpret_cast<cl_queue_properties*>(data->correlationData[0]);
+    if (props != nullptr) {
+      delete[] props;
+    }
   }
 
   static void OnEnterCreateCommandQueue(cl_callback_data* data, ClCollector* collector) {
@@ -1899,13 +1816,8 @@ class ClCollector {
   ClKernelInstanceList kernel_instance_list_;
 
   bool kernel_tracing_points_enabled[CL_FUNCTION_COUNT];
-  ze_device_handle_t ze_device_;
-  uint64_t timer_mask_;
-  uint64_t timer_freq_;
-#ifdef PTI_KERNEL_INTERVALS
-  ClKernelIntervalList kernel_interval_list_;
-#endif // PTI_KERNEL_INTERVALS
-  ClDeviceMap device_map_;
+
+  std::map<cl_device_id, ClDevice> device_map_;
 
   ClKernelMemInfoMap kernel_mem_info_map_;
 

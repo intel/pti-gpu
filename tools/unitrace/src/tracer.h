@@ -89,7 +89,7 @@ class UniTracer {
         }
     }
     else {
-        //TODO: this is ugly. clean it up.
+        //TODO: clean it up later
         itt_collector = IttCollector::Create(nullptr);
     }
 

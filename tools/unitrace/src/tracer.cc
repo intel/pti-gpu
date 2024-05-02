@@ -187,5 +187,6 @@ void __attribute__((destructor)) Fini(void) {
 
   if (tracer != nullptr) {
     delete tracer;
+    tracer = nullptr;
   }
 }
