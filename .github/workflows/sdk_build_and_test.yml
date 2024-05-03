@@ -6,15 +6,38 @@ on:
   pull_request:
     branches: [ "master" ]
 
+defaults:
+  run:
+    shell: bash
+
 permissions:
   contents: read
 
 jobs:
   sdk-build-and-test:
+    name: Test suite of pti library
+
+    container:
+      image: ${{ vars.PTI_DOCKER_IMAGE }} 
+      options: --device=/dev/dri --cap-add CAP_PERFMON
 
     if: vars.PTI_RUN_TESTS == 1
-    runs-on: self-hosted
 
+    #
+    # pti is a selector to machines with Intel Ponte Vecchio officially
+    # Intel(R) Data Center GPU Max 1100
+    #
+    runs-on: [pti]
+
+    #
+    # A note regarding the double call of source in every step in the
+    # sdk-build-and-test workflow.
+    #
+    # The first call to source is running oneapi-v2024.1.0
+    # the second call to source overlays the compiler 2024.1.1
+    #
+    # This will be improved in due course.
+    #
     steps:
       - name: Clean-up
         run:  rm -rf *
@@ -25,18 +48,24 @@ jobs:
       - name: Build
         working-directory: sdk
         run: |
+          source /opt/intel/oneapi/setvars.sh
+          source /opt/intel/oneapinext/setvars.sh --force
           cmake --preset default
           cmake --build --preset default -j $(($(nproc)/2))
 
       - name: Test
         working-directory: sdk
         run: |
+          source /opt/intel/oneapi/setvars.sh
+          source /opt/intel/oneapinext/setvars.sh --force
           ctest --output-on-failure --preset default
 
       - name: Build AddressSanitizer
         if: always()
         working-directory: sdk
         run: |
+          source /opt/intel/oneapi/setvars.sh
+          source /opt/intel/oneapinext/setvars.sh --force
           cmake --preset asan
           cmake --build --preset asan --parallel $(($(nproc)/2))
 
@@ -44,6 +73,8 @@ jobs:
         if: always()
         working-directory: sdk
         run: |
+          source /opt/intel/oneapi/setvars.sh
+          source /opt/intel/oneapinext/setvars.sh --force
           cmake --preset tsan
           cmake --build --preset tsan --parallel $(($(nproc)/2))
 
@@ -53,6 +84,8 @@ jobs:
         run: |
           # To ensure it still builds, run build for fuzz targets until we have
           # proper fuzz testing infrastructure in place.
+          source /opt/intel/oneapi/setvars.sh
+          source /opt/intel/oneapinext/setvars.sh --force
           cmake --preset fuzz
           cmake --build --preset fuzz --parallel $(($(nproc)/2))
 
@@ -60,17 +93,23 @@ jobs:
         if: always()
         working-directory: sdk
         run: |
+          source /opt/intel/oneapi/setvars.sh
+          source /opt/intel/oneapinext/setvars.sh --force
           ctest --preset asan --output-on-failure -L samples
 
       - name: Test ThreadSanitizer
         if: always()
         working-directory: sdk
         run: |
+          source /opt/intel/oneapi/setvars.sh
+          source /opt/intel/oneapinext/setvars.sh --force
           ctest --preset tsan --output-on-failure -L samples
 
       - name: Install SDK
         working-directory: sdk
         run: |
+          source /opt/intel/oneapi/setvars.sh
+          source /opt/intel/oneapinext/setvars.sh --force
           cmake --install build --config Release --prefix out
 
       - name: Upload SDK
@@ -82,13 +121,14 @@ jobs:
 
   pti-tools-build-and-test:
 
-    needs: sdk-build-and-test   # this is a workaround to ensure jobs run sequentially
-                                # TODO make the workflow more generic
+    container:
+      image: ${{ vars.PTI_DOCKER_IMAGE }}
+      #
+      # Sprinkle in the magic docker ingredients and poof!
+      #
+      options: "--device=/dev/dri --cap-add CAP_PERFMON "
 
-    # run this job only if the previous one run and provided some result
-    if: (needs.sdk-build-and-test.result == 'success' || needs.sdk-build-and-test.result == 'failure' )
-
-    runs-on: self-hosted
+    runs-on: [pti]
 
     steps:
       - name: Clean-up
@@ -99,29 +139,35 @@ jobs:
 
       - name: Build-and-test-unitrace
         run: |
+          source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s unitrace
 
       - name: Build-and-test-onetrace
         if: always()
         run: |
+          source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s onetrace
 
       - name: Build-and-test-oneprof
         if: always()
         run: |
+          source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s oneprof
 
       - name: Build-and-test-sysmon
         if: always()
         run: |
+          source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s sysmon
 
       - name: Build-and-test-cl_gpu_metrics
         if: always()
         run: |
+          source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s cl_gpu_metrics
 
       - name: Build-and-test-gpu-inst-count
         if: always()
         run: |
+          source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s gpu_inst_count
