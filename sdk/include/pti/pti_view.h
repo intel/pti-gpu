@@ -22,7 +22,7 @@ extern "C" {
  */
 #define PTI_MAX_DEVICE_UUID_SIZE 16                         //!< Size of uuid array.
 #define PTI_MAX_PCI_ADDRESS_SIZE 16                         //!< Size of pci address array.
-#define PTI_INVALID_QUEUE_ID 0xFFFFFFFFFFFFFFFF-1           //!< For oneapi versions earlier than 2024.1.1 -- UINT64_MAX-1
+#define PTI_INVALID_QUEUE_ID 0xFFFFFFFFFFFFFFFF-1           //!< For oneAPI versions earlier than 2024.1.1 -- UINT64_MAX-1
 
 /**
  * @brief Return/Error codes
