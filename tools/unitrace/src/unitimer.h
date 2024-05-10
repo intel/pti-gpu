@@ -12,9 +12,9 @@
 #include <iostream>
 
 class UniTimer {
-  public:
+public:
     static void StartUniTimer(void) {
-        if (epoch_start_time_ == 0) {
+        if ((utils::GetEnv("UNITRACE_SystemTime") != "1") && (epoch_start_time_ == 0)) {
             // loop multiple times to mitigate context switch impact
             for (int i = 0; i < 100; i++) {
                 uint64_t start;
@@ -30,7 +30,7 @@ class UniTimer {
     static uint64_t GetEpochTime(uint64_t systime) {
         return epoch_start_time_ + systime;
     }
-
+    
     static uint64_t GetEpochTimeInUs(uint64_t systime) {
         return ((epoch_start_time_ + systime) / 1000);
     }
@@ -53,7 +53,7 @@ class UniTimer {
         return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
 #endif /* _WIN32 */
     }
-  private:
+private:
     inline static uint64_t epoch_start_time_ = 0;
 };
     

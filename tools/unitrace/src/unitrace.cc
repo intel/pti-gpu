@@ -186,6 +186,10 @@ void Usage(char * progname) {
     "--stall-sampling               " <<
     "Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs" <<
     std::endl;
+  std::cout <<
+    "--system-time                  " <<
+    "Use system time for trace collection (default is epoch time)" <<
+    std::endl;
 #if 0
   std::cout <<
     "--filter <kernelname>          " <<
@@ -379,6 +383,9 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--metric-sampling") == 0 || strcmp(argv[i], "-k") == 0) {
       utils::SetEnv("UNITRACE_KernelMetrics", "1");
       metric_sampling = true;
+      ++app_index;
+    } else if (strcmp(argv[i], "--system-time") == 0) {
+      utils::SetEnv("UNITRACE_SystemTime", "1");
       ++app_index;
 #if 0
     } else if (strcmp(argv[i], "--device-id") == 0) {
