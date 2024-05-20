@@ -17,8 +17,111 @@ jobs:
   sdk-build-and-test:
     name: Test suite of pti library
 
+    #
+    # pti is a selector to machines with Intel Ponte Vecchio officially
+    # Intel(R) Data Center GPU Max 1100
+    #
+    runs-on: [pti]
+
+    strategy:
+      matrix:
+        include:
+          - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
+
+    container: 
+      image: ${{ matrix.container }}
+      options: --device=/dev/dri --cap-add CAP_PERFMON
+
+    if: vars.PTI_RUN_TESTS == 1
+
+    steps:
+      - name: Clean-up
+        run:  rm -rf *
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset default
+          cmake --build --preset default -j $(($(nproc)/2))
+
+      - name: Test
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          ctest --output-on-failure --preset default
+
+      - name: Build AddressSanitizer
+        if: always()
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset asan
+          cmake --build --preset asan --parallel $(($(nproc)/2))
+
+      - name: Build ThreadSanitizer
+        if: always()
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset tsan
+          cmake --build --preset tsan --parallel $(($(nproc)/2))
+
+      - name: Build libFuzzer
+        if: always()
+        working-directory: sdk
+        run: |
+          # To ensure it still builds, run build for fuzz targets until we have
+          # proper fuzz testing infrastructure in place.
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset fuzz
+          cmake --build --preset fuzz --parallel $(($(nproc)/2))
+
+      - name: Test AddressSanitizer
+        if: always()
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          ctest --preset asan --output-on-failure -L samples
+
+      - name: Test ThreadSanitizer
+        if: always()
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          ctest --preset tsan --output-on-failure -L samples
+
+      - name: Install SDK
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --install build --config Release --prefix out
+
+      - name: Upload SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: "PTI-SDK-2024.1.1"
+          path: |
+            sdk/out
+
+  #
+  # A note regarding the double call of source in every step in the
+  # sdk-build-and-test workflow.
+  #
+  # The first call to source is running oneapi-v2024.1.0
+  # the second call to source overlays the compiler 2024.1.1
+  # and custom installs it into /opt/intel/oneapinext
+  #
+  # Please refer to sdk-build-and-test-goofy
+  #
+  sdk-build-and-test-goofy:
+    name: Test suite of pti library with double source
+
     container:
-      image: ${{ vars.PTI_DOCKER_IMAGE }} 
+      image: ${{ vars.PTI_DOCKER_IMAGE_2024_1_0 }} 
       options: --device=/dev/dri --cap-add CAP_PERFMON
 
     if: vars.PTI_RUN_TESTS == 1
@@ -115,22 +218,26 @@ jobs:
       - name: Upload SDK
         uses: actions/upload-artifact@v4
         with:
-          name: "PTI-SDK"
+          name: "PTI-SDK-2024.1.0"
           path: |
             sdk/out
 
-  pti-tools-build-and-test:
 
-    container:
-      image: ${{ vars.PTI_DOCKER_IMAGE }}
-      #
-      # Sprinkle in the magic docker ingredients and poof!
-      #
-      options: "--device=/dev/dri --cap-add CAP_PERFMON "
+  pti-tools-build-and-test:
 
     if: vars.PTI_RUN_TESTS == 1
 
     runs-on: [pti]
+
+    strategy:
+      matrix:
+        include:
+          - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
+          - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_0 }}
+
+    container: 
+      image: ${{ matrix.container }}
+      options: --device=/dev/dri --cap-add CAP_PERFMON
 
     steps:
       - name: Clean-up

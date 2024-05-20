@@ -26,10 +26,7 @@ if (NOT TARGET MKL::MKL)
   find_package(MKL REQUIRED)
 endif()
 
-target_compile_options(onemkl_gemm_exe PUBLIC "-fsycl" "-mkl" "-gline-tables-only")
-target_link_options(onemkl_gemm_exe PUBLIC "-fsycl" "-mkl" "-gline-tables-only")
-
-target_link_libraries(onemkl_gemm_exe PUBLIC mkl_intel_lp64 mkl_sequential mkl_core mkl_sycl Pti::pti_view)
+target_link_libraries(onemkl_gemm_exe PUBLIC MKL::MKL MKL::MKL_SYCL Pti::pti_view)
 target_include_directories(onemkl_gemm_exe SYSTEM PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
 target_include_directories(onemkl_gemm_exe
                            PRIVATE "${PROJECT_SOURCE_DIR}/../../src/utils"

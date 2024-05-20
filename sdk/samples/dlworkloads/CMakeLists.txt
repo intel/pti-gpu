@@ -35,4 +35,4 @@ if (NOT TARGET MKL::MKL)
 endif()
 
 target_include_directories(dlworkload SYSTEM PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
-target_link_libraries(dlworkload DNNL::dnnl -lmkl_sycl -lmkl_intel_ilp64 -lmkl_core -lmkl_tbb_thread oneDPL Pti::pti_view)
+target_link_libraries(dlworkload DNNL::dnnl MKL::MKL MKL::MKL_SYCL oneDPL Pti::pti_view)
