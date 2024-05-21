@@ -1,0 +1,4 @@
+# [PTI-LIB] Update formatting. Add EditorConfig file.
+# This formats the whole project (sans dlworkloads and iso). It also adds
+# automation for detecting formatting problems. Not super relevant in the blame
+7262dc724137b8972cb2b5ec1304f0cf236ddbac
