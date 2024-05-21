@@ -43,9 +43,9 @@ def gen_func_param_dict(api_files):
           #print("FUNC_LIST -- next line: ",next(f).split("* params,")[0])
   return func_dict
 
-# Generates EnableTracing function and populates with registrable signatures for all apis: partitioned by all or just kfunc. 
+# Generates EnableTracing function and populates with registrable signatures for all apis: partitioned by all or just kfunc.
 def gen_api(f, func_list, kfunc_list, exclude_from_epilogue_list, exclude_from_prologue_list):
-  f.write("void EnableTracing(zel_tracer_handle_t tracer) {\n")
+  f.write("void EnableTracer(zel_tracer_handle_t tracer) {\n")
   f.write("\n")
   f.write("  if (options_.api_tracing) {\n")
   for func in func_list:

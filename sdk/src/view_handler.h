@@ -129,7 +129,8 @@ struct PtiViewRecordHandler {
     if (!collector_) {
       CollectorOptions collector_options;
       collector_options.kernel_tracing = true;
-      collector_ = ZeCollector::Create(collector_options, ZeChromeKernelStagesCallback, nullptr);
+      collector_ = ZeCollector::Create(&state_,
+                                collector_options, ZeChromeKernelStagesCallback, nullptr);
       overhead::SetOverheadCallback(OverheadCollectionCallback);
     }
   }
@@ -142,7 +143,7 @@ struct PtiViewRecordHandler {
   virtual ~PtiViewRecordHandler() {
     overhead::overhead_collection_enabled = false;
     if (collector_) {
-      collector_->DisableTracing();
+      collector_->DisableTracer();
     }
     DisableTracing();
   }
@@ -279,7 +280,7 @@ struct PtiViewRecordHandler {
         auto it = map_view_kind_enabled.find(type);
         if (it == map_view_kind_enabled.cend() || map_view_kind_enabled[type] == false) {
           map_view_kind_enabled[type] = true;
-          collector_->EnableTracer();
+          collector_->EnableTracing();
         }
       }
     }
@@ -328,7 +329,7 @@ struct PtiViewRecordHandler {
         auto it = map_view_kind_enabled.find(type);
         if (it != map_view_kind_enabled.cend() && map_view_kind_enabled[type] == true) {
           map_view_kind_enabled[type] = false;
-          collector_->DisableTracer();
+          collector_->DisableTracing();
         }
       }
     }
@@ -394,6 +395,21 @@ struct PtiViewRecordHandler {
     return kernel_name_str;
   }
 
+  inline pti_result GetState() {
+    return state_;
+  }
+
+  inline pti_result GPULocalAvailable() {
+    if (collector_) {
+      if (collector_->IsIntrospectionCapable() && collector_->IsDynamicTracingCapable()) {
+        return pti_result::PTI_SUCCESS;
+      } else {
+        return pti_result::PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED;
+      }
+    }
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+
  private:
   inline void RequestNewBuffer(pti::view::utilities::ViewBuffer& buffer) {
     unsigned char* raw_buffer = nullptr;
@@ -427,6 +443,9 @@ struct PtiViewRecordHandler {
   }
   std::unique_ptr<ZeCollector> collector_ = nullptr;
   std::atomic<bool> collection_enabled_ = false;
+  // Internal PTI state.
+  // If abnornal situation happens - this variable will be set the corresponding value
+  std::atomic<pti_result> state_  = pti_result::PTI_SUCCESS;
   std::atomic<bool> callbacks_set_ = false;
   AskForBufferEvent get_new_buffer_;
   ReturnBufferEvent deliver_buffer_;

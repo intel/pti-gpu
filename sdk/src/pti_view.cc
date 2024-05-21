@@ -18,6 +18,10 @@
 pti_result ptiViewEnable(pti_view_kind view_kind) {
   SPDLOG_DEBUG("In {}, view_kind:  {}", __FUNCTION__, (uint32_t)view_kind);
   try {
+    pti_result pti_state = Instance().GetState();
+    if (Instance().GetState() != pti_result::PTI_SUCCESS) {
+      return pti_state;
+    }
     if (!(IsPtiViewKindEnum(view_kind))) {
       return pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
@@ -39,6 +43,10 @@ pti_result ptiViewEnable(pti_view_kind view_kind) {
 //
 pti_result ptiViewDisable(pti_view_kind view_kind) {
   try {
+    pti_result pti_state = Instance().GetState();
+    if (Instance().GetState() != pti_result::PTI_SUCCESS) {
+      return pti_state;
+    }
     if (!(IsPtiViewKindEnum(view_kind))) {
       return pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
@@ -54,6 +62,19 @@ pti_result ptiViewDisable(pti_view_kind view_kind) {
   }
 }
 
+pti_result  ptiViewGPULocalAvailable() {
+  try {
+    return Instance().GPULocalAvailable();
+  } catch (const std::overflow_error& e) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::runtime_error& e) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::exception& e) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
 //
 // TODO: parse different exception types, analyse caught exception and return
 // different error code.

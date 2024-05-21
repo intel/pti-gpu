@@ -123,6 +123,7 @@ if(HAVE_SYCL)
   target_link_libraries(sycl_queue_id PUBLIC Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
 
+
   gtest_discover_tests(
     dpcgemm_suite
     DISCOVERY_TIMEOUT 60
@@ -156,6 +157,7 @@ if(HAVE_SYCL)
     TEST_LIST TIMESTAMPS_CORRECTNESS_LIST
     PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
     PROPERTIES LABELS "functional")
+
 endif()
 
 add_executable(zegemm_suite main_zegemm_fixture.cc)
@@ -220,6 +222,19 @@ target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_ma
                                                    spdlog::spdlog_header_only
                                                    LevelZero::level-zero)
 
+add_executable(view_gpu_local_test view_gpu_local_test.cc)
+
+target_include_directories(
+  view_gpu_local_test
+  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include")
+
+target_compile_options(view_gpu_local_test PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+target_link_options(view_gpu_local_test PRIVATE ${PTI_LINK_FLAGS_EXPR})
+
+target_link_libraries(view_gpu_local_test PUBLIC Pti::pti_view GTest::gtest_main
+                                            LevelZero::level-zero)
+
+
 gtest_discover_tests(
   zegemm_suite
   DISCOVERY_TIMEOUT 60
@@ -235,6 +250,11 @@ gtest_discover_tests(
   DISCOVERY_TIMEOUT 60
   TEST_LIST ASSERT_EXCEPTION_TEST_LIST
   PROPERTIES LABELS "unit")
+
+gtest_discover_tests(
+  view_gpu_local_test
+  DISCOVERY_TIMEOUT 60
+  PROPERTIES LABELS "functional")
 
 # TODO: Organize this better? Where to put
 # functional tests?

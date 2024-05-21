@@ -35,6 +35,12 @@ typedef enum {
   PTI_ERROR_NO_CALLBACKS_SET = 4,         //!< error due to no callbacks set via ptiViewSetCallbacks
   PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY = 5,  //!< empty external ID-queue while working with
                                           //!< PTI_VIEW_EXTERNAL_CORRELATION
+  PTI_ERROR_DRIVER = 50,                  //!< unknown driver error
+  PTI_ERROR_TRACING_NOT_INITIALIZED = 51, //!< installed driver requires tracing enabling with
+                                          //!< setting environment variable ZE_ENABLE_TRACING_LAYER
+                                          //!< to 1
+  PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED = 52, //!< no Local profiling support in the installed
+                                                //!< driver
 
   PTI_ERROR_INTERNAL = 200                //!< internal error
 } pti_result;
@@ -108,10 +114,10 @@ typedef enum _pti_view_external_kind {
 /**
  *  @brief Collection Overhead kind
  */
-typedef enum _pti_view_overhead_kind { 
+typedef enum _pti_view_overhead_kind {
   PTI_VIEW_OVERHEAD_KIND_INVALID = 0,        //!< Invalid overhead kind
   PTI_VIEW_OVERHEAD_KIND_UNKNOWN = 1,        //!< Unknown overhead kind
-  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< overhead due to a resource 
+  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< overhead due to a resource
   PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,   //!< overhead due to a buffer flush
   PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,         //!< overhead due to driver
   PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< overhead due to L0 api processing time
@@ -319,6 +325,13 @@ pti_result PTI_EXPORT ptiViewEnable(pti_view_kind view_kind);
 pti_result PTI_EXPORT ptiViewDisable(pti_view_kind view_kind);
 
 /**
+ * @brief Returns if GPU Local view is supported by the installed driver
+ *
+ * @return pti_result
+*/
+pti_result PTI_EXPORT ptiViewGPULocalAvailable();
+
+/**
  * @brief Flushes all view records by calling bufferCompleted callback
  *
  * @return pti_result
@@ -359,7 +372,7 @@ ptiViewPopExternalCorrelationId(pti_view_external_kind external_kind, uint64_t* 
  *
  * @return const char*
  */
-PTI_EXPORT const char* 
+PTI_EXPORT const char*
 ptiViewOverheadKindToString( pti_view_overhead_kind type );
 
 /**
