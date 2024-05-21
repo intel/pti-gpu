@@ -28,7 +28,7 @@ if (NOT TARGET MKL::MKL)
   return()
 endif()
 
-add_executable(onemkl_gemm_exe onemkl_gemm.cpp)
+add_executable(onemkl_gemm_exe onemkl_gemm.cc)
 
 if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)

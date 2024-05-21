@@ -1155,3 +1155,62 @@ macro(ProjectIsTopLevel)
     endif()
   endif()
 endmacro()
+
+macro(AddFormatTarget)
+  find_program(CLANG_FORMAT_EXE clang-format)
+  find_program(BLACK_FORMAT_EXE black)
+
+  add_custom_target(format)
+  add_custom_target(format-chk)
+
+  cmake_policy(PUSH)
+  cmake_policy(SET CMP0009 NEW)
+  file(GLOB_RECURSE cf_src_files  "${PROJECT_SOURCE_DIR}/*.cc"
+                                  "${PROJECT_SOURCE_DIR}/*.h"
+                                  "${PROJECT_SOURCE_DIR}/src/*.cc"
+                                  "${PROJECT_SOURCE_DIR}/src/*.h"
+                                  "${PROJECT_SOURCE_DIR}/src/**/*.h"
+                                  "${PROJECT_SOURCE_DIR}/src/**/*.cc"
+                                  "${PROJECT_SOURCE_DIR}/test/*.cc"
+                                  "${PROJECT_SOURCE_DIR}/test/*.h"
+                                  "${PROJECT_SOURCE_DIR}/test/**/*.h"
+                                  "${PROJECT_SOURCE_DIR}/test/**/*.cc"
+                                  "${PROJECT_SOURCE_DIR}/samples/*.cc"
+                                  "${PROJECT_SOURCE_DIR}/samples/*.h"
+                                  "${PROJECT_SOURCE_DIR}/samples/**/*.h"
+                                  "${PROJECT_SOURCE_DIR}/samples/**/*.cc"
+                                  "${PROJECT_SOURCE_DIR}/fuzz/*.cc"
+                                  "${PROJECT_SOURCE_DIR}/fuzz/*.h"
+                                  "${PROJECT_SOURCE_DIR}/fuzz/**/*.h"
+                                  "${PROJECT_SOURCE_DIR}/fuzz/**/*.cc")
+  list(FILTER cf_src_files EXCLUDE REGEX
+                                  "^${PROJECT_SOURCE_DIR}/samples/dlworkload*")
+  list(FILTER cf_src_files EXCLUDE REGEX
+                                   "^${PROJECT_SOURCE_DIR}/samples/iso3d*")
+  list(FILTER cf_src_files EXCLUDE REGEX
+                                  "^${PROJECT_SOURCE_DIR}/build*")
+
+  add_custom_target(format-cpp COMMAND ${CLANG_FORMAT_EXE} -i ${cf_src_files})
+  add_custom_target(format-cpp-chk COMMAND ${CLANG_FORMAT_EXE} --dry-run --Werror ${cf_src_files})
+
+  add_dependencies(format format-cpp)
+  add_dependencies(format-chk format-cpp-chk)
+
+  if(BLACK_FORMAT_EXE)
+    list(APPEND py_src_dirs "${PROJECT_SOURCE_DIR}/cmake"
+                            "${PROJECT_SOURCE_DIR}/src"
+                            "${PROJECT_SOURCE_DIR}/fuzz"
+                            "${PROJECT_SOURCE_DIR}/test"
+                            "${PROJECT_SOURCE_DIR}/samples")
+    file(GLOB py_src_dirs_cur "${PROJECT_SOURCE_DIR}/*.py")
+    set(py_src_dirs ${py_src_dirs} ${py_src_dirs_cur})
+    add_custom_target(format-py COMMAND ${BLACK_FORMAT_EXE} ${py_src_dirs})
+    add_custom_target(format-py-chk COMMAND ${BLACK_FORMAT_EXE} --check ${py_src_dirs})
+
+    add_dependencies(format format-py)
+    add_dependencies(format-chk format-py-chk)
+  else()
+    message(STATUS "black not found. Python code cannot be formatted.")
+  endif()
+  cmake_policy(POP)
+endmacro()

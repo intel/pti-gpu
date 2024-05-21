@@ -6,8 +6,8 @@
 #ifndef SRC_API_VIEW_HANDLER_H_
 #define SRC_API_VIEW_HANDLER_H_
 
-#include <spdlog/spdlog.h>
 #include <spdlog/cfg/env.h>
+#include <spdlog/spdlog.h>
 
 #include <atomic>
 #include <cstddef>
@@ -118,7 +118,6 @@ struct PtiViewRecordHandler {
   PtiViewRecordHandler()
       : get_new_buffer_(pti::view::defaults::DefaultBufferAllocation),
         deliver_buffer_(pti::view::defaults::DefaultRecordParser) {
-
     // Read Logging level required
     // set environment variable SPDLOG_LEVEL=<level>, where level=TRACE/DEBUG/INFO..
     // Logs appear only when PTI_ENABLE_LOGGING=ON => SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
@@ -129,8 +128,8 @@ struct PtiViewRecordHandler {
     if (!collector_) {
       CollectorOptions collector_options;
       collector_options.kernel_tracing = true;
-      collector_ = ZeCollector::Create(&state_,
-                                collector_options, ZeChromeKernelStagesCallback, nullptr);
+      collector_ =
+          ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback, nullptr);
       overhead::SetOverheadCallback(OverheadCollectionCallback);
     }
   }
@@ -395,9 +394,7 @@ struct PtiViewRecordHandler {
     return kernel_name_str;
   }
 
-  inline pti_result GetState() {
-    return state_;
-  }
+  inline pti_result GetState() { return state_; }
 
   inline pti_result GPULocalAvailable() {
     if (collector_) {
@@ -445,7 +442,7 @@ struct PtiViewRecordHandler {
   std::atomic<bool> collection_enabled_ = false;
   // Internal PTI state.
   // If abnornal situation happens - this variable will be set the corresponding value
-  std::atomic<pti_result> state_  = pti_result::PTI_SUCCESS;
+  std::atomic<pti_result> state_ = pti_result::PTI_SUCCESS;
   std::atomic<bool> callbacks_set_ = false;
   AskForBufferEvent get_new_buffer_;
   ReturnBufferEvent deliver_buffer_;

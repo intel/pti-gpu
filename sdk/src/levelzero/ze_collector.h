@@ -152,7 +152,8 @@ class ZeCollector {
   ZeCollector(ZeCollector&&) = delete;
   ZeCollector& operator=(ZeCollector&&) = delete;
 
-  static std::unique_ptr<ZeCollector> Create(std::atomic<pti_result>* pti_state, CollectorOptions options,
+  static std::unique_ptr<ZeCollector> Create(std::atomic<pti_result>* pti_state,
+                                             CollectorOptions options,
                                              OnZeKernelFinishCallback acallback = nullptr,
                                              void* callback_data = nullptr) {
     SPDLOG_DEBUG("In {}", __FUNCTION__);
@@ -163,13 +164,13 @@ class ZeCollector {
           "zeInit() returned: {}. There might be Level-Zero Loader "
           "and Tracing library mismatch. Cannot continue",
           static_cast<uint32_t>(status));
-          *pti_state = pti_result::PTI_ERROR_DRIVER;
+      *pti_state = pti_result::PTI_ERROR_DRIVER;
     }
 
     ze_api_version_t version = utils::ze::GetVersion();
     PTI_ASSERT(ZE_MAJOR_VERSION(version) >= 1 && ZE_MINOR_VERSION(version) >= 3);
-    SPDLOG_DEBUG("Driver version major: {}, minor: {}",
-                            ZE_MAJOR_VERSION(version), ZE_MINOR_VERSION(version));
+    SPDLOG_DEBUG("Driver version major: {}, minor: {}", ZE_MAJOR_VERSION(version),
+                 ZE_MINOR_VERSION(version));
     if ((*pti_state) != pti_result::PTI_SUCCESS) {
       // zeInit returned not SUCCESS but we want to know version of driver in any case
       return nullptr;
@@ -187,17 +188,18 @@ class ZeCollector {
     overhead_fini("zelTracerCreate");
 
     if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_CRITICAL("Unable to create Level Zero tracer, error code {0:#x}\n"
-                      "It could be due to old driver installed where tracing enabled with "
-                      "setting env variable ZE_ENABLE_TRACING_LAYER to 1.",
-                      static_cast<std::size_t>(status));
+      SPDLOG_CRITICAL(
+          "Unable to create Level Zero tracer, error code {0:#x}\n"
+          "It could be due to old driver installed where tracing enabled with "
+          "setting env variable ZE_ENABLE_TRACING_LAYER to 1.",
+          static_cast<std::size_t>(status));
       *pti_state = pti_result::PTI_ERROR_TRACING_NOT_INITIALIZED;
       return nullptr;
     }
 
     collector->collection_mode_ =
         SelectZeCollectionMode(collector->driver_introspection_capable_,
-                             collector->options_.disabled_mode, collector->options_.hybrid_mode);
+                               collector->options_.disabled_mode, collector->options_.hybrid_mode);
     SPDLOG_DEBUG("\tCollection_mode: {}", (uint32_t)collector->collection_mode_);
 
     collector->EnableTracer(tracer);
@@ -209,7 +211,7 @@ class ZeCollector {
 
     if (collector->options_.disabled_mode) {
       SPDLOG_DEBUG("\tRunning in disabled mode");
-      status =collector->l0_wrapper_.w_zelDisableTracingLayer();
+      status = collector->l0_wrapper_.w_zelDisableTracingLayer();
       if (ZE_RESULT_SUCCESS == status) {
         global_ref_count--;
       }
@@ -229,11 +231,11 @@ class ZeCollector {
 #endif
     }
   }
-  enum class ZeCollectionMode { Full = 0, Hybrid = 1, Local = 2};
-  enum class ZeCollectionState { Normal = 0, Abnormal = 1};
+  enum class ZeCollectionMode { Full = 0, Hybrid = 1, Local = 2 };
+  enum class ZeCollectionState { Normal = 0, Abnormal = 1 };
 
   static ZeCollectionMode SelectZeCollectionMode(bool introspection_capable, bool& disabled_mode,
-                                             bool& hybrid_mode) {
+                                                 bool& hybrid_mode) {
     ZeCollector::ZeCollectionMode mode = ZeCollectionMode::Full;
     disabled_mode = false;
     hybrid_mode = false;
@@ -304,14 +306,9 @@ class ZeCollector {
     return mode;
   }
 
-  bool IsIntrospectionCapable() {
-    return driver_introspection_capable_;
-  }
+  bool IsIntrospectionCapable() { return driver_introspection_capable_; }
 
-  bool IsDynamicTracingCapable() {
-    return loader_dynamic_tracing_capable_;
-  }
-
+  bool IsDynamicTracingCapable() { return loader_dynamic_tracing_capable_; }
 
   // We get here on StartTracing/enable of L0 related view kinds.
   // The caller needs to ensure duplicated enable of view_kinds do not happen on a per thread basis.
@@ -381,7 +378,7 @@ class ZeCollector {
     SPDLOG_TRACE("In {}", __FUNCTION__);
 
     ze_result_t res = l0_wrapper_.InitIntrospectionWrappers();
-    if (ZE_RESULT_SUCCESS != res ) {
+    if (ZE_RESULT_SUCCESS != res) {
       return res;
     }
 
@@ -517,10 +514,11 @@ class ZeCollector {
 
     if (ZE_RESULT_SUCCESS != status) {
       // as this function is called from many places - makes sense to communicate an issue here
-      SPDLOG_WARN("Level-Zero Introspection API is not present. Local Collection not possible."
-                       " Disabling Level-Zero Tracing.");
+      SPDLOG_WARN(
+          "Level-Zero Introspection API is not present. Local Collection not possible."
+          " Disabling Level-Zero Tracing.");
       if (nullptr != parent_state_) {
-          *(parent_state_) = pti_result::PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED;
+        *(parent_state_) = pti_result::PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED;
       }
       return status;
     }
@@ -836,7 +834,7 @@ class ZeCollector {
     ze_kernel_timestamp_result_t timestamp{};
 
     ze_event_handle_t event_to_query = command->event_self;
-    if (ZeCollectionMode::Local == collection_mode_  && command->event_swap != nullptr) {
+    if (ZeCollectionMode::Local == collection_mode_ && command->event_swap != nullptr) {
       event_to_query = command->event_swap;
     }
     SPDLOG_TRACE("\tQuery KernelTimestamp on event: {}", (void*)event_to_query);
@@ -2294,13 +2292,13 @@ class ZeCollector {
   A2BridgeKernelPool bridge_kernel_pool_;
   A2EventPool swap_event_pool_;
 
-  Level0Wrapper  l0_wrapper_;
+  Level0Wrapper l0_wrapper_;
 
   std::atomic<ZeCollectionState> collection_state_ = ZeCollectionState::Normal;
 
   // pointer to state of an object that created ZeCollector
   // a way to communicate abnormal situations
-  std::atomic<pti_result>* parent_state_  = nullptr;
+  std::atomic<pti_result>* parent_state_ = nullptr;
 
   class ZeStartStopModeChanger {
    private:
@@ -2340,7 +2338,7 @@ class ZeCollector {
         }
       }
       parent_collector_->cb_enabled_.acallback = true;
-      if ( ZeCollectionMode::Hybrid == parent_collector_->collection_mode_)
+      if (ZeCollectionMode::Hybrid == parent_collector_->collection_mode_)
         parent_collector_->options_.hybrid_mode = false;
       ref_count++;
       return ref_count;

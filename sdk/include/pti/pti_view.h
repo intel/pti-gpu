@@ -13,6 +13,7 @@
 #include "pti/pti_export.h"
 #include "pti/pti_version.h"
 
+/* clang-format off */
 #if defined(__cplusplus)
 extern "C" {
 #endif

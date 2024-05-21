@@ -1,0 +1,47 @@
+---
+
+name: Linter Checks
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - sdk/**
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - sdk/**
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  run-format-check:
+
+    container:
+      image: ${{ vars.PTI_DOCKER_IMAGE }}
+
+    if: vars.PTI_RUN_TESTS == 1
+
+    runs-on: [self-hosted, Linux, pti]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get install -y clang-format
+
+      - name: Check SDK Format
+        working-directory: sdk
+        run: |
+          mkdir build
+          cd build
+          # Expedited configure
+          cmake .. -DPTI_BUILD_TESTING=OFF -DPTI_BUILD_SAMPLES=OFF -DPTI_INSTALL=OFF
+          make format-chk

@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#include <spdlog/spdlog.h>
-
 #include "pti/pti_view.h"
+
+#include <spdlog/spdlog.h>
 
 #include "internal_helper.h"
 #include "view_handler.h"
@@ -62,7 +62,7 @@ pti_result ptiViewDisable(pti_view_kind view_kind) {
   }
 }
 
-pti_result  ptiViewGPULocalAvailable() {
+pti_result ptiViewGPULocalAvailable() {
   try {
     return Instance().GPULocalAvailable();
   } catch (const std::overflow_error& e) {

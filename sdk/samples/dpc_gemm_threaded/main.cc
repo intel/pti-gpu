@@ -8,17 +8,17 @@
 // Based on dpc_gemm sample. Added multithreading
 //
 
+#include <stdarg.h>
 #include <string.h>
 
-#include <sycl/sycl.hpp>
 #include <cstdlib>
 #include <memory>
+#include <sycl/sycl.hpp>
 #include <thread>
-#include <stdarg.h>
 
 #include "pti/pti_view.h"
-#include "utils.h"
 #include "samples_utils.h"
+#include "utils.h"
 
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
@@ -37,8 +37,7 @@ static float Check(const std::vector<float>& a, float value) {
   return eps / a.size();
 }
 
-void GEMM(const float* a, const float* b, float* c, unsigned size,
-          sycl::id<2> id) {
+void GEMM(const float* a, const float* b, float* c, unsigned size, sycl::id<2> id) {
   int i = id.get(0);
   int j = id.get(1);
   float sum = 0.0f;
@@ -49,8 +48,8 @@ void GEMM(const float* a, const float* b, float* c, unsigned size,
 }
 
 static float RunAndCheck(sycl::queue queue, const std::vector<float>& a,
-                         const std::vector<float>& b, std::vector<float>& c,
-                         unsigned size, float expected_result) {
+                         const std::vector<float>& b, std::vector<float>& c, unsigned size,
+                         float expected_result) {
   assert(size > 0);
   assert(a.size() == size * size);
   assert(b.size() == size * size);
@@ -68,20 +67,17 @@ static float RunAndCheck(sycl::queue queue, const std::vector<float>& a,
       auto b_acc = b_buf.get_access<sycl::access::mode::read>(cgh);
       auto c_acc = c_buf.get_access<sycl::access::mode::write>(cgh);
 
-      cgh.parallel_for<class __GEMM>(
-          sycl::range<2>(size, size), [=](sycl::id<2> id) {
-            auto a_acc_ptr = a_acc.get_multi_ptr<sycl::access::decorated::no>();
-            auto b_acc_ptr = b_acc.get_multi_ptr<sycl::access::decorated::no>();
-            auto c_acc_ptr = c_acc.get_multi_ptr<sycl::access::decorated::no>();
-            GEMM(a_acc_ptr.get(), b_acc_ptr.get(), c_acc_ptr.get(), size, id);
-          });
+      cgh.parallel_for<class __GEMM>(sycl::range<2>(size, size), [=](sycl::id<2> id) {
+        auto a_acc_ptr = a_acc.get_multi_ptr<sycl::access::decorated::no>();
+        auto b_acc_ptr = b_acc.get_multi_ptr<sycl::access::decorated::no>();
+        auto c_acc_ptr = c_acc.get_multi_ptr<sycl::access::decorated::no>();
+        GEMM(a_acc_ptr.get(), b_acc_ptr.get(), c_acc_ptr.get(), size, id);
+      });
     });
     queue.wait_and_throw();
 
-    auto start =
-        event.get_profiling_info<sycl::info::event_profiling::command_start>();
-    auto end =
-        event.get_profiling_info<sycl::info::event_profiling::command_end>();
+    auto start = event.get_profiling_info<sycl::info::event_profiling::command_start>();
+    auto end = event.get_profiling_info<sycl::info::event_profiling::command_end>();
     time = static_cast<double>(end - start) / NSEC_IN_SEC;
   } catch (const sycl::exception& e) {
     std::cout << "[ERROR] " << e.what() << std::endl;
@@ -95,15 +91,14 @@ static float RunAndCheck(sycl::queue queue, const std::vector<float>& a,
   return Check(c, expected_result);
 }
 
-static void Compute(sycl::queue queue, const std::vector<float>& a,
-                    const std::vector<float>& b, std::vector<float>& c,
-                    unsigned size, unsigned repeat_count,
+static void Compute(sycl::queue queue, const std::vector<float>& a, const std::vector<float>& b,
+                    std::vector<float>& c, unsigned size, unsigned repeat_count,
                     float expected_result) {
   for (unsigned i = 0; i < repeat_count; ++i) {
     float eps = RunAndCheck(queue, a, b, c, size, expected_result);
     if (verbose) {
       std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN")
-              << "CORRECT with accuracy: " << eps << std::endl;
+                << "CORRECT with accuracy: " << eps << std::endl;
     }
   }
 }
@@ -133,25 +128,21 @@ const unsigned default_thread_count = 2;
 const unsigned default_repetition_per_thread = 4;
 
 void Usage(const char* name) {
-
-  std::cout << " Calculating floating point matrix multiply on gpu, submitting the work from many CPU threads\n"
+  std::cout << " Calculating floating point matrix multiply on gpu, submitting the work from many "
+               "CPU threads\n"
             << "  Usage " << name << "  [ options ]" << std::endl;
-  std::cout <<
-    "--threads [-t]  integer         " <<
-    "Threads number, default: " << default_thread_count << std::endl;
-  std::cout <<
-    "--size [-s]     integer        " <<
-    "Matrix size, default: " << default_size << std::endl;
-  std::cout <<
-    "--repeat [-r]   integer         " <<
-    "Repetition number per thread, default: " << default_repetition_per_thread << std::endl;
-  std::cout <<
-    "--verbose [-v]                 " <<
-    "Enable verbose mode to report the app progress, default: off" << std::endl;
+  std::cout << "--threads [-t]  integer         "
+            << "Threads number, default: " << default_thread_count << std::endl;
+  std::cout << "--size [-s]     integer        "
+            << "Matrix size, default: " << default_size << std::endl;
+  std::cout << "--repeat [-r]   integer         "
+            << "Repetition number per thread, default: " << default_repetition_per_thread
+            << std::endl;
+  std::cout << "--verbose [-v]                 "
+            << "Enable verbose mode to report the app progress, default: off" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
-
   int exit_code = EXIT_SUCCESS;
   unsigned thread_count = default_thread_count;
   unsigned repeat_count = default_repetition_per_thread;
@@ -159,20 +150,20 @@ int main(int argc, char* argv[]) {
 
   try {
     unsigned temp;
-    for (uint32_t i=1; i < argc; i++) {
-      if (strcmp(argv[i], "-s" ) == 0 || strcmp(argv[i], "--size") == 0 ){
+    for (uint32_t i = 1; i < argc; i++) {
+      if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--size") == 0) {
         i++;
         temp = std::stoul(argv[i]);
-        size = (temp < min_size) ? min_size : (temp > max_size) ?  max_size : temp;
-      } else if (strcmp(argv[i], "-t" ) == 0 || strcmp(argv[i], "--threads") == 0 ){
+        size = (temp < min_size) ? min_size : (temp > max_size) ? max_size : temp;
+      } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--threads") == 0) {
         i++;
         temp = std::stoul(argv[i]);
-        thread_count = (temp < 1) ? 1 : (temp > max_thread_count) ?  max_thread_count : temp;
-      } else if (strcmp(argv[i], "-r" ) == 0 || strcmp(argv[i], "--repeat") == 0 ){
+        thread_count = (temp < 1) ? 1 : (temp > max_thread_count) ? max_thread_count : temp;
+      } else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--repeat") == 0) {
         i++;
         temp = std::stoul(argv[i]);
         repeat_count = (temp < 1) ? 1 : temp;
-      } else if (strcmp(argv[i], "-v" ) == 0 || strcmp(argv[i], "--verbose") == 0 ){
+      } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
         // verbosity off makes minimal the sample self output -
         // so profiling output won't be intermixed with the sample output
         // and could be analyzed by tests
@@ -182,8 +173,7 @@ int main(int argc, char* argv[]) {
         return EXIT_SUCCESS;
       }
     }
-  }
-  catch(...) {
+  } catch (...) {
     Usage(argv[0]);
     return EXIT_FAILURE;
   }
@@ -194,7 +184,7 @@ int main(int argc, char* argv[]) {
 
   ptiViewSetCallbacks(
       [](auto** buf, auto* buf_size) {
-        *buf_size = 1000*sizeof(pti_view_record_kernel);
+        *buf_size = 1000 * sizeof(pti_view_record_kernel);
         void* ptr = ::operator new(*buf_size);
         ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
         *buf = reinterpret_cast<unsigned char*>(ptr);
@@ -219,19 +209,16 @@ int main(int argc, char* argv[]) {
           if (1LU == count) return;
           uint64_t prev_stamp = va_arg(args, uint64_t);
           uint64_t next_stamp = 0LU;
-          for (uint64_t i = 1; i < count; ++i)
-          {
+          for (uint64_t i = 1; i < count; ++i) {
             next_stamp = va_arg(args, uint64_t);
-            assert(prev_stamp<=next_stamp);
+            assert(prev_stamp <= next_stamp);
             prev_stamp = next_stamp;
           }
           va_end(args);
           return;
-
         };
         while (true) {
-          auto buf_status =
-              ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
+          auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
           if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
             std::cout << "Reached End of buffer" << '\n';
             break;
@@ -250,51 +237,56 @@ int main(int argc, char* argv[]) {
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Sycl Runtime Record" << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
+              samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime*>(ptr));
               break;
             }
             case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_overhead *>(ptr));
+              samples_utils::dump_record(reinterpret_cast<pti_view_record_overhead*>(ptr));
               break;
             }
             case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_external_correlation *>(ptr));
+              samples_utils::dump_record(
+                  reinterpret_cast<pti_view_record_external_correlation*>(ptr));
               break;
             }
-            case pti_view_kind:: PTI_VIEW_DEVICE_GPU_MEM_COPY: {
+            case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Memory Record" << '\n';
 
-              pti_view_record_memory_copy* p_memory_rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+              pti_view_record_memory_copy* p_memory_rec =
+                  reinterpret_cast<pti_view_record_memory_copy*>(ptr);
               samples_utils::dump_record(p_memory_rec);
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
-              validate_timestamps(4, p_memory_rec->_append_timestamp, p_memory_rec->_submit_timestamp,
-                                     p_memory_rec->_start_timestamp, p_memory_rec->_end_timestamp);
+              validate_timestamps(4, p_memory_rec->_append_timestamp,
+                                  p_memory_rec->_submit_timestamp, p_memory_rec->_start_timestamp,
+                                  p_memory_rec->_end_timestamp);
               break;
             }
-            case pti_view_kind:: PTI_VIEW_DEVICE_GPU_MEM_FILL: {
+            case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Memory Record" << '\n';
 
-              pti_view_record_memory_fill* p_memory_rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
+              pti_view_record_memory_fill* p_memory_rec =
+                  reinterpret_cast<pti_view_record_memory_fill*>(ptr);
               samples_utils::dump_record(p_memory_rec);
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
-              validate_timestamps(4, p_memory_rec->_append_timestamp, p_memory_rec->_submit_timestamp,
-                                     p_memory_rec->_start_timestamp, p_memory_rec->_end_timestamp);
+              validate_timestamps(4, p_memory_rec->_append_timestamp,
+                                  p_memory_rec->_submit_timestamp, p_memory_rec->_start_timestamp,
+                                  p_memory_rec->_end_timestamp);
               break;
             }
             case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
@@ -308,9 +300,10 @@ int main(int argc, char* argv[]) {
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
-              validate_timestamps(6, p_kernel_rec->_sycl_task_begin_timestamp, p_kernel_rec->_sycl_enqk_begin_timestamp,
-                                     p_kernel_rec->_append_timestamp, p_kernel_rec->_submit_timestamp,
-                                     p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp);
+              validate_timestamps(6, p_kernel_rec->_sycl_task_begin_timestamp,
+                                  p_kernel_rec->_sycl_enqk_begin_timestamp,
+                                  p_kernel_rec->_append_timestamp, p_kernel_rec->_submit_timestamp,
+                                  p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp);
               break;
             }
             default: {
@@ -339,8 +332,7 @@ int main(int argc, char* argv[]) {
 
     float expected_result = A_VALUE * B_VALUE * size;
 
-    auto threadFunction = [&queue] (unsigned _size, unsigned _repeat_count, float _expected_result) {
-
+    auto threadFunction = [&queue](unsigned _size, unsigned _repeat_count, float _expected_result) {
       std::vector<float> a(_size * _size, A_VALUE);
       std::vector<float> b(_size * _size, B_VALUE);
       std::vector<float> c(_size * _size, 0.0f);
@@ -355,31 +347,31 @@ int main(int argc, char* argv[]) {
       }
     };
 
-    std::cout << "DPC++ Matrix Multiplication (CPU threads: " << thread_count << ", matrix size: " << size << " x "
-              << size << ", repeats: " << repeat_count << " times)" << std::endl;
+    std::cout << "DPC++ Matrix Multiplication (CPU threads: " << thread_count
+              << ", matrix size: " << size << " x " << size << ", repeats: " << repeat_count
+              << " times)" << std::endl;
     std::cout << "Target device: "
-              << queue.get_info<sycl::info::queue::device>()
-                    .get_info<sycl::info::device::name>()
-              << std::endl << std::flush;
+              << queue.get_info<sycl::info::queue::device>().get_info<sycl::info::device::name>()
+              << std::endl
+              << std::flush;
 
     std::vector<std::thread> the_threads;
-    for (unsigned i=0; i<thread_count; i++) {
-      std::thread t = std::thread( threadFunction, size, repeat_count, expected_result);
+    for (unsigned i = 0; i < thread_count; i++) {
+      std::thread t = std::thread(threadFunction, size, repeat_count, expected_result);
       the_threads.push_back(std::move(t));
     }
 
-    for(auto& th : the_threads ) {
+    for (auto& th : the_threads) {
       if (th.joinable()) {
-      th.join();
+        th.join();
       }
     }
-  } catch (const sycl::exception &e) {
+  } catch (const sycl::exception& e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';
-    std::cerr << "\tError code: " << e.code().value()
-              << "\n\tCategory: " << e.category().name()
+    std::cerr << "\tError code: " << e.code().value() << "\n\tCategory: " << e.category().name()
               << "\n\tMessage: " << e.code().message() << '\n';
     exit_code = EXIT_FAILURE;
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     std::cerr << "Error: Exception caught " << e.what() << '\n';
     exit_code = EXIT_FAILURE;
   } catch (...) {

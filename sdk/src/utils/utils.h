@@ -271,7 +271,6 @@ inline std::string GetPathToSharedObject(T address) {
 #endif
 }
 
-
 }  // namespace utils
 
 #endif  // PTI_UTILS_UTILS_H_

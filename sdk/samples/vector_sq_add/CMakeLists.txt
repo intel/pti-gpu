@@ -18,7 +18,7 @@ if(NOT has_sycl)
   return()
 endif()
 
-add_executable(vec_sqadd vector_sq_add.cpp)
+add_executable(vec_sqadd vector_sq_add.cc)
 
 target_link_options(vec_sqadd PUBLIC -fsycl -gline-tables-only)
 target_compile_options(vec_sqadd PUBLIC -fsycl -gline-tables-only)

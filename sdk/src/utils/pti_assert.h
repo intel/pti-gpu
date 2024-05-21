@@ -17,4 +17,4 @@
 
 #define PTI_ASSERT(X) assert(X)
 
-#endif // PTI_UTILS_PTI_ASSERT_H_
+#endif  // PTI_UTILS_PTI_ASSERT_H_

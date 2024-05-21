@@ -10,11 +10,11 @@
 
 #include "pti/pti_export.h"
 
+/* clang-format off */
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
-/* clang-format off */
 #if !defined(PTI_VERSION)
 #define PTI_VERSION @PTI_VERSION@
 #endif
@@ -23,7 +23,6 @@ extern "C" {
 #define PTI_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
 #define PTI_VERSION_MINOR @PROJECT_VERSION_MINOR@
 #define PTI_VERSION_PATCH @PROJECT_VERSION_PATCH@
-/* clang-format on */
 
 typedef struct pti_version {
   uint32_t _major;

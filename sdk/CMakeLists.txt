@@ -19,7 +19,12 @@ GetSpdlog()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(CMAKE_EXPORT_COMPILE_COMMANDS)
-    set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+  set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
+      ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+endif()
+
+if(PROJECT_IS_TOP_LEVEL)
+  AddFormatTarget()
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -59,7 +64,8 @@ set(PTI_COMPILE_FLAGS_EXPR
     -Wformat-security
     $<$<CONFIG:Debug>:-fstack-protector>
     $<$<CONFIG:Release>:
-    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror -Werror=format-security>
+    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror
+    -Werror=format-security>
     -fstack-protector-strong>>
     $<$<CXX_COMPILER_ID:Clang>:-Wall
     -Wextra
@@ -67,7 +73,8 @@ set(PTI_COMPILE_FLAGS_EXPR
     -Wformat-security
     $<$<CONFIG:Debug>:-fstack-protector>
     $<$<CONFIG:Release>:
-    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror -Werror=format-security>
+    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror
+    -Werror=format-security>
     -fstack-protector-strong>>
     $<$<CXX_COMPILER_ID:GNU>:-Wall
     -Wextra
@@ -75,7 +82,8 @@ set(PTI_COMPILE_FLAGS_EXPR
     -Wformat-security
     $<$<CONFIG:Debug>:-fstack-protector>
     $<$<CONFIG:Release>:
-    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror -Werror=format-security>
+    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror
+    -Werror=format-security>
     -fstack-protector-strong>>)
 
 set(PTI_LINK_FLAGS_EXPR
@@ -106,7 +114,8 @@ add_library(Pti::pti ALIAS pti)
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
 include(GenerateExportHeader)
-generate_export_header(pti EXPORT_FILE_NAME ${PROJECT_BINARY_DIR}/include/pti/pti_export.h)
+generate_export_header(pti EXPORT_FILE_NAME
+                       ${PROJECT_BINARY_DIR}/include/pti/pti_export.h)
 
 target_include_directories(
   pti
@@ -126,8 +135,9 @@ set_target_properties(
 
 target_compile_options(pti PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
 target_link_options(pti PRIVATE ${PTI_LINK_FLAGS_EXPR})
-target_compile_definitions(pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR}
-    $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>)
+target_compile_definitions(
+  pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR}
+              $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>)
 
 # Why version 1.14.0?
 # It is an IPEX requirement for PTI to link against the LTS version of the
@@ -180,14 +190,12 @@ target_link_options(pti_view PRIVATE ${PTI_LINK_FLAGS_EXPR})
 
 target_compile_definitions(
   pti_view
-  PRIVATE
-    $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
-    $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
-    ${PTI_DEFINE_FLAGS_EXPR}
-    $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
-        SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
-        SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_OFF>
-)
+  PRIVATE $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
+          $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
+          ${PTI_DEFINE_FLAGS_EXPR}
+          $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
+          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
+          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_OFF>)
 
 if(PTI_DEBUG)
   add_compile_definitions(PTI_DEBUG)
@@ -195,18 +203,18 @@ endif()
 
 target_link_libraries(
   pti_view
-  PUBLIC
-    Threads::Threads
-  PRIVATE
-    $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
-    LevelZero::level-zero
-    spdlog::spdlog_header_only)
+  PUBLIC Threads::Threads
+  PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti> LevelZero::level-zero
+          spdlog::spdlog_header_only)
 
 FindHeadersPath(
   pti_view "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
   "tracing.gen" gen_tracing_header LevelZero::level-zero)
 
-target_link_libraries(pti PUBLIC pti_view PRIVATE spdlog::spdlog_header_only $<TARGET_NAME_IF_EXISTS:Xpti::xpti>)
+target_link_libraries(
+  pti
+  PUBLIC pti_view
+  PRIVATE spdlog::spdlog_header_only $<TARGET_NAME_IF_EXISTS:Xpti::xpti>)
 
 include(CTest)
 if(BUILD_TESTING AND PTI_BUILD_TESTING)
@@ -226,34 +234,34 @@ if(PTI_INSTALL)
     VERSION "${PROJECT_VERSION}"
     COMPATIBILITY SameMinorVersion)
 
-  install(FILES "${PROJECT_SOURCE_DIR}/PtiConfig.cmake"
-                "${PROJECT_BINARY_DIR}/PtiConfigVersion.cmake"
-          COMPONENT Pti_Development
-          DESTINATION "${PTI_INSTALL_CMAKE_DIR}")
+  install(
+    FILES "${PROJECT_SOURCE_DIR}/PtiConfig.cmake"
+          "${PROJECT_BINARY_DIR}/PtiConfigVersion.cmake"
+    COMPONENT Pti_Development
+    DESTINATION "${PTI_INSTALL_CMAKE_DIR}")
 
   install(
     TARGETS pti pti_view
     EXPORT PtiTargets
     LIBRARY DESTINATION ${PTI_INSTALL_LIB_DIR}
-    COMPONENT Pti_Runtime
-    NAMELINK_COMPONENT Pti_Development
-    ARCHIVE DESTINATION ${PTI_INSTALL_LIB_DIR}
+            COMPONENT Pti_Runtime
+            NAMELINK_COMPONENT Pti_Development
+    ARCHIVE DESTINATION ${PTI_INSTALL_LIB_DIR} COMPONENT Pti_Development
+    RUNTIME DESTINATION ${PTI_INSTALL_BIN_DIR} COMPONENT Pti_Runtime)
+
+  install(
+    DIRECTORY "${PROJECT_BINARY_DIR}/include/pti"
+    DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
     COMPONENT Pti_Development
-    RUNTIME DESTINATION ${PTI_INSTALL_BIN_DIR}
-    COMPONENT Pti_Runtime
-    )
+    FILES_MATCHING
+    PATTERN "*.h")
 
-  install(DIRECTORY "${PROJECT_BINARY_DIR}/include/pti"
-          DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
-          COMPONENT Pti_Development
-          FILES_MATCHING PATTERN "*.h"
-          )
-
-  install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/"
-          DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
-          COMPONENT Pti_Development
-          FILES_MATCHING PATTERN "*.h"
-          )
+  install(
+    DIRECTORY "${PROJECT_SOURCE_DIR}/include/"
+    DESTINATION "${PTI_INSTALL_INCLUDE_DIR}"
+    COMPONENT Pti_Development
+    FILES_MATCHING
+    PATTERN "*.h")
 
   install(
     EXPORT PtiTargets
@@ -271,7 +279,7 @@ if(PTI_INSTALL)
   #
   # This file is only installed in oneAPI drops
   #
-  if ("${PTI_PRESET_USED}" STREQUAL "oneAPI" )
+  if("${PTI_PRESET_USED}" STREQUAL "oneAPI")
     install(
       FILES "env/vars.sh"
       DESTINATION "env/"
