@@ -86,6 +86,9 @@ class UniTracer {
             if (tracer->CheckOption(TRACE_CHROME_ITT_LOGGING)) {
                 itt_collector->EnableChromeLogging();
             }
+            if (tracer->CheckOption(TRACE_CHROME_MPI_LOGGING)) {
+              itt_collector->SetMpiCallback(ChromeLogger::MpiLoggingCallback);
+            }
         }
     }
     else {

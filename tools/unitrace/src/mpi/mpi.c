@@ -182,6 +182,10 @@ const char *mpi_task_names[MPI_TASK_NUM] = {
 __itt_domain *mpi_domain = NULL;
 __itt_string_handle *mpi_task_handles[MPI_TASK_NUM] = { 0 };
 
+extern void __itt_task_end_internal_ex_info(const __itt_domain *domain,
+                                     size_t src_size, int src_location, int src_tag,
+                                     size_t dst_size, int dst_location, int dst_tag);
+
 #define ITT_BEGIN(_MPI_ID) { \
 	__itt_task_begin(mpi_domain, __itt_null, __itt_null, mpi_task_handles[_MPI_ID]); \
 	}
@@ -190,12 +194,16 @@ __itt_string_handle *mpi_task_handles[MPI_TASK_NUM] = { 0 };
 	__itt_task_end(mpi_domain); \
 	}
 
+#define ITT_END_MPI_EX_INFO(_MPI_ID, data_size1, location1 , tag1, data_size2, location2 , tag2){\
+    __itt_task_end_internal_ex_info(mpi_domain, data_size1, location1 , tag1, data_size2, location2 , tag2); \
+}
+
 int MPI_Send(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
     int result = 0;
     ITT_BEGIN(MPI_TASK_SEND);
     result = PMPI_Send(buf, count, datatype, dest, tag, comm);
-    ITT_END(MPI_TASK_SEND);
+    ITT_END_MPI_EX_INFO(MPI_TASK_SEND, 0, -1 , -1, count*sizeof(datatype), dest, tag);
     return result;
 }
 
@@ -205,7 +213,7 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag,
     int result = 0;
     ITT_BEGIN(MPI_TASK_RECV);
     result = PMPI_Recv(buf, count, datatype, source, tag, comm, status);
-    ITT_END(MPI_TASK_RECV);
+    ITT_END_MPI_EX_INFO(MPI_TASK_RECV, count*sizeof(datatype), source, tag, 0, -1 , -1 );
     return result;
 }
 
@@ -215,7 +223,7 @@ int MPI_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, int t
     int result = 0;
     ITT_BEGIN(MPI_TASK_ISEND);
     result = PMPI_Isend(buf, count, datatype, dest, tag, comm, request);
-    ITT_END(MPI_TASK_ISEND);
+    ITT_END_MPI_EX_INFO(MPI_TASK_ISEND,  0, -1 , -1, count*sizeof(datatype), dest, tag);
     return result;
 }
 
@@ -225,7 +233,7 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag,
     int result = 0;
     ITT_BEGIN(MPI_TASK_IRECV);
     result = PMPI_Irecv(buf, count, datatype, source, tag, comm, request);
-    ITT_END(MPI_TASK_IRECV);
+    ITT_END_MPI_EX_INFO(MPI_TASK_IRECV, count*sizeof(datatype), source, tag, 0, -1 , -1);
     return result;
 }
 
@@ -312,7 +320,7 @@ int MPI_Iprobe(int source, int tag, MPI_Comm comm, int *flag, MPI_Status * statu
     int result = 0;
     ITT_BEGIN(MPI_TASK_IPROBE);
     result = PMPI_Iprobe(source, tag, comm, flag, status);
-    ITT_END(MPI_TASK_IPROBE);
+    ITT_END_MPI_EX_INFO(MPI_TASK_IPROBE, 0, source, tag, 0, -1 , -1);
     return result;
 }
 
@@ -321,7 +329,7 @@ int MPI_Probe(int source, int tag, MPI_Comm comm, MPI_Status * status)
     int result = 0;
     ITT_BEGIN(MPI_TASK_PROBE);
     result = PMPI_Probe(source, tag, comm, status);
-    ITT_END(MPI_TASK_PROBE);
+    ITT_END_MPI_EX_INFO(MPI_TASK_PROBE, 0, source, tag, 0, -1 , -1);
     return result;
 }
 
@@ -333,7 +341,7 @@ int MPI_Sendrecv(const void *sendbuf, int sendcount, MPI_Datatype sendtype, int 
     ITT_BEGIN(MPI_TASK_SENDRECV);
     result = PMPI_Sendrecv(sendbuf, sendcount, sendtype, dest,
                            sendtag, recvbuf, recvcount, recvtype, source, recvtag, comm, status);
-    ITT_END(MPI_TASK_SENDRECV);
+    ITT_END_MPI_EX_INFO(MPI_TASK_SENDRECV, sendcount*sizeof(sendtype), dest, sendtag, recvcount*sizeof(recvtype), source, recvtag );
     return result;
 }
 
@@ -344,7 +352,7 @@ int MPI_Sendrecv_replace(void *buf, int count, MPI_Datatype datatype, int dest,
     ITT_BEGIN(MPI_TASK_SENDRECV_REPLACE);
     result = PMPI_Sendrecv_replace(buf, count, datatype, dest,
                                    sendtag, source, recvtag, comm, status);
-    ITT_END(MPI_TASK_SENDRECV_REPLACE);
+    ITT_END_MPI_EX_INFO(MPI_TASK_SENDRECV_REPLACE, 0, source, recvtag, count*sizeof(datatype), dest, sendtag);
     return result;
 }
 
@@ -407,7 +415,7 @@ int MPI_Bcast(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Comm
     int result = 0;
     ITT_BEGIN(MPI_TASK_BCAST);
     result = PMPI_Bcast(buffer, count, datatype, root, comm);
-    ITT_END(MPI_TASK_BCAST);
+    ITT_END_MPI_EX_INFO(MPI_TASK_BCAST, count*sizeof(datatype), root , -1, 0, -1 , -1);
     return result;
 }
 
@@ -417,7 +425,15 @@ int MPI_Gather(const void *sendbuf, int sendcount, MPI_Datatype sendtype, void *
     int result = 0;
     ITT_BEGIN(MPI_TASK_GATHER);
     result = PMPI_Gather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, root, comm);
-    ITT_END(MPI_TASK_GATHER);
+    int curr_rank;
+    PMPI_Comm_rank(comm, &curr_rank);
+    if(curr_rank == root) {
+        int size;
+        PMPI_Comm_size(comm, &size);
+        ITT_END_MPI_EX_INFO(MPI_TASK_GATHER, sendcount*sizeof(sendtype), -1, -1, recvcount*sizeof(recvtype)*size, root, -1);
+    } else {
+        ITT_END_MPI_EX_INFO(MPI_TASK_GATHER, sendcount*sizeof(sendtype), root, -1, 0, -1, -1);
+    }
     return result;
 }
 
@@ -439,7 +455,15 @@ int MPI_Scatter(const void *sendbuf, int sendcount, MPI_Datatype sendtype, void 
     int result = 0;
     ITT_BEGIN(MPI_TASK_SCATTER);
     result = PMPI_Scatter(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, root, comm);
-    ITT_END(MPI_TASK_SCATTER);
+    int curr_rank;
+    PMPI_Comm_rank(comm, &curr_rank);
+    if(curr_rank != root) {
+        ITT_END_MPI_EX_INFO(MPI_TASK_SCATTER, 0, -1, -1, recvcount*sizeof(recvtype), root, -1);
+    } else {
+        int size;
+        PMPI_Comm_size(comm, &size);
+        ITT_END_MPI_EX_INFO(MPI_TASK_SCATTER, sendcount*sizeof(sendtype)*size, root, -1, recvcount*sizeof(recvtype), -1, -1);
+    }
     return result;
 }
 
@@ -461,7 +485,7 @@ int MPI_Allgather(const void *sendbuf, int sendcount, MPI_Datatype sendtype, voi
     int result = 0;
     ITT_BEGIN(MPI_TASK_ALLGATHER);
     result = PMPI_Allgather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm);
-    ITT_END(MPI_TASK_ALLGATHER);
+    ITT_END_MPI_EX_INFO(MPI_TASK_ALLGATHER, sendcount*sizeof(sendtype), -1, -1, recvcount*sizeof(recvtype), -1, -1);
     return result;
 }
 
@@ -482,7 +506,7 @@ int MPI_Alltoall(const void *sendbuf, int sendcount, MPI_Datatype sendtype,
     int result = 0;
     ITT_BEGIN(MPI_TASK_ALLTOALL);
     result = PMPI_Alltoall(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm);
-    ITT_END(MPI_TASK_ALLTOALL);
+    ITT_END_MPI_EX_INFO(MPI_TASK_ALLTOALL, sendcount*sizeof(sendtype), -1, -1, recvcount*sizeof(recvtype), -1, -1);
     return result;
 }
 
@@ -504,7 +528,7 @@ int MPI_Reduce(const void *sendbuf, void *recvbuf, int count, MPI_Datatype datat
     int result = 0;
     ITT_BEGIN(MPI_TASK_REDUCE);
     result = PMPI_Reduce(sendbuf, recvbuf, count, datatype, op, root, comm);
-    ITT_END(MPI_TASK_REDUCE);
+    ITT_END_MPI_EX_INFO(MPI_TASK_REDUCE, count*sizeof(datatype), root , -1, 0, -1 , -1);
     return result;
 }
 
@@ -514,7 +538,7 @@ int MPI_Allreduce(const void *sendbuf, void *recvbuf, int count, MPI_Datatype da
     int result = 0;
     ITT_BEGIN(MPI_TASK_ALLREDUCE);
     result = PMPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm);
-    ITT_END(MPI_TASK_ALLREDUCE);
+    ITT_END_MPI_EX_INFO(MPI_TASK_ALLREDUCE, count*sizeof(datatype), -1 , -1, 0, -1 , -1);
     return result;
 }
 
@@ -536,7 +560,7 @@ int MPI_Get(void *origin_addr, int origin_count, MPI_Datatype origin_datatype,
     ITT_BEGIN(MPI_TASK_GET);
     result = PMPI_Get(origin_addr, origin_count, origin_datatype,
                       target_rank, target_disp, target_count, target_datatype, win);
-    ITT_END(MPI_TASK_GET);
+    ITT_END_MPI_EX_INFO(MPI_TASK_GET, origin_count*sizeof(origin_datatype), target_rank, -1, target_count*sizeof(target_datatype), -1, -1);
     return result;
 }
 
@@ -548,7 +572,7 @@ int MPI_Put(const void *origin_addr, int origin_count, MPI_Datatype origin_datat
     ITT_BEGIN(MPI_TASK_PUT);
     result = PMPI_Put(origin_addr, origin_count, origin_datatype,
                       target_rank, target_disp, target_count, target_datatype, win);
-    ITT_END(MPI_TASK_PUT);
+    ITT_END_MPI_EX_INFO(MPI_TASK_PUT, origin_count*sizeof(origin_datatype), target_rank, -1, target_count*sizeof(target_datatype), -1, -1);
     return result;
 }
 
@@ -570,7 +594,7 @@ int MPI_Iallreduce(const void *sendbuf, void *recvbuf, int count, MPI_Datatype d
     int result = 0;
     ITT_BEGIN(MPI_TASK_IALLREDUCE);
     result = PMPI_Iallreduce(sendbuf, recvbuf, count, datatype, op, comm, request);
-    ITT_END(MPI_TASK_IALLREDUCE);
+    ITT_END_MPI_EX_INFO(MPI_TASK_IALLREDUCE, count*sizeof(datatype), -1 , -1, 0, -1 , -1);
     return result;
 }
 
@@ -580,7 +604,7 @@ int MPI_Ialltoall(const void *sendbuf, int sendcount, MPI_Datatype sendtype, voi
     int result = 0;
     ITT_BEGIN(MPI_TASK_IALLTOALL);
     result = PMPI_Ialltoall(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm, request);
-    ITT_END(MPI_TASK_IALLTOALL);
+    ITT_END_MPI_EX_INFO(MPI_TASK_IALLTOALL, sendcount*sizeof(sendtype), -1, -1, recvcount*sizeof(recvtype), -1, -1);
     return result;
 }
 
@@ -611,7 +635,7 @@ int MPI_Ibcast(void *buffer, int count, MPI_Datatype datatype, int root, MPI_Com
     int result = 0;
     ITT_BEGIN(MPI_TASK_IBCAST);
     result = PMPI_Ibcast(buffer, count, datatype, root, comm, request);
-    ITT_END(MPI_TASK_IBCAST);
+    ITT_END_MPI_EX_INFO(MPI_TASK_IBCAST, count*sizeof(datatype), root , -1, 0, -1 , -1);
     return result;
 }
 
@@ -621,7 +645,7 @@ int MPI_Ireduce(const void *sendbuf, void *recvbuf, int count, MPI_Datatype data
     int result = 0;
     ITT_BEGIN(MPI_TASK_IREDUCE);
     result = PMPI_Ireduce(sendbuf, recvbuf, count, datatype, op, root, comm, request);
-    ITT_END(MPI_TASK_IREDUCE);
+    ITT_END_MPI_EX_INFO(MPI_TASK_IREDUCE, count*sizeof(datatype), root , -1, 0, -1 , -1);
     return result;
 }
 
@@ -632,7 +656,7 @@ int MPI_Ireduce_scatter_block(const void *sendbuf, void *recvbuf, int recvcount,
     int result = 0;
     ITT_BEGIN(MPI_TASK_IREDUCE_SCATTER_BLOCK);
     result = PMPI_Ireduce_scatter_block(sendbuf, recvbuf, recvcount, datatype, op, comm, request);
-    ITT_END(MPI_TASK_IREDUCE_SCATTER_BLOCK);
+    ITT_END_MPI_EX_INFO(MPI_TASK_IREDUCE_SCATTER_BLOCK, 0, -1, -1, recvcount*sizeof(datatype), -1 , -1);
     return result;
 }
 

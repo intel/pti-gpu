@@ -568,6 +568,41 @@ class TraceBuffer {
         }
         pkt.args = "\"id\": \"" + str_kids + "\"";
 */
+        if(rec.api_type_ == MPI) {
+          MpiArgs args = rec.mpi_args_;
+
+          bool isFirst=true; // because first argument can be zero and second non zero
+          std::string str_args = ""; // build arguments
+
+          if (args.src_size != 0) {
+            str_args += (isFirst ? "" : ", ");
+            str_args += "\"ssize\": " + std::to_string(args.src_size);
+            isFirst = false;
+          }
+          if (args.src_location != -1) {
+              str_args += (isFirst ? "" : ", ");
+              str_args += "\"src\": " + std::to_string(args.src_location);
+              isFirst = false;
+          }
+          if (args.src_tag != -1) {
+              str_args += (isFirst ? "" : ", ");
+              str_args += "\"stag\": " + std::to_string(args.src_tag);
+              isFirst = false;
+          }
+          if (args.dst_size != 0) {
+            str_args += (isFirst ? "" : ", "); isFirst = false;
+            str_args += "\"dsize\": " +std::to_string(args.dst_size);
+          }
+          if (args.dst_location != -1) {
+            str_args += (isFirst ? "" : ", "); isFirst = false;
+            str_args += "\"dst\": " +std::to_string(args.dst_location);
+          }
+          if (args.dst_tag != -1) {
+            str_args += (isFirst ? "" : ", "); isFirst = false;
+            str_args += "\"dtag\": " +std::to_string(args.dst_tag);
+          }
+          pkt.args = str_args;
+        }
         pkt.cat = cpu_op;
       }
       else if (rec.type_ == EVENT_DURATION_START) {
@@ -1021,6 +1056,28 @@ class ChromeLogger {
         rec->start_time_ = start_ts;
         rec->end_time_ = end_ts;
         rec->id_ = 0;
+        thread_local_buffer_.BufferHostEvent();
+      }
+    }
+
+    static void MpiLoggingCallback(const char *name, uint64_t start_ts, uint64_t end_ts,size_t src_size, int src_location, int src_tag,
+                                     size_t dst_size, int dst_location, int dst_tag) {
+      if (!thread_local_buffer_.IsFinalized()) {
+        HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
+        rec->type_ = EVENT_COMPLETE;
+        rec->name_ = name;
+        rec->api_id_ = IttTracingId;
+        rec->start_time_ = start_ts;
+        rec->end_time_ = end_ts;
+        rec->id_ = 0;
+        rec->api_type_ = MPI;
+        rec->mpi_args_.src_size = src_size;
+        rec->mpi_args_.src_location = src_location;
+        rec->mpi_args_.src_tag = src_tag;
+        rec->mpi_args_.dst_size = dst_size;
+        rec->mpi_args_.dst_location = dst_location;
+        rec->mpi_args_.dst_tag = dst_tag;
+
         thread_local_buffer_.BufferHostEvent();
       }
     }

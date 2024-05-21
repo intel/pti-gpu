@@ -19,6 +19,8 @@
 
 static std::string rank_mpi = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
 typedef void (*OnIttLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts);
+typedef void (*OnMpiLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, size_t src_size, int src_location, int src_tag,
+                                     size_t dst_size, int dst_location, int dst_tag);
 
 struct ittFunction {
   uint64_t total_time;
@@ -95,6 +97,17 @@ class IttCollector {
     }
   }
 
+  void Log(const char *name, uint64_t start_ts, uint64_t end_ts, size_t src_size, int src_location, int src_tag,
+                                     size_t dst_size, int dst_location, int dst_tag) {
+    if (mpi_callback_) {
+      mpi_callback_(name, start_ts, end_ts, src_size, src_location, src_tag,
+                                    dst_size, dst_location, dst_tag);
+    }
+  }
+  void SetMpiCallback(OnMpiLoggingCallback callback) {
+    mpi_callback_ = callback;
+  }
+
   std::string CclSummaryReport() const {
     const uint32_t kFunctionLength = 10;
     const uint32_t kCallsLength = 12;
@@ -159,6 +172,7 @@ class IttCollector {
 
  private: // Data
   OnIttLoggingCallback callback_ = nullptr;
+  OnMpiLoggingCallback mpi_callback_ = nullptr;
   bool is_itt_ccl_summary_ = false;
   bool is_itt_chrome_logging_on_ = false;
 };
@@ -319,6 +333,31 @@ ITT_EXTERN_C void ITTAPI __itt_task_end(const __itt_domain *domain)
     }
     task_desc.pop();
   }
+}
+
+ITT_EXTERN_C void ITTAPI __itt_task_end_internal_ex_info(const __itt_domain *domain,
+                                     size_t src_size, int src_location, int src_tag,
+                                     size_t dst_size, int dst_location, int dst_tag)
+{
+  if (!UniController::IsCollectionEnabled() || !itt_collector->IsEnableChromeLoggingOn()) {
+    return;
+  }
+
+  if (task_desc.empty() || strcmp(task_desc.top().domain, domain->nameA)) {
+    return;
+  }
+
+  std::string display(task_desc.top().domain);
+  display += "::";
+  display += task_desc.top().name;
+  auto start = task_desc.top().start_time;
+  auto end = UniTimer::GetHostTimestamp();
+
+  if (itt_collector->IsEnableChromeLoggingOn()) {
+    itt_collector->Log(display.c_str(), start, end, src_size, src_location, src_tag,
+                                     dst_size, dst_location, dst_tag);
+  }
+  task_desc.pop();
 }
 
 ITT_EXTERN_C __itt_event ITTAPI __itt_event_create(const char *name, int namelen)

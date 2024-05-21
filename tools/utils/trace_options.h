@@ -44,6 +44,7 @@
 #define TRACE_METRIC_QUERY           28
 #define TRACE_METRIC_STREAM          29
 #define TRACE_CCL_SUMMARY_REPORT     30
+#define TRACE_CHROME_MPI_LOGGING     31
 
 const char* kChromeTraceFileExt = "json";
 

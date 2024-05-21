@@ -18,6 +18,26 @@ enum EVENT_TYPE {
   EVENT_MARK,
 };
 
+enum API_TYPE {
+  NONE,
+  MPI,
+  ITT,
+  CCL
+};
+
+typedef struct MpiArgs_ {
+  int src_location;
+  int src_tag;
+  int dst_location;
+  int dst_tag;
+  size_t src_size;
+  size_t dst_size;
+}MpiArgs;
+
+typedef struct IttArgs_ {
+/*Add arguments here*/
+}IttArgs;
+
 typedef struct HostEventRecord_ {
   uint64_t id_;
   uint64_t start_time_;
@@ -25,6 +45,12 @@ typedef struct HostEventRecord_ {
   std::string name_;
   API_TRACING_ID api_id_;
   EVENT_TYPE type_;
+
+  API_TYPE api_type_ = API_TYPE::NONE;
+  union{
+    MpiArgs mpi_args_;
+    IttArgs itt_args_;
+   };
 } HostEventRecord;
 
 
