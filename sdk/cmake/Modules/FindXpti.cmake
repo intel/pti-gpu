@@ -49,38 +49,38 @@ The following cache variables may also be set:
 
 # Based on tutorial found in CMake manual:
 # https://cmake.org/cmake/help/latest/manual/cmake-developer.7.html
-if(UNIX)
-  find_path(
-    Xpti_INCLUDE_DIR
-    NAMES xpti/xpti_trace_framework.h
-    HINTS ENV LD_LIBRARY_PATH
-          ENV CMPLR_ROOT
-    PATHS /opt/intel/oneapi/compiler/latest
-          /opt/intel/oneapi/compiler/latest/linux
-    PATH_SUFFIXES include
-                  linux/include
-  )
-  find_library(
-    Xpti_STATIC_LIBRARY
-    NAMES xpti
-    HINTS ENV LD_LIBRARY_PATH
-          ENV CMPLR_ROOT
-    PATHS /opt/intel/oneapi/compiler/latest
-          /opt/intel/oneapi/compiler/latest/linux
-    PATH_SUFFIXES lib
-                  linux/lib
-  )
-  find_library(
-    Xpti_SHARED_LIBRARY
-    NAMES xptifw
-    HINTS ENV LD_LIBRARY_PATH
-          ENV CMPLR_ROOT
-    PATHS /opt/intel/oneapi/compiler/latest
-          /opt/intel/oneapi/compiler/latest/linux
-    PATH_SUFFIXES lib
-                  linux/lib
-  )
-endif()
+find_path(
+  Xpti_INCLUDE_DIR
+  NAMES xpti/xpti_trace_framework.h
+  HINTS ENV CMPLR_ROOT
+        ENV CPATH
+  PATHS /opt/intel/oneapi/compiler/latest
+        /opt/intel/oneapi/compiler/latest/linux
+  PATH_SUFFIXES include
+                linux/include
+)
+
+find_library(
+  Xpti_STATIC_LIBRARY
+  NAMES xpti
+  HINTS ENV CMPLR_ROOT
+        ENV LIBRARY_PATH
+  PATHS /opt/intel/oneapi/compiler/latest
+        /opt/intel/oneapi/compiler/latest/linux
+  PATH_SUFFIXES lib
+                linux/lib
+)
+
+find_library(
+  Xpti_SHARED_LIBRARY
+  NAMES xptifw
+  HINTS ENV CMPLR_ROOT
+        ENV LIBRARY_PATH
+  PATHS /opt/intel/oneapi/compiler/latest
+        /opt/intel/oneapi/compiler/latest/linux
+  PATH_SUFFIXES lib
+                linux/lib
+)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(

@@ -14,8 +14,6 @@ This module provides the following imported targets, if found:
 
 ``LevelZero::level-zero``
   Level Zero library
-``LevelZero::ze_loader``
-  Level Zero loader
 
 Result Variables
 ^^^^^^^^^^^^^^^^
@@ -36,8 +34,6 @@ The following cache variables may also be set:
   The directory containing ``level_zero/ze_api.h``.
 ``LevelZero_LIBRARY``
   The path to the LevelZero library.
-``LevelZero_Loader_LIBRARY``
-  The path to the LevelZero loader library.
 
 #]=======================================================================]
 
@@ -47,32 +43,25 @@ The following cache variables may also be set:
 # Level Zero provides
 #   * libze_loader.pc
 find_package(PkgConfig)
-pkg_check_modules(PC_level_zero QUIET level-zero)
 pkg_check_modules(PC_ze_loader QUIET libze_loader)
 
 find_path(
   LevelZero_INCLUDE_DIR
   NAMES level_zero/ze_api.h
-  PATHS ${PC_level_zero_INCLUDE_DIRS}
+  HINTS ENV CPATH
         ${PC_ze_loader_INCLUDE_DIRS}
-        ${CMAKE_INCLUDE_PATH}
+  PATHS ${CMAKE_INCLUDE_PATH}
+  PATH_SUFFIXES include
 )
 
 find_library(
   LevelZero_LIBRARY
   NAMES ze_loader
-  PATHS ${PC_level_zero_LIBRARY_DIRS}
+  HINTS ENV LIBRARY_PATH
         ${PC_ze_loader_LIBRARY_DIRS}
+  PATHS ${CMAKE_LIBRARY_PATH}
         ENV LD_LIBRARY_PATH
-        ${CMAKE_LIBRARY_PATH}
-)
-
-find_library(
-  LevelZero_Loader_LIBRARY
-  NAMES ze_loader
-  PATHS ${PC_ze_loader_LIBRARY_DIRS}
-        ENV LD_LIBRARY_PATH
-        ${CMAKE_LIBRARY_PATH}
+  PATH_SUFFIXES lib
 )
 
 get_filename_component(LevelZero_LIBRARY_DIR ${LevelZero_LIBRARY} DIRECTORY)
@@ -116,16 +105,7 @@ if(LevelZero_FOUND AND NOT TARGET LevelZero::level-zero)
                INTERFACE_INCLUDE_DIRECTORIES "${LevelZero_INCLUDE_DIR}")
 endif()
 
-if(LevelZero_FOUND AND NOT TARGET LevelZero::ze_loader)
-  add_library(LevelZero::ze_loader UNKNOWN IMPORTED)
-  set_target_properties(
-    LevelZero::ze_loader
-    PROPERTIES IMPORTED_LOCATION "${LevelZero_Loader_LIBRARY}"
-               INTERFACE_COMPILE_OPTIONS "${PC_ze_loader_CFLAGS_OTHER}"
-               INTERFACE_INCLUDE_DIRECTORIES "${LevelZero_INCLUDE_DIR}")
-endif()
-
-mark_as_advanced(LevelZero_INCLUDE_DIR LevelZero_LIBRARY LevelZero_Loader_LIBRARY)
+mark_as_advanced(LevelZero_INCLUDE_DIR LevelZero_LIBRARY)
 
 if(DEFINED LevelZero_VERSION)
   set(LevelZero_VERSION_STRING ${LevelZero_VERSION})

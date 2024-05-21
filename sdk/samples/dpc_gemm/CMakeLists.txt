@@ -6,6 +6,11 @@ project(PTI_Samples_DPC_GEMM CXX)
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fsycl" has_sycl)
 
+if (NOT has_sycl)
+  message(WARNING "${PROJECT_NAME} requres a sycl compatible compiler")
+  return()
+endif()
+
 add_executable(dpc_gemm main.cc)
 
 target_link_options(dpc_gemm PUBLIC -fsycl -gline-tables-only)

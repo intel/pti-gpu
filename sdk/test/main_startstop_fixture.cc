@@ -18,35 +18,32 @@
 #include "samples_utils.h"
 #include "utils.h"
 
-using namespace sycl;
-
 namespace {
 
 enum class TestType {
-  ARB_START_STOP = 1,
-  ARB_START_STOP_DUP_ENABLES = 2,
-  ARB_START_STOP_DUP_DISABLES = 3,
-  ARB_START_STOP_NO_KERNEL_START = 4,
-  ARB_START_STOP_NO_KERNEL_STOP = 5,
-  ARB_START_STOP_SYCL = 6,
-  ARB_START_STOP_MT = 7,
-  ARB_START_STOP_MT_DUP_ENABLES = 8,
-  ARB_START_STOP_MT_DUP_DISABLES = 9,
-  ARB_START_STOP_MT_NO_KERNEL_START = 10,
-  ARB_START_STOP_MT_NO_KERNEL_STOP = 11,
-  ARB_START_STOP_MT_SYCL = 12,
+  kArbStartStop = 1,
+  kArbStartStopDupEnables = 2,
+  kArbStartStopDupDisables = 3,
+  kArbStartStopNoKernelStart = 4,
+  kArbStartStopNoKernelStop = 5,
+  kArbStartStopSycl = 6,
+  kArbStartStopMt = 7,
+  kArbStartStopMtDupEnables = 8,
+  kArbStartStopMtDupDisables = 9,
+  kArbStartStopMtNoKernelStart = 10,
+  kArbStartStopMtNoKernelStop = 11,
+  kArbStartStopMtSycl = 12,
 };
 
-constexpr uint32_t arb_start_stop_counter =
+constexpr uint32_t kArbStartStopCounter =
     4;  // keep this a even number if changed -- test requires it.
 
 bool matched_sq_corr_ids = false;
 bool matched_add_corr_ids = false;
 bool timestamps_nonzero_duration = true;
 bool kernel_timestamps_monotonic = false;
-constexpr size_t vector_size = 5000;
-constexpr size_t thread_count = 3;
-typedef std::vector<double> DoubleVector;
+constexpr size_t kVectorSize = 5000;
+constexpr size_t kThreadCount = 3;
 uint64_t sycl_kernel_corr_id[3];
 uint64_t sycl_kernel_start_time[3];
 uint64_t kernel_corr_id[3];
@@ -58,87 +55,94 @@ uint64_t kernel_stop_ts = 0;
 uint64_t number_of_kernel_recs = 0;
 uint64_t number_of_sycl_recs = 0;
 uint64_t expected_sycl_recs = 0;
-uint64_t eid = 11;             // external correlation id base.
-const uint64_t epsilon = 100;  // min in kernel duration in nanoseconds
+uint64_t eid = 11;                  // external correlation id base.
+constexpr uint64_t kEpsilon = 100;  // min in kernel duration in nanoseconds
 
 // sync variables
 std::mutex common_m;
 std::condition_variable main_cv;
-std::atomic<size_t> shared_thread_counter[arb_start_stop_counter] = {0};
+std::atomic<size_t> shared_thread_count[kArbStartStopCounter] = {0};
 
 //************************************
 // Vector square in SYCL on device: modifies each input vector
 //************************************
-void vecSq(queue &q, const DoubleVector &a_vector, const DoubleVector &b_vector) {
-  ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3,
-                                   eid + 20);
-  range<1> num_items{a_vector.size()};
-  buffer a_buf(a_vector);
-  buffer b_buf(b_vector);
+template <typename T>
+void VecSq(sycl::queue &q, const std::vector<T> &a_vector, const std::vector<T> &b_vector) {
+  ASSERT_EQ(ptiViewPushExternalCorrelationId(
+                pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid + 20),
+            pti_result::PTI_SUCCESS);
+  sycl::range<1> num_items{a_vector.size()};
+  sycl::buffer a_buf(a_vector);
+  sycl::buffer b_buf(b_vector);
 
-  q.submit([&](handler &h) {
-    accessor a(a_buf, h, read_write);
-    accessor b(b_buf, h, read_write);
+  q.submit([&](sycl::handler &h) {
+    sycl::accessor a(a_buf, h, sycl::read_write);
+    sycl::accessor b(b_buf, h, sycl::read_write);
     h.parallel_for(num_items, [=](auto i) {
       a[i] = a[i] * a[i];
       b[i] = b[i] * b[i];
     });
   });
   q.wait();
-  ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid);
+  ASSERT_EQ(ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3,
+                                            &eid),
+            pti_result::PTI_SUCCESS);
 }
 
 //************************************
 // Vector add in SYCL on device: returns sum in 4th parameter "sq_add".
 //************************************
-[[maybe_unused]] void vecAdd(queue &q, const DoubleVector &a_vector, const DoubleVector &b_vector,
-                             DoubleVector &sq_add) {
-  range<1> num_items{a_vector.size()};
-  buffer a_buf(a_vector);
-  buffer b_buf(b_vector);
-  buffer sum_buf(sq_add.data(), num_items);
+template <typename T>
+[[maybe_unused]] void VecAdd(sycl::queue &q, const std::vector<T> &a_vector,
+                             const std::vector<T> &b_vector, std::vector<T> &sq_add) {
+  sycl::range<1> num_items{a_vector.size()};
+  sycl::buffer a_buf(a_vector);
+  sycl::buffer b_buf(b_vector);
+  sycl::buffer sum_buf(sq_add.data(), num_items);
 
-  q.submit([&](handler &h) {
-    accessor a(a_buf, h, read_only);
-    accessor b(b_buf, h, read_only);
-    accessor sum(sum_buf, h, write_only, no_init);
+  q.submit([&](sycl::handler &h) {
+    sycl::accessor a(a_buf, h, sycl::read_only);
+    sycl::accessor b(b_buf, h, sycl::read_only);
+    sycl::accessor sum(sum_buf, h, sycl::write_only, sycl::no_init);
     h.parallel_for(num_items, [=](auto i) { sum[i] = a[i] + b[i]; });
   });
   q.wait();
 }
 
 [[maybe_unused]] void StartTracingNonL0() {
-  assert(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION) == pti_result::PTI_SUCCESS);
-  assert(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD) == pti_result::PTI_SUCCESS);
-  assert(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS) == pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
 }
 
 [[maybe_unused]] void StopTracingNonL0() {
-  ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION);
-  ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD);
-  ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS);
+  ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION);  // TODO: check return
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
 }
 
 [[maybe_unused]] void StartTracingMTL0([[maybe_unused]] TestType type) {
-  assert(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL) == pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
 }
 
 void StartTracingL0([[maybe_unused]] TestType type) {
-  if (type != TestType::ARB_START_STOP_NO_KERNEL_START)
-    assert(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL) == pti_result::PTI_SUCCESS);
-  if (type == TestType::ARB_START_STOP_DUP_ENABLES) {
-    assert(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL) == pti_result::PTI_SUCCESS);
+  if (type != TestType::kArbStartStopNoKernelStart)
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  if (type == TestType::kArbStartStopDupEnables) {
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   }
 }
 
 [[maybe_unused]] void StopTracingMTL0([[maybe_unused]] TestType type) {
-  assert(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL) == pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
 }
 
 void StopTracingL0([[maybe_unused]] TestType type) {
-  if (type != TestType::ARB_START_STOP_NO_KERNEL_STOP) ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
-  if (type == TestType::ARB_START_STOP_DUP_DISABLES) {
-    ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
+  if (type != TestType::kArbStartStopNoKernelStop) {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  }
+  if (type == TestType::kArbStartStopDupDisables) {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   }
 }
 
@@ -208,21 +212,21 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
         pti_view_record_kernel *a_kernel_rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
         std::string kernel_name = a_kernel_rec->_name;
         number_of_kernel_recs++;
-        if ((kernel_idx < 2) && (kernel_name.find("vecSq(") != std::string::npos)) {
+        if ((kernel_idx < 2) && (kernel_name.find("VecSq<") != std::string::npos)) {
           kernel_corr_id[kernel_idx] = a_kernel_rec->_correlation_id;
           kernel_append_time[kernel_idx] = a_kernel_rec->_append_timestamp;
           kernel_idx++;
         }
-        if ((kernel_idx < 2) && (kernel_name.find("vecAdd(") != std::string::npos)) {
+        if ((kernel_idx < 2) && (kernel_name.find("VecAdd<") != std::string::npos)) {
           kernel_corr_id[kernel_idx] = a_kernel_rec->_correlation_id;
           kernel_append_time[kernel_idx] = a_kernel_rec->_append_timestamp;
           kernel_idx++;
         }
-        // std::cout << "KernelTimestamp for vecAdd: " << a_kernel_rec->_append_timestamp << ":"
+        // std::cout << "KernelTimestamp for VecAdd: " << a_kernel_rec->_append_timestamp << ":"
         //           << a_kernel_rec->_thread_id << "\n";
         timestamps_nonzero_duration =
             timestamps_nonzero_duration &&
-            ((a_kernel_rec->_end_timestamp - a_kernel_rec->_start_timestamp) > epsilon);
+            ((a_kernel_rec->_end_timestamp - a_kernel_rec->_start_timestamp) > kEpsilon);
 
         kernel_timestamps_monotonic = samples_utils::isMonotonic(
             {a_kernel_rec->_sycl_task_begin_timestamp, a_kernel_rec->_sycl_enqk_begin_timestamp,
@@ -239,14 +243,15 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
   ::operator delete(buf);
 };
 
-[[maybe_unused]] void initVectors(DoubleVector &a, DoubleVector &b, DoubleVector &c,
-                                  DoubleVector &d) {
-  a.resize(vector_size);
-  b.resize(vector_size);
-  c.resize(2 * vector_size);
-  d.resize(2 * vector_size);
+template <typename T>
+[[maybe_unused]] void InitVectors(std::vector<T> &a, std::vector<T> &b, std::vector<T> &c,
+                                  std::vector<T> &d) {
+  a.resize(kVectorSize);
+  b.resize(kVectorSize);
+  c.resize(2 * kVectorSize);
+  d.resize(2 * kVectorSize);
 
-  for (size_t i = 0; i < vector_size; i++) {
+  for (size_t i = 0; i < kVectorSize; i++) {
     a[i] = sin(i);
     b[i] = cos(i);
     c[2 * i] = sin(i) * sin(i);
@@ -256,44 +261,46 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
   }
 }
 
-[[maybe_unused]] void arrive_and_wait(unsigned int index) {
+[[maybe_unused]] void ArriveAndWait(unsigned int index) {
   std::unique_lock<std::mutex> lk(common_m);
-  shared_thread_counter[index]++;
-  main_cv.wait(lk, [&] { return (shared_thread_counter[index] == thread_count); });
+  shared_thread_count[index]++;
+  main_cv.wait(lk, [&] { return (shared_thread_count[index] == kThreadCount); });
   main_cv.notify_all();
 }
 
-void RunArbStartStopTestMultiThreaded(queue &q, const DoubleVector &a, const DoubleVector &b,
-                                      TestType a_test_type) {
-  auto threadFunction = [&q](const DoubleVector &a, const DoubleVector &b, TestType a_test_type) {
+template <typename T>
+void RunArbStartStopTestMultiThreaded(sycl::queue &q, const std::vector<T> &a,
+                                      const std::vector<T> &b, TestType a_test_type) {
+  auto thread_function = [&q](const auto &a, const auto &b, TestType a_test_type) {
     auto start = std::chrono::steady_clock::now();
 
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
 
-    for (unsigned int i = 0; i < arb_start_stop_counter; i++) {
+    for (unsigned int i = 0; i < kArbStartStopCounter; i++) {
       if (i % 2) {
-        if (a_test_type != TestType::ARB_START_STOP_MT_SYCL)
+        if (a_test_type != TestType::kArbStartStopMtSycl)
           StartTracingL0(a_test_type);
         else
           StartTracingNonL0();
       }
-      vecSq(q, a, b);
-      arrive_and_wait(i);
+      VecSq(q, a, b);
+      ArriveAndWait(i);
       if (i % 2) {
-        if (a_test_type != TestType::ARB_START_STOP_MT_SYCL)
+        if (a_test_type != TestType::kArbStartStopMtSycl) {
           StopTracingL0(a_test_type);
-        else
+        } else {
           StopTracingNonL0();
-        ptiFlushAllViews();
+        }
+        ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
       }
-    };
+    }
     std::cout << "\t-- Total execution time: " << time.count() << " sec" << std::endl;
   };
 
   std::vector<std::thread> the_threads;
-  for (unsigned i = 0; i < thread_count; i++) {
-    std::thread t = std::thread(threadFunction, a, b, a_test_type);
+  for (unsigned i = 0; i < kThreadCount; i++) {
+    std::thread t = std::thread(thread_function, a, b, a_test_type);
     the_threads.push_back(std::move(t));
   }
 
@@ -302,43 +309,42 @@ void RunArbStartStopTestMultiThreaded(queue &q, const DoubleVector &a, const Dou
       th.join();
     }
   }
-};
+}
 
-void RunArbStartStopTest(queue &q, [[maybe_unused]] const DoubleVector &a,
-                         [[maybe_unused]] const DoubleVector &b, TestType a_test_type) {
-  for (unsigned int i = 1; i <= arb_start_stop_counter; i++) {
+template <typename T>
+void RunArbStartStopTest(sycl::queue &q, [[maybe_unused]] const std::vector<T> &a,
+                         [[maybe_unused]] const std::vector<T> &b, TestType a_test_type) {
+  for (unsigned int i = 1; i <= kArbStartStopCounter; i++) {
     if (i % 2) {
-      if (a_test_type != TestType::ARB_START_STOP_SYCL)
+      if (a_test_type != TestType::kArbStartStopSycl)
         StartTracingL0(a_test_type);
       else
         StartTracingNonL0();
-    };
+    }
 
-    vecSq(q, a, b);
+    VecSq(q, a, b);
 
     if (i % 2) {
-      if (a_test_type != TestType::ARB_START_STOP_SYCL)
+      if (a_test_type != TestType::kArbStartStopSycl) {
         StopTracingL0(a_test_type);
-      else
+      } else {
         StopTracingNonL0();
-      ptiFlushAllViews();
+      }
+      ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
     }
-  };
-};
+  }
+}
 
-void RunVecsqadd(TestType a_test_type) {
-  DoubleVector a, b, c, d, sq_add, sq_add2;
-  ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid);
-  auto dev = sycl::device(sycl::gpu_selector_v);
+template <typename T>
+void VecSqAddRouter(sycl::queue &sycl_queue, TestType a_test_type) {
+  std::vector<T> a(kVectorSize);
+  std::vector<T> b(kVectorSize);
+  std::vector<T> c(2 * kVectorSize);
+  std::vector<T> d(2 * kVectorSize);
+  std::vector<T> sq_add(kVectorSize);
+  std::vector<T> sq_add2(2 * kVectorSize);
 
-  a.resize(vector_size);
-  b.resize(vector_size);
-  c.resize(2 * vector_size);
-  d.resize(2 * vector_size);
-  sq_add.resize(vector_size);
-  sq_add2.resize(2 * vector_size);
-
-  for (size_t i = 0; i < vector_size; i++) {
+  for (size_t i = 0; i < kVectorSize; i++) {
     a[i] = sin(i);
     b[i] = cos(i);
     c[2 * i] = sin(i) * sin(i);
@@ -347,58 +353,83 @@ void RunVecsqadd(TestType a_test_type) {
     d[2 * i + 1] = cos(i);
   }
 
-  auto d_selector{gpu_selector_v};
+  // Start Tests by Type
+  if (a_test_type == TestType::kArbStartStop) {
+    RunArbStartStopTest(sycl_queue, a, b, a_test_type);
+  }
+
+  if (a_test_type == TestType::kArbStartStopDupEnables) {
+    RunArbStartStopTest(sycl_queue, a, b, a_test_type);
+  }
+
+  if (a_test_type == TestType::kArbStartStopDupDisables) {
+    RunArbStartStopTest(sycl_queue, a, b, a_test_type);
+  }
+
+  if (a_test_type == TestType::kArbStartStopNoKernelStart) {
+    RunArbStartStopTest(sycl_queue, a, b, a_test_type);
+  }
+
+  if (a_test_type == TestType::kArbStartStopNoKernelStop) {
+    RunArbStartStopTest(sycl_queue, a, b, a_test_type);
+  }
+
+  if (a_test_type == TestType::kArbStartStopSycl) {
+    RunArbStartStopTest(sycl_queue, a, b, a_test_type);
+  }
+
+  if (a_test_type == TestType::kArbStartStopMt) {
+    RunArbStartStopTestMultiThreaded(sycl_queue, a, b, a_test_type);
+  }
+
+  if (a_test_type == TestType::kArbStartStopMtDupEnables) {
+    RunArbStartStopTestMultiThreaded(sycl_queue, a, b, TestType::kArbStartStopDupEnables);
+  }
+
+  if (a_test_type == TestType::kArbStartStopMtDupDisables) {
+    RunArbStartStopTestMultiThreaded(sycl_queue, a, b, TestType::kArbStartStopDupDisables);
+  }
+
+  if (a_test_type == TestType::kArbStartStopMtNoKernelStart) {
+    RunArbStartStopTestMultiThreaded(sycl_queue, a, b, TestType::kArbStartStopNoKernelStart);
+  }
+
+  if (a_test_type == TestType::kArbStartStopMtNoKernelStop) {
+    RunArbStartStopTestMultiThreaded(sycl_queue, a, b, TestType::kArbStartStopNoKernelStop);
+  }
+
+  if (a_test_type == TestType::kArbStartStopMtSycl) {
+    RunArbStartStopTestMultiThreaded(sycl_queue, a, b, TestType::kArbStartStopMtSycl);
+  }
+}
+
+void RunVecsqadd(TestType a_test_type) {
+  ASSERT_EQ(ptiViewPushExternalCorrelationId(
+                pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid),
+            pti_result::PTI_SUCCESS);
+
+  auto dev = sycl::device(sycl::gpu_selector_v);
+
+  auto d_selector{sycl::gpu_selector_v};
   sycl::property_list prop_list{sycl::property::queue::in_order()};
   sycl::queue q(d_selector, sycl::async_handler{}, prop_list);
 
-  // Start Tests by Type
-  if (a_test_type == TestType::ARB_START_STOP) RunArbStartStopTest(q, a, b, a_test_type);
-  if (a_test_type == TestType::ARB_START_STOP_DUP_ENABLES)
-    RunArbStartStopTest(q, a, b, a_test_type);
-  if (a_test_type == TestType::ARB_START_STOP_DUP_DISABLES)
-    RunArbStartStopTest(q, a, b, a_test_type);
-  if (a_test_type == TestType::ARB_START_STOP_NO_KERNEL_START)
-    RunArbStartStopTest(q, a, b, a_test_type);
-  if (a_test_type == TestType::ARB_START_STOP_NO_KERNEL_STOP)
-    RunArbStartStopTest(q, a, b, a_test_type);
-  if (a_test_type == TestType::ARB_START_STOP_SYCL) RunArbStartStopTest(q, a, b, a_test_type);
+  if (q.get_device().has(sycl::aspect::fp64)) {
+    VecSqAddRouter<double>(q, a_test_type);
+  } else {
+    VecSqAddRouter<float>(q, a_test_type);
+  }
 
-  if (a_test_type == TestType::ARB_START_STOP_MT)
-    RunArbStartStopTestMultiThreaded(q, a, b, a_test_type);
-  if (a_test_type == TestType::ARB_START_STOP_MT_DUP_ENABLES)
-    RunArbStartStopTestMultiThreaded(q, a, b, TestType::ARB_START_STOP_DUP_ENABLES);
-  if (a_test_type == TestType::ARB_START_STOP_MT_DUP_DISABLES)
-    RunArbStartStopTestMultiThreaded(q, a, b, TestType::ARB_START_STOP_DUP_DISABLES);
-  if (a_test_type == TestType::ARB_START_STOP_MT_NO_KERNEL_START)
-    RunArbStartStopTestMultiThreaded(q, a, b, TestType::ARB_START_STOP_NO_KERNEL_START);
-  if (a_test_type == TestType::ARB_START_STOP_MT_NO_KERNEL_STOP)
-    RunArbStartStopTestMultiThreaded(q, a, b, TestType::ARB_START_STOP_NO_KERNEL_STOP);
-  if (a_test_type == TestType::ARB_START_STOP_MT_SYCL)
-    RunArbStartStopTestMultiThreaded(q, a, b, TestType::ARB_START_STOP_MT_SYCL);
-  a.clear();
-  b.clear();
-  sq_add.clear();
-  c.clear();
-  d.clear();
-  sq_add2.clear();
-
-  ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid);
-  ptiFlushAllViews();
-  // ptiFlushAllViews();
+  ASSERT_EQ(ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3,
+                                            &eid),
+            pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
 }
 
 }  // namespace
 
 class StartStopFixtureTest : public ::testing::TestWithParam<bool> {
  protected:
-  StartStopFixtureTest() {
-    // Setup work for each test
-  }
-
-  ~StartStopFixtureTest() override {
-    // Cleanup work for each test
-  }
-
   void SetUp() override {
     matched_sq_corr_ids = false;
     matched_add_corr_ids = false;
@@ -409,7 +440,9 @@ class StartStopFixtureTest : public ::testing::TestWithParam<bool> {
     number_of_kernel_recs = 0;
     number_of_sycl_recs = 0;
     expected_sycl_recs = 0;
-    for (unsigned int i = 0; i < arb_start_stop_counter; i++) shared_thread_counter[i] = 0;
+    for (unsigned int i = 0; i < kArbStartStopCounter; i++) {
+      shared_thread_count[i] = 0;
+    }
   }
 
   void TearDown() override {
@@ -424,8 +457,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedBalanced) {
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_MT);
-  EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter * thread_count / 2);
+  RunVecsqadd(TestType::kArbStartStopMt);
+  EXPECT_EQ(number_of_kernel_recs, kArbStartStopCounter * kThreadCount / 2);
   EXPECT_EQ(timestamps_nonzero_duration, true);
   EXPECT_EQ(kernel_timestamps_monotonic, true);
 }
@@ -437,8 +470,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedKernelsDuplicatedEnab
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_MT_DUP_ENABLES);
-  EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter * thread_count / 2);
+  RunVecsqadd(TestType::kArbStartStopMtDupEnables);
+  EXPECT_EQ(number_of_kernel_recs, kArbStartStopCounter * kThreadCount / 2);
 }
 
 // MT - Enable gpu_kernels once when we start / stop disables it multiple times.   Should have no
@@ -448,8 +481,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedKernelsDuplicatedDisa
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_MT_DUP_DISABLES);
-  EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter * thread_count / 2);
+  RunVecsqadd(TestType::kArbStartStopMtDupDisables);
+  EXPECT_EQ(number_of_kernel_recs, kArbStartStopCounter * kThreadCount / 2);
 }
 
 // MT - sycl only tracing -- no l0.
@@ -458,7 +491,7 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedSycls) {
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_MT_SYCL);
+  RunVecsqadd(TestType::kArbStartStopMtSycl);
   EXPECT_GT(number_of_sycl_recs, 0);
   EXPECT_EQ(number_of_kernel_recs, 0);
 }
@@ -470,7 +503,7 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedNoStartKernelWithStop
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_MT_NO_KERNEL_START);
+  RunVecsqadd(TestType::kArbStartStopMtNoKernelStart);
   EXPECT_EQ(number_of_kernel_recs, 0);
 }
 
@@ -481,11 +514,11 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedNoStopKernelWithStart
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_MT_NO_KERNEL_STOP);
+  RunVecsqadd(TestType::kArbStartStopMtNoKernelStop);
   if (do_immediate)
-    EXPECT_EQ(number_of_kernel_recs, (arb_start_stop_counter - 1) * thread_count);
+    EXPECT_EQ(number_of_kernel_recs, (kArbStartStopCounter - 1) * kThreadCount);
   else
-    EXPECT_EQ(number_of_kernel_recs, (arb_start_stop_counter - 1) * thread_count);
+    EXPECT_EQ(number_of_kernel_recs, (kArbStartStopCounter - 1) * kThreadCount);
 }
 
 // Enable gpu_kernels once when we start / stop disables it multiple times.   Should have no effect
@@ -495,8 +528,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountKernelsDuplicatedDisables) {
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_DUP_DISABLES);
-  EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter / 2);
+  RunVecsqadd(TestType::kArbStartStopDupDisables);
+  EXPECT_EQ(number_of_kernel_recs, kArbStartStopCounter / 2);
 }
 
 // Enable gpu_kernels multiple times when we start / stop disables it once.   Should have no effect
@@ -506,8 +539,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountKernelsDuplicatedEnables) {
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_DUP_ENABLES);
-  EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter / 2);
+  RunVecsqadd(TestType::kArbStartStopDupEnables);
+  EXPECT_EQ(number_of_kernel_recs, kArbStartStopCounter / 2);
 }
 
 // StartTracing / StopTracing have matching enable/disable of gpu_kernels every other iteration.
@@ -516,8 +549,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountKernelsBalanced) {
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP);
-  EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter / 2);
+  RunVecsqadd(TestType::kArbStartStop);
+  EXPECT_EQ(number_of_kernel_recs, kArbStartStopCounter / 2);
   EXPECT_EQ(timestamps_nonzero_duration, true);
   EXPECT_EQ(kernel_timestamps_monotonic, true);
 }
@@ -528,7 +561,7 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountSycls) {
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_SYCL);
+  RunVecsqadd(TestType::kArbStartStopSycl);
   EXPECT_GT(number_of_sycl_recs, 0);
   EXPECT_EQ(number_of_kernel_recs, 0);
 }
@@ -540,7 +573,7 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountNoStartKernelWithStopKernel) {
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_NO_KERNEL_START);
+  RunVecsqadd(TestType::kArbStartStopNoKernelStart);
   EXPECT_EQ(number_of_kernel_recs, 0);
 }
 
@@ -551,8 +584,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountNoStopKernelWithStartKernel) {
   // use SetEnv until
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunVecsqadd(TestType::ARB_START_STOP_NO_KERNEL_STOP);
-  EXPECT_EQ(number_of_kernel_recs, arb_start_stop_counter);
+  RunVecsqadd(TestType::kArbStartStopNoKernelStop);
+  EXPECT_EQ(number_of_kernel_recs, kArbStartStopCounter);
 }
 
 INSTANTIATE_TEST_SUITE_P(StartStopTests, StartStopFixtureTest, ::testing::Values(false, true));

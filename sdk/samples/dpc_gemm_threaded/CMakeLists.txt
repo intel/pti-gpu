@@ -2,7 +2,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
                       "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/Modules/")
 include(macros)
 
-setrequiredcmakeversion()
+SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
 project(PTI_Samples_DPC_GEMM_THREADED CXX)
@@ -12,19 +12,25 @@ setbuildtype()
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fsycl" has_sycl)
 
-add_compile_options(-std=c++17 -fsycl -gline-tables-only -pthread)
-add_link_options(-fsycl -gline-tables-only -pthread)
+if(NOT has_sycl)
+  message(WARNING "${PROJECT_NAME} requres a sycl compatible compiler")
+  return()
+endif()
 
 add_executable(dpc_gemm_threaded main.cc)
+
+target_compile_options(dpc_gemm_threaded PRIVATE -fsycl -gline-tables-only)
+target_link_options(dpc_gemm_threaded PRIVATE -fsycl -gline-tables-only)
+target_include_directories(dpc_gemm_threaded PRIVATE
+                           "${PROJECT_SOURCE_DIR}/../../src/utils"
+                           "${PROJECT_SOURCE_DIR}/../samples_utilities")
+
+if (NOT TARGET Threads::Threads)
+  find_package(Threads REQUIRED)
+endif()
 
 if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-target_link_libraries(dpc_gemm_threaded PUBLIC Pti::pti_view)
-
-target_include_directories(dpc_gemm_threaded
-                           PRIVATE "${PROJECT_SOURCE_DIR}/../../src/utils" "${PROJECT_SOURCE_DIR}/../samples_utilities")
-if(CMAKE_INCLUDE_PATH)
-  target_include_directories(dpc_gemm_threaded  PUBLIC "${CMAKE_INCLUDE_PATH}")
-endif()
+target_link_libraries(dpc_gemm_threaded PUBLIC Threads::Threads Pti::pti_view)

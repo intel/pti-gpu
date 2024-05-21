@@ -22,7 +22,7 @@ if(HAVE_SYCL)
   target_compile_definitions(dpcgemm_suite PUBLIC PTI_LEVEL_ZERO=1
                                                   ${PTI_DEFINE_FLAGS_EXPR})
 
-  target_link_libraries(dpcgemm_suite PUBLIC Pti::pti_view GTest::gtest_main)
+  target_link_libraries(dpcgemm_suite PUBLIC Pti::pti_view GTest::gtest_main LevelZero::level-zero)
 
   add_executable(vecsqadd_suite main_vecsqadd_fixture.cc)
   target_include_directories(

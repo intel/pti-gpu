@@ -8,6 +8,7 @@
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
+#include "utils/sycl_config_info.h"
 
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
@@ -122,22 +123,23 @@ void Compute(sycl::queue queue, const std::vector<float>& a, const std::vector<f
     [[maybe_unused]] volatile float eps = RunAndCheck(queue, a, b, c, size, expected_result);
   }
 }
-
-struct GTestData {
-  bool buffer_cb_registered = false;
-};
 }  // namespace
 
 class MainFixtureTest : public ::testing::Test {
+ public:
+  static void SetUpTestSuite() {  // Setup shared resource between tests (GPU)
+    try {
+      dev_ = sycl::device(sycl::gpu_selector_v);
+      if (pti::test::utils::IsIntegratedGraphics(dev_)) {
+        expected_mem_transfers_per_mult_ = 1;
+      }
+    } catch (const sycl::exception& e) {
+      FAIL() << "Unable to select valid device to run tests on. Check your hardware, driver "
+                "install, or system configuration.";
+    }
+  }
+
  protected:
-  MainFixtureTest() {
-    // Setup work for each test
-  }
-
-  ~MainFixtureTest() override {
-    // Cleanup work for each test
-  }
-
   void SetUp() override {  // Called right after constructor before each test
     buffer_cb_registered_ = true;
     requested_buffer_calls = 0;
@@ -171,13 +173,6 @@ class MainFixtureTest : public ::testing::Test {
   void TearDown() override {
     // Called right before destructor after each test
   }
-
-  // Class members commonly used by all tests in the test suite for MainFixture
-  unsigned size_ = 1024;
-
-  unsigned repeat_count_ = 1;
-
-  bool buffer_cb_registered_ = false;
 
   static void InadequateBufferRequested(unsigned char** buf, size_t* buf_size) {
     *buf_size = sizeof(pti_view_record_kernel) - 1;
@@ -242,13 +237,17 @@ class MainFixtureTest : public ::testing::Test {
               reinterpret_cast<pti_view_record_external_correlation*>(ptr);
           switch (aExtRec->_external_kind) {
             case pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3: {
-              if (aExtRec->_external_id == eid_) masked_by_last_id_records += 1;
-              if (aExtRec->_external_id == eid_ + 50) last_id_records += 1;
+              if (aExtRec->_external_id == eid_) {
+                masked_by_last_id_records += 1;
+              }
+              if (aExtRec->_external_id == eid_ + 50) {
+                last_id_records += 1;
+              }
               break;
             }
             default:
               break;
-          };
+          }
           // PTI_VIEW_EXTERNAL_KIND_CUSTOM_0 = 4,
           break;
         }
@@ -274,14 +273,17 @@ class MainFixtureTest : public ::testing::Test {
         }
         case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
           std::string function_name = reinterpret_cast<pti_view_record_sycl_runtime*>(ptr)->_name;
-          if (function_name.find("piEnqueueKernelLaunch") != std::string::npos)
+          if (function_name.find("piEnqueueKernelLaunch") != std::string::npos) {
             kernel_launch_func_name = true;
+          }
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
           std::string kernel_name = reinterpret_cast<pti_view_record_kernel*>(ptr)->_name;
-          if (kernel_name.find("RunAndCheck(") != std::string::npos) demangled_kernel_name = true;
+          if (kernel_name.find("RunAndCheck(") != std::string::npos) {
+            demangled_kernel_name = true;
+          }
           std::string kernel_source_filename =
               reinterpret_cast<pti_view_record_kernel*>(ptr)->_source_file_name;
           uint64_t kernel_enqueue_ts =
@@ -289,19 +291,26 @@ class MainFixtureTest : public ::testing::Test {
           if (kernel_source_filename != "") {
             kernel_has_sycl_file_count += 1;
             kernel_has_sycl_file_info = true;
-          };
-          if (kernel_enqueue_ts > 0) kernel_has_sycl_enqk_info = true;
+          }
+          if (kernel_enqueue_ts > 0) {
+            kernel_has_sycl_enqk_info = true;
+          }
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
           kernel_timestamps_monotonic = samples_utils::isMonotonic(
               {rec->_sycl_task_begin_timestamp, rec->_sycl_enqk_begin_timestamp,
                rec->_append_timestamp, rec->_submit_timestamp, rec->_start_timestamp,
                rec->_end_timestamp});
-          if (rec->_sycl_task_begin_timestamp == 0) kernel_has_task_begin0_record = true;
-          if (rec->_sycl_enqk_begin_timestamp == 0) kernel_has_enqk_begin0_record = true;
+          if (rec->_sycl_task_begin_timestamp == 0) {
+            kernel_has_task_begin0_record = true;
+          }
+          if (rec->_sycl_enqk_begin_timestamp == 0) {
+            kernel_has_enqk_begin0_record = true;
+          }
           if (samples_utils::stringify_uuid(rec->_device_uuid, "") !=
-              "00000000-0000-0000-0000-000000000000")
+              "00000000-0000-0000-0000-000000000000") {
             kernel_uuid_zero = false;
+          }
           break;
         }
         default: {
@@ -333,9 +342,8 @@ class MainFixtureTest : public ::testing::Test {
     ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_2,
                                      eid_ + 40);
 
-    auto dev = sycl::device(sycl::gpu_selector_v);
     sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
-    sycl::queue queue(dev, sycl::async_handler{}, prop_list);
+    sycl::queue queue(dev_, sycl::async_handler{}, prop_list);
 
     std::cout << "DPC++ Matrix Multiplication (matrix size: " << size_ << " x " << size_
               << ", repeats " << repeat_count_ << " times)" << std::endl;
@@ -365,6 +373,13 @@ class MainFixtureTest : public ::testing::Test {
     perf_time = time.count();
     std::cout << "Total execution time: " << time.count() << " sec" << std::endl;
   }
+
+  // Class members commonly used by all tests in the test suite for MainFixture
+  inline static sycl::device dev_;
+  inline static int expected_mem_transfers_per_mult_ = 4;
+  unsigned size_ = 1024;
+  unsigned repeat_count_ = 1;
+  bool buffer_cb_registered_ = false;
 };
 
 TEST_F(MainFixtureTest, ErrorCodeReturnedOnCallbacksNotSet) {
@@ -452,7 +467,7 @@ TEST_F(MainFixtureTest, KernelViewRecordHasNonZeroEnqkBeginRecords) {
 TEST_F(MainFixtureTest, NumberOfExpectedMemoryRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
-  EXPECT_EQ(memory_view_record_count, 4 * repeat_count_);
+  EXPECT_EQ(memory_view_record_count, expected_mem_transfers_per_mult_ * repeat_count_);
 }
 
 TEST_F(MainFixtureTest, NumberOfExpectedMemoryRecordsAfterStopTracing) {
@@ -463,7 +478,7 @@ TEST_F(MainFixtureTest, NumberOfExpectedMemoryRecordsAfterStopTracing) {
   RunGemmNoTrace();
   StopTracing();
   RunGemmNoTrace();
-  EXPECT_EQ(memory_view_record_count, 4 * repeat_count_);
+  EXPECT_EQ(memory_view_record_count, expected_mem_transfers_per_mult_ * repeat_count_);
 }
 
 TEST_F(MainFixtureTest, NumberOfExpectedKernelRecords) {

@@ -283,42 +283,13 @@ if(PTI_INSTALL)
   endif()
 endif()
 
-if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
-  find_package(MKL CONFIG PATHS $ENV{MKLROOT} NO_DEFAULT_PATH)
-  message(STATUS "Imported oneMKL targets: ${MKL_IMPORTED_TARGETS}")
-  find_package(dnnl)
-  find_package(oneDPL)
-  find_package(TBB)
-  find_package(DevUtilities)
-
-  add_subdirectory(samples/dpc_gemm)
-  add_subdirectory(samples/dpc_gemm_threaded)
-  add_subdirectory(samples/vector_sq_add)
-
-  if(TARGET DevUtilities::utils)
-    add_subdirectory(samples/iso3dfd_dpcpp)
-  endif()
-
-  if(TARGET MKL::MKL)
-    add_subdirectory(samples/onemkl_gemm)
-  else()
-    message(
-      WARNING
-      "Unable to build onemkl_gemm sample due to missing MKL installation"
-    )
-  endif()
-
-  if(TARGET MKL::MKL
-     AND TARGET DNNL::dnnl
-     AND TARGET oneDPL
-     AND TARGET TBB::tbb)
-    add_subdirectory(samples/dlworkloads)
-  else()
-    message(
-      WARNING
-      "Unable to build dlworkloads sample due to missing oneAPI component(s)"
-    )
-  endif()
+if(PTI_BUILD_SAMPLES)
+ add_subdirectory(samples/dpc_gemm)
+ add_subdirectory(samples/dpc_gemm_threaded)
+ add_subdirectory(samples/vector_sq_add)
+ add_subdirectory(samples/onemkl_gemm)
+ add_subdirectory(samples/iso3dfd_dpcpp)
+ add_subdirectory(samples/dlworkloads)
 endif()
 
 if(BUILD_TESTING AND PTI_FUZZ)

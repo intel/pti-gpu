@@ -136,7 +136,7 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
   static std::vector<uint64_t> kernel_device_timestamps;
   static std::vector<uint64_t> kernel_host_timestamps;
 
-  static std::vector<std::pair<uint64_t, uint64_t> >kernel_device_timestamps_pairs;
+  static std::vector<std::pair<uint64_t, uint64_t> > kernel_device_timestamps_pairs;
 
   void SetUp() override {  // Called right after constructor before each test
     kernel_device_timestamps_pairs.clear();
@@ -171,14 +171,12 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
       if (timestamps[item].first <= timestamps[item - 1].second) {
         std::cerr << "--->  ERROR: Device timestamps overlaps t(i) < t(i-1), at i: " << item
                   << ", t(i): " << timestamps[item].first
-                  << ", t(i-1): " << timestamps[item - 1].second
-                  << std::endl;
+                  << ", t(i-1): " << timestamps[item - 1].second << std::endl;
         return false;
       }
     }
     return true;
   }
-
 
   bool TestForDeviceKernelDurationNonZero(std::vector<std::pair<uint64_t, uint64_t> >& timestamps) {
     if (timestamps.size() == 0) {
@@ -189,16 +187,16 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
               << std::endl;
     // pair is kernel start and kernel end
     for (uint32_t item = 0; item < timestamps.size(); item++) {
-      if ((timestamps[item].second - timestamps[item].first) < 100 ) {
-        std::cerr << "--->  ERROR: Device kernel duration is less than 100 ns, timestamps at kernel i: " << item
-                  << ", end: " << timestamps[item].second << ", start: " << timestamps[item].first
-                  << std::endl;
+      if ((timestamps[item].second - timestamps[item].first) < 100) {
+        std::cerr
+            << "--->  ERROR: Device kernel duration is less than 100 ns, timestamps at kernel i: "
+            << item << ", end: " << timestamps[item].second << ", start: " << timestamps[item].first
+            << std::endl;
         return false;
       }
     }
     return true;
   }
-
 
   bool TestForAppendSubmitAtImmediate(std::vector<uint64_t>& timestamps) {
     if (timestamps.size() == 0) {
@@ -280,8 +278,8 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
           kernel_host_timestamps.push_back(p_kernel_rec->_append_timestamp);
           kernel_host_timestamps.push_back(p_kernel_rec->_submit_timestamp);
 
-          kernel_device_timestamps_pairs.push_back(std::pair<uint64_t, uint64_t> {
-                                p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp});
+          kernel_device_timestamps_pairs.push_back(std::pair<uint64_t, uint64_t>{
+              p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp});
           break;
         }
         default: {
@@ -303,8 +301,8 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
 // static members initialization
 uint32_t NoKernelOverlapParametrizedTestFixture::times_buffer_completed = 0;
 std::vector<uint64_t> NoKernelOverlapParametrizedTestFixture::kernel_host_timestamps{};
-std::vector<std::pair<uint64_t, uint64_t> > NoKernelOverlapParametrizedTestFixture::
-                                                              kernel_device_timestamps_pairs{};
+std::vector<std::pair<uint64_t, uint64_t> >
+    NoKernelOverlapParametrizedTestFixture::kernel_device_timestamps_pairs{};
 
 TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   bool do_immediate = GetParam();
@@ -316,8 +314,7 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
 
   // order of records is not garantie the order of submission and execution of kernels -
   // so let's  sort kernel stamp pairs by device start stamp
-  std::sort(kernel_device_timestamps_pairs.begin(),
-            kernel_device_timestamps_pairs.end(),
+  std::sort(kernel_device_timestamps_pairs.begin(), kernel_device_timestamps_pairs.end(),
             compare_pair);
 
   EXPECT_EQ(TestForDeviceKernelsOverlap(kernel_device_timestamps_pairs), true);

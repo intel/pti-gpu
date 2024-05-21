@@ -10,17 +10,15 @@
 #include "samples_utils.h"
 #include "utils.h"
 
-using namespace sycl;
-
-#define A_VALUE 0.128f
-typedef std::vector<double> DoubleVector;
+inline constexpr auto kAValue = 0.128f;
 
 namespace {
+constexpr int kVectorSize = 1024;
 bool queue_id_kernel_records = false;
 bool queue_id_memcpy_records = false;
 bool queue_id_memfill_records = false;
 std::set<uint64_t> mt_q_ids;
-unsigned int thread_count = 5;
+constexpr uint32_t kThreadCount = 5;
 uint64_t queue_id_K1 = -1;
 uint64_t queue_id_K2 = 0;
 uint64_t queue_id = -1;
@@ -28,7 +26,7 @@ bool use_same_q = false;
 bool use_same_k = false;
 [[maybe_unused]] bool use_stacked_q = false;
 [[maybe_unused]] bool templated_run = false;
-inline constexpr uint64_t kMaxQueueId = (uint64_t)-1;
+inline constexpr uint64_t kMaxQueueId = static_cast<uint64_t>(-1);
 }  // namespace
 
 void StartTracing() {
@@ -274,14 +272,15 @@ static void InitKernelF(sycl::queue queue, std::vector<float> &a, unsigned size)
 //************************************
 // Vector square in SYCL on device: modifies each input vector
 //************************************
-void vecSq(queue &q, const DoubleVector &a_vector, const DoubleVector &b_vector) {
-  range<1> num_items{a_vector.size()};
-  buffer a_buf(a_vector);
-  buffer b_buf(b_vector);
+template <typename T>
+void VecSq(sycl::queue &q, const std::vector<T> &a_vector, const std::vector<T> &b_vector) {
+  sycl::range<1> num_items{a_vector.size()};
+  sycl::buffer a_buf(a_vector);
+  sycl::buffer b_buf(b_vector);
 
-  q.submit([&](handler &h) {
-    accessor a(a_buf, h, read_write);
-    accessor b(b_buf, h, read_write);
+  q.submit([&](sycl::handler &h) {
+    sycl::accessor a(a_buf, h, sycl::read_write);
+    sycl::accessor b(b_buf, h, sycl::read_write);
     h.parallel_for(num_items, [=](auto i) {
       a[i] = a[i] * a[i];
       b[i] = b[i] * b[i];
@@ -290,10 +289,11 @@ void vecSq(queue &q, const DoubleVector &a_vector, const DoubleVector &b_vector)
   q.wait();
 }
 
-void vecSqStackedQ(const DoubleVector &a_vector, const DoubleVector &b_vector) {
-  range<1> num_items{a_vector.size()};
-  buffer a_buf(a_vector);
-  buffer b_buf(b_vector);
+template <typename T>
+void VecSqStackedQ(const std::vector<T> &a_vector, const std::vector<T> &b_vector) {
+  sycl::range<1> num_items{a_vector.size()};
+  sycl::buffer a_buf(a_vector);
+  sycl::buffer b_buf(b_vector);
 
   sycl::device dev;
   dev = sycl::device(sycl::gpu_selector_v);
@@ -301,9 +301,9 @@ void vecSqStackedQ(const DoubleVector &a_vector, const DoubleVector &b_vector) {
   sycl::property_list prop_list{sycl::property::queue::in_order()};
   sycl::queue q(dev, sycl::async_handler{}, prop_list);
 
-  q.submit([&](handler &h) {
-    accessor a(a_buf, h, read_write);
-    accessor b(b_buf, h, read_write);
+  q.submit([&](sycl::handler &h) {
+    sycl::accessor a(a_buf, h, sycl::read_write);
+    sycl::accessor b(b_buf, h, sycl::read_write);
     h.parallel_for(num_items, [=](auto i) {
       a[i] = a[i] * a[i];
       b[i] = b[i] * b[i];
@@ -312,48 +312,20 @@ void vecSqStackedQ(const DoubleVector &a_vector, const DoubleVector &b_vector) {
   q.wait();
 }
 
-int RunSyclQueueIdMtTests(bool stacked_q = false) {
-  int exit_code = EXIT_SUCCESS;
-  unsigned vector_size = 1024;
-  DoubleVector a, b, c, d, sq_add, sq_add2;
-
-  a.resize(vector_size);
-  b.resize(vector_size);
-
-  StartTracing();
-  sycl::device dev;
-  dev = sycl::device(sycl::gpu_selector_v);
-
-  sycl::property_list prop_list{sycl::property::queue::enable_profiling(),
-                                sycl::property::queue::in_order()};
-
-  std::vector<queue> mt_queues;
-  unsigned int queue_size = 5;
-
-  for (uint32_t i = 0; i < queue_size; i++) {
-    mt_queues.push_back(sycl::queue(dev, sycl::async_handler{}, prop_list));
-  }
-
-  auto threadFunction = [](queue &q, const DoubleVector &a, const DoubleVector &b) {
-    vecSq(q, a, b);
-  };
-
-  auto threadFunctionStackedQ = [](const DoubleVector &a, const DoubleVector &b) {
-    vecSqStackedQ(a, b);
-  };
-
-  auto devA = static_cast<float *>(malloc_device(vector_size * sizeof(float), mt_queues[2]));
-  mt_queues[2]
-      .memset(devA, 0, vector_size * sizeof(float))
-      .wait();  // force a memfill pti record to test.
+template <typename T>
+void SyclQueueIdMtTestsRouted(std::vector<sycl::queue> &queues, bool stacked_q) {
+  std::vector<T> a(kVectorSize);
+  std::vector<T> b(kVectorSize);
+  auto thread_function = [](sycl::queue &q, const auto &a, const auto &b) { VecSq(q, a, b); };
+  auto thread_function_stacked_q = [](const auto &a, const auto &b) { VecSqStackedQ(a, b); };
 
   std::vector<std::thread> the_threads;
-  for (unsigned i = 0; i < thread_count; i++) {
+  for (uint32_t i = 0; i < kThreadCount; i++) {
     if (stacked_q) {
-      std::thread t = std::thread(threadFunctionStackedQ, a, b);
+      std::thread t = std::thread(thread_function_stacked_q, a, b);
       the_threads.push_back(std::move(t));
     } else {
-      std::thread t = std::thread(threadFunction, std::ref(mt_queues[i]), a, b);
+      std::thread t = std::thread(thread_function, std::ref(queues[i]), a, b);
       the_threads.push_back(std::move(t));
     }
   }
@@ -363,6 +335,35 @@ int RunSyclQueueIdMtTests(bool stacked_q = false) {
       th.join();
     }
   }
+}
+
+int RunSyclQueueIdMtTests(bool stacked_q = false) {
+  int exit_code = EXIT_SUCCESS;
+
+  StartTracing();
+  sycl::device dev;
+  dev = sycl::device(sycl::gpu_selector_v);
+
+  sycl::property_list prop_list{sycl::property::queue::enable_profiling(),
+                                sycl::property::queue::in_order()};
+
+  std::vector<sycl::queue> mt_queues;
+  unsigned int queue_size = 5;
+
+  for (uint32_t i = 0; i < queue_size; i++) {
+    mt_queues.push_back(sycl::queue(dev, sycl::async_handler{}, prop_list));
+  }
+
+  auto devA = static_cast<float *>(malloc_device(kVectorSize * sizeof(float), mt_queues[2]));
+  mt_queues[2]
+      .memset(devA, 0, kVectorSize * sizeof(float))
+      .wait();  // force a memfill pti record to test.
+
+  if (dev.has(sycl::aspect::fp64)) {
+    SyclQueueIdMtTestsRouted<double>(mt_queues, stacked_q);
+  } else {
+    SyclQueueIdMtTestsRouted<float>(mt_queues, stacked_q);
+  }
 
   return exit_code;
 }
@@ -371,11 +372,11 @@ int RunSyclQueueIdTests(bool use_same_q = false, bool use_same_k = false,
                         bool templated_run = false, bool use_stacked_q = false) {
   int exit_code = EXIT_SUCCESS;
   unsigned size = 1024;
-  std::vector<float> a(size * size, A_VALUE);
+  std::vector<float> a(size * size, kAValue);
 
   if (use_stacked_q) {
     StartTracing();
-    for (unsigned i = 0; i < thread_count; i++) {
+    for (unsigned i = 0; i < kThreadCount; i++) {
       InitKernelAStackedQ(a, size);
     }
     StopTracing();
@@ -388,8 +389,8 @@ int RunSyclQueueIdTests(bool use_same_q = false, bool use_same_k = false,
   sycl::property_list prop_list{sycl::property::queue::enable_profiling(),
                                 sycl::property::queue::in_order()};
 
-  std::vector<queue> queues;
-  std::vector<queue> mt_queues;
+  std::vector<sycl::queue> queues;
+  std::vector<sycl::queue> mt_queues;
   unsigned int queue_size = 5;
 
   for (uint32_t i = 0; i < queue_size; i++) {
@@ -597,14 +598,14 @@ TEST_P(SyclQueueIdFixtureTest, STQueueIDsUniqueInLoopInstancesStackedQ) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdTests(use_same_q = false, use_same_k = false, templated_run = false,
                       use_stacked_q = true);
-  ASSERT_EQ(mt_q_ids.size(), thread_count);
+  ASSERT_EQ(mt_q_ids.size(), kThreadCount);
 }
 TEST_P(SyclQueueIdFixtureTest, MTQueueIDsUniqueInAllThreads) {
   bool do_immediate = GetParam();
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdMtTests();
-  ASSERT_EQ(mt_q_ids.size(), thread_count);
+  ASSERT_EQ(mt_q_ids.size(), kThreadCount);
 }
 
 TEST_P(SyclQueueIdFixtureTest, MTQueueIDsUniqueInAllThreadsStackedQ) {
@@ -612,7 +613,7 @@ TEST_P(SyclQueueIdFixtureTest, MTQueueIDsUniqueInAllThreadsStackedQ) {
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdMtTests(use_stacked_q = true);
-  ASSERT_EQ(mt_q_ids.size(), thread_count);
+  ASSERT_EQ(mt_q_ids.size(), kThreadCount);
 }
 #endif
 

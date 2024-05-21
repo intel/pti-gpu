@@ -1,5 +1,5 @@
-#ifndef UTILS_TEST_HELPERS_H_
-#define UTILS_TEST_HELPERS_H_
+#ifndef TEST_UTILS_TEST_HELPERS_H_
+#define TEST_UTILS_TEST_HELPERS_H_
 
 #include <cstring>
 #include <type_traits>
@@ -100,4 +100,4 @@ inline std::vector<unsigned char> CreateFullBuffer() {
 }
 }  // namespace pti::test::utils
 
-#endif  // UTILS_TEST_HELPERS_H_
+#endif  // TEST_UTILS_TEST_HELPERS_H_
