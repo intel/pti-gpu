@@ -129,17 +129,23 @@ target_link_options(pti PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR}
     $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>)
 
-# Why version 1.16.X?
-# loader 1.15.8 supports ze[Enable/Disable]TracingLayer
-# Level-Zero core Introspection API introduced in Spec 1.9
-# Loder and Tracing layer 1.16.X correctly handle situation
-# when Instrospection API prpvided or not by Level-Zero
-# Level Zero Loader >= 1.16.15 desired for critical bug
-# fixes. However, on Ubuntu, it reports itself as 1.16.0.
+# Why version 1.14.0?
+# It is an IPEX requirement for PTI to link against the LTS version of the
+# Level Zero Loader.
+# However, for best results, we recommend installing, Level Zero Loader >=
+# 1.16.15.
+# Notice about loader versions:
+#  * 1.15.8 supports dynamic tracing i.e. ze[Enable/Disable]TracingLayer.
+#  * 1.16.1 supports Level-Zero core Introspection API introduced in Spec 1.9.
+#   *  Notice: this supports the new API, but not the new feature (local
+#      collection). One needs to install a compatible Level Zero driver to
+#      use the feature. Currently supported in the Intel GPU rolling release
+#      drivers.
+#  * 1.16.15 fixes a critical bug in ze[Enable/Disable]TracingLayer.
 if(NOT PROJECT_IS_TOP_LEVEL)
-  find_package(LevelZero 1.16.0 REQUIRED)
+  find_package(LevelZero 1.14.0 REQUIRED)
 else()
-  find_package(LevelZero 1.16.0)
+  find_package(LevelZero 1.14.0)
 endif()
 
 if(NOT TARGET LevelZero::level-zero)
