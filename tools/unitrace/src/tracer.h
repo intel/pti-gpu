@@ -69,6 +69,7 @@ class UniTracer {
     OnZeFunctionFinishCallback ze_fcallback = nullptr;
     OnClKernelFinishCallback cl_kcallback = nullptr;
     OnClFunctionFinishCallback cl_fcallback = nullptr;
+    OnClExtFunctionFinishCallback cl_extfcallback = nullptr;
     ZeCollector* ze_collector = nullptr;
     ClCollector* cl_gpu_collector = nullptr;
     ClCollector* cl_cpu_collector = nullptr;
@@ -109,6 +110,7 @@ class UniTracer {
         // also set fcallback functions
         ze_fcallback = ChromeLogger::ChromeCallLoggingCallback;
         cl_fcallback = ChromeLogger::ClChromeCallLoggingCallback;
+        cl_extfcallback = ChromeLogger::ClExtChromeCallLoggingCallback;
       }
       else if (tracer->CheckOption(TRACE_CHROME_DEVICE_LOGGING)) {
         ze_kcallback = ChromeLogger::ZeChromeKernelLoggingCallback;
@@ -132,6 +134,7 @@ class UniTracer {
       if (tracer->CheckOption(TRACE_CHROME_CALL_LOGGING)) {
         ze_fcallback = ChromeLogger::ChromeCallLoggingCallback;
         cl_fcallback = ChromeLogger::ClChromeCallLoggingCallback;
+        cl_extfcallback = ChromeLogger::ClExtChromeCallLoggingCallback;
       }
 
       collector_options.api_tracing = true;
@@ -158,7 +161,7 @@ class UniTracer {
         if (cl_cpu_device != nullptr) {
           cl_cpu_collector = ClCollector::Create(
               cl_cpu_device, &tracer->correlator_,
-              collector_options, cl_kcallback, cl_fcallback, tracer);
+              collector_options, cl_kcallback, cl_fcallback, cl_extfcallback, tracer);
           if (cl_cpu_collector == nullptr) {
             std::cerr <<
               "[WARNING] Unable to create kernel collector for CL CPU backend" <<
@@ -170,7 +173,7 @@ class UniTracer {
         if (cl_gpu_device != nullptr) {
           cl_gpu_collector = ClCollector::Create(
               cl_gpu_device, &tracer->correlator_,
-              collector_options, cl_kcallback, cl_fcallback, tracer);
+              collector_options, cl_kcallback, cl_fcallback, cl_extfcallback, tracer);
           if (cl_gpu_collector == nullptr) {
             std::cerr <<
               "[WARNING] Unable to create kernel collector for CL GPU backend" <<

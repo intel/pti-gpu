@@ -23,6 +23,8 @@
 #include "unievent.h"
 #include "unimemory.h"
 
+#include "opencl/cl_ext_collector.h"
+
 #include "common_header.gen"
 
 static inline std::string GetHostName(void) {
@@ -41,6 +43,7 @@ static std::string pmi_hostname = GetHostName();
 
 std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, size_t size, bool detailed);
 ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device, int32_t *parent_device_id, int32_t *device_id, int32_t *subdevice_id);
+std::string GetClKernelCommandName(uint64_t id);
 
 static Logger* logger_ = nullptr;
 
@@ -87,7 +90,9 @@ typedef struct TraceDataPacket_ {
       name = utils::Demangle(name.data());
     }
     else {
-      if ((api_id != OpenClTracingId) && (api_id != XptiTracingId) && (api_id != IttTracingId) && (api_id != ZeKernelTracingId)) {
+      if ((cl_ext_api_id)api_id > clExtApiIdStartTraceId && (cl_ext_api_id)api_id < clExtApiIdEndTraceId) {
+        name = cl_ext_api_id_name[api_id - clExtApiIdStartTraceId - 1];
+      } else if ((api_id != OpenClTracingId) && (api_id != XptiTracingId) && (api_id != IttTracingId) && (api_id != ZeKernelTracingId)) {
         // L0 kernel names are already demanged/
         name = get_symbol(api_id);
       }
@@ -712,20 +717,36 @@ std::set<ClTraceBuffer *> *cl_trace_buffers_ = nullptr;
 class ClTraceBuffer {
   public:
     ClTraceBuffer() {
-      if (utils::GetEnv("UNITRACE_ChromeEventBufferSize").empty()) {
-        max_num_buffered_events_ = -1;
+      std::string szstr = utils::GetEnv("UNITRACE_ChromeEventBufferSize");
+      if (szstr.empty() || (szstr == "-1")) {
+        buffer_capacity_ = -1;
+        slice_capacity_ = BUFFER_SLICE_SIZE_DEFAULT;
       }
       else {
-        max_num_buffered_events_ = std::stoi(utils::GetEnv("UNITRACE_ChromeEventBufferSize"));
+        buffer_capacity_ = std::stoi(szstr);
+        slice_capacity_ = buffer_capacity_;
       }
-      if (max_num_buffered_events_ > 0) {
-        buffer_.reserve(max_num_buffered_events_);
-      }
+      ClKernelCommandExecutionRecord *der = (ClKernelCommandExecutionRecord *)(malloc(sizeof(ClKernelCommandExecutionRecord) * slice_capacity_));
+      UniMemory::ExitIfOutOfMemory((void *)(der));
+      
+      device_event_buffer_.push_back(der); 
+
+      HostEventRecord *her = (HostEventRecord *)(malloc(sizeof(HostEventRecord) * slice_capacity_));
+      UniMemory::ExitIfOutOfMemory((void *)(her));
+
+      host_event_buffer_.push_back(her); 
       tid_= utils::GetTid();
       pid_= utils::GetPid();
-      flushed_ = false;
+
+      current_device_event_buffer_slice_ = 0;
+      current_host_event_buffer_slice_ = 0;
+      next_device_event_index_ = 0;
+      next_host_event_index_ = 0;
+      device_event_buffer_flushed_ = false;
+      host_event_buffer_flushed_ = false;
       finalized_.store(false, std::memory_order_release);
-      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
+
+      std::lock_guard<std::recursive_mutex> lock(logger_lock_);	// use this lock to protect trace_buffers_
       
       if (cl_trace_buffers_ == nullptr) {
         cl_trace_buffers_ = new std::set<ClTraceBuffer *>;
@@ -738,67 +759,281 @@ class ClTraceBuffer {
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       if (!finalized_.exchange(true)) {
         // finalize if not finalized
-        if (!flushed_) {
-          for(auto& ele : buffer_) {
-            logger_->Log(ele.Stringify());
+        if (!device_event_buffer_flushed_) {
+          for (int i = 0; i < current_device_event_buffer_slice_; i++) {
+            for (int j = 0; j < slice_capacity_; j++) {
+              FlushDeviceEvent(device_event_buffer_[i][j]);
+            }
+          }  
+          for (int j = 0; j < next_device_event_index_; j++) {
+            FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][j]);
           }
-          cl_trace_buffers_->erase(this);
-          flushed_ = true;
+          device_event_buffer_flushed_ = true;
         }
+        if (!host_event_buffer_flushed_) {
+          for (int i = 0; i < current_host_event_buffer_slice_; i++) {
+            for (int j = 0; j < slice_capacity_; j++) {
+              FlushHostEvent(host_event_buffer_[i][j]);
+            }
+          }  
+          for (int j = 0; j < next_host_event_index_; j++) {
+            FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
+          }
+          host_event_buffer_flushed_ = true;
+        }
+
+        for (auto& slice : device_event_buffer_) {
+          free(slice);
+        }
+        device_event_buffer_.clear();
+
+        for (auto& slice : host_event_buffer_) {
+          free(slice);
+        }
+        host_event_buffer_.clear();
+
+        cl_trace_buffers_->erase(this);
       }
     }
 
     ClTraceBuffer(const ClTraceBuffer& that) = delete;
     ClTraceBuffer& operator=(const ClTraceBuffer& that) = delete;
 
-    void Buffer(TraceDataPacket& pkt) {
-      buffer_.push_back(pkt);
-      flushed_ = false;
-      if (max_num_buffered_events_ != -1) {
-        if (buffer_.size() >= max_num_buffered_events_) {
-          FlushBuffer();
+    ClKernelCommandExecutionRecord *GetDeviceEvent(void) {
+      if (next_device_event_index_ ==  slice_capacity_) {
+        if (buffer_capacity_ == -1) {
+          ClKernelCommandExecutionRecord *der = (ClKernelCommandExecutionRecord *)(malloc(sizeof(ClKernelCommandExecutionRecord) * slice_capacity_));
+          UniMemory::ExitIfOutOfMemory((void *)(der));
+      
+          device_event_buffer_.push_back(der);
+          current_device_event_buffer_slice_++;
+          next_device_event_index_ = 0;
+        }
+        else {
+          FlushDeviceBuffer();
         }
       }
+      return &(device_event_buffer_[current_device_event_buffer_slice_][next_device_event_index_]);
     }
 
-    void BufferWithPidTid(TraceDataPacket& pkt) {
-      pkt.tid = tid_;
-      pkt.pid = pid_;
-      buffer_.push_back(pkt);
-      flushed_ = false;
-      if (max_num_buffered_events_ != -1) {
-        if (buffer_.size() >= max_num_buffered_events_) {
-          FlushBuffer();
+    HostEventRecord *GetHostEvent(void) {
+      if (next_host_event_index_ ==  slice_capacity_) {
+        if (buffer_capacity_ == -1) {
+          HostEventRecord *her = (HostEventRecord *)(malloc(sizeof(HostEventRecord) * slice_capacity_));
+          UniMemory::ExitIfOutOfMemory((void *)(her));
+
+          host_event_buffer_.push_back(her);
+          current_host_event_buffer_slice_++;
+          next_host_event_index_ = 0;
+        }
+        else {
+          FlushHostBuffer();
         }
       }
+      return &(host_event_buffer_[current_host_event_buffer_slice_][next_host_event_index_]);
+    }
+
+    void BufferHostEvent(void) {
+      next_host_event_index_++;
+      host_event_buffer_flushed_ = false;
+    }
+
+    void BufferDeviceEvent(void) {
+      next_device_event_index_++;
+      device_event_buffer_flushed_ = false;
     }
 
     uint32_t GetTid() { return tid_; }
     uint32_t GetPid() { return pid_; }
 
-    void FlushBuffer() {
+    void FlushDeviceEvent(ClKernelCommandExecutionRecord& rec) {
+      auto [device_pid, device_tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, GetPid(), rec.tid_);
+
+      {
+        TraceDataPacket pkt{};
+        pkt.ph = 'X';
+        pkt.tid = device_tid;
+        pkt.pid = device_pid;
+        pkt.kernel_command_id = rec.kernel_command_id_;
+
+        if (rec.implicit_scaling_) {
+          pkt.name = "Tile #" + std::to_string(rec.tile_) + ": " + GetClKernelCommandName(rec.kernel_command_id_);
+        }
+        else {
+          pkt.name = GetClKernelCommandName(rec.kernel_command_id_);
+        }
+        pkt.api_id = ClKernelTracingId;
+        pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
+        pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
+        pkt.cat = gpu_op;
+        pkt.args = "\"id\": \"" + std::to_string(rec.kid_) + "\"";
+        logger_->Log(pkt.Stringify());
+      }
+
+      if (!rec.implicit_scaling_) {
+        {
+          TraceDataPacket pkt{};
+          pkt.ph = 't';
+          pkt.tid = device_tid;
+          pkt.pid = device_pid;
+          pkt.api_id = DepTracingId;
+          pkt.id = rec.kid_;
+          pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
+          pkt.dur = (uint64_t)(-1);
+          pkt.cat = data_flow;
+          pkt.rank = mpi_rank;
+          logger_->Log(pkt.Stringify());
+        }
+
+        {
+          TraceDataPacket pkt{};
+          pkt.ph = 's';
+          pkt.tid = device_tid;
+          pkt.pid = device_pid;
+          pkt.api_id = DepTracingId;
+          pkt.id = rec.kid_;
+          pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
+          pkt.dur = (uint64_t)(-1);
+          pkt.cat = data_flow_sync;
+          pkt.rank = mpi_rank;
+          logger_->Log(pkt.Stringify());
+        }
+      }
+    }
+
+    void FlushDeviceBuffer() {
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
-      if (flushed_) {
+      if (device_event_buffer_flushed_) {
         return;
       }
 
-      for(auto& ele : buffer_) {
-        logger_->Log(ele.Stringify());
+      for (int i = 0; i < current_device_event_buffer_slice_; i++) {
+        for (int j = 0; j < slice_capacity_; j++) {
+          FlushDeviceEvent(device_event_buffer_[i][j]);
+        }
+      }  
+      for (int j = 0; j < next_device_event_index_; j++) {
+        FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][j]);
       }
-      buffer_.clear();
-      flushed_ = true;
+         
+      current_device_event_buffer_slice_ = 0;
+      next_device_event_index_ = 0;
+      device_event_buffer_flushed_ = true;
     }
+    
+    void FlushHostEvent(HostEventRecord& rec) {
+      TraceDataPacket pkt{};
+
+      if (rec.type_ == EVENT_COMPLETE) {
+        pkt.ph = 'X';
+        pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
+
+/*
+        std::string str_kids = "";
+        if (kids == nullptr) {
+          str_kids = "0";
+        }
+        else {
+          int i = 0;
+          for (auto id : *kids) {
+            if (i != 0) {
+              str_kids += ",";
+            }
+            str_kids += std::to_string(id);
+            i++;
+          }
+        }
+        pkt.args = "\"id\": \"" + str_kids + "\"";
+*/
+        pkt.cat = cpu_op;
+      }
+      else if (rec.type_ == EVENT_DURATION_START) {
+        pkt.ph = 'B';
+        pkt.dur = (uint64_t)(-1);
+        pkt.cat = cpu_op;
+      }
+      else if (rec.type_ == EVENT_DURATION_END) {
+        pkt.ph = 'E';
+        pkt.dur = (uint64_t)(-1);
+        pkt.cat = cpu_op;
+      }
+      else if (rec.type_ == EVENT_FLOW_SOURCE) {
+        pkt.ph = 's';
+        pkt.id = rec.id_;
+        pkt.dur = (uint64_t)(-1);
+        pkt.cat = data_flow;
+      }
+      else if (rec.type_ == EVENT_FLOW_SINK) {
+        pkt.ph = 't';
+        pkt.id = rec.id_;
+        pkt.dur = (uint64_t)(-1);
+        pkt.cat = data_flow_sync;
+      }
+      else if (rec.type_ == EVENT_MARK) {
+        pkt.ph = 'R';
+        pkt.dur = (uint64_t)(-1);
+        pkt.cat = cpu_op;
+      }
+      else {
+        // should never get here
+      }
+
+      pkt.tid = GetTid();
+      pkt.pid = GetPid();
+      pkt.api_id = rec.api_id_;
+      pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
+      //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started);
+      pkt.rank = mpi_rank;
+      pkt.name = rec.name_;
+
+      logger_->Log(pkt.Stringify());
+    }
+
+    void FlushHostBuffer() {
+      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
+      if (host_event_buffer_flushed_) {
+        return;
+      }
+
+      for (int i = 0; i < current_host_event_buffer_slice_; i++) {
+        for (int j = 0; j < slice_capacity_; j++) {
+          FlushHostEvent(host_event_buffer_[i][j]);
+        }
+      }  
+      for (int j = 0; j < next_host_event_index_; j++) {
+        FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
+      }
+      current_host_event_buffer_slice_ = 0;
+      next_host_event_index_ = 0;   
+      host_event_buffer_flushed_ = true;
+    }
+    
     
     void Finalize() {
       
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       if (!finalized_.exchange(true)) {
-        // finalize if not finalized
-        if (!flushed_) {
-          for(auto& ele : buffer_) {
-            logger_->Log(ele.Stringify());
+        if (!device_event_buffer_flushed_) {
+          for (int i = 0; i < current_device_event_buffer_slice_; i++) {
+            for (int j = 0; j < slice_capacity_; j++) {
+              FlushDeviceEvent(device_event_buffer_[i][j]);
+            }
+          }  
+          for (int j = 0; j < next_device_event_index_; j++) {
+            FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][j]);
           }
-          flushed_ = true;
+          device_event_buffer_flushed_ = true;
+        }
+        if (!host_event_buffer_flushed_) {
+          for (int i = 0; i < current_host_event_buffer_slice_; i++) {
+            for (int j = 0; j < slice_capacity_; j++) {
+              FlushHostEvent(host_event_buffer_[i][j]);
+            }
+          }  
+          for (int j = 0; j < next_host_event_index_; j++) {
+            FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
+          }
+          host_event_buffer_flushed_ = true;
         }
       }
     }
@@ -808,11 +1043,25 @@ class ClTraceBuffer {
     }
     
   private:
-    int32_t max_num_buffered_events_;
+    // int32_t max_num_buffered_events_;
+    // uint32_t tid_;
+    // uint32_t pid_;
+    // std::vector<TraceDataPacket> buffer_;
+    // bool flushed_;
+    // std::atomic<bool> finalized_;
+
+    int32_t buffer_capacity_;
+    int32_t slice_capacity_;	// each buffer can have multiple slices
+    int32_t current_device_event_buffer_slice_;	// device slice in use
+    int32_t current_host_event_buffer_slice_;	// host slice in use
+    int32_t next_device_event_index_;	// next free device event in in-use slice
+    int32_t next_host_event_index_;	// next free host event in in-use slice
     uint32_t tid_;
     uint32_t pid_;
-    std::vector<TraceDataPacket> buffer_;
-    bool flushed_;
+    std::vector<ClKernelCommandExecutionRecord *> device_event_buffer_;
+    std::vector<HostEventRecord *> host_event_buffer_;
+    bool host_event_buffer_flushed_;
+    bool device_event_buffer_flushed_;
     std::atomic<bool> finalized_;
 };
 
@@ -1103,9 +1352,6 @@ class ChromeLogger {
       int tile,
       bool implicit, 
       const uint64_t id,
-      const std::string& name,
-      uint64_t queued,
-      uint64_t submitted,
       uint64_t started,
       uint64_t ended) {
 
@@ -1113,56 +1359,21 @@ class ChromeLogger {
         return;
       }
 
-      auto [device_pid, device_tid] = ClGetDevicePidTid(pci, device, queue, utils::GetPid(), utils::GetTid());
-  
       PTI_ASSERT(ended > started);
 
-      {
-        TraceDataPacket pkt;
-        pkt.ph = 'X';
-        pkt.tid = device_tid;
-        pkt.pid = device_pid;
-        if(implicit) {
-          pkt.name = "Tile #" + std::to_string(tile) + ": " + name;
-        }
-        else {
-          pkt.name = name;
-        }
-        pkt.ts = UniTimer::GetEpochTimeInUs(started);
-        //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started)
-        pkt.dur = UniTimer::GetTimeInUs(ended - started);
-        pkt.args = "\"id\": \""+std::to_string(id)+"\"";
-        pkt.cat = gpu_op;
-        pkt.api_id = ClKernelTracingId;
-        cl_thread_local_buffer_.Buffer(pkt);
-      }
-      {
-        TraceDataPacket pkt;
-        pkt.ph = 't';
-        pkt.tid = device_tid;
-        pkt.pid = device_pid;
-        pkt.api_id = DepTracingId;
-        pkt.id = id;
-        pkt.ts = UniTimer::GetEpochTimeInUs(started);
-        pkt.dur = (uint64_t)(-1);
-        pkt.cat = cl_data_flow;
-        pkt.rank = mpi_rank;
-        cl_thread_local_buffer_.Buffer(pkt);
-      }
+      ClKernelCommandExecutionRecord *rec = cl_thread_local_buffer_.GetDeviceEvent();
 
-      {
-        TraceDataPacket pkt;
-        pkt.ph = 's';
-        pkt.tid = device_tid;
-        pkt.pid = device_pid;
-        pkt.api_id = DepTracingId;
-        pkt.id = id;
-        pkt.ts = UniTimer::GetEpochTimeInUs(started);
-        pkt.dur = (uint64_t)(-1);
-        pkt.cat = cl_data_flow_sync;
-        pkt.rank = mpi_rank;
-        cl_thread_local_buffer_.Buffer(pkt);
-      }
+      rec->tid_ = utils::GetTid();
+      rec->tile_ = tile;
+      rec->start_time_ = started;
+      rec->end_time_ = ended;
+      rec->device_ = device;
+      rec->pci_ = pci;
+      rec->queue_ = queue;
+      rec->implicit_scaling_ = implicit;
+      rec->kid_ = id;
+      rec->kernel_command_id_ = id;
+      cl_thread_local_buffer_.BufferDeviceEvent();
     }
 
     static void ChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
@@ -1206,73 +1417,48 @@ class ChromeLogger {
       }
     }
 
-    static void ClChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const std::string& name,
+    static void ClChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
       uint64_t started, uint64_t ended) {
-      if (thread_local_buffer_.IsFinalized()) {
+      if (cl_thread_local_buffer_.IsFinalized()) {
         return;
       }
 
-      {
-        TraceDataPacket pkt{};
-        pkt.ph = 'X';
-        pkt.tid = utils::GetTid();
-        pkt.pid = utils::GetPid();
-        pkt.name = name;
-        pkt.api_id = OpenClTracingId;
-        pkt.ts = UniTimer::GetEpochTimeInUs(started);
-        //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started);
-        pkt.dur = UniTimer::GetTimeInUs(ended - started);
-        pkt.cat = cpu_op;
-
-        std::string str_kids="";
-        if (kids == nullptr) {
-          str_kids = "0";
-        }
-        else {
-          int i = 0;
-          for (auto id : *kids) {
-            if (i != 0) {
-              str_kids += ",";
-            }
-            str_kids += std::to_string(id);
-            i++;
-          }
-        }
-        pkt.args = "\"id\": \"" + str_kids + "\"";
-        cl_thread_local_buffer_.Buffer(pkt);
-      }
+      HostEventRecord *rec = cl_thread_local_buffer_.GetHostEvent();
+      rec->type_ = EVENT_COMPLETE;
+      rec->api_id_ = api_id;
+      rec->start_time_ = started;
+      rec->end_time_ = ended;
+      rec->id_ = 0;
+      cl_thread_local_buffer_.BufferHostEvent();
 
       if ((kids != nullptr) && (flow_dir == FLOW_H2D)) {
         for (auto id : *kids) {
-          TraceDataPacket pkt{};
-          pkt.ph = 's';
-          pkt.tid = utils::GetTid();
-          pkt.pid = utils::GetPid();
-          pkt.api_id = DepTracingId;
-          pkt.id = id;
-          pkt.ts = UniTimer::GetEpochTimeInUs(started);
-          pkt.dur = (uint64_t)(-1);
-          pkt.cat = cl_data_flow;
-          pkt.rank = mpi_rank;
-          cl_thread_local_buffer_.Buffer(pkt);
+          rec = cl_thread_local_buffer_.GetHostEvent();
+
+          rec->type_ = EVENT_FLOW_SOURCE;
+          rec->api_id_ = DepTracingId;
+          rec->start_time_ = started;
+          rec->id_ = id;
+          cl_thread_local_buffer_.BufferHostEvent();
         }
       }
 
       if ((kids != nullptr) && (flow_dir == FLOW_D2H)) {
         for (auto id : *kids) {
-          TraceDataPacket pkt{};
-          pkt.ph = 't';
-          pkt.tid = utils::GetTid();
-          pkt.pid = utils::GetPid();
-          pkt.api_id = DepTracingId;
-          pkt.id = id;
-          pkt.ts = UniTimer::GetEpochTimeInUs(started);
-          pkt.dur = (uint64_t)(-1);
-          pkt.cat = cl_data_flow_sync;
-          pkt.rank = mpi_rank;
-          cl_thread_local_buffer_.Buffer(pkt);
+          rec = cl_thread_local_buffer_.GetHostEvent();
+
+          rec->type_ = EVENT_FLOW_SINK;
+          rec->api_id_ = DepTracingId;
+          rec->start_time_ = started;
+          rec->id_ = id;
+          cl_thread_local_buffer_.BufferHostEvent();
         }
       }
+    }
+
+    static void ClExtChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const cl_ext_api_id api_id,
+      uint64_t started, uint64_t ended) {
+      ClChromeCallLoggingCallback(kids, flow_dir, (API_TRACING_ID)api_id, started, ended);
     }
 };
 

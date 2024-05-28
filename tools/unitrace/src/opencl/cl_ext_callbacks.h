@@ -105,7 +105,7 @@ static void* clHostMemAllocINTEL(
     collector->Log<DEVICE_TYPE>(stream.str());
   }
 
-  collector->Callback<DEVICE_TYPE>(function_name, start, end);
+  collector->Callback<DEVICE_TYPE>(clHostMemAllocINTELTraceId, start, end);
 
   return result;
 }
@@ -185,7 +185,7 @@ static void* clDeviceMemAllocINTEL(
     collector->Log<DEVICE_TYPE>(stream.str());
   }
 
-  collector->Callback<DEVICE_TYPE>(function_name, start, end);
+  collector->Callback<DEVICE_TYPE>(clDeviceMemAllocINTELTraceId, start, end);
 
   return result;
 }
@@ -265,7 +265,7 @@ static void* clSharedMemAllocINTEL(
     collector->Log<DEVICE_TYPE>(stream.str());
   }
 
-  collector->Callback<DEVICE_TYPE>(function_name, start, end);
+  collector->Callback<DEVICE_TYPE>(clSharedMemAllocINTELTraceId, start, end);
 
   return result;
 }
@@ -329,7 +329,7 @@ static cl_int clMemFreeINTEL(
     collector->Log<DEVICE_TYPE>(stream.str());
   }
 
-  collector->Callback<DEVICE_TYPE>(function_name, start, end);
+  collector->Callback<DEVICE_TYPE>(clMemFreeINTELTraceId, start, end);
 
   return result;
 }
@@ -403,7 +403,7 @@ static cl_int clGetMemAllocInfoINTEL(
     collector->Log<DEVICE_TYPE>(stream.str());
   }
 
-  collector->Callback<DEVICE_TYPE>(function_name, start, end);
+  collector->Callback<DEVICE_TYPE>(clGetMemAllocInfoINTELTraceId, start, end);
 
   return result;
 }
@@ -469,7 +469,7 @@ static cl_int clSetKernelArgMemPointerINTEL(
     collector->Log<DEVICE_TYPE>(stream.str());
   }
 
-  collector->Callback<DEVICE_TYPE>(function_name, start, end);
+  collector->Callback<DEVICE_TYPE>(clSetKernelArgMemPointerINTELTraceId, start, end);
 
   return result;
 }
@@ -547,7 +547,7 @@ static cl_int clEnqueueMemcpyINTEL(
     collector->Log<DEVICE_TYPE>(stream.str());
   }
 
-  collector->Callback<DEVICE_TYPE>(function_name, start, end);
+  collector->Callback<DEVICE_TYPE>(clEnqueueMemcpyINTELTraceId, start, end);
 
   return result;
 }
@@ -620,7 +620,7 @@ static cl_int clGetDeviceGlobalVariablePointerINTEL(
     collector->Log<DEVICE_TYPE>(stream.str());
   }
 
-  collector->Callback<DEVICE_TYPE>(function_name, start, end);
+  collector->Callback<DEVICE_TYPE>(clGetDeviceGlobalVariablePointerINTELTraceId, start, end);
 
   return result;
 }
@@ -700,7 +700,7 @@ static cl_int clGetKernelSuggestedLocalWorkSizeINTEL(
     collector->Log<DEVICE_TYPE>(stream.str());
   }
 
-  collector->Callback<DEVICE_TYPE>(function_name, start, end);
+  collector->Callback<DEVICE_TYPE>(clGetKernelSuggestedLocalWorkSizeINTELTraceId, start, end);
 
   return result;
 }

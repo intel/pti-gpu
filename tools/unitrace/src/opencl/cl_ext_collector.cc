@@ -62,17 +62,19 @@ void ClExtCollector::LogGPU(const std::string& message) const {
 }
 
 void ClExtCollector::CallbackCPU(
-    const char* function_name, uint64_t start, uint64_t end) const {
-  if (cpu_collector_->fcallback_ != nullptr) {
-    cpu_collector_->fcallback_(
-        0, FLOW_NUL, function_name, start, end);
+    const cl_ext_api_id api_id, uint64_t start, uint64_t end) const {
+
+  if (cpu_collector_->extfcallback_ != nullptr) {
+    cpu_collector_->extfcallback_(
+        0, FLOW_NUL, api_id, start, end);
   }
 }
 
 void ClExtCollector::CallbackGPU(
-    const char* function_name, uint64_t start, uint64_t end) const {
-  if (gpu_collector_->fcallback_ != nullptr) {
-    gpu_collector_->fcallback_(
-        0, FLOW_NUL, function_name, start, end);
+    const cl_ext_api_id api_id, uint64_t start, uint64_t end) const {
+
+  if (gpu_collector_->extfcallback_ != nullptr) {
+    gpu_collector_->extfcallback_(
+        0, FLOW_NUL, api_id, start, end);
   }
 }

@@ -13,6 +13,7 @@
 #include <list>
 #include <map>
 #include <mutex>
+#include <shared_mutex>
 #include <set>
 #include <string>
 #include <vector>
@@ -25,6 +26,8 @@
 #include "collector_options.h"
 #include "unikernel.h"
 #include "unicontrol.h"
+
+#include "common_header.gen"
 
 class ClCollector;
 
@@ -115,9 +118,6 @@ typedef void (*OnClKernelFinishCallback)(
     int tile,
     bool implicit,
     const uint64_t id,
-    const std::string& name,
-    uint64_t queued,
-    uint64_t submitted,
     uint64_t started,
     uint64_t ended);
 
@@ -143,9 +143,15 @@ struct ClFunction {
 };
 
 using ClFunctionInfoMap = std::map<std::string, ClFunction>;
+static std::shared_mutex cl_kernel_command_properties_mutex_;
+static std::map<uint64_t, ClKernelProps> cl_kernel_command_properties_;
 
 typedef void (*OnClFunctionFinishCallback)(
-    std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const std::string& name,
+    std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
+    uint64_t started, uint64_t ended);
+
+typedef void (*OnClExtFunctionFinishCallback)(
+    std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const cl_ext_api_id api_id,
     uint64_t started, uint64_t ended);
 
 void OnEnterFunction(
@@ -155,6 +161,38 @@ void OnExitFunction(
     cl_function_id function, cl_callback_data* data,
     uint64_t start, uint64_t end, ClCollector* collector);
 
+inline std::string GetVerboseName(const ClKernelProps* props) {
+  PTI_ASSERT(props != nullptr);
+  PTI_ASSERT(!props->name.empty());
+
+  std::stringstream sstream;
+  sstream << props->name;
+  if (props->simd_width > 0) {
+    sstream << "[SIMD";
+    if (props->simd_width == 1) {
+      sstream << "_ANY";
+    } else {
+      sstream << props->simd_width;
+    }
+    sstream << " {" <<
+      props->global_size[0] << "; " <<
+      props->global_size[1] << "; " <<
+      props->global_size[2] << "} {" <<
+      props->local_size[0] << "; " <<
+      props->local_size[1] << "; " <<
+      props->local_size[2] << "}]";
+  } else if (props->bytes_transferred > 0) {
+    sstream << "[" <<
+      std::to_string(props->bytes_transferred) << " bytes]";
+  }
+
+  return sstream.str();
+}
+
+inline std::string GetClKernelCommandName(uint64_t id) {
+  return GetVerboseName(&cl_kernel_command_properties_[id]);
+}
+
 class ClCollector {
  public: // Interface
   static ClCollector* Create(
@@ -163,13 +201,14 @@ class ClCollector {
       CollectorOptions options,
       OnClKernelFinishCallback kcallback = nullptr,
       OnClFunctionFinishCallback fcallback = nullptr,
+      OnClExtFunctionFinishCallback extfcallback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(correlator != nullptr);
     TraceGuard guard;
 
     ClCollector* collector = new ClCollector(
-        device, correlator, options, kcallback, fcallback, callback_data);
+        device, correlator, options, kcallback, fcallback, extfcallback, callback_data);
     PTI_ASSERT(collector != nullptr);
 
     collector->SetKernelTracingPoints();
@@ -407,12 +446,14 @@ class ClCollector {
       CollectorOptions options,
       OnClKernelFinishCallback kcallback,
       OnClFunctionFinishCallback fcallback,
+      OnClExtFunctionFinishCallback extfcallback,
       void* callback_data)
       : device_(device),
         correlator_(correlator),
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
+        extfcallback_(extfcallback),
         callback_data_(callback_data){
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(correlator_ != nullptr);
@@ -761,11 +802,15 @@ class ClCollector {
         PrintOutOffloadedCommand(name, device, host_queued, host_submitted, host_started, host_ended);
       }
 
+      auto it = cl_kernel_command_properties_.find(instance->kernel_id);
+      if (it == cl_kernel_command_properties_.end()) {
+        cl_kernel_command_properties_.insert({instance->kernel_id, instance->props});
+      }
+
       if (kcallback_ != nullptr) {
         kcallback_(
             pciInfo, device, queue, tile, implicit,
-            instance->kernel_id, name,
-            host_queued, host_submitted,
+            instance->kernel_id,
             host_started, host_ended);
       }
     }
@@ -830,34 +875,6 @@ class ClCollector {
         ++it;
       }
     }
-  }
-
-  std::string GetVerboseName(const ClKernelProps* props) {
-    PTI_ASSERT(props != nullptr);
-    PTI_ASSERT(!props->name.empty());
-
-    std::stringstream sstream;
-    sstream << props->name;
-    if (props->simd_width > 0) {
-      sstream << "[SIMD";
-      if (props->simd_width == 1) {
-        sstream << "_ANY";
-      } else {
-        sstream << props->simd_width;
-      }
-      sstream << " {" <<
-        props->global_size[0] << "; " <<
-        props->global_size[1] << "; " <<
-        props->global_size[2] << "} {" <<
-        props->local_size[0] << "; " <<
-        props->local_size[1] << "; " <<
-        props->local_size[2] << "}]";
-    } else if (props->bytes_transferred > 0) {
-      sstream << props->name << "[" <<
-        std::to_string(props->bytes_transferred) << " bytes]";
-    }
-
-    return sstream.str();
   }
 
   void AddKernelInfo(
@@ -1727,9 +1744,10 @@ class ClCollector {
           kernel_id.push_back(collector->correlator_->GetKernelId());
         }
 
+        API_TRACING_ID api_id = (API_TRACING_ID)(OCLStartTracingId + function);
         collector->fcallback_(
             (kernel_id.empty() ? nullptr: &kernel_id), flow_dir,
-            callback_data->functionName, start_time, end_time);
+            api_id, start_time, end_time);
       }
     }
 
@@ -1809,6 +1827,7 @@ class ClCollector {
 
   OnClKernelFinishCallback kcallback_ = nullptr;
   OnClFunctionFinishCallback fcallback_ = nullptr;
+  OnClExtFunctionFinishCallback extfcallback_ = nullptr;
   void* callback_data_ = nullptr;
 
   std::mutex lock_;

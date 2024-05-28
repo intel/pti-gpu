@@ -52,4 +52,21 @@ struct ZeKernelCommandExecutionRecord {
   bool implicit_scaling_;
 };
 
+struct ClKernelCommandExecutionRecord {
+  uint64_t kid_;
+  uint64_t tid_;
+  int32_t  tile_;
+  uint64_t kernel_command_id_;
+  uint64_t start_time_;
+  uint64_t end_time_;
+  cl_device_id device_;
+  cl_device_pci_bus_info_khr pci_;
+  cl_command_queue queue_;
+
+  // size_t mem_size_;
+  // uint32_t engine_ordinal_;
+  // uint32_t engine_index_;
+  // ze_group_count_t group_count_;
+  bool implicit_scaling_;  
+};
 #endif // PTI_TOOLS_UNITRACE_UNIKERNEL_H

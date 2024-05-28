@@ -14,6 +14,32 @@
 
 class ClCollector;
 
+enum cl_ext_api_id {
+  clExtApiIdStartTraceId=4321,
+  clHostMemAllocINTELTraceId,
+  clDeviceMemAllocINTELTraceId,
+  clSharedMemAllocINTELTraceId,
+  clMemFreeINTELTraceId,
+  clGetMemAllocInfoINTELTraceId,
+  clSetKernelArgMemPointerINTELTraceId,
+  clEnqueueMemcpyINTELTraceId,
+  clGetDeviceGlobalVariablePointerINTELTraceId,
+  clGetKernelSuggestedLocalWorkSizeINTELTraceId,
+  clExtApiIdEndTraceId
+};
+
+static std::string cl_ext_api_id_name [ ] = {
+  "clHostMemAllocINTEL",
+  "clDeviceMemAllocINTEL",
+  "clSharedMemAllocINTEL",
+  "clMemFreeINTEL",
+  "clGetMemAllocInfoINTEL",
+  "clSetKernelArgMemPointerINTEL",
+  "clEnqueueMemcpyINTEL",
+  "clGetDeviceGlobalVariablePointerINTEL",
+  "clGetKernelSuggestedLocalWorkSizeINTEL"
+};
+
 class ClExtCollector {
  public:
   static ClExtCollector* Create(
@@ -121,20 +147,20 @@ class ClExtCollector {
 
   template <cl_device_type DEVICE_TYPE>
   void Callback(
-      const char* function_name, uint64_t start, uint64_t end) const {
+      const cl_ext_api_id api_id, uint64_t start, uint64_t end) const {
     if (DEVICE_TYPE == CL_DEVICE_TYPE_GPU) {
       PTI_ASSERT(gpu_collector_ != nullptr);
-      CallbackGPU(function_name, start, end);
+      CallbackGPU(api_id, start, end);
     } else {
       PTI_ASSERT(cpu_collector_ != nullptr);
-      CallbackCPU(function_name, start, end);
+      CallbackCPU(api_id, start, end);
     }
   }
 
   void CallbackCPU(
-      const char* function_name, uint64_t start, uint64_t end) const;
+      const cl_ext_api_id api_id, uint64_t start, uint64_t end) const;
   void CallbackGPU(
-      const char* function_name, uint64_t start, uint64_t end) const;
+      const cl_ext_api_id api_id, uint64_t start, uint64_t end) const;
 
  private:
   ClExtCollector(ClCollector* cpu_collector, ClCollector* gpu_collector)
