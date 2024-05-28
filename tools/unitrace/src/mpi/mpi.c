@@ -320,7 +320,7 @@ int MPI_Iprobe(int source, int tag, MPI_Comm comm, int *flag, MPI_Status * statu
     int result = 0;
     ITT_BEGIN(MPI_TASK_IPROBE);
     result = PMPI_Iprobe(source, tag, comm, flag, status);
-    ITT_END_MPI_EX_INFO(MPI_TASK_IPROBE, 0, source, tag, 0, -1 , -1);
+    ITT_END(MPI_TASK_IPROBE);
     return result;
 }
 
@@ -329,7 +329,7 @@ int MPI_Probe(int source, int tag, MPI_Comm comm, MPI_Status * status)
     int result = 0;
     ITT_BEGIN(MPI_TASK_PROBE);
     result = PMPI_Probe(source, tag, comm, status);
-    ITT_END_MPI_EX_INFO(MPI_TASK_PROBE, 0, source, tag, 0, -1 , -1);
+    ITT_END(MPI_TASK_PROBE);
     return result;
 }
 

@@ -575,32 +575,20 @@ class TraceBuffer {
           std::string str_args = ""; // build arguments
 
           if (args.src_size != 0) {
-            str_args += (isFirst ? "" : ", ");
+            str_args = "";
             str_args += "\"ssize\": " + std::to_string(args.src_size);
+            str_args += ", \"src\": " + std::to_string(args.src_location);
+            str_args += ", \"stag\": " + std::to_string(args.src_tag);
             isFirst = false;
           }
-          if (args.src_location != -1) {
-              str_args += (isFirst ? "" : ", ");
-              str_args += "\"src\": " + std::to_string(args.src_location);
-              isFirst = false;
-          }
-          if (args.src_tag != -1) {
-              str_args += (isFirst ? "" : ", ");
-              str_args += "\"stag\": " + std::to_string(args.src_tag);
-              isFirst = false;
-          }
+
           if (args.dst_size != 0) {
             str_args += (isFirst ? "" : ", "); isFirst = false;
             str_args += "\"dsize\": " +std::to_string(args.dst_size);
+            str_args += ", \"dst\": " +std::to_string(args.dst_location);
+            str_args += ", \"dtag\": " +std::to_string(args.dst_tag);
           }
-          if (args.dst_location != -1) {
-            str_args += (isFirst ? "" : ", "); isFirst = false;
-            str_args += "\"dst\": " +std::to_string(args.dst_location);
-          }
-          if (args.dst_tag != -1) {
-            str_args += (isFirst ? "" : ", "); isFirst = false;
-            str_args += "\"dtag\": " +std::to_string(args.dst_tag);
-          }
+
           pkt.args = str_args;
         }
         pkt.cat = cpu_op;
