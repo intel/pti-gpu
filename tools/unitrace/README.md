@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This a performnce tool for Intel(R) oneAPI applications. It traces and profiles host/device activites, interactions and hardware utilizations for
+This a performance tool for Intel(R) oneAPI applications. It traces and profiles host/device activities, interactions and hardware utilizations for
 Intel(R) GPU applications.
 
 ## Supported Platforms
@@ -13,7 +13,7 @@ Intel(R) GPU applications.
 
 ## Requirements
 
-- cmake 3.22 or above (cmake versions prior to 3.22 are not fully tested or validated)
+- CMake 3.22 or above (CMake versions prior to 3.22 are not fully tested or validated)
 - C++ compiler with C++17 support
 - Intel(R) oneAPI Base Toolkits
 - Python
@@ -102,9 +102,9 @@ the .json trace file to **https://ui.perfetto.dev/** in either Google Chrome or 
 
 Do **NOT** use **chrome://tracing/** to view the event trace!
 
-## Host Level Zero and/or OpenCL Activites
+## Host Level Zero and/or OpenCL Activities
 
-To trace/profile Level Zero and/or OpenCL host activies, one can use one or more of the following options:
+To trace/profile Level Zero and/or OpenCL host activities, one can use one or more of the following options:
 
 --call-logging [-c]
 --host-timing  [-h]
@@ -161,7 +161,7 @@ By default, the kernel timing is summarized regardless of shapes. In case the ke
 The **--kernel-submission [-s]** option outputs a time summary of kernels spent in queuing, submission and execution:
 ![Kernel Submissions!](/tools/unitrace/doc/images/kernel-submissions.png)
 
-The **--device-timeline [-t]** option outputs timestamps of each kernel instance queuing, submission and execution start and exection end in text format while the application is running.
+The **--device-timeline [-t]** option outputs timestamps of each kernel instance queuing, submission and execution start and execution end in text format while the application is running.
 
 ![Device Timeline Text!](/tools/unitrace/doc/images/device-timeline-text.png)
 
@@ -244,9 +244,9 @@ This option is especially useful when the application is a distributed MPI one.
 
 ## Activate and Deactivate Tracing and Profiling at Runtime
 
-By default, the application is traced/profiled from the start to the end. In certain cases, however, it is more efficent and desirable to
+By default, the application is traced/profiled from the start to the end. In certain cases, however, it is more efficient and desirable to
 dynamically activate and deactivate tracing at runtime. One can do so by using **--conditional-collection** option together with setting and
-unsetting environment varible **"PTI_ENABLE_COLLECTION"** in the application:
+unsetting environment variable **"PTI_ENABLE_COLLECTION"** in the application:
 
 ```cpp
 // activate tracing
@@ -423,9 +423,9 @@ One way to run the external trace processor on Windows is to use Windows Subsyst
    ```
 ## Profile Hardware Performance Metrics
 
-Hardware performance metric counter can be profiled at the same time while host/device activites are profiled in the same run or they can be done in separate runs.
+Hardware performance metric counter can be profiled at the same time while host/device activities are profiled in the same run or they can be done in separate runs.
 
-Please note that device timing is also enabled if hardware performance metric counter profiling is enabled. The device timing information will guide you to the hot kernels so you know which kernel's peformance counters are of most interest.
+Please note that device timing is also enabled if hardware performance metric counter profiling is enabled. The device timing information will guide you to the hot kernels so you know which kernel's performance counters are of most interest.
 
 Please also note that FLAT device hierarchy is required for hardware metric profiling.
 
@@ -524,14 +524,14 @@ Please refer to https://perfetto.dev/docs/ for more information,
 
 How to make the best use of the tool and to get the most out of it really depends on what you want to do and what part of your code you want to focus on.
 
-If you care about just the host activities, you don't need any options to enable profiling on the device. If you just want to focus on one specific layer of the software stack, for example, the SYCL runtime and SYCL Plugins, you can use the corrpesonding layer specific options to enable profiling only the layer of interest, for exmaple, **--chrome-sycl-logging**. Of course, if you need to see interactions between layers, you need to enable profiling multiple layers at the same time.
+If you care about just the host activities, you don't need any options to enable profiling on the device. If you just want to focus on one specific layer of the software stack, for example, the SYCL runtime and SYCL Plugins, you can use the corresponding layer specific options to enable profiling only the layer of interest, for example, **--chrome-sycl-logging**. Of course, if you need to see interactions between layers, you need to enable profiling multiple layers at the same time.
 
 Similarly, if you care about just the device activities, you can use the options to turn on device profiling only. By default, device activities are profiled by thread (not GPU thread) and by Level Zero engines and/or OpenCL queues. This gives detailed information of how the device is utilized and if concurrencies between engines/queues match the expectations. In case you don't need the details and care only how the device is utilized in general, you may use **--chrome-no-thread-on-device** and/or **--chrome-no-engine-on-device** to turn one or both off.
 
-Typically, you need options to enable profiling both host activities and device activities to understand how host and device are utilized and interacted. Ideally, you want both the concurrencies or overlappings between host actitives and device activities and the concurrencies or overlappings between device engines maximized for best performance. Turning on profiling both host and device will give you the timelines of both and help you identify concurrency issues.
+Typically, you need options to enable profiling both host activities and device activities to understand how host and device are utilized and interacted. Ideally, you want both the concurrencies or overlappings between host activities and device activities and the concurrencies or overlappings between device engines maximized for best performance. Turning on profiling both host and device will give you the timelines of both and help you identify concurrency issues.
 
-It is also recommended to start with device timing (**-d**) and/or host timing (**-h**) summaries. From the summaries, you can quickly spot the hot spots or the expensive kernels on device or calls on host. From the device summary, you will also learn if each kernel has occupancy and/or register spilling issues. Next, from the detailed timelines you will determine if these expensive device kernels or host calls are indeed performance bottlenecks to the overall peformance.
+It is also recommended to start with device timing (**-d**) and/or host timing (**-h**) summaries. From the summaries, you can quickly spot the hot spots or the expensive kernels on device or calls on host. From the device summary, you will also learn if each kernel has occupancy and/or register spilling issues. Next, from the detailed timelines you will determine if these expensive device kernels or host calls are indeed performance bottlenecks to the overall performance.
 
-Once a kernel is determined to be a performance bottlneck, it is time to figure out why its perforamnce is not optimal. There can be multiple reasons why the kernel is not performant: cache misses, low occupnacy, low ALU utilizations, execution unit stalls, etc. You can get answers from metric profiles using **-q** option. In case of execution unit stall analysis, the **--stall-sampling** will give you instruction addresses and reasons of stalls.
+Once a kernel is determined to be a performance bottleneck, it is time to figure out why its performance is not optimal. There can be multiple reasons why the kernel is not performant: cache misses, low occupancy, low ALU utilizations, execution unit stalls, etc. You can get answers from metric profiles using **-q** option. In case of execution unit stall analysis, the **--stall-sampling** will give you instruction addresses and reasons of stalls.
 
 In an interactive, for example Python, session, the **-t** option can be very useful with the kernel queuing, submission and execution data are output immediately after each kernel completes while your session is active.
