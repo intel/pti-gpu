@@ -34,7 +34,6 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-
 target_link_libraries(onemkl_gemm_exe PUBLIC MKL::MKL MKL::MKL_SYCL Pti::pti_view)
 target_include_directories(onemkl_gemm_exe
                            PRIVATE "${PROJECT_SOURCE_DIR}/../../src/utils"

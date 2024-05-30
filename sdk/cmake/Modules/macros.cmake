@@ -986,23 +986,44 @@ macro(CheckIfSyclIsAvailable)
   endif()
 endmacro()
 
+set(SPDLOG_FMT_URL "https://github.com/fmtlib/fmt/archive/refs/tags/10.1.1.tar.gz")
+set(SPDLOG_FMT_SHA256 78B8C0A72B1C35E4443A7E308DF52498252D1CEFC2B08C9A97BC9EE6CFE61F8B)
+set(SPDLOG_GABIME_URL "https://github.com/gabime/spdlog/archive/refs/tags/v1.12.0.tar.gz")
+set(SPDLOG_GABIME_SHA256 "4DCCF2D10F410C1E2FEAFF89966BFC49A1ABB29EF6F08246335B110E001E09A9")
 macro(GetSpdlog)
   find_package(spdlog 1.6.0 QUIET)
 
   if(NOT TARGET spdlog::spdlog OR NOT TARGET spdlog::spdlog_header_only)
     include(FetchContent)
-    FetchContent_Declare(
-      fmt
-      URL https://github.com/fmtlib/fmt/archive/refs/tags/10.1.1.tar.gz
-      URL_HASH
-      SHA256=78B8C0A72B1C35E4443A7E308DF52498252D1CEFC2B08C9A97BC9EE6CFE61F8B
-    )
-    FetchContent_Declare(
-      spdlog
-      URL https://github.com/gabime/spdlog/archive/refs/tags/v1.12.0.tar.gz
-      URL_HASH
-      SHA256=4DCCF2D10F410C1E2FEAFF89966BFC49A1ABB29EF6F08246335B110E001E09A9
+    if(CMAKE_VERSION VERSION_LESS "3.24")
+      FetchContent_Declare(
+        fmt
+        URL ${SPDLOG_FMT_URL}
+        URL_HASH
+        SHA256=${SPDLOG_FMT_SHA256}
       )
+      FetchContent_Declare(
+        spdlog
+        URL ${SPDLOG_GABIME_URL}
+        URL_HASH
+        SHA256=${SPDLOG_GABIME_SHA256}
+        )
+    else()
+      FetchContent_Declare(
+        fmt
+        URL ${SPDLOG_FMT_URL}
+        URL_HASH
+        SHA256=${SPDLOG_FMT_SHA256}
+        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+      )
+      FetchContent_Declare(
+        spdlog
+        URL ${SPDLOG_GABIME_URL}
+        URL_HASH
+        SHA256=${SPDLOG_GABIME_SHA256}
+        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+        )
+    endif()
     set(FMT_SYSTEM_HEADERS
         ON
         CACHE BOOL "" FORCE)
@@ -1022,15 +1043,27 @@ macro(GetSpdlog)
   endif()
 endmacro()
 
+set(GetGTest_URL "https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz")
+set(GetGTest_SHA256 8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7)
 macro(GetGTest)
   if(NOT TARGET GTest::gtest OR NOT TARGET GTest::gtest_main)
     include(FetchContent)
-    FetchContent_Declare(
-      googletest
-      URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
-      URL_HASH
-      SHA256=8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7
-      )
+    if(CMAKE_VERSION VERSION_LESS "3.24")
+      FetchContent_Declare(
+        googletest
+        URL ${GetGTest_URL}
+        URL_HASH
+        SHA256=${GetGTest_SHA256}
+        )
+    else()
+      FetchContent_Declare(
+        googletest
+        URL ${GetGTest_URL}
+        URL_HASH
+        SHA256=${GetGTest_SHA256}
+        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+        )
+    endif()
     set(INSTALL_GTEST
         OFF
         CACHE BOOL "" FORCE)
