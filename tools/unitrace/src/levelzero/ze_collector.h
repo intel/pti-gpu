@@ -530,7 +530,7 @@ struct ZeKernelCommandNameKey {
       if (mem_size_ == r.mem_size_) {
         if (tile_ == r.tile_) {
           return ((group_count_.groupCountX != r.group_count_.groupCountX) ||
-              (group_count_.groupCountX != r.group_count_.groupCountX) || (group_count_.groupCountX != r.group_count_.groupCountX));
+              (group_count_.groupCountY != r.group_count_.groupCountY) || (group_count_.groupCountZ != r.group_count_.groupCountZ));
         }
       }
     }
