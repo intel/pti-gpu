@@ -40,11 +40,11 @@ void StartTracing() {
 }
 
 void StopTracing() {
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P);
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
-  ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
 }
 
 static void BufferRequested(unsigned char** buf, size_t* buf_size) {

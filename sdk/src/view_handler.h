@@ -334,8 +334,10 @@ struct PtiViewRecordHandler {
     }
 
     try {
-      for (const auto& view_types : GetViewNameAndCallback(type)) {
-        view_event_map_.Erase(view_types.fn_name);
+      if (type != pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION) {
+        for (const auto& view_types : GetViewNameAndCallback(type)) {
+          view_event_map_.Erase(view_types.fn_name);
+        }
       }
     } catch (const std::out_of_range&) {
       result = pti_result::PTI_ERROR_BAD_ARGUMENT;

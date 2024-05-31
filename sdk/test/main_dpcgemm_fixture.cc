@@ -56,12 +56,12 @@ void StartTracing() {
 }
 
 void StopTracing() {
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
-  ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS);
-  ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION);
-  ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
 }
 
 float Check(const std::vector<float>& a, float value) {
