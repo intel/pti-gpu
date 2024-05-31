@@ -445,7 +445,19 @@ int MPI_Gatherv(const void *sendbuf, int sendcount, MPI_Datatype sendtype, void 
     ITT_BEGIN(MPI_TASK_GATHERV);
     result = PMPI_Gatherv(sendbuf, sendcount, sendtype, recvbuf,
                           recvcounts, displs, recvtype, root, comm);
-    ITT_END(MPI_TASK_GATHERV);
+    int curr_rank;
+    PMPI_Comm_rank(comm, &curr_rank);
+    if(curr_rank == root) {
+        int no_of_element = 0;
+        int size = 0;
+        PMPI_Comm_size(comm, &size);
+        for (int i=0; i<size; ++i) {
+            no_of_element += recvcounts[i];
+        }
+        ITT_END_MPI_EX_INFO(MPI_TASK_GATHER, sendcount*sizeof(sendtype), -1, -1, no_of_element*sizeof(recvtype), root, -1);
+    } else {
+        ITT_END_MPI_EX_INFO(MPI_TASK_GATHER, sendcount*sizeof(sendtype), root, -1, 0, -1, -1);
+    }
     return result;
 }
 
@@ -475,7 +487,20 @@ int MPI_Scatterv(const void *sendbuf, const int *sendcounts, const int *displs,
     ITT_BEGIN(MPI_TASK_SCATTERV);
     result = PMPI_Scatterv(sendbuf, sendcounts, displs,
                            sendtype, recvbuf, recvcount, recvtype, root, comm);
-    ITT_END(MPI_TASK_SCATTERV);
+
+    int curr_rank;
+    PMPI_Comm_rank(comm, &curr_rank);
+    if (curr_rank != root){
+        ITT_END_MPI_EX_INFO(MPI_TASK_SCATTERV, 0, -1, -1, recvcount*sizeof(recvtype), root, -1);
+    }else {
+        int no_of_element = 0;
+        int size = 0;
+        PMPI_Comm_size(comm, &size);
+        for (int i=0; i<size; ++i) {
+            no_of_element += sendcounts[i];
+        }
+        ITT_END_MPI_EX_INFO(MPI_TASK_SCATTERV, no_of_element*sizeof(sendtype), curr_rank, -1, recvcount*sizeof(recvtype), curr_rank, -1);
+    }
     return result;
 }
 
@@ -496,7 +521,16 @@ int MPI_Allgatherv(const void *sendbuf, int sendcount, MPI_Datatype sendtype, vo
     ITT_BEGIN(MPI_TASK_ALLGATHERV);
     result = PMPI_Allgatherv(sendbuf, sendcount, sendtype, recvbuf,
                              recvcounts, displs, recvtype, comm);
-    ITT_END(MPI_TASK_ALLGATHERV);
+
+    int no_of_element = 0;
+    int size = 0;
+    PMPI_Comm_size(comm, &size);
+    for (int i=0; i<size; ++i) {
+        no_of_element += recvcounts[i];
+    }
+    int curr_rank;
+    PMPI_Comm_rank(comm, &curr_rank);
+    ITT_END_MPI_EX_INFO(MPI_TASK_ALLGATHERV, sendcount*sizeof(sendtype), curr_rank, -1, no_of_element*sizeof(recvtype), curr_rank, -1);
     return result;
 }
 
@@ -518,7 +552,17 @@ int MPI_Alltoallv(const void *sendbuf, const int *sendcounts,
     ITT_BEGIN(MPI_TASK_ALLTOALLV);
     result = PMPI_Alltoallv(sendbuf, sendcounts, sdispls, sendtype, recvbuf,
                             recvcounts, rdispls, recvtype, comm);
-    ITT_END(MPI_TASK_ALLTOALLV);
+    int no_of_recv_element = 0;
+    int no_of_send_element = 0;
+    int size = 0;
+    PMPI_Comm_size(comm, &size);
+    for (int i=0; i<size; ++i) {
+        no_of_recv_element += recvcounts[i];
+        no_of_send_element += sendcounts[i];
+    }
+    int curr_rank;
+    PMPI_Comm_rank(comm, &curr_rank);
+    ITT_END_MPI_EX_INFO(MPI_TASK_ALLTOALLV, no_of_send_element*sizeof(sendtype), curr_rank, -1, no_of_recv_element*sizeof(recvtype), curr_rank, -1);
     return result;
 }
 
@@ -584,7 +628,15 @@ int MPI_Iallgatherv(const void *sendbuf, int sendcount, MPI_Datatype sendtype, v
     ITT_BEGIN(MPI_TASK_IALLGATHERV);
     result = PMPI_Iallgatherv(sendbuf, sendcount, sendtype, recvbuf,
                     recvcounts, displs, recvtype, comm, request);
-    ITT_END(MPI_TASK_IALLGATHERV);
+    int no_of_recv_element = 0;
+    int size = 0;
+    PMPI_Comm_size(comm, &size);
+    for (int i=0; i<size; ++i) {
+        no_of_recv_element += recvcounts[i];
+    }
+    int curr_rank;
+    PMPI_Comm_rank(comm, &curr_rank);
+    ITT_END_MPI_EX_INFO(MPI_TASK_IALLGATHERV, sendcount*sizeof(sendtype), curr_rank, -1, no_of_recv_element*sizeof(recvtype), curr_rank, -1);
     return result;
 }
 
@@ -616,7 +668,18 @@ int MPI_Ialltoallv(const void *sendbuf, const int sendcounts[], const int sdispl
     ITT_BEGIN(MPI_TASK_IALLTOALLV);
     result = PMPI_Ialltoallv(sendbuf, sendcounts, sdispls, sendtype, recvbuf,
                             recvcounts, rdispls, recvtype, comm, request);
-    ITT_END(MPI_TASK_IALLTOALLV);
+
+    int no_of_recv_element = 0;
+    int no_of_send_element = 0;
+    int size = 0;
+    PMPI_Comm_size(comm, &size);
+    for (int i=0; i<size; ++i) {
+        no_of_recv_element += recvcounts[i];
+        no_of_send_element += sendcounts[i];
+    }
+    int curr_rank;
+    PMPI_Comm_rank(comm, &curr_rank);
+    ITT_END_MPI_EX_INFO(MPI_TASK_IALLTOALLV, no_of_send_element*sizeof(sendtype), curr_rank, -1, no_of_recv_element*sizeof(recvtype), curr_rank, -1);
     return result;
 }
 
