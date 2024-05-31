@@ -113,7 +113,7 @@ def FindBB(bbs, ins):	# find BB of an instruction
 
     return None, None	# never reaches here
 
-def AnalyzeSbidStalls(kernel, args, df, report):
+def AnalyzeStalls(kernel, args, stalldf, report):
     shaders = os.listdir(args.shaderdump)
     files = []	# .asm files
 
@@ -172,9 +172,6 @@ def AnalyzeSbidStalls(kernel, args, df, report):
 
         asm = asm + ".ip"
 
-    df = df[["IP[Address]", "SbidStall[Events]"]]
-    df = df[df["SbidStall[Events]"] > 0]	# drop 0s
-    df = df.sort_values(by = ["SbidStall[Events]"], ascending = False)
     source_available = False
     instructions = []
     with open(asm, "r") as inf:
@@ -189,9 +186,14 @@ def AnalyzeSbidStalls(kernel, args, df, report):
 
     bbs = ConstructCFG(instructions)
 
+    df = stalldf[["IP[Address]", "SbidStall[Events]"]]
+    df = df[df["SbidStall[Events]"] > 0]	# drop 0s
+    df = df.sort_values(by = ["SbidStall[Events]"], ascending = False)
+
     print("Kernel: " + kernel, file = report)
     print("Assembly with instruction addresses: " + asm, file = report)
-    print("SBID stalls: ", file = report)
+    print("***********************************************************************************************", file = report)
+    print("Sbid Stalls: ", file = report)
 
     for index, row in df.iterrows():
         ip = row["IP[Address]"]
@@ -200,15 +202,24 @@ def AnalyzeSbidStalls(kernel, args, df, report):
             if ((ins.startswith("//") == False) and ("//" in ins)):
                 if (ins.startswith("/* [" + str('{:08X}'.format(pc))+ "] */ ") == True):	# found stalled instruction
                     words = ins.split("{")
-                    if (len(words) < 2):
-                        break	# invalid
-
                     sbids_stalled = []
-                    for token in words[1].split("}")[0].split(","):
-                        if (token.startswith("$") == True):
-                            subtokens = token.split(".")
-                            if (len(subtokens) > 1):
-                                sbids_stalled.append(subtokens[0])
+                    if (len(words) >= 2):
+                        for token in words[1].split("}")[0].split(","):
+                            if (token.startswith("$") == True):
+                                sbids_stalled.append(token)
+                    if (len(sbids_stalled) == 0):
+                        words = ins.split("(")	# check if SBID tokens are in (...)
+                        if (len(words) >= 2):
+                            i = 1
+                            done = False
+                            while (done == False):
+                                for token in words[i].split(")")[0].split(","):
+                                    if (token.startswith("$") == True):
+                                        sbids_stalled.append(token)
+                                        done = True
+                                i = i + 1
+                                if (i == len(words)):	# all words are inspected
+                                    break
 
                     ins_stalled_not_line_resolved = addr
                     ins_stalled_not_file_resolved = addr
@@ -229,18 +240,26 @@ def AnalyzeSbidStalls(kernel, args, df, report):
                         bid, start, end = bbs_to_check[j]
                         for addr2, ins2 in enumerate(reversed(instructions[start : end + 1])):
                             if (len(sbids_stalled) > 0):
-                                if ((ins2.startswith("//") == False) and ("//" in ins2)):
+                                if ((ins2.startswith("//") == False) and ("//" in ins2) and (re.match("/\* *\[", ins2) is not None)):
                                     tokens = ins2.split("{")
                                     if (len(tokens) > 1):
-                                        sbids = []
+                                        sbids_stall = []
                                         for token in tokens[1].split("}")[0].split(","):
                                             if (token.startswith("$") == True):
-                                                sbids.append(token)
+                                                sbids_stall.append(token)
                                         for sbid in sbids_stalled:
-                                            if (sbid in sbids):	# instruction stalled depends on ins2
-                                                sbids_stalled.remove(sbid)	# remove sbid from the sbids of the instruction stalled
-                                                ins_stall_not_line_resolved.append(end - addr2)	# source lines/files to be resolved
-                                                ins_stall_not_file_resolved.append(end - addr2)
+                                            for sbid2 in sbids_stall:
+                                                if (len(sbid.split(".")) > 1): # .dst or .src in bid
+                                                    if (sbid2 == sbid.split(".")[0]):
+                                                        sbids_stalled.remove(sbid)	# remove sbid from the sbids of the instruction stalled
+                                                        ins_stall_not_line_resolved.append(end - addr2)	# source lines/files to be resolved
+                                                        ins_stall_not_file_resolved.append(end - addr2)
+                                                else:
+                                                    if (sbid == sbid2.split(".")[0]): # stalled ins depends on ins2 or dependency already resolved
+                                                        sbids_stalled.remove(sbid)	# remove sbid from the sbids of the instruction stalled
+                                                        if ((sbid == sbid2) and ("sync." not in ins2)): # ins2 not a sync. ins depends on ins2
+                                                            ins_stall_not_line_resolved.append(end - addr2) # source lines/files to be resolved
+                                                            ins_stall_not_file_resolved.append(end - addr2)
 
                             if (re.match("// *Line", ins2) is not None):
                                 if (ins_stalled_not_line_resolved != None): # source line of stalled instruction
@@ -300,6 +319,58 @@ def AnalyzeSbidStalls(kernel, args, df, report):
                         print("is stalled", file = report)
 
                     break
+
+
+    # analyze stalls of other types
+
+    type = ["ControlStall[Events]", "PipeStall[Events]", "SendStall[Events]", "DistStall[Events]", "SyncStall[Events]", "InstrFetchStall[Events]", "OtherStall[Events]"]
+    for t in type:
+        df = stalldf[["IP[Address]", t]]
+        df = df[df[t] > 0]	# drop 0s
+        if (df.shape[0] == 0):	# zero stalls. move to the next type
+            continue
+        df = df.sort_values(by = [t], ascending = False)
+
+        print("***********************************************************************************************", file = report)
+        print(t.split("Stall")[0] + " Stalls: ", file = report)
+
+        for index, row in df.iterrows():
+            ip = row["IP[Address]"]
+            pc = int(ip, 16)
+            for addr, ins in enumerate(instructions):
+                if ((ins.startswith("//") == False) and ("//" in ins)):
+                    if (ins.startswith("/* [" + str('{:08X}'.format(pc))+ "] */ ") == True):	# found stalled instruction
+                        if (source_available == True):
+                            ins_stalled_not_line_resolved = addr
+                            ins_stalled_not_file_resolved = addr
+                            source_line_stalled = None
+                            source_file_stalled = None
+
+                            for addr2, ins2 in enumerate(reversed(instructions[0: addr])):
+                                if (re.match("// *Line", ins2) is not None):
+                                    if (ins_stalled_not_line_resolved != None): # source line of stalled instruction
+                                        source_line_stalled = addr - 1 - addr2
+                                        ins_stalled_not_line_resolved = None
+
+                                if (re.match("// *File", ins2) is not None):
+                                    if (ins_stalled_not_file_resolved != None): # source file of stalled instruction
+                                        source_file_stalled = addr - 1 - addr2
+                                        ins_stalled_not_file_resolved = None
+
+                                if ((ins_stalled_not_line_resolved == None) and (ins_stalled_not_file_resolved == None)):
+                                    break	# we are done
+
+                        print("\nInstruction", file = report)
+                        print("  " + ins, file = report)
+                        if (source_line_stalled != None):
+                            print("  " + instructions[source_line_stalled][3:], file = report)
+                            if (source_file_stalled != None):
+                                print("  " + instructions[source_file_stalled][3:], file = report)
+
+                        print("is stalled", file = report)
+
+                        break
+
     print("===============================================================================================", file = report)
 
 def AnalyzeStallMetrics(args, header, last):
@@ -357,7 +428,7 @@ def AnalyzeStallMetrics(args, header, last):
                     plt.close(fig)	# close figure to save memory
 
                     if (args.shaderdump is not None):
-                        AnalyzeSbidStalls(kernel, args, df2, report_out)
+                        AnalyzeStalls(kernel, args, df2, report_out)
 
                     print("\nAnalyzed kernel " + kernel)
 
@@ -396,7 +467,7 @@ def AnalyzeStallMetrics(args, header, last):
         plt.close(fig)	# close figure to save memory
 
         if (args.shaderdump is not None):
-            AnalyzeSbidStalls(kernel, args, df2, report_out)
+            AnalyzeStalls(kernel, args, df2, report_out)
 
         print("\nAnalyzed kernel " + kernel)
         if (p != None):
@@ -405,7 +476,7 @@ def AnalyzeStallMetrics(args, header, last):
 
         if ((args.shaderdump is not None) and (args.report is not None)):
             report_out.close()
-            print("SBID stall report is in file " + args.report)
+            print("Stall report is in file " + args.report)
 
     else:
         counting = True
@@ -455,12 +526,12 @@ def AnalyzeStallMetrics(args, header, last):
         plt.savefig(args.output)
 
         if (args.shaderdump is not None):
-            AnalyzeSbidStalls(kernel, args, df2, report_out)
+            AnalyzeStalls(kernel, args, df2, report_out)
 
         print("\nStall metric chart in file " + args.output + " has been successfully generated.")
         if ((args.shaderdump is not None) and (args.report is not None)):
             report_out.close()
-            print("SBID stall report is in file " + args.report)
+            print("Stall report is in file " + args.report)
 
 def PlotKernelInstancePerfMetrics(args, kernel, df, metrics):
     k = 0
@@ -536,7 +607,7 @@ def AnalyzePerfMetrics(args, header, last):
                         ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
                     else:
                         ax = df3.plot(y = metrics_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
-                        
+
                     plt.grid(visible = True, which = 'both', axis = 'y')
                     plt.legend(loc = 'best', fontsize = 4)
                     plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
