@@ -1861,16 +1861,16 @@ class ZeCollector {
         for (auto it = props.second.crbegin(); it != props.second.crend(); it++) {
           // quote kernel name which may contain "," 
           kpfs << "\"" << utils::Demangle(it->second->name_.c_str()) << "\"" << std::endl;
-          kpfs << it->second->base_addr_ << std::endl;
+          kpfs << std::to_string(it->second->base_addr_) << std::endl;
           if (prev_base == 0) {
-            kpfs << it->second->size_ << std::endl;
+            kpfs << std::to_string(it->second->size_) << std::endl;
           }
           else {
             size_t size = prev_base - it->second->base_addr_;
             if (size > it->second->size_) {
               size = it->second->size_;
             }
-            kpfs << size << std::endl;
+            kpfs << std::to_string(size) << std::endl;
           }
           prev_base = it->second->base_addr_;
         }
@@ -1917,9 +1917,9 @@ class ZeCollector {
         for (auto& prof : profiles.second) {
           for (auto& ts : prof->timestamps_) {
             std::string kname = GetZeKernelCommandName(prof->kernel_command_id_, prof->group_count_, prof->mem_size_);
-            ouf << ts.subdevice_id << std::endl;
-            ouf << ts.metric_start << std::endl;
-            ouf << ts.metric_end << std::endl;
+            ouf << std::to_string(ts.subdevice_id) << std::endl;
+            ouf << std::to_string(ts.metric_start) << std::endl;
+            ouf << std::to_string(ts.metric_end) << std::endl;
             ouf << kname << std::endl;
           }
         }

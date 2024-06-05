@@ -16,7 +16,7 @@ Intel(R) GPU applications.
 - CMake 3.22 or above (CMake versions prior to 3.22 are not fully tested or validated)
 - C++ compiler with C++17 support
 - Intel(R) oneAPI Base Toolkits
-- Python
+- Python 3.9 or later
 - Matplotlib 3.8 or later (https://matplotlib.org/)
 - Pandas 2.2.1 or later (https://pandas.pydata.org/)
 - Intel(R) MPI (optional)
@@ -472,45 +472,194 @@ To kernels that take short time, you may find that the default sampling rate is 
 
 ### Analyze Performance Metrics
 
-Once you have the hardware performance metrics data collected, you can use the script **analyzeperfmetrics.py** to analyze the metrics. This script plots a performance chart stored in either .png or .pdf file, depending on the output format you choose.
+Once you have the hardware performance metrics data collected, you can use the script **analyzeperfmetrics.py** to analyze the metrics. 
+
+#### List Contents of the Metric Data File
+
+The first step is to inspect the contents of the metric data file using **-l** or **--list** option. 
 
    ```sh
-   python analyzeperfmetrics.py -d 1 -k mykernel -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.png perfmetrics.12345.csv
+   python analyzeperfmetrics.py -l perfmetrics.12345.csv
    ```
 
-This command plots a chart of XVE stall and function unit utilizations for the **second** instance of kernel **mykernel** executed on device **1**and store it in file **perfchart.png**.
+This shows the device, metrics and kernels profiled:
 
-![Analyze Performance Metrics!](/tools/unitrace/doc/images/perfchart.png)
+```sh
+Device 0
+    Metric
+        GpuTime[ns]
+        GpuCoreClocks[cycles]
+        AvgGpuCoreFrequencyMHz[MHz]
+        GpuSliceClocksCount[events]
+        AvgGpuSliceFrequencyMHz[MHz]
+        L3_BYTE_READ[bytes]
+        L3_BYTE_WRITE[bytes]
+        GPU_MEMORY_BYTE_READ[bytes]
+        GPU_MEMORY_BYTE_WRITE[bytes]
+        XVE_ACTIVE[%]
+        XVE_STALL[%]
+        XVE_BUSY[events]
+        XVE_THREADS_OCCUPANCY_ALL[%]
+        XVE_COMPUTE_THREAD_COUNT[threads]
+        XVE_ATOMIC_ACCESS_COUNT[messages]
+        XVE_BARRIER_MESSAGE_COUNT[messages]
+        XVE_INST_EXECUTED_ALU0_ALL[events]
+        XVE_INST_EXECUTED_ALU1_ALL[events]
+        XVE_INST_EXECUTED_XMX_ALL[events]
+        XVE_INST_EXECUTED_SEND_ALL[events]
+        XVE_INST_EXECUTED_CONTROL_ALL[events]
+        XVE_PIPE_ALU0_AND_ALU1_ACTIVE[%]
+        XVE_PIPE_ALU0_AND_XMX_ACTIVE[%]
+        XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%]
+        XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%]
+        XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%]
+        XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%]
+        XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]
+        QueryBeginTime[ns]
+        CoreFrequencyMHz[MHz]
+        XveSliceFrequencyMHz[MHz]
+        ReportReason
+        ContextIdValid
+        ContextId
+        SourceId
+        StreamMarker
+    Kernel, Number of Instances
+        "main::{lambda(auto:1)#1}[SIMD32 {8192; 1; 1} {128; 1; 1}]", 1
+        "main::{lambda(auto:1)#2}[SIMD32 {8192; 1; 1} {128; 1; 1}]", 1
+        "main::{lambda(auto:1)#3}[SIMD32 {8192; 1; 1} {128; 1; 1}]", 1
+        "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]", 5
+        "main::{lambda(auto:1)#5}[SIMD32 {4096; 1; 1} {256; 1; 1}]", 5
+        "main::{lambda(auto:1)#6}[SIMD32 {4096; 1; 1} {256; 1; 1}]", 5
+        "main::{lambda(auto:1)#7}[SIMD32 {2048; 1; 1} {512; 1; 1}]", 5
+```
+
+The **Device** is the device on which the metrics are sampled. In this example output, the decice is 0. If multiple devices are used and sampled, multiple sections of **Device** will be present.
+
+The **Metric** section shows the metrics collected on the device and the **Kernel, Number of Instances** shows the kernels and number of instances for each kernel are profiled. An instance is one kernel execution sampled on the device. For example, The kernel "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" having 5 instances means the 5 exeuctions of the kernel are sampled. Please note that the number of instances of a kernel here may be less than the total number of exeuctions or submissions of the kernel in the application, especially when the kernel is short and/or sampling interval is large. 
+
+The number of instances is not applicable to stall sampling metric data:
+
+```sh
+Device 0
+    Metric
+        Active[Events]
+        ControlStall[Events]
+        PipeStall[Events]
+        SendStall[Events]
+        DistStall[Events]
+        SbidStall[Events]
+        SyncStall[Events]
+        InstrFetchStall[Events]
+        OtherStall[Events]
+    Kernel
+        "main::{lambda(auto:1)#1}"
+        "main::{lambda(auto:1)#2}"
+        "main::{lambda(auto:1)#3}"
+        "main::{lambda(auto:1)#5}"
+        "main::{lambda(auto:1)#6}"
+        "main::{lambda(auto:1)#7}"
+        "main::{lambda(auto:1)#4}"
+```
+
+You can also use the -o option to redirect the output to a text file for later reference:
+
+   ```sh
+   python analyzeperfmetrics.py -l -o contents.txt perfmetrics.12345.csv
+   ```
+
+
+#### Analyze Kernel Performance Metrics
+
+Once you have the knowledge of the device, the metrics and the kernels in the metric data file, you can run the same script to analyze specific performance metrics of a specific instance of a specific kernel, all instances of a specific kernel or all instances of all kernels executed on a specific device. The performance chart will be stored in either .png or .pdf file, depending on the output format you choose and/or command line options you use.
+
+   ```sh
+   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.png perfmetrics.12345.csv
+   ```
+
+This command plots a chart of XVE stall and function unit utilizations for the **second** instance of kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** profiled on device **0** and stores the chart in file **perfchart.png**.
+
+![Analyze Kernel Performance Metrics!](/tools/unitrace/doc/images/perfchart.png)
+
+If instance is 0, all 5 instances of the kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** are analyzed.
+
+   ```sh
+   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 0 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
+
+   ```
+
+If **-k** option is not present and instance is 0, all instances of all kernels are analyzed.
+
+   ```sh
+   python analyzeperfmetrics.py -d 0 -i 0 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
+
+   ```
 
 If the input metric data file has stall sampling events collected using **--stall-sampling** option, the chart generated shows stall events and instruction addresses.
 
 ![Analyze Stall Metrics!](/tools/unitrace/doc/images/stallchart.png)
 
-From this chart, we can easily see that the most stalls are **SbidStalls** at instruction **0x000001B8**. To reduce or eliminate the stalls, we need to dive into the instructions to find out the cause of the stalls.
+From this chart, we can easily see that the most stalls are **SbidStalls** at instruction **0x000001B8**. To reduce or eliminate the stalls, we need to analyze the stalls at instruction level to find out the cause of the stalls.
 
-The assembly in the shader dump do not contain instruction addresses. So first we need to add address to each instruction using **addrasm.py**.
+#### Analyze Stalls at Instruction Level
+
+To pinpoint stalls to exact instructions, you need kernel shader dump. If you want to pinpoint to the source lines and source files, you also need to use the compiler option **-gline-tables-only**, for example:
+
+    ```sh
+    icpx -fsycl -gline-tables-only -O2 -o mytest mytest.cpp
+    ````
+
+To get a kernel shader dump, run the application with environment variables **IGC_ShaderDumpEnable** and **IGC_DumpToCustomDir** set:
+
+    ```sh
+    IGC_ShaderDumpEnable=1 IGC_DumpToCustomDir=dump mytest
+    ````
+
+After you run unitrace using **--stall-sampling**, you can run the same script to analyze stalls:
+
+    ```sh
+     python ~/Box/private/applications.analyzers.profilingtoolsinterfaces.sdk/tools/unitrace/scripts/analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf ./stallmetrics.56789.csv
+    ```
+
+In addition to the stall statistics chart, a stall analysis report is generated:
+
+```sh
+Kernel: main::{lambda(auto:1)#3}
+Assembly with instruction addresses: ./dump.3/OCL_asme5a3f8d8dcdadd7e_simd32_entry_0003.asm.ip
+***********************************************************************************************
+Sbid Stalls:
+
+Instruction
+  /* [000001B8] */         sync.nop                             null                             {Compacted,$5.dst}     // $15
+  Line 40:  c[index] = a[index] + b[index];
+  File: /nfs/pdx/home/zma2/Box/PVC/grf.cpp
+is stalled potentially by
+  instruction
+    /* [00000198] */         load.ugm.d32.a64 (32|M0)  r18:2         [r14:4]            {I@1,$5} // ex_desc:0x0; desc:0x8200580 // $14
+    Line 40:  c[index] = a[index] + b[index];
+    File: /nfs/pdx/home/zma2/Box/PVC/grf.cpp
+
+Instruction
+  /* [00000118] */ (W)     mul (1|M0)               acc0.0<1>:d   r5.0<0;1,0>:d     r0.2<0;1,0>:uw   {Compacted,A@1,$3.dst} //  ALU pipe: int; $4
+  Line 96:  return __spirv_BuiltInGlobalInvocationId.x;
+  File: /opt/hpc_software/compilers/intel/nightly/20240527/compiler/latest/bin/compiler/../../include/sycl/CL/__spirv/spirv_vars.hpp
+is stalled potentially by
+  instruction
+    /* [00000100] */ (W)     load.ugm.d32x8t.a32.ca.ca (1|M0)  r5:1  bti[255][r126:1]   {I@1,$3} // ex_desc:0xFF000000; desc:0x6218C500 //
+    Line 1652:  }
+    File: /opt/hpc_software/compilers/intel/nightly/20240527/compiler/latest/bin/compiler/../../include/sycl/handler.hpp
+```
+
+The report shows not only the instruction and the location (address, source line and source file if available) of each stall, but also the instruction and the location if available that causes the stall.
+
+To eliminate or reduce the stalls, you need to fix the cause.
+
+The stall analysis report can also be stored in a text file for later reference:
 
 
-   ```sh
-   python addrasm.py -o kernel.pc.asm kernel.asm
-   ```
+    ```sh
+     python ~/Box/private/applications.analyzers.profilingtoolsinterfaces.sdk/tools/unitrace/scripts/analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf -r stallreport.txt ./stallmetrics.56789.csv
+    ```
 
-Here, **kernel.asm** is the kernel assembly as input and **kernel.pc.asm** is the new assembly generated with address prefixed to each instruction.
-
-In the **kernel.pc.asm**, we can easily locate the instruction at **0x000001B8** and find out why this instruction is stalled.
-
-If compilation option **-gline-tables-only** is present, the source lines are also embedded in the assembly and we can easily map instructions to source lines.
-
-For more information on the command line options, please run
-
-   ```sh
-   python analyzeperfmetrics.py -h
-   ```
-and
- 
-   ```sh
-   python addrasm.py -h
-   ```
 
 ## Query Trace Events
 

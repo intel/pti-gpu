@@ -594,7 +594,7 @@ class TraceBuffer {
             str_args += ", \"dtag\": " +std::to_string(args.dst_tag);
           }
 
-          pkt.args = str_args;
+          pkt.args = std::move(str_args);
         }
         pkt.cat = cpu_op;
       }

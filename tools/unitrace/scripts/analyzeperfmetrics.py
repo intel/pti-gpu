@@ -526,7 +526,7 @@ def AnalyzeStallMetrics(args, header, last):
         plt.savefig(args.output)
 
         if (args.shaderdump is not None):
-            AnalyzeStalls(kernel, args, df2, report_out)
+            AnalyzeStalls(args.kernel, args, df2, report_out)
 
         print("\nStall metric chart in file " + args.output + " has been successfully generated.")
         if ((args.shaderdump is not None) and (args.report is not None)):
@@ -798,7 +798,8 @@ def List(args):
                     if kernel in kernel_and_instances:
                         kernel_and_instances[kernel] = kernel_and_instances[kernel] + 1
                     else:
-                        kernel_and_instances[kernel] = 1
+                        if (kernel != ""):
+                            kernel_and_instances[kernel] = 1
 
                     kernel = ""	# reset kernel name to empty
                 else:
@@ -826,8 +827,8 @@ def List(args):
             for kernel in kernels:
                 print("        \"" + kernel + "\"", file = of)
 
-        if (args.output is not None):
-            of.close()
+    if (args.output is not None):
+        of.close()
 
 def main(args):
     if (os.path.isfile(args.input) == False):

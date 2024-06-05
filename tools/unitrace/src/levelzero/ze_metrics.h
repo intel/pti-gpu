@@ -40,8 +40,12 @@ static uint32_t max_metric_samples = 32768;
 
 inline void PrintDeviceList() {
   ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
+  if (status != ZE_RESULT_SUCCESS) {
+    std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
+    std::cerr << "Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+    return;
+  }
+  
   std::vector<ze_device_handle_t> device_list = utils::ze::GetDeviceList();
   if (device_list.empty()) {
     std::cout << "[WARNING] No device found" << std::endl;
@@ -82,7 +86,11 @@ inline std::string GetMetricUnits(const char* units) {
 
 inline void PrintMetricList(uint32_t device_id) {
   ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  if (status != ZE_RESULT_SUCCESS) {
+    std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
+    std::cerr << "Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+    return;
+  }
 
   std::vector<ze_device_handle_t> device_list = utils::ze::GetDeviceList();
   if (device_list.empty()) {
@@ -509,6 +517,9 @@ class ZeMetricProfiler {
   }
 
   void ComputeMetrics() {
+    uint8_t *raw_metrics = (uint8_t *)malloc(sizeof(uint8_t) * (MAX_METRIC_BUFFER + 512));
+    UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
+  
     for (auto it = device_descriptors_.begin(); it != device_descriptors_.end(); ++it) {
       if (it->second->parent_device_ != nullptr) {
         // subdevice
@@ -585,21 +596,20 @@ class ZeMetricProfiler {
         }
   
         std::ifstream inf = std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
-        std::vector<uint8_t> raw_metrics(MAX_METRIC_BUFFER + 512);
-  
+        
         if (!inf.is_open()) {
           continue;
         }
 
         while (!inf.eof()) {
-          inf.read(reinterpret_cast<char *>(raw_metrics.data()), MAX_METRIC_BUFFER + 512);
+          inf.read(reinterpret_cast<char *>(raw_metrics), MAX_METRIC_BUFFER + 512);
           int raw_size = inf.gcount();
           if (raw_size > 0) {
             uint32_t num_samples = 0;
             uint32_t num_metrics = 0;
             ze_result_t status = zetMetricGroupCalculateMultipleMetricValuesExp(
               it->second->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-              raw_size, raw_metrics.data(), &num_samples, &num_metrics,
+              raw_size, raw_metrics, &num_samples, &num_metrics,
               nullptr, nullptr);
             if ((status != ZE_RESULT_SUCCESS) || (num_samples == 0) || (num_metrics == 0)) {
               std::cerr << "[WARNING] Unable to calculate metrics" << std::endl;
@@ -611,7 +621,7 @@ class ZeMetricProfiler {
 
             status = zetMetricGroupCalculateMultipleMetricValuesExp(
               it->second->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-              raw_size, raw_metrics.data(), &num_samples, &num_metrics,
+              raw_size, raw_metrics, &num_samples, &num_metrics,
               samples.data(), metrics.data());
 
             if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
@@ -787,8 +797,6 @@ class ZeMetricProfiler {
           continue;
         }
 
-        std::vector<uint8_t> raw_metrics(MAX_METRIC_BUFFER + 512);
-  
         std::string header("\n=== Device #");
 
         header += std::to_string(it->second->device_id_) + " Metrics ===\n";
@@ -806,14 +814,14 @@ class ZeMetricProfiler {
         uint64_t cur_sampling_ts = 0;
         auto kit = kinfo.begin();
         while (!inf.eof()) {
-          inf.read(reinterpret_cast<char *>(raw_metrics.data()), MAX_METRIC_BUFFER + 512);
+          inf.read(reinterpret_cast<char *>(raw_metrics), MAX_METRIC_BUFFER + 512);
           int raw_size = inf.gcount();
           if (raw_size > 0) {
             uint32_t num_samples = 0;
             uint32_t num_metrics = 0;
             ze_result_t status = zetMetricGroupCalculateMultipleMetricValuesExp(
               it->second->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-              raw_size, raw_metrics.data(), &num_samples, &num_metrics,
+              raw_size, raw_metrics, &num_samples, &num_metrics,
               nullptr, nullptr);
             if ((status != ZE_RESULT_SUCCESS) || (num_samples == 0) || (num_metrics == 0)) {
               std::cerr << "[WARNING] Unable to calculate metrics" << std::endl;
@@ -825,7 +833,7 @@ class ZeMetricProfiler {
   
             status = zetMetricGroupCalculateMultipleMetricValuesExp(
               it->second->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-              raw_size, raw_metrics.data(), &num_samples, &num_metrics,
+              raw_size, raw_metrics, &num_samples, &num_metrics,
               samples.data(), metrics.data());
             if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
               std::cerr << "[WARNING] Unable to calculate metrics" << std::endl;
@@ -884,6 +892,7 @@ class ZeMetricProfiler {
         inf.close();
       }
     }
+    free(raw_metrics);
   }
 
  private:
@@ -959,7 +968,7 @@ class ZeMetricProfiler {
     return name_list;
   }
 
-  static uint64_t ReadMetrics(ze_event_handle_t event, zet_metric_streamer_handle_t  streamer, std::vector<uint8_t>& storage) {
+  static uint64_t ReadMetrics(ze_event_handle_t event, zet_metric_streamer_handle_t  streamer, uint8_t *storage, size_t ssize) {
     ze_result_t status = ZE_RESULT_SUCCESS;
 
     //status = zeEventHostSynchronize(event, 0);
@@ -977,12 +986,12 @@ class ZeMetricProfiler {
     status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, nullptr);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     PTI_ASSERT(data_size > 0);
-    if (data_size > storage.size()) {
-      data_size = storage.size();
+    if (data_size > ssize) {
+      data_size = ssize;
       std::cerr << "[WARNING] Metric samples dropped." << std::endl;
     }
 
-    status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, storage.data());
+    status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, storage);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     return data_size;
@@ -1016,6 +1025,7 @@ class ZeMetricProfiler {
     status = zetMetricStreamerOpen(context, device, group, &streamer_desc, event, &streamer);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Failed to open metric streamer (" << status << "). The sampling interval might be too small." << std::endl;
+      std::cerr << "Please also make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
 
       status = zeEventDestroy(event);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -1036,12 +1046,12 @@ class ZeMetricProfiler {
     metrics_list = GetMetricList(group);
     PTI_ASSERT(!metrics_list.empty());
 
-    std::vector<uint8_t> raw_metrics(MAX_METRIC_BUFFER + 512);
+    uint8_t *raw_metrics = (uint8_t *)malloc(sizeof(uint8_t) * (MAX_METRIC_BUFFER + 512));
+    UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
 
-    auto it = raw_metrics.begin();
     desc->profiling_state_.store(PROFILER_ENABLED, std::memory_order_release);
     while (desc->profiling_state_.load(std::memory_order_acquire) != PROFILER_DISABLED) {
-      uint64_t size = ReadMetrics(event, streamer, raw_metrics);
+      uint64_t size = ReadMetrics(event, streamer, raw_metrics, (MAX_METRIC_BUFFER + 512));
       if (size == 0) {
         if (!desc->metric_data_.empty()) {
           desc->metric_file_stream_.write(reinterpret_cast<char*>(desc->metric_data_.data()), desc->metric_data_.size());
@@ -1049,15 +1059,15 @@ class ZeMetricProfiler {
         }
         continue;
       }
-      desc->metric_data_.insert(desc->metric_data_.end(), it, it + size);
+      desc->metric_data_.insert(desc->metric_data_.end(), raw_metrics, raw_metrics + size);
     }
-    auto size = ReadMetrics(event, streamer, raw_metrics);
-    desc->metric_data_.insert(desc->metric_data_.end(), it, it + size);
+    auto size = ReadMetrics(event, streamer, raw_metrics, (MAX_METRIC_BUFFER + 512));
+    desc->metric_data_.insert(desc->metric_data_.end(), raw_metrics, raw_metrics + size);
     if (!desc->metric_data_.empty()) {
       desc->metric_file_stream_.write(reinterpret_cast<char*>(desc->metric_data_.data()), desc->metric_data_.size());
       desc->metric_data_.clear();
     }
-    raw_metrics.clear();
+    free(raw_metrics);
 
     status = zetMetricStreamerClose(streamer);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
