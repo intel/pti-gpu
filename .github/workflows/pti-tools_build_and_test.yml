@@ -1,0 +1,84 @@
+name: pti-tools-build-and-test
+
+on:
+  push:
+    branches: [ "master" ]
+    paths-ignore:
+      - sdk/**
+      - .github/**
+  pull_request:
+    branches: [ "master" ]
+    paths-ignore:
+      - sdk/**
+      - .github/**
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+
+  pti-tools-build-and-test:
+    name: Test pti library Ubuntu-22-04
+
+    if: vars.PTI_RUN_TESTS == 1
+
+    runs-on: [pti]
+
+    strategy:
+      matrix:
+        include:
+          - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
+
+    container: 
+      image: ${{ matrix.container }}
+      options: --device=/dev/dri --cap-add CAP_PERFMON
+
+    steps:
+      - name: Clean-up
+        run:  rm -rf *
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build-and-test-unitrace
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python ./tests/run.py -s unitrace
+
+      - name: Build-and-test-onetrace
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python ./tests/run.py -s onetrace
+
+      - name: Build-and-test-oneprof
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          #
+          # Must with more than one GPU because of
+          # an random failures as documented in PTI-75
+          #
+          if [ $(sycl-ls|grep 'ext_oneapi_level_zero:gpu:' -c) -gt 1 ]; then
+            exit 0
+          fi
+          python ./tests/run.py -s oneprof
+
+      - name: Build-and-test-sysmon
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python ./tests/run.py -s sysmon
+
+      - name: Build-and-test-cl_gpu_metrics
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python ./tests/run.py -s cl_gpu_metrics
+
+      - name: Build-and-test-gpu-inst-count
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python ./tests/run.py -s gpu_inst_count
+
+
