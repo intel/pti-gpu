@@ -189,6 +189,10 @@ cd build
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_LIBRARY_PATH=<opencl_icd_lib_path> ..
 nmake
 ```
+Please note that <opencl_icd_lib_path> is the path where you can find in Windows' "Registry Editor" (Search "Registry Editor" with the "magnifying glass" icon) and look under HKEY_LOCAL_MACHINE -> SOFTWARE -> Khronos -> OpenCL -> Vendors and you should see something like this: C:\Program Files (x86)\Intel\oneAPI\compiler\latest\windows\lib\x64\intelocl64.dll, this is your <opencl_icd_lib_path>
+You also need to download and install git, and set up the proxy in the command prompt:
+git config --global http.proxy http://[username]:[password]%40[your proxy]
+
 Use this command line to run the tool:
 ```sh
 onetrace.exe [options] <target_application>
