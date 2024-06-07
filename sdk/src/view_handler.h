@@ -36,7 +36,14 @@
 
 using AskForBufferEvent = std::function<void(unsigned char**, size_t*)>;
 using ReturnBufferEvent = std::function<void(unsigned char*, size_t, size_t)>;
+
 using ViewInsert = std::function<void(void*, const ZeKernelCommandExecutionRecord&)>;
+
+/*
+namespace {
+std::mutex timestamp_api_mtx_;
+}
+*/
 
 inline void MemCopyEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
@@ -117,7 +124,8 @@ struct PtiViewRecordHandler {
 
   PtiViewRecordHandler()
       : get_new_buffer_(pti::view::defaults::DefaultBufferAllocation),
-        deliver_buffer_(pti::view::defaults::DefaultRecordParser) {
+        deliver_buffer_(pti::view::defaults::DefaultRecordParser),
+        user_provided_ts_func_ptr_(utils::GetRealTime) {
     // Read Logging level required
     // set environment variable SPDLOG_LEVEL=<level>, where level=TRACE/DEBUG/INFO..
     // Logs appear only when PTI_ENABLE_LOGGING=ON => SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
@@ -131,6 +139,8 @@ struct PtiViewRecordHandler {
       collector_ =
           ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback, nullptr);
       overhead::SetOverheadCallback(OverheadCollectionCallback);
+      timestamp_of_last_ts_shift_ = utils::GetTime();  // CLOCK_MONOTONIC_RAW or equivalent
+      ts_shift_ = utils::ConversionFactorMonotonicRawToUnknownClock(user_provided_ts_func_ptr_);
     }
   }
 
@@ -183,6 +193,15 @@ struct PtiViewRecordHandler {
         DeliverBuffer(std::move(buffer));
       }
     });
+  }
+
+  inline pti_result RegisterTimestampCallback(pti_fptr_get_timestamp get_timestamp) {
+    if (!get_timestamp) return pti_result::PTI_ERROR_BAD_ARGUMENT;
+    const std::lock_guard<std::mutex> lock(timestamp_api_mtx_);
+    user_provided_ts_func_ptr_ = get_timestamp;
+    timestamp_of_last_ts_shift_ = utils::GetTime();  // CLOCK_MONOTONIC_RAW or equivalent
+    ts_shift_ = utils::ConversionFactorMonotonicRawToUnknownClock(user_provided_ts_func_ptr_);
+    return pti_result::PTI_SUCCESS;
   }
 
   inline pti_result RegisterBufferCallbacks(AskForBufferEvent&& get_new_buf,
@@ -397,6 +416,7 @@ struct PtiViewRecordHandler {
   }
 
   inline pti_result GetState() { return state_; }
+  inline void SetState(pti_result new_state) { state_ = new_state; }
 
   inline pti_result GPULocalAvailable() {
     if (collector_) {
@@ -407,6 +427,19 @@ struct PtiViewRecordHandler {
       }
     }
     return pti_result::PTI_ERROR_INTERNAL;
+  }
+  inline uint64_t GetUserTimestamp() { return (*user_provided_ts_func_ptr_.load())(); }
+
+  inline int64_t GetTimeShift() {
+    const std::lock_guard<std::mutex> lock(timestamp_api_mtx_);
+
+    uint64_t now = utils::GetTime();       // CLOCK_MONOTONIC_RAW or equivalent
+    constexpr auto kEpsilon = 1000000000;  // 1 second.
+    if ((now - timestamp_of_last_ts_shift_) > kEpsilon) {
+      timestamp_of_last_ts_shift_ = utils::GetTime();  // CLOCK_MONOTONIC_RAW or equivalent
+      ts_shift_ = utils::ConversionFactorMonotonicRawToUnknownClock(user_provided_ts_func_ptr_);
+    }
+    return ts_shift_;
   }
 
  private:
@@ -450,10 +483,15 @@ struct PtiViewRecordHandler {
   ReturnBufferEvent deliver_buffer_;
   mutable std::mutex get_new_buffer_mtx_;
   mutable std::mutex deliver_buffer_mtx_;
+  mutable std::mutex timestamp_api_mtx_;
   ViewEventTable view_event_map_;
   KernelNameStorageQueue kernel_name_storage_;
   ViewBufferTable view_buffers_;
   pti::view::BufferConsumer consumer_ = {};  // Starts thread
+  std::atomic<pti_fptr_get_timestamp> user_provided_ts_func_ptr_ = nullptr;
+  int64_t ts_shift_ = 0;  // conversion factor for switching from default clock to user provided
+                          // one(defaults to monotonic raw)
+  uint64_t timestamp_of_last_ts_shift_ = 0;  // every 1 second we recalculate time_shift_
 };
 
 // Required to access buffer from ze_collector callbacks
@@ -653,12 +691,24 @@ inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRec
 
 inline uint64_t ApplyTimeShift(uint64_t timestamp, int64_t time_shift) {
   uint64_t out_ts = 0;
-  if (time_shift < 0) {
-    PTI_ASSERT(timestamp >= static_cast<uint64_t>(-time_shift));  // underflow?
-    out_ts = timestamp - static_cast<uint64_t>(-time_shift);
-  } else {
-    PTI_ASSERT((UINT64_MAX - timestamp) >= static_cast<uint64_t>(time_shift));  // overflow?
-    out_ts = timestamp + static_cast<uint64_t>(time_shift);
+  try {
+    if (time_shift < 0) {
+      if (timestamp < static_cast<uint64_t>(-time_shift)) {  // underflow?
+        SPDLOG_WARN("Timestamp underflow detected when shifting domains: TS: {}, time_shift: {}",
+                    timestamp, time_shift);
+        throw std::out_of_range("Timestamp underflow detected");
+      }
+      out_ts = timestamp - static_cast<uint64_t>(-time_shift);
+    } else {
+      if ((UINT64_MAX - timestamp) < static_cast<uint64_t>(time_shift)) {  // overflow?
+        SPDLOG_WARN("Timestamp overflow detected when shifting domains: TS: {}, time_shift: {}",
+                    timestamp, time_shift);
+        throw std::out_of_range("Timestamp overflow detected");
+      };
+      out_ts = timestamp + static_cast<uint64_t>(time_shift);
+    }
+  } catch (const std::out_of_range&) {
+    Instance().SetState(pti_result::PTI_ERROR_BAD_TIMESTAMP);
   }
   return out_ts;
 }
@@ -703,7 +753,7 @@ inline auto DoCommonMemCopy(bool p2p, const ZeKernelCommandExecutionRecord& rec)
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY;
   if (p2p) record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
 
-  int64_t ts_shift = utils::ConvertionFactorMonotonicRawToReal();
+  int64_t ts_shift = Instance().GetTimeShift();
 
   record._append_timestamp = ApplyTimeShift(rec.append_time_, ts_shift);
   record._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
@@ -742,7 +792,7 @@ inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
   pti_view_record_memory_fill record;
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL;
 
-  int64_t ts_shift = utils::ConvertionFactorMonotonicRawToReal();
+  int64_t ts_shift = Instance().GetTimeShift();
 
   record._append_timestamp = ApplyTimeShift(rec.append_time_, ts_shift);
   record._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
@@ -766,7 +816,7 @@ inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
 }
 
 inline void OverheadCollectionEvent(void* data, const ZeKernelCommandExecutionRecord& /*rec*/) {
-  int64_t ts_shift = utils::ConvertionFactorMonotonicRawToReal();
+  int64_t ts_shift = Instance().GetTimeShift();
   pti_view_record_overhead* ohRec = reinterpret_cast<pti_view_record_overhead*>(data);
   ohRec->_overhead_start_timestamp_ns =
       ApplyTimeShift(ohRec->_overhead_start_timestamp_ns, ts_shift);
@@ -780,7 +830,7 @@ inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecor
   pti_view_record_sycl_runtime record;
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS;
 
-  int64_t ts_shift = utils::ConvertionFactorMonotonicRawToReal();
+  int64_t ts_shift = Instance().GetTimeShift();
 
   if (external_collection_enabled) {
     GenerateExternalCorrelationRecords(rec);
@@ -799,7 +849,7 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   pti_view_record_kernel record;
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL;
 
-  int64_t ts_shift = utils::ConvertionFactorMonotonicRawToReal();
+  int64_t ts_shift = Instance().GetTimeShift();
 
   if (external_collection_enabled) {
     GenerateExternalCorrelationRecords(rec);

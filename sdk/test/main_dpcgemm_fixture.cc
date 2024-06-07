@@ -45,6 +45,8 @@ uint64_t num_of_overhead_recs = 0;
 bool overhead_kind_stringified = false;
 uint64_t num_of_overhead_counts = 0;
 bool buffer_size_atleast_largest_record = false;
+uint64_t last_kernel_timestamp = 0;
+uint64_t user_real_timestamp = 0;
 
 void StartTracing() {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
@@ -168,6 +170,8 @@ class MainFixtureTest : public ::testing::Test {
     perf_time_with_tracing = 0;
     perf_time_without_tracing = 0;
     perf_time = 0;
+    last_kernel_timestamp = 0;
+    user_real_timestamp = 0;
   };
 
   void TearDown() override {
@@ -307,6 +311,7 @@ class MainFixtureTest : public ::testing::Test {
           if (rec->_sycl_enqk_begin_timestamp == 0) {
             kernel_has_enqk_begin0_record = true;
           }
+          last_kernel_timestamp = rec->_end_timestamp;
           if (samples_utils::stringify_uuid(rec->_device_uuid, "") !=
               "00000000-0000-0000-0000-000000000000") {
             kernel_uuid_zero = false;
@@ -619,6 +624,58 @@ TEST_F(MainFixtureTest, KerneluuidDeviceNonZero) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   ASSERT_EQ(kernel_uuid_zero, false);
+}
+
+// ptisdk default is real clock domain -- this tests that ptiViewGetTimestamp returns a
+// monotonically increasing ts in same domain.
+TEST_F(MainFixtureTest, ValidateRealTimestampToUser) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunGemm();
+  ASSERT_GT(last_kernel_timestamp, 0);
+  user_real_timestamp = ptiViewGetTimestamp();
+  ASSERT_GT(user_real_timestamp, last_kernel_timestamp);
+}
+
+// set user ts function in clockmonotonic raw domain -- test output is in increasing timestamps in
+// same domain.
+TEST_F(MainFixtureTest, ValidateRealTimestampFromUser) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewSetTimestampCallback(utils::GetTime), pti_result::PTI_SUCCESS);
+  uint64_t before_run = utils::GetTime();
+  RunGemm();
+  ASSERT_GT(last_kernel_timestamp, 0);
+  uint64_t after_run = utils::GetTime();
+  ASSERT_LT(before_run, last_kernel_timestamp);
+  ASSERT_GT(after_run, last_kernel_timestamp);
+}
+
+// set user ts function in real clock domain and capture last timestamp before switch
+// switch to monotonic raw domain and capture last timestamp
+// -- test output is in increasing timestamps in same domain.
+TEST_F(MainFixtureTest, ValidateSwitchedTSCallbackFromUser) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewSetTimestampCallback(utils::GetRealTime),
+            pti_result::PTI_SUCCESS);  // kernels will have real domain
+  RunGemm();
+  ASSERT_GT(last_kernel_timestamp, 0);
+  user_real_timestamp = ptiViewGetTimestamp();  // Real Domain
+  uint64_t after_run = utils::GetTime();        // Monotonic raw Domain
+  ASSERT_LT(after_run, last_kernel_timestamp);
+  ASSERT_LT(after_run, user_real_timestamp);
+  ASSERT_LT(last_kernel_timestamp, user_real_timestamp);
+
+  uint64_t before_switch_last_kernel_ts = last_kernel_timestamp;  // real clock
+  ASSERT_EQ(ptiViewSetTimestampCallback(utils::GetTime),
+            pti_result::PTI_SUCCESS);           // Switch -- kernels will have monotonic raw
+  user_real_timestamp = ptiViewGetTimestamp();  // Monotonic raw also
+  RunGemm();
+  ASSERT_GT(last_kernel_timestamp, 0);
+  ASSERT_GT(last_kernel_timestamp, user_real_timestamp);
+  after_run = utils::GetTime();
+
+  ASSERT_GT(before_switch_last_kernel_ts,
+            last_kernel_timestamp);             // real clock raw value > than monotonic raw
+  ASSERT_GT(after_run, last_kernel_timestamp);  // in same domain so monotonically increasing
 }
 
 namespace {

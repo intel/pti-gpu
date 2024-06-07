@@ -40,6 +40,8 @@
 
 namespace utils {
 
+typedef uint64_t (*fptr_get_timestamp_unknown_clock)(void);
+
 // Duplicated from test/utils --- there are some useful methods there that can be pulled here as
 // needed.
 //-----
@@ -71,24 +73,36 @@ inline uint64_t GetTime(clockid_t id) {
 }
 
 inline uint64_t GetTime() { return GetTime(CLOCK_MONOTONIC_RAW); }
+inline uint64_t GetRealTime() { return GetTime(CLOCK_REALTIME); }
 
-inline uint64_t ConvertClockMonotonicToRaw(uint64_t clock_monotonic) {
-  uint64_t raw = GetTime(CLOCK_MONOTONIC_RAW);
-  uint64_t monotonic = GetTime(CLOCK_MONOTONIC);
-  return (raw > monotonic) ? clock_monotonic + (raw - monotonic)
-                           : clock_monotonic - (monotonic - raw);
-}
+inline int64_t ConversionFactorMonotonicRawToUnknownClock(
+    fptr_get_timestamp_unknown_clock user_provided_get_timestamp) {
+  uint64_t user_final = user_provided_get_timestamp();
+  uint64_t raw_final = utils::GetTime(CLOCK_MONOTONIC_RAW);
+  constexpr auto kNumberOfIterations = 50;
+  std::array<uint64_t, kNumberOfIterations> raw_start = {};
+  std::array<uint64_t, kNumberOfIterations> raw_end = {};
+  std::array<uint64_t, kNumberOfIterations> user = {};
 
-inline uint64_t ConvertClockMonotonicRawToRealTime(uint64_t clock_monotonic_raw) {
-  uint64_t real = GetTime(CLOCK_REALTIME);
-  uint64_t raw = GetTime(CLOCK_MONOTONIC_RAW);
-  return (real > raw) ? clock_monotonic_raw + (real - raw) : clock_monotonic_raw - (raw - real);
-}
+  int i_at_min = -1;
+  int64_t diff_min = INT_MAX;  // some big number
+  int64_t diff;
 
-inline int64_t ConvertionFactorMonotonicRawToReal() {
-  uint64_t real = GetTime(CLOCK_REALTIME);
-  uint64_t raw = GetTime(CLOCK_MONOTONIC_RAW);
-  return (real > raw) ? (real - raw) : -(raw - real);
+  for (int i = 0; i < kNumberOfIterations; i++) {
+    raw_start[i] = utils::GetTime(CLOCK_MONOTONIC_RAW);
+    user[i] = user_provided_get_timestamp();
+    raw_end[i] = utils::GetTime(CLOCK_MONOTONIC_RAW);
+    diff = raw_end[i] - raw_start[i];
+    if (diff < diff_min) {
+      diff_min = diff;
+      i_at_min = i;
+    }
+  }
+
+  raw_final = (raw_start[i_at_min] + raw_end[i_at_min]) / 2;
+  user_final = user[i_at_min];
+
+  return (user_final > raw_final) ? (user_final - raw_final) : -(raw_final - user_final);
 }
 
 #endif

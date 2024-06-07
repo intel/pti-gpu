@@ -257,3 +257,24 @@ const char* ptiViewMemcpyTypeToString(pti_view_memcpy_type type) {
   }
   return kMemcpyType[0];
 }
+
+// Capture monotonic_raw which is not subject to jumps and adjustments; convert to real time and
+// return.
+uint64_t ptiViewGetTimestamp() {
+  return Instance().GetUserTimestamp();  // user timestamp func ptr is real time by default.
+}
+
+// Set callback function to get host timestamps from user.
+pti_result ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequested) {
+  try {
+    return Instance().RegisterTimestampCallback(fptr_timestampRequested);
+  } catch (const std::overflow_error& e) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::runtime_error& e) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::exception& e) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}

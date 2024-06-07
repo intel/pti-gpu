@@ -36,6 +36,7 @@ typedef enum {
   PTI_ERROR_NO_CALLBACKS_SET = 4,         //!< error due to no callbacks set via ptiViewSetCallbacks
   PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY = 5,  //!< empty external ID-queue while working with
                                           //!< PTI_VIEW_EXTERNAL_CORRELATION
+  PTI_ERROR_BAD_TIMESTAMP = 6,            //!< error in timestamp conversion, might be related with the user provided TimestampCallback
   PTI_ERROR_DRIVER = 50,                  //!< unknown driver error
   PTI_ERROR_TRACING_NOT_INITIALIZED = 51, //!< installed driver requires tracing enabling with
                                           //!< setting environment variable ZE_ENABLE_TRACING_LAYER
@@ -391,6 +392,33 @@ ptiViewMemoryTypeToString( pti_view_memory_type type );
  */
 PTI_EXPORT const char*
 ptiViewMemcpyTypeToString( pti_view_memcpy_type type );
+
+/**
+ * @brief Returns current pti host timestamp in nanoseconds. The timestamp is in the same domain as view records timestamps.  
+ *
+ * @return uint64_t
+ */
+PTI_EXPORT uint64_t 
+ptiViewGetTimestamp();
+
+
+/**
+ * @brief User provided timestamping function.  
+ *        This will be used to obtain host timestamps when user registers using the ptiViewSetTimestampCallback.
+ *        It is expected that this function will return timestamps in nano seconds.
+ */
+typedef uint64_t (*pti_fptr_get_timestamp)( void );
+
+/**
+ * @brief Sets callback to user provided timestamping function.  This will replace the default pti host timestamper.
+ *        Multiple callbacks that set differing timestamp function, through the session; will result in differing 
+ *        timestamp domains in the view record buffer.
+ *
+ * @return pti_result
+ */
+pti_result PTI_EXPORT
+ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequested);
+
 
 #if defined(__cplusplus)
 }
