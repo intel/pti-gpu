@@ -405,32 +405,53 @@ def AnalyzeStallMetrics(args, header, last):
                     df2 = df2.loc[(df2["ControlStall[Events]"] != 0) | (df2["PipeStall[Events]"] != 0) | (df2["SendStall[Events]"] != 0) | (df2["DistStall[Events]"] != 0) | (df2["SbidStall[Events]"] != 0) | (df2["SyncStall[Events]"] != 0) | (df2["InstrFetchStall[Events]"] != 0) | (df2["OtherStall[Events]"] != 0)]
                     df3 = df2[stalls]
 
-                    xlabels = []
-                    xticks = []
-                    for i, ip in enumerate(df2["IP[Address]"]):
-                        xlabels.append(ip)
-                        xticks.append(i)
+                    if (df3.shape[0] > 0):
+                        xlabels = []
+                        xticks = []
+                        for i, ip in enumerate(df2["IP[Address]"]):
+                            xlabels.append(ip)
+                            xticks.append(i)
 
-                    df3 = df3.reset_index()
-                    if (df3.shape[0] > 1):	# draw line chart if there are at least 2 data points
-                        ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                    else:	# draw bar chart otherwise
-                        ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                    ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
-                    plt.grid(visible = True, which = 'both', axis = 'y')
-                    plt.legend(loc = 'best', fontsize = 4)
-                    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-                    plt.tight_layout()
-                    fig = ax.get_figure()
-                    if (p == None):
-                        p = pdf(args.output)
-                    fig.savefig(p, format = 'pdf')
-                    plt.close(fig)	# close figure to save memory
+                        df3 = df3.reset_index()
+                        numpages = (df3.shape[0] + (100 - 1)) // 100 # multiple charts if more than 100 instructions are stalled
+                        if (numpages > 1):
+                            for page in range(1, numpages + 1):
+                                df4 = df3[100 * (page - 1) : min([100 * page, df3.shape[0]])]
+                                if (df4.shape[0] > 1):
+                                    ax = df4.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                                else:
+                                    ax = df4.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                                ax.set_xticks(xticks[100 * (page - 1) :  min([100 * page, df3.shape[0]])], labels = xlabels[100 * (page - 1) :  min([100 * page, df3.shape[0]])], rotation = 90, fontsize = 4)
+                                plt.grid(visible = True, which = 'both', axis = 'y')
+                                plt.legend(loc = 'best', fontsize = 4)
+                                plt.title(label = args.title + "\n(" + kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
+                                plt.tight_layout()
+                                fig = ax.get_figure()
+                                if (p == None):
+                                    p = pdf(args.output)
+                                fig.savefig(p, format = 'pdf')
+                                plt.close(fig)	# close figure to save memory
+                        else:
+                            if (df3.shape[0] > 1):	# draw line chart if there are at least 2 data points
+                                ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                            else:	# draw bar chart otherwise
+                                ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                            ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
+                            plt.grid(visible = True, which = 'both', axis = 'y')
+                            plt.legend(loc = 'best', fontsize = 4)
+                            plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+                            plt.tight_layout()
+                            fig = ax.get_figure()
+                            if (p == None):
+                                p = pdf(args.output)
+                            fig.savefig(p, format = 'pdf')
+                            plt.close(fig)	# close figure to save memory
 
-                    if (args.shaderdump is not None):
-                        AnalyzeStalls(kernel, args, df2, report_out)
-
-                    print("\nAnalyzed kernel " + kernel)
+                        if (args.shaderdump is not None):
+                            AnalyzeStalls(kernel, args, df2, report_out)
+                        print("\nAnalyzed kernel " + kernel)
+                    else:
+                        print("\nNo stall events for kernel " + kernel)
 
                     kernel = row['Kernel']
                     start = index
@@ -443,33 +464,55 @@ def AnalyzeStallMetrics(args, header, last):
         df2 = df2.loc[(df2["ControlStall[Events]"] != 0) | (df2["PipeStall[Events]"] != 0) | (df2["SendStall[Events]"] != 0) | (df2["DistStall[Events]"] != 0) | (df2["SbidStall[Events]"] != 0) | (df2["SyncStall[Events]"] != 0) | (df2["InstrFetchStall[Events]"] != 0) | (df2["OtherStall[Events]"] != 0)]
         df3 = df2[stalls]
 
-        xlabels = []
-        xticks = []
-        for i, ip in enumerate(df2["IP[Address]"]):
-            xlabels.append(ip)
-            xticks.append(i)
+        if (df3.shape[0] > 0):
+            xlabels = []
+            xticks = []
+            for i, ip in enumerate(df2["IP[Address]"]):
+                xlabels.append(ip)
+                xticks.append(i)
 
-        df3 = df3.reset_index()
-        if (df3.shape[0] > 1):
-            ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+            df3 = df3.reset_index()
+            numpages = (df3.shape[0] + (100 - 1)) // 100 # multiple charts if more than 100 instructions are stalled
+            if (numpages > 1):
+                for page in range(1, numpages + 1):
+                    df4 = df3[100 * (page - 1) : min([100 * page, df3.shape[0]])]
+                    if (df4.shape[0] > 1):
+                        ax = df4.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                    else:
+                        ax = df4.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                    ax.set_xticks(xticks[100 * (page - 1) :  min([100 * page, df3.shape[0]])], labels = xlabels[100 * (page - 1) :  min([100 * page, df3.shape[0]])], rotation = 90, fontsize = 4)
+                    plt.grid(visible = True, which = 'both', axis = 'y')
+                    plt.legend(loc = 'best', fontsize = 4)
+                    plt.title(label = args.title + "\n(" + kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
+                    plt.tight_layout()
+                    fig = ax.get_figure()
+                    if (p == None):
+                        p = pdf(args.output)
+                    fig.savefig(p, format = 'pdf')
+                    plt.close(fig)	# close figure to save memory
+            else:
+                if (df3.shape[0] > 1):
+                    ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                else:
+                    ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+    
+                ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
+                plt.grid(visible = True, which = 'both', axis = 'y')
+                plt.legend(loc = 'best', fontsize = 4)
+                plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+                plt.tight_layout()
+                fig = ax.get_figure()
+                if (p == None):
+                    p = pdf(args.output)
+                fig.savefig(p, format = 'pdf')
+                plt.close(fig)	# close figure to save memory
+
+            if (args.shaderdump is not None):
+                AnalyzeStalls(kernel, args, df2, report_out)
+            print("\nAnalyzed kernel " + kernel)
         else:
-            ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+            print("\nNo stall events for kernel " + kernel)
 
-        ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
-        plt.grid(visible = True, which = 'both', axis = 'y')
-        plt.legend(loc = 'best', fontsize = 4)
-        plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-        plt.tight_layout()
-        fig = ax.get_figure()
-        if (p == None):
-            p = pdf(args.output)
-        fig.savefig(p, format = 'pdf')
-        plt.close(fig)	# close figure to save memory
-
-        if (args.shaderdump is not None):
-            AnalyzeStalls(kernel, args, df2, report_out)
-
-        print("\nAnalyzed kernel " + kernel)
         if (p != None):
             p.close()
             print("\nStall metric charts are stored in file " + args.output + " in PDF format")
@@ -507,28 +550,32 @@ def AnalyzeStallMetrics(args, header, last):
         df2 = df2.loc[(df2["ControlStall[Events]"] != 0) | (df2["PipeStall[Events]"] != 0) | (df2["SendStall[Events]"] != 0) | (df2["DistStall[Events]"] != 0) | (df2["SbidStall[Events]"] != 0) | (df2["SyncStall[Events]"] != 0) | (df2["InstrFetchStall[Events]"] != 0) | (df2["OtherStall[Events]"] != 0)]
         df3 = df2[stalls]
 
-        xlabels = []
-        xticks = []
-        for i, ip in enumerate(df2["IP[Address]"]):
-            xlabels.append(ip)
-            xticks.append(i)
+        if (df3.shape[0] > 0):
+            xlabels = []
+            xticks = []
+            for i, ip in enumerate(df2["IP[Address]"]):
+                xlabels.append(ip)
+                xticks.append(i)
 
-        df3 = df3.reset_index()
-        if (df3.shape[0] > 1):
-            ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+            df3 = df3.reset_index()
+            if (df3.shape[0] > 1):
+                ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+            else:
+                ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+            ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
+            plt.grid(visible = True, which = 'both', axis = 'y')
+            plt.legend(loc = 'best', fontsize = 4)
+            plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+            plt.tight_layout()
+            plt.savefig(args.output)
+
+            if (args.shaderdump is not None):
+                AnalyzeStalls(args.kernel, args, df2, report_out)
+
+            print("\nStall metric chart in file " + args.output + " has been successfully generated.")
         else:
-            ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-        ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
-        plt.grid(visible = True, which = 'both', axis = 'y')
-        plt.legend(loc = 'best', fontsize = 4)
-        plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-        plt.tight_layout()
-        plt.savefig(args.output)
+            print("\nNo stall events for kernel " + args.kernel + " in the input data")
 
-        if (args.shaderdump is not None):
-            AnalyzeStalls(args.kernel, args, df2, report_out)
-
-        print("\nStall metric chart in file " + args.output + " has been successfully generated.")
         if ((args.shaderdump is not None) and (args.report is not None)):
             report_out.close()
             print("Stall report is in file " + args.report)
@@ -564,16 +611,19 @@ def PlotKernelInstancePerfMetrics(args, kernel, df, metrics):
     df2 = df[start : stop]	# data frame of the instance of interest
     df3 = df2[metrics]
 
-    if (df3.shape[0] > 1):
-        ax = df3.plot(y = metrics, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
-    else:
-        ax = df3.plot(y = metrics, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
-    plt.grid(visible = True, which = 'both', axis = 'y')
-    plt.legend(loc = 'best', fontsize = 4)
-    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-    plt.tight_layout()
+    if (df3.shape[0] > 0):
+        if (df3.shape[0] > 1):
+            ax = df3.plot(y = metrics, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
+        else:
+            ax = df3.plot(y = metrics, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
+        plt.grid(visible = True, which = 'both', axis = 'y')
+        plt.legend(loc = 'best', fontsize = 4)
+        plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+        plt.tight_layout()
 
-    return ax
+        return ax
+    else:
+        return None
 
 def AnalyzePerfMetrics(args, header, last):
 
@@ -603,21 +653,25 @@ def AnalyzePerfMetrics(args, header, last):
 
                     df2 = df[start : stop]	# data frame of the instance of interest
                     df3 = df2[metrics_cleansed]
-                    if (df3.shape[0] > 1):
-                        ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
-                    else:
-                        ax = df3.plot(y = metrics_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
+                    if (df3.shape[0] > 0):
+                        if (df3.shape[0] > 1):
+                            ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
+                        else:
+                            ax = df3.plot(y = metrics_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
 
-                    plt.grid(visible = True, which = 'both', axis = 'y')
-                    plt.legend(loc = 'best', fontsize = 4)
-                    plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-                    plt.tight_layout()
-                    if (p == None):
-                        p = pdf(args.output)
-                    fig = ax.get_figure()
-                    fig.savefig(p, format = 'pdf')
-                    plt.close(fig)	# close figure to save memory
-                    print("Analyzed kernel " + kernel)
+                        plt.grid(visible = True, which = 'both', axis = 'y')
+                        plt.legend(loc = 'best', fontsize = 4)
+                        plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+                        plt.tight_layout()
+                        if (p == None):
+                            p = pdf(args.output)
+                        fig = ax.get_figure()
+                        fig.savefig(p, format = 'pdf')
+                        plt.close(fig)	# close figure to save memory
+                        print("Analyzed kernel " + kernel)
+                    else:
+                        print("No samples for kernel " + kernel)
+
                     kernel = ""	# reset kernel name to empty
                 else:
                     if (kernel == ""):
@@ -674,22 +728,25 @@ def AnalyzePerfMetrics(args, header, last):
                         df2 = df[start : stop]	# data frame of the instance of interest
                         df3 = df2[metrics_cleansed]
 
-                        if (df3.shape[0] > 1):
-                            ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
-                        else:
-                            ax = df3.plot(y = metrics_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
-
-                        plt.grid(visible = True, which = 'both', axis = 'y')
-                        plt.legend(loc = 'best', fontsize = 4)
-                        plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-                        plt.tight_layout()
-                        if (p == None):
-                            p = pdf(args.output)
-                        fig = ax.get_figure()
-                        fig.savefig(p, format = 'pdf')
-                        plt.close(fig)	# close figure to save memory
                         instance = instance + 1
-                        print("Analyzed instance " + str(instance) + " of kernel " + args.kernel)
+                        if (df3.shape[0] > 0):
+                            if (df3.shape[0] > 1):
+                                ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
+                            else:
+                                ax = df3.plot(y = metrics_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
+
+                            plt.grid(visible = True, which = 'both', axis = 'y')
+                            plt.legend(loc = 'best', fontsize = 4)
+                            plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+                            plt.tight_layout()
+                            if (p == None):
+                                p = pdf(args.output)
+                            fig = ax.get_figure()
+                            fig.savefig(p, format = 'pdf')
+                            plt.close(fig)	# close figure to save memory
+                            print("Analyzed instance " + str(instance) + " of kernel " + args.kernel)
+                        else:
+                            print("No samples for instance " + str(instance) + " of kernel " + args.kernel)
 
                         # continue scan for next instance
                         counting = True			# a new kernel and/or a new instance starts in the data frame
@@ -702,22 +759,25 @@ def AnalyzePerfMetrics(args, header, last):
                 df2 = df[start : stop]	# data frame of the instance of interest
                 df3 = df2[metrics]
 
-                if (df3.shape[0] > 1):
-                    ax = df3.plot(y = metrics, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
-                else:
-                    ax = df3.plot(y = metrics, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
-
-                plt.grid(visible = True, which = 'both', axis = 'y')
-                plt.legend(loc = 'best', fontsize = 4)
-                plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-                plt.tight_layout()
-                if (p == None):
-                    p = pdf(args.output)
-                fig = ax.get_figure()
-                fig.savefig(p, format = 'pdf')
-                plt.close(fig)	# close figure to save memory
                 instance = instance + 1
-                print("Analyzed instance " + str(instance) + " of kernel " + args.kernel)
+                if (df3.shape[0] > 0):
+                    if (df3.shape[0] > 1):
+                        ax = df3.plot(y = metrics, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
+                    else:
+                        ax = df3.plot(y = metrics, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
+
+                    plt.grid(visible = True, which = 'both', axis = 'y')
+                    plt.legend(loc = 'best', fontsize = 4)
+                    plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+                    plt.tight_layout()
+                    if (p == None):
+                        p = pdf(args.output)
+                    fig = ax.get_figure()
+                    fig.savefig(p, format = 'pdf')
+                    plt.close(fig)	# close figure to save memory
+                    print("Analyzed instance " + str(instance) + " of kernel " + args.kernel)
+                else:
+                    print("No samples for " + str(instance) + " of kernel " + args.kernel)
 
             if (p != None):
                 p.close()
