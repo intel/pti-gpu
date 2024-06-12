@@ -558,16 +558,35 @@ def AnalyzeStallMetrics(args, header, last):
                 xticks.append(i)
 
             df3 = df3.reset_index()
-            if (df3.shape[0] > 1):
-                ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+            numpages = (df3.shape[0] + (100 - 1)) // 100 # multiple charts if more than 100 instructions are stalled
+            if (numpages > 1):
+                p = pdf(args.output)
+                for page in range(1, numpages + 1):
+                    df4 = df3[100 * (page - 1) : min([100 * page, df3.shape[0]])]
+                    if (df4.shape[0] > 1):
+                        ax = df4.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                    else:
+                        ax = df4.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                    ax.set_xticks(xticks[100 * (page - 1) :  min([100 * page, df3.shape[0]])], labels = xlabels[100 * (page - 1) :  min([100 * page, df3.shape[0]])], rotation = 90, fontsize = 4)
+                    plt.grid(visible = True, which = 'both', axis = 'y')
+                    plt.legend(loc = 'best', fontsize = 4)
+                    plt.title(label = args.title + "\n(" + args.kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
+                    plt.tight_layout()
+                    fig = ax.get_figure()
+                    fig.savefig(p, format = 'pdf')
+                    plt.close(fig)	# close figure to save memory
+                p.close()
             else:
-                ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-            ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
-            plt.grid(visible = True, which = 'both', axis = 'y')
-            plt.legend(loc = 'best', fontsize = 4)
-            plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-            plt.tight_layout()
-            plt.savefig(args.output)
+                if (df3.shape[0] > 1):
+                    ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                else:
+                    ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
+                ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
+                plt.grid(visible = True, which = 'both', axis = 'y')
+                plt.legend(loc = 'best', fontsize = 4)
+                plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+                plt.tight_layout()
+                plt.savefig(args.output)
 
             if (args.shaderdump is not None):
                 AnalyzeStalls(args.kernel, args, df2, report_out)
