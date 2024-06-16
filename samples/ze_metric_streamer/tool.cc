@@ -7,40 +7,19 @@
 
 #include <iomanip>
 #include <iostream>
-#include <set>
 
-#include "ze_kernel_collector.h"
 #include "ze_metric_collector.h"
 
-struct Kernel {
-  uint64_t total_time;
-  uint64_t call_count;
-  float eu_active;
-  float eu_stall;
-
-  bool operator>(const Kernel& r) const {
-    if (total_time != r.total_time) {
-      return total_time > r.total_time;
-    }
-    return call_count > r.call_count;
-  }
-
-  bool operator!=(const Kernel& r) const {
-    if (total_time == r.total_time) {
-      return call_count != r.call_count;
-    }
-    return true;
-  }
+struct MetricResult {
+  uint64_t inst_alu0 = 0;
+  uint64_t inst_alu1 = 0;
+  uint64_t inst_xmx = 0;
+  uint64_t inst_send = 0;
+  uint64_t inst_ctrl = 0;
 };
 
-using KernelMap = std::map<std::string, Kernel>;
+const uint32_t kInstructionLength = 20;
 
-const uint32_t kKernelLength = 10;
-const uint32_t kCallsLength = 12;
-const uint32_t kTimeLength = 20;
-const uint32_t kPercentLength = 16;
-
-static ZeKernelCollector* kernel_collector = nullptr;
 static ZeMetricCollector* metric_collector = nullptr;
 
 static std::chrono::steady_clock::time_point start;
@@ -61,159 +40,80 @@ int ParseArgs(int argc, char* argv[]) {
 
 extern "C" PTI_EXPORT
 void SetToolEnv() {
-  utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
   utils::SetEnv("ZET_ENABLE_METRICS", "1");
 }
 
 // Internal Tool Functionality ////////////////////////////////////////////////
 
-static KernelMap GetKernelMap() {
-  PTI_ASSERT(kernel_collector != nullptr);
+static MetricResult GetMetricResult() {
   PTI_ASSERT(metric_collector != nullptr);
 
   std::vector<zet_typed_value_t> report_list =
     metric_collector->GetReportList();
   if (report_list.size() == 0) {
-    return KernelMap();
+    return MetricResult();
   }
 
-  const ZeKernelIntervalList& kernel_interval_list =
-    kernel_collector->GetKernelIntervalList();
-  if (kernel_interval_list.size() == 0) {
-    return KernelMap();
-  }
+  MetricResult metric_result;
 
-  KernelMap kernel_map;
-
-  int gpu_timestamp_id = metric_collector->GetMetricId("QueryBeginTime");
-  PTI_ASSERT(gpu_timestamp_id >= 0);
-  int eu_active_id = metric_collector->GetMetricId("XVE_ACTIVE");
-  PTI_ASSERT(eu_active_id >= 0); // Note, the names of the same events might vary on different GPU models.
-  // In case of this assert, check the corresponding events names (active, stall) using ze_metric_info sample tool.
-  int eu_stall_id = metric_collector->GetMetricId("XVE_STALL");
-  PTI_ASSERT(eu_stall_id >= 0);
+  int inst_alu0_id = metric_collector->GetMetricId("XVE_INST_EXECUTED_ALU0_ALL");
+  PTI_ASSERT(inst_alu0_id > 0);
+  int inst_alu1_id = metric_collector->GetMetricId("XVE_INST_EXECUTED_ALU1_ALL");
+  PTI_ASSERT(inst_alu1_id > 0);
+  int inst_xmx_id = metric_collector->GetMetricId("XVE_INST_EXECUTED_XMX_ALL");
+  PTI_ASSERT(inst_xmx_id > 0);
+  int inst_send_id = metric_collector->GetMetricId("XVE_INST_EXECUTED_SEND_ALL");
+  PTI_ASSERT(inst_send_id > 0);
+  int inst_ctrl_id = metric_collector->GetMetricId("XVE_INST_EXECUTED_CONTROL_ALL");
+  PTI_ASSERT(inst_ctrl_id > 0);
 
   uint32_t report_size = metric_collector->GetReportSize();
   PTI_ASSERT(report_size > 0);
 
-  for (auto& kernel : kernel_interval_list) {
-    uint32_t sample_count = 0;
-    float eu_active = 0.0f, eu_stall = 0.0f;
+  const zet_typed_value_t* report = report_list.data();
+  while (report < report_list.data() + report_list.size()) {
+    PTI_ASSERT(report[inst_alu0_id].type == ZET_VALUE_TYPE_UINT64);
+    uint64_t inst_alu0 = report[inst_alu0_id].value.ui64;
+    PTI_ASSERT(report[inst_alu1_id].type == ZET_VALUE_TYPE_UINT64);
+    uint64_t inst_alu1 = report[inst_alu1_id].value.ui64;
+    PTI_ASSERT(report[inst_xmx_id].type == ZET_VALUE_TYPE_UINT64);
+    uint64_t inst_xmx = report[inst_xmx_id].value.ui64;
+    PTI_ASSERT(report[inst_send_id].type == ZET_VALUE_TYPE_UINT64);
+    uint64_t inst_send = report[inst_send_id].value.ui64;
+    PTI_ASSERT(report[inst_ctrl_id].type == ZET_VALUE_TYPE_UINT64);
+    uint64_t inst_ctrl = report[inst_ctrl_id].value.ui64;
 
-    const zet_typed_value_t* report = report_list.data();
-    while (report < report_list.data() + report_list.size()) {
-      PTI_ASSERT(report[gpu_timestamp_id].type == ZET_VALUE_TYPE_UINT64);
-      uint64_t report_timestamp = report[gpu_timestamp_id].value.ui64;
-
-      if (report_timestamp >= kernel.start && report_timestamp <= kernel.end) {
-        PTI_ASSERT(report[eu_active_id].type == ZET_VALUE_TYPE_FLOAT32);
-        eu_active += report[eu_active_id].value.fp32;
-        PTI_ASSERT(report[eu_stall_id].type == ZET_VALUE_TYPE_FLOAT32);
-        eu_stall += report[eu_stall_id].value.fp32;
-        ++sample_count;
-      }
-
-      if (report_timestamp > kernel.end) {
-        break;
-      }
-
-      report += report_size;
-    }
-
-    if (sample_count > 0) {
-      eu_active /= sample_count;
-      eu_stall /= sample_count;
-    } else {
-      std::cerr << "[WARNING] No samples found for a kernel instance of " <<
-        kernel.name << ", results may be inaccurate" << std::endl;
-    }
-
-    if (kernel_map.count(kernel.name) == 0) {
-      kernel_map[kernel.name] =
-        {kernel.end - kernel.start, 1, eu_active, eu_stall};
-    } else {
-      Kernel& kernel_info = kernel_map[kernel.name];
-      kernel_info.total_time += (kernel.end - kernel.start);
-      kernel_info.eu_active =
-        (kernel_info.eu_active * kernel_info.call_count + eu_active) /
-        (kernel_info.call_count + 1);
-      kernel_info.eu_stall =
-        (kernel_info.eu_stall * kernel_info.call_count + eu_stall) /
-        (kernel_info.call_count + 1);
-      kernel_info.call_count += 1;
-    }
+    metric_result.inst_alu0 += inst_alu0;
+    metric_result.inst_alu1 += inst_alu1;
+    metric_result.inst_xmx += inst_xmx;
+    metric_result.inst_send += inst_send;
+    metric_result.inst_ctrl += inst_ctrl;
   }
 
-  return kernel_map;
+  return metric_result;
 }
 
 static void PrintResults() {
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
   std::chrono::duration<uint64_t, std::nano> time = end - start;
 
-  KernelMap kernel_map = GetKernelMap();
-  if (kernel_map.size() == 0) {
-    return;
-  }
-
-  std::set< std::pair<std::string, Kernel>,
-            utils::Comparator > sorted_list(
-      kernel_map.begin(), kernel_map.end());
-
-  uint64_t total_duration = 0;
-  size_t max_name_length = kKernelLength;
-  for (auto& value : sorted_list) {
-    total_duration += value.second.total_time;
-    if (value.first.size() > max_name_length) {
-      max_name_length = value.first.size();
-    }
-  }
-
-  if (total_duration == 0) {
-    return;
-  }
+  MetricResult metric_result = GetMetricResult();
 
   std::cerr << std::endl;
   std::cerr << "=== Device Metrics: ===" << std::endl;
   std::cerr << std::endl;
-  std::cerr << "Total Execution Time (ns): " << time.count() << std::endl;
-  std::cerr << "Total Kernel Time (ns): " << total_duration << std::endl;
-  std::cerr << std::endl;
 
-  std::cerr << std::setw(max_name_length) << "Kernel" << "," <<
-    std::setw(kCallsLength) << "Calls" << "," <<
-    std::setw(kTimeLength) << "Time (ns)" << "," <<
-    std::setw(kPercentLength) << "Time (%)" << "," <<
-    std::setw(kTimeLength) << "Average (ns)" << "," <<
-    std::setw(kPercentLength) << "EU Active (%)" << "," <<
-    std::setw(kPercentLength) << "EU Stall (%)" << "," <<
-    std::setw(kPercentLength) << "EU Idle (%)" << std::endl;
+  std::cerr << std::setw(kInstructionLength) << "Inst executed alu0" << "," <<
+    std::setw(kInstructionLength) << "Inst executed alu1" << "," <<
+    std::setw(kInstructionLength) << "Inst executed xmx" << "," <<
+    std::setw(kInstructionLength) << "Inst executed send" << "," <<
+    std::setw(kInstructionLength) << "Inst executed ctrl" << std::endl;
 
-  for (auto& value : sorted_list) {
-    const std::string& kernel = value.first;
-    uint64_t call_count = value.second.call_count;
-    uint64_t duration = value.second.total_time;
-    uint64_t avg_duration = duration / call_count;
-    float percent_duration = 100.0f * duration / total_duration;
-    float eu_active = value.second.eu_active;
-    float eu_stall = value.second.eu_stall;
-    float eu_idle = 0.0f;
-    if (eu_active + eu_stall < 100.0f) {
-      eu_idle = 100.f - eu_active - eu_stall;
-    }
-    std::cerr << std::setw(max_name_length) << kernel << "," <<
-      std::setw(kCallsLength) << call_count << "," <<
-      std::setw(kTimeLength) << duration << "," <<
-      std::setw(kPercentLength) << std::setprecision(2) <<
-        std::fixed << percent_duration << "," <<
-      std::setw(kTimeLength) << avg_duration << "," <<
-      std::setw(kPercentLength) << std::setprecision(2) <<
-        std::fixed << eu_active << "," <<
-      std::setw(kPercentLength) << std::setprecision(2) <<
-        std::fixed << eu_stall << "," <<
-      std::setw(kPercentLength) << std::setprecision(2) <<
-        std::fixed << eu_idle << std::endl;
-  }
+  std::cerr << std::setw(kInstructionLength) << metric_result.inst_alu0 << "," <<
+    std::setw(kInstructionLength) << metric_result.inst_alu1 << "," <<
+    std::setw(kInstructionLength) << metric_result.inst_xmx << "," <<
+    std::setw(kInstructionLength) << metric_result.inst_send << "," <<
+    std::setw(kInstructionLength) << metric_result.inst_ctrl << std::endl;
 
   std::cerr << std::endl;
 }
@@ -232,17 +132,9 @@ void EnableProfiling() {
     return;
   }
 
-  kernel_collector = ZeKernelCollector::Create();
-  if (kernel_collector == nullptr) {
-    return;
-  }
-
   metric_collector =
     ZeMetricCollector::Create(driver, device, "ComputeBasic");
   if (metric_collector == nullptr) {
-    kernel_collector->DisableTracing();
-    delete kernel_collector;
-    kernel_collector = nullptr;
     return;
   }
 
@@ -250,13 +142,10 @@ void EnableProfiling() {
 }
 
 void DisableProfiling() {
-  if (kernel_collector != nullptr || metric_collector != nullptr) {
-    PTI_ASSERT(kernel_collector != nullptr);
+  if (metric_collector != nullptr) {
     PTI_ASSERT(metric_collector != nullptr);
-    kernel_collector->DisableTracing();
     metric_collector->DisableCollection();
     PrintResults();
-    delete kernel_collector;
     delete metric_collector;
   }
 }

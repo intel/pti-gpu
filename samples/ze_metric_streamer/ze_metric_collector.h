@@ -76,6 +76,7 @@ class ZeMetricCollector {
     }
 
     uint32_t value_count = 0;
+    // TODO: debug this call, fails with ZE_RESULT_ERROR_INVALID_ARGUMENT
     status = zetMetricGroupCalculateMetricValues(
         metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
         metric_storage_.size(), metric_storage_.data(), &value_count, nullptr);
@@ -211,9 +212,7 @@ class ZeMetricCollector {
             metric_streamer, UINT32_MAX, &data_size, storage.data());
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         storage.resize(data_size);
-        //PTI_ASSERT(storage.size() > 0);
-	if(storage.size() > 0)
-            collector->AppendMetrics(storage);
+	      if(storage.size() > 0) collector->AppendMetrics(storage);
       }
     }
 

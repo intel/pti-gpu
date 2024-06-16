@@ -12,8 +12,7 @@ add_library(zet_metric_streamer SHARED
   "${PROJECT_SOURCE_DIR}/../../loader/init.cc"
   tool.cc)
 target_include_directories(zet_metric_streamer
-  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils"
-  PRIVATE "${PROJECT_SOURCE_DIR}/../ze_hot_kernels")
+  PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(zet_metric_streamer
     PUBLIC "${CMAKE_INCLUDE_PATH}")
