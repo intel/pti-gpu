@@ -507,6 +507,7 @@ class ZeMetricProfiler {
 
   struct ZeKernelInfo {
     int32_t subdevice_id;
+    uint64_t global_instance_id;
     uint64_t metric_start;
     uint64_t metric_end;
     std::string kernel_name;
@@ -529,7 +530,7 @@ class ZeMetricProfiler {
       if (it->second->stall_sampling_) {
         std::map<uint64_t, std::pair<std::string, size_t>> kprops;
         int max_kname_size = 0;
-        // enumberate all kernel property files
+        // enumerate all kernel property files
         for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir_name_))) {
           // kernel properties file path: <data_dir>/.kprops.<device_id>.<pid>.txt
           if (e.path().filename().string().find(".kprops." + std::to_string(it->second->device_id_)) == 0) {
@@ -731,7 +732,7 @@ class ZeMetricProfiler {
       }
       else {
         std::vector<ZeKernelInfo> kinfo;
-        // enumberate all kernel time files
+        // enumerate all kernel time files
         for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir_name_))) {
           // kernel properties file path: <data_dir>/.ktime.<device_id>.<pid>.txt
           if (e.path().filename().string().find(".ktime." + std::to_string(it->second->device_id_)) == 0) {
@@ -752,6 +753,13 @@ class ZeMetricProfiler {
               info.subdevice_id = std::strtol(line.c_str(), nullptr, 0);
               line.clear();
         
+              std::getline(kf, line);
+              if (kf.eof()) {
+                break;
+              }
+              info.global_instance_id = std::strtol(line.c_str(), nullptr, 0);
+              line.clear();
+
               std::getline(kf, line);
               if (kf.eof()) {
                 break;
@@ -802,7 +810,7 @@ class ZeMetricProfiler {
         header += std::to_string(it->second->device_id_) + " Metrics ===\n";
         logger_->Log(header);
 
-        header = "\nKernel, ";
+        header = "\nKernel, GlobalInstanceId, ";
         for (int i = 0; i <  metric_list.size(); i++) {
           header += metric_list[i] + ", ";
         }
@@ -860,6 +868,7 @@ class ZeMetricProfiler {
                   // belong to this kernel
                   kernelsampled = true;
                   str = kit->kernel_name + ", ";
+                  str += std::to_string(kit->global_instance_id) + ", ";
                   for (int k = 0; k < metric_list.size(); k++) {
                     if (k == ts_idx) {
                       str += std::to_string(ts);

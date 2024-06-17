@@ -160,7 +160,7 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--metric-query [-q]            " <<
-    "Query hardware metrics for each kernel instance" <<
+    "Query hardware metrics for each kernel instance is enabled for level-zero." <<
     std::endl;
   std::cout <<
     "--metric-sampling [-k]         " <<
@@ -186,28 +186,6 @@ void Usage(char * progname) {
     "--stall-sampling               " <<
     "Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs" <<
     std::endl;
-  std::cout <<
-    "--system-time                  " <<
-    "Use system time for trace collection (default is epoch time)" <<
-    std::endl;
-#if 0
-  std::cout <<
-    "--filter <kernelname>          " <<
-    "Filter traces by this kernelname (full or partial name permitted)" <<
-    std::endl;
-  std::cout <<
-    "--filter-file <filterfile>     " <<
-    "Full path to filter file containing kernelnames (full or paritial names permitted)" <<
-    std::endl;
-  std::cout <<
-    "--filter-in                    " <<
-    "Trace output file will only INCLUDE data for these kernelname/s only" <<
-    std::endl;
-  std::cout <<
-    "--filter-out                   " <<
-    "Trace output file will EXCLUDE data for these kernelname/s only" <<
-    std::endl;
-#endif /* 0 */
   std::cout <<
     "--version                      " <<
     "Print version" <<
@@ -387,16 +365,6 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--system-time") == 0) {
       utils::SetEnv("UNITRACE_SystemTime", "1");
       ++app_index;
-#if 0
-    } else if (strcmp(argv[i], "--device-id") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Device ID is not specified" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_DeviceId", argv[i]);
-      app_index += 2;
-#endif /* 0 */
     } else if (strcmp(argv[i], "--sampling-interval") == 0 || strcmp(argv[i], "-i") == 0) {
       ++i;
       if (i >= argc) {
@@ -686,7 +654,6 @@ int main(int argc, char *argv[]) {
 
       // wait for child process to complete
       while (wait(nullptr) > 0);
-
       DisableProfiling();
       if (std::filesystem::exists(std::filesystem::path(data_dir))) {
         for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir))) {

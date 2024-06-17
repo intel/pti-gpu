@@ -27,6 +27,10 @@
 #include "unikernel.h"
 #include "unicontrol.h"
 
+// OpenCl Hw metric collection happens via level-zero interface hence below includes
+#include <level_zero/zes_api.h>
+#include "ze_utils.h"
+
 #include "common_header.gen"
 
 class ClCollector;
@@ -146,6 +150,14 @@ using ClFunctionInfoMap = std::map<std::string, ClFunction>;
 static std::shared_mutex cl_kernel_command_properties_mutex_;
 static std::map<uint64_t, ClKernelProps> cl_kernel_command_properties_;
 
+struct ClKernelProfileRecord {
+  cl_device_id device_ = nullptr;
+  uint64_t global_instance_id_ = 0;
+  uint64_t device_started_;
+  uint64_t device_ended_;
+  std::string kernel_name_;
+};
+
 typedef void (*OnClFunctionFinishCallback)(
     std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
     uint64_t started, uint64_t ended);
@@ -153,6 +165,46 @@ typedef void (*OnClFunctionFinishCallback)(
 typedef void (*OnClExtFunctionFinishCallback)(
     std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const cl_ext_api_id api_id,
     uint64_t started, uint64_t ended);
+
+
+// Metric collection happens via level-0 interfaces hence these function.
+inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
+  PTI_ASSERT(device != nullptr);
+
+  if (!utils::cl::CheckExtension(device, "cl_khr_pci_bus_info")) {
+    return cl_device_pci_bus_info_khr{0, 0, 0, 0};
+  }
+
+  cl_device_pci_bus_info_khr pci_info{};
+  cl_int status = clGetDeviceInfo(
+      device, CL_DEVICE_PCI_BUS_INFO_KHR,
+      sizeof(cl_device_pci_bus_info_khr), &pci_info, nullptr);
+  PTI_ASSERT(status == CL_SUCCESS);
+
+  return pci_info;
+}
+
+inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
+  if (device_id == nullptr) {
+    return nullptr;
+  }
+
+  cl_device_pci_bus_info_khr pci_info = GetDevicePciInfo(device_id);
+
+  for (auto device : utils::ze::GetDeviceList()) {
+    zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
+    ze_result_t status = zesDevicePciGetProperties(device, &pci_props);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (pci_info.pci_domain == pci_props.address.domain &&
+        pci_info.pci_bus == pci_props.address.bus &&
+        pci_info.pci_device == pci_props.address.device &&
+        pci_info.pci_function == pci_props.address.function) {
+      return device;
+    }
+  }
+
+  return nullptr;
+}
 
 void OnEnterFunction(
     cl_function_id function, cl_callback_data* data,
@@ -183,7 +235,7 @@ inline std::string GetVerboseName(const ClKernelProps* props) {
       props->local_size[2] << "}]";
   } else if (props->bytes_transferred > 0) {
     sstream << "[" <<
-      std::to_string(props->bytes_transferred) << " bytes]";
+      std::to_string(props->bytes_transferred) << "]";
   }
 
   return sstream.str();
@@ -207,8 +259,10 @@ class ClCollector {
     PTI_ASSERT(correlator != nullptr);
     TraceGuard guard;
 
+    std::string data_dir_name = utils::GetEnv("UNITRACE_DataDir");
+
     ClCollector* collector = new ClCollector(
-        device, correlator, options, kcallback, fcallback, extfcallback, callback_data);
+        device, correlator, options, kcallback, fcallback, extfcallback, callback_data, data_dir_name);
     PTI_ASSERT(collector != nullptr);
 
     collector->SetKernelTracingPoints();
@@ -240,7 +294,53 @@ class ClCollector {
   }
 
   void DisableTracing() {
-    // nothing to do for now
+    PTI_ASSERT(tracer_ != nullptr);
+    bool disabled = tracer_->Disable();
+    PTI_ASSERT(disabled);
+
+    if (options_.stall_sampling) {
+      std::map<uint64_t, const ClKernelProps *> props; // sorted by base address;
+      for (auto it = kprops_.begin(); it != kprops_.end(); it++) {
+        props.insert(std::pair<uint64_t, const ClKernelProps *>(it->second.base_addr, &(it->second)));
+      }
+
+      // kernel properties file path: data_dir/.kprops.<device_id>.<pid>.txt
+      std::string fpath = data_dir_name_ + "/.kprops.0."  + std::to_string(utils::GetPid()) + ".txt";
+      std::ofstream kpfs = std::ofstream(fpath, std::ios::out | std::ios::trunc);
+      uint64_t prev_base = 0;
+      for (auto it = props.crbegin(); it != props.crend(); it++) {
+        kpfs << "\"" << utils::Demangle(it->second->name.c_str()) << "\"" << std::endl;
+        kpfs << std::to_string(it->second->base_addr) << std::endl;
+        if (prev_base == 0) {
+          kpfs << std::to_string(it->second->size) << std::endl;
+        }
+        else {
+          size_t size = prev_base - it->second->base_addr;
+          if (size > it->second->size) {
+            size = it->second->size;
+          }
+          kpfs << std::to_string(size) << std::endl;
+        }
+        prev_base = it->second->base_addr;
+      }
+      kpfs.close();
+    }
+
+    if (options_.metric_stream) {
+      std::ofstream ouf;
+      // kernel instance time file path: <data_dir>/.ktime.<device_id>.<pid>.txt
+      std::string fpath = data_dir_name_ + "/.ktime.0." + std::to_string(utils::GetPid()) + ".txt";
+      std::cout<<"file path:"<<fpath<<std::endl;
+      ouf = std::ofstream(fpath, std::ios::out | std::ios::trunc);
+      for (auto& prof : profile_records_) {
+        ouf << std::to_string((-1)) << std::endl;
+        ouf << std::to_string(prof.global_instance_id_) << std::endl;
+        ouf << std::to_string(prof.device_started_) << std::endl;
+        ouf << std::to_string(prof.device_ended_) << std::endl;
+        ouf << "\"" << prof.kernel_name_ << "\"" << std::endl;
+      }
+      ouf.close();
+    }
   }
 
   const ClKernelInfoMap& GetKernelInfoMap() const {
@@ -447,14 +547,16 @@ class ClCollector {
       OnClKernelFinishCallback kcallback,
       OnClFunctionFinishCallback fcallback,
       OnClExtFunctionFinishCallback extfcallback,
-      void* callback_data)
+      void* callback_data,
+      std::string& data_dir_name)
       : device_(device),
         correlator_(correlator),
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
         extfcallback_(extfcallback),
-        callback_data_(callback_data){
+        callback_data_(callback_data),
+        data_dir_name_(data_dir_name) {
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(correlator_ != nullptr);
 
@@ -581,58 +683,6 @@ class ClCollector {
         PTI_ASSERT(set);
       }
     }
-#if 0
-    bool set = true;
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clCreateCommandQueueWithProperties);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clCreateCommandQueue);
-    PTI_ASSERT(set);
-
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueNDRangeKernel);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueTask);
-    PTI_ASSERT(set);
-
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueReadBuffer);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueWriteBuffer);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueReadBufferRect);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueWriteBufferRect);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueCopyBuffer);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueCopyBufferRect);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueFillBuffer);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueReadImage);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueWriteImage);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueCopyImage);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueFillImage);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueCopyImageToBuffer);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clEnqueueCopyBufferToImage);
-    PTI_ASSERT(set);
-
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clFinish);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clReleaseCommandQueue);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clReleaseEvent);
-    set = set && tracer->SetTracingFunction(
-        CL_FUNCTION_clWaitForEvents);
-    PTI_ASSERT(set);
-#endif /* 0 */
 
     bool enabled = tracer->Enable();
     PTI_ASSERT(enabled);
@@ -813,12 +863,51 @@ class ClCollector {
             instance->kernel_id,
             host_started, host_ended);
       }
+
+      if (options_.metric_stream) {
+        cl_ulong cl_host_timestamp = 0;
+        cl_ulong cl_device_timestamp = 0;
+        utils::cl::GetTimestamps(device, &cl_host_timestamp, &cl_device_timestamp);
+
+        uint64_t ze_host_timestamp;
+        uint64_t ze_device_timestamp;
+        ze_device_handle_t ze_device;
+        uint64_t mask;
+        uint64_t freq;
+
+        ze_device = GetZeDevice(device);
+        PTI_ASSERT(ze_device != nullptr);
+        mask = utils::ze::GetMetricTimestampMask(ze_device);
+        freq = utils::ze::GetMetricTimerFrequency(ze_device);
+
+        zeDeviceGetGlobalTimestamps(ze_device, &ze_host_timestamp, &ze_device_timestamp);
+        ze_device_timestamp = ze_device_timestamp & mask;
+
+        cl_ulong elapsed;
+
+        elapsed = cl_device_timestamp - started;
+        elapsed += (ze_host_timestamp - cl_host_timestamp);
+
+        uint64_t ze_started;
+        uint64_t ze_ended;
+
+        uint64_t ns_per_cycle;
+        ns_per_cycle = static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+
+        ze_started = (ze_device_timestamp - (elapsed / ns_per_cycle)) & mask;
+        ze_ended = (ze_started + ((ended - started) / ns_per_cycle)) & mask;;
+
+        ze_started = ze_started * ns_per_cycle;
+        ze_ended = ze_ended * ns_per_cycle;
+
+        if (ze_ended < ze_started) {
+          ze_ended += ((mask + 1)* ns_per_cycle);
+        }
+        ClKernelProfileRecord rec{device, instance->kernel_id, ze_started, ze_ended, name};
+
+        profile_records_.push_back(std::move(rec));
+      }
     }
-
-    //cl_int status = clReleaseEvent(event);
-    //PTI_ASSERT(status == CL_SUCCESS);
-
-    //delete instance;
   }
 
   void ProcessKernelInstance(cl_event event) {
@@ -1096,11 +1185,24 @@ class ClCollector {
       collector->CalculateKernelGlobalSize(params, &instance->props);
       collector->CalculateKernelLocalSize(params, &instance->props);
 
-      uint64_t base_addr;
-      status = clGetKernelInfo(kernel, CL_KERNEL_BINARY_GPU_ADDRESS_INTEL, sizeof(uint64_t), &base_addr, nullptr);
+      uint64_t base_addr = 0;
+      uint32_t addrbits = 0;
+      uint64_t size = 0;
+
+      status = clGetKernelInfo(kernel, CL_KERNEL_BINARY_GPU_ADDRESS_INTEL, 0, nullptr, &size);
+      status = clGetKernelInfo(kernel, CL_KERNEL_BINARY_GPU_ADDRESS_INTEL, size, &base_addr, &size);
+
       PTI_ASSERT(status == CL_SUCCESS);
-      instance->props.base_addr = base_addr & 0xFFFFFFFF;
-      instance->props.size = 0;
+      instance->props.base_addr = (base_addr & 0xFFFFFFFF) - 65536;
+      size = 0;
+      status = clGetKernelInfo(kernel, CL_KERNEL_BINARY_PROGRAM_INTEL, 0, nullptr, &size);
+      PTI_ASSERT(status == CL_SUCCESS);
+      instance->props.size = size;
+
+      auto it = collector->kprops_.find(instance->props.name);
+      if (it == collector->kprops_.end()) {
+        collector->kprops_.insert(std::pair<std::string, ClKernelProps>(instance->props.name, instance->props));
+      }
 
       instance->kernel_id = UniKernelInstanceId::GetKernelInstanceId();
       PTI_ASSERT(collector->correlator_ != nullptr);
@@ -1851,6 +1953,11 @@ class ClCollector {
   OnClFunctionFinishCallback callback_ = nullptr;
 
   ClFunctionInfoMap function_info_map_;
+
+  std::map<std::string, ClKernelProps> kprops_;
+  std::string data_dir_name_;
+
+  std::vector<ClKernelProfileRecord> profile_records_;
 
   friend class ClExtCollector;
 };

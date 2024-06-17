@@ -1918,6 +1918,7 @@ class ZeCollector {
           for (auto& ts : prof->timestamps_) {
             std::string kname = GetZeKernelCommandName(prof->kernel_command_id_, prof->group_count_, prof->mem_size_);
             ouf << std::to_string(ts.subdevice_id) << std::endl;
+            ouf << std::to_string(prof->instance_id_) << std::endl;
             ouf << std::to_string(ts.metric_start) << std::endl;
             ouf << std::to_string(ts.metric_end) << std::endl;
             ouf << kname << std::endl;
