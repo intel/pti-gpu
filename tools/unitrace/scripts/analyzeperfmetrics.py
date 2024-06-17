@@ -41,7 +41,10 @@ def Demangle(name):
     stdout, _ = p.communicate()
     demangled = stdout.split("\n")[0]
 
-    return demangled[18:]	#skip leading "typeinfo name for "
+    if ("typeinfo name for" not in demangled):   # name is not mangled
+        return name
+    else:
+        return demangled[18:]	#skip leading "typeinfo name for "
 
 class BB:
     def __init__(self, bid, start, end, preds, succs):
@@ -206,7 +209,11 @@ def AnalyzeStalls(kernel, args, stalldf, report):
                     if (len(words) >= 2):
                         for token in words[1].split("}")[0].split(","):
                             if (token.startswith("$") == True):
-                                sbids_stalled.append(token)
+                                if (("load" in ins) or ("store" in ins) or ("send" in ins) or ("EOT" in ins)):
+                                    if (len(token.split(".")) > 1): # .src or .dst
+                                        sbids_stalled.append(token)
+                                else:
+                                    sbids_stalled.append(token)
                     if (len(sbids_stalled) == 0):
                         words = ins.split("(")	# check if SBID tokens are in (...)
                         if (len(words) >= 2):
@@ -215,7 +222,11 @@ def AnalyzeStalls(kernel, args, stalldf, report):
                             while (done == False):
                                 for token in words[i].split(")")[0].split(","):
                                     if (token.startswith("$") == True):
-                                        sbids_stalled.append(token)
+                                        if (("load" in ins) or ("store" in ins) or ("send" in ins) or ("EOT" in ins)):
+                                            if (len(token.split(".")) > 1): # .src or .dst
+                                                sbids_stalled.append(token)
+                                        else:
+                                            sbids_stalled.append(token)
                                         done = True
                                 i = i + 1
                                 if (i == len(words)):	# all words are inspected
@@ -256,8 +267,8 @@ def AnalyzeStalls(kernel, args, stalldf, report):
                                                         ins_stall_not_file_resolved.append(end - addr2)
                                                 else:
                                                     if (sbid == sbid2.split(".")[0]): # stalled ins depends on ins2 or dependency already resolved
-                                                        sbids_stalled.remove(sbid)	# remove sbid from the sbids of the instruction stalled
                                                         if ((sbid == sbid2) and ("sync." not in ins2)): # ins2 not a sync. ins depends on ins2
+                                                            sbids_stalled.remove(sbid)	# remove sbid from the sbids of the instruction stalled
                                                             ins_stall_not_line_resolved.append(end - addr2) # source lines/files to be resolved
                                                             ins_stall_not_file_resolved.append(end - addr2)
 
