@@ -1228,7 +1228,7 @@ class ZeCollector {
       
       str = "\n\n=== Kernel Properties ===\n\n";
       str = str + std::string(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ') +
-        "Kernel, Compiled, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread\n";
+        "Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread\n";
       correlator_->Log(str);
   
       i = -1; 
@@ -1246,6 +1246,8 @@ class ZeCollector {
         str = str + knames[i] + "," +
           std::string(sizeof("Compiled") - sizeof("AOT") + 1, ' ') +
           (kit->second.aot_ ? "AOT" : "JIT") + "," +
+          std::string(std::max(int(sizeof("SIMD") - ((kit->second.simd_width_ != 1) ? std::to_string(kit->second.simd_width_).length() : sizeof("ANY") - 1)), 0), ' ') +
+          ((kit->second.simd_width_ != 1) ? std::to_string(kit->second.simd_width_) : "ANY") + "," +
           std::string(std::max(int(sizeof("Number of Arguments") - std::to_string(kit->second.nargs_).length()), 0), ' ') +
           std::to_string(kit->second.nargs_) + "," +
           std::string(std::max(int(sizeof("SLM Per Work Group") - std::to_string(kit->second.slmsize_).length()), 0), ' ') + 
