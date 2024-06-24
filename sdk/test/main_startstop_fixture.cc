@@ -492,8 +492,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedSycls) {
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kArbStartStopMtSycl);
-  EXPECT_GT(number_of_sycl_recs, 0);
-  EXPECT_EQ(number_of_kernel_recs, 0);
+  EXPECT_GT(number_of_sycl_recs, 0ULL);
+  EXPECT_EQ(number_of_kernel_recs, 0ULL);
 }
 
 // MT - StartTracing does *not* enable gpu_kernel view kind,  StopTracing has disable for it -- so
@@ -504,7 +504,7 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedNoStartKernelWithStop
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kArbStartStopMtNoKernelStart);
-  EXPECT_EQ(number_of_kernel_recs, 0);
+  EXPECT_EQ(number_of_kernel_recs, 0ULL);
 }
 
 // MT - StartTracing enable gpu_kernel view kind,  StopTracing does not disable it -- so span of
@@ -562,8 +562,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountSycls) {
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kArbStartStopSycl);
-  EXPECT_GT(number_of_sycl_recs, 0);
-  EXPECT_EQ(number_of_kernel_recs, 0);
+  EXPECT_GT(number_of_sycl_recs, 0ULL);
+  EXPECT_EQ(number_of_kernel_recs, 0ULL);
 }
 
 // StartTracing does *not* enable gpu_kernel view kind,  StopTracing has disable it -- so expect 0
@@ -574,7 +574,7 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountNoStartKernelWithStopKernel) {
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kArbStartStopNoKernelStart);
-  EXPECT_EQ(number_of_kernel_recs, 0);
+  EXPECT_EQ(number_of_kernel_recs, 0ULL);
 }
 
 // StartTracing enable gpu_kernel view kind,  StopTracing does not disable it -- so span of tracing

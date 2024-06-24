@@ -192,8 +192,8 @@ void p2pTest() {
       gpu_queues[i].memset(gpu_device_ptrs[i], 0, num_root_devices * sizeof(float)).wait();
       gpu_queues[i].memset(gpu_shared_ptrs[i], 0, num_root_devices * sizeof(float)).wait();
     }
-  } catch (sycl::exception e) {
-    std::cout << "[ERROR] " << e.what() << std::endl;
+  } catch (const sycl::exception& e) {
+    FAIL() << "[ERROR] " << e.what();
   }
   if (num_root_devices > 0) {
     // This forces a non-p2p D2D record --- memcpy same device for testing purposes.
@@ -209,7 +209,9 @@ void p2pTest() {
       auto hSrcDevice =
           get_native<sycl::backend::ext_oneapi_level_zero>(gpu_queues[i].get_device());
       for (uint32_t j = 0; j < num_root_devices; j++) {
-        if (i == j) continue;
+        if (i == j) {
+          continue;
+        }
         auto hDstDevice =
             get_native<sycl::backend::ext_oneapi_level_zero>(gpu_queues[j].get_device());
 

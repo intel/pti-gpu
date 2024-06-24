@@ -9,6 +9,25 @@
 
 namespace pti::test::utils {
 
+template <typename... T>
+constexpr std::size_t ValidateTimestamps(T... args) {
+  using TimestampType = std::common_type_t<T...>;
+  constexpr auto count = sizeof...(args);
+  static_assert(count > 1, "Must provide more than one timestamp to validate");
+  std::size_t found_issues = 0;
+  TimestampType prev_stamp = 0;
+  (
+      [&] {
+        auto next_stamp = args;
+        if (!(prev_stamp <= next_stamp)) {
+          found_issues++;
+        }
+        prev_stamp = next_stamp;
+      }(),
+      ...);
+  return found_issues;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 /// @brief Helper functions for creating "empty" view records.
 template <typename T>

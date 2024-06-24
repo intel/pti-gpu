@@ -74,7 +74,7 @@ void Initialize(float* ptr_prev, float* ptr_next, float* ptr_vel, size_t n1,
     for (size_t j = 0; j < n2; j++) {
       size_t offset = i * dim2 + j * n1;
 #pragma omp simd
-      for (int k = 0; k < n1; k++) {
+      for (size_t k = 0; k < n1; k++) {
         ptr_prev[offset + k] = 0.0f;
         ptr_next[offset + k] = 0.0f;
         ptr_vel[offset + k] =
@@ -85,10 +85,10 @@ void Initialize(float* ptr_prev, float* ptr_next, float* ptr_vel, size_t n1,
   // Add a source to initial wavefield as an initial condition
   float val = 1.f;
   for (int s = 5; s >= 0; s--) {
-    for (int i = n3 / 2 - s; i < n3 / 2 + s; i++) {
-      for (int j = n2 / 4 - s; j < n2 / 4 + s; j++) {
+    for (size_t i = n3 / 2 - s; i < n3 / 2 + s; i++) {
+      for (size_t j = n2 / 4 - s; j < n2 / 4 + s; j++) {
         size_t offset = i * dim2 + j * n1;
-        for (int k = n1 / 4 - s; k < n1 / 4 + s; k++) {
+        for (size_t k = n1 / 4 - s; k < n1 / 4 + s; k++) {
           ptr_prev[offset + k] = val;
         }
       }
@@ -120,9 +120,9 @@ void Iso3dfdIteration(float* ptr_next_base, float* ptr_prev_base,
        bz += n3_block) {  // start of cache blocking
     for (size_t by = kHalfLength; by < n2End; by += n2_block) {
       for (size_t bx = kHalfLength; bx < n1End; bx += n1_block) {
-        int izEnd = std::min(bz + n3_block, n3End);
-        int iyEnd = std::min(by + n2_block, n2End);
-        int ixEnd = std::min(n1_block, n1End - bx);
+        size_t izEnd = std::min(bz + n3_block, n3End);
+        size_t iyEnd = std::min(by + n2_block, n2End);
+        size_t ixEnd = std::min(n1_block, n1End - bx);
         for (size_t iz = bz; iz < izEnd; iz++) {  // start of inner iterations
           for (size_t iy = by; iy < iyEnd; iy++) {
             float* ptr_next = ptr_next_base + iz * dimn1n2 + iy * n1 + bx;
@@ -369,7 +369,7 @@ int main(int argc, char* argv[]) {
 
   // Apply the DX DY and DZ to coefficients
   coeff[0] = (3.0f * coeff[0]) / (dxyz * dxyz);
-  for (int i = 1; i <= kHalfLength; i++) {
+  for (unsigned int i = 1; i <= kHalfLength; i++) {
     coeff[i] = coeff[i] / (dxyz * dxyz);
   }
 

@@ -492,7 +492,7 @@ TEST_P(SyclQueueIdFixtureTest, SameQSameKernelSameQID) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdTests(use_same_q = true, use_same_k = true, templated_run = false);
   ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0);
+  ASSERT_NE(queue_id_K2, 0ULL);
   ASSERT_EQ(queue_id_K1, queue_id_K2);
 }
 
@@ -502,7 +502,7 @@ TEST_P(SyclQueueIdFixtureTest, SameQDifferentKernelSameQID) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdTests(use_same_q = true, use_same_k = false, templated_run = false);
   ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0);
+  ASSERT_NE(queue_id_K2, 0ULL);
   ASSERT_EQ(queue_id_K1, queue_id_K2);
 }
 
@@ -513,7 +513,7 @@ TEST_P(SyclQueueIdFixtureTest, DifferentQSameKernelDifferentQID) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdTests(use_same_q = false, use_same_k = true, templated_run = false);
   ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0);
+  ASSERT_NE(queue_id_K2, 0ULL);
   ASSERT_NE(queue_id_K1, queue_id_K2);
 }
 
@@ -523,7 +523,7 @@ TEST_P(SyclQueueIdFixtureTest, DifferentQDifferentKernelDifferentQID) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdTests(use_same_q = false, use_same_k = false, templated_run = false);
   ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0);
+  ASSERT_NE(queue_id_K2, 0ULL);
   ASSERT_NE(queue_id_K1, queue_id_K2);
 }
 #endif
@@ -534,7 +534,7 @@ TEST_P(SyclQueueIdFixtureTest, SameQSameTemplatedKernelSameQID) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdTests(use_same_q = true, use_same_k = true, templated_run = true);
   ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0);
+  ASSERT_NE(queue_id_K2, 0ULL);
   ASSERT_EQ(queue_id_K1, queue_id_K2);
 }
 
@@ -547,7 +547,7 @@ TEST_P(SyclQueueIdFixtureTest, SameQDifferentTemplatedKernelSameQID) {
 #if __INTEL_LLVM_COMPILER >= 20240101
   ASSERT_NE(queue_id_K1, (kMaxQueueId - 1));
 #endif
-  ASSERT_NE(queue_id_K2, 0);
+  ASSERT_NE(queue_id_K2, 0ULL);
   ASSERT_EQ(queue_id_K1, queue_id_K2);
 }
 
@@ -558,7 +558,7 @@ TEST_P(SyclQueueIdFixtureTest, DifferentQSameTemplatedKernelDifferentQID) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdTests(use_same_q = false, use_same_k = true, templated_run = true);
   ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0);
+  ASSERT_NE(queue_id_K2, 0ULL);
   ASSERT_NE(queue_id_K1, queue_id_K2);
 }
 
@@ -568,7 +568,7 @@ TEST_P(SyclQueueIdFixtureTest, DifferentQDifferentTemplatedKernelDifferentQID) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdTests(use_same_q = false, use_same_k = false, templated_run = true);
   ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0);
+  ASSERT_NE(queue_id_K2, 0ULL);
   ASSERT_NE(queue_id_K1, queue_id_K2);
 }
 #else

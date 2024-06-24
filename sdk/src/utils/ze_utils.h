@@ -271,7 +271,7 @@ inline uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return ((props.kernelTimestampValidBits == 64)
-              ? std::numeric_limits<uint64_t>::max()
+              ? (std::numeric_limits<uint64_t>::max)()
               : ((1ULL << props.kernelTimestampValidBits) - 1ULL));
 }
 
@@ -303,7 +303,7 @@ inline bool GetDeviceTimerFrequency_TimestampMask_UUID(ze_device_handle_t device
 
   timer_frequency = props.timerResolution;
   timestamp_mask = (props.kernelTimestampValidBits == 64)
-                       ? std::numeric_limits<uint64_t>::max()
+                       ? (std::numeric_limits<uint64_t>::max)()
                        : ((1ULL << props.kernelTimestampValidBits) - 1ULL);
   std::copy_n(props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE, uuid.id);
   return true;

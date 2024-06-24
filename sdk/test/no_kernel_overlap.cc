@@ -4,10 +4,12 @@
 #include <iostream>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
+#include <type_traits>
 #include <vector>
 
 #include "pti/pti_view.h"
 #include "utils.h"
+#include "utils/test_helpers.h"
 
 using namespace sycl;
 
@@ -43,7 +45,7 @@ void StopTracing() {
   EXPECT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
 }
 
-void TestCore() {
+void TestCore(bool do_immediate) {
   try {
     constexpr size_t vector_size = 10 * 1024 * 1024;
     const size_t repetitions = 10;
@@ -59,9 +61,20 @@ void TestCore() {
                                       sycl::ext::intel::property::queue::no_immediate_command_list()};
     */
     // Important that queue is in order
-    sycl::property_list prop{sycl::property::queue::in_order()};
+    sycl::property_list prop1{sycl::property::queue::in_order(),
+                              sycl::ext::intel::property::queue::immediate_command_list()};
+    sycl::property_list prop;
+    sycl::queue q;
+    if (do_immediate) {
+      sycl::property_list prop1{sycl::property::queue::in_order(),
+                                sycl::ext::intel::property::queue::immediate_command_list()};
+      q = sycl::queue(sycl::gpu_selector_v, prop1);
+    } else {
+      sycl::property_list prop1{sycl::property::queue::in_order(),
+                                sycl::ext::intel::property::queue::no_immediate_command_list()};
+      q = sycl::queue(sycl::gpu_selector_v, prop1);
+    }
 
-    queue q(sycl::gpu_selector_v, prop);
     int64_t* a = sycl::malloc_device<int64_t>(vector_size, q);
     int64_t* b = sycl::malloc_device<int64_t>(vector_size, q);
     int64_t* c = sycl::malloc_device<int64_t>(vector_size, q);
@@ -87,7 +100,6 @@ void TestCore() {
     q.wait();
     q.memcpy(outp_data_host, c, vector_size * sizeof(int64_t)).wait();
     check_results(outp_data_host, vector_size);
-
   } catch (const sycl::exception& e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';
     std::cerr << "\tError code: " << e.code().value() << "\n\tCategory: " << e.category().name()
@@ -99,29 +111,12 @@ void TestCore() {
   }
   return;
 }
-
-uint32_t validate_timestamps(uint64_t count, ...) {
-  uint32_t found_issues = 0;
-  va_list args;
-  va_start(args, count);
-  if (1LU == count) return found_issues;
-  uint64_t prev_stamp = va_arg(args, uint64_t);
-  uint64_t next_stamp = 0LU;
-  for (uint64_t i = 1; i < count; ++i) {
-    next_stamp = va_arg(args, uint64_t);
-    if (!(prev_stamp <= next_stamp)) {
-      found_issues++;
-    }
-    prev_stamp = next_stamp;
-  }
-  va_end(args);
-  return found_issues;
-}
 }  // namespace
 
 bool compare_pair(std::pair<uint64_t, uint64_t> a_stamps, std::pair<uint64_t, uint64_t> b_stamps) {
   return a_stamps.first < b_stamps.first;
 }
+
 class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<bool> {
  protected:
   NoKernelOverlapParametrizedTestFixture() {
@@ -257,24 +252,23 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           pti_view_record_kernel* p_kernel_rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
 
-          uint32_t found_issues = validate_timestamps(
-              6, p_kernel_rec->_sycl_task_begin_timestamp, p_kernel_rec->_sycl_enqk_begin_timestamp,
+          auto found_issues = pti::test::utils::ValidateTimestamps(
+              p_kernel_rec->_sycl_task_begin_timestamp, p_kernel_rec->_sycl_enqk_begin_timestamp,
               p_kernel_rec->_append_timestamp, p_kernel_rec->_submit_timestamp,
               p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp);
+
           if (found_issues > 0) {
-            std::cerr << "------------>     ERROR: Not monotonic kernel timestamps" << std::endl;
-            exit(1);
+            FAIL() << "------------>     ERROR: Not monotonic kernel timestamps";
           }
+
           if (p_kernel_rec->_sycl_task_begin_timestamp == 0) {
-            std::cerr << "------------>     Something wrong: Sycl Task Begin Time is 0"
-                      << std::endl;
-            exit(1);
+            FAIL() << "------------>     Something wrong: Sycl Task Begin Time is 0";
           }
+
           if (p_kernel_rec->_sycl_enqk_begin_timestamp == 0) {
-            std::cerr << "------------>     Something wrong: Sycl Enq Launch Kernel Time is 0"
-                      << std::endl;
-            exit(1);
+            FAIL() << "------------>     Something wrong: Sycl Enq Launch Kernel Time is 0";
           }
+
           kernel_host_timestamps.push_back(p_kernel_rec->_append_timestamp);
           kernel_host_timestamps.push_back(p_kernel_rec->_submit_timestamp);
 
@@ -290,9 +284,9 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
     ::operator delete(buf);
   }
 
-  static void RunTest() {
+  static void RunTest(bool do_immediate) {
     StartTracing();
-    TestCore();
+    TestCore(do_immediate);
     StopTracing();
     EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   }
@@ -310,7 +304,7 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
 
-  RunTest();
+  RunTest(do_immediate);
 
   // order of records is not garantie the order of submission and execution of kernels -
   // so let's  sort kernel stamp pairs by device start stamp

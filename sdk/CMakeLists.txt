@@ -9,7 +9,13 @@ SetCompilerFlags()
 project(
   pti
   VERSION ${PTI_VERSION}
-  LANGUAGES C CXX)
+  DESCRIPTION "Intel Profiling Tools Interface"
+  HOMEPAGE_URL "https://github.com/intel/pti-gpu"
+  LANGUAGES C CXX
+)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin CACHE STRING "")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE STRING "")
 
 ProjectIsTopLevel()
 RemoveNDebugFlag()
@@ -39,12 +45,13 @@ set(CMAKE_C_VISIBILITY_PRESET "hidden")
 
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
+set(CMAKE_INSTALL_RPATH $ORIGIN)
+
 option(PTI_BUILD_TESTING "Build PTI tests" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_INSTALL "Install library when invoking --install" ON)
 option(PTI_ENABLE_LOGGING "Enable logging for Pti" OFF)
 option(PTI_DEBUG "Enable code helping to debug Pti" OFF)
-option(PTI_SANITIZE "Enable Sanitizer Pti" OFF)
 option(PTI_FUZZ "Enable Fuzz Pti" OFF)
 
 include(GNUInstallDirs)
@@ -56,51 +63,6 @@ set(PTI_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
 set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
 CheckSOVersion(${PTI_API_SOVERSION})
-
-set(PTI_COMPILE_FLAGS_EXPR
-    $<$<CXX_COMPILER_ID:IntelLLVM>:-Wall
-    -Wextra
-    -Wformat
-    -Wformat-security
-    $<$<CONFIG:Debug>:-fstack-protector>
-    $<$<CONFIG:Release>:
-    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror
-    -Werror=format-security>
-    -fstack-protector-strong>>
-    $<$<CXX_COMPILER_ID:Clang>:-Wall
-    -Wextra
-    -Wformat
-    -Wformat-security
-    $<$<CONFIG:Debug>:-fstack-protector>
-    $<$<CONFIG:Release>:
-    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror
-    -Werror=format-security>
-    -fstack-protector-strong>>
-    $<$<CXX_COMPILER_ID:GNU>:-Wall
-    -Wextra
-    -Wformat
-    -Wformat-security
-    $<$<CONFIG:Debug>:-fstack-protector>
-    $<$<CONFIG:Release>:
-    $<$<BOOL:${PROJECT_IS_TOP_LEVEL}>:-Werror
-    -Werror=format-security>
-    -fstack-protector-strong>>)
-
-set(PTI_LINK_FLAGS_EXPR
-    $<$<CXX_COMPILER_ID:IntelLLVM>:
-    $<$<CONFIG:Debug>:>
-    $<$<CONFIG:Release>:-Wl,-z,relro,-z,now,-z,noexecstack>>
-    $<$<CXX_COMPILER_ID:Clang>:
-    $<$<CONFIG:Debug>:>
-    $<$<CONFIG:Release>:-Wl,-z,relro,-z,now,-z,noexecstack>>
-    $<$<CXX_COMPILER_ID:GNU>:
-    $<$<CONFIG:Release>:-Wl,-z,relro,-z,now,-z,noexecstack>>)
-
-set(PTI_DEFINE_FLAGS_EXPR
-    $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<NOT:$<BOOL:${PTI_SANITIZE}>>:_FORTIFY_SOURCE=2>>
-    $<$<CXX_COMPILER_ID:Clang>:$<$<NOT:$<BOOL:${PTI_SANITIZE}>>:_FORTIFY_SOURCE=2>>
-    $<$<CXX_COMPILER_ID:GNU>:$<$<NOT:$<BOOL:${PTI_SANITIZE}>>:_FORTIFY_SOURCE=2>>
-)
 
 configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
                ${PROJECT_BINARY_DIR}/include/pti/pti_version.h)
@@ -117,6 +79,9 @@ include(GenerateExportHeader)
 generate_export_header(pti EXPORT_FILE_NAME
                        ${PROJECT_BINARY_DIR}/include/pti/pti_export.h)
 
+# Suspect we need this since we're sharing across multiple targets
+set(PTI_DEFINE_SYMBOL "pti_EXPORTS")
+
 target_include_directories(
   pti
   PUBLIC "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
@@ -132,12 +97,17 @@ set_target_properties(
   PROPERTIES VERSION "${PROJECT_VERSION}"
              SOVERSION "${PTI_API_SOVERSION}"
              POSITION_INDEPENDENT_CODE ON)
+if (WIN32)
+  set_target_properties(
+    pti
+    PROPERTIES OUTPUT_NAME "pti-${PROJECT_VERSION_MAJOR}-${PROJECT_VERSION_MINOR}"
+               DEBUG_POSTFIX "d"
+  )
+  AddProjectVersionInfo(pti)
+endif()
 
-target_compile_options(pti PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
-target_link_options(pti PRIVATE ${PTI_LINK_FLAGS_EXPR})
 target_compile_definitions(
-  pti PRIVATE ${PTI_DEFINE_FLAGS_EXPR}
-              $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>)
+  pti PRIVATE $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>)
 
 # Why version 1.14.0?
 # It is an IPEX requirement for PTI to link against the LTS version of the
@@ -183,16 +153,23 @@ set_target_properties(
   pti_view
   PROPERTIES VERSION "${PROJECT_VERSION}"
              SOVERSION "${PTI_API_SOVERSION}"
-             POSITION_INDEPENDENT_CODE ON)
+             POSITION_INDEPENDENT_CODE ON
+	           DEFINE_SYMBOL "${PTI_DEFINE_SYMBOL}")
 
-target_compile_options(pti_view PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
-target_link_options(pti_view PRIVATE ${PTI_LINK_FLAGS_EXPR})
+if (WIN32)
+  set_target_properties(
+    pti_view
+    PROPERTIES OUTPUT_NAME "pti_view-${PROJECT_VERSION_MAJOR}-${PROJECT_VERSION_MINOR}"
+               DEBUG_POSTFIX "d"
+  )
+  AddProjectVersionInfo(pti_view)
+endif()
+
 
 target_compile_definitions(
   pti_view
   PRIVATE $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
           $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
-          ${PTI_DEFINE_FLAGS_EXPR}
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_OFF>)
@@ -204,8 +181,10 @@ endif()
 target_link_libraries(
   pti_view
   PUBLIC Threads::Threads
-  PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti> LevelZero::level-zero
-          spdlog::spdlog_header_only)
+  PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
+          LevelZero::level-zero
+          spdlog::spdlog_header_only
+          ${CMAKE_DL_LIBS})
 
 FindHeadersPath(
   pti_view "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
@@ -214,7 +193,10 @@ FindHeadersPath(
 target_link_libraries(
   pti
   PUBLIC pti_view
-  PRIVATE spdlog::spdlog_header_only $<TARGET_NAME_IF_EXISTS:Xpti::xpti>)
+  PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
+          LevelZero::level-zero
+          spdlog::spdlog_header_only
+          ${CMAKE_DL_LIBS})
 
 include(CTest)
 if(BUILD_TESTING AND PTI_BUILD_TESTING)

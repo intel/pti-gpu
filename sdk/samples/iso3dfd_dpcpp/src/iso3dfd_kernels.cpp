@@ -32,6 +32,9 @@
 // SYCL Basic synchronization (barrier function)
 //
 #include "iso3dfd.h"
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 #define NSEC_IN_USEC 1000
 #define MSEC_IN_SEC  1000
@@ -39,9 +42,20 @@
 #define NSEC_IN_SEC  1000000000
 
 inline uint64_t GetTime() {
-    timespec ts{0};
-    int status = clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
+#if defined(_WIN32)
+  LARGE_INTEGER ticks{};
+  LARGE_INTEGER frequency{};
+  BOOL status = QueryPerformanceFrequency(&frequency);
+  assert(status != 0);
+  status = QueryPerformanceCounter(&ticks);
+  assert(status != 0);
+  return ticks.QuadPart * (NSEC_IN_SEC / frequency.QuadPart);
+#else
+ timespec ts{0, 0};
+ int status = clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+ assert(status == 0);
+ return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
+#endif
   }
 /*
  * Device-Code - Optimized for GPU
@@ -60,7 +74,7 @@ inline uint64_t GetTime() {
 void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
                          float *vel, const float *coeff, float *tab, size_t nx,
                          size_t nxy, size_t bx, size_t by, size_t z_offset,
-                         int full_end_z) {
+                         size_t full_end_z) {
   // Compute local-id for each work-item
   auto id0 = it.get_local_id(2);
   auto id1 = it.get_local_id(1);
@@ -95,12 +109,12 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
   float back[kHalfLength];
   float c[kHalfLength + 1];
 
-  for (auto iter = 0; iter < kHalfLength; iter++) {
+  for (unsigned int iter = 0; iter < kHalfLength; iter++) {
     front[iter] = prev[gid + iter * nxy];
   }
   c[0] = coeff[0];
 
-  for (auto iter = 1; iter <= kHalfLength; iter++) {
+  for (unsigned int iter = 1; iter <= kHalfLength; iter++) {
     back[iter - 1] = prev[gid - iter * nxy];
     c[iter] = coeff[iter];
   }
@@ -151,7 +165,7 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
     // read from the SLM buffers
     float value = c[0] * front[0];
 #pragma unroll(kHalfLength)
-    for (auto iter = 1; iter <= kHalfLength; iter++) {
+    for (unsigned int iter = 1; iter <= kHalfLength; iter++) {
       value += c[iter] *
                (front[iter] + back[iter - 1] + tab[identifiant + iter] +
                 tab[identifiant - iter] + tab[identifiant + iter * stride] +
@@ -164,12 +178,12 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
 
     // Input data in front and back are shifted to discard the
     // oldest value and read one new value.
-    for (auto iter = kHalfLength - 1; iter > 0; iter--) {
+    for (unsigned int iter = kHalfLength - 1; iter > 0; iter--) {
       back[iter] = back[iter - 1];
     }
     back[0] = front[0];
 
-    for (auto iter = 0; iter < kHalfLength; iter++) {
+    for (unsigned int iter = 0; iter < kHalfLength; iter++) {
       front[iter] = front[iter + 1];
     }
 
@@ -197,7 +211,7 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
  */
 void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
                             const float *vel, const float *coeff, int nx, int nxy,
-                            int bx, int by, int z_offset, int full_end_z) {
+                            int bx, int by, int z_offset, size_t full_end_z) {
   // We compute the start and the end position in the grid
   // for each work-item.
   // Each work-items local value gid is updated to track the
@@ -222,11 +236,11 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
   float back[kHalfLength];
   float c[kHalfLength + 1];
 
-  for (auto iter = 0; iter <= kHalfLength; iter++) {
+  for (unsigned int iter = 0; iter <= kHalfLength; iter++) {
     front[iter] = prev[gid + iter * nxy];
   }
   c[0] = coeff[0];
-  for (auto iter = 1; iter <= kHalfLength; iter++) {
+  for (unsigned int iter = 1; iter <= kHalfLength; iter++) {
     c[iter] = coeff[iter];
     back[iter - 1] = prev[gid - iter * nxy];
   }
@@ -239,7 +253,7 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
 
   float value = c[0] * front[0];
 #pragma unroll(kHalfLength)
-  for (auto iter = 1; iter <= kHalfLength; iter++) {
+  for (unsigned int iter = 1; iter <= kHalfLength; iter++) {
     value += c[iter] *
              (front[iter] + back[iter - 1] + prev[gid + iter] +
               prev[gid - iter] + prev[gid + iter * nx] + prev[gid - iter * nx]);
@@ -259,7 +273,7 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
     }
     back[0] = front[0];
 
-    for (auto iter = 0; iter < kHalfLength; iter++) {
+    for (unsigned int iter = 0; iter < kHalfLength; iter++) {
       front[iter] = front[iter + 1];
     }
 
@@ -270,7 +284,7 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
     // Stencil code to update grid point at position given by global id (gid)
     float value = c[0] * front[0];
 #pragma unroll(kHalfLength)
-    for (auto iter = 1; iter <= kHalfLength; iter++) {
+    for (unsigned int iter = 1; iter <= kHalfLength; iter++) {
       value += c[iter] * (front[iter] + back[iter - 1] + prev[gid + iter] +
                           prev[gid - iter] + prev[gid + iter * nx] +
                           prev[gid - iter * nx]);
@@ -318,7 +332,7 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
     buffer b_ptr_coeff(ptr_coeff, range(kHalfLength + 1));
 
     // Iterate over time steps
-    for (auto i = 0; i < nIterations; i += 1) {
+    for (unsigned int i = 0; i < nIterations; i += 1) {
       // Submit command group for execution
       {
         const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);

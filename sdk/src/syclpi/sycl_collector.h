@@ -13,43 +13,40 @@
 #include <array>
 #include <atomic>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
-#ifdef PTI_DEBUG
 #include <iostream>
+#include <string_view>
+#ifdef PTI_DEBUG
 #include <map>
 #include <memory>
 #endif
 #include <string>
 #include <xpti/xpti_trace_framework.hpp>
 
+#include "library_loader.h"
 #include "unikernel.h"
 #include "utils.h"
+
+#if (defined(_WIN32) || defined(_WIN64))
+inline static constexpr std::string_view kXptiLibName = "xptifw.dll";
+#else
+inline static constexpr std::string_view kXptiLibName = "libxptifw.so";
+#endif
+
+inline static constexpr std::string_view kStashedSymbolName = "xptiGetStashedTuple";
+inline static constexpr std::string_view kUnknownFunctionName = "<unknown>";
+
 using StashedFuncPtr = xpti::result_t (*)(
     char**, uint64_t&);  // signature of xpti function to get queue_id (xptiGetStashedTuple)
 
-// Work-around for ensuring XPTI_SUBSCRIBERS and XPTI_FRAMEWORK_DISPATCHER are
-// set before xptiTraceInit() is called.
-// Warning: Do not add a dependency on another static variable or there is a
-// risk of undefined behavior.
-// TODO: Fix when there's a better solution.
-class GlobalSyclInitializer {
- public:
-  inline static bool Initialize() {
-    // https://stackoverflow.com/questions/48650674/c-c-how-to-find-out-the-own-library-name
-    utils::SetEnv("XPTI_SUBSCRIBERS", utils::GetPathToSharedObject(Initialize).c_str());
-    utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", utils::GetPathToSharedObject(xptiReset).c_str());
-    utils::SetEnv("XPTI_TRACE_ENABLE", "1");
-    return true;
-  }
-
-  inline static bool result_ = Initialize();
-};
-
-inline constexpr auto kMaxFuncNameLen = 2048;
+inline constexpr auto kMaxFuncNameLen = static_cast<std::size_t>(2048);
+static_assert(
+    kUnknownFunctionName.size() < kMaxFuncNameLen,
+    "Placeholder function name size must be less than the size of the max function name length");
 inline constexpr uint64_t kDefaultQueueId = PTI_INVALID_QUEUE_ID;
 
-typedef void (*OnSyclRuntimeViewCallback)(void* data, ZeKernelCommandExecutionRecord& kcexec);
-
+using OnSyclRuntimeViewCallback = void (*)(void* data, ZeKernelCommandExecutionRecord& kcexec);
 #ifdef PTI_DEBUG
 
 // keeping this for future SYCL nodes/tasks debug
@@ -64,17 +61,17 @@ struct sycl_node_t {
   sycl_node_t(uint64_t id)
       : _id(id),
         _node_create_time(0ULL),
-        _source_file_name("<unknown>"),
-        _source_line_number(0),
-        _task_begin_count(0),
-        _task_end_count(0){};
+        _source_file_name(kUnknownFunctionName),
+        _source_line_number(0UL),
+        _task_begin_count(0UL),
+        _task_end_count(0UL){};
 };
 
-thread_local std::map<uint64_t, std::unique_ptr<sycl_node_t>> s_node_map = {};
+inline thread_local std::map<uint64_t, std::unique_ptr<sycl_node_t>> s_node_map = {};
 
 #endif
 
-thread_local std::map<uint64_t, uint64_t> node_q_map = {};
+inline thread_local std::map<uint64_t, uint64_t> node_q_map = {};
 struct SyclPiFuncT {
   std::array<char, kMaxFuncNameLen> func_name;
   uint32_t func_pid;
@@ -120,7 +117,7 @@ inline const char* GetTracePointTypeString(xpti::trace_point_type_t trace_type) 
   }
 }
 
-std::string Truncate(const std::string& name) {
+inline std::string Truncate(const std::string& name) {
   size_t pos = name.find_last_of(":");
   if (pos != std::string::npos) {
     return name.substr(pos + 1);
@@ -147,21 +144,19 @@ class SyclCollector {
     }
   }
 
-  // This function detects ability of oneapi version used to build this code, to issue the new api
-  // call xptiGetStashedTuple.
-  //   If the new api is not present -- checked via dlsym using handle of shared object that would
-  //   contain it if present. Return nullptr or the actual function pointer to the
-  //   xptiGetStashedTuple.
-
-  template <typename T>
-  inline StashedFuncPtr GetStashedFuncPtrFromSharedObject(T address) {
-    auto lib_name = utils::GetPathToSharedObject(address);
-    auto xpti_handle_ = dlopen(lib_name.c_str(), RTLD_LAZY);
-    if (!xpti_handle_) return nullptr;
-    std::string xpti_sym = "xptiGetStashedTuple";
-    auto xptiGetStashedTuple =
-        reinterpret_cast<StashedFuncPtr>(dlsym(xpti_handle_, xpti_sym.c_str()));
-    dlclose(xpti_handle_);
+  //  For compiler versions < 2024.1.1. Manually load xptiGetStashedTuple.
+  inline StashedFuncPtr GetStashedFuncPtrFromSharedObject() {
+    StashedFuncPtr xptiGetStashedTuple = nullptr;
+    try {
+      auto xpti_lib = LibraryLoader{std::string{kXptiLibName}};
+      xptiGetStashedTuple = xpti_lib.GetSymbol<StashedFuncPtr>(kStashedSymbolName.data());
+    } catch ([[maybe_unused]] const std::runtime_error& e) {
+      xptiGetStashedTuple = nullptr;
+      SPDLOG_ERROR("exception caught while trying to get {}: {}", kStashedSymbolName, e.what());
+    } catch (...) {
+      xptiGetStashedTuple = nullptr;
+      SPDLOG_ERROR("unknown exception caught while trying to get {}", kStashedSymbolName);
+    }
     return xptiGetStashedTuple;
   }
 
@@ -171,8 +166,8 @@ class SyclCollector {
                                            xpti::trace_event_data_t* Event, uint64_t,
                                            const void* UserData) {
     auto Payload = xptiQueryPayload(Event);
-    uint64_t Time = utils::GetTime(CLOCK_MONOTONIC_RAW);
-    std::string Name = "<unknown>";
+    uint64_t Time = utils::GetTime();
+    std::string Name{kUnknownFunctionName};
 
     if (Payload) {
       if (Payload->name_sid() != xpti::invalid_id) {
@@ -209,10 +204,16 @@ class SyclCollector {
         if (UserData) {
           const auto* function_name = static_cast<const char*>(UserData);
           SPDLOG_TRACE("\tSYCL.PI Function Begin: {}", function_name);
-          if ((strlen(function_name) + 1) < kMaxFuncNameLen) {
-            strcpy(current_func_task_info.func_name.data(), function_name);
+          // TODO: Re-evaluate whether this is actually needed. I do not see what we are doing with
+          // current_func_task_info.func_name.
+          auto function_name_size = std::strlen(function_name) + 1;  // plus '\0'
+          if (function_name_size < current_func_task_info.func_name.size()) {
+            std::copy_n(function_name, function_name_size,
+                        current_func_task_info.func_name.begin());
           } else {
-            strcpy(current_func_task_info.func_name.data(), "<unknown>");
+            std::copy_n(kUnknownFunctionName.begin(), kUnknownFunctionName.size(),
+                        current_func_task_info.func_name.begin());
+            current_func_task_info.func_name[kUnknownFunctionName.size()] = '\0';
           }
           current_func_task_info.func_pid = pid;
           current_func_task_info.func_tid = tid;
@@ -290,7 +291,7 @@ class SyclCollector {
               }
               sycl_data_kview.sycl_node_id_ = ID;
               sycl_data_kview.sycl_queue_id_ = node_q_map[ID];
-              sycl_data_kview.sycl_invocation_id_ = Instance_ID;
+              sycl_data_kview.sycl_invocation_id_ = static_cast<uint32_t>(Instance_ID);
               sycl_data_kview.sycl_task_begin_time_ = Time;
             } else if (strcmp(xptiLookupString(Item.first), "memory_object") == 0) {
               sycl_data_mview.sycl_queue_id_ = node_q_map[ID];
@@ -309,7 +310,7 @@ class SyclCollector {
         break;
       case xpti::trace_point_type_t::queue_create:
         break;
-      case xpti::trace_point_type_t::node_create:
+      case xpti::trace_point_type_t::node_create: {
         if (Event) {
           char* key = nullptr;
           uint64_t value = 0;
@@ -325,16 +326,20 @@ class SyclCollector {
           }
           xpti::metadata_t* Metadata = xptiQueryMetadata(Event);
           for (const auto& Item : *Metadata) {
-            if (strcmp(xptiLookupString(Item.first), "sym_function_name") == 0)
+            if (strcmp(xptiLookupString(Item.first), "sym_function_name") == 0) {
               sycl_data_kview.sycl_queue_id_ = node_q_map[ID];
-            if (strcmp(xptiLookupString(Item.first), "memory_object") == 0)
+            }
+            if (strcmp(xptiLookupString(Item.first), "memory_object") == 0) {
               sycl_data_mview.sycl_queue_id_ = node_q_map[ID];
+            }
           }
         }
 #ifdef PTI_DEBUG
         const char* source_file_name = nullptr;
+        uint32_t source_line_number = 0;
         if (Payload) {
           source_file_name = Payload->source_file;
+          source_line_number = Payload->line_no;
         }
         // From the experiments found that a "simple" Node Created once per
         // program so if a node (the same kernel task, defined at one specific
@@ -347,8 +352,7 @@ class SyclCollector {
         }
         auto node = std::make_unique<sycl_node_t>(ID);
         if (source_file_name) {
-          uint32_t chars = strlen(source_file_name);
-          node->_source_file_name = (char*)source_file_name;
+          node->_source_file_name = source_file_name;
         }
         node->_source_line_number = source_line_number;
         node->_name = Name;
@@ -359,6 +363,7 @@ class SyclCollector {
           sycl_data_mview.sycl_task_begin_time_ = Time;
         }
         break;
+      }
       default:
         break;
     }
@@ -366,8 +371,7 @@ class SyclCollector {
 
  private:
   SyclCollector(OnSyclRuntimeViewCallback buffer_callback)
-      : acallback_(buffer_callback),
-        xptiGetStashedKV(GetStashedFuncPtrFromSharedObject(xptiReset)){};
+      : acallback_(buffer_callback), xptiGetStashedKV(GetStashedFuncPtrFromSharedObject()){};
 
   inline static thread_local ZeKernelCommandExecutionRecord sycl_runtime_rec_;
   std::atomic<OnSyclRuntimeViewCallback> acallback_ = nullptr;
@@ -443,18 +447,21 @@ XPTI_CALLBACK_API void xptiTraceFinish(const char* /*stream_name*/) {}
 
 #include <windows.h>
 
-#include <string>
-
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fwdReason, LPVOID lpvReserved) {
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fwdReason, LPVOID /*lpvReserved*/) {
   switch (fwdReason) {
-    case DLL_PROCESS_ATTACH:
-      // printf("Framework initialization\n");
+    case DLL_PROCESS_ATTACH: {
+      utils::SetEnv("XPTI_SUBSCRIBERS", utils::GetPathToSharedObject(hinstDLL).c_str());
+      utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER",
+                    utils::GetPathToSharedObject(kXptiLibName.data()).c_str());
+      utils::SetEnv("XPTI_TRACE_ENABLE", "1");
+      break;
+    }
+    case DLL_THREAD_ATTACH:
+      break;
+    case DLL_THREAD_DETACH:
+      framework_finalized = true;
       break;
     case DLL_PROCESS_DETACH:
-      //
-      //  We cannot unload all subscribers here...
-      //
-      // printf("Framework finalization\n");
       break;
   }
 
@@ -463,7 +470,13 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fwdReason, LPVOID lpvReserved) {
 
 #else  // Linux (possibly macOS?)
 
-__attribute__((constructor)) static void framework_init() {}
+// Work-around for ensuring XPTI_SUBSCRIBERS and XPTI_FRAMEWORK_DISPATCHER are
+// set before xptiTraceInit() is called.
+__attribute__((constructor)) static void framework_init() {
+  utils::SetEnv("XPTI_SUBSCRIBERS", utils::GetPathToSharedObject(Truncate).c_str());
+  utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", utils::GetPathToSharedObject(xptiReset).c_str());
+  utils::SetEnv("XPTI_TRACE_ENABLE", "1");
+}
 
 __attribute__((destructor)) static void framework_fini() { framework_finalized = true; }
 

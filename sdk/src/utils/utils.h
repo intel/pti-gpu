@@ -9,6 +9,8 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+
+#include <chrono>
 #else
 #include <dlfcn.h>
 #include <sys/syscall.h>
@@ -18,6 +20,7 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <cstring>
 #include <fstream>
 #include <string>
@@ -71,27 +74,50 @@ inline uint64_t GetTime(clockid_t id) {
   PTI_ASSERT(status == 0);
   return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
 }
+#endif
 
-inline uint64_t GetTime() { return GetTime(CLOCK_MONOTONIC_RAW); }
-inline uint64_t GetRealTime() { return GetTime(CLOCK_REALTIME); }
+inline uint64_t GetMonotonicRawTime() {
+#if defined(_WIN32)
+  LARGE_INTEGER ticks{};
+  LARGE_INTEGER frequency{};
+  BOOL status = QueryPerformanceFrequency(&frequency);
+  PTI_ASSERT(status != 0);
+  status = QueryPerformanceCounter(&ticks);
+  PTI_ASSERT(status != 0);
+  return ticks.QuadPart * (NSEC_IN_SEC / frequency.QuadPart);
+#else
+  return GetTime(CLOCK_MONOTONIC_RAW);
+#endif
+}
+
+inline uint64_t GetRealTime() {
+#if defined(_WIN32)
+  // convert to ns ticks the proper way
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+      .count();
+#else
+  return GetTime(CLOCK_REALTIME);
+#endif
+}
 
 inline int64_t ConversionFactorMonotonicRawToUnknownClock(
     fptr_get_timestamp_unknown_clock user_provided_get_timestamp) {
   uint64_t user_final = user_provided_get_timestamp();
-  uint64_t raw_final = utils::GetTime(CLOCK_MONOTONIC_RAW);
+  uint64_t raw_final = GetMonotonicRawTime();
   constexpr auto kNumberOfIterations = 50;
   std::array<uint64_t, kNumberOfIterations> raw_start = {};
   std::array<uint64_t, kNumberOfIterations> raw_end = {};
   std::array<uint64_t, kNumberOfIterations> user = {};
 
   int i_at_min = -1;
-  int64_t diff_min = INT_MAX;  // some big number
+  int64_t diff_min = (std::numeric_limits<int64_t>::max)();  // some big number
   int64_t diff;
 
   for (int i = 0; i < kNumberOfIterations; i++) {
-    raw_start[i] = utils::GetTime(CLOCK_MONOTONIC_RAW);
+    raw_start[i] = GetMonotonicRawTime();
     user[i] = user_provided_get_timestamp();
-    raw_end[i] = utils::GetTime(CLOCK_MONOTONIC_RAW);
+    raw_end[i] = GetMonotonicRawTime();
     diff = raw_end[i] - raw_start[i];
     if (diff < diff_min) {
       diff_min = diff;
@@ -102,10 +128,11 @@ inline int64_t ConversionFactorMonotonicRawToUnknownClock(
   raw_final = (raw_start[i_at_min] + raw_end[i_at_min]) / 2;
   user_final = user[i_at_min];
 
-  return (user_final > raw_final) ? (user_final - raw_final) : -(raw_final - user_final);
+  return (user_final > raw_final) ? static_cast<int64_t>(user_final - raw_final)
+                                  : -static_cast<int64_t>(raw_final - user_final);
 }
 
-#endif
+inline uint64_t GetTime() { return GetMonotonicRawTime(); }
 
 inline std::string GetFilePath(const std::string& filename) {
   PTI_ASSERT(!filename.empty());
@@ -197,16 +224,6 @@ inline std::string GetEnv(const char* name) {
 #endif
 }
 
-inline std::string GetHostName() {
-#if defined(_WIN32)
-  return "TBD"
-#else
-  char h_name[256];
-  gethostname(h_name, sizeof(h_name));
-  return h_name;
-#endif
-}
-
 inline uint32_t GetPid() {
 #if defined(_WIN32)
   return GetCurrentProcessId();
@@ -224,20 +241,6 @@ inline uint32_t GetTid() {
 #else
 #error "SYS_gettid is unavailable on this system"
 #endif
-#endif
-}
-
-inline uint64_t GetSystemTime() {
-#if defined(_WIN32)
-  LARGE_INTEGER ticks{0};
-  LARGE_INTEGER frequency{0};
-  BOOL status = QueryPerformanceFrequency(&frequency);
-  PTI_ASSERT(status != 0);
-  status = QueryPerformanceCounter(&ticks);
-  PTI_ASSERT(status != 0);
-  return ticks.QuadPart * (NSEC_IN_SEC / frequency.QuadPart);
-#else
-  return GetTime(CLOCK_MONOTONIC_RAW);
 #endif
 }
 
@@ -269,14 +272,30 @@ inline size_t UpperBound(const std::vector<uint64_t>& data, uint64_t value) {
   return start;
 }
 
+#if defined(_WIN32)
+inline std::string GetDllPath(HMODULE dll_addr) {
+  std::array<CHAR, MAX_STR_SIZE> buffer{};
+  auto status =
+      GetModuleFileNameA(dll_addr, static_cast<LPSTR>(std::data(buffer)), std::size(buffer));
+  return status ? std::string{std::data(buffer), status} : std::string{};
+}
+#endif
+
 template <typename T>
 inline std::string GetPathToSharedObject(T address) {
-  static_assert(std::is_pointer<T>::value);
+  static_assert(std::is_pointer<T>::value && !std::is_same<T, const char*>::value,
+                "Expecting a function pointer");
 #if defined(_WIN32)
-  char buffer[MAX_STR_SIZE] = {0};
-  DWORD status = GetModuleFileNameA(reinterpret_cast<HMODULE>(address), buffer, MAX_STR_SIZE);
-  PTI_ASSERT(status > 0);
-  return std::string{buffer};
+  HMODULE dll_addr = nullptr;
+
+  auto got_module = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                                       reinterpret_cast<LPCSTR>(address), &dll_addr);
+  if (!got_module) {
+    return std::string{};
+  }
+
+  return GetDllPath(dll_addr);
+
 #else
   Dl_info info{nullptr, nullptr, nullptr, nullptr};
   auto status = dladdr(reinterpret_cast<const void*>(address), &info);
@@ -284,6 +303,23 @@ inline std::string GetPathToSharedObject(T address) {
   return std::string{info.dli_fname};
 #endif
 }
+
+#if defined(_WIN32)
+template <>
+inline std::string GetPathToSharedObject(HMODULE address) {
+  return GetDllPath(address);
+}
+
+template <>
+inline std::string GetPathToSharedObject(const char* name) {
+  HMODULE dll_addr = GetModuleHandleA(name);
+  if (!dll_addr) {
+    return std::string{};
+  }
+  return GetPathToSharedObject(dll_addr);
+}
+
+#endif
 
 }  // namespace utils
 

@@ -1,3 +1,6 @@
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
+                      "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/Modules/")
+
 cmake_minimum_required(VERSION 3.14)
 
 project(PTI_Samples_DPC_GEMM CXX)
@@ -7,7 +10,14 @@ include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fsycl" has_sycl)
 
 if (NOT has_sycl)
-  message(WARNING "${PROJECT_NAME} requres a sycl compatible compiler")
+  message(WARNING "${PROJECT_NAME} requires a sycl compatible compiler")
+  return()
+endif()
+
+find_package(LevelZero)
+
+if (NOT TARGET LevelZero::level-zero)
+  message(WARNING "${PROJECT_NAME} pti requires level zero")
   return()
 endif()
 
@@ -25,4 +35,4 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-target_link_libraries(dpc_gemm PUBLIC Pti::pti_view)
+target_link_libraries(dpc_gemm PUBLIC Pti::pti_view LevelZero::level-zero)

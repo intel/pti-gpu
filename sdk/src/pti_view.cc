@@ -8,15 +8,24 @@
 
 #include <spdlog/spdlog.h>
 
+#include <iostream>
+
 #include "internal_helper.h"
 #include "view_handler.h"
+
+namespace {
+// TODO: maybe_unused because SPDLOG_ERROR not guarenteed to be there on release builds
+void LogException([[maybe_unused]] const std::exception& excep) {
+  SPDLOG_ERROR("Caught exception before return: {}", excep.what());
+}
+}  // namespace
 
 //
 // TODO: parse different exception types, analyse caught exception and return
 // different error code.
 //
 pti_result ptiViewEnable(pti_view_kind view_kind) {
-  SPDLOG_DEBUG("In {}, view_kind:  {}", __FUNCTION__, (uint32_t)view_kind);
+  SPDLOG_DEBUG("In {}, view_kind:  {}", __FUNCTION__, static_cast<uint32_t>(view_kind));
   try {
     pti_result pti_state = Instance().GetState();
     if (Instance().GetState() != pti_result::PTI_SUCCESS) {
@@ -27,10 +36,13 @@ pti_result ptiViewEnable(pti_view_kind view_kind) {
     }
     return Instance().Enable(view_kind);
   } catch (const std::overflow_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::runtime_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::exception& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
@@ -52,10 +64,13 @@ pti_result ptiViewDisable(pti_view_kind view_kind) {
     }
     return Instance().Disable(view_kind);
   } catch (const std::overflow_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::runtime_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::exception& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
@@ -66,10 +81,13 @@ pti_result ptiViewGPULocalAvailable() {
   try {
     return Instance().GPULocalAvailable();
   } catch (const std::overflow_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::runtime_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::exception& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
@@ -84,10 +102,13 @@ pti_result ptiViewSetCallbacks(pti_fptr_buffer_requested fptr_bufferRequested,
   try {
     return Instance().RegisterBufferCallbacks(fptr_bufferRequested, fptr_bufferCompleted);
   } catch (const std::overflow_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::runtime_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::exception& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
@@ -103,10 +124,13 @@ pti_result ptiViewGetNextRecord(uint8_t* buffer, size_t valid_bytes,
   try {
     return GetNextRecord(buffer, valid_bytes, record);
   } catch (const std::overflow_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::runtime_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::exception& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
@@ -121,10 +145,13 @@ pti_result ptiFlushAllViews() {
   try {
     return Instance().FlushBuffers();
   } catch (const std::overflow_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::runtime_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::exception& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
@@ -140,10 +167,13 @@ pti_result ptiViewPushExternalCorrelationId(pti_view_external_kind external_kind
   try {
     return Instance().PushExternalKindId(external_kind, external_id);
   } catch (const std::overflow_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::runtime_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::exception& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
@@ -159,10 +189,13 @@ pti_result ptiViewPopExternalCorrelationId(pti_view_external_kind external_kind,
   try {
     return Instance().PopExternalKindId(external_kind, p_external_id);
   } catch (const std::overflow_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::runtime_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::exception& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
@@ -269,10 +302,13 @@ pti_result ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequ
   try {
     return Instance().RegisterTimestampCallback(fptr_timestampRequested);
   } catch (const std::overflow_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::runtime_error& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (const std::exception& e) {
+    LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;

@@ -4,6 +4,18 @@ enable_testing()
 
 include(GoogleTest)
 
+if (NOT TARGET LevelZero::level-zero)
+  find_package(LevelZero REQUIRED)
+endif()
+
+set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin")
+
+# Multi-config generators not supported yet, this is an incomplete bandage.
+get_property(PTI_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(PTI_IS_MULTI_CONFIG)
+  set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}")
+endif()
+
 if(HAVE_SYCL)
   add_executable(dpcgemm_suite main_dpcgemm_fixture.cc)
   target_include_directories(
@@ -17,11 +29,8 @@ if(HAVE_SYCL)
     dpcgemm_suite
     PUBLIC -fsycl -gline-tables-only
     PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
-  target_link_options(dpcgemm_suite PUBLIC -fsycl -gline-tables-only PRIVATE
-                      ${PTI_LINK_FLAGS_EXPR})
-  target_compile_definitions(dpcgemm_suite PUBLIC PTI_LEVEL_ZERO=1
-                                                  ${PTI_DEFINE_FLAGS_EXPR})
-
+  target_link_options(dpcgemm_suite PUBLIC -fsycl -gline-tables-only)
+  target_compile_definitions(dpcgemm_suite PUBLIC PTI_LEVEL_ZERO=1)
   target_link_libraries(dpcgemm_suite PUBLIC Pti::pti_view GTest::gtest_main LevelZero::level-zero)
 
   add_executable(vecsqadd_suite main_vecsqadd_fixture.cc)
@@ -33,38 +42,31 @@ if(HAVE_SYCL)
 
   target_compile_options(
     vecsqadd_suite
-    PUBLIC -fsycl -gline-tables-only
-    PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+    PUBLIC -fsycl -gline-tables-only)
 
-  target_link_options(vecsqadd_suite PUBLIC -fsycl -gline-tables-only PRIVATE
-                      ${PTI_LINK_FLAGS_EXPR})
+  target_link_options(vecsqadd_suite PUBLIC -fsycl -gline-tables-only)
 
-  target_compile_definitions(vecsqadd_suite PUBLIC PTI_LEVEL_ZERO=1
-                                                   ${PTI_DEFINE_FLAGS_EXPR})
+  target_compile_definitions(vecsqadd_suite PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(vecsqadd_suite PUBLIC Pti::pti_view
-                                              GTest::gtest_main)
+	  GTest::gtest_main LevelZero::level-zero)
 
   add_executable(no_kernel_overlap no_kernel_overlap.cc)
   target_include_directories(
     no_kernel_overlap
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
-#           "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
 
   target_compile_options(
     no_kernel_overlap
-    PUBLIC -fsycl -gline-tables-only
-    PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+    PUBLIC -fsycl -gline-tables-only)
 
-  target_link_options(no_kernel_overlap PUBLIC -fsycl -gline-tables-only PRIVATE
-                      ${PTI_LINK_FLAGS_EXPR})
+  target_link_options(no_kernel_overlap PUBLIC -fsycl -gline-tables-only)
 
-  target_compile_definitions(no_kernel_overlap PUBLIC PTI_LEVEL_ZERO=1
-                                                   ${PTI_DEFINE_FLAGS_EXPR})
+  target_compile_definitions(no_kernel_overlap PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(no_kernel_overlap PUBLIC Pti::pti_view
-                                              GTest::gtest_main)
+	  GTest::gtest_main LevelZero::level-zero)
 
   add_executable(startstop_suite main_startstop_fixture.cc)
   target_include_directories(
@@ -75,17 +77,14 @@ if(HAVE_SYCL)
 
   target_compile_options(
     startstop_suite
-    PUBLIC -fsycl -gline-tables-only
-    PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+    PUBLIC -fsycl -gline-tables-only)
 
-  target_link_options(startstop_suite PUBLIC -fsycl -gline-tables-only PRIVATE
-                      ${PTI_LINK_FLAGS_EXPR})
+  target_link_options(startstop_suite PUBLIC -fsycl -gline-tables-only)
 
-  target_compile_definitions(startstop_suite PUBLIC PTI_LEVEL_ZERO=1
-                                                   ${PTI_DEFINE_FLAGS_EXPR})
+  target_compile_definitions(startstop_suite PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(startstop_suite PUBLIC Pti::pti_view
-                                              GTest::gtest_main)
+	  GTest::gtest_main LevelZero::level-zero)
 
   add_executable(mem_ops_test mem_ops_test.cc)
 
@@ -96,11 +95,9 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(mem_ops_test PRIVATE -fsycl -gline-tables-only
-                                                ${PTI_COMPILE_FLAGS_EXPR})
-  target_link_options(mem_ops_test PRIVATE -fsycl -gline-tables-only
-                    ${PTI_LINK_FLAGS_EXPR})
-  target_compile_definitions(mem_ops_test PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
+  target_compile_options(mem_ops_test PRIVATE -fsycl -gline-tables-only)
+
+  target_link_options(mem_ops_test PRIVATE -fsycl -gline-tables-only)
 
   target_link_libraries(mem_ops_test PUBLIC Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
@@ -114,15 +111,11 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only
-                                                ${PTI_COMPILE_FLAGS_EXPR})
-  target_link_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only
-                    ${PTI_LINK_FLAGS_EXPR})
-  target_compile_definitions(sycl_queue_id PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
+  target_compile_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only)
+  target_link_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only)
 
   target_link_libraries(sycl_queue_id PUBLIC Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
-
 
   gtest_discover_tests(
     dpcgemm_suite
@@ -172,20 +165,16 @@ add_custom_command(
   TARGET zegemm_suite
   PRE_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          ${PROJECT_SOURCE_DIR}/test/gemm.spv ${CMAKE_BINARY_DIR}/test/gemm.spv)
+          ${PROJECT_SOURCE_DIR}/test/gemm.spv ${PTI_TEST_BIN_DIR}/gemm.spv)
 add_custom_command(
   TARGET zegemm_suite
   PRE_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          ${PROJECT_SOURCE_DIR}/test/gemm.cl ${CMAKE_BINARY_DIR}/test/gemm.cl)
+          ${PROJECT_SOURCE_DIR}/test/gemm.cl ${PTI_TEST_BIN_DIR}/gemm.cl)
 
 if (NOT TARGET LevelZero::level-zero)
   find_package(LevelZero REQUIRED)
 endif()
-
-target_compile_options(zegemm_suite PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
-target_link_options(zegemm_suite PRIVATE ${PTI_LINK_FLAGS_EXPR})
-target_compile_definitions(zegemm_suite PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
 target_link_libraries(zegemm_suite PUBLIC Pti::pti_view GTest::gtest_main
                                           GTest::gmock LevelZero::level-zero)
@@ -197,10 +186,6 @@ target_include_directories(
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
-
-target_compile_options(view_record_test PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
-target_link_options(view_record_test PRIVATE ${PTI_LINK_FLAGS_EXPR})
-target_compile_definitions(view_record_test PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
 
 target_link_libraries(view_record_test PUBLIC Pti::pti_view GTest::gtest_main
                                               spdlog::spdlog_header_only
@@ -214,10 +199,6 @@ target_include_directories(
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
 
-target_compile_options(assert_exception_test PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
-target_link_options(assert_exception_test PRIVATE ${PTI_LINK_FLAGS_EXPR})
-target_compile_definitions(assert_exception_test PRIVATE ${PTI_DEFINE_FLAGS_EXPR})
-
 target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_main
                                                    spdlog::spdlog_header_only
                                                    LevelZero::level-zero)
@@ -227,9 +208,6 @@ add_executable(view_gpu_local_test view_gpu_local_test.cc)
 target_include_directories(
   view_gpu_local_test
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include")
-
-target_compile_options(view_gpu_local_test PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
-target_link_options(view_gpu_local_test PRIVATE ${PTI_LINK_FLAGS_EXPR})
 
 target_link_libraries(view_gpu_local_test PUBLIC Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
@@ -273,14 +251,14 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
     NAME mt-awk-test
     COMMAND
       bash -c
-      "${CMAKE_BINARY_DIR}/samples/dpc_gemm_threaded/dpc_gemm_threaded -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT} &&
+      "${PTI_TEST_BIN_DIR}/dpc_gemm_threaded -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT} &&
           awk -f ${CMAKE_CURRENT_SOURCE_DIR}/multi_thread_correlation.awk ${MT_AWK_TEST_OUT}"
   )
   add_test(
     NAME mt-awk-test-immediate
     COMMAND
       bash -c
-      "${CMAKE_BINARY_DIR}/samples/dpc_gemm_threaded/dpc_gemm_threaded -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT_IMMEDIATE} &&
+      "${PTI_TEST_BIN_DIR}/dpc_gemm_threaded -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT_IMMEDIATE} &&
           awk -f ${CMAKE_CURRENT_SOURCE_DIR}/multi_thread_correlation.awk ${MT_AWK_TEST_OUT_IMMEDIATE}"
   )
   set_property(TEST mt-awk-test-immediate PROPERTY ENVIRONMENT SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=1)

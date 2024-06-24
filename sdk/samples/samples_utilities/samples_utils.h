@@ -7,10 +7,57 @@
 #define SAMPLES_UTILS_H_
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 
 #include "pti/pti_view.h"
 
 namespace samples_utils {
+#define PTI_THROW(X)                                    \
+  do {                                                  \
+    if (X != pti_result::PTI_SUCCESS) {                 \
+      throw std::runtime_error("PTI CALL FAILED: " #X); \
+    }                                                   \
+  } while (0)
+
+#define PTI_CHECK_SUCCESS(X)                            \
+  do {                                                  \
+    if (X != pti_result::PTI_SUCCESS) {                 \
+      std::cerr << "PTI CALL FAILED: " #X << std::endl; \
+      std::exit(EXIT_FAILURE);                          \
+    }                                                   \
+  } while (0)
+
+inline constexpr auto kDefaultPtiBufferAlignment = std::align_val_t{1};
+
+template <typename T>
+[[nodiscard]] inline T* AlignedAlloc(std::size_t size, std::align_val_t align) {
+  try {
+    return static_cast<T*>(::operator new(size, align));
+  } catch (const std::bad_alloc& e) {
+    std::cerr << "Alloc failed " << e.what() << '\n';
+    return nullptr;
+  }
+}
+
+template <typename T>
+inline void AlignedDealloc(T* buf_ptr, std::align_val_t align) {
+  try {
+    ::operator delete(buf_ptr, align);
+  } catch (...) {
+    std::cerr << "DeAlloc failed, abort" << '\n';
+    std::abort();
+  }
+}
+
+template <typename T>
+[[nodiscard]] inline T* AlignedAlloc(std::size_t size) {
+  return AlignedAlloc<T>(size, kDefaultPtiBufferAlignment);
+}
+
+template <typename T>
+inline void AlignedDealloc(T* buf_ptr) {
+  return AlignedDealloc<T>(buf_ptr, kDefaultPtiBufferAlignment);
+}
 
 //
 // Returns:    True  - if a_list passed in is a monotonically increasing sequence.

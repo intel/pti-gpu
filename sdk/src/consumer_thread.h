@@ -1,4 +1,4 @@
-//==============================================================
+// ==============================================================
 // Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
@@ -16,15 +16,26 @@
  * user to parse buffers with a future or "PushAndForget" and ignore the
  * result.
  *
+ * Note: MSVC has a bug with std::packaged_task. Therefore, our implementation on
+ * Windows and Linux is slightly different. https://github.com/microsoft/STL/issues/321
+ *
  */
+#include <spdlog/spdlog.h>
 
 #include <atomic>
 #include <future>
+#include <memory>
 #include <thread>
 
 #include "view_buffer.h"
 
 namespace pti::view {
+
+#if !defined(_MSC_VER)
+using TaskType = std::packaged_task<void()>;
+#else
+using TaskType = std::function<void()>;
+#endif
 
 constexpr auto kDefaultBufferQueueDepth = 50UL;
 constexpr auto kBufQueueDepthMult = 2UL;
@@ -56,9 +67,15 @@ class BufferConsumer {
   BufferConsumer& operator=(BufferConsumer&&) = delete;
 
   virtual ~BufferConsumer() {
-    Stop();
-    if (consumer_.joinable()) {
-      consumer_.join();
+    try {
+      Stop();
+      if (consumer_.joinable()) {
+        consumer_.join();
+      }
+    } catch ([[maybe_unused]] const std::exception& e) {
+      SPDLOG_ERROR("Exception caught in {}: {}", __FUNCTION__, e.what());
+    } catch (...) {
+      SPDLOG_ERROR("Unknown caught in {}", __FUNCTION__);
     }
   }
 
@@ -71,9 +88,15 @@ class BufferConsumer {
    */
   template <typename T>
   inline auto Push(T&& callable) {
+#if !defined(_MSC_VER)
     auto delivery = std::packaged_task<void()>(std::move(callable));
     auto delivery_future = delivery.get_future();
     queue_.Push(std::move(delivery));
+#else
+    auto delivery = std::make_shared<std::packaged_task<void()> >(std::move(callable));
+    auto delivery_future = delivery->get_future();
+    queue_.Push([delivery = std::move(delivery)]() { (*delivery)(); });
+#endif
     return delivery_future;
   }
 
@@ -85,7 +108,12 @@ class BufferConsumer {
    */
   template <typename T>
   inline void PushAndForget(T&& callable) {
+#if !defined(_MSC_VER)
     queue_.Push(std::packaged_task<void()>(std::move(callable)));
+#else
+    auto ptr = std::make_shared<T>(std::move(callable));
+    queue_.Push([ptr = std::move(ptr)]() { return (*ptr)(); });
+#endif
   }
 
   /**
@@ -97,7 +125,11 @@ class BufferConsumer {
   inline void Stop() {
     stop_thread_ = true;
     queue_.ResetBufferDepth();
+#if !defined(_MSC_VER)
     queue_.Push(std::packaged_task<void()>([] {}));
+#else
+    queue_.Push(std::function<void()>([] {}));
+#endif
   }
 
  private:
@@ -109,7 +141,7 @@ class BufferConsumer {
   }
 
   std::atomic<bool> stop_thread_ = false;
-  utilities::ViewRecordBufferQueue<std::packaged_task<void()>> queue_{kDefaultBufferQueueDepth};
+  utilities::ViewRecordBufferQueue<TaskType> queue_{kDefaultBufferQueueDepth};
   std::thread consumer_;
 };
 }  // namespace pti::view

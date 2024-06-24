@@ -27,7 +27,7 @@ class MyDeviceSelector {
   }
 
   // This is the function which gives a "rating" to devices.
-  virtual int operator()(const sycl::device &device) const {
+  int operator()(const sycl::device &device) const {
     // The template parameter to device.get_info can be a variety of properties
     // defined by the SYCL spec's sycl::info:: enum. Properties may have
     // different types. Here we query name which is a string.

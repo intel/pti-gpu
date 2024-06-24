@@ -55,7 +55,7 @@ bool CheckBlockDimension(sycl::queue& q, unsigned int dim_x,
   auto max_block_size =
       device.get_info<sycl::info::device::max_work_group_size>();
 
-  if ((max_block_size > 1) && (dim_x * dim_y > max_block_size)) {
+  if ((max_block_size > 1) && (static_cast<std::size_t>(dim_x) * dim_y > max_block_size)) {
     std::cout << "ERROR: Invalid block sizes: n1_Tblock * n2_Tblock should be "
                  "less than or equal to "
               << max_block_size << "\n";

@@ -43,15 +43,18 @@ The following cache variables may also be set:
 
 # Based on tutorial found in CMake manual:
 # https://cmake.org/cmake/help/latest/manual/cmake-developer.7.html
-if(UNIX)
-  find_path(
-    DevUtilities_INCLUDE_DIR
-    NAMES dpc_common.hpp
-    HINTS ENV CPATH ENV LD_LIBRARY_PATH ENV CMPLR_ROOT
-    PATHS /opt/intel/oneapi/dev-utilities /opt/intel/oneapi/dev-utilities/latest
-          /opt/intel/oneapi/dev-utilities/linux
-    PATH_SUFFIXES include linux/include)
-endif()
+find_path(
+  DevUtilities_INCLUDE_DIR
+  NAMES dpc_common.hpp
+  HINTS ENV CPATH
+	ENV LD_LIBRARY_PATH
+	ENV CMPLR_ROOT
+  PATHS /opt/intel/oneapi/dev-utilities
+        /opt/intel/oneapi/dev-utilities/latest
+        /opt/intel/oneapi/dev-utilities/linux
+	"C:/Program Files (x86)/Intel/oneAPI/dev-utilities/latest"
+  PATH_SUFFIXES include
+                linux/include)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(

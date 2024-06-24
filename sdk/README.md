@@ -17,6 +17,12 @@ One of the objectives is to extend functionality of PTI SDK and with the time to
 
 This project is in active development. We decided to open it at this early stage to benefit from feedback and critisim of interested parties and early adopters.
 
+**Windows support is unsupported and incomplete:**
+
+- Kernel Name Demangling not present.
+- Release package not available.
+- SYCL Runtime Records unsupported in current oneAPI Release.
+
 ## Recent (version 0.7.0) update
 
 Starting version 0.7.0 **PTI SDK** implements the new functionality of Local collection. It enables starting and stopping collection anytime-anywhere in an application when run on the system with installed Level-Zero runtime supporting [1.9.0 specification](https://spec.oneapi.io/releases/index.html#level-zero-v1-9-0) and higher.
@@ -40,15 +46,19 @@ Please, check [TODO](TODO.md) list. We are aware of many shortcomings and ineffi
 
 ## Regularly Tested Configurations
 
-- Ubuntu 20.04 with Intel(R) Data Center GPU Max 1550
+- Ubuntu 22.04 with Intel(R) Data Center GPU Max 1550
+- Ubuntu 22.04 with Intel(R) Data Center GPU Max 1100
+- Rocky 8 with Intel(R) Data Center GPU Max 1100
 
 ## Prerequisites
 
-- [CMake](https://cmake.org/) (version 3.12 and above)
+- [CMake](https://cmake.org/) (version 3.12 and above. For Windows tests version 3.23 and above.)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html)
 
 ## Build
+
+### Linux
 
 Build the pti library + tests and samples
 
@@ -61,21 +71,53 @@ Build the pti library + tests and samples
 >> make -j
 ```
 
+### Windows
+
+Using the Intel(R) oneAPI cmd and Visual Studio 2022
+
+```console
+> cd sdk
+> mkdir build
+> cd build
+> cmake ..  -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/icpx_toolchain.cmake -DCMAKE_CXX_FLAGS=/EHcs -DCMAKE_CXX_FLAGS=/EHcs
+> cmake --build . --parallel 4
+```
+
 ## Sample
+
+### Linux
 
 From `build` directory:
 
 ```console
->> ./samples/vector_sq_add/vec_sqadd
+>> ./bin/vec_sqadd
+```
+
+### Windows
+
+From `build` directory:
+
+```console
+> bin\vec_sqadd.exe
 ```
 
 ## Test
+
+### Linux
 
 ```console
 >> make test
 ```
 
+### Windows
+
+```console
+>  ninja test
+```
+
 ## Install
+
+### Linux
 
 ```console
 >> mkdir build
@@ -83,6 +125,16 @@ From `build` directory:
 >> cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/icpx_toolchain.cmake -DBUILD_TESTING=OFF ..
 >> make -j
 >> cmake --install . --config Release --prefix "../out"
+```
+
+### Windows
+
+```console
+> mkdir build
+> cd build
+> cmake ..  -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/icpx_toolchain.cmake -DCMAKE_CXX_FLAGS=/EHcs -DCMAKE_CXX_FLAGS=/EHcs
+> cmake --build . --parallel 4
+> cmake --install . --config Release --prefix "../out"
 ```
 
 ## Linking

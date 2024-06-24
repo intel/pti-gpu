@@ -58,9 +58,9 @@ void oneMKLGemm(void) {
       try {
         std::rethrow_exception(e);
       } catch (sycl::exception const &e) {
-        std::cout << "Caught asynchronous SYCL exception:\n" << e.what() << std::endl;
+        std::cerr << "Caught asynchronous SYCL exception:\n" << e.what() << std::endl;
       } catch (std::exception const &e) {
-        std::cout << "Caught asynchronous STL exception:\n" << e.what() << std::endl;
+        std::cerr << "Caught asynchronous STL exception:\n" << e.what() << std::endl;
       }
     }
   };
@@ -86,11 +86,11 @@ void oneMKLGemm(void) {
   T alpha = 1.0f;
   T beta = 2.0f;
 
-  oneapi::mkl::transpose transA = oneapi::mkl::transpose::trans;
-  oneapi::mkl::transpose transB = oneapi::mkl::transpose::nontrans;
+  constexpr auto trans_a = oneapi::mkl::transpose::trans;
+  constexpr auto trans_b = oneapi::mkl::transpose::nontrans;
 
-  sizea = (transA == oneapi::mkl::transpose::nontrans) ? lda * k : lda * m;
-  sizeb = (transB == oneapi::mkl::transpose::nontrans) ? ldb * n : ldb * k;
+  sizea = lda * m;  // sizea = (trans_a == oneapi::mkl::transpose::nontrans) ? lda * k : lda * m;
+  sizeb = ldb * n;  // sizeb = (trans_b == oneapi::mkl::transpose::nontrans) ? ldb * n : ldb * k;
 
   // Allocate host memory
   std::vector<T> hostA(sizea);
@@ -132,8 +132,8 @@ void oneMKLGemm(void) {
 
   // Execute oneMKL GEMM
   try {
-    gemm_done = oneapi::mkl::blas::gemm(main_queue, transA, transB, m, n, k, alpha, devA, lda, devB,
-                                        ldb, beta, devC, ldc);
+    gemm_done = oneapi::mkl::blas::gemm(main_queue, trans_a, trans_b, m, n, k, alpha, devA, lda,
+                                        devB, ldb, beta, devC, ldc);
   } catch (sycl::exception const &e) {
     std::cout << "\t\tCaught synchronous SYCL exception during GEMM:\n" << e.what() << std::endl;
   }

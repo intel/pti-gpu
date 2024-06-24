@@ -293,8 +293,12 @@ int main()
   // Xunsong: Disable PTI at here
 
   std::cout  << std::endl << "program finished." << std::endl;
-  auto flush_results = ptiFlushAllViews();
-  assert(flush_results == pti_result::PTI_SUCCESS);
+
+  if (ptiFlushAllViews() != pti_result::PTI_SUCCESS) {
+    std::cerr << "Failed to flush views" << '\n';
+    exit_code = EXIT_FAILURE;
+  }
+
   ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, &eid);
   return exit_code;
 }

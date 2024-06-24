@@ -3,6 +3,7 @@
 build*/
 venv/
 .vscode/
+.vs/
 .vim/
 .cache/
 compile_commands.json

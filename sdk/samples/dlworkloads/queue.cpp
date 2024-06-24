@@ -26,7 +26,7 @@ std::unique_ptr<sycl::queue> CreateQueue()
   if (root_devices.size() == 0) {
     return NULL;
   }
-  for (int i = 0; i < root_devices.size(); ++i) {
+  for (std::size_t i = 0; i < root_devices.size(); ++i) {
     const auto& root_device = root_devices[i];
     std::cout << "  " << i << ") ";
     std::cout << "root device: " << root_device.get_info<sycl::info::device::name>();

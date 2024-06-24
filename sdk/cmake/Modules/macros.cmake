@@ -970,7 +970,7 @@ macro(CheckIfSyclIsAvailable)
   CHECK_CXX_COMPILER_FLAG("-fsycl" HAVE_SYCL)
 
   if(HAVE_SYCL)
-    CHECK_INCLUDE_FILE_CXX("CL/sycl.hpp" SYCL_IS_AVAILABLE "-fsycl")
+    CHECK_INCLUDE_FILE_CXX("sycl/sycl.hpp" SYCL_IS_AVAILABLE "-fsycl")
     if(NOT SYCL_IS_AVAILABLE)
       set(HAVE_SYCL NO)
     else()
@@ -1040,6 +1040,17 @@ macro(GetSpdlog)
         OFF
         CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(fmt spdlog)
+
+    # Prevent fmt from using exceptions because it could throw while logging.
+    # Disable warning in fmt due to our usage of EHsc. 
+    target_compile_definitions(fmt PUBLIC FMT_EXCEPTIONS=0)
+    target_compile_options(fmt PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/wd6285 $<$<CONFIG:Release>:/wd4702 /wd6385>>)
+    target_compile_definitions(fmt-header-only INTERFACE FMT_EXCEPTIONS=0)
+    target_compile_options(fmt-header-only INTERFACE $<$<CXX_COMPILER_ID:MSVC>:/wd6285 $<$<CONFIG:Release>:/wd4702 /wd6385>>)
+
+    # spdlog sets the /MP flag on MSVC which causes a warning on icx.
+    target_compile_options(spdlog PRIVATE $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-command-line-argument>)
+
   endif()
 endmacro()
 
@@ -1071,6 +1082,10 @@ macro(GetGTest)
         ON
         CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
+    target_compile_options(gmock_main PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
+    target_compile_options(gmock PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
+    target_compile_options(gtest PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
+    target_compile_options(gtest_main PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
   endif()
 endmacro()
 
@@ -1198,9 +1213,7 @@ macro(AddFormatTarget)
 
   cmake_policy(PUSH)
   cmake_policy(SET CMP0009 NEW)
-  file(GLOB_RECURSE cf_src_files  "${PROJECT_SOURCE_DIR}/*.cc"
-                                  "${PROJECT_SOURCE_DIR}/*.h"
-                                  "${PROJECT_SOURCE_DIR}/src/*.cc"
+  file(GLOB_RECURSE cf_src_files  "${PROJECT_SOURCE_DIR}/src/*.cc"
                                   "${PROJECT_SOURCE_DIR}/src/*.h"
                                   "${PROJECT_SOURCE_DIR}/src/**/*.h"
                                   "${PROJECT_SOURCE_DIR}/src/**/*.cc"
@@ -1246,4 +1259,31 @@ macro(AddFormatTarget)
     message(STATUS "black not found. Python code cannot be formatted.")
   endif()
   cmake_policy(POP)
+endmacro()
+
+macro(AddProjectVersionInfo TARGET)
+  if (WIN32)
+    set(PTI_VERSIONINFO_RC "${PROJECT_BINARY_DIR}/${TARGET}_versioninfo.rc")
+    set(PTI_VERSIONINFO_RC_IN "${PROJECT_SOURCE_DIR}/cmake/Modules/pti_versioninfo.rc.in")
+
+    set(INTEL_LIC_PATH "${PTI_CMAKE_MACRO_DIR}/../LICENSE")
+
+    if (EXISTS "${INTEL_LIC_PATH}")
+      file(STRINGS "${INTEL_LIC_PATH}" INTEL_LICENSE_FILE_STRINGS)
+      foreach(PTI_STRING ${INTEL_LICENSE_FILE_STRINGS})
+        string(REGEX MATCH "^Copyright.*" PTI_COPYRIGHT "${PTI_STRING}")
+        if (PTI_COPYRIGHT)
+          break()
+        endif()
+      endforeach()
+    endif()
+
+    if(NOT PTI_COPYRIGHT)
+      message(WARNING "Copyright file not found, Windows versioninfo will be incomplete")
+      set(PTI_COPYRIGHT "")
+    endif()
+
+    configure_file(${PTI_VERSIONINFO_RC_IN} ${PTI_VERSIONINFO_RC} @ONLY)
+    target_sources(${TARGET} PRIVATE ${PTI_VERSIONINFO_RC})
+  endif()
 endmacro()

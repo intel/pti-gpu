@@ -14,7 +14,6 @@
  * records.
  */
 
-#include <dlfcn.h>
 #include <level_zero/layers/zel_tracing_api.h>
 #include <level_zero/layers/zel_tracing_register_cb.h>
 #include <level_zero/loader/ze_loader.h>
@@ -47,8 +46,9 @@ struct CallbacksEnabled {
   std::atomic<bool> acallback = false;
 };
 
-std::atomic<uint64_t> global_ref_count = 0;  // Keeps track of zelEnable/zelDisable TracingLayer()
-                                             // calls issued. 0 => truely disabled tracing.
+inline std::atomic<uint64_t> global_ref_count =
+    0;  // Keeps track of zelEnable/zelDisable TracingLayer()
+        // calls issued. 0 => truely disabled tracing.
 
 struct ZeInstanceData {
   uint64_t start_time_host;
@@ -58,7 +58,7 @@ struct ZeInstanceData {
   uint64_t kid;  // passing kid from enter callback to exit callback
 };
 
-thread_local ZeInstanceData ze_instance_data;
+inline thread_local ZeInstanceData ze_instance_data;
 
 struct ZeKernelGroupSize {
   uint32_t x;
@@ -99,7 +99,7 @@ struct ZeKernelCommand {
   ze_fence_handle_t fence;
   uint64_t submit_time = 0;          // in ns
   uint64_t submit_time_device_ = 0;  // in ticks
-  uint64_t tid = 0;
+  uint32_t tid = 0;
   uint64_t sycl_node_id_ = 0;
   uint64_t sycl_queue_id_ =
       PTI_INVALID_QUEUE_ID;  // default to invalid till we determine otherwise.
@@ -294,11 +294,11 @@ class ZeCollector {
           hybrid_mode = false;
         }
       }
-    } catch (std::invalid_argument const& ex) {
+    } catch (std::invalid_argument const& /*ex*/) {
       hybrid_mode = false;
       disabled_mode = false;
       mode = ZeCollectionMode::Full;
-    } catch (std::out_of_range const& ex) {
+    } catch (std::out_of_range const& /*ex*/) {
       hybrid_mode = false;
       disabled_mode = false;
       mode = ZeCollectionMode::Full;
@@ -507,8 +507,8 @@ class ZeCollector {
     ze_bool_t isImmediate = true;
     ze_context_handle_t hContext;
     ze_device_handle_t hDevice;
-    uint32_t ordinal = -1;
-    uint32_t index = -1;
+    uint32_t ordinal = static_cast<uint32_t>(-1);
+    uint32_t index = static_cast<uint32_t>(-1);
 
     status = l0_wrapper_.w_zeCommandListGetDeviceHandle(command_list, &hDevice);
 
@@ -776,14 +776,14 @@ class ZeCollector {
         rec.device_ = command->props.src_device;
         rec.dst_device_ = command->props.dst_device;
         if (command->props.src_device != nullptr) {
-          auto it = device_descriptors_.find(command->props.src_device);
-          PTI_ASSERT(it != device_descriptors_.end());
-          rec.pci_prop_ = it->second.pci_properties;
+          auto dev_it = device_descriptors_.find(command->props.src_device);
+          PTI_ASSERT(dev_it != device_descriptors_.end());
+          rec.pci_prop_ = dev_it->second.pci_properties;
         }
         if (command->props.dst_device != nullptr) {
-          auto it = device_descriptors_.find(command->props.dst_device);
-          PTI_ASSERT(it != device_descriptors_.end());
-          rec.dst_pci_prop_ = it->second.pci_properties;
+          auto dev_it = device_descriptors_.find(command->props.dst_device);
+          PTI_ASSERT(dev_it != device_descriptors_.end());
+          rec.dst_pci_prop_ = dev_it->second.pci_properties;
         }
         if (command->props.bytes_transferred > 0) {
           rec.bytes_xfered_ = command->props.bytes_transferred;

@@ -1,4 +1,15 @@
-cmake_minimum_required(VERSION 3.5)
+if(WIN32)
+  if(CMAKE_VERSION VERSION_LESS "3.20")
+    message(WARNING "sample requires CMake version 3.20 or greater.")
+    return()
+  endif()
+  cmake_minimum_required(VERSION 3.20)
+  find_package(oneDPLWindowsIntelLLVM)
+else()
+  cmake_minimum_required(VERSION 3.14)
+endif()
+
+
 project(dlworkload_demo_with_syclgraph_capture)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -70,5 +81,9 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
+if (NOT TARGET LevelZero::level-zero)
+  find_package(LevelZero::level-zero REQUIRED)
+endif()
+
 target_include_directories(dlworkload SYSTEM PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
-target_link_libraries(dlworkload DNNL::dnnl MKL::MKL MKL::MKL_SYCL oneDPL Pti::pti_view)
+target_link_libraries(dlworkload DNNL::dnnl MKL::MKL MKL::MKL_SYCL oneDPL Pti::pti_view LevelZero::level-zero)

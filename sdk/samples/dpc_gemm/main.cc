@@ -18,22 +18,141 @@
 #define B_VALUE 0.256f
 #define MAX_EPS 1.0e-4f
 
+constexpr auto kRequestedRecordCount = 5'000'000ULL;
+constexpr auto kRequestedBufferSize = kRequestedRecordCount * sizeof(pti_view_record_kernel);
+
 void StartTracing() {
-  assert(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL) == pti_result::PTI_SUCCESS);
-  assert(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL) == pti_result::PTI_SUCCESS);
-  assert(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY) == pti_result::PTI_SUCCESS);
-  assert(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS) == pti_result::PTI_SUCCESS);
-  assert(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION) == pti_result::PTI_SUCCESS);
-  assert(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD) == pti_result::PTI_SUCCESS);
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
 }
 
 void StopTracing() {
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
-  ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS);
-  ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION);
-  ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD);
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
+}
+
+void ProvideBuffer(unsigned char **buf, std::size_t *buf_size) {
+  *buf = samples_utils::AlignedAlloc<unsigned char>(kRequestedBufferSize);
+  if (!*buf) {
+    std::cerr << "Unable to allocate buffer for PTI tracing " << '\n';
+    std::abort();
+  }
+  *buf_size = kRequestedBufferSize;
+}
+
+void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf_size) {
+  if (!buf || !valid_buf_size || !buf_size) {
+    std::cerr << "Received empty buffer" << '\n';
+    if (valid_buf_size) {
+      samples_utils::AlignedDealloc(buf);
+    }
+    return;
+  }
+  pti_view_record_base *ptr = nullptr;
+  while (true) {
+    auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
+    if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
+      std::cout << "Reached End of buffer" << '\n';
+      break;
+    }
+    if (buf_status != pti_result::PTI_SUCCESS) {
+      std::cerr << "Found Error Parsing Records from PTI" << '\n';
+      break;
+    }
+    switch (ptr->_view_kind) {
+      case pti_view_kind::PTI_VIEW_INVALID: {
+        std::cout << "Found Invalid Record" << '\n';
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        samples_utils::dump_record(reinterpret_cast<pti_view_record_overhead *>(ptr));
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        samples_utils::dump_record(reinterpret_cast<pti_view_record_external_correlation *>(ptr));
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        std::cout << "Found Sycl Runtime Record" << '\n';
+        samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        std::cout << "Found Memory Record" << '\n';
+        samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_copy *>(ptr));
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        std::cout << "Found Memory Record" << '\n';
+        samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_fill *>(ptr));
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
+        pti_view_record_kernel *rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        std::cout << "Found Kernel Record" << '\n';
+        samples_utils::dump_record(rec);
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        if (samples_utils::isMonotonic({rec->_sycl_task_begin_timestamp,
+                                        rec->_sycl_enqk_begin_timestamp, rec->_append_timestamp,
+                                        rec->_submit_timestamp, rec->_start_timestamp,
+                                        rec->_end_timestamp})) {
+          std::cout << "------------>     All Monotonic" << std::endl;
+        } else {
+          std::cerr << "------------>     Something wrong: NOT All monotonic" << std::endl;
+        }
+        if (rec->_sycl_task_begin_timestamp == 0) {
+          std::cerr << "------------>     Something wrong: Sycl Task "
+                       "Begin Time is 0"
+                    << std::endl;
+        }
+        if (rec->_sycl_enqk_begin_timestamp == 0) {
+          std::cerr << "------------>     Something wrong: Sycl Enq "
+                       "Launch Kernel Time is 0"
+                    << std::endl;
+        }
+        break;
+      }
+      default: {
+        std::cerr << "This shouldn't happen" << '\n';
+        break;
+      }
+    }
+  }
+  samples_utils::AlignedDealloc(buf);
 }
 
 static float Check(const std::vector<float> &a, float value) {
@@ -121,139 +240,22 @@ void Usage(const char *name) {
 
 int main(int argc, char *argv[]) {
   int exit_code = EXIT_SUCCESS;
-  uint64_t eid = 11;                                   // external correlation id base.
-  const uint64_t buffer_record_count_asked = 5000000;  // number of buffer records requested.
-  ptiViewSetCallbacks(
-      [](auto **buf, auto *buf_size) {
-        *buf_size = buffer_record_count_asked * sizeof(pti_view_record_kernel);
-        void *ptr = ::operator new(*buf_size);
-        ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
-        *buf = reinterpret_cast<unsigned char *>(ptr);
-        if (!*buf) {
-          std::abort();
-        }
-        return;
-      },
-      [](auto *buf, auto buf_size, auto valid_buf_size) {
-        if (!buf || !valid_buf_size || !buf_size) {
-          std::cerr << "Received empty buffer" << '\n';
-          if (valid_buf_size) {
-            ::operator delete(buf);
-          }
-          return;
-        }
-        pti_view_record_base *ptr = nullptr;
-        while (true) {
-          auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
-          if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
-            std::cout << "Reached End of buffer" << '\n';
-            break;
-          }
-          if (buf_status != pti_result::PTI_SUCCESS) {
-            std::cerr << "Found Error Parsing Records from PTI" << '\n';
-            break;
-          }
-          switch (ptr->_view_kind) {
-            case pti_view_kind::PTI_VIEW_INVALID: {
-              std::cout << "Found Invalid Record" << '\n';
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_overhead *>(ptr));
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              samples_utils::dump_record(
-                  reinterpret_cast<pti_view_record_external_correlation *>(ptr));
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              std::cout << "Found Sycl Runtime Record" << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              std::cout << "Found Memory Record" << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_copy *>(ptr));
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              std::cout << "Found Memory Record" << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_fill *>(ptr));
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-              pti_view_record_kernel *rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              std::cout << "Found Kernel Record" << '\n';
-              samples_utils::dump_record(rec);
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              if (samples_utils::isMonotonic({rec->_sycl_task_begin_timestamp,
-                                              rec->_sycl_enqk_begin_timestamp,
-                                              rec->_append_timestamp, rec->_submit_timestamp,
-                                              rec->_start_timestamp, rec->_end_timestamp})) {
-                std::cout << "------------>     All Monotonic" << std::endl;
-              } else {
-                std::cerr << "------------>     Something wrong: NOT All monotonic" << std::endl;
-              }
-              if (rec->_sycl_task_begin_timestamp == 0) {
-                std::cerr << "------------>     Something wrong: Sycl Task "
-                             "Begin Time is 0"
-                          << std::endl;
-              }
-              if (rec->_sycl_enqk_begin_timestamp == 0) {
-                std::cerr << "------------>     Something wrong: Sycl Enq "
-                             "Launch Kernel Time is 0"
-                          << std::endl;
-              }
-              break;
-            }
-            default: {
-              std::cerr << "This shouldn't happen" << '\n';
-              break;
-            }
-          }
-        }
-        ::operator delete(buf);
-      });
+  uint64_t eid = 11;  // external correlation id base.
+  PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
   // start tracing early enables to capture nodes creation at piProgramCreate
   //  and Kernel Task sycl file/line info is captured, as exampple shows at a Node Creation
   // Emit external correlation id records by marking section of code by
   // ptiViewPushExternalCorrelationId / ptiViewPopExternalCorrelationId
   //   Each of the enabled activity view records (sycl runtime, kernel launches) will be *preceeded*
   //   by 1 external correlation id record per kind.
-  ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid);
-  ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3,
-                                   eid + 50);
-  ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0,
-                                   eid + 30);
-  ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_2,
-                                   eid + 40);
+  PTI_CHECK_SUCCESS(ptiViewPushExternalCorrelationId(
+      pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid));
+  PTI_CHECK_SUCCESS(ptiViewPushExternalCorrelationId(
+      pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid + 50));
+  PTI_CHECK_SUCCESS(ptiViewPushExternalCorrelationId(
+      pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, eid + 30));
+  PTI_CHECK_SUCCESS(ptiViewPushExternalCorrelationId(
+      pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_2, eid + 40));
   unsigned repeat_count = 1;
   unsigned size = 1024;
   sycl::device dev;
@@ -294,10 +296,14 @@ int main(int argc, char *argv[]) {
   sycl::queue queue(dev, sycl::async_handler{}, prop_list);   // Main runandcheck kernel
   sycl::queue queue1(dev, sycl::async_handler{}, prop_list);  // Main runandcheck kernel
 
-  ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid);
-  ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid);
-  ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, &eid);
-  ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_2, &eid);
+  PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(
+      pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid));
+  PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(
+      pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid));
+  PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(
+      pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, &eid));
+  PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(
+      pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_2, &eid));
 
   std::cout << "DPC++ Matrix Multiplication (matrix size: " << size << " x " << size << ", repeats "
             << repeat_count << " times)" << std::endl;
@@ -309,8 +315,8 @@ int main(int argc, char *argv[]) {
   std::vector<float> b(size * size, B_VALUE);
   std::vector<float> c(size * size, 0.0f);
 
-  ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1,
-                                   eid + 50);
+  PTI_CHECK_SUCCESS(ptiViewPushExternalCorrelationId(
+      pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1, eid + 50));
 
   try {
     auto start = std::chrono::steady_clock::now();
@@ -323,7 +329,8 @@ int main(int argc, char *argv[]) {
     start = std::chrono::steady_clock::now();
     expected_result = A_VALUE * B_VALUE * size;
 
-    ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1, &eid);
+    PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(
+        pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1, &eid));
 
     StartTracing();
     Compute(std::move(queue), a, b, c, size, repeat_count, expected_result);
@@ -343,8 +350,8 @@ int main(int argc, char *argv[]) {
     std::cerr << "Error: Unknown exception caught." << '\n';
     exit_code = EXIT_FAILURE;
   }
-
-  auto flush_results = ptiFlushAllViews();
   StopTracing();
+  PTI_CHECK_SUCCESS(ptiFlushAllViews());
+
   return exit_code;
 }

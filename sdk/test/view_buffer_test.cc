@@ -96,13 +96,13 @@ TEST_F(ViewBufferFixtureTest, MoveAssignment) {
 TEST_F(ViewBufferFixtureTest, QueuePush) {
   pti::view::utilities::ViewBufferQueue buf_queue;
   buf_queue.Push(std::move(standard_buffer_));
-  EXPECT_EQ(buf_queue.Size(), 1);
+  EXPECT_EQ(buf_queue.Size(), static_cast<std::size_t>(1));
 }
 
 TEST_F(ViewBufferFixtureTest, QueuePop) {
   pti::view::utilities::ViewBufferQueue buf_queue;
   buf_queue.Push(std::move(standard_buffer_));
-  EXPECT_EQ(buf_queue.Size(), 1);
+  EXPECT_EQ(buf_queue.Size(), static_cast<std::size_t>(1));
   auto consume_buffer = buf_queue.Pop();
   EXPECT_EQ(consume_buffer.IsNull(), false);
   EXPECT_EQ(consume_buffer.GetValidBytes(), bytes_inserted_);
@@ -114,7 +114,7 @@ TEST_F(ViewBufferFixtureTest, QueueMultithreadedPopPush) {
 
   std::thread pop_thread([this, &buf_queue] {
     auto consume_buffer = buf_queue.Pop();
-    EXPECT_EQ(buf_queue.Size(), 0);
+    EXPECT_EQ(buf_queue.Size(), static_cast<std::size_t>(0));
     EXPECT_EQ(consume_buffer.IsNull(), false);
     EXPECT_EQ(consume_buffer.GetValidBytes(), bytes_inserted_);
     EXPECT_EQ(consume_buffer.GetBuffer(), underlying_buffer_.data());
@@ -122,7 +122,7 @@ TEST_F(ViewBufferFixtureTest, QueueMultithreadedPopPush) {
 
   buf_queue.Push(std::move(standard_buffer_));
   pop_thread.join();
-  EXPECT_EQ(buf_queue.Size(), 0);
+  EXPECT_EQ(buf_queue.Size(), static_cast<std::size_t>(0));
 }
 
 TEST_F(ViewBufferFixtureTest, QueueMultithreadedPushPop) {
@@ -140,7 +140,7 @@ TEST_F(ViewBufferFixtureTest, QueueMultithreadedPushPop) {
   // Pop the first buffer
   auto consume_buffer = buf_queue.Pop();
   EXPECT_EQ(consume_buffer.IsNull(), true);
-  EXPECT_EQ(consume_buffer.GetValidBytes(), 0);
+  EXPECT_EQ(consume_buffer.GetValidBytes(), static_cast<std::size_t>(0));
   EXPECT_EQ(consume_buffer.GetBuffer(), nullptr);
   consume_buffer = buf_queue.Pop();
   consume_buffer = buf_queue.Pop();
@@ -151,7 +151,7 @@ TEST_F(ViewBufferFixtureTest, QueueMultithreadedPushPop) {
   EXPECT_EQ(consume_buffer.IsNull(), false);
   EXPECT_EQ(consume_buffer.GetValidBytes(), bytes_inserted_);
   EXPECT_EQ(consume_buffer.GetBuffer(), underlying_buffer_.data());
-  EXPECT_EQ(buf_queue.Size(), 0);
+  EXPECT_EQ(buf_queue.Size(), static_cast<std::size_t>(0));
 }
 
 TEST_F(ViewBufferFixtureTest, QueueMultithreadedWaitUntilEmpty) {
@@ -175,7 +175,7 @@ TEST_F(ViewBufferFixtureTest, QueueMultithreadedWaitUntilEmpty) {
   });
 
   buf_queue.WaitUntilEmptyOr(stop_consumer);
-  EXPECT_EQ(buf_queue.Size(), 0);
+  EXPECT_EQ(buf_queue.Size(), static_cast<std::size_t>(0));
 
   push_thread.join();
   pop_thread.join();
@@ -196,7 +196,7 @@ TEST_F(ViewBufferFixtureTest, QueueMultithreadedWaitUntilEmptyOr) {
   });
 
   buf_queue.WaitUntilEmptyOr(stop_consumer);
-  EXPECT_NE(buf_queue.Size(), 0);
+  EXPECT_NE(buf_queue.Size(), static_cast<std::size_t>(0));
 
   push_thread.join();
 }

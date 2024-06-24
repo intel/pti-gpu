@@ -112,8 +112,8 @@ float RunAndCheck(sycl::queue queue, const std::vector<float>& a, const std::vec
       });
     });
     queue.wait_and_throw();
-  } catch (sycl::exception e) {
-    std::cout << "[ERROR] " << e.what() << std::endl;
+  } catch (const sycl::exception& e) {
+    std::cerr << "[ERROR] " << e.what() << std::endl;
   }
 
   return Check(c, expected_result);
@@ -422,14 +422,14 @@ TEST_F(MainFixtureTest, BufferCallBacksRegistered) {
 TEST_F(MainFixtureTest, SecondCallbackCalled) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
-  EXPECT_GT(completed_buffer_used_bytes, 0);
+  EXPECT_GT(completed_buffer_used_bytes, static_cast<std::size_t>(0));
 }
 
 TEST_F(MainFixtureTest, MemoryViewRecordCreated) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_EQ(memory_view_record_created, true);
-  EXPECT_EQ(memory_bytes_copied, 4194304);
+  EXPECT_EQ(memory_bytes_copied, 4194304ULL);
 }
 
 TEST_F(MainFixtureTest, KernelViewRecordCreated) {
@@ -524,14 +524,14 @@ TEST_F(MainFixtureTest, DeMangledKernelNameCheck) {
 TEST_F(MainFixtureTest, NoMaskedByLastIdExternalViewRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
-  ASSERT_EQ(masked_by_last_id_records, 0);
+  ASSERT_EQ(masked_by_last_id_records, 0ULL);
 }
 
 // Tests for external_corr_id parameter properly populated on a pop.
 TEST_F(MainFixtureTest, LastEidReturnedParameter) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
-  ASSERT_EQ(last_pop_eid, 51);
+  ASSERT_EQ(last_pop_eid, 51ULL);
 }
 
 // Ensures that ImmediateCommandList on or off by default does not result in
@@ -553,8 +553,8 @@ TEST_F(MainFixtureTest, ZeroDiffICLonOroff) {
   RunGemm();
   kernel_view_record_count_off = kernel_view_record_count;
   memory_view_record_count_off = memory_view_record_count;
-  ASSERT_EQ(kernel_view_record_count_on - kernel_view_record_count_off, 0);
-  ASSERT_EQ(memory_view_record_count_on - memory_view_record_count_off, 0);
+  ASSERT_EQ(kernel_view_record_count_on - kernel_view_record_count_off, 0ULL);
+  ASSERT_EQ(memory_view_record_count_on - memory_view_record_count_off, 0ULL);
 }
 
 // Tests for external_corr_id usage of kind stack --- use only the top/last for
@@ -562,14 +562,14 @@ TEST_F(MainFixtureTest, ZeroDiffICLonOroff) {
 TEST_F(MainFixtureTest, OnlyLastIdExternalViewRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
-  EXPECT_GT(last_id_records, 0);
+  EXPECT_GT(last_id_records, 0ULL);
 }
 
 // Tests for overhead records present in stream.
 TEST_F(MainFixtureTest, OverheadRecordsPresentViewRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
-  EXPECT_GT(num_of_overhead_recs, 0);
+  EXPECT_GT(num_of_overhead_recs, 0ULL);
 }
 
 // Tests for overhead records have stringified enum types in stream.
@@ -631,7 +631,7 @@ TEST_F(MainFixtureTest, KerneluuidDeviceNonZero) {
 TEST_F(MainFixtureTest, ValidateRealTimestampToUser) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
-  ASSERT_GT(last_kernel_timestamp, 0);
+  ASSERT_GT(last_kernel_timestamp, 0ULL);
   user_real_timestamp = ptiViewGetTimestamp();
   ASSERT_GT(user_real_timestamp, last_kernel_timestamp);
 }
@@ -643,7 +643,7 @@ TEST_F(MainFixtureTest, ValidateRealTimestampFromUser) {
   ASSERT_EQ(ptiViewSetTimestampCallback(utils::GetTime), pti_result::PTI_SUCCESS);
   uint64_t before_run = utils::GetTime();
   RunGemm();
-  ASSERT_GT(last_kernel_timestamp, 0);
+  ASSERT_GT(last_kernel_timestamp, 0ULL);
   uint64_t after_run = utils::GetTime();
   ASSERT_LT(before_run, last_kernel_timestamp);
   ASSERT_GT(after_run, last_kernel_timestamp);
@@ -657,7 +657,7 @@ TEST_F(MainFixtureTest, ValidateSwitchedTSCallbackFromUser) {
   ASSERT_EQ(ptiViewSetTimestampCallback(utils::GetRealTime),
             pti_result::PTI_SUCCESS);  // kernels will have real domain
   RunGemm();
-  ASSERT_GT(last_kernel_timestamp, 0);
+  ASSERT_GT(last_kernel_timestamp, 0ULL);
   user_real_timestamp = ptiViewGetTimestamp();  // Real Domain
   uint64_t after_run = utils::GetTime();        // Monotonic raw Domain
   ASSERT_LT(after_run, last_kernel_timestamp);
@@ -669,7 +669,7 @@ TEST_F(MainFixtureTest, ValidateSwitchedTSCallbackFromUser) {
             pti_result::PTI_SUCCESS);           // Switch -- kernels will have monotonic raw
   user_real_timestamp = ptiViewGetTimestamp();  // Monotonic raw also
   RunGemm();
-  ASSERT_GT(last_kernel_timestamp, 0);
+  ASSERT_GT(last_kernel_timestamp, 0ULL);
   ASSERT_GT(last_kernel_timestamp, user_real_timestamp);
   after_run = utils::GetTime();
 

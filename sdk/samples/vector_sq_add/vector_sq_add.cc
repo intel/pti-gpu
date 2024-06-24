@@ -17,13 +17,6 @@
 #include "samples_utils.h"
 #include "utils.h"
 
-#define PTI_THROW(X)                                    \
-  do {                                                  \
-    if (X != pti_result::PTI_SUCCESS) {                 \
-      throw std::runtime_error("PTI CALL FAILED: " #X); \
-    }                                                   \
-  } while (0)
-
 void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
@@ -38,7 +31,7 @@ void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
 }
 
-constexpr size_t kVectorSize = 5000;
+constexpr std::size_t kVectorSize = 5000;
 
 void PrintQueueInfo(const sycl::queue &sycl_queue) {
   auto queue_type = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue);
@@ -155,7 +148,7 @@ void RunProfiledVecSqAdd(sycl::queue &sycl_queue) {
   PrintResults(sq_add2, 2 * kVectorSize);
 }
 
-int main(int argc, char *argv[]) {
+int main() {
   int exit_code = EXIT_SUCCESS;
 
   try {

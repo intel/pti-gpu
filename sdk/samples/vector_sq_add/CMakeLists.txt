@@ -30,5 +30,10 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-target_link_libraries(vec_sqadd PUBLIC Pti::pti_view)
+
+if (NOT TARGET LevelZero::level-zero)
+  find_package(LevelZero REQUIRED)
+endif()
+
+target_link_libraries(vec_sqadd PUBLIC Pti::pti_view LevelZero::level-zero)
 

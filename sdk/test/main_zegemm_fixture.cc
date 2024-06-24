@@ -433,7 +433,7 @@ TEST_F(MainZeFixtureTest, BufferCallBacksRegistered) {
 TEST_F(MainZeFixtureTest, SecondCallbackCalled) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
-  EXPECT_GT(completed_buffer_used_bytes, 0);
+  EXPECT_GT(completed_buffer_used_bytes, static_cast<size_t>(0));
 }
 
 TEST_F(MainZeFixtureTest, MemoryViewRecordCreated) {
@@ -578,14 +578,19 @@ TEST(PtiVersionTestSuite, TestVersionMacros) {
 TEST(PtiVersionTestSuite, TestVersionFunction) {
   // Unit tests should be run against same version of header and lib
   auto pti_ver = ptiVersion();
-  EXPECT_EQ(pti_ver._major, PTI_VERSION_MAJOR);
-  EXPECT_EQ(pti_ver._minor, PTI_VERSION_MINOR);
-  EXPECT_EQ(pti_ver._patch, PTI_VERSION_PATCH);
+  EXPECT_EQ(pti_ver._major, static_cast<uint32_t>(PTI_VERSION_MAJOR));
+  EXPECT_EQ(pti_ver._minor, static_cast<uint32_t>(PTI_VERSION_MINOR));
+  EXPECT_EQ(pti_ver._patch, static_cast<uint32_t>(PTI_VERSION_PATCH));
 }
 
 TEST(PtiVersionTestSuite, TestVersionString) {
   using ::testing::ContainsRegex;
   // Unit tests should be run against same version of header and lib
-  EXPECT_THAT(ptiVersionString(), ContainsRegex("^[0-9]+\\.[0-9]+\\.[0-9]+"));
+#if !defined(WIN32)
+  constexpr const char* const test_version_regex = "^[0-9]+\\.[0-9]+\\.[0-9]+";
+#else
+  constexpr const char* const test_version_regex = "^\\d+\\.\\d+\\.\\d+";
+#endif
+  EXPECT_THAT(ptiVersionString(), ContainsRegex(test_version_regex));
   EXPECT_STREQ(PTI_VERSION_STRING, ptiVersionString());
 }

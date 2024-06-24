@@ -39,12 +39,6 @@ using ReturnBufferEvent = std::function<void(unsigned char*, size_t, size_t)>;
 
 using ViewInsert = std::function<void(void*, const ZeKernelCommandExecutionRecord&)>;
 
-/*
-namespace {
-std::mutex timestamp_api_mtx_;
-}
-*/
-
 inline void MemCopyEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void MemCopyP2PEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
@@ -134,7 +128,7 @@ struct PtiViewRecordHandler {
     spdlog::set_pattern("[%H:%M][%^-%l-%$]%P:%t %s:%# %v");
 
     if (!collector_) {
-      CollectorOptions collector_options;
+      CollectorOptions collector_options{};
       collector_options.kernel_tracing = true;
       collector_ =
           ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback, nullptr);
@@ -150,11 +144,17 @@ struct PtiViewRecordHandler {
   PtiViewRecordHandler& operator=(PtiViewRecordHandler&&) = delete;
 
   virtual ~PtiViewRecordHandler() {
-    overhead::overhead_collection_enabled = false;
-    if (collector_) {
-      collector_->DisableTracer();
+    try {
+      overhead::overhead_collection_enabled = false;
+      if (collector_) {
+        collector_->DisableTracer();
+      }
+      DisableTracing();
+    } catch ([[maybe_unused]] const std::exception& e) {
+      SPDLOG_ERROR("Exception caught in {}: {}", __FUNCTION__, e.what());
+    } catch (...) {
+      SPDLOG_ERROR("Unknown Exception in {}", __FUNCTION__);
     }
-    DisableTracing();
   }
 
   inline pti_result FlushBuffers() {
@@ -252,7 +252,9 @@ struct PtiViewRecordHandler {
   }
 
   inline pti_result Enable(pti_view_kind type) {
-    if (!callbacks_set_) return pti_result::PTI_ERROR_NO_CALLBACKS_SET;
+    if (!callbacks_set_) {
+      return pti_result::PTI_ERROR_NO_CALLBACKS_SET;
+    }
     auto result = pti_result::PTI_SUCCESS;
     bool collection_enabled = collection_enabled_;
     bool l0_collection_type = ((type == pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL) ||
@@ -673,7 +675,7 @@ inline void SetMemCopyType(T& mem_record, const ZeKernelCommandExecutionRecord& 
 
 inline void GetDeviceId(char* buf, const ze_pci_ext_properties_t& pci_prop_) {
   // determined by pti_view_record_kernel _pci_address
-  constexpr auto kMaxDeviceIdLength = 16;
+  constexpr auto kMaxDeviceIdLength = PTI_MAX_PCI_ADDRESS_SIZE;
   std::snprintf(buf, kMaxDeviceIdLength, "%x:%x:%x.%x", pci_prop_.address.domain,
                 pci_prop_.address.bus, pci_prop_.address.device, pci_prop_.address.function);
 }

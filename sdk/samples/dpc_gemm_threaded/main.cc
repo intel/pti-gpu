@@ -104,19 +104,19 @@ static void Compute(sycl::queue queue, const std::vector<float>& a, const std::v
 }
 
 void StartTracing() {
-  ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL);
-  ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
-  ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
-  ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS);
-  ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD);
+  PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
 }
 
 void StopTracing() {
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
-  ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
-  ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS);
-  ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD);
+  PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
 }
 
 const unsigned max_thread_count = 64;
@@ -150,7 +150,7 @@ int main(int argc, char* argv[]) {
 
   try {
     unsigned temp;
-    for (uint32_t i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
       if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--size") == 0) {
         i++;
         temp = std::stoul(argv[i]);
@@ -178,145 +178,144 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL);
-  ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
-  ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
-
-  ptiViewSetCallbacks(
-      [](auto** buf, auto* buf_size) {
-        *buf_size = 1000 * sizeof(pti_view_record_kernel);
-        void* ptr = ::operator new(*buf_size);
-        ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
-        *buf = reinterpret_cast<unsigned char*>(ptr);
-        if (!*buf) {
-          std::abort();
-        }
-        return;
-      },
-      [](auto* buf, auto buf_size, auto valid_buf_size) {
-        if (!buf || !valid_buf_size || !buf_size) {
-          std::cerr << "Received empty buffer" << '\n';
-          if (valid_buf_size) {
-            ::operator delete(buf);
-          }
-          return;
-        }
-        pti_view_record_base* ptr = nullptr;
-
-        auto validate_timestamps = [](uint64_t count, ...) {
-          va_list args;
-          va_start(args, count);
-          if (1LU == count) return;
-          uint64_t prev_stamp = va_arg(args, uint64_t);
-          uint64_t next_stamp = 0LU;
-          for (uint64_t i = 1; i < count; ++i) {
-            next_stamp = va_arg(args, uint64_t);
-            assert(prev_stamp <= next_stamp);
-            prev_stamp = next_stamp;
-          }
-          va_end(args);
-          return;
-        };
-        while (true) {
-          auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
-          if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
-            std::cout << "Reached End of buffer" << '\n';
-            break;
-          }
-          if (buf_status != pti_result::PTI_SUCCESS) {
-            std::cerr << "Found Error Parsing Records from PTI" << '\n';
-            break;
-          }
-          switch (ptr->_view_kind) {
-            case pti_view_kind::PTI_VIEW_INVALID: {
-              std::cout << "Found Invalid Record" << '\n';
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              std::cout << "Found Sycl Runtime Record" << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime*>(ptr));
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_overhead*>(ptr));
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              samples_utils::dump_record(
-                  reinterpret_cast<pti_view_record_external_correlation*>(ptr));
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              std::cout << "Found Memory Record" << '\n';
-
-              pti_view_record_memory_copy* p_memory_rec =
-                  reinterpret_cast<pti_view_record_memory_copy*>(ptr);
-              samples_utils::dump_record(p_memory_rec);
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              validate_timestamps(4, p_memory_rec->_append_timestamp,
-                                  p_memory_rec->_submit_timestamp, p_memory_rec->_start_timestamp,
-                                  p_memory_rec->_end_timestamp);
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              std::cout << "Found Memory Record" << '\n';
-
-              pti_view_record_memory_fill* p_memory_rec =
-                  reinterpret_cast<pti_view_record_memory_fill*>(ptr);
-              samples_utils::dump_record(p_memory_rec);
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              validate_timestamps(4, p_memory_rec->_append_timestamp,
-                                  p_memory_rec->_submit_timestamp, p_memory_rec->_start_timestamp,
-                                  p_memory_rec->_end_timestamp);
-              break;
-            }
-            case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              std::cout << "Found Kernel Record" << '\n';
-
-              pti_view_record_kernel* p_kernel_rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
-              samples_utils::dump_record(p_kernel_rec);
-              std::cout << "---------------------------------------------------"
-                           "-----------------------------"
-                        << '\n';
-              validate_timestamps(6, p_kernel_rec->_sycl_task_begin_timestamp,
-                                  p_kernel_rec->_sycl_enqk_begin_timestamp,
-                                  p_kernel_rec->_append_timestamp, p_kernel_rec->_submit_timestamp,
-                                  p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp);
-              break;
-            }
-            default: {
-              std::cerr << "This shouldn't happen" << '\n';
-              break;
-            }
-          }
-        }
-        ::operator delete(buf);
-      });
-  StartTracing();
-  sycl::device dev;
   try {
+    PTI_THROW(ptiViewSetCallbacks(
+        [](auto** buf, auto* buf_size) {
+          *buf_size = 1000 * sizeof(pti_view_record_kernel);
+          void* ptr = ::operator new(*buf_size);
+          ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
+          *buf = reinterpret_cast<unsigned char*>(ptr);
+          if (!*buf) {
+            std::abort();
+          }
+          return;
+        },
+        [](auto* buf, auto buf_size, auto valid_buf_size) {
+          if (!buf || !valid_buf_size || !buf_size) {
+            std::cerr << "Received empty buffer" << '\n';
+            if (valid_buf_size) {
+              ::operator delete(buf);
+            }
+            return;
+          }
+          pti_view_record_base* ptr = nullptr;
+
+          auto validate_timestamps = [](uint64_t count, ...) {
+            va_list args;
+            va_start(args, count);
+            if (1LU == count) return;
+            uint64_t prev_stamp = va_arg(args, uint64_t);
+            uint64_t next_stamp = 0LU;
+            for (uint64_t i = 1; i < count; ++i) {
+              next_stamp = va_arg(args, uint64_t);
+              assert(prev_stamp <= next_stamp);
+              prev_stamp = next_stamp;
+            }
+            va_end(args);
+            return;
+          };
+          while (true) {
+            auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
+            if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
+              std::cout << "Reached End of buffer" << '\n';
+              break;
+            }
+            if (buf_status != pti_result::PTI_SUCCESS) {
+              std::cerr << "Found Error Parsing Records from PTI" << '\n';
+              break;
+            }
+            switch (ptr->_view_kind) {
+              case pti_view_kind::PTI_VIEW_INVALID: {
+                std::cout << "Found Invalid Record" << '\n';
+                break;
+              }
+              case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                std::cout << "Found Sycl Runtime Record" << '\n';
+                samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime*>(ptr));
+                break;
+              }
+              case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                samples_utils::dump_record(reinterpret_cast<pti_view_record_overhead*>(ptr));
+                break;
+              }
+              case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                samples_utils::dump_record(
+                    reinterpret_cast<pti_view_record_external_correlation*>(ptr));
+                break;
+              }
+              case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                std::cout << "Found Memory Record" << '\n';
+
+                pti_view_record_memory_copy* p_memory_rec =
+                    reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+                samples_utils::dump_record(p_memory_rec);
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                validate_timestamps(4, p_memory_rec->_append_timestamp,
+                                    p_memory_rec->_submit_timestamp, p_memory_rec->_start_timestamp,
+                                    p_memory_rec->_end_timestamp);
+                break;
+              }
+              case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                std::cout << "Found Memory Record" << '\n';
+
+                pti_view_record_memory_fill* p_memory_rec =
+                    reinterpret_cast<pti_view_record_memory_fill*>(ptr);
+                samples_utils::dump_record(p_memory_rec);
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                validate_timestamps(4, p_memory_rec->_append_timestamp,
+                                    p_memory_rec->_submit_timestamp, p_memory_rec->_start_timestamp,
+                                    p_memory_rec->_end_timestamp);
+                break;
+              }
+              case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                std::cout << "Found Kernel Record" << '\n';
+
+                pti_view_record_kernel* p_kernel_rec =
+                    reinterpret_cast<pti_view_record_kernel*>(ptr);
+                samples_utils::dump_record(p_kernel_rec);
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                validate_timestamps(6, p_kernel_rec->_sycl_task_begin_timestamp,
+                                    p_kernel_rec->_sycl_enqk_begin_timestamp,
+                                    p_kernel_rec->_append_timestamp,
+                                    p_kernel_rec->_submit_timestamp, p_kernel_rec->_start_timestamp,
+                                    p_kernel_rec->_end_timestamp);
+                break;
+              }
+              default: {
+                std::cerr << "This shouldn't happen" << '\n';
+                break;
+              }
+            }
+          }
+          ::operator delete(buf);
+        }));
+
+    StartTracing();
+    sycl::device dev;
     dev = sycl::device(sycl::gpu_selector_v);
     sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
     sycl::queue queue(dev, sycl::async_handler{}, prop_list);
@@ -366,6 +365,8 @@ int main(int argc, char* argv[]) {
         th.join();
       }
     }
+    StopTracing();
+    PTI_THROW(ptiFlushAllViews());
   } catch (const sycl::exception& e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';
     std::cerr << "\tError code: " << e.code().value() << "\n\tCategory: " << e.category().name()
@@ -378,8 +379,5 @@ int main(int argc, char* argv[]) {
     std::cerr << "Error: Unknown exception caught." << '\n';
     exit_code = EXIT_FAILURE;
   }
-
-  StopTracing();
-  auto flush_results = ptiFlushAllViews();
   return exit_code;
 }

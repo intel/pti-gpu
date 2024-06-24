@@ -49,28 +49,28 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --preset default
-          cmake --build --preset default -j $(($(nproc)/2))
+          cmake --preset linux-icpx-release
+          cmake --build --preset linux-icpx-release -j $(($(nproc)/2))
 
       - name: Test
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --output-on-failure --preset default
+          ctest --output-on-failure --preset linux-icpx-release
 
       - name: Build AddressSanitizer
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --preset asan
-          cmake --build --preset asan --parallel $(($(nproc)/2))
+          cmake --preset linux-asan
+          cmake --build --preset linux-asan --parallel $(($(nproc)/2))
 
       - name: Build ThreadSanitizer
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --preset tsan
-          cmake --build --preset tsan --parallel $(($(nproc)/2))
+          cmake --preset linux-tsan
+          cmake --build --preset linux-tsan --parallel $(($(nproc)/2))
 
       - name: Build libFuzzer
         working-directory: sdk
@@ -78,8 +78,8 @@ jobs:
           # To ensure it still builds, run build for fuzz targets until we have
           # proper fuzz testing infrastructure in place.
           source /opt/intel/oneapi/setvars.sh
-          cmake --preset fuzz
-          cmake --build --preset fuzz --parallel $(($(nproc)/2))
+          cmake --preset linux-fuzz
+          cmake --build --preset linux-fuzz --parallel $(($(nproc)/2))
 
       #
       # Rocky8 has a problem with this test.
@@ -97,19 +97,19 @@ jobs:
              [[ $(cat /etc/redhat-release)  =~ Rocky.*8 ]]; then
             exit 0
           fi
-          ctest --preset asan --output-on-failure -L samples
+          ctest --preset linux-asan --output-on-failure -L samples
 
       - name: Test ThreadSanitizer
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --preset tsan --output-on-failure -L samples
+          ctest --preset linux-tsan --output-on-failure -L samples
 
       - name: Install SDK
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --install build --config Release --prefix out
+          cmake --install build-linux-icx-release --config Release --prefix out
 
       - name: Upload SDK
         uses: actions/upload-artifact@v4

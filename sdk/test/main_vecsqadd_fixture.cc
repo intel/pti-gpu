@@ -188,12 +188,12 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
         pti_view_record_kernel *a_kernel_rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
         std::string kernel_name = a_kernel_rec->_name;
         std::cout << "Found Kernel: " << kernel_name << '\n';
-        if ((kernel_idx < 2) && (kernel_name.find("VecSq<") != std::string::npos)) {
+        if ((kernel_idx < 2) && (kernel_name.find("VecSq") != std::string::npos)) {
           kernel_corr_id[kernel_idx] = a_kernel_rec->_correlation_id;
           kernel_append_time[kernel_idx] = a_kernel_rec->_append_timestamp;
           kernel_idx++;
         }
-        if ((kernel_idx < 2) && (kernel_name.find("VecAdd<") != std::string::npos)) {
+        if ((kernel_idx < 2) && (kernel_name.find("VecAdd") != std::string::npos)) {
           kernel_corr_id[kernel_idx] = a_kernel_rec->_correlation_id;
           kernel_append_time[kernel_idx] = a_kernel_rec->_append_timestamp;
           kernel_idx++;

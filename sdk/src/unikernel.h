@@ -49,8 +49,8 @@ struct ZeKernelCommandExecutionRecord {
 
   uint64_t kid_;
   uint32_t cid_;
-  uint64_t tid_;
-  uint64_t pid_;
+  uint32_t tid_;
+  uint32_t pid_;
   int32_t tile_;
   uint64_t append_time_;
   uint64_t submit_time_;
