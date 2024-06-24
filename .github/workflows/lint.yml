@@ -33,9 +33,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Python Environment Setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Install Dependencies
         run: |
-          sudo apt-get install -y clang-format
+          python -m pip install --upgrade setuptools wheel pip
+          pip install clang-format==14
 
       - name: Check SDK Format
         working-directory: sdk
