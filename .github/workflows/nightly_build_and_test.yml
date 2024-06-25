@@ -109,7 +109,7 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --install build-linux-icx-release --config Release --prefix out
+          cmake --install build-linux-icpx-release --config Release --prefix out
 
       - name: Upload SDK
         uses: actions/upload-artifact@v4
