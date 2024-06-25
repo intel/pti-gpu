@@ -1,7 +1,7 @@
 #!/bin/sh
 # shellcheck shell=sh
 
-# Copyright 2019 Intel Corporation
+# Copyright 2024 Intel Corporation
 # SPDX-License-Identifier: MIT
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,13 +21,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-
-# ############################################################################
-
-# Copy and include at the top of your `env/vars.sh` script (don't forget to
-# remove the test/example code at the end of this file). See the test/example
-# code at the end of this file for more help.
 
 
 # ############################################################################
@@ -96,10 +89,6 @@ get_script_path() (
 # Also, "ps -o comm=" is limited to a 15 character result, but it works
 # fine here, because we are only looking for the name of this script or the
 # name of the execution shell, both always fit into fifteen characters.
-
-# TODO: Edge cases exist when executed by way of "/bin/sh setvars.sh"
-# Most shells detect or fall thru to error message, sometimes ksh does not.
-# This is an odd and unusual situation; not a high priority issue.
 
 _vars_get_proc_name() {
   if [ -n "${ZSH_VERSION:-}" ] ; then
@@ -232,30 +221,9 @@ if [ "" = "$vars_script_name" ] ; then
 fi
 
 
-# ############################################################################
-
-# For testing and simple demonstration.
-# This is where you should put your component-specific env var settings.
-
 my_script_name=$(basename -- "${vars_script_name:-}")
 my_script_path=$(get_script_path "${vars_script_name:-}")
 component_root=$(dirname -- "${my_script_path}")
-
-# Use the above in your `env/vars.sh` script.
-# Remove the following from your script, it is for test and demonstration.
-
-#echo "\$my_script_name = $my_script_name"
-#echo "\$my_script_path = $my_script_path"
-
-#if [ "$my_script_path" = "" ] ; then
-#  printf "%s\n" "Something went wrong, no script pathname identified."
-#else
-#  printf "%s\n" "\"$my_script_name\" is located at: $my_script_path"
-#  printf "%s\n" "Component root is located at: $component_root"
-#fi
-
-# Add component bin folder to the system PATH, using prepend_path() function.
-#PATH=$(prepend_path "${component_root}/bin" "${PATH:-}") ; export PATH
 
 # Add component include folder to CPATH, using prepend_path() function.
 CPATH=$(prepend_path "${component_root}/include" "${CPATH:-}") ; export CPATH
@@ -265,6 +233,3 @@ CMAKE_PREFIX_PATH=$(prepend_path "${component_root}/lib/cmake/pti" "${CMAKE_PREF
 LD_LIBRARY_PATH=$(prepend_path "${component_root}/lib" "${LD_LIBRARY_PATH:-}") ; export LD_LIBRARY_PATH
 
 LIBRARY_PATH=$(prepend_path "${component_root}/lib" "${LIBRARY_PATH:-}") ; export LIBRARY_PATH
-
-# Add component man pages to MANPATH, using prepend_manpath() function.
-#MANPATH=$(prepend_manpath "${component_root}/man" "${MANPATH:-}") ; export MANPATH
