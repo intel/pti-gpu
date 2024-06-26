@@ -10,7 +10,7 @@
 #include <sstream>
 
 #include <CL/cl.h>
-#include <CL/cl_ext_private.h>
+#include "opencl/extensions/public/cl_ext_private.h"
 
 #include "cl_ext_collector.h"
 #include "cl_utils.h"

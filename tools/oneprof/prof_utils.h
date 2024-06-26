@@ -11,7 +11,7 @@
 #include <iostream>
 
 #include <level_zero/zes_api.h>
-#include <CL/cl_ext_private.h>
+#include "opencl/extensions/public/cl_ext_private.h"
 
 #include "ze_utils.h"
 #include "cl_utils.h"
