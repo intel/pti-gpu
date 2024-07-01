@@ -10,10 +10,6 @@ on:
     paths:
       - sdk/**
 
-defaults:
-  run:
-    shell: bash
-
 permissions:
   contents: read
 
@@ -25,7 +21,10 @@ jobs:
     # pti is a selector to machines with Intel Ponte Vecchio officially
     # Intel(R) Data Center GPU Max 1100
     #
-    runs-on: [pti]
+    runs-on: [self-hosted, Linux, pti]
+    defaults:
+      run:
+        shell: bash
 
     strategy:
       matrix:
@@ -116,4 +115,89 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: "PTI-SDK-${{ matrix.uploadname }}"
+          path: sdk/out
+
+  win-lib-build-and-test:
+    name: Test pti-lib on Windows
+    runs-on: [self-hosted, Windows, pti]
+    env:
+      LEVEL_ZERO_LOADER_VERSION: 1.14.0
+    defaults:
+      run:
+        shell: cmd
+        working-directory: sdk
+
+    if: vars.PTI_RUN_TESTS == 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Level Zero Loader Version
+        id: loader-ver
+        run: |
+          @echo off
+          REM Make sure there is no whitespace between ...>>...
+          echo ze_loader_ver=%LEVEL_ZERO_LOADER_VERSION%>>%GITHUB_OUTPUT%
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: sdk/level-zero-sdk
+          key: ${{ runner.os }}-Ze-Loader-${{ steps.loader-ver.outputs.ze_loader_ver }}
+
+      - name: Download Dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          rmdir /S /Q level-zero-sdk
+          del /s level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip
+          echo https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip
+          curl.exe -L -O https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip
+          unzip.exe -q level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip -d level-zero-sdk
+          echo "Successfully Downloaded Level Zero Loader Version %LEVEL_ZERO_LOADER_VERSION%"
+
+      - name: Build
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          set /A JOBS=%NUMBER_OF_PROCESSORS%/2
+          rmdir /S /Q wbd
+          cmake --preset windows-ci-debug
+          cmake --build --preset windows-ci-debug --parallel %JOBS%
+
+      - name: Test
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          REM TODO Kernel name demangling not supported on Windows yet.
+          ctest --output-on-failure --preset windows-ci-debug -E MainFixtureTest.DeMangled.*
+
+      - name: Build and Install Release Configuration
+        if: github.event.pull_request.merged == true
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          set /A JOBS=%NUMBER_OF_PROCESSORS%/2
+          rmdir /S /Q wbr
+          cmake --preset windows-ci-release
+          cmake --build --preset windows-ci-release --parallel %JOBS%
+          cmake --install wbr --config Release --prefix out
+
+      - name: Install Lib
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          cmake --install wbd --config Debug --prefix out
+
+      - name: Upload SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: "PTI-SDK-WIN"
           path: sdk/out

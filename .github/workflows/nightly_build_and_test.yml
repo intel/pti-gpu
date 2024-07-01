@@ -20,7 +20,7 @@ jobs:
     # pti is a selector to machines with Intel Ponte Vecchio officially
     # Intel(R) Data Center GPU Max 1100
     #
-    runs-on: [pti]
+    runs-on: [self-hosted, Linux, pti]
 
     strategy:
       matrix:
