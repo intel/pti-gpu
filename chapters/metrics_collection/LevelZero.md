@@ -1,4 +1,4 @@
-# Metrics Collectoin with oneAPI Level Zero (Level Zero) Metric API
+# Metrics Collection with oneAPI Level Zero (Level Zero) Metric API
 ## Overview
 oneAPI Level Zero runtime provides a set of API to collect hardware metrics for Intel(R) Processor Graphics.
 
@@ -40,7 +40,7 @@ ze_result_t status = ZE_RESULT_SUCCESS;
 status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
 assert(status == ZE_RESULT_SUCCESS);
 ```
-Every group and seprate metric contain a list of properties that helps to determine their purpose (like name or description) as well as to grab some additional information that should be used while collecton (e.g. metric type or domain ID).
+Every group and separate metric contain a list of properties that helps to determine their purpose (like name or description) as well as to grab some additional information that should be used while collecting (e.g. metric type or domain ID).
 ```cpp
 uint32_t group_count = 0;
 status = zetMetricGroupGet(device, &group_count, nullptr);
@@ -79,9 +79,9 @@ for (uint32_t gid = 0; gid < group_count; ++gid) {
 ```
 
 ### Continuous Collection
-Process of metrics collection in continuous mode assumes that there is an infinite loop in a seprate thread, where one asks for collected samples periodically, read the data for a chunk of samples and store them into some memory or file (one sample contains all the metics from a metric group).
+The process of metrics collection in continuous mode assumes that there is an infinite loop in a separate thread, where one asks for collected samples periodically, read the data for a chunk of samples and store them into some memory or file (one sample contains all the metrics from a metric group).
 
-First one should choose a metric group to collect, that can be done e.g. while enumeration phase (see above). To activate it, one should call `zetContextActivateMetricGroups` function that will set up the hardware:
+First one should choose a metric group to collect, that can be done e.g. while in the enumeration phase (see above). To activate it, one should call `zetContextActivateMetricGroups` function that will set up the hardware:
 ```cpp
 status = zetContextActivateMetricGroups(context, device, 1, &group);
 assert(status == ZE_RESULT_SUCCESS);
@@ -102,7 +102,7 @@ ze_event_handle_t event = nullptr;
 status = zeEventCreate(event_pool, &event_desc, &event);
 assert(status == ZE_RESULT_SUCCESS);
 ```
-Metric tracer object performs the management of metrics collection process. Before its creation one should set target sampling interval (time on GPU in nanoseconds between two reports) and number of reports to collect in one chunk:
+The metric tracer object performs the management of metrics collection process. Before its creation one should set target sampling interval (time on GPU in nanoseconds between two reports) and number of reports to collect in one chunk:
 ```cpp
 zet_metric_streamer_desc_t metric_streamer_desc = {
     ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC,
@@ -176,7 +176,7 @@ assert(status == ZE_RESULT_SUCCESS);
 ```
 After the metrics will be collected and calculated, one can find previously set marker values in `RenderStreamMarker` metric for two reports - the first one will be collected before the target activity, and the second one - after.
 
-Each of these reports contains `QueryBeginTime` value that shows the time in nanosends when the report measurement is started. So to get activity execution time, one should compute the difference between these two values.
+Each of these reports contains `QueryBeginTime` value that shows the time in nanoseconds when the report measurement is started. So to get activity execution time, one should compute the difference between these two values.
 
 ### Query-Based Collection
 An alternate way to collect hardware metrics is query-based mode that allows one to map collected results directly to device activity, e.g.  kernel execution or memory transfer.
@@ -204,7 +204,7 @@ ze_event_pool_handle_t event_pool = nullptr;
 status = zeEventPoolCreate(context, &event_pool_desc, 0, nullptr, &event_pool);
 assert(status == ZE_RESULT_SUCCESS);
 ```
-This time one may have to deal with multiple metric queries at a time (e.g. if multiple kernels are submitted to execution simultaniously), so the size for both pools may be greater than one.
+This time one may have to deal with multiple metric queries at a time (e.g. if multiple kernels are submitted to execution simultaneously), so the size for both pools may be greater than one.
 
 The process of metric query submission looks like this:
 ```cpp
@@ -260,7 +260,7 @@ assert(status == ZE_RESULT_SUCCESS);
 status = zetContextActivateMetricGroups(context, device, 0, nullptr);
 assert(status == ZE_RESULT_SUCCESS);
 ```
-Each calculated quety metric report contains the field `GpuTime` that provides the time spent on GPU in nanoseconds - so it can be used to measure kernel/transfer execution time on the device.
+Each calculated query metric report contains the field `GpuTime` that provides the time spent on GPU in nanoseconds - so it can be used to measure kernel/transfer execution time on the device.
 
 ### Calculation
 Metric reports collected at the previous stages are in raw format and should be post-calculated to become user-readable. To perform calculations one should call `zetMetricGroupCalculateMetricValues` function for target metric group.
@@ -294,7 +294,7 @@ gpuTimestampNs = gpuTimestampClocks * NS_IN_SEC / gpuTimerFrequency
 Starting from version 1.1, Level Zero provides this value as `timerResolution` field of `ze_device_properties_t` structure in cycles per second. Also it can be retrieved with the help of Intel(R) Metrics Discovery Application Programming Interface as part of device information as `GpuTimestampFrequency` symbol (look into "Device Information" section from [here](./MetricsDiscoveryAPI.md) for details).
 
 #### OpenCL(TM) Kernels
-Common stragety of metrics to kernel mapping for OpenCL(TM) kernels may be the following:
+A common strategy of metrics to kernel mapping for OpenCL(TM) kernels may be the following:
 1. Collect kernel timestamps based on [OpenCL(TM) device activity tracing](../device_activity_tracing/OpenCL.md) mechanism;
 2. Convert device timestamps into host timestamps with the help of `clGetDeviceAndHostTimer` function (Time Correlation section [here](../device_activity_tracing/OpenCL.md));
 3. Convert host timestamps into Level Zero kernel timestamps with the help of `zeDeviceGetGlobalTimestamps` function (Time Correlation section [here](../device_activity_tracing/LevelZero.md));
