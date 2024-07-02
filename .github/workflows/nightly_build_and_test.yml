@@ -122,7 +122,7 @@ jobs:
 
     if: vars.PTI_RUN_TESTS == 1
 
-    runs-on: [pti]
+    runs-on: [Linux, pti]
 
     strategy:
       matrix:
@@ -185,7 +185,7 @@ jobs:
 
     if: vars.PTI_RUN_TESTS == 1
 
-    runs-on: [pti]
+    runs-on: [Linux, pti]
 
     strategy:
       matrix:
