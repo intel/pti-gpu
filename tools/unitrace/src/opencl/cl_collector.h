@@ -295,8 +295,6 @@ class ClCollector {
 
   void DisableTracing() {
     PTI_ASSERT(tracer_ != nullptr);
-    bool disabled = tracer_->Disable();
-    PTI_ASSERT(disabled);
 
     if (options_.stall_sampling) {
       std::map<uint64_t, const ClKernelProps *> props; // sorted by base address;
