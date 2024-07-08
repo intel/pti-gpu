@@ -1354,7 +1354,8 @@ class ZeCollector {
                                      ZeKernelCommandProps& props, ze_event_handle_t& signal_event,
                                      ZeCommandListInfo& command_list_info,
                                      std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, command: {}", __FUNCTION__, (void*)command);
+    SPDLOG_TRACE("In {}, command: {}, kernel name {}", __FUNCTION__, (void*)command,
+                 props.name.c_str());
     if (ZeCollectionState::Abnormal == collection_state_) {
       return;
     }
@@ -1405,6 +1406,8 @@ class ZeCollector {
     } else {
       command->corr_id_ = UniCorrId::GetUniCorrId();
     }
+
+    SPDLOG_TRACE("\tcorr_id: {}", command->corr_id_);
 
     // creating unique ptr here so command will be properly deleted when removed from
     // the container it stored
@@ -1712,7 +1715,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendLaunchKernel(
       ze_command_list_append_launch_kernel_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kKernel,
                                  *(params->phSignalEvent), instance_data);
@@ -1735,7 +1738,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendLaunchCooperativeKernel(
       ze_command_list_append_launch_cooperative_kernel_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kKernel,
                                  *(params->phSignalEvent), instance_data);
@@ -1758,7 +1761,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendLaunchKernelIndirect(
       ze_command_list_append_launch_kernel_indirect_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kKernel,
                                  *(params->phSignalEvent), instance_data);
@@ -1781,7 +1784,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendMemoryCopy(
       ze_command_list_append_memory_copy_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
                                  *(params->phSignalEvent), instance_data);
@@ -1807,7 +1810,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendMemoryFill(
       ze_command_list_append_memory_fill_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
                                  *(params->phSignalEvent), instance_data);
@@ -1830,7 +1833,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendBarrier(ze_command_list_append_barrier_params_t* params,
                                               void* global_data, void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kCommand,
                                  *(params->phSignalEvent), instance_data);
@@ -1853,7 +1856,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendMemoryRangesBarrier(
       ze_command_list_append_memory_ranges_barrier_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kCommand,
                                  *(params->phSignalEvent), instance_data);
@@ -1875,7 +1878,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendMemoryCopyRegion(
       ze_command_list_append_memory_copy_region_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
                                  *(params->phSignalEvent), instance_data);
@@ -1884,7 +1887,7 @@ class ZeCollector {
   static void OnExitCommandListAppendMemoryCopyRegion(
       ze_command_list_append_memory_copy_region_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       size_t bytes_transferred = 0;
@@ -1909,7 +1912,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendMemoryCopyFromContext(
       ze_command_list_append_memory_copy_from_context_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
                                  *(params->phSignalEvent), instance_data);
@@ -1918,7 +1921,7 @@ class ZeCollector {
   static void OnExitCommandListAppendMemoryCopyFromContext(
       ze_command_list_append_memory_copy_from_context_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       ze_context_handle_t src_context = *(params->phContextSrc);
@@ -1934,7 +1937,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendImageCopy(ze_command_list_append_image_copy_params_t* params,
                                                 void* global_data, void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
                                  *(params->phSignalEvent), instance_data);
@@ -1943,7 +1946,7 @@ class ZeCollector {
   static void OnExitCommandListAppendImageCopy(ze_command_list_append_image_copy_params_t* params,
                                                ze_result_t result, void* global_data,
                                                void** instance_data, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       collector->AppendImageMemoryCopyCommand(
@@ -1957,7 +1960,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendImageCopyRegion(
       ze_command_list_append_image_copy_region_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
                                  *(params->phSignalEvent), instance_data);
@@ -1966,7 +1969,7 @@ class ZeCollector {
   static void OnExitCommandListAppendImageCopyRegion(
       ze_command_list_append_image_copy_region_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       collector->AppendImageMemoryCopyCommand(
@@ -1980,7 +1983,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendImageCopyToMemory(
       ze_command_list_append_image_copy_to_memory_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
                                  *(params->phSignalEvent), instance_data);
@@ -1989,7 +1992,7 @@ class ZeCollector {
   static void OnExitCommandListAppendImageCopyToMemory(
       ze_command_list_append_image_copy_to_memory_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       collector->AppendImageMemoryCopyCommand(collector, "zeCommandListAppendImageCopyRegion",
@@ -2004,7 +2007,7 @@ class ZeCollector {
   static void OnEnterCommandListAppendImageCopyFromMemory(
       ze_command_list_append_image_copy_from_memory_params_t* params, void* global_data,
       void** instance_data) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} --->", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     PrepareToAppendKernelCommand(collector, *(params->phCommandList), KernelCommandType::kMemory,
                                  *(params->phSignalEvent), instance_data);
@@ -2013,7 +2016,7 @@ class ZeCollector {
   static void OnExitCommandListAppendImageCopyFromMemory(
       ze_command_list_append_image_copy_from_memory_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       size_t bytes_transferred = 0;
@@ -2040,7 +2043,7 @@ class ZeCollector {
 
   static void OnExitCommandListCreate(ze_command_list_create_params_t* params, ze_result_t result,
                                       void* global_data, void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(**params->pphCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
@@ -2055,7 +2058,7 @@ class ZeCollector {
   static void OnExitCommandListCreateImmediate(ze_command_list_create_immediate_params_t* params,
                                                ze_result_t result, void* global_data,
                                                void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(**params->pphCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
@@ -2083,7 +2086,7 @@ class ZeCollector {
 
   static void OnExitCommandListDestroy(ze_command_list_destroy_params_t* params, ze_result_t result,
                                        void* global_data, void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*params->phCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
@@ -2101,7 +2104,7 @@ class ZeCollector {
 
   static void OnExitCommandListReset(ze_command_list_reset_params_t* params, ze_result_t result,
                                      void* global_data, void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*params->phCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
@@ -2140,7 +2143,7 @@ class ZeCollector {
   static void OnExitCommandQueueExecuteCommandLists(
       ze_command_queue_execute_command_lists_params_t* params, ze_result_t result,
       void* global_data, void** /*instance_data*/, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       uint32_t command_list_count = *params->pnumCommandLists;
@@ -2160,7 +2163,7 @@ class ZeCollector {
   static void OnExitCommandQueueSynchronize(ze_command_queue_synchronize_params_t* /*params*/,
                                             ze_result_t result, void* global_data,
                                             void** /*instance_data*/, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       {
@@ -2178,7 +2181,7 @@ class ZeCollector {
   static void OnExitCommandQueueCreate(ze_command_queue_create_params_t* params,
                                        [[maybe_unused]] ze_result_t result, void* global_data,
                                        void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     ze_device_handle_t* device = params->phDevice;
     if (device == nullptr) {
@@ -2213,7 +2216,7 @@ class ZeCollector {
   static void OnExitCommandQueueDestroy(ze_command_queue_destroy_params_t* params,
                                         ze_result_t result, void* global_data,
                                         void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
@@ -2232,7 +2235,7 @@ class ZeCollector {
   static void OnExitKernelSetGroupSize(ze_kernel_set_group_size_params_t* params,
                                        ze_result_t result, void* global_data,
                                        void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       ZeKernelGroupSize group_size{*(params->pgroupSizeX), *(params->pgroupSizeY),
@@ -2243,7 +2246,7 @@ class ZeCollector {
 
   static void OnExitKernelDestroy(ze_kernel_destroy_params_t* params, ze_result_t result,
                                   void* global_data, void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       collector->RemoveKernelGroupSize(*(params->phKernel));
@@ -2252,7 +2255,7 @@ class ZeCollector {
 
   static void OnExitContextDestroy(ze_context_destroy_params_t* params, ze_result_t result,
                                    void* global_data, void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       collector->ProcessCalls(nullptr, nullptr);

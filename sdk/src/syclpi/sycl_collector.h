@@ -203,7 +203,8 @@ class SyclCollector {
 
         if (UserData) {
           const auto* function_name = static_cast<const char*>(UserData);
-          SPDLOG_TRACE("\tSYCL.PI Function Begin: {}", function_name);
+          SPDLOG_TRACE("\tSYCL.PI Function Begin: {}, corr_id: {}", function_name,
+                       sycl_data_kview.cid_);
           // TODO: Re-evaluate whether this is actually needed. I do not see what we are doing with
           // current_func_task_info.func_name.
           auto function_name_size = std::strlen(function_name) + 1;  // plus '\0'

@@ -27,7 +27,7 @@ BEGIN {
 /Ze Kernel Submit Time:/ { submit_time=$5 };
 /Ze Kernel Start Time:/ { start_time=$5 };
 /Ze Kernel End Time:/ { end_time=$5 };
-/Kernel Thread Id :/ {
+/Kernel Thread Id:/ {
 	kthreads[kid]=$5
 	k_type[kid]="Kernel"
 	k_append_time[kid]=append_time;
@@ -37,12 +37,12 @@ BEGIN {
 	k_line_number[kid]= NR;
 	};
 
-/Memory Op Id :/ { mid=$5 };
+/Memory Op Id:/ { mid=$5 };
 /Memory Op Append Time:/ { append_time=$5 };
 /Memory Op Submit Time:/ { submit_time=$5 };
 /Memory Op Start Time:/ { start_time=$5 };
 /Memory Op End Time:/ { end_time=$5 };
-/Memory Op Thread Id :/ {
+/Memory Op Thread Id:/ {
 	kthreads[mid]=$6
 	k_type[mid]="Memory"
 	k_append_time[mid]=append_time;

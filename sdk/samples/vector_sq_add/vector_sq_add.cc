@@ -4,9 +4,12 @@
 // Copyright © Intel Corporation
 // SPDX-License-Identifier: MIT
 // =============================================================
+
 #include <level_zero/ze_api.h>
 
 #include <iostream>
+#include <map>
+#include <set>
 #include <string>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
@@ -22,6 +25,7 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION));
 }
 
 void StopTracing() {
@@ -29,6 +33,7 @@ void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION));
 }
 
 constexpr std::size_t kVectorSize = 5000;
@@ -124,6 +129,7 @@ void RunProfiledVecSqAdd(sycl::queue &sycl_queue) {
   std::vector<T> d(2 * kVectorSize);
   std::vector<T> sq_add(kVectorSize);
   std::vector<T> sq_add2(2 * kVectorSize);
+  uint64_t corr_id = 0;
 
   for (size_t i = 0; i < kVectorSize; i++) {
     a[i] = sin(i);
@@ -135,8 +141,18 @@ void RunProfiledVecSqAdd(sycl::queue &sycl_queue) {
   }
 
   VecSq(sycl_queue, a, b);
+
+  // Submitting different kernels in the regions with different correlation IDs
+
   StartTracing();
-  VecAdd(sycl_queue, a, b, sq_add);
+  PTI_THROW(
+      ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1, 1));
+  VecSq(sycl_queue, a, b);
+  PTI_THROW(ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1,
+                                            &corr_id));
+  if (corr_id != 1) {
+    std::cerr << "Wrong correlation ID (should be 1): " << corr_id << '\n';
+  }
   StopTracing();
   PrintResults(sq_add, kVectorSize);
 
@@ -144,9 +160,22 @@ void RunProfiledVecSqAdd(sycl::queue &sycl_queue) {
   PrintResults(sq_add, kVectorSize);
 
   StartTracing();
+  PTI_THROW(
+      ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1, 2));
   VecAdd(sycl_queue, c, d, sq_add2);
+  PTI_THROW(ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1,
+                                            &corr_id));
+  if (corr_id != 2) {
+    std::cerr << "Wrong correlation ID (should be 2): " << corr_id << '\n';
+  }
   PrintResults(sq_add2, 2 * kVectorSize);
 }
+
+// These structures are to store the correlation between the external annotations and
+// the runtime APIs calls and GPU kernel/mem ops
+std::map<std::pair<pti_view_external_kind, uint64_t>, std::vector<uint32_t> > external_corr_map;
+std::map<uint32_t, std::string> runtime_enq_2_gpu_kernel_name_map;
+std::map<uint32_t, std::string> runtime_enq_2_gpu_mem_op_name_map;
 
 int main() {
   int exit_code = EXIT_SUCCESS;
@@ -192,15 +221,26 @@ int main() {
                              "-----------------------------"
                           << '\n';
                 std::cout << "Found Sycl Runtime Record" << '\n';
-                samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
+                pti_view_record_sycl_runtime *rec =
+                    reinterpret_cast<pti_view_record_sycl_runtime *>(ptr);
+                if (strstr(rec->_name, "EnqueueKernel") != nullptr) {
+                  runtime_enq_2_gpu_kernel_name_map[rec->_correlation_id] = "unknown_at_this_point";
+                }
+                if (strstr(rec->_name, "EnqueueMem") != nullptr) {
+                  runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = "unknown_at_this_point";
+                }
+                samples_utils::dump_record(rec);
                 break;
               }
               case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
+                pti_view_record_memory_copy *rec =
+                    reinterpret_cast<pti_view_record_memory_copy *>(ptr);
+                runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
                 std::cout << "Found Memory Record" << '\n';
-                samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_copy *>(ptr));
+                samples_utils::dump_record(rec);
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
@@ -210,18 +250,22 @@ int main() {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
+                pti_view_record_memory_fill *rec =
+                    reinterpret_cast<pti_view_record_memory_fill *>(ptr);
+                runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
                 std::cout << "Found Memory Record" << '\n';
-                samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_fill *>(ptr));
+                samples_utils::dump_record(rec);
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
                 break;
               }
               case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-                pti_view_record_kernel *rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
+                pti_view_record_kernel *rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
+                runtime_enq_2_gpu_kernel_name_map[rec->_correlation_id] = rec->_name;
                 std::cout << "Found Kernel Record" << '\n';
                 samples_utils::dump_record(rec);
 
@@ -249,6 +293,18 @@ int main() {
 
                 break;
               }
+              case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                pti_view_record_external_correlation *rec =
+                    reinterpret_cast<pti_view_record_external_correlation *>(ptr);
+
+                external_corr_map[std::pair{rec->_external_kind, rec->_external_id}].push_back(
+                    rec->_correlation_id);
+                samples_utils::dump_record(rec);
+                break;
+              }
               default: {
                 std::cerr << "This shouldn't happen" << '\n';
                 break;
@@ -274,6 +330,36 @@ int main() {
 
     StopTracing();
     PTI_THROW(ptiFlushAllViews());
+
+    // This piece demonstartes what could be learnt from a use of the external correlation API
+    std::cout << "\nUser annotations via External Correlation API:\n";
+    for (auto &corr : external_corr_map) {
+      std::cout << "External Range: Kind: " << static_cast<int>(corr.first.first)
+                << ", ID: " << corr.first.second << ", Correlation IDs: ";
+      std::set<uint32_t> kernel_ids;
+      std::set<uint32_t> memory_ids;
+      for (auto &id : corr.second) {
+        std::cout << id << ", ";
+        if (runtime_enq_2_gpu_kernel_name_map.find(id) != runtime_enq_2_gpu_kernel_name_map.end()) {
+          kernel_ids.insert(id);
+        }
+        if (runtime_enq_2_gpu_mem_op_name_map.find(id) != runtime_enq_2_gpu_mem_op_name_map.end()) {
+          memory_ids.insert(id);
+        }
+      }
+      std::cout << "\n\n"
+                << "Kernel(s) in this Range: " << '\n';
+      for (auto &id : kernel_ids) {
+        std::cout << "Correlation ID: " << id << " " << runtime_enq_2_gpu_kernel_name_map[id]
+                  << '\n';
+      }
+      std::cout << '\n' << "Memory Op(s) in this Range: " << '\n';
+      for (auto &id : memory_ids) {
+        std::cout << "Correlation ID: " << id << " " << runtime_enq_2_gpu_mem_op_name_map[id]
+                  << '\n';
+      }
+      std::cout << '\n';
+    }
   } catch (const sycl::exception &e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';
     std::cerr << "\tError code: " << e.code().value() << "\n\tCategory: " << e.category().name()

@@ -107,9 +107,9 @@ void dump_record(pti_view_record_kernel* record) {
   std::cout << "Kernel Queue Handle: " << record->_queue_handle << '\n';
   std::cout << "Kernel Queue ID: " << record->_sycl_queue_id << '\n';
   std::cout << "Kernel CommandList Context Handle: " << record->_context_handle << '\n';
-  std::cout << "Kernel Id : " << std::dec << record->_kernel_id << '\n';
-  std::cout << "Correlation Id : " << std::dec << record->_correlation_id << '\n';
-  std::cout << "Kernel Thread Id : " << std::dec << record->_thread_id << '\n';
+  std::cout << "Kernel Id: " << std::dec << record->_kernel_id << '\n';
+  std::cout << "Correlation Id: " << std::dec << record->_correlation_id << '\n';
+  std::cout << "Kernel Thread Id: " << std::dec << record->_thread_id << '\n';
   std::cout << "         Sycl Kernel Task Begin Time: " << std::dec
             << record->_sycl_task_begin_timestamp << " ns" << '\n';
   std::cout << "Sycl Kernel EnqueueKernel Begin Time: " << std::dec
@@ -143,10 +143,10 @@ void dump_record(pti_view_record_memory_copy* record) {
   std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
   std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
   std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
-  std::cout << "Memory Op Id : " << std::dec << record->_mem_op_id << '\n';
+  std::cout << "Memory Op Id: " << std::dec << record->_mem_op_id << '\n';
   std::cout << "Memory Bytes Copied: " << std::dec << record->_bytes << '\n';
-  std::cout << "Memory Op Thread Id : " << std::dec << record->_thread_id << '\n';
-  std::cout << "Correlation Id : " << std::dec << record->_correlation_id << '\n';
+  std::cout << "Memory Op Thread Id: " << std::dec << record->_thread_id << '\n';
+  std::cout << "Correlation Id: " << std::dec << record->_correlation_id << '\n';
   std::cout << "Memory Copy Type: " << std::dec << ptiViewMemcpyTypeToString(record->_memcpy_type)
             << '\n';
   std::cout << "Memory Copy Source: " << std::dec << ptiViewMemoryTypeToString(record->_mem_src)
@@ -176,10 +176,10 @@ void dump_record(pti_view_record_memory_copy_p2p* record) {
   std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
   std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
   std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
-  std::cout << "Memory Op Id : " << std::dec << record->_mem_op_id << '\n';
+  std::cout << "Memory Op Id: " << std::dec << record->_mem_op_id << '\n';
   std::cout << "Memory Bytes Copied: " << std::dec << record->_bytes << '\n';
-  std::cout << "Memory Op Thread Id : " << std::dec << record->_thread_id << '\n';
-  std::cout << "Correlation Id : " << std::dec << record->_correlation_id << '\n';
+  std::cout << "Memory Op Thread Id: " << std::dec << record->_thread_id << '\n';
+  std::cout << "Correlation Id: " << std::dec << record->_correlation_id << '\n';
   std::cout << "Memory Copy Type: " << std::dec << ptiViewMemcpyTypeToString(record->_memcpy_type)
             << '\n';
   std::cout << "Memory Copy Source: " << std::dec << ptiViewMemoryTypeToString(record->_mem_src)
@@ -207,11 +207,11 @@ void dump_record(pti_view_record_memory_fill* record) {
   std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
   std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
   std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
-  std::cout << "Memory Op Id : " << std::dec << record->_mem_op_id << '\n';
-  std::cout << "Memory Op Thread Id : " << std::dec << record->_thread_id << '\n';
+  std::cout << "Memory Op Id: " << std::dec << record->_mem_op_id << '\n';
+  std::cout << "Memory Op Thread Id: " << std::dec << record->_thread_id << '\n';
   std::cout << "Memory Bytes Transfered: " << record->_bytes << '\n';
   std::cout << "Memory Value for Set: " << record->_value_for_set << '\n';
-  std::cout << "Correlation Id : " << std::dec << record->_correlation_id << '\n';
+  std::cout << "Correlation Id: " << std::dec << record->_correlation_id << '\n';
   std::cout << "Memory Fill Type: " << std::dec << record->_mem_type << '\n';
 }
 
@@ -232,7 +232,7 @@ void dump_record(pti_view_record_overhead* record) {
   std::cout << "Overhead Count: " << record->_overhead_count << '\n';
   std::cout << "Overhead Start Timestamp(ns): " << record->_overhead_start_timestamp_ns << '\n';
   std::cout << "Overhead End Timestamp(ns): " << record->_overhead_end_timestamp_ns << '\n';
-  std::cout << "Overhead ThreadId : " << record->_overhead_thread_id << '\n';
+  std::cout << "Overhead ThreadId: " << record->_overhead_thread_id << '\n';
   // std::cout << "Overhead API Responsible : "
   //<< record->_overhead_api_name << '\n';
 }

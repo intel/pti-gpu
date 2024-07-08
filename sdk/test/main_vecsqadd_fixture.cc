@@ -4,11 +4,13 @@
 // Copyright © Intel Corporation
 // SPDX-License-Identifier: MIT
 // =============================================================
+
 #include <gtest/gtest.h>
 #include <level_zero/ze_api.h>
 
 #include <chrono>
 #include <iostream>
+#include <map>
 #include <string>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
@@ -29,8 +31,6 @@ constexpr uint32_t kStressLoopCounter = 5;
 constexpr size_t kVectorSize = 5000;
 constexpr auto kStressWaitTime = std::chrono::seconds{5};
 
-bool matched_sq_corr_ids = false;
-bool matched_add_corr_ids = false;
 bool timestamps_monotonic = true;
 uint64_t sycl_kernel_corr_id[3];
 uint64_t sycl_kernel_start_time[3];
@@ -39,15 +39,23 @@ uint64_t kernel_append_time[3];
 uint64_t sycl_idx = 0;
 uint64_t kernel_idx = 0;
 uint64_t a_append_timestamp = 0;
-uint64_t eid = 11;  // external correlation id base.
+const uint64_t eid = 11;  // external correlation id base.
+const uint64_t eid_offset_vecSq = 20;
+
+// These structures are to store the correlation between the external annotations and
+// the runtime APIs calls and GPU kernel/mem ops
+std::map<uint32_t, std::pair<pti_view_external_kind, uint64_t> > external_corr_map;
+std::map<uint32_t, std::string> runtime_enq_2_gpu_kernel_name_map;
+std::map<uint32_t, std::string> runtime_enq_2_gpu_mem_op_name_map;
 
 //************************************
 // Vector square in SYCL on device: modifies each input vector
 //************************************
 template <typename T>
 void VecSq(sycl::queue &q, const std::vector<T> &a_vector, const std::vector<T> &b_vector) {
+  uint64_t ret_eid = 0;
   ASSERT_EQ(ptiViewPushExternalCorrelationId(
-                pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid + 20),
+                pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid + eid_offset_vecSq),
             pti_result::PTI_SUCCESS);
   sycl::range<1> num_items{a_vector.size()};
   sycl::buffer a_buf(a_vector);
@@ -63,20 +71,21 @@ void VecSq(sycl::queue &q, const std::vector<T> &a_vector, const std::vector<T> 
   });
   q.wait();
   ASSERT_EQ(ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3,
-                                            &eid),
+                                            &ret_eid),
             pti_result::PTI_SUCCESS);
 }
 
 template <typename T>
 void VecPassThroughToVecSq(sycl::queue &q, const std::vector<T> &a_vector,
                            const std::vector<T> &b_vector) {
+  uint64_t ret_eid = 0;
   // This external id(21) is ignored due to overriding push in the VecSq call it preceeds.
   ASSERT_EQ(ptiViewPushExternalCorrelationId(
                 pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid + 10),
             pti_result::PTI_SUCCESS);
   VecSq(q, a_vector, b_vector);
   ASSERT_EQ(ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3,
-                                            &eid),
+                                            &ret_eid),
             pti_result::PTI_SUCCESS);
 }
 
@@ -158,8 +167,9 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
         break;
       }
       case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
-        [[maybe_unused]] pti_view_record_external_correlation *a_ext_rec =
+        pti_view_record_external_correlation *rec =
             reinterpret_cast<pti_view_record_external_correlation *>(ptr);
+        external_corr_map[rec->_correlation_id] = std::pair{rec->_external_kind, rec->_external_id};
         break;
       }
       case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
@@ -168,25 +178,37 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
+        pti_view_record_memory_copy *rec = reinterpret_cast<pti_view_record_memory_copy *>(ptr);
+        runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
+        pti_view_record_memory_fill *rec = reinterpret_cast<pti_view_record_memory_fill *>(ptr);
+        runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
         break;
       }
       case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
         pti_view_record_sycl_runtime *a_sycl_rec =
             reinterpret_cast<pti_view_record_sycl_runtime *>(ptr);
         std::string function_name = a_sycl_rec->_name;
-        if ((sycl_idx < 2) && (function_name.find("piEnqueueKernelLaunch") != std::string::npos)) {
+        // To be ready for Universal Runtime - remove "pi"
+        if ((sycl_idx < 2) && (function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
           sycl_kernel_corr_id[sycl_idx] = a_sycl_rec->_correlation_id;
           sycl_kernel_start_time[sycl_idx] = a_sycl_rec->_start_timestamp;
           sycl_idx++;
         };
+        if (function_name.find("EnqueueKernel") != std::string::npos) {
+          runtime_enq_2_gpu_kernel_name_map[a_sycl_rec->_correlation_id] = "unknown_at_this_point";
+        }
+        if (function_name.find("EnqueueMem") != std::string::npos) {
+          runtime_enq_2_gpu_mem_op_name_map[a_sycl_rec->_correlation_id] = "unknown_at_this_point";
+        }
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
         pti_view_record_kernel *a_kernel_rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
         std::string kernel_name = a_kernel_rec->_name;
+        runtime_enq_2_gpu_kernel_name_map[a_kernel_rec->_correlation_id] = kernel_name;
         std::cout << "Found Kernel: " << kernel_name << '\n';
         if ((kernel_idx < 2) && (kernel_name.find("VecSq") != std::string::npos)) {
           kernel_corr_id[kernel_idx] = a_kernel_rec->_correlation_id;
@@ -249,6 +271,7 @@ void RunOverflowStressTest(sycl::queue &q, [[maybe_unused]] const std::vector<T>
 
 template <typename T>
 void VecSqAddRouter(sycl::queue &sycl_queue, TestType a_test_type) {
+  uint64_t ret_eid = 0;
   ASSERT_EQ(ptiViewPushExternalCorrelationId(
                 pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid),
             pti_result::PTI_SUCCESS);
@@ -282,7 +305,7 @@ void VecSqAddRouter(sycl::queue &sycl_queue, TestType a_test_type) {
   }
 
   ASSERT_EQ(ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3,
-                                            &eid),
+                                            &ret_eid),
             pti_result::PTI_SUCCESS);
 }
 
@@ -307,10 +330,11 @@ void RunVecsqadd(TestType a_test_type) {
 class VecsqaddFixtureTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    matched_sq_corr_ids = false;
-    matched_add_corr_ids = false;
     timestamps_monotonic = true;
     a_append_timestamp = 0;
+    external_corr_map.clear();
+    runtime_enq_2_gpu_kernel_name_map.clear();
+    runtime_enq_2_gpu_mem_op_name_map.clear();
   }
 
   void TearDown() override {
@@ -318,26 +342,33 @@ class VecsqaddFixtureTest : public ::testing::Test {
   }
 };
 
-TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForSq) {
+TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSq) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kExternalCorrId);
-  EXPECT_EQ(sycl_kernel_corr_id[0], kernel_corr_id[0]);
+  uint64_t correlation_id = kernel_corr_id[0];
+  // Check that the correlation id of runtime and kernel matches
+  EXPECT_EQ(sycl_kernel_corr_id[0], correlation_id);
+  // Check time ordering
   EXPECT_LE(sycl_kernel_start_time[0], kernel_append_time[0]);
-  if ((sycl_kernel_corr_id[0] == kernel_corr_id[0]) &&
-      (sycl_kernel_start_time[0] < kernel_append_time[0]))
-    matched_sq_corr_ids = true;
-  EXPECT_EQ(matched_sq_corr_ids, true);
+  // Check that correlation id belongs to specific passed external kind and id
+  EXPECT_NE(external_corr_map.find(correlation_id), external_corr_map.end());
+  EXPECT_EQ(external_corr_map[correlation_id].first,
+            pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3);
+  EXPECT_EQ(external_corr_map[correlation_id].second, eid + eid_offset_vecSq);
+  // Check that the kernel name and mem op name are as expected
+  EXPECT_NE(runtime_enq_2_gpu_kernel_name_map[correlation_id].find("VecSq"), std::string::npos);
+  for (auto &elem : runtime_enq_2_gpu_mem_op_name_map) {
+    EXPECT_NE(elem.second.find("Copy"), std::string::npos);
+  }
 }
 
 TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAdd) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kExternalCorrId);
+  // Check that the correlation id of runtime and kernel matches
   EXPECT_EQ(sycl_kernel_corr_id[1], kernel_corr_id[1]);
+  // Check time ordering
   EXPECT_LE(sycl_kernel_start_time[1], kernel_append_time[1]);
-  if ((sycl_kernel_corr_id[1] == kernel_corr_id[1]) &&
-      (sycl_kernel_start_time[1] < kernel_append_time[1]))
-    matched_add_corr_ids = true;
-  EXPECT_EQ(matched_add_corr_ids, true);
 }
 
 TEST_F(VecsqaddFixtureTest, TimestampWrapAroundOnOverflow) {

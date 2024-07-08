@@ -371,6 +371,8 @@ struct PtiViewRecordHandler {
 
   inline pti_result PushExternalKindId(pti_view_external_kind external_kind, uint64_t external_id) {
     pti_result result = pti_result::PTI_SUCCESS;
+    SPDLOG_TRACE("In {}, ext_id: {}, ext_kind: {}", __FUNCTION__, external_id,
+                 static_cast<uint32_t>(external_kind));
 
     pti_view_record_external_correlation ext_corr_rec = pti_view_record_external_correlation();
     ext_corr_rec._external_id = external_id;
@@ -388,6 +390,7 @@ struct PtiViewRecordHandler {
   inline pti_result PopExternalKindId(pti_view_external_kind external_kind,
                                       uint64_t* p_external_id) {
     pti_result result = pti_result::PTI_SUCCESS;
+    SPDLOG_TRACE("In {}, ext_kind: {}", __FUNCTION__, static_cast<uint32_t>(external_kind));
     auto it = map_ext_corrid_vectors.find({external_kind});
     if (it != map_ext_corrid_vectors.cend()) {
       pti_view_record_external_correlation ext_record = it->second.top();
@@ -682,12 +685,13 @@ inline void GetDeviceId(char* buf, const ze_pci_ext_properties_t& pci_prop_) {
 
 inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRecord& rec) {
   for (auto it = map_ext_corrid_vectors.cbegin(); it != map_ext_corrid_vectors.cend(); it++) {
-    // for ( pti_view_record_external_correlation ext_record : it->second ) {
     pti_view_record_external_correlation ext_record = it->second.top();
     ext_record._correlation_id = rec.cid_;
     ext_record._view_kind._view_kind = pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION;
+    SPDLOG_TRACE("In {}, ext_id: {}, ext_kind: {}, corr_id: {}", __FUNCTION__,
+                 ext_record._external_id, static_cast<uint32_t>(ext_record._external_kind),
+                 ext_record._correlation_id);
     Instance().InsertRecord(ext_record);
-    //}
   }
 }
 
@@ -851,11 +855,10 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   pti_view_record_kernel record;
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL;
 
-  int64_t ts_shift = Instance().GetTimeShift();
+  // Note: no need to call  GenerateExternalCorrelationRecords(rec)
+  // as there records go only with runtime API records and not with GPU kernels, memory ops..
 
-  if (external_collection_enabled) {
-    GenerateExternalCorrelationRecords(rec);
-  }
+  int64_t ts_shift = Instance().GetTimeShift();
 
   record._append_timestamp = ApplyTimeShift(rec.append_time_, ts_shift);
   record._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
