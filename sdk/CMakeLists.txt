@@ -257,15 +257,24 @@ if(PTI_INSTALL)
   #
   # This file is only installed in oneAPI drops
   #
-  if("${PTI_PRESET_USED}" STREQUAL "oneAPI")
-    install(
-      FILES "env/vars.sh"
-      DESTINATION "env/"
-      COMPONENT Pti_oneAPI)
+  if("${PTI_PRESET_USED}" MATCHES "[lw].*-oneAPI-release")
     install(
       FILES "../third-party-programs.txt"
       DESTINATION "${PTI_INSTALL_LIC_DIR}"
       COMPONENT Pti_oneAPI)
+
+    if (UNIX)
+      install(
+        FILES "env/vars.sh"
+        DESTINATION "env/"
+        COMPONENT Pti_oneAPI)
+    elseif (WIN32)
+      install(
+        FILES "env/vars.bat"
+        DESTINATION "env/"
+        COMPONENT Pti_oneAPI)
+    endif()
+
   endif()
 endif()
 

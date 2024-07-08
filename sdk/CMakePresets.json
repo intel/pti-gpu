@@ -158,6 +158,16 @@
       }
     },
     {
+      "name": "windows-oneAPI-release",
+      "displayName": "Windows oneAPI Release Config",
+      "description": "Latest known valid configuration for releasing PTI with oneAPI toolkit.",
+      "inherits": "windows-ci-release",
+      "cacheVariables": {
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "PTI_PRESET_USED": "${presetName}"
+      }
+    },
+    {
       "name": "windows-ci-debug",
       "displayName": "Windows CI Debug Config",
       "description": "Windows CI Debug Config. Uses icx and Ninja.",
@@ -267,6 +277,11 @@
     "configurePreset": "windows-ci-release"
   },
   {
+    "name": "windows-oneAPI-release",
+    "configurePreset": "windows-oneAPI-release",
+    "displayName": "windows oneAPI Release Build"
+  },
+  {
     "name": "windows-ci-debug",
     "displayName": "Windows CI Debug Build",
     "configurePreset": "windows-ci-debug"
@@ -343,6 +358,11 @@
     "name": "windows-icx-release",
     "displayName": "Windows Release x64 IntelLLVM Test",
     "configurePreset": "windows-icx-release"
+  },
+  {
+    "name": "windows-oneAPI-release",
+    "configurePreset": "windows-oneAPI-release",
+    "displayName": "Windows oneAPI Release Tests"
   },
   {
     "name": "windows-ci-release",
