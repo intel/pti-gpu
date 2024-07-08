@@ -45,8 +45,6 @@ set(CMAKE_C_VISIBILITY_PRESET "hidden")
 
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
-set(CMAKE_INSTALL_RPATH $ORIGIN)
-
 option(PTI_BUILD_TESTING "Build PTI tests" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_INSTALL "Install library when invoking --install" ON)
@@ -70,14 +68,19 @@ configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
 find_package(Xpti)
 
 # https://cmake.org/cmake/help/latest/guide/importing-exporting/index.html
-add_library(pti SHARED "${PROJECT_SOURCE_DIR}/src/pti.cc")
+add_library(pti_all INTERFACE)
+add_library(Pti::pti_all ALIAS pti_all)
+
+add_library(pti SHARED "${PROJECT_SOURCE_DIR}/src/pti.cc"
+	               "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
+
 add_library(Pti::pti ALIAS pti)
 
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
 include(GenerateExportHeader)
 generate_export_header(pti EXPORT_FILE_NAME
-                       ${PROJECT_BINARY_DIR}/include/pti/pti_export.h)
+                 ${PROJECT_BINARY_DIR}/include/pti/pti_export.h)
 
 # Suspect we need this since we're sharing across multiple targets
 set(PTI_DEFINE_SYMBOL "pti_EXPORTS")
@@ -88,15 +91,17 @@ target_include_directories(
          "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
          "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
          "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
-          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils"
-          "${PROJECT_SOURCE_DIR}/src/loader")
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+          "${PROJECT_SOURCE_DIR}/src/syclpi"
+          "${PROJECT_SOURCE_DIR}/src/levelzero"
+          "${PROJECT_SOURCE_DIR}/src/utils")
 
 set_target_properties(
   pti
   PROPERTIES VERSION "${PROJECT_VERSION}"
              SOVERSION "${PTI_API_SOVERSION}"
              POSITION_INDEPENDENT_CODE ON)
+
 if (WIN32)
   set_target_properties(
     pti
@@ -105,9 +110,6 @@ if (WIN32)
   )
   AddProjectVersionInfo(pti)
 endif()
-
-target_compile_definitions(
-  pti PRIVATE $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>)
 
 # Why version 1.14.0?
 # It is an IPEX requirement for PTI to link against the LTS version of the
@@ -136,9 +138,9 @@ find_package(Threads REQUIRED)
 
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
+
 add_library(Pti::pti_view ALIAS pti_view)
-# add_library(pti_callback SHARED "..") add_library(pti_event SHARED "..")
-# add_library(pti_metric SHARED "..") add_library(pti_profiling SHARED "..") ..
+
 target_include_directories(
   pti_view
   PUBLIC "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
@@ -165,7 +167,6 @@ if (WIN32)
   AddProjectVersionInfo(pti_view)
 endif()
 
-
 target_compile_definitions(
   pti_view
   PRIVATE $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
@@ -180,7 +181,7 @@ endif()
 
 target_link_libraries(
   pti_view
-  PUBLIC Threads::Threads
+  PUBLIC Threads::Threads Pti::pti
   PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
           LevelZero::level-zero
           spdlog::spdlog_header_only
@@ -191,12 +192,7 @@ FindHeadersPath(
   "tracing.gen" gen_tracing_header LevelZero::level-zero)
 
 target_link_libraries(
-  pti
-  PUBLIC pti_view
-  PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
-          LevelZero::level-zero
-          spdlog::spdlog_header_only
-          ${CMAKE_DL_LIBS})
+	pti_all INTERFACE Pti::pti_view Pti::pti)
 
 include(CTest)
 if(BUILD_TESTING AND PTI_BUILD_TESTING)
@@ -204,7 +200,7 @@ if(BUILD_TESTING AND PTI_BUILD_TESTING)
 endif()
 
 export(
-  TARGETS pti pti_view
+  TARGETS pti_all pti pti_view
   FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/PtiTargets.cmake"
   NAMESPACE Pti::)
 
@@ -223,7 +219,7 @@ if(PTI_INSTALL)
     DESTINATION "${PTI_INSTALL_CMAKE_DIR}")
 
   install(
-    TARGETS pti pti_view
+    TARGETS pti_all pti pti_view
     EXPORT PtiTargets
     LIBRARY DESTINATION ${PTI_INSTALL_LIB_DIR}
             COMPONENT Pti_Runtime

@@ -7,7 +7,7 @@
 #ifndef INCLUDE_PTI_H_
 #define INCLUDE_PTI_H_
 
+#include "pti/pti_export.h"
 #include "pti/pti_version.h"
-#include "pti/pti_view.h"
 
 #endif  // INCLUDE_PTI_H_
