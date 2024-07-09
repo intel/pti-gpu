@@ -1,0 +1,142 @@
+@startuml
+
+title Simplified GTPin Profiler results class diagram
+
+package profiler {
+    package "pti gtpin tool (ea inst count)" {
+        package "gtpin sdk" {
+
+            interface WriterBase {
+                {abstract} +Write(ApplicationData*)
+            }
+            note "GTPinProfiler passes ApplicationData\nfrom GTPinTool to WriterBase::Write()" as NoteWrite
+            GTPinTool .. NoteWrite
+            NoteWrite .. WriterBase
+
+            interface ToolFactory {
+                +MakeGTPinTool()
+                +MakeApplicationData()
+                +MakeKernelData()
+                +MakeInvocationData()
+                +MakeResultData()
+                +MakeProfileRecord()
+            }
+            abstract GTPinProfiler
+            abstract GTPinTool
+
+            GTPinProfiler *-- GTPinTool
+            GTPinProfiler *-- WriterBase
+            class RawRecord <<low level record>>
+            class SiteOfInstrument{
+                GTInstruction
+                vector<ResultData> results
+            }
+            class ApplicationData {
+                string appName
+                map<KernelId, shared_ptr<KernelData>> m_kernels
+                +GetApplicationName()
+                +GetKernels()
+                +GetKernel(KernelId)
+                + ...()
+            }
+            NoteWrite .. ApplicationData
+            class KernelData {
+                m_kernelName
+                m_kernelRuns
+                m_origBinary
+                m_origAsm
+                m_kernelId
+                map<KernelRun, shared_ptr<InvocationData>> m_invocations
+                vector<shared_ptrSiteOfInstrument> m_sitesOfInterest
+                vector<shared_ptr<ResultDataCommon>> m_resultDataCommon
+                +GetResultsNum()
+                +GetSiteOfInstrument()
+                +GetResultDataCommon()
+                + ...()
+            }
+            note "KernelData::sitesOfInterest.size() ==\nnum profiling segments" as NoteSOISize
+            KernelData .. NoteSOISize
+            class InvocationData {
+                runIdx
+                globalRunIdx
+                dispatchId
+                vector<shared_ptr<ResultData>> data
+            }
+            note "InvocationData::data.size() ==\nnum instructions" as NoteDataSize
+            InvocationData .. NoteDataSize
+            class ResultData {
+
+            }
+            
+            note "KernelData::sitesOfInterest has connection\nbetween resultData and raw GTPin records\nthrough 'vector<ResultData> results'" as NoteSOIsize
+            KernelData .. NoteSOIsize
+            NoteSOIsize .. InvocationData
+
+            note "Number of ProfileRecords ==\nKernelData::sitesOfInterest.size()" as NoteSOIRecSize
+            RawRecord .. NoteSOIRecSize
+            NoteSOIRecSize .. SiteOfInstrument
+
+            GTPinTool --{ ApplicationData : stores all process information
+            ApplicationData --{ KernelData 
+            KernelData --{ InvocationData
+            InvocationData --{ ResultData
+            KernelData }-- SiteOfInstrument
+        }
+        class InstCountFactory {
+            +MakeGTPinTool(): InstCountGTPinTool_p
+            +MakeApplicationData(): InstCountApplicationData_p
+            +MakeKernelData(): InstCountKernelData_p
+            +MakeInvocationData(): InstCountInvocationData_p
+            +MakeResultData(): InstCountResultData_p
+            +MakeInstCountRecord(): InstCountProfileRecord_p
+        }
+        ToolFactory <|-- InstCountFactory
+
+        class InstCountGTPinTool {
+            -Aggregate(ProfileRecord, ResultData)
+            -..()
+        }
+        GTPinTool <|-- InstCountGTPinTool
+
+        class InstCountProfileRecord {
+            counter: uint64_t
+            frequency: uint64_t
+        }
+        RawRecord <|-- InstCountProfileRecord
+
+        class InstCountSiteOfInstrument {
+            +
+            soiType
+        }
+        SiteOfInstrument <|-- InstCountSiteOfInstrument
+        class InstCountApplicationData {
+            +
+            totalInstrExecutedPerApplication
+        }
+        class InstCountKernelData {
+            +
+            totalInstrExecutedPerKernel
+        }
+        class InstCountInvocationData {
+            +
+            totalInstrExecutedPerInvocation
+        }
+        class InstCountResultData {
+            +
+            counter: size_t
+            frequency: size_t
+        }
+        ApplicationData <|-- InstCountApplicationData
+        KernelData <|-- InstCountKernelData
+        InvocationData <|-- InstCountInvocationData
+        ResultData <|-- InstCountResultData
+
+    }
+
+    class InstCountWriter {
+    }
+
+    WriterBase <|-- InstCountWriter
+}
+
+@enduml

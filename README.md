@@ -57,6 +57,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
  - [ze_tracer](tools/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);
  - [cl_tracer](tools/cl_tracer) - "Swiss army knife" for OpenCL(TM) API call tracing and profiling;
  - [gpuinfo](tools/gpuinfo) - provides basic information about the GPUs installed in a system, and the list of HW metrics one can collect for it;
+ - [instcount](tools/instcount) - prints GPU kernel assembly (GEN ISA) annotated by instruction execution count;
  - [sysmon](tools/sysmon) - Linux "top" like utility to monitor GPUs installed on a system;
 
 ## Sample Tools & Utilities
@@ -75,7 +76,6 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 - tools for OpenMP*:
     - [omp_hot_regions](samples/omp_hot_regions) - provides a list of hottest parallel (for CPU) and target (for GPU) OpenMP* regions;
 - tools for binary instrumentation:
-    - [gpu_inst_count](samples/gpu_inst_count) - prints GPU kernel assembly (GEN ISA) annotated by instruction execution count;
     - [gpu_perfmon_read](samples/gpu_perfmon_read) - prints GPU kernel assembly (GEN ISA) annotated by specific HW metric, which is accumulated in EU PerfMon register;
 - utilities:
     - [dpc_info](samples/dpc_info) - prints information on available platforms and devices in DPC++;

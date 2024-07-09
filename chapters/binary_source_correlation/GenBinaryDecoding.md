@@ -54,5 +54,7 @@ std::vector< std::pair<uint32_t, std::string> > Disassemble(
 ## Samples
 - [OpenCL(TM) Debug Info](../../samples/cl_debug_info)
 - [Level Zero Debug Info](../../samples/ze_debug_info)
-- [GPU Instruction Count](../../samples/gpu_inst_count)
 - [GPU PerfMon Read](../../samples/gpu_perfmon_read)
+
+## Tools
+- [Level Zero Tracer](../../tools/instcount)

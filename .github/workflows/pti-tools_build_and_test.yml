@@ -76,9 +76,9 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s cl_gpu_metrics
 
-      - name: Build-and-test-gpu-inst-count
+      - name: Build-and-test-instcount
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s gpu_inst_count
+          python ./tests/run.py -s instcount
 
 

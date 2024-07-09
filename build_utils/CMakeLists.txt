@@ -529,7 +529,7 @@ macro(GetGTPinHeaders_legacy TARGET)
   endif()
 endmacro()
 
-macro(GetGTPinPackage TARGET)
+macro(GetGTPinPackage)
   if(NOT DEFINED GTPIN_PATH)
     if(NOT DEFINED GTPIN_LINK)
       if(UNIX)
@@ -545,12 +545,14 @@ macro(GetGTPinPackage TARGET)
       FetchContent_Declare(
         gtpin_package
         URL ${GTPIN_LINK}
+SOURCE_DIR ${GTPIN_SOURCE_DIR}
       )
     else()
       FetchContent_Declare(
         gtpin_package
         URL ${GTPIN_LINK}
         DOWNLOAD_EXTRACT_TIMESTAMP YES
+SOURCE_DIR ${GTPIN_SOURCE_DIR}
       )
     endif()
     message(STATUS "Download GTPin package link: ${GTPIN_LINK}")
@@ -584,14 +586,14 @@ macro(GetGTPinPackage TARGET)
 endmacro()
 
 macro(FindGTPinLibrary TARGET)
-  GetGTPinPackage(${TARGET})
+  GetGTPinPackage()
   target_link_directories(${TARGET}
     PRIVATE ${GTPIN_PATH}/Lib/intel64)
   target_link_libraries(${TARGET} gtpin ged)
 endmacro()
 
 macro(FindGTPinHeaders TARGET)
-  GetGTPinPackage(${TARGET})
+  GetGTPinPackage()
   target_include_directories(${TARGET}
     PRIVATE ${GTPIN_PATH}/Include
     PRIVATE ${GTPIN_PATH}/Include/api
@@ -599,7 +601,7 @@ macro(FindGTPinHeaders TARGET)
 endmacro()
 
 macro(FindGTPinUtils TARGET)
-  GetGTPinPackage(${TARGET})
+  GetGTPinPackage()
   if(NOT TARGET gtpintool_utils)
     set(GTPIN_KIT ${GTPIN_PATH})
     add_subdirectory(${GTPIN_PATH}/Examples ${CMAKE_CURRENT_BINARY_DIR}/gtpin_utils EXCLUDE_FROM_ALL)

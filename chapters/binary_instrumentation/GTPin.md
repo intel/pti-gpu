@@ -107,7 +107,7 @@ static void OnKernelComplete(GTPinKernelExec kernelExec, void* v) {
 
 **Note**, that to use GT-Pin tools with oneAPI Level Zero (Level Zero) one should set the following environment variables:
 ```
-ZET_ENABLE_API_TRACING_EXP=1
+ZE_ENABLE_TRACING_LAYER=1
 ZET_ENABLE_PROGRAM_INSTRUMENTATION=1
 ```
 
@@ -118,5 +118,7 @@ ZET_ENABLE_PROGRAM_INSTRUMENTATION=1
 - refer to the paper [Introduction to GEN Assembly](https://software.intel.com/en-us/articles/introduction-to-gen-assembly) to learn more on Intel(R) Processor Graphics instruction set
 
 ## Samples
-- [GPU Instruction Count](../../samples/gpu_inst_count)
 - [GPU PerfMon Read](../../samples/gpu_perfmon_read)
+
+## Tools
+- [Level Zero Tracer](../../tools/instcount)

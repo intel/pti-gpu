@@ -10,126 +10,87 @@
 #include <api/gtpin_api.h>
 
 #include <memory>
+#include <vector>
 
-#include "results_gtpin.hpp"
+#include "results.hpp"
 
 /**
  * @file This file describes writer interface and several default writers, which
- * can be exetended for tool specific output
+ * can be extended for tool specific output
  */
 
-namespace gtpin {
 namespace gtpin_prof {
 
-class GTPinDataWriterBase {
+/**
+ * @class WriterBase
+ * @brief Base class for writers that write profiler data.
+ *
+ * This class serves as the base class for all writer classes that are responsible for writing
+ * profiler data.
+ */
+class WriterBase {
  public:
-  GTPinDataWriterBase() = default;
-  virtual ~GTPinDataWriterBase() = default;
+  WriterBase() = default;
+  virtual ~WriterBase() = default;
 
-  /// Main function, that recieves the profiler data results. The function is
-  /// writer specific
-  virtual void Write(const std::shared_ptr<ProfilerData> res) = 0;
+  /**
+   * @brief Write data.
+   *
+   * This function is responsible for writing the profiler data.
+   *
+   * @param res - The profiler data to write.
+   */
+  virtual void Write(const ApplicationDataSPtr res) const = 0;
 
-  /// Init function will be called at least once before the first call of Write
-  virtual bool Init() { return true; }
+  /**
+   * @brief Initialize the writer.
+   *
+   * This function is called at least once before the first call to Write().
+   *
+   * @return true if the writer is successfully initialized, false otherwise.
+   */
+  virtual bool Init();
 };
 
-/// StreamGTPinDataWriter describes stream writers functionality
-class StreamGTPinDataWriter : public GTPinDataWriterBase {
+/**
+ * @class MultipleWriter
+ * @brief Class that allows using multiple writers.
+ *
+ * This class allows using multiple writer objects to write profiler data.
+ */
+class MultipleWriter : public WriterBase {
  public:
-  /// stream can be defined at the construction time, or during Init function
-  /// call
-  StreamGTPinDataWriter() = default;
-  StreamGTPinDataWriter(std::ostream& stream);
-  virtual ~StreamGTPinDataWriter();
+  /**
+   * @brief Constructs a MultipleWriter object with the given list of writers.
+   *
+   * @param writers - The list of writer objects.
+   */
+  MultipleWriter(std::vector<WriterBaseSPtr> writers);
+  virtual ~MultipleWriter() = default;
 
- protected:
-  // virtual std::ostream& GetStream();
-  inline std::ostream& GetStream() { return sh->m_stream; }
-  class StreamHolder {
-   public:
-    StreamHolder(std::ostream& stream);
-    ~StreamHolder();
-    std::ostream& m_stream;
-  };
-  StreamHolder* sh = nullptr;
-
-  /// Specific functions that extends functionality of predefined writes. Called
-  /// on each level after main writer work
-  virtual void WriteToolProfilerData(const std::shared_ptr<ProfilerData> profData) {}
-  virtual void WriteToolKernelData(const std::shared_ptr<ProfilerData> profData,
-                                   const std::shared_ptr<KernelData> kerData) {}
-  virtual void WriteToolInvocationData(const std::shared_ptr<ProfilerData> profData,
-                                       const std::shared_ptr<KernelData> kerData,
-                                       const std::shared_ptr<InvocationData> invData) {}
-  virtual void WriteToolResultData(const std::shared_ptr<ProfilerData> profData,
-                                   const std::shared_ptr<KernelData> kerData,
-                                   const std::shared_ptr<InvocationData> invData,
-                                   const std::shared_ptr<ResultData> resData) {}
-};
-
-/// Does nothing
-class DefaultGTPinWriter : public GTPinDataWriterBase {
- public:
-  DefaultGTPinWriter() = default;
-  virtual ~DefaultGTPinWriter() = default;
-  void Write(const std::shared_ptr<ProfilerData> res) final;
-};
-
-/// Allow to use several writers
-class MultipleGTPinWriter : public GTPinDataWriterBase {
- public:
-  MultipleGTPinWriter(std::vector<std::shared_ptr<GTPinDataWriterBase>> writers);
-  virtual ~MultipleGTPinWriter() = default;
+  /**
+   * @brief Initialize all writers in the list.
+   *
+   * This function initializes all the writer objects in the list of writers.
+   *
+   * @return true if all writers are successfully initialized, false if any writer fails to
+   * initialize.
+   */
   bool Init() final;
-  void Write(const std::shared_ptr<ProfilerData> res) final;
+
+  /**
+   * @brief Write data using all writers.
+   *
+   * This function writes the profiler data using all the writer objects in the list.
+   *
+   * @param res - The profiler data to write.
+   */
+  void Write(const ApplicationDataSPtr res) const final;
 
  private:
-  const std::vector<std::shared_ptr<GTPinDataWriterBase>> m_writers;
-};
-
-/// Generates text, passes to ostream
-class DefaultTxtGTPinWriter : public StreamGTPinDataWriter {
- public:
-  using StreamGTPinDataWriter::StreamGTPinDataWriter;
-  void Write(const std::shared_ptr<ProfilerData> res) final;
-  virtual void WriteToolProfilerData(const std::shared_ptr<ProfilerData> profData) {}
-  virtual void WriteToolKernelData(const std::shared_ptr<ProfilerData> profData,
-                                   const std::shared_ptr<KernelData> kerData) {}
-  virtual void WriteToolInvocationData(const std::shared_ptr<ProfilerData> profData,
-                                       const std::shared_ptr<KernelData> kerData,
-                                       const std::shared_ptr<InvocationData> invData) {}
-  virtual void WriteToolResultData(const std::shared_ptr<ProfilerData> profData,
-                                   const std::shared_ptr<KernelData> kerData,
-                                   const std::shared_ptr<InvocationData> invData,
-                                   const std::shared_ptr<ResultData> resData) {}
-};
-
-/// Generates JSON, passes to ostream
-class DefaultJsonGTPinWriter : public StreamGTPinDataWriter {
- public:
-  using StreamGTPinDataWriter::StreamGTPinDataWriter;
-  void Write(const std::shared_ptr<ProfilerData> res) final;
-  virtual void WriteToolProfilerData(const std::shared_ptr<ProfilerData> profData) {}
-  virtual void WriteToolKernelData(const std::shared_ptr<ProfilerData> profData,
-                                   const std::shared_ptr<KernelData> kerData) {}
-  virtual void WriteToolInvocationData(const std::shared_ptr<ProfilerData> profData,
-                                       const std::shared_ptr<KernelData> kerData,
-                                       const std::shared_ptr<InvocationData> invData) {}
-  virtual void WriteToolResultData(const std::shared_ptr<ProfilerData> profData,
-                                   const std::shared_ptr<KernelData> kerData,
-                                   const std::shared_ptr<InvocationData> invData,
-                                   const std::shared_ptr<ResultData> resData) {}
-};
-
-/// Generates CSV, passes to ostream
-class DefaultCsvGTPinWriter : public StreamGTPinDataWriter {
- public:
-  using StreamGTPinDataWriter::StreamGTPinDataWriter;
-  void Write(const std::shared_ptr<ProfilerData> res) final;
+  const std::vector<WriterBaseSPtr> m_writers;
 };
 
 }  // namespace gtpin_prof
-}  // namespace gtpin
 
 #endif  // PTI_GTPIN_WRITER_H

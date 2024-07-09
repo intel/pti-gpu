@@ -1,0 +1,50 @@
+@startuml
+
+title Capsule class diagram
+
+' class Capsule {
+'     -IGtKernelInstrument m_instrumentor
+'     -GtProfileArray m_profileArray
+'     -size_t m_recordIndex
+'     ----
+'     +Capsule(instrumentor profileArray recordIndex)
+'     +GetProcedure(): proc
+'     +AppendProcedure()
+'     +operator+()
+'     -- Analyses --
+'     +AddInstructionCounterAnalysis()
+'     +AddSimdActiveAnalysis()
+'     +AddCacheLineAlignedAnalysis()
+'     +AddCacheLineCounterAnalysis()
+'     +AddStrideDistributionAnanlysis()
+'     -- Utils --
+'     +CalcBaseAddr()
+'     +IsCacheLineAligned()
+'     +ComputeSimdMask()
+'     +CounterAdd()
+'     +CounterInc()
+
+'     -- Other --
+
+' }
+
+' class CapsuleState {
+'     -GtGenProcedure m_proc
+'     -IGtKernelInstrument m_instrumentor
+'     -GtProfileArray m_profileArray
+'     -size_t m_recordIndex
+'     -size_t m_numTiles 
+'     -GtReg m_baseAddrReg
+'     -GtReg m_simdMaskReg
+'     -GtReg m_tempAddrReg
+'     -GtReg m_tempData64Reg
+'     -GtReg m_tempMsgData64Reg
+'     -IGtVregFactory m_vregs
+'     -IGtInsFactory m_insF
+'     +AppendProcedure()
+'     +GetProcedure(): proc
+'     +Getters()
+'     +Setters()
+' }
+
+@enduml

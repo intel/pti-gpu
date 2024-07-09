@@ -1,0 +1,109 @@
+@startuml
+
+
+title Simplified class diagram for PTI GTPin tool. Describes the interfaces and classes used by the PTI GTPin tool
+
+package profiler {
+    package "pti gtpin tool (inst count)" {
+        package "gtpin sdk" {
+            interface WriterBase {
+                {abstract} +Write()
+            }
+            interface ControlBase {
+                {abstract} +ShouldProfile()
+                {abstract} +ShouldInstrument()
+            }
+            interface GTPinProfilerBase {
+                {abstract} +GTPinProfilerBase(writer_ptr, control_ptr)
+                {abstract} +Start()
+                {abstract} +Status()
+                {abstract} +Stop()
+                {abstract} +LastError()
+            }
+            interface gtpin::IGTool {
+                {abstract} +OnKernelBuild()
+                {abstract} +OnKernelRun()
+                {abstract} +OnKernelComplete()
+            }
+            interface ToolFactory {
+                #ControlBase control_ptr
+                {abstract} +ToolFactory(control_ptr)
+                +GetControl()
+                {abstract} +MakeGTPinTool()
+                {abstract} +MakeKernel()
+                {abstract} +MakeInvocation()
+                {abstract} +MakeResult()
+                {abstract} +..()
+            }
+            GTPinProfiler *-- ToolFactory
+            abstract GTPinProfiler {
+                #WriterBase writer_ptr
+                #ControlBase control_ptr
+                #ToolFactory factory_ptr
+                +GTPinProfiler(writer_ptr, control_ptr)
+                +Start()
+                +Status()
+                +Stop()
+                {abstract} #GetFactory(): ToolFactory_ptr
+            }
+            abstract GTPinTool {
+                #ToolFactory factory_ptr
+                #ControlBase control_ptr
+                +GTPinTool(factory_ptr, control_ptr)
+                +OnKernelBuild()
+                +OnKernelRun()
+                +OnKernelComplete()
+                {abstract} #Analyze()
+                {abstract} #Instrument()
+                {abstract} #Aggregate()
+            }
+
+            GTPinProfilerBase <|-- GTPinProfiler : implements
+            gtpin::IGTool <|--GTPinTool  : implements
+            GTPinProfiler *-- GTPinTool : using factory->MakeGTPinTool()
+            GTPinProfiler *-- WriterBase : passed to ctor
+            GTPinProfiler *-- ControlBase : passed to ctor
+        }
+        class InstCountProfilerImpl {
+            -GetFactory(): InstCountFactory_ptr
+        }
+        class InstCountFactory {
+                +MakeGTPinTool(writer_ptr, control_ptr, results_factory_ptr) : InstCountGTPinTool_ptr
+                +MakeKernel()
+                +MakeInvocation()
+                +MakeResult()
+                +..()
+        }
+        class InstCountGTPinTool {
+            -Analyze()
+            -Instrument()
+            -Aggregate()
+        }
+        note "Tool specific behavior is located\n in next functions:\n* Analyze() analyzes kernel for\nnumber of sites of interest,\nand and results data\n* Instrument() modifies the\nkernel to collect data\n* Aggregate() processes the\ncollected data into results" as N3
+        N3 .. InstCountGTPinTool
+
+        interface InstCountControlBase {
+            {abstract} +ShouldProfileBBL()
+        }
+        ControlBase <|-- InstCountControlBase
+        interface InstCountWriterBase {}
+        WriterBase <|-- InstCountWriterBase
+        GTPinProfiler <|-- InstCountProfilerImpl : implements
+        GTPinTool <|-- InstCountGTPinTool : implements
+        ToolFactory <|-- InstCountFactory : implements
+    }
+
+    class InstCountWriter {
+        +Write()
+    }
+    class InstCountControl {
+        +ShouldProfile()
+        +ShouldInstrument()
+        +ShouldProfileBBL()
+    }
+
+    InstCountWriterBase <|-- InstCountWriter : implements
+    InstCountControlBase <|-- InstCountControl : implements
+}
+
+@enduml
