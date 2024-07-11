@@ -875,6 +875,7 @@ def main():
       "zeEventDestroy",
       "zeEventHostReset",
       "zeEventPoolCreate",
+      "zeCommandListAppendEventReset",
       "zeCommandListAppendLaunchKernel",
       "zeCommandListAppendLaunchCooperativeKernel",
       "zeCommandListAppendLaunchKernelIndirect",
@@ -889,6 +890,7 @@ def main():
       "zeCommandListAppendImageCopyToMemory",
       "zeCommandListAppendImageCopyFromMemory",
       "zeCommandQueueExecuteCommandLists",
+      "zeCommandListClose",
       "zeCommandListCreate",
       "zeCommandListCreateImmediate",
       "zeCommandListDestroy",
@@ -908,6 +910,7 @@ def main():
       "zeFenceHostSynchronize",
       "zeContextDestroy"]
   command_list_func_list = [
+      "zeCommandListAppendEventReset",
       "zeCommandListAppendLaunchKernel",
       "zeCommandListAppendLaunchCooperativeKernel",
       "zeCommandListAppendLaunchKernelIndirect",

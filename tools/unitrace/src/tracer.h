@@ -47,7 +47,11 @@ class UniTracer {
   static UniTracer* Create(const TraceOptions& options) {
     ze_result_t status = ZE_RESULT_SUCCESS;
     status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (status != ZE_RESULT_SUCCESS) {
+      std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
+      std::cerr << "Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+      exit(-1);
+    }
 
     cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
     cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
