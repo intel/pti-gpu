@@ -37,6 +37,65 @@ class UniKernelId {
   inline static std::atomic<uint64_t> kernel_id_ = 1;  // start with 1
 };
 
+#define GET_MEMCPY_TYPE(SRC_TYPE, DST_TYPE, RESULT_TYPE)                   \
+  if (src_type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_##SRC_TYPE && \
+      dst_type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_##DST_TYPE) { \
+    return pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_##RESULT_TYPE;       \
+  }
+
+/**
+ * \internal
+ * Represets the route of memory copy/fill command
+ */
+struct ZeMemoryCommandRoute {
+  pti_view_memory_type src_type;
+  pti_view_memory_type dst_type;
+  bool peer_2_peer;
+  ZeMemoryCommandRoute()
+      : src_type(pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY),
+        dst_type(pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY),
+        peer_2_peer(false) {}
+  char GetChar(pti_view_memory_type type) const {
+    return type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY   ? 'M'
+           : type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST   ? 'H'
+           : type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE ? 'D'
+                                                                       : 'S';
+  }
+  std::string StringifyTypesCompact() const {
+    std::string str = "";
+    str += GetChar(src_type) + std::string("2") + GetChar(dst_type);
+    return str;
+  }
+  std::string StringifyPeer2PeerCompact() const {
+    std::string str = "";
+    str += peer_2_peer ? " - P2P" : std::string("");
+    return str;
+  }
+  pti_view_memcpy_type GetMemcpyType() const {
+    GET_MEMCPY_TYPE(MEMORY, MEMORY, M2M);
+    GET_MEMCPY_TYPE(MEMORY, HOST, M2H);
+    GET_MEMCPY_TYPE(MEMORY, DEVICE, M2D);
+    GET_MEMCPY_TYPE(MEMORY, SHARED, M2S);
+
+    GET_MEMCPY_TYPE(HOST, MEMORY, H2M);
+    GET_MEMCPY_TYPE(HOST, HOST, H2H);
+    GET_MEMCPY_TYPE(HOST, DEVICE, H2D);
+    GET_MEMCPY_TYPE(HOST, SHARED, H2S);
+
+    GET_MEMCPY_TYPE(DEVICE, HOST, D2H);
+    GET_MEMCPY_TYPE(DEVICE, DEVICE, D2D);
+    GET_MEMCPY_TYPE(DEVICE, SHARED, D2S);
+    GET_MEMCPY_TYPE(DEVICE, MEMORY, D2M);
+
+    GET_MEMCPY_TYPE(SHARED, DEVICE, S2D);
+    GET_MEMCPY_TYPE(SHARED, SHARED, S2S);
+    GET_MEMCPY_TYPE(SHARED, MEMORY, S2M);
+    GET_MEMCPY_TYPE(SHARED, HOST, S2H);
+
+    return pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2M;
+  }
+};
+
 struct ZeKernelCommandExecutionRecord {
   uint64_t sycl_node_id_;
   uint64_t sycl_queue_id_ = PTI_INVALID_QUEUE_ID;
@@ -64,6 +123,7 @@ struct ZeKernelCommandExecutionRecord {
   ze_device_handle_t device_;    // in case of memcpy -- represents source
   ze_context_handle_t context_;  // in case of memcpy -- represents source
 
+  ZeMemoryCommandRoute route_;
   ze_device_handle_t dst_device_;  // in case of memcpy -- represents destination (nullptr else)
   ze_pci_ext_properties_t dst_pci_prop_;  // in case of memcpy -- represents destination
 

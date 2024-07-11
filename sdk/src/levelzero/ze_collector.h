@@ -71,6 +71,7 @@ enum class KernelCommandType { kInvalid = 0, kKernel = 1, kMemory = 2, kCommand 
 struct ZeKernelCommandProps {
   std::string name;
   KernelCommandType type = KernelCommandType::kInvalid;
+  ZeMemoryCommandRoute route;
   size_t simd_width;
   size_t bytes_transferred;
   std::array<uint32_t, 3> group_count;
@@ -423,15 +424,17 @@ class ZeCollector {
   }
 
   void CreateDeviceMap() {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_DEBUG("In {}", __FUNCTION__);
     const auto drivers = utils::ze::GetDriverList();
     for (auto* const driver : drivers) {
       const auto devices = utils::ze::GetDeviceList(driver);
       for (auto* const device : devices) {
         device_descriptors_[device] = GetZeDeviceDescriptor(device);
+        SPDLOG_DEBUG("\tdevice: {}", (void*)device);
         const auto sub_devices = utils::ze::GetSubDeviceList(device);
         device_map_[device] = sub_devices;
         for (auto* const sub_device : sub_devices) {
+          SPDLOG_DEBUG("\tsub-device: {}", (void*)sub_device);
           device_descriptors_[sub_device] = GetZeDeviceDescriptor(sub_device);
         }
       }
@@ -569,6 +572,15 @@ class ZeCollector {
       std::copy_n(device_descriptors_[device_handle].uuid.id, ZE_MAX_DEVICE_UUID_SIZE, ptr);
       return;
     }
+    // in some cases for CCL Copy GetMemoryAllocProperties returns new,
+    // not seen so far, device handle that looks like a parent device to two tile devices
+    // TODO: this is not a good solution, need to investigate why this happens
+    // and how to handle it properly
+    // Specifically - bad that here write to device_descriptors_ without lock
+    SPDLOG_DEBUG("In {} detected new device: device_handle: {}", __FUNCTION__,
+                 (void*)device_handle);
+    device_descriptors_[device_handle] = GetZeDeviceDescriptor(device_handle);
+    std::copy_n(device_descriptors_[device_handle].uuid.id, ZE_MAX_DEVICE_UUID_SIZE, ptr);
     return;
   }
 
@@ -594,7 +606,7 @@ class ZeCollector {
       PTI_ASSERT(command != nullptr);
 
       if (command->event_self != nullptr) {
-        SPDLOG_TRACE("\tChecking event status idx: {}", idx);
+        SPDLOG_TRACE("\tChecking event status idx: {}, event: {}", idx, (void*)command->event_self);
         overhead::Init();
         status = zeEventQueryStatus(command->event_self);
         overhead_fini("zeEventQueryStatus");
@@ -602,7 +614,7 @@ class ZeCollector {
         if (status == ZE_RESULT_SUCCESS) {
           SPDLOG_TRACE("\tEvent SIGNALED!");
           if (command->event_self == event) {
-            SPDLOG_TRACE("\tKNOWN EVENT!");
+            SPDLOG_TRACE("\tPassed EVENT!");
             ProcessCallCommand(command, kids, kcexecrec);
             it = kernel_command_list_.erase(it);
             // TODO: this could be good check in Debug
@@ -612,7 +624,7 @@ class ZeCollector {
             }*/
             break;
           } else {
-            SPDLOG_TRACE("\tUNKNOWN EVENT!");
+            SPDLOG_TRACE("\tAnother EVENT!");
             ProcessCallCommand(command, nullptr, kcexecrec);
             it = kernel_command_list_.erase(it);
           }
@@ -758,6 +770,7 @@ class ZeCollector {
       rec.name_ = std::move(name);
       rec.queue_ = command->queue;
       rec.device_ = command->device;
+      rec.route_ = command->props.route;
       if (command->props.src_device != nullptr) {
         CopyDeviceUUIDTo(command->props.src_device, static_cast<uint8_t*>(rec.src_device_uuid));
       }
@@ -792,7 +805,7 @@ class ZeCollector {
         }
       }
 
-      rec.context_ = GetCommandListInfoConst(command->command_list).context;
+      rec.context_ = command->context;
 
       if (command->props.type == KernelCommandType::kKernel) {
         rec.sycl_node_id_ = command->sycl_node_id_;
@@ -1110,13 +1123,14 @@ class ZeCollector {
 
   static void OnEnterEventDestroy(ze_event_destroy_params_t* params, void* global_data,
                                   void** /*instance_data*/, std::vector<uint64_t>* /*kids*/) {
-    SPDLOG_TRACE("In {} event", __FUNCTION__, (void*)*(params->phEvent));
+    SPDLOG_TRACE("In {} event: {}", __FUNCTION__, (void*)*(params->phEvent));
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       // only events that managed by collector should be taken care
       if (ZeCollectionMode::Local == collector->collection_mode_) {
         ze_event_handle_t swap_event =
             collector->swap_event_pool_.RemoveKeyEventFromShadowCache(*(params->phEvent));
+        SPDLOG_TRACE("--- RemoveKeyEventFromShadowCache returned: {}", (void*)(swap_event));
         if (swap_event != nullptr) {
           collector->swap_event_pool_.ReturnSwapEvent(swap_event);
         }
@@ -1127,7 +1141,7 @@ class ZeCollector {
   static void OnEnterEventHostReset(ze_event_host_reset_params_t* params, void* global_data,
                                     void** /*instance_data*/,
                                     [[maybe_unused]] std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} event: {}", __FUNCTION__, (void*)*(params->phEvent));
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
@@ -1154,7 +1168,7 @@ class ZeCollector {
   static void OnExitEventHostSynchronize(ze_event_host_synchronize_params_t* params,
                                          ze_result_t result, void* global_data,
                                          void** /*instance_data*/, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}", __FUNCTION__);
+    SPDLOG_TRACE("In {} event: {}", __FUNCTION__, (void*)*(params->phEvent));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
@@ -1441,10 +1455,8 @@ class ZeCollector {
         SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
                      (void*)command->props.src_device, (void*)command->props.dst_device);
         bool is_two_devices =
-            (command->props.src_device != command->props.dst_device &&
-             command->props.src_device != nullptr && command->props.dst_device != nullptr)
-                ? true
-                : false;
+            (command->props.src_device != nullptr && command->props.dst_device != nullptr) ? true
+                                                                                           : false;
         append_res = A2AppendBridgeMemoryCopyOrFill(
             command->command_list, command->event_self, command->event_swap, command->props.dst,
             command->props.src, command->props.bytes_transferred, command->props.value_size,
@@ -1608,10 +1620,9 @@ class ZeCollector {
     SPDLOG_TRACE("In {}", __FUNCTION__);
     PTI_ASSERT(!name.empty());
 
-    std::string direction;
+    ZeMemoryCommandRoute route;
     ze_device_handle_t hSrcDevice = nullptr;
     ze_device_handle_t hDstDevice = nullptr;
-    bool p2p = false;
 
     if (src_context != nullptr && src != nullptr) {
       ze_memory_allocation_properties_t props;
@@ -1624,23 +1635,24 @@ class ZeCollector {
 
       switch (props.type) {
         case ZE_MEMORY_TYPE_UNKNOWN:
-          direction.push_back('M');
-          p2p = false;
+          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
+          route.peer_2_peer = false;
           break;
         case ZE_MEMORY_TYPE_HOST:
-          direction.push_back('H');
-          p2p = false;
+          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
+          route.peer_2_peer = false;
           break;
         case ZE_MEMORY_TYPE_DEVICE:
-          direction.push_back('D');
-          p2p = true;
+          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
+          route.peer_2_peer = true;
           break;
         case ZE_MEMORY_TYPE_SHARED:
-          direction.push_back('S');
-          p2p = true;
+          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
+          route.peer_2_peer = true;
           break;
         default:
-          p2p = false;
+          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
+          route.peer_2_peer = false;
           break;
       }
     }
@@ -1654,24 +1666,24 @@ class ZeCollector {
       overhead_fini("zeMemGetAllocProperties");
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-      direction.push_back('2');
       switch (props.type) {
         case ZE_MEMORY_TYPE_UNKNOWN:
-          direction.push_back('M');
-          p2p = false;
+          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
+          route.peer_2_peer = false;
           break;
         case ZE_MEMORY_TYPE_HOST:
-          direction.push_back('H');
-          p2p = false;
+          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
+          route.peer_2_peer = false;
           break;
         case ZE_MEMORY_TYPE_DEVICE:
-          direction.push_back('D');
+          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
           break;
         case ZE_MEMORY_TYPE_SHARED:
-          direction.push_back('S');
+          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
           break;
         default:
-          p2p = false;
+          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
+          route.peer_2_peer = false;
           break;
       }
     }
@@ -1679,20 +1691,21 @@ class ZeCollector {
     //
     // TODO:  Redo the stringified -P2P propagation.
     //
-    if (!direction.empty()) {
-      ze_bool_t p2p_access = 0;
-      if (p2p && hSrcDevice && hDstDevice && (hSrcDevice != hDstDevice)) {
-        auto status = zeDeviceCanAccessPeer(hSrcDevice, hDstDevice, &p2p_access);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        if (p2p_access) {
-          direction.append(" - P2P");
-        }
+    name += "(" + route.StringifyTypesCompact();
+    ze_bool_t p2p_access = 0;
+    if (route.peer_2_peer && hSrcDevice && hDstDevice && (hSrcDevice != hDstDevice)) {
+      auto status = zeDeviceCanAccessPeer(hSrcDevice, hDstDevice, &p2p_access);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (p2p_access) {
+        name += route.StringifyPeer2PeerCompact();
       }
-      name += "(" + direction + ")";
     }
+    name += ")";
+    SPDLOG_TRACE("\t\tIn {}, ops name: {}, p2p: {}", __FUNCTION__, name.c_str(), route.peer_2_peer);
 
     ZeKernelCommandProps props{};
     props.name = std::move(name);
+    props.route = route;
     props.bytes_transferred = bytes_transferred;
     props.value_size = pattern_size;
     props.type = KernelCommandType::kMemory;

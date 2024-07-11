@@ -394,7 +394,10 @@ struct PtiViewRecordHandler {
     auto it = map_ext_corrid_vectors.find({external_kind});
     if (it != map_ext_corrid_vectors.cend()) {
       pti_view_record_external_correlation ext_record = it->second.top();
-      if (p_external_id != nullptr) *p_external_id = ext_record._external_id;
+      SPDLOG_TRACE("\text_id: {}", ext_record._external_id);
+      if (p_external_id != nullptr) {
+        *p_external_id = ext_record._external_id;
+      }
       it->second.pop();
       if (!it->second.size()) {
         map_ext_corrid_vectors.erase(it);
@@ -543,137 +546,17 @@ inline pti_result GetNextRecord(uint8_t* buffer, size_t valid_bytes,
   return pti_result::PTI_SUCCESS;
 }
 
-//
-// TODO -- can we save on the string compare cost by optimizing at the source in
-// L0 collector?
-//
 inline void SetMemFillType(pti_view_record_memory_fill& mem_record,
                            const ZeKernelCommandExecutionRecord& rec) {
-  std::size_t found_pos = rec.name_.find_last_of("(");
-  std::string tmp_str = rec.name_.substr(found_pos);
-  if (tmp_str == "(M)") {
-    mem_record._mem_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-    return;
-  }
-  if (tmp_str == "(H)") {
-    mem_record._mem_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-    return;
-  }
-  if (tmp_str == "(D)") {
-    mem_record._mem_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-    return;
-  }
-  if (tmp_str == "(S)") {
-    mem_record._mem_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-    return;
-  }
+  SPDLOG_TRACE("In {}, memory route: {}", __FUNCTION__, rec.route_.StringifyTypesCompact());
+  mem_record._mem_type = rec.route_.dst_type;
 }
 
-//
-// TODO -- can we save on the string compare cost by optimizing at the source in
-// L0 collector?
-//
 template <typename T>
 inline void SetMemCopyType(T& mem_record, const ZeKernelCommandExecutionRecord& rec) {
-  std::size_t found_pos = rec.name_.find_last_of("(");
-  std::string tmp_str = rec.name_.substr(found_pos, 4);
-  tmp_str.push_back(')');
-  if (tmp_str == "(M2M)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2M;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-    return;
-  }
-  if (tmp_str == "(M2H)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2H;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-    return;
-  }
-  if (tmp_str == "(M2D)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2D;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-    return;
-  }
-  if (tmp_str == "(M2S)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2S;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-    return;
-  }
-  if (tmp_str == "(H2M)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_H2M;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-    return;
-  }
-  if (tmp_str == "(H2H)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_H2H;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-    return;
-  }
-  if (tmp_str == "(H2D)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_H2D;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-    return;
-  }
-  if (tmp_str == "(H2S)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_H2S;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-    return;
-  }
-  if (tmp_str == "(D2M)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2M;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-    return;
-  }
-  if (tmp_str == "(D2H)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2H;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-    return;
-  }
-  if (tmp_str == "(D2D)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2D;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-    return;
-  }
-  if (tmp_str == "(D2S)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2S;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-    return;
-  }
-  if (tmp_str == "(S2M)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_S2M;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-    return;
-  }
-  if (tmp_str == "(S2H)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_S2H;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-    return;
-  }
-  if (tmp_str == "(S2D)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_S2D;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-    return;
-  }
-  if (tmp_str == "(S2S)") {
-    mem_record._memcpy_type = pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_S2S;
-    mem_record._mem_src = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-    mem_record._mem_dst = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-    return;
-  }
+  mem_record._memcpy_type = rec.route_.GetMemcpyType();
+  mem_record._mem_src = rec.route_.src_type;
+  mem_record._mem_dst = rec.route_.dst_type;
 }
 
 inline void GetDeviceId(char* buf, const ze_pci_ext_properties_t& pci_prop_) {
@@ -848,6 +731,7 @@ inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecor
   record._process_id = rec.pid_;
   record._correlation_id = rec.cid_;
   record._name = rec.sycl_func_name_;
+  SPDLOG_TRACE("In {}, name: {}, corr_id: {}", __FUNCTION__, record._name, record._correlation_id);
   Instance().InsertRecord(record);
 }
 

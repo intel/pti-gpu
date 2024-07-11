@@ -13,6 +13,8 @@ bool p2p_d2d_record = false;
 bool p2p_d2s_record = false;
 bool p2p_s2d_record = false;
 bool p2p_s2s_record = false;
+bool memfill_m2s = false;
+bool memfill_m2d = false;
 bool uuid_non_unique = false;
 bool memfill_uuid_zero = false;
 bool memcopy_type_valid = false;
@@ -144,8 +146,13 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
         pti_view_record_memory_fill* rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
+        std::string tmp_str = rec->_name;
         if (memcmp(rec->_device_uuid, zero_uuid, PTI_MAX_DEVICE_UUID_SIZE) != 0)
           memfill_uuid_zero = false;
+        memfill_m2s = memfill_m2s || ((rec->_mem_type == PTI_VIEW_MEMORY_TYPE_SHARED) &&
+                                      (tmp_str.find("M2S") != std::string::npos));
+        memfill_m2d = memfill_m2d || ((rec->_mem_type == PTI_VIEW_MEMORY_TYPE_DEVICE) &&
+                                      (tmp_str.find("M2D") != std::string::npos));
         break;
       }
       case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
@@ -189,6 +196,7 @@ void p2pTest() {
           static_cast<float*>(malloc_device(num_root_devices * sizeof(float), gpu_queues[i])));
       gpu_shared_ptrs.push_back(
           static_cast<float*>(malloc_shared(num_root_devices * sizeof(float), gpu_queues[i])));
+      std::cout << "memset for root device#: " << i << std::endl;
       gpu_queues[i].memset(gpu_device_ptrs[i], 0, num_root_devices * sizeof(float)).wait();
       gpu_queues[i].memset(gpu_shared_ptrs[i], 0, num_root_devices * sizeof(float)).wait();
     }
@@ -269,6 +277,8 @@ class MemoryOperationFixtureTest : public ::testing::Test {
     p2p_d2s_record = false;
     p2p_s2d_record = false;
     p2p_s2s_record = false;
+    memfill_m2s = false;
+    memfill_m2d = false;
     uuid_non_unique = false;
     memfill_uuid_zero = false;
     memcopy_type_valid = false;
@@ -368,6 +378,18 @@ TEST_F(MemoryOperationFixtureTest, MemDstTypeShared) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   p2pTest();
   ASSERT_EQ(memdst_type_valid, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, MemFillDstTypeSharedPresent) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memfill_m2s, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, MemFillDstTypeDevicePresent) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  ASSERT_EQ(memfill_m2d, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, P2PD2DStringified) {

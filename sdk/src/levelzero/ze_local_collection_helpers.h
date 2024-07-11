@@ -45,7 +45,7 @@ bool A2AppendBridgeKernel(ze_kernel_handle_t kernel, ze_command_list_handle_t co
 bool A2AppendBridgeMemoryCopyOrFill(ze_command_list_handle_t command_list,
                                     ze_event_handle_t signal_event, ze_event_handle_t wait_event,
                                     void* dst, void* src, size_t size1, size_t size2,
-                                    [[maybe_unused]] bool is_two_devices = false) {
+                                    bool is_two_devices = false) {
   // TODO make a small host to device mem transfer - kind of "brige" transfer
   // this would require allocatiing memory on host and device in the specific context that
   // the command list belongs to
@@ -61,7 +61,8 @@ bool A2AppendBridgeMemoryCopyOrFill(ze_command_list_handle_t command_list,
   uint32_t count = 1;
   ze_result_t result = ZE_RESULT_SUCCESS;
   if (0 == size2) {  // MemoryCopy
-    size_t size_here = ((dst == src) || (is_two_devices)) ? size1 : 0;
+    const size_t size_64 = (size1 > 64) ? 64 : size1;
+    size_t size_here = ((dst == src) || (is_two_devices)) ? size_64 : 0;
     SPDLOG_TRACE("\tAppending Bridge MemoryCopy dst: {}, src: {}, size_here: {}", dst, src,
                  size_here);
     result = zeCommandListAppendMemoryCopy(command_list, dst, src, size_here, signal_event, count,
