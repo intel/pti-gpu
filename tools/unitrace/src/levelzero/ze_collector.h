@@ -1488,21 +1488,21 @@ class ZeCollector {
     global_device_submissions_mutex_.lock();
     if (global_device_submissions_) {
       for (auto s : *global_device_submissions_) {
-        auto& local_device_submissions = *s;
-        auto it = local_device_submissions.commands_submitted_.begin();
-        while (it != local_device_submissions.commands_submitted_.end()) {
+        auto& local_submissions = *s;
+        auto it = local_submissions.commands_submitted_.begin();
+        while (it != local_submissions.commands_submitted_.end()) {
           ZeCommand *command = *it;
     
           bool processed = false;
           if ((command->device_global_timestamps_ != nullptr) || (command->kernel_timestamp_ != nullptr)) {
             if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
-              ProcessCommandSubmitted(local_device_submissions_, command, kids, false);
+              ProcessCommandSubmitted(local_submissions, command, kids, false);
               processed = true;
             }
           }
           else {
             if (zeEventQueryStatus(command->event_) == ZE_RESULT_SUCCESS) {
-              ProcessCommandSubmitted(local_device_submissions_, command, kids, true);
+              ProcessCommandSubmitted(local_submissions, command, kids, true);
               processed = true;
             }
           }
@@ -1515,8 +1515,8 @@ class ZeCollector {
                 event_cache_.ResetEvent(command->event_);
               }
             }
-            local_device_submissions_.commands_free_pool_.push_back(command);
-            it = local_device_submissions_.commands_submitted_.erase(it);
+            local_submissions.commands_free_pool_.push_back(command);
+            it = local_submissions.commands_submitted_.erase(it);
             continue;
           }
           ++it;
@@ -2293,6 +2293,10 @@ class ZeCollector {
             timestamp = command->redirected_kernel_timestamp_[command->redirected_kernel_timestamp_slot_[command->kernel_timestamp_slot_]];
           }
         }
+        else {
+          std::cerr << "[ERROR] Failed to get timestamps on device";
+          return;
+        }
       }
     }
     else {
@@ -2442,6 +2446,7 @@ class ZeCollector {
       desc = new ZeCommandList;
       UniMemory::ExitIfOutOfMemory((void *)(desc));
     }
+    desc->next_free_timestamp_slot_ = 0;
     command_lists_mutex_.unlock();
 
     desc->cmdlist_ = command_list;
@@ -2451,7 +2456,6 @@ class ZeCollector {
     desc->engine_ordinal_ = ordinal;	// valid if immediate command list
     desc->engine_index_ = index;;	// valid if immediate command list
 
-    desc->next_free_timestamp_slot_ = 0;
     if (immediate == false) {
       ze_kernel_timestamp_result_t *ts = nullptr;
 
@@ -2529,6 +2533,7 @@ class ZeCollector {
             auto status = zeEventHostSynchronize(it->second->timestamp_event_to_signal_, UINT64_MAX);
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
+              command_lists_mutex_.unlock();
               return;
             }
           }
@@ -2576,11 +2581,18 @@ class ZeCollector {
               auto status = zeEventHostSynchronize(it->second->timestamp_event_to_signal_, UINT64_MAX);
               if (status != ZE_RESULT_SUCCESS) {
                 std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
+                command_lists_mutex_.unlock_shared();
+                command_queues_mutex_.unlock_shared();
                 return;
               }
             }
             ProcessCommandsSubmitted(nullptr);	// make sure commands submitted last time are processed
-            zeEventHostReset(it->second->timestamp_event_to_signal_);	// reset event 
+            if (zeEventHostReset(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {    // reset event 
+              std::cerr << "[ERROR] Failed to reset timestamp event" << std::endl;
+              command_lists_mutex_.unlock_shared();
+              command_queues_mutex_.unlock_shared();
+              return;
+            }
           }
         }
       }
