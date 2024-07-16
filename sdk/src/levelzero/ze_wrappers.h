@@ -18,8 +18,8 @@
 #if defined(_WIN32)
 inline static constexpr const char* const kLevelZeroLoaderName = "ze_loader.dll";
 inline static constexpr const char* const kLevelZeroDriverName =
-    "ze_intel_gpu64.dll";  // ze_intel_gpu64 works now. However, it did not work early on. Change to
-                           // ze_loader if this is an issue in the future.
+    kLevelZeroLoaderName;  // Use ze_loader.dll. ze_intel_gpu64 is the driver if this is an issue in
+                           // the future.
 #else
 inline static constexpr const char* const kLevelZeroLoaderName = "libze_loader.so.1";
 inline static constexpr const char* const kLevelZeroDriverName = "libze_intel_gpu.so.1";
