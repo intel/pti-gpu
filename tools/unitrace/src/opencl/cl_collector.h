@@ -61,6 +61,7 @@ struct ClKernelProps {
   size_t local_size[3];
   uint64_t base_addr;
   uint32_t size;
+  cl_device_id device_id;
 };
 
 struct ClKernelInstance {
@@ -297,47 +298,76 @@ class ClCollector {
     PTI_ASSERT(tracer_ != nullptr);
 
     if (options_.stall_sampling) {
-      std::map<uint64_t, const ClKernelProps *> props; // sorted by base address;
+      std::map<uint32_t, std::map<uint64_t, const ClKernelProps *>> device_kprops;
       for (auto it = kprops_.begin(); it != kprops_.end(); it++) {
-        props.insert(std::pair<uint64_t, const ClKernelProps *>(it->second.base_addr, &(it->second)));
+        auto dev_id = present_cl_devices_.find(it->second.device_id);
+        if (dev_id == present_cl_devices_.end()) {
+          std::cerr<<"Invalid device is found\n";
+          return;
+        }
+        std::map<uint64_t, const ClKernelProps *> prop;
+        prop.insert({it->second.base_addr, &(it->second)});
+        device_kprops.insert({dev_id->second,std::move(prop)});
       }
 
-      // kernel properties file path: data_dir/.kprops.<device_id>.<pid>.txt
-      std::string fpath = data_dir_name_ + "/.kprops.0."  + std::to_string(utils::GetPid()) + ".txt";
-      std::ofstream kpfs = std::ofstream(fpath, std::ios::out | std::ios::trunc);
-      uint64_t prev_base = 0;
-      for (auto it = props.crbegin(); it != props.crend(); it++) {
-        kpfs << "\"" << utils::Demangle(it->second->name.c_str()) << "\"" << std::endl;
-        kpfs << std::to_string(it->second->base_addr) << std::endl;
-        if (prev_base == 0) {
-          kpfs << std::to_string(it->second->size) << std::endl;
-        }
-        else {
-          size_t size = prev_base - it->second->base_addr;
-          if (size > it->second->size) {
-            size = it->second->size;
+      for(auto& props : device_kprops) {
+        // kernel properties file path: data_dir/.kprops.<device_id>.<pid>.txt
+        std::string fpath = data_dir_name_ + "/.kprops." + std::to_string(props.first) + "." + std::to_string(utils::GetPid()) + ".txt";
+        std::ofstream kpfs = std::ofstream(fpath, std::ios::out | std::ios::trunc);
+        uint64_t prev_base = 0;
+        for (auto it = props.second.crbegin(); it != props.second.crend(); it++) {
+          kpfs << "\"" << utils::Demangle(it->second->name.c_str()) << "\"" << std::endl;
+          kpfs << std::to_string(it->second->base_addr) << std::endl;
+          if (prev_base == 0) {
+            kpfs << std::to_string(it->second->size) << std::endl;
           }
-          kpfs << std::to_string(size) << std::endl;
+          else {
+            size_t size = prev_base - it->second->base_addr;
+            if (size > it->second->size) {
+              size = it->second->size;
+            }
+            kpfs << std::to_string(size) << std::endl;
+          }
+          prev_base = it->second->base_addr;
         }
-        prev_base = it->second->base_addr;
+        kpfs.close();
       }
-      kpfs.close();
     }
 
     if (options_.metric_stream) {
-      std::ofstream ouf;
-      // kernel instance time file path: <data_dir>/.ktime.<device_id>.<pid>.txt
-      std::string fpath = data_dir_name_ + "/.ktime.0." + std::to_string(utils::GetPid()) + ".txt";
-      std::cout<<"file path:"<<fpath<<std::endl;
-      ouf = std::ofstream(fpath, std::ios::out | std::ios::trunc);
-      for (auto& prof : profile_records_) {
-        ouf << std::to_string((-1)) << std::endl;
-        ouf << std::to_string(prof.global_instance_id_) << std::endl;
-        ouf << std::to_string(prof.device_started_) << std::endl;
-        ouf << std::to_string(prof.device_ended_) << std::endl;
-        ouf << "\"" << prof.kernel_name_ << "\"" << std::endl;
+      std::map<int32_t, std::vector<ClKernelProfileRecord>> device_kprofiles;
+      for (auto record_idx=0; record_idx < profile_records_.size(); ++record_idx) {
+        ClKernelProfileRecord record = profile_records_[record_idx];
+        auto it = present_cl_devices_.find(record.device_);
+        if (it == present_cl_devices_.end()) {
+          std::cerr<<"Invalid device is found\n";
+          return;
+        }
+        auto device_id = it->second;
+        if (device_kprofiles.find(device_id) != device_kprofiles.end()) {
+          device_kprofiles[device_id].push_back(record);
+        } else {
+          std::vector<ClKernelProfileRecord> new_recs;
+          new_recs.push_back(record);
+          device_kprofiles[device_id] = new_recs;
+        }
       }
-      ouf.close();
+
+      for (auto it = device_kprofiles.begin(); it != device_kprofiles.end(); ++it) {
+        std::ofstream ouf;
+        // kernel instance time file path: <data_dir>/.ktime.<device_id>.<pid>.txt
+        std::string fpath = data_dir_name_ + "/.ktime." + std::to_string(it->first) + "." + std::to_string(utils::GetPid()) + ".txt";
+        ouf = std::ofstream(fpath, std::ios::out | std::ios::trunc);
+        std::vector<ClKernelProfileRecord> profile = it->second;
+        for(auto i=0; i < profile.size(); ++i) {
+          ouf << std::to_string((-1)) << std::endl;
+          ouf << std::to_string(profile[i].global_instance_id_) << std::endl;
+          ouf << std::to_string(profile[i].device_started_) << std::endl;
+          ouf << std::to_string(profile[i].device_ended_) << std::endl;
+          ouf << "\"" << profile[i].kernel_name_ << "\"" << std::endl;
+        }
+        ouf.close();
+      }
     }
   }
 
@@ -613,10 +643,12 @@ class ClCollector {
             subcd.parent_ = dev;
             subcd.subdevs_ = std::vector<cl_device_id>();
             device_map_.insert({subdev, subcd});
+            present_cl_devices_.insert({subdev,present_cl_devices_.size()});
           }
           cd.subdevs_ = std::move(subdevs);
         }
         device_map_.insert({dev, cd});
+        present_cl_devices_.insert({dev,present_cl_devices_.size()});
       }
     }
   }
@@ -1173,6 +1205,7 @@ class ClCollector {
       PTI_ASSERT(queue != nullptr);
       cl_device_id device = utils::cl::GetDevice(queue);
       PTI_ASSERT(device != nullptr);
+      instance->props.device_id = device;
 
       size_t simd_width = utils::cl::GetKernelSimdWidth(device, kernel);
       PTI_ASSERT(simd_width > 0);
@@ -1956,6 +1989,7 @@ class ClCollector {
   std::string data_dir_name_;
 
   std::vector<ClKernelProfileRecord> profile_records_;
+  std::map<cl_device_id, uint32_t> present_cl_devices_;
 
   friend class ClExtCollector;
 };
