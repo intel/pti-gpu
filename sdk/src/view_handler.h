@@ -120,10 +120,17 @@ struct PtiViewRecordHandler {
       : get_new_buffer_(pti::view::defaults::DefaultBufferAllocation),
         deliver_buffer_(pti::view::defaults::DefaultRecordParser),
         user_provided_ts_func_ptr_(utils::GetRealTime) {
+    // initially set logging level to warn
+    // need to use warnings very carefully, only when absolutely necessary
+    // as on Windows encountered it is INFO (taken from compiler define) by default (?)
+    spdlog::set_level(spdlog::level::warn);
     // Read Logging level required
-    // set environment variable SPDLOG_LEVEL=<level>, where level=TRACE/DEBUG/INFO..
+    // set environment variable PTILOG_LEVEL=<level>, where level=TRACE/DEBUG/INFO..
     // Logs appear only when PTI_ENABLE_LOGGING=ON => SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
-    spdlog::cfg::load_env_levels();
+    std::string env_string = utils::GetEnv("PTILOG_LEVEL");
+    if (!env_string.empty()) {
+      spdlog::cfg::helpers::load_levels(env_string);
+    }
     // https://github.com/gabime/spdlog/wiki/3.-Custom-formatting
     spdlog::set_pattern("[%H:%M][%^-%l-%$]%P:%t %s:%# %v");
 
@@ -390,11 +397,11 @@ struct PtiViewRecordHandler {
   inline pti_result PopExternalKindId(pti_view_external_kind external_kind,
                                       uint64_t* p_external_id) {
     pti_result result = pti_result::PTI_SUCCESS;
-    SPDLOG_TRACE("In {}, ext_kind: {}", __FUNCTION__, static_cast<uint32_t>(external_kind));
     auto it = map_ext_corrid_vectors.find({external_kind});
     if (it != map_ext_corrid_vectors.cend()) {
       pti_view_record_external_correlation ext_record = it->second.top();
-      SPDLOG_TRACE("\text_id: {}", ext_record._external_id);
+      SPDLOG_TRACE("In {}, ext_id: {} ext_kind: {}", __FUNCTION__, ext_record._external_id,
+                   static_cast<uint32_t>(external_kind));
       if (p_external_id != nullptr) {
         *p_external_id = ext_record._external_id;
       }
@@ -403,6 +410,7 @@ struct PtiViewRecordHandler {
         map_ext_corrid_vectors.erase(it);
       }
     } else {
+      SPDLOG_TRACE("In {}, External ID Queue is empty", __FUNCTION__);
       result = pti_result::PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY;
     }
     return result;

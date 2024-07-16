@@ -30,6 +30,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "collector_options.h"
@@ -225,12 +226,13 @@ class ZeCollector {
   }
 
   ~ZeCollector() {
-    if (tracer_ != nullptr) {
 #if !defined(_WIN32)
+    // TODO Looks on Windows due to not specified DLLs unload order we hit assert here
+    if (tracer_ != nullptr) {
       ze_result_t status = zelTracerDestroy(tracer_);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-#endif
     }
+#endif
   }
   enum class ZeCollectionMode { Full = 0, Hybrid = 1, Local = 2 };
   enum class ZeCollectionState { Normal = 0, Abnormal = 1 };
@@ -242,11 +244,8 @@ class ZeCollector {
     hybrid_mode = false;
     SPDLOG_TRACE("In {}", __FUNCTION__);
 
-    SPDLOG_DEBUG("\tIntrospectable?: {}", introspection_capable);
-    std::cout << "Introspectable?: " << introspection_capable << "\n";
-    SPDLOG_DEBUG("\tChecking if the mode enforced by PTI_COLLECTION_MODE environment variable");
-    std::cout << "Checking if the mode enforced by PTI_COLLECTION_MODE environment variable"
-              << std::endl;
+    SPDLOG_INFO("\tIntrospectable?: {}", introspection_capable);
+    SPDLOG_INFO("\tChecking if the mode enforced by PTI_COLLECTION_MODE environment variable");
     try {
       std::string env_string = utils::GetEnv("PTI_COLLECTION_MODE");
       int32_t env_value = -1;
@@ -255,7 +254,6 @@ class ZeCollector {
         SPDLOG_DEBUG("\tDetected var: {}", env_value);
         switch (env_value) {
           case 0:  // FullAPI collection mode
-            std::cout << "Forced Full collection\n";
             SPDLOG_DEBUG("\tForced Full collection");
             disabled_mode = false;
             hybrid_mode = false;
@@ -263,23 +261,19 @@ class ZeCollector {
             break;
           case 1:  // Asking for Hybrid collection mode
             if (introspection_capable) {
-              std::cout
-                  << "Level-Zero Introspection API available: Forced fallback to hybrid mode.\n";
-              SPDLOG_DEBUG(
+              SPDLOG_INFO(
                   "\tLevel-Zero Introspection API available: Forced fallback to hybrid mode.");
               disabled_mode = false;
               hybrid_mode = true;
               mode = ZeCollectionMode::Hybrid;
               break;
             } else {
-              std::cout << "Level-Zero Introspection API not available: Cannot do Hybrid mode.\n";
               SPDLOG_WARN("\tLevel-Zero Introspection API not available: Cannot do Hybrid mode.");
             }
             break;
           case 2:  // Asking for Local collection mode
             if (introspection_capable) {
-              std::cout << "Forced fallback to Local mode.\n";
-              SPDLOG_DEBUG("\tForced fallback to Local mode.");
+              SPDLOG_INFO("\tForced fallback to Local mode.");
               disabled_mode = true;
               hybrid_mode = false;
               mode = ZeCollectionMode::Local;
@@ -584,6 +578,39 @@ class ZeCollector {
     return;
   }
 
+  /**
+   *  \internal
+   *  \warning To be called only after the corresponding Command is processed
+   *  \warning lock to be acquired in caller chain
+   */
+  void CleanDestroyedEvent(bool destroyed, ze_event_handle_t event) {
+    if (destroyed) {
+      destroyed_events_.erase(event);
+      ze_event_handle_t swap_event = swap_event_pool_.RemoveKeyEventFromShadowCache(event);
+      SPDLOG_TRACE("--- RemoveKeyEventFromShadowCache returned: {}",
+                   static_cast<const void*>(swap_event));
+      if (swap_event != nullptr) {
+        swap_event_pool_.ReturnSwapEvent(swap_event);
+      }
+    }
+  }
+
+  /**
+   *  \internal
+   *  \warning lock to be acquired in caller chain
+   */
+  bool QueryEventStatusUnlessDestroyed(ze_event_handle_t event, ze_result_t& status) {
+    bool destroyed = destroyed_events_.find(event) != destroyed_events_.end();
+    SPDLOG_TRACE("\tPrior checking event status event: {}, destroyed: {} ",
+                 static_cast<const void*>(event), destroyed);
+    if (!destroyed) {
+      overhead::Init();
+      status = zeEventQueryStatus(event);
+      overhead_fini("zeEventQueryStatus");
+    }
+    return destroyed;
+  }
+
   void ProcessCallEvent(ze_event_handle_t event, std::vector<uint64_t>* kids,
                         std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
     // lock is acquired in caller
@@ -595,45 +622,49 @@ class ZeCollector {
     status = zeEventQueryStatus(event);
     overhead_fini("zeEventQueryStatus");
     if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_WARN("\tIn {} EventQueryStatus returned: {}, Returning...", __FUNCTION__,
-                  (uint32_t)status);
+      SPDLOG_DEBUG("\tIn {} EventQueryStatus returned: {}, Returning...", __FUNCTION__,
+                   static_cast<uint32_t>(status));
       return;
     }
 
     [[maybe_unused]] uint32_t idx = 0;
+    bool done = false;
     for (auto it = kernel_command_list_.begin(); it != kernel_command_list_.end();) {
       ZeKernelCommand* command = (*it).get();
       PTI_ASSERT(command != nullptr);
 
       if (command->event_self != nullptr) {
-        SPDLOG_TRACE("\tChecking event status idx: {}, event: {}", idx, (void*)command->event_self);
-        overhead::Init();
-        status = zeEventQueryStatus(command->event_self);
-        overhead_fini("zeEventQueryStatus");
+        status = ZE_RESULT_NOT_READY;
+        bool destroyed = QueryEventStatusUnlessDestroyed(command->event_self, status);
         idx++;
-        if (status == ZE_RESULT_SUCCESS) {
-          SPDLOG_TRACE("\tEvent SIGNALED!");
+        if (status == ZE_RESULT_SUCCESS || destroyed) {
+          // if this the event passed to the function or another event we met at the way
           if (command->event_self == event) {
-            SPDLOG_TRACE("\tPassed EVENT!");
-            ProcessCallCommand(command, kids, kcexecrec);
-            it = kernel_command_list_.erase(it);
-            // TODO: this could be good check in Debug
-            /*if (collection_mode_ == Local && command->event_swap != nullptr) {
-              status = zeEventHostReset(command->event_swap);
-              PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-            }*/
-            break;
-          } else {
-            SPDLOG_TRACE("\tAnother EVENT!");
-            ProcessCallCommand(command, nullptr, kcexecrec);
-            it = kernel_command_list_.erase(it);
+            done = true;
           }
-        } else {
+          SPDLOG_TRACE("\tIs Passed event? {}, idx: {}", done, idx);
+
+          // TODO: this could be good check in Debug
+          /*if (collection_mode_ == Local && command->event_swap != nullptr) {
+            status = zeEventHostReset(command->event_swap);
+            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          }*/
+
+          SPDLOG_TRACE("\tEvent SIGNALED or destroyed!");
+          ProcessCallCommand(command, kids, kcexecrec);
+          CleanDestroyedEvent(destroyed, command->event_self);
+          it = kernel_command_list_.erase(it);
+        } else {  // command not ready yet
           it++;
         }
       } else {
+        PTI_ASSERT(command->event_self == nullptr);
         SPDLOG_WARN("\tDeleting of unexpected command {} containing zero event.", (void*)command);
         it = kernel_command_list_.erase(it);
+      }
+
+      if (done) {
+        break;
       }
     }
   }
@@ -642,8 +673,7 @@ class ZeCollector {
                         std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
     // lock is acquired in the caller
     // const std::lock_guard<std::mutex> lock(lock_);
-    SPDLOG_TRACE("In {}, fence: {}", __FUNCTION__, (void*)fence);
-
+    SPDLOG_TRACE("In {}, fence: {}", __FUNCTION__, static_cast<const void*>(fence));
     ze_result_t status = ZE_RESULT_SUCCESS;
     overhead::Init();
     status = zeFenceQueryStatus(fence);
@@ -656,23 +686,29 @@ class ZeCollector {
     for (auto it = kernel_command_list_.begin(); it != kernel_command_list_.end();) {
       ZeKernelCommand* command = (*it).get();
       PTI_ASSERT(command != nullptr);
+
       if ((command->fence != nullptr) && (command->fence == fence)) {
         ProcessCallCommand(command, kids, kcexecrec);
+        // TODO - check if we need to clean up the fence event
+        // CleanDestroyedEvent(destroyed, command->event_self);
+        it = kernel_command_list_.erase(it);
         done = true;
-      } else {
-        overhead::Init();
-        status = zeEventQueryStatus(command->event_self);
-        overhead_fini("zeEventQueryStatus");
-        if ((command->event_self != nullptr) && (status == ZE_RESULT_SUCCESS)) {
+      } else if (command->event_self != nullptr) {
+        status = ZE_RESULT_NOT_READY;
+        bool destroyed = QueryEventStatusUnlessDestroyed(command->event_self, status);
+        if (destroyed || status == ZE_RESULT_SUCCESS) {
           ProcessCallCommand(command, nullptr, kcexecrec);
+          CleanDestroyedEvent(destroyed, command->event_self);
+          it = kernel_command_list_.erase(it);
+        } else {  // command not ready yet
+          it++;
         }
-      }
-      if (command->event_self == nullptr) {
+      } else {
+        PTI_ASSERT(command->event_self == nullptr);
         SPDLOG_WARN("\tDeleting of unexpected command {} containing zero event.", (void*)command);
         it = kernel_command_list_.erase(it);
-      } else {
-        it++;
       }
+
       if (done) {
         break;
       }
@@ -850,14 +886,14 @@ class ZeCollector {
     if (ZeCollectionMode::Local == collection_mode_ && command->event_swap != nullptr) {
       event_to_query = command->event_swap;
     }
-    SPDLOG_TRACE("\tQuery KernelTimestamp on event: {}", (void*)event_to_query);
+    SPDLOG_TRACE("\tQuery KernelTimestamp on event: {}", static_cast<const void*>(event_to_query));
     overhead::Init();
     ze_result_t status = zeEventQueryKernelTimestamp(event_to_query, &timestamp);
     overhead_fini("zeEventQueryKernelTimestamp");
     if (status != ZE_RESULT_SUCCESS) {
       // sporadic - smth wrong with event from time to time
-      SPDLOG_WARN("In {}, zeEventQueryKernelTimestamp returted: {}", __FUNCTION__,
-                  static_cast<uint32_t>(status));
+      SPDLOG_WARN("In {}, zeEventQueryKernelTimestamp returned: {} for event: {}", __FUNCTION__,
+                  static_cast<uint32_t>(status), static_cast<const void*>(event_to_query));
     }
 
     ProcessCallTimestamp(command, timestamp, -1, true, kcexecrec);
@@ -1128,12 +1164,8 @@ class ZeCollector {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       // only events that managed by collector should be taken care
       if (ZeCollectionMode::Local == collector->collection_mode_) {
-        ze_event_handle_t swap_event =
-            collector->swap_event_pool_.RemoveKeyEventFromShadowCache(*(params->phEvent));
-        SPDLOG_TRACE("--- RemoveKeyEventFromShadowCache returned: {}", (void*)(swap_event));
-        if (swap_event != nullptr) {
-          collector->swap_event_pool_.ReturnSwapEvent(swap_event);
-        }
+        const std::lock_guard<std::mutex> lock(collector->lock_);
+        collector->destroyed_events_.insert(*(params->phEvent));
       }
     }
   }
@@ -1202,8 +1234,8 @@ class ZeCollector {
   static void OnExitEventQueryStatus([[maybe_unused]] ze_event_query_status_params_t* params,
                                      [[maybe_unused]] ze_result_t result, void* /*global_data*/,
                                      void** /*instance_data*/, std::vector<uint64_t>* /*kids*/) {
-    SPDLOG_TRACE("In {}, result {} event: {} ", __FUNCTION__, (uint32_t)result,
-                 (void*)*(params->phEvent));
+    SPDLOG_TRACE("In {}, result {} event: {}", __FUNCTION__, static_cast<uint32_t>(result),
+                 static_cast<const void*>(*(params->phEvent)));
     // this call-back is useful to see if we are re-entering to it via Tracing level
     // this should not happen when we are inside of Tracing layer..
     // but things can get weird..
@@ -1212,7 +1244,7 @@ class ZeCollector {
   static void OnExitFenceHostSynchronize(ze_fence_host_synchronize_params_t* params,
                                          ze_result_t result, void* global_data,
                                          void** /*instance_data*/, std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, result {} ", __FUNCTION__, (uint32_t)result);
+    SPDLOG_TRACE("In {}, result {} ", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*(params->phFence) != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
@@ -1316,7 +1348,7 @@ class ZeCollector {
       if (signal_event == nullptr) {
         signal_event = collector->event_cache_.GetEvent(context);
         PTI_ASSERT(signal_event != nullptr);
-        SPDLOG_DEBUG("In {} created Signal event from event_cache", __FUNCTION__);
+        SPDLOG_DEBUG("\tIn {} created Signal event from event_cache", __FUNCTION__);
       }
       command->event_self = signal_event;
     } else {
@@ -1335,7 +1367,7 @@ class ZeCollector {
           swap_event = collector->swap_event_pool_.GetEvent(context);
           PTI_ASSERT(swap_event != nullptr);
           collector->swap_event_pool_.StoreEventsToShadowCache(command->event_self, swap_event);
-          SPDLOG_TRACE("\t\tCreated swap_event: {}", (void*)swap_event);
+          SPDLOG_TRACE("\t\tCreated swap_event: {}", static_cast<const void*>(swap_event));
         }
         // both should not be signalled.
         // this verifies that EventReset handled properly, as a lot of events might re-used
@@ -1344,12 +1376,14 @@ class ZeCollector {
 
         command->event_swap = swap_event;
         signal_event = command->event_swap;
-        SPDLOG_TRACE("\t\t swap event: {}", (void*)command->event_swap);
+        SPDLOG_TRACE("\t\t swap event: {}, self_event: {}",
+                     static_cast<const void*>(command->event_swap),
+                     static_cast<const void*>(command->event_self));
       } else {
         signal_event = collector->event_cache_.GetEvent(context);
         PTI_ASSERT(signal_event != nullptr);
-        SPDLOG_DEBUG("\tCollection mode: {} created Signal event from event_cache: {}",
-                     (uint32_t)collector->collection_mode_, (void*)signal_event);
+        SPDLOG_DEBUG("\tLocal collection mode, created Signal event from event_cache: {}",
+                     static_cast<const void*>(signal_event));
         command->event_self = signal_event;
       }
     }
@@ -1368,8 +1402,8 @@ class ZeCollector {
                                      ZeKernelCommandProps& props, ze_event_handle_t& signal_event,
                                      ZeCommandListInfo& command_list_info,
                                      std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {}, command: {}, kernel name {}", __FUNCTION__, (void*)command,
-                 props.name.c_str());
+    SPDLOG_TRACE("In {}, command: {}, kernel name {}", __FUNCTION__,
+                 static_cast<const void*>(command), props.name.c_str());
     if (ZeCollectionState::Abnormal == collection_state_) {
       return;
     }
@@ -2273,6 +2307,9 @@ class ZeCollector {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       collector->ProcessCalls(nullptr, nullptr);
       collector->event_cache_.ReleaseContext(*(params->phContext));
+      if (collector->collection_mode_ == ZeCollectionMode::Local) {
+        collector->swap_event_pool_.Clean(*(params->phContext));
+      }
     }
   }
 
@@ -2291,6 +2328,9 @@ class ZeCollector {
   ZeCollectionMode collection_mode_ = ZeCollectionMode::Full;
 
   std::list<std::unique_ptr<ZeKernelCommand>> kernel_command_list_;
+  // keep track of destroyed events, not request their status
+  // CCL workloads often destroy events
+  std::unordered_set<ze_event_handle_t> destroyed_events_;
 
   mutable std::shared_mutex command_list_map_mutex_;
   ZeCommandListMap command_list_map_;

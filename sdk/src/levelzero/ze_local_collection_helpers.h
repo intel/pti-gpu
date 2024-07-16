@@ -11,10 +11,10 @@
 #include <level_zero/ze_api.h>
 #include <spdlog/spdlog.h>
 
-#include <map>
 #include <mutex>
-#include <set>
 #include <shared_mutex>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "utils.h"
 
@@ -94,11 +94,13 @@ bool A2AppendBridgeBarrier(ze_command_list_handle_t command_list, ze_event_handl
 class A2EventPool {
   // EventPool per context
   // TODO - current implementation is not optimal and covering very basic case,
+  // - ZeEventCache and this class should be merged - better to have one class
+  //   then all below items need to be revisited
+  //   Not doing it as it would be rather big change and might compromise stability
+  //
   // - create events in groups more than by 2
   // - simplify treating of ready and busy events
-  // - implement a case if no more events in pool availble, so the new one needed..
-  // - make a stress test for this case
-  // - implement _Clean function
+  // - make a stress test for this case for creating many pools for the context
  public:
   A2EventPool(const A2EventPool&) = delete;
   A2EventPool& operator=(const A2EventPool&) = delete;
@@ -154,8 +156,8 @@ class A2EventPool {
       ze_event_handle_t event = CreateEvent(new_pool, 1);  // creating in advance
       event_context_map_[our_event] = context;
       event_context_map_[event] = context;
-      busy_event_map_[context] = std::set<ze_event_handle_t>{our_event};
-      ready_event_map_[context] = std::set<ze_event_handle_t>{event};
+      busy_event_map_[context] = std::unordered_set<ze_event_handle_t>{our_event};
+      ready_event_map_[context] = std::unordered_set<ze_event_handle_t>{event};
     }
     return our_event;
   }
@@ -180,8 +182,8 @@ class A2EventPool {
           ready_map.insert(our_event);
           ze_result_t status = zeEventHostReset(our_event);
           if (status != ZE_RESULT_SUCCESS) {
-            SPDLOG_WARN("\tIn {} zeEventHostReset for event: {} returned {}", __FUNCTION__,
-                        (void*)our_event, (uint32_t)status);
+            SPDLOG_DEBUG("\tIn {} zeEventHostReset for event: {} returned {}", __FUNCTION__,
+                         (void*)our_event, (uint32_t)status);
           }
           res = true;
         }
@@ -223,13 +225,20 @@ class A2EventPool {
     return our_event;
   }
 
-  bool Clean(ze_context_handle_t /*context = nullptr */) {
-    // TODO gracely remove all events and pools
-    // this function could be called when context for which pools created
-    // is still active
-    // So it should be called at the collection stop or a context destroy
-    // context == nullptr would mean - clean for all contextes
-    return false;
+  void Clean(ze_context_handle_t context = nullptr) {
+    std::unique_lock lock(shadow_map_mutex_);
+
+    if (context) {
+      CleanBusyEvents(context);
+      CleanReadyEvents(context);
+      CleanPools(context);
+    } else {
+      for (auto context : event_pool_map_) {
+        CleanBusyEvents(context.first);
+        CleanReadyEvents(context.first);
+        CleanPools(context.first);
+      }
+    }
   }
 
  private:
@@ -279,15 +288,65 @@ class A2EventPool {
     return event;
   }
 
+  ze_event_handle_t FindKeyEvent(std::unordered_map<ze_event_handle_t, ze_event_handle_t>& the_map,
+                                 ze_event_handle_t eventValue) {
+    for (auto const key : the_map) {
+      if (key.second == eventValue) {
+        return key.first;
+      }
+    }
+    return nullptr;
+  }
+
+  void CleanBusyEvents(ze_context_handle_t context) {
+    for (auto event : busy_event_map_[context]) {
+      ze_result_t status = zeEventDestroy(event);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_DEBUG("\tIn {} zeEventDestroy for event: {} returned {}", __FUNCTION__,
+                     static_cast<const void*>(event), (uint32_t)status);
+      }
+      ze_event_handle_t ev = FindKeyEvent(shadow_map_, event);
+      if (ev) {
+        shadow_map_.erase(ev);
+      }
+      event_context_map_.erase(event);
+    }
+    busy_event_map_.erase(context);
+  }
+
+  void CleanReadyEvents(ze_context_handle_t context) {
+    for (auto event : ready_event_map_[context]) {
+      ze_result_t status = zeEventHostReset(event);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_DEBUG("\tIn {} zeEventHostReset for event: {} returned {}", __FUNCTION__,
+                     (void*)event, (uint32_t)status);
+      }
+      event_context_map_.erase(event);
+    }
+    ready_event_map_.erase(context);
+  }
+
+  void CleanPools(ze_context_handle_t context) {
+    for (auto pool : event_pool_map_[context]) {
+      ze_result_t status = zeEventPoolDestroy(pool);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_DEBUG("\tIn {} zeEventPoolDestroy for pool: {} returned {}", __FUNCTION__,
+                     static_cast<const void*>(pool), (uint32_t)status);
+      }
+      used_pool_index_map_.erase(pool);
+    }
+    event_pool_map_.erase(context);
+  }
+
   std::shared_mutex mutex_;
   std::shared_mutex shadow_map_mutex_;
-  std::map<ze_context_handle_t, std::vector<ze_event_pool_handle_t> > event_pool_map_;
-  std::map<ze_event_handle_t, ze_context_handle_t> event_context_map_;
-  std::map<ze_context_handle_t, std::set<ze_event_handle_t> > busy_event_map_;
-  std::map<ze_context_handle_t, std::set<ze_event_handle_t> > ready_event_map_;
-  std::map<ze_event_pool_handle_t, uint32_t> used_pool_index_map_;
+  std::unordered_map<ze_context_handle_t, std::vector<ze_event_pool_handle_t> > event_pool_map_;
+  std::unordered_map<ze_event_handle_t, ze_context_handle_t> event_context_map_;
+  std::unordered_map<ze_context_handle_t, std::unordered_set<ze_event_handle_t> > busy_event_map_;
+  std::unordered_map<ze_context_handle_t, std::unordered_set<ze_event_handle_t> > ready_event_map_;
+  std::unordered_map<ze_event_pool_handle_t, uint32_t> used_pool_index_map_;
 
-  std::map<ze_event_handle_t, ze_event_handle_t> shadow_map_;
+  std::unordered_map<ze_event_handle_t, ze_event_handle_t> shadow_map_;
 };
 
 class A2BridgeKernelPool {

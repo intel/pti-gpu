@@ -173,7 +173,7 @@ target_compile_definitions(
           $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
-          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_OFF>)
+          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
 
 if(PTI_DEBUG)
   add_compile_definitions(PTI_DEBUG)

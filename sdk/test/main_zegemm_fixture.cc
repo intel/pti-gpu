@@ -6,6 +6,7 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <level_zero/ze_api.h>
 #include <math.h>
 #include <string.h>
 
@@ -38,6 +39,9 @@ uint64_t kernel_view_record_count = 0;
 bool buffer_size_atleast_largest_record = false;
 bool ze_initialization_succeeded = false;
 bool ze_tracing_enabled_env = true;
+bool capture_records = false;
+std::vector<pti_view_record_memory_copy> copy_records;
+std::vector<pti_view_record_kernel> kernel_records;
 
 float Check(const std::vector<float>& a, float value) {
   PTI_ASSERT(value > MAX_EPS);
@@ -48,6 +52,206 @@ float Check(const std::vector<float>& a, float value) {
   }
 
   return eps / a.size();
+}
+
+int GetGroupOrdinals(ze_device_handle_t device, uint32_t& computeOrdinal, uint32_t& copyOrdinal) {
+  // Discover all command queue groups
+  uint32_t cmdqueue_group_count = 0;
+  ze_result_t status =
+      zeDeviceGetCommandQueueGroupProperties(device, &cmdqueue_group_count, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  std::vector<ze_command_queue_group_properties_t> cmdqueue_group_props(cmdqueue_group_count);
+  for (auto prop : cmdqueue_group_props) {
+    prop.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_GROUP_PROPERTIES;
+    prop.pNext = nullptr;
+  }
+  status = zeDeviceGetCommandQueueGroupProperties(device, &cmdqueue_group_count,
+                                                  cmdqueue_group_props.data());
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  // Find command queues that support compute and copy
+  computeOrdinal = cmdqueue_group_count;
+  copyOrdinal = cmdqueue_group_count;
+  for (uint32_t i = 0; i < cmdqueue_group_count; ++i) {
+    if (cmdqueue_group_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE) {
+      computeOrdinal = i;
+    }
+    if (cmdqueue_group_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) {
+      copyOrdinal = i;
+    }
+  }
+  if (computeOrdinal == cmdqueue_group_count || copyOrdinal == cmdqueue_group_count) {
+    std::cout << "No compute or copy command queue group found" << std::endl;
+    return 1;
+  }
+  return 0;
+}
+
+float RunWithPollingAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device,
+                             ze_context_handle_t context, const std::vector<float>& a,
+                             const std::vector<float>& b, std::vector<float>& c, unsigned size,
+                             float expected_result) {
+  PTI_ASSERT(kernel != nullptr);
+  PTI_ASSERT(device != nullptr);
+  PTI_ASSERT(context != nullptr);
+
+  PTI_ASSERT(size > 0);
+  PTI_ASSERT(a.size() == size * size);
+  PTI_ASSERT(b.size() == size * size);
+  PTI_ASSERT(c.size() == size * size);
+
+  ze_result_t status = ZE_RESULT_SUCCESS;
+
+  uint32_t group_size[3] = {0};
+  status = zeKernelSuggestGroupSize(kernel, size, size, 1, &(group_size[0]), &(group_size[1]),
+                                    &(group_size[2]));
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  if ((size % group_size[0]) != 0 || (size % group_size[1]) != 0) {
+    std::cout << "Non-uniform workgroups are not supported" << std::endl;
+    return 0.0f;
+  }
+
+  uint32_t compute_queue_ordinal = 0;
+  uint32_t copy_queue_ordinal = 0;
+  if (0 != GetGroupOrdinals(device, compute_queue_ordinal, copy_queue_ordinal)) {
+    // no compute or copy queue group found
+    return 0.0f;
+  }
+  std::cout << "Compute Queue Ordinal: " << compute_queue_ordinal << std::endl;
+  std::cout << "Copy Queue Ordinal: " << copy_queue_ordinal << std::endl;
+
+  ze_command_queue_desc_t cmd_queue_desc_copy = {ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
+                                                 nullptr,
+                                                 copy_queue_ordinal,
+                                                 0,
+                                                 ZE_COMMAND_QUEUE_FLAG_IN_ORDER,
+                                                 ZE_COMMAND_QUEUE_MODE_DEFAULT,
+                                                 ZE_COMMAND_QUEUE_PRIORITY_NORMAL};
+  ze_command_queue_desc_t cmd_queue_desc_kernel = {ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
+                                                   nullptr,
+                                                   compute_queue_ordinal,
+                                                   0,
+                                                   ZE_COMMAND_QUEUE_FLAG_IN_ORDER,
+                                                   ZE_COMMAND_QUEUE_MODE_DEFAULT,
+                                                   ZE_COMMAND_QUEUE_PRIORITY_NORMAL};
+
+  ze_command_list_handle_t cmd_list_copy = nullptr;
+  ze_command_list_handle_t cmd_list_kernel = nullptr;
+  status = zeCommandListCreateImmediate(context, device, &cmd_queue_desc_copy, &cmd_list_copy);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeCommandListCreateImmediate(context, device, &cmd_queue_desc_kernel, &cmd_list_kernel);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  void* dev_a = nullptr;
+  ze_device_mem_alloc_desc_t alloc_desc = {ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC, nullptr, 0, 0};
+  status =
+      zeMemAllocDevice(context, &alloc_desc, size * size * sizeof(float), ALIGN, device, &dev_a);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  void* dev_b = nullptr;
+  status =
+      zeMemAllocDevice(context, &alloc_desc, size * size * sizeof(float), ALIGN, device, &dev_b);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  void* dev_c = nullptr;
+  status =
+      zeMemAllocDevice(context, &alloc_desc, size * size * sizeof(float), ALIGN, device, &dev_c);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  status = zeKernelSetGroupSize(kernel, group_size[0], group_size[1], group_size[2]);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  status = zeKernelSetArgumentValue(kernel, 0, sizeof(dev_a), &dev_a);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeKernelSetArgumentValue(kernel, 1, sizeof(dev_a), &dev_b);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeKernelSetArgumentValue(kernel, 2, sizeof(dev_a), &dev_c);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeKernelSetArgumentValue(kernel, 3, sizeof(size), &size);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  // No Timestamp information in the Pool
+  ze_event_pool_desc_t event_pool_desc = {ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
+                                          ZE_EVENT_POOL_FLAG_HOST_VISIBLE, 3};
+  ze_event_pool_handle_t event_pool = nullptr;
+  status = zeEventPoolCreate(context, &event_pool_desc, 0, nullptr, &event_pool);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  ze_event_handle_t event_mem_copy1 = nullptr;
+  ze_event_handle_t event_mem_copy2 = nullptr;
+  ze_event_handle_t event_kernel = nullptr;
+  ze_event_desc_t event_desc_copy1 = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, 0, 0, 0};
+  ze_event_desc_t event_desc_copy2 = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, 1, 0, 0};
+  ze_event_desc_t event_desc_kernel = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, 2, 0, 0};
+  zeEventCreate(event_pool, &event_desc_copy1, &event_mem_copy1);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  zeEventCreate(event_pool, &event_desc_copy2, &event_mem_copy2);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  zeEventCreate(event_pool, &event_desc_kernel, &event_kernel);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  std::cout << "Event Mem Copy 1: " << event_mem_copy1 << std::endl;
+  std::cout << "Event Mem Copy 2: " << event_mem_copy2 << std::endl;
+  std::cout << "Event Kernel: " << event_kernel << std::endl;
+
+  status = zeCommandListAppendMemoryCopy(cmd_list_copy, dev_a, a.data(),
+                                         size * size * sizeof(float), event_mem_copy1, 0, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeCommandListAppendMemoryCopy(cmd_list_copy, dev_b, b.data(),
+                                         size * size * sizeof(float), event_mem_copy2, 0, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  // Trying to simulate oneCCL behavior we saw in traces: event is polled until it is ready
+  // No synchronization is used, just polling
+  // And destroyed as soon as it is ready
+  // This fragment could be changed after we discover more on oneCCL behavior
+  ze_result_t status1 = ZE_RESULT_NOT_READY;
+  ze_result_t status2 = ZE_RESULT_NOT_READY;
+  while (status1 != ZE_RESULT_SUCCESS && status2 != ZE_RESULT_SUCCESS) {
+    status1 = zeEventQueryStatus(event_mem_copy1);
+    status2 = zeEventQueryStatus(event_mem_copy2);
+  }
+
+  ze_group_count_t dim = {size / group_size[0], size / group_size[1], 1};
+  status = zeCommandListAppendLaunchKernel(cmd_list_kernel, kernel, &dim, event_kernel, 0, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  status1 = zeEventDestroy(event_mem_copy1);
+  PTI_ASSERT(status1 == ZE_RESULT_SUCCESS);
+  status2 = zeEventDestroy(event_mem_copy2);
+  PTI_ASSERT(status2 == ZE_RESULT_SUCCESS);
+
+  status = zeEventHostSynchronize(event_kernel, UINT32_MAX);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  status2 = zeEventDestroy(event_kernel);
+  PTI_ASSERT(status2 == ZE_RESULT_SUCCESS);
+
+  status = zeCommandListAppendMemoryCopy(cmd_list_copy, c.data(), dev_c,
+                                         size * size * sizeof(float), nullptr, 0, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  status = zeCommandListHostSynchronize(cmd_list_copy, UINT32_MAX);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  status = zeCommandListDestroy(cmd_list_copy);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeCommandListDestroy(cmd_list_kernel);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  status = zeMemFree(context, dev_a);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeMemFree(context, dev_b);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeMemFree(context, dev_c);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  status = zeEventPoolDestroy(event_pool);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  return Check(c, expected_result);
 }
 
 float RunAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device, ze_context_handle_t context,
@@ -190,7 +394,7 @@ float RunAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device, ze_conte
 
 void Compute(ze_device_handle_t device, ze_driver_handle_t driver, const std::vector<float>& a,
              const std::vector<float>& b, std::vector<float>& c, unsigned size,
-             unsigned repeat_count, float expected_result) {
+             unsigned repeat_count, float expected_result, bool with_polling = false) {
   PTI_ASSERT(device != nullptr && driver != nullptr);
   PTI_ASSERT(size > 0 && repeat_count > 0);
 
@@ -227,7 +431,10 @@ void Compute(ze_device_handle_t device, ze_driver_handle_t driver, const std::ve
       utils::SetEnv("PTI_ENABLE_COLLECTION", "1");
     }
 
-    float eps = RunAndCheck(kernel, device, context, a, b, c, size, expected_result);
+    float eps =
+        (with_polling)
+            ? RunWithPollingAndCheck(kernel, device, context, a, b, c, size, expected_result)
+            : RunAndCheck(kernel, device, context, a, b, c, size, expected_result);
     std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN") << "CORRECT with accuracy: " << eps
               << std::endl;
 
@@ -271,6 +478,9 @@ class MainZeFixtureTest : public ::testing::Test {
     kernel_view_record_created = false;
     memory_view_record_count = 0;
     kernel_view_record_count = 0;
+    capture_records = false;
+    copy_records.clear();
+    kernel_records.clear();
   }
 
   void TearDown() override {
@@ -311,6 +521,16 @@ class MainZeFixtureTest : public ::testing::Test {
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
           memory_view_record_created = true;
           memory_view_record_count += 1;
+          if (capture_records) {
+            std::cout << "--- Record Memory Copy" << '\n';
+            pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+            uint64_t duration = rec->_end_timestamp - rec->_start_timestamp;
+            std::cout << "  Start: " << rec->_start_timestamp << '\n';
+            std::cout << "  End: " << rec->_end_timestamp << '\n';
+            std::cout << "  Duration: " << duration << '\n';
+            std::cout << "  Memcpy Type: " << rec->_memcpy_type << '\n';
+            copy_records.push_back(*rec);
+          }
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
@@ -321,6 +541,15 @@ class MainZeFixtureTest : public ::testing::Test {
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
+          if (capture_records) {
+            std::cout << "--- Record Kernel" << '\n';
+            pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
+            uint64_t duration = rec->_end_timestamp - rec->_start_timestamp;
+            std::cout << "  Start: " << rec->_start_timestamp << '\n';
+            std::cout << "  End: " << rec->_end_timestamp << '\n';
+            std::cout << "  Duration: " << duration << '\n';
+            kernel_records.push_back(*rec);
+          }
           break;
         }
         default: {
@@ -364,7 +593,7 @@ class MainZeFixtureTest : public ::testing::Test {
     buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy);
   }
 
-  int RunGemm() {
+  int RunGemm(bool with_polling = false) {
     ze_result_t status = ZE_RESULT_SUCCESS;
     status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     ze_initialization_succeeded = (status == ZE_RESULT_SUCCESS);
@@ -390,7 +619,7 @@ class MainZeFixtureTest : public ::testing::Test {
 
     auto start = std::chrono::steady_clock::now();
     float expected_result = A_VALUE * B_VALUE * size;
-    Compute(device, driver, a, b, c, size, repeat_count, expected_result);
+    Compute(device, driver, a, b, c, size, repeat_count, expected_result, with_polling);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
 
@@ -402,6 +631,55 @@ class MainZeFixtureTest : public ::testing::Test {
     return flush_results;
   }
 };
+
+/**
+ * This test body uses directly L0 API to simulate one of oneCCL behaviors
+ * It creates two immediate command lists, do not synchronize on events but rather poll them and
+ * destroy them after they found signaled
+ * so it verified that such case profiled correctly
+ */
+TEST_F(MainZeFixtureTest, ProfilingSuccededWhenEventPolling) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  capture_records = true;
+  repeat_count = 1;
+  RunGemm(true);
+  EXPECT_EQ(copy_records.size(), 3);
+  int32_t h2d_1 = -1;
+  int32_t h2d_2 = -1;
+  for (size_t i = 0; i < copy_records.size(); i++) {
+    if (copy_records[i]._memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2D) {
+      if (h2d_1 == -1) {
+        h2d_1 = i;
+      } else {
+        h2d_2 = i;
+        break;
+      }
+    }
+  }
+  EXPECT_EQ(h2d_1 != -1, true);
+  EXPECT_EQ(h2d_2 != -1, true);
+  EXPECT_NE(h2d_1, h2d_2);
+  // Check if the duration diff between the two similar H2D transfers is less than several percents
+  // E.g. 20% or 70% is just some common sense number to check if the durations are close enough
+#ifdef _WIN32
+  // On Windows (on integrated GPU) the difference is expected to be higher
+  // as the first transer seems warming up the hardware and the second one is faster
+  float expected_diff = 0.70f;
+#else
+  float expected_diff = 0.20f;
+#endif
+  std::cout << "Expected max difference between two similar M2D transfers: " << expected_diff
+            << std::endl;
+  uint64_t dur1 = copy_records[h2d_1]._end_timestamp - copy_records[h2d_1]._start_timestamp;
+  uint64_t dur2 = copy_records[h2d_2]._end_timestamp - copy_records[h2d_2]._start_timestamp;
+  std::cout << "Duration 1: " << dur1 << ", Duration 2: " << dur2 << std::endl;
+  float rel_diff = fabs(2.f * ((float)dur1 - (float)dur2) / ((float)dur1 + (float)dur2));
+  std::cout << "Relative difference between two similar M2D transfers: " << rel_diff << std::endl;
+  EXPECT_LT(rel_diff, expected_diff);
+  // Check if the kernel duration is greater than 0
+  EXPECT_EQ(kernel_records.size(), 1);
+  EXPECT_GT(kernel_records[0]._end_timestamp, kernel_records[0]._start_timestamp);
+}
 
 TEST_F(MainZeFixtureTest, ZeInitializationSucceeded) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
