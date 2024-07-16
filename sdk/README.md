@@ -17,12 +17,6 @@ One of the objectives is to extend functionality of PTI SDK and with the time to
 
 This project is in active development. We decided to open it at this early stage to benefit from feedback and critisim of interested parties and early adopters.
 
-**Windows support is unsupported and incomplete:**
-
-- Kernel Name Demangling not present.
-- Release package not available.
-- SYCL Runtime Records unsupported in current oneAPI Release.
-
 ## Recent (version 0.7.0) update
 
 Starting version 0.7.0 **PTI SDK** implements the new functionality of Local collection. It enables starting and stopping collection anytime-anywhere in an application when run on the system with installed Level-Zero runtime supporting [1.9.0 specification](https://spec.oneapi.io/releases/index.html#level-zero-v1-9-0) and higher.
@@ -31,6 +25,18 @@ Local collection functionality is transparent and controlled via `ptiViewEnable`
 Outside of Local collection regions of interest, PTI SDK maintains zero overhead by not issuing any calls or collecting any data.
 
 On systems with Level-Zero version lower than 1.9.0 **PTI SDK** still operates as before its version 0.7.0: tracing runtime calls and causing the overhead outside of `ptiViewEnable` - `ptiViewDisable` regions, but reporting data only for `ptiViewEnable` - `ptiViewDisable` regions.
+
+## Recent (version 0.9.0) update
+
+- Added function call(s) providing the timestamp and allowing the user to provide
+  their own timestamp via a callback.
+- Windows support added.
+- Various bug fixes and improvements.
+
+**Known issues on Windows:**
+
+- Kernel Name Demangling not present.
+- In the current oneAPI release, SYCL runtime records are not present.
 
 ## How to contribute
 
@@ -43,18 +49,38 @@ Please, check [TODO](TODO.md) list. We are aware of many shortcomings and ineffi
 ## Supported OS
 
 - Linux
+- Windows
 
 ## Regularly Tested Configurations
 
 - Ubuntu 22.04 with Intel(R) Data Center GPU Max 1550
 - Ubuntu 22.04 with Intel(R) Data Center GPU Max 1100
 - Rocky 8 with Intel(R) Data Center GPU Max 1100
+- Windows 11 with Intel(R) Arc(TM) A380 Graphics
 
 ## Prerequisites
 
-- [CMake](https://cmake.org/) (version 3.12 and above. For Windows tests version 3.23 and above.)
+- [CMake](https://cmake.org/) (version 3.12 and above. For presets, >= 3.20)
 - [Git](https://git-scm.com/) (version 1.8 and above)
-- [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html)
+- [Ninja](https://github.com/ninja-build/ninja) (optional, version >= 1.10.1)
+- [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html) ([version](#intelr-oneapi-base-toolkit-tested-versions))
+- [Level Zero Loader](https://github.com/oneapi-src/level-zero) (>= 1.16.15)
+
+### Windows Specific Prerequisites
+
+- [CMake](https://cmake.org/) (For Windows tests version >= 3.23)
+- [Ninja](https://github.com/ninja-build/ninja) (version 1.12.1)
+- [Visual Studio 2022](https://visualstudio.microsoft.com/vs/) (Tested with version >= 17.10.3)
+
+### Intel(R) oneAPI Base Toolkit Tested Version(s)
+
+| Support | Linux | Windows |
+| -------- | ------- | ------- |
+| Full | 2024.1.1 - 2024.1.2 | n/a |
+| Partial | 2024.1.0 | 2024.1.1 |
+
+Partial support means that some features may not work as expected or may not
+work at all.
 
 ## Build
 
