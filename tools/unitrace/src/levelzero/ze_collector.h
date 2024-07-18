@@ -594,7 +594,7 @@ void SweepKernelProfiles(ZeKernelProfiles& profiles) {
 }
 
 static std::mutex global_device_time_stats_mutex_;
-static std::map<ZeKernelCommandNameKey, ZeKernelCommandTime, ZeKernelCommandNameKeyCompare> *global_device_time_stats_;
+static std::map<ZeKernelCommandNameKey, ZeKernelCommandTime, ZeKernelCommandNameKeyCompare> *global_device_time_stats_ = nullptr;
 
 void SweepKernelCommandTimeStats(std::map<ZeKernelCommandNameKey, ZeKernelCommandTime, ZeKernelCommandNameKeyCompare>& stats) {
   global_device_time_stats_mutex_.lock();
@@ -631,7 +631,7 @@ void SweepKernelCommandTimeStats(std::map<ZeKernelCommandNameKey, ZeKernelComman
 }
 
 static std::mutex global_host_time_stats_mutex_;
-static std::map<uint32_t, ZeFunctionTime> *global_host_time_stats_;
+static std::map<uint32_t, ZeFunctionTime> *global_host_time_stats_ = nullptr;
 
 void SweepHostFunctionTimeStats(std::map<uint32_t, ZeFunctionTime>& stats) {
   global_host_time_stats_mutex_.lock();
@@ -664,39 +664,39 @@ void SweepHostFunctionTimeStats(std::map<uint32_t, ZeFunctionTime>& stats) {
 }
 
 struct ZeCommandMetricQuery {
-  uint64_t instance_id_ = 0;	//unique kernel or command instance identifier
-  zet_metric_query_handle_t metric_query_ = nullptr;
-  ze_event_handle_t metric_query_event_ = nullptr;
-  ze_device_handle_t device_ = nullptr;
+  uint64_t instance_id_;        // unique kernel or command instance identifier
+  zet_metric_query_handle_t metric_query_;
+  ze_event_handle_t metric_query_event_;
+  ze_device_handle_t device_;
   ZeKernelCommandType type_;
   bool immediate_;
 };
 
 struct ZeCommand {
-  uint64_t kernel_command_id_;	//kernel or command identifier
-  uint64_t instance_id_ = 0;	//unique kernel or command instance identifier
-  ze_event_handle_t event_ = nullptr;
-  ze_event_handle_t timestamp_event_ = nullptr;
-  ze_device_handle_t device_ = nullptr;
-  uint64_t host_time_origin_;	// in ns
+  uint64_t kernel_command_id_;  // kernel or command identifier
+  uint64_t instance_id_;        // unique kernel or command instance identifier
+  ze_event_handle_t event_;
+  ze_event_handle_t timestamp_event_;
+  ze_device_handle_t device_;
+  uint64_t host_time_origin_;   // in ns
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
   uint64_t metric_timer_frequency_;
   uint64_t metric_timer_mask_;
-  uint64_t append_time_ = 0;
-  uint64_t submit_time_ = 0;		//in ns
-  uint64_t submit_time_device_ = 0;	//in ticks
-  ze_command_list_handle_t command_list_ = nullptr;
-  ze_command_queue_handle_t queue_ = nullptr;
+  uint64_t append_time_;
+  uint64_t submit_time_;        // in ns
+  uint64_t submit_time_device_; // in ticks
+  ze_command_list_handle_t command_list_;
+  ze_command_queue_handle_t queue_;
   ze_fence_handle_t fence_;
   uint64_t tid_;
-  uint64_t mem_size_;	// memory copy/fill size
+  uint64_t mem_size_;           // memory copy/fill size
   ZeCommandMetricQuery *command_metric_query_;
   uint32_t engine_ordinal_;
   uint32_t engine_index_;
   ZeKernelGroupSize group_size_;
   ze_group_count_t group_count_;
-  ZeKernelCommandType type_;	
+  ZeKernelCommandType type_;
   ze_kernel_timestamp_result_t *volatile kernel_timestamp_;
   ze_kernel_timestamp_result_t *volatile redirected_kernel_timestamp_;
   volatile uint64_t *volatile device_global_timestamps_;
@@ -782,6 +782,17 @@ struct ZeDeviceSubmissions {
       commands_free_pool_.pop_front();
     }
 
+    // Explicitly initialize ZeCommand members.
+    command->instance_id_ = 0;
+    command->event_ = nullptr;
+    command->timestamp_event_ = nullptr;
+    command->device_ = nullptr;
+    command->append_time_ = 0;
+    command->submit_time_ = 0;
+    command->submit_time_device_ = 0;
+    command->command_list_ = nullptr;
+    command->queue_ = nullptr;
+
     return command;
   }
 
@@ -851,6 +862,11 @@ struct ZeDeviceSubmissions {
       query = metric_queries_free_pool_.front();
       metric_queries_free_pool_.pop_front();
     }
+
+    query->instance_id_ = 0;
+    query->metric_query_ = nullptr;
+    query->metric_query_event_ = nullptr;
+    query->device_ = nullptr;
 
     return query;
   }
@@ -974,7 +990,7 @@ struct ZeDevice {
 
 // these will no go away when ZeCollector is destructed
 static std::shared_mutex devices_mutex_;
-static std::map<ze_device_handle_t, ZeDevice> *devices_;
+static std::map<ze_device_handle_t, ZeDevice> *devices_ = nullptr;
 
 struct ZeCommandQueue {
   ze_command_queue_handle_t queue_;
