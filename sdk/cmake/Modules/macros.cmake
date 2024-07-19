@@ -991,9 +991,11 @@ set(SPDLOG_FMT_SHA256 78B8C0A72B1C35E4443A7E308DF52498252D1CEFC2B08C9A97BC9EE6CF
 set(SPDLOG_GABIME_URL "https://github.com/gabime/spdlog/archive/refs/tags/v1.12.0.tar.gz")
 set(SPDLOG_GABIME_SHA256 "4DCCF2D10F410C1E2FEAFF89966BFC49A1ABB29EF6F08246335B110E001E09A9")
 macro(GetSpdlog)
-  find_package(spdlog 1.6.0 QUIET)
+  if(NOT TARGET spdlog::spdlog)
+    find_package(spdlog 1.6.0 QUIET)
+  endif()
 
-  if(NOT TARGET spdlog::spdlog OR NOT TARGET spdlog::spdlog_header_only)
+  if(NOT TARGET spdlog::spdlog)
     include(FetchContent)
     if(CMAKE_VERSION VERSION_LESS "3.24")
       FetchContent_Declare(
@@ -1030,6 +1032,12 @@ macro(GetSpdlog)
     set(FMT_INSTALL
         OFF
         CACHE BOOL "" FORCE)
+    set(SPDLOG_BUILD_SHARED
+        OFF
+        CACHE BOOL "" FORCE)
+    set(SPDLOG_BUILD_PIC
+        ON
+        CACHE BOOL "" FORCE)
     set(SPDLOG_FMT_EXTERNAL_HO
         ON
         CACHE BOOL "" FORCE)
@@ -1042,7 +1050,7 @@ macro(GetSpdlog)
     FetchContent_MakeAvailable(fmt spdlog)
 
     # Prevent fmt from using exceptions because it could throw while logging.
-    # Disable warning in fmt due to our usage of EHsc. 
+    # Disable warning in fmt due to our usage of EHsc.
     target_compile_definitions(fmt PUBLIC FMT_EXCEPTIONS=0)
     target_compile_options(fmt PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/wd6285 $<$<CONFIG:Release>:/wd4702 /wd6385>>)
     target_compile_definitions(fmt-header-only INTERFACE FMT_EXCEPTIONS=0)
@@ -1050,12 +1058,11 @@ macro(GetSpdlog)
 
     # spdlog sets the /MP flag on MSVC which causes a warning on icx.
     target_compile_options(spdlog PRIVATE $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-command-line-argument>)
-
   endif()
 endmacro()
 
-set(GetGTest_URL "https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz")
-set(GetGTest_SHA256 8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7)
+set(GetGTest_URL "https://github.com/google/googletest/archive/refs/tags/v1.15.0.tar.gz")
+set(GetGTest_SHA256 7315acb6bf10e99f332c8a43f00d5fbb1ee6ca48c52f6b936991b216c586aaad)
 macro(GetGTest)
   if(NOT TARGET GTest::gtest OR NOT TARGET GTest::gtest_main)
     include(FetchContent)
@@ -1141,6 +1148,18 @@ macro(GetLevelZero)
     # (Basically treat as if including via find_package)
     add_library(pti_ze_loader INTERFACE IMPORTED)
     add_dependencies(pti_ze_loader ze_tracing_layer)
+
+    set(PTI_LZ_COMPILE_OPTIONS $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-parameter>
+                               $<$<CXX_COMPILER_ID:MSVC>:/wd6285
+                                $<$<CONFIG:Release>:/wd4702 /wd6385 /wd6386>>)
+
+    # Silence Warnings from Level Zero Loader. Allows us to better detect PTI
+    # warnings and errors.
+    target_compile_options(ze_loader PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
+    target_compile_options(ze_tracing_layer PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
+    target_compile_options(ze_null PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
+    target_compile_options(ze_validation_layer PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
+    target_compile_options(utils PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
 
     # Pull Headers out of source tree and add them to level_zero/
     # This allows us to keep the normal way to include level zero

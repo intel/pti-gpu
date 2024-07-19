@@ -184,7 +184,7 @@ target_link_libraries(
   PUBLIC Threads::Threads Pti::pti
   PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
           LevelZero::level-zero
-          spdlog::spdlog_header_only
+          spdlog::spdlog
           ${CMAKE_DL_LIBS})
 
 FindHeadersPath(

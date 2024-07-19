@@ -62,7 +62,7 @@ int GetGroupOrdinals(ze_device_handle_t device, uint32_t& computeOrdinal, uint32
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   std::vector<ze_command_queue_group_properties_t> cmdqueue_group_props(cmdqueue_group_count);
-  for (auto prop : cmdqueue_group_props) {
+  for (auto& prop : cmdqueue_group_props) {
     prop.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_GROUP_PROPERTIES;
     prop.pNext = nullptr;
   }
@@ -643,22 +643,22 @@ TEST_F(MainZeFixtureTest, ProfilingSuccededWhenEventPolling) {
   capture_records = true;
   repeat_count = 1;
   RunGemm(true);
-  EXPECT_EQ(copy_records.size(), 3);
-  int32_t h2d_1 = -1;
-  int32_t h2d_2 = -1;
-  for (size_t i = 0; i < copy_records.size(); i++) {
+  EXPECT_EQ(copy_records.size(), static_cast<std::size_t>(3));
+  auto m2d_1 = static_cast<std::size_t>(-1);
+  auto m2d_2 = static_cast<std::size_t>(-1);
+  for (std::size_t i = 0; i < copy_records.size(); i++) {
     if (copy_records[i]._memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2D) {
-      if (h2d_1 == -1) {
-        h2d_1 = i;
+      if (m2d_1 == static_cast<std::size_t>(-1)) {
+        m2d_1 = i;
       } else {
-        h2d_2 = i;
+        m2d_2 = i;
         break;
       }
     }
   }
-  EXPECT_EQ(h2d_1 != -1, true);
-  EXPECT_EQ(h2d_2 != -1, true);
-  EXPECT_NE(h2d_1, h2d_2);
+  EXPECT_EQ(m2d_1 != static_cast<std::size_t>(-1), true);
+  EXPECT_EQ(m2d_2 != static_cast<std::size_t>(-1), true);
+  EXPECT_NE(m2d_1, m2d_2);
   // Check if the duration diff between the two similar H2D transfers is less than several percents
   // E.g. 20% or 70% is just some common sense number to check if the durations are close enough
 #ifdef _WIN32
@@ -670,14 +670,14 @@ TEST_F(MainZeFixtureTest, ProfilingSuccededWhenEventPolling) {
 #endif
   std::cout << "Expected max difference between two similar M2D transfers: " << expected_diff
             << std::endl;
-  uint64_t dur1 = copy_records[h2d_1]._end_timestamp - copy_records[h2d_1]._start_timestamp;
-  uint64_t dur2 = copy_records[h2d_2]._end_timestamp - copy_records[h2d_2]._start_timestamp;
+  uint64_t dur1 = copy_records[m2d_1]._end_timestamp - copy_records[m2d_1]._start_timestamp;
+  uint64_t dur2 = copy_records[m2d_2]._end_timestamp - copy_records[m2d_2]._start_timestamp;
   std::cout << "Duration 1: " << dur1 << ", Duration 2: " << dur2 << std::endl;
   float rel_diff = fabs(2.f * ((float)dur1 - (float)dur2) / ((float)dur1 + (float)dur2));
   std::cout << "Relative difference between two similar M2D transfers: " << rel_diff << std::endl;
   EXPECT_LT(rel_diff, expected_diff);
   // Check if the kernel duration is greater than 0
-  EXPECT_EQ(kernel_records.size(), 1);
+  EXPECT_EQ(kernel_records.size(), static_cast<std::size_t>(1));
   EXPECT_GT(kernel_records[0]._end_timestamp, kernel_records[0]._start_timestamp);
 }
 

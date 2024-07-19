@@ -188,7 +188,7 @@ target_include_directories(
          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
 
 target_link_libraries(view_record_test PUBLIC Pti::pti_view GTest::gtest_main
-                                              spdlog::spdlog_header_only
+                                              spdlog::spdlog
                                               LevelZero::level-zero)
 
 add_executable(assert_exception_test assert_exception_test.cc)
@@ -200,7 +200,7 @@ target_include_directories(
          "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
 
 target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_main
-                                                   spdlog::spdlog_header_only
+                                                   spdlog::spdlog
                                                    LevelZero::level-zero)
 
 add_executable(view_gpu_local_test view_gpu_local_test.cc)
@@ -268,7 +268,7 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   add_test(NAME run-dpc_gemm COMMAND dpc_gemm)
   add_test(NAME run-onemkl_gemm_exe COMMAND onemkl_gemm_exe)
   add_test(NAME run-vec_sqadd COMMAND vec_sqadd)
-  add_test(NAME run-iso COMMAND iso3dfd.exe 256 256 256 32 8 64 10 gpu)
+  add_test(NAME run-iso COMMAND iso3dfd 256 256 256 32 8 64 10 gpu)
 
   set_tests_properties(
     mt-awk-test mt-awk-test-immediate run-dlworkload run-dpc_gemm run-onemkl_gemm_exe run-vec_sqadd

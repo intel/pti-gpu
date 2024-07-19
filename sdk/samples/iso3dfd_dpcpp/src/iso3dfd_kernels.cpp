@@ -31,10 +31,15 @@
 // Shared Local Memory (SLM) optimizations (SYCL)
 // SYCL Basic synchronization (barrier function)
 //
-#include "iso3dfd.h"
 #if defined(_WIN32)
 #include <windows.h>
 #endif
+
+#include <cstdlib>
+#include <iostream>
+
+#include "iso3dfd.h"
+
 
 #define NSEC_IN_USEC 1000
 #define MSEC_IN_SEC  1000
@@ -43,12 +48,22 @@
 
 inline uint64_t GetTime() {
 #if defined(_WIN32)
-  LARGE_INTEGER ticks{};
-  LARGE_INTEGER frequency{};
+  LARGE_INTEGER ticks{ {0, 0} };
+  LARGE_INTEGER frequency{ {0, 0} };
   BOOL status = QueryPerformanceFrequency(&frequency);
-  assert(status != 0);
+
+  if (!status) {
+    std::cerr << "Could not query performance frequency" << '\n';
+    std::abort();
+  }
+
   status = QueryPerformanceCounter(&ticks);
-  assert(status != 0);
+
+  if (!status) {
+    std::cerr << "Could not query performance counter" << '\n';
+    std::abort();
+  }
+
   return ticks.QuadPart * (NSEC_IN_SEC / frequency.QuadPart);
 #else
  timespec ts{0, 0};

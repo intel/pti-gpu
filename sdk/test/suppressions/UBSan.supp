@@ -5,4 +5,4 @@
 
 # ISO sample has some undefined overflow behavior. However, we did not write
 # this code.
-pointer-overflow:iso3dfd.exe
+pointer-overflow:iso3dfd

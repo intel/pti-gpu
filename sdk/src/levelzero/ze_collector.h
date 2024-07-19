@@ -1556,13 +1556,6 @@ class ZeCollector {
       return;
     }
     PTI_ASSERT(command_list != nullptr);
-    ze_memory_allocation_properties_t mem_props;
-    mem_props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
-    mem_props.pNext = nullptr;
-
-    ze_device_properties_t dev_props;
-    dev_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
-    dev_props.pNext = nullptr;
 
     ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
@@ -1573,8 +1566,8 @@ class ZeCollector {
         GetTransferProps(std::move(command_name), bytes_transferred, (src ? context : nullptr), src,
                          (dst ? context : nullptr), dst, pattern_size);
 
-    PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props, signal_event,
-                                  command_list_info, kids);
+    PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
+                                  signal_event, command_list_info, kids);
   }
 
   void AppendMemoryCommandContext(ZeCollector* collector, std::string command,

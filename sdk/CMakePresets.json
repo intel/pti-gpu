@@ -52,6 +52,7 @@
       "binaryDir": "${sourceDir}/build-${presetName}",
       "cacheVariables": {
         "CMAKE_INSTALL_LIBDIR": "lib",
+        "CMAKE_DISABLE_FIND_PACKAGE_spdlog": true,
         "PTI_PRESET_USED": "${presetName}"
       }
     },
@@ -141,7 +142,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
-        "CMAKE_CXX_FLAGS": "/W4 /MD /EHcs /fp:precise -Qstd:c++17 /sdl /GS /Gy /DYNAMICBASE /guard:cf",
+        "CMAKE_CXX_FLAGS": "/W4 /WX /MD /EHcs /fp:precise -Qstd:c++17 /sdl /GS /Gy /DYNAMICBASE /guard:cf",
         "CMAKE_SHARED_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf",
         "CMAKE_EXE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf"
       }
@@ -164,6 +165,7 @@
       "inherits": "windows-ci-release",
       "cacheVariables": {
         "CMAKE_INSTALL_LIBDIR": "lib",
+        "CMAKE_DISABLE_FIND_PACKAGE_spdlog": true,
         "PTI_PRESET_USED": "${presetName}"
       }
     },
@@ -279,7 +281,7 @@
   {
     "name": "windows-oneAPI-release",
     "configurePreset": "windows-oneAPI-release",
-    "displayName": "windows oneAPI Release Build"
+    "displayName": "Windows oneAPI Release Build"
   },
   {
     "name": "windows-ci-debug",
@@ -362,7 +364,7 @@
   {
     "name": "windows-oneAPI-release",
     "configurePreset": "windows-oneAPI-release",
-    "displayName": "Windows oneAPI Release Tests"
+    "displayName": "Windows oneAPI Release Test"
   },
   {
     "name": "windows-ci-release",
