@@ -70,6 +70,7 @@ class PtiLibHandler {
   decltype(&ptiViewMemoryTypeToString) ptiViewMemoryTypeToString_ = nullptr;              // NOLINT
   decltype(&ptiViewMemcpyTypeToString) ptiViewMemcpyTypeToString_ = nullptr;              // NOLINT
   decltype(&ptiViewSetCallbacks) ptiViewSetCallbacks_ = nullptr;                          // NOLINT
+  decltype(&ptiViewSetOclProfiling) ptiViewSetOclProfiling_ = nullptr;                    // NOLINT
   decltype(&ptiViewGetNextRecord) ptiViewGetNextRecord_ = nullptr;                        // NOLINT
   decltype(&ptiFlushAllViews) ptiFlushAllViews_ = nullptr;                                // NOLINT
   decltype(&ptiViewPushExternalCorrelationId) ptiViewPushExternalCorrelationId_ =         // NOLINT
@@ -110,6 +111,7 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiViewMemoryTypeToString);
     PTI_VIEW_GET_SYMBOL(ptiViewMemcpyTypeToString);
     PTI_VIEW_GET_SYMBOL(ptiViewSetCallbacks);
+    PTI_VIEW_GET_SYMBOL(ptiViewSetOclProfiling);
     PTI_VIEW_GET_SYMBOL(ptiViewGetNextRecord);
     PTI_VIEW_GET_SYMBOL(ptiFlushAllViews);
     PTI_VIEW_GET_SYMBOL(ptiViewPushExternalCorrelationId);

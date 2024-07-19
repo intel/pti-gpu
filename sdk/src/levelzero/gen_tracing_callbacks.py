@@ -48,6 +48,28 @@ def gen_func_param_dict(api_files):
 
 
 #
+# Extracts api function names from tracing_types.h and returns as list.
+#
+def get_ocl_api_list(ocl_path):
+    ocl_file_path = os.path.join(ocl_path, "tracing_types.h")
+    ocl_file = open(ocl_file_path, "rt")
+    func_list = []
+    cl_function_id_found = False
+    for line in ocl_file.readlines():
+        line = line.strip()
+        # print(line)
+        if cl_function_id_found == True and line.find("CL_FUNCTION_COUNT") == -1:
+            if line.startswith("CL_FUNCTION_"):
+                api_name = line[
+                    len("CL_FUNCTION_") : line.find("=", len("CL_FUNCTION_"))
+                ]
+                func_list.append(api_name.strip())
+        elif line.find("ClFunctionId") != -1:
+            cl_function_id_found = True
+    return func_list
+
+
+#
 # Generates Individual Type Related function Id files
 # Generates map objects for those ids into the main generated callback api file
 #
@@ -422,9 +444,9 @@ def append_undefined_functions(func_list, func_dictionary):
 
 
 def main():
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 4:
         print(
-            "Usage: python gen_tracing_header.py <output_include_path> <l0_include_path>"
+            "Usage: python gen_tracing_header.py <output_include_path> <l0_include_path> <ocl_include_path> proj_bin_path"
         )
         return
 
@@ -445,6 +467,8 @@ def main():
     dst_cb_api_file = open(dst_cb_api_file_path, "wt", opener=default_file_opener)
 
     l0_path = sys.argv[2]
+    ocl_path = sys.argv[3]
+    print(ocl_path)
 
     # Extract registratable apis from 2 headers (ze_api.h, layers/zel_tracing_register_cb.h)
     # Both are complementary to each other. One addresses apis from v1.0(ze_api.h) the other v1.1+.
@@ -452,7 +476,10 @@ def main():
     l0_file_path_api_1_1_plus = os.path.join(
         l0_path, "layers", "zel_tracing_register_cb.h"
     )
-    proj_bin_path = sys.argv[3]
+
+    # Extract registratable apis from tracing_types.h
+    ocl_api_list = get_ocl_api_list(ocl_path)
+    proj_bin_path = sys.argv[4]
 
     l0_api_files = [l0_file_path_api_1_0, l0_file_path_api_1_1_plus]
     func_param_dictionary = gen_func_param_dict(l0_api_files)
@@ -557,7 +584,7 @@ def main():
     resource_list = []
 
     # category_dict = {"runtime": func_list, "resource": resource_list}
-    category_dict = {"runtime": func_list}
+    category_dict = {"runtime": ocl_api_list + func_list}
 
     gen_callbacks(
         dst_file,

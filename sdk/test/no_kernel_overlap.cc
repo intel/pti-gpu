@@ -15,6 +15,7 @@ using namespace sycl;
 
 namespace {
 
+bool opencl_backend = false;
 void vecAdd(sycl::queue& q, int64_t* a, int64_t* b, int64_t* res, int count) {
   q.submit([&](sycl::handler& h) {
     h.parallel_for(count, [=](sycl::item<1> item) {
@@ -64,6 +65,7 @@ void TestCore(bool do_immediate) {
                                sycl::ext::intel::property::queue::no_immediate_command_list()};
       q = sycl::queue(sycl::gpu_selector_v, prop);
     }
+    opencl_backend = (q.get_backend() == sycl::backend::opencl);
 
     int64_t* a = sycl::malloc_device<int64_t>(vector_size, q);
     int64_t* b = sycl::malloc_device<int64_t>(vector_size, q);
@@ -127,6 +129,7 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
     kernel_device_timestamps_pairs.clear();
     kernel_host_timestamps.clear();
     times_buffer_completed = 0;
+    opencl_backend = false;
   }
 
   void TearDown() override {
@@ -190,7 +193,7 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
     for (uint32_t item = 0; item < timestamps.size(); item += 2) {
       if (timestamps[item] != timestamps[item + 1]) {
         std::cerr << "--->  ERROR: Append and Submit timestamps not equal t(i) != t(i+1), at i: "
-                  << item << " \t t(i): " << timestamps[item]
+                  << item << " \t t(i): " << timestamps[item] << "\n"
                   << ", t(i+1): " << timestamps[item + 1] << std::endl;
         return false;
       }
@@ -299,6 +302,7 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
 
   RunTest(do_immediate);
+  if (opencl_backend) GTEST_SKIP();
 
   // order of records is not garantie the order of submission and execution of kernels -
   // so let's  sort kernel stamp pairs by device start stamp

@@ -6,7 +6,7 @@
 // =============================================================
 
 #include <gtest/gtest.h>
-#include <level_zero/ze_api.h>
+// #include <level_zero/ze_api.h>
 
 #include <chrono>
 #include <cmath>
@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "pti/pti_view.h"
+#include "samples_utils.h"
 #include "utils.h"
 
 namespace {
@@ -181,6 +182,7 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
         pti_view_record_memory_copy *rec = reinterpret_cast<pti_view_record_memory_copy *>(ptr);
+        std::cout << "MemCopy rec name: " << rec->_name << "\n";
         runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
         break;
       }
@@ -315,8 +317,8 @@ void RunVecsqadd(TestType a_test_type) {
   auto dev = sycl::device(sycl::gpu_selector_v);
 
   auto d_selector{sycl::gpu_selector_v};
-  sycl::property_list prop{sycl::property::queue::in_order()};
-  sycl::queue q(d_selector, prop);
+  sycl::property_list prop_list{sycl::property::queue::in_order()};
+  sycl::queue q(d_selector, prop_list);
 
   if (q.get_device().has(sycl::aspect::fp64)) {
     VecSqAddRouter<double>(q, a_test_type);
@@ -360,7 +362,8 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSq) {
   // Check that the kernel name and mem op name are as expected
   EXPECT_NE(runtime_enq_2_gpu_kernel_name_map[correlation_id].find("VecSq"), std::string::npos);
   for (auto &elem : runtime_enq_2_gpu_mem_op_name_map) {
-    EXPECT_NE(elem.second.find("Copy"), std::string::npos);
+    EXPECT_TRUE((elem.second.find("Copy") != std::string::npos) ||
+                (elem.second.find("Buffer") != std::string::npos));
   }
 }
 
@@ -381,7 +384,8 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSqReduce
   // Check that the kernel name and mem op name are as expected
   EXPECT_NE(runtime_enq_2_gpu_kernel_name_map[correlation_id].find("VecSq"), std::string::npos);
   for (auto &elem : runtime_enq_2_gpu_mem_op_name_map) {
-    EXPECT_NE(elem.second.find("Copy"), std::string::npos);
+    EXPECT_TRUE((elem.second.find("Copy") != std::string::npos) ||
+                (elem.second.find("Buffer") != std::string::npos));
   }
 }
 
@@ -396,6 +400,17 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAdd) {
 
 TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAddReducedOps) {
   utils::SetEnv("PTI_TRACE_ALL_RUNTIME_OPS", "0");
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunVecsqadd(TestType::kExternalCorrId);
+  // Check that the correlation id of runtime and kernel matches
+  EXPECT_EQ(sycl_kernel_corr_id[1], kernel_corr_id[1]);
+  // Check time ordering
+  EXPECT_LE(sycl_kernel_start_time[1], kernel_append_time[1]);
+}
+
+TEST_F(VecsqaddFixtureTest, OCLSetQueueProfileSetExplicitly) {
+  utils::SetEnv("PTI_TRACE_ALL_RUNTIME_OPS", "0");
+  PTI_CHECK_SUCCESS(ptiViewSetOclProfiling());
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kExternalCorrId);
   // Check that the correlation id of runtime and kernel matches

@@ -114,8 +114,8 @@ typedef struct pti_view_record_base {
  */
 typedef struct pti_view_record_kernel {
   pti_view_record_base _view_kind;                  //!< Base record
-  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
-  ze_context_handle_t _context_handle;              //!< Context handle
+  void* _queue_handle;          //!< Device back-end queue handle
+  void* _context_handle;              //!< Context handle
   const char* _name;                                //!< Kernel name
   const char* _source_file_name;                    //!< Kernel source file,
                                                     //!< null if no information
@@ -163,8 +163,8 @@ typedef struct pti_view_record_memory_copy {
   pti_view_memcpy_type _memcpy_type;                //!< Memory copy type
   pti_view_memory_type _mem_src;                    //!< Memory type
   pti_view_memory_type _mem_dst;                    //!< Memory type
-  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
-  ze_context_handle_t _context_handle;              //!< Context handle
+  void* _queue_handle;          //!< Device back-end queue handle
+  void* _context_handle;              //!< Context handle
   const char* _name;                                //!< Back-end API name making a memory copy
   char _pci_address[PTI_MAX_PCI_ADDRESS_SIZE];      //!< Source or Destination Device pci_address
   uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Source or Destination Device uuid
@@ -191,8 +191,8 @@ typedef struct pti_view_record_memory_copy_p2p {
   pti_view_memcpy_type _memcpy_type;                //!< Memory copy type
   pti_view_memory_type _mem_src;                    //!< Memory type
   pti_view_memory_type _mem_dst;                    //!< Memory type
-  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
-  ze_context_handle_t _context_handle;              //!< Context handle
+  void* _queue_handle;          //!< Device back-end queue handle
+  void* _context_handle;              //!< Context handle
   const char* _name;                                //!< Back-end API name making a memory copy
   char _src_pci_address[PTI_MAX_PCI_ADDRESS_SIZE];  //!< Source Device pci_address
   char _dst_pci_address[PTI_MAX_PCI_ADDRESS_SIZE];  //!< Destination Device pci_address
@@ -219,8 +219,8 @@ typedef struct pti_view_record_memory_copy_p2p {
 typedef struct pti_view_record_memory_fill {
   pti_view_record_base _view_kind;                  //!< Base record
   pti_view_memory_type _mem_type;                   //!< Type of memory filled
-  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
-  ze_context_handle_t _context_handle;              //!< Context handle
+  void* _queue_handle;          //!< Device back-end queue handle
+  void* _context_handle;              //!< Context handle
   const char* _name;                                //!< Back-end API name making a memory fill
   char _pci_address[PTI_MAX_PCI_ADDRESS_SIZE];      //!< Device pci_address
   uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Device uuid
@@ -284,6 +284,20 @@ typedef struct pti_view_record_zecalls {
   uint32_t _correlation_id;        //!< Correlation id tracking memfill, memcpy and kernel gpu activity
   ze_result_t _result;             //!< Result status of zecall
 } pti_view_record_zecalls;
+
+
+/**
+ * @brief OpenCL apicalls View record type
+ */
+typedef struct pti_view_record_oclcalls {
+  pti_view_record_base _view_kind; //!< Base record
+  uint64_t _start_timestamp;       //!< L0 api call start timestamp, ns
+  uint64_t _end_timestamp;         //!< L0 api call end timestamp, ns
+  uint32_t _process_id;            //!< Process ID of where the zecall observed
+  uint32_t _thread_id;             //!< Thread ID of where the zecall observed
+  uint32_t _callback_id;           //!< Callback id of this zecall 
+  uint32_t _correlation_id;        //!< Correlation id tracking memfill, memcpy and kernel gpu activity
+} pti_view_record_oclcalls;
 
 
 /**
@@ -445,6 +459,16 @@ ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequested);
  */
 pti_result PTI_EXPORT
 ptiViewGetCallbackIdName(uint32_t id, const char** name);
+
+/**
+ * @brief Turns on opencl lightweight profiling -- this api call needs to be used *before* queue creations 
+ *        for queues which have commands that need to be profiled.  Enable view_kinds for OpenCL to see the profiled
+ *        kernel/memory commands in the buffer.
+ *
+ * @return pti_result
+ */
+PTI_EXPORT pti_result
+ptiViewSetOclProfiling();
 
 #if defined(__cplusplus)
 }

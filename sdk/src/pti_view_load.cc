@@ -247,3 +247,19 @@ pti_result ptiViewGetCallbackIdName(uint32_t id, const char** name) {
     return pti_result::PTI_ERROR_INTERNAL;
   }
 }
+
+pti_result ptiViewSetOclProfiling() {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiViewSetOclProfiling_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiViewSetOclProfiling_();
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}

@@ -45,6 +45,7 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
 option(PTI_BUILD_TESTING "Build PTI tests" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
+option(PTI_BUILD_OCL_EXTERNAL "Build opencl externals with library" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_INSTALL "Install library when invoking --install" ON)
 option(PTI_ENABLE_LOGGING "Enable logging for Pti" OFF)
 option(PTI_DEBUG "Enable code helping to debug Pti" OFF)
@@ -97,6 +98,18 @@ endif()
 
 find_package(Threads REQUIRED)
 
+if(NOT TARGET OpenCL::OpenCL)
+  GetOpenCL()
+endif()
+
+if(NOT TARGET OpenCL::TracingHeaders)
+  GetOpenCLTracing()
+endif()
+
+#if(NOT TARGET OpenCL::OpenCLExt)
+#  GetOpenCLExtensionLoader()
+#endif()
+
 # Build PTI libraries.
 configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
                ${PROJECT_BINARY_DIR}/include/pti/pti_version.h)
@@ -111,7 +124,8 @@ add_library(pti_all INTERFACE)
 add_library(Pti::pti_all ALIAS pti_all)
 
 # formerly pti_view
-add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc")
+add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
+                            "${PROJECT_SOURCE_DIR}/src/utils/trace_guard.cc")
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
 include(GenerateExportHeader)
@@ -132,7 +146,8 @@ target_include_directories(
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
           "${PROJECT_SOURCE_DIR}/src/sycl"
           "${PROJECT_SOURCE_DIR}/src/levelzero"
-          "${PROJECT_SOURCE_DIR}/src/utils")
+          "${PROJECT_SOURCE_DIR}/src/utils"
+          "${PROJECT_SOURCE_DIR}/src/opencl")
 
 set_target_properties(
   pti
@@ -170,6 +185,7 @@ target_link_libraries(
   PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
           LevelZero::level-zero
           spdlog::spdlog
+          OpenCL::OpenCL OpenCL::TracingHeaders #OpenCL::OpenCLExt
           ${CMAKE_DL_LIBS}
           ${FS_LIB})
 
@@ -192,6 +208,8 @@ target_include_directories(
          "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
   PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/sycl"
           "${PROJECT_SOURCE_DIR}/src/levelzero"
+          "${PROJECT_SOURCE_DIR}/src/opencl"
+          "${PROJECT_BINARY_DIR}/include"
           "${PROJECT_SOURCE_DIR}/src/utils" "${PROJECT_SOURCE_DIR}/src/loader")
 
 set_target_properties(
@@ -217,6 +235,11 @@ target_compile_definitions(
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
+
+
+if(PTI_DEBUG)
+  add_compile_definitions(PTI_DEBUG)
+endif()
 
 target_link_libraries(
   pti_view
@@ -267,6 +290,9 @@ target_compile_definitions(
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
+FindHeadersPath(
+  pti_view "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
+  "tracing.gen" gen_tracing_header LevelZero::level-zero)
 
 target_link_libraries(
   pti_metrics

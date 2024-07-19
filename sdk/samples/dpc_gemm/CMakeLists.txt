@@ -35,4 +35,4 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-target_link_libraries(dpc_gemm PUBLIC Pti::pti_view PRIVATE LevelZero::headers)
+target_link_libraries(dpc_gemm PUBLIC Pti::pti_view LevelZero::headers)

@@ -29,6 +29,7 @@ inline constexpr auto kOhThreshold =
 enum class OverheadRuntimeType {
   OVERHEAD_RUNTIME_TYPE_SYCL = 0,
   OVERHEAD_RUNTIME_TYPE_L0,
+  OVERHEAD_RUNTIME_TYPE_OCL,
 };
 
 typedef void (*OnZeOverheadFinishCallback)(void* data, ZeKernelCommandExecutionRecord& kcexec);

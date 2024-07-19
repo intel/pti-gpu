@@ -28,12 +28,14 @@
 #include "sycl_collector.h"
 #endif
 
+#include "cl_collector.h"
 #include "overhead_kinds.h"
 #include "unikernel.h"
 #include "utils.h"
 #include "view_buffer.h"
 #include "view_record_info.h"
 #include "ze_collector.h"
+// #include "cl_api_callbacks.h"
 
 using AskForBufferEvent = std::function<void(unsigned char**, size_t*)>;
 using ReturnBufferEvent = std::function<void(unsigned char*, size_t, size_t)>;
@@ -50,6 +52,8 @@ inline void KernelEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void ZecallEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
+inline void OclcallEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
 inline void SyclRuntimeEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void OverheadCollectionEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
@@ -58,6 +62,8 @@ inline void ZeChromeKernelStagesCallback(void* data,
                                          std::vector<ZeKernelCommandExecutionRecord>& kcexecrec);
 
 inline void ZeApiCallsCallback(void* data, ZeKernelCommandExecutionRecord& rec);
+inline void OclApiCallsCallback(void* data, ZeKernelCommandExecutionRecord& rec);
+inline void ClKernelStagesCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 
 inline void SyclRuntimeViewCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 inline void OverheadCollectionCallback(void* data, ZeKernelCommandExecutionRecord& rec);
@@ -66,6 +72,13 @@ enum class internal_result {
   kStatusSuccess = 0,
   kStatusViewNotEnabled = 1,  //!< status due to a pti_view_kind not enabled
 };
+// Backends supported types --- bitmapped for fast set and detection.
+typedef enum _pti_view_backends {
+  PTI_VIEW_BACKEND_TYPE = 0,        //!< Unknown memory type
+  PTI_VIEW_BACKEND_LEVEL_ZERO = 1,  //!< Host memory
+  PTI_VIEW_BACKEND_OPENCL = 2,      //!< Device memory
+  // Next one should be 2**2 = 4
+} pti_view_backends;
 
 struct ViewData {
   const char* fn_name = "";
@@ -78,7 +91,8 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
       {
         {PTI_VIEW_DEVICE_GPU_KERNEL,
           {
-            ViewData{"KernelEvent", KernelEvent}
+            ViewData{"KernelEvent", KernelEvent},
+            ViewData{"ClKernelEvent", KernelEvent}
           }
         },
         {PTI_VIEW_SYCL_RUNTIME_CALLS,
@@ -93,22 +107,33 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
         },
         {PTI_VIEW_DEVICE_GPU_MEM_COPY,
           {
-            ViewData{"zeCommandListAppendMemoryCopy", MemCopyEvent}
+            ViewData{"zeCommandListAppendMemoryCopy", MemCopyEvent},
+            ViewData{"clEnqueueWriteBuffer", MemCopyEvent},
+            ViewData{"clEnqueueReadBuffer", MemCopyEvent},
+            ViewData{"clEnqueueMemcpyINTEL", MemCopyEvent},
           }
         },
         {PTI_VIEW_DEVICE_GPU_MEM_FILL,
           {
-            ViewData{"zeCommandListAppendMemoryFill", MemFillEvent}
+            ViewData{"zeCommandListAppendMemoryFill", MemFillEvent},
+            ViewData{"clEnqueueFillBuffer", MemFillEvent},
+            ViewData{"clEnqueueSVMMemFill", MemFillEvent},
+            ViewData{"clEnqueueMemFillINTEL", MemFillEvent},
           }
         },
         {PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P,
           {
-            ViewData{"zeCommandListAppendMemoryCopyP2P", MemCopyP2PEvent},
+            ViewData{"zeCommandListAppendMemoryCopyP2P", MemCopyP2PEvent}
           }
         },
         {PTI_VIEW_LEVEL_ZERO_CALLS,
           {
             ViewData{"ZecallEvent", ZecallEvent},
+          }
+        },
+        {PTI_VIEW_OPENCL_CALLS,
+          {
+            ViewData{"OclcallEvent", OclcallEvent},
           }
         },
       };
@@ -149,11 +174,21 @@ struct PtiViewRecordHandler {
     // https://github.com/gabime/spdlog/wiki/3.-Custom-formatting
     spdlog::set_pattern("[%H:%M][%^-%l-%$]%P:%t %s:%# %v");
 
+    if (!cl_gpu_collector_) {
+      CollectorOptions collector_options{};
+      collector_options.kernel_tracing = true;
+      cl_gpu_collector_ = ClCollector::Create(cl_gpu_device, collector_options,
+                                              ClKernelStagesCallback, OclApiCallsCallback, nullptr);
+      if (cl_gpu_collector_) SetCollectorEnabled(pti_view_backends::PTI_VIEW_BACKEND_OPENCL);
+      SPDLOG_INFO("Successfully enabled(opencl gpu collector): {}", collectors_enabled);
+    }
     if (!collector_) {
       CollectorOptions collector_options{};
       collector_options.kernel_tracing = true;
       collector_ = ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback,
                                        ZeApiCallsCallback, nullptr);
+      if (collector_) SetCollectorEnabled(pti_view_backends::PTI_VIEW_BACKEND_LEVEL_ZERO);
+      SPDLOG_INFO("Successfully enabled(levelzero collector): {}", collectors_enabled);
       overhead::SetOverheadCallback(OverheadCollectionCallback);
       // Get timevalue in nanoseconds for frequency of sync between clock sources
       // (clock_monotonic_raw and by default clock_realtime)
@@ -218,6 +253,14 @@ struct PtiViewRecordHandler {
     return PTI_SUCCESS;
   }
 
+  inline void SetCollectorSupported(pti_view_backends supported_backend) {
+    collectors_supported |= supported_backend;
+  };
+
+  inline void SetCollectorEnabled(pti_view_backends enabled_backend) {
+    collectors_enabled |= enabled_backend;
+  };
+
   template <typename T>
   inline void InsertRecord(const T& view_record, uint32_t thread_id) {
     static_assert(std::is_trivially_copyable<T>::value,
@@ -241,6 +284,10 @@ struct PtiViewRecordHandler {
         DeliverBuffer(std::move(buffer));
       }
     });
+  }
+
+  inline pti_result OclTurnOnQueueTracing() {
+    return cl_gpu_collector_->EnableKernelTracingQueuesOnly();
   }
 
   inline pti_result RegisterTimestampCallback(pti_fptr_get_timestamp get_timestamp) {
@@ -312,12 +359,16 @@ struct PtiViewRecordHandler {
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
                                (type == pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
+    bool ocl_collection_type = ((type == pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL) ||
+                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
+                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
+                                (type == pti_view_kind::PTI_VIEW_OPENCL_CALLS) ||
+                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
 
     //
     // TBD --- implement and remove the checks for below pti_view_kinds
     //
-    if ((type == pti_view_kind::PTI_VIEW_DEVICE_CPU_KERNEL) ||
-        (type == pti_view_kind::PTI_VIEW_OPENCL_CALLS)) {
+    if (type == pti_view_kind::PTI_VIEW_DEVICE_CPU_KERNEL) {
       return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
     }
 
@@ -344,13 +395,14 @@ struct PtiViewRecordHandler {
 #endif
     }
 
-    if (collector_) {
+    if (collector_ || cl_gpu_collector_) {
       collection_enabled = true;
-      if (l0_collection_type) {
+      if (l0_collection_type || ocl_collection_type) {
         auto it = map_view_kind_enabled.find(type);
         if (it == map_view_kind_enabled.cend() || map_view_kind_enabled[type] == false) {
           map_view_kind_enabled[type] = true;
-          collector_->EnableTracing();
+          if (l0_collection_type) collector_->EnableTracing();
+          if (ocl_collection_type) cl_gpu_collector_->EnableTracing();
         }
       }
     }
@@ -380,6 +432,11 @@ struct PtiViewRecordHandler {
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
                                (type == pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
+    bool ocl_collection_type = ((type == pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL) ||
+                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
+                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
+                                (type == pti_view_kind::PTI_VIEW_OPENCL_CALLS) ||
+                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
 
     if (type == pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD) {
       overhead::overhead_collection_enabled = false;
@@ -396,11 +453,12 @@ struct PtiViewRecordHandler {
       return pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
     if (collector_) {
-      if (l0_collection_type) {
+      if (l0_collection_type || ocl_collection_type) {
         auto it = map_view_kind_enabled.find(type);
         if (it != map_view_kind_enabled.cend() && map_view_kind_enabled[type] == true) {
           map_view_kind_enabled[type] = false;
-          collector_->DisableTracing();
+          if (l0_collection_type) collector_->DisableTracing();
+          if (ocl_collection_type) cl_gpu_collector_->DisableTracing();
         }
       }
     }
@@ -546,6 +604,8 @@ struct PtiViewRecordHandler {
     collection_enabled_ = false;
   }
   std::unique_ptr<ZeCollector> collector_ = nullptr;
+  std::unique_ptr<ClCollector> cl_gpu_collector_ = nullptr;
+  cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
   std::atomic<bool> collection_enabled_ = false;
   // Internal PTI state.
   // If abnornal situation happens - this variable will be set the corresponding value
@@ -575,6 +635,9 @@ struct PtiViewRecordHandler {
   std::atomic<bool> deinit_ = false;
 
   std::map<uint32_t, SpecialCallsData> map_spcalls_suppression;
+  uint32_t collectors_supported = 0;  // which backends do we currently support
+  uint32_t collectors_enabled =
+      0;  // which supported backends have been successfully created by pti.
 };
 
 // Required to access buffer from ze_collector callbacks
@@ -634,11 +697,11 @@ inline void SetMemCopyType(T& mem_record, const ZeKernelCommandExecutionRecord& 
   mem_record._mem_dst = rec.route_.dst_type;
 }
 
-inline void GetDeviceId(char* buf, const ze_pci_ext_properties_t& pci_prop_) {
+inline void GetDeviceId(char* buf, const UniPciProps& pci_prop_) {
   // determined by pti_view_record_kernel _pci_address
   constexpr auto kMaxDeviceIdLength = PTI_MAX_PCI_ADDRESS_SIZE;
-  std::snprintf(buf, kMaxDeviceIdLength, "%x:%x:%x.%x", pci_prop_.address.domain,
-                pci_prop_.address.bus, pci_prop_.address.device, pci_prop_.address.function);
+  std::snprintf(buf, kMaxDeviceIdLength, "%x:%x:%x.%x", pci_prop_.domain, pci_prop_.bus,
+                pci_prop_.device, pci_prop_.function);
 }
 
 inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRecord& rec) {
@@ -679,6 +742,7 @@ inline uint64_t ApplyTimeShift(uint64_t timestamp, int64_t time_shift) {
 
 template <typename T>
 inline void SetMemCpyIds(T& record, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("IN: {}, device_: {}, dst_device: {}", __FUNCTION__, rec.device_, rec.dst_device_);
   if (rec.device_ != nullptr) {
     GetDeviceId(record._pci_address, rec.pci_prop_);
     std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
@@ -874,10 +938,13 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
     Instance().InsertRecord(special_rec, special_rec._thread_id);
   }
 #endif
+  SPDLOG_TRACE("In {}, name: {}, device_id: {}, thread_id: {}", __FUNCTION__, record._name,
+               rec.pci_prop_.domain, rec.tid_);
   Instance().InsertRecord(record, record._thread_id);
 }
 
 inline void ZecallEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, thread_id: {}", __FUNCTION__, rec.tid_);
   pti_view_record_zecalls record;
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS;
 
@@ -889,6 +956,23 @@ inline void ZecallEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   record._process_id = rec.pid_;
   record._callback_id = rec.callback_id_;
   record._result = rec.result_;
+  record._correlation_id = rec.cid_;
+  Instance().InsertRecord(record, record._thread_id);
+}
+
+inline void OclcallEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, thread_id: {}, corrid: {}, callback_id: {}", __FUNCTION__, rec.tid_,
+               rec.cid_, rec.callback_id_);
+  pti_view_record_oclcalls record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_OPENCL_CALLS;
+
+  int64_t ts_shift = Instance().GetTimeShift();
+
+  record._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
+  record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
+  record._thread_id = rec.tid_;
+  record._process_id = rec.pid_;
+  record._callback_id = rec.callback_id_;
   record._correlation_id = rec.cid_;
   Instance().InsertRecord(record, record._thread_id);
 }
@@ -919,6 +1003,59 @@ inline void ZeChromeKernelStagesCallback(void* data,
   }
 }
 
+/*
+  for (const auto& rec : kcexecrec) {
+    if ((rec.name_.find("P2P)") != std::string::npos) &&
+        (rec.name_.find("zeCommandListAppendMemoryCopy") != std::string::npos)) {
+      Instance()("zeCommandListAppendMemoryCopyP2P", data, rec);
+    } else if (rec.name_.find("zeCommandListAppendMemoryCopy") != std::string::npos) {
+      Instance()("zeCommandListAppendMemoryCopy", data, rec);
+    } else if (rec.name_.find("zeCommandListAppendMemoryFill") != std::string::npos) {
+      Instance()("zeCommandListAppendMemoryFill", data, rec);
+    } else if (rec.name_.find("zeCommandListAppendBarrier") != std::string::npos) {
+      // no-op for now
+    } else {
+      Instance()("KernelEvent", data, rec);
+    }
+  }
+}
+*/
+
+inline void ClKernelStagesCallback(void* data, ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_DEBUG("In {}", __FUNCTION__);
+  /*
+      std::cout << "Device: " << rec.device_ << "\n" << std::hex <<
+                   "PCI_BUS:" << rec.pci_info_.pci_bus << "\n" <<
+                   "PCI_Device:" << rec.pci_info_.pci_device << "\n" <<
+                   "PCI_Function:" << rec.pci_info_.pci_function << "\n" << std::dec <<
+                   "Q:" << rec.queue_ << "\n" <<
+                   "T:" << rec.tile_ << "\n" <<
+                   "Kid:" << rec.kid_ << "\n" <<
+                   "STime:" << rec.start_time_<< "\n" <<
+                   "STime:" << rec.end_time_<< "\n" <<
+                   std::endl;
+  */
+
+  if ((rec.name_.find("P2P)") != std::string::npos) &&
+      (rec.name_.find("clEnqueueWriteBuffer") != std::string::npos)) {
+    Instance()("clEnqueueWriteBuffer", data, rec);
+  } else if (rec.name_.find("clEnqueueWriteBuffer") != std::string::npos) {
+    Instance()("clEnqueueWriteBuffer", data, rec);
+  } else if (rec.name_.find("clEnqueueReadBuffer") != std::string::npos) {
+    Instance()("clEnqueueReadBuffer", data, rec);
+  } else if (rec.name_.find("clEnqueueFillBuffer") != std::string::npos) {
+    Instance()("clEnqueueFillBuffer", data, rec);
+  } else if (rec.name_.find("clEnqueueSVMMemFill") != std::string::npos) {
+    Instance()("clEnqueueSVMMemFill", data, rec);
+  } else if (rec.name_.find("clEnqueueMemFillINTEL") != std::string::npos) {
+    Instance()("clEnqueueMemFillINTEL", data, rec);
+  } else if (rec.name_.find("clEnqueueMemcpyINTEL") != std::string::npos) {
+    Instance()("clEnqueueMemcpyINTEL", data, rec);
+  } else {
+    Instance()("ClKernelEvent", data, rec);
+  }
+}
+
 inline void ZeApiCallsCallback([[maybe_unused]] void* data,
                                [[maybe_unused]] ZeKernelCommandExecutionRecord& rec) {
   internal_result status = Instance()("ZecallEvent", data, rec);
@@ -929,4 +1066,17 @@ inline void ZeApiCallsCallback([[maybe_unused]] void* data,
     Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
   }
 }
+
+inline void OclApiCallsCallback([[maybe_unused]] void* data,
+                                [[maybe_unused]] ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_DEBUG("In {}", __FUNCTION__);
+  internal_result status = Instance()("OclcallEvent", data, rec);
+  // Assume zecalls are disabled unless we know it is not so.
+  if (status == internal_result::kStatusSuccess) {
+    SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
+    special_rec_data.oclcall_disabled = false;
+    Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
+  }
+}
+
 #endif  // SRC_API_VIEW_HANDLER_H_

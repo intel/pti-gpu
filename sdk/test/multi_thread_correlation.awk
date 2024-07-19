@@ -12,6 +12,16 @@ BEGIN {
         tid = 0;
 }
 
+/OclCall Thread Id:/ { tid=$4 };
+/OclCall Start Time:/ { zecall_start_ts = $4 };
+/OclCall End Time:/ { zecall_end_ts = $4 };
+/^OclCall Correlation Id:/ && $4 > 0 {
+	oclcall[$4]= tid;
+	oclcall_start_time[$4]= oclcall_start_ts;
+	oclcall_end_time[$4]= oclcall_end_ts;
+	oclcall_line_number[$4]= NR;
+       	};
+
 /ZeCall Thread Id:/ { tid=$4 };
 /ZeCall Start Time:/ { zecall_start_ts = $4 };
 /ZeCall End Time:/ { zecall_end_ts = $4 };
@@ -68,6 +78,12 @@ END {
 		#for (corrId in kthreads) if (kthreads[corrId] != sycl[corrId]) print(corrId);
 		#};
 	for (corrId in kthreads) {
+		if (oclcall[corrId] != kthreads[corrId]) {
+		  print(k_type[corrId]);
+		  print ("Correlation Id issues in oclcall --- Threads don't match: ", oclcall[corrId], kthreads[corrId], k_type[corrId])
+                  print("------------>for correlationId:", corrId, "- oclcall line number: ",oclcall_line_number[corrId],"- levelZero line number:",k_line_number[corrId]);
+		  corrErr=1;
+		};
 		if (zecall[corrId] != kthreads[corrId]) {
 		  print(k_type[corrId]);
 		  print ("Correlation Id issues in zecall --- Threads don't match: ", zecall[corrId], kthreads[corrId], k_type[corrId])
@@ -82,8 +98,10 @@ END {
 		};
 		if (! (sycl_start_time[corrId] <= k_append_time[corrId] &&
                   sycl_start_time[corrId] <= zecall_start_time[corrId] &&
+                  sycl_start_time[corrId] <= oclcall_start_time[corrId] &&
                   sycl_end_time[corrId] >= sycl_start_time[corrId] &&
                   sycl_end_time[corrId] >= zecall_end_time[corrId] &&
+                  sycl_end_time[corrId] >= oclcall_end_time[corrId] &&
                   k_append_time[corrId] <= k_submit_time[corrId] &&
                   k_submit_time[corrId] <= k_start_time[corrId] &&
                   k_start_time[corrId] <= k_end_time[corrId]))

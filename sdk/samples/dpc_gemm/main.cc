@@ -30,6 +30,7 @@ void StartTracing() {
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_OPENCL_CALLS));
 }
 
 void StopTracing() {
@@ -40,6 +41,7 @@ void StopTracing() {
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_OPENCL_CALLS));
 }
 
 void ProvideBuffer(unsigned char **buf, std::size_t *buf_size) {
@@ -103,6 +105,17 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cout << "Found Zecalls Record" << '\n';
         samples_utils::dump_record(reinterpret_cast<pti_view_record_zecalls *>(ptr));
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_OPENCL_CALLS: {
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        std::cout << "Found Oclcalls Record" << '\n';
+        samples_utils::dump_record(reinterpret_cast<pti_view_record_oclcalls *>(ptr));
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
@@ -255,8 +268,6 @@ void Usage(const char *name) {
 int main(int argc, char *argv[]) {
   int exit_code = EXIT_SUCCESS;
   uint64_t eid = 11;  // external correlation id base.
-  PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
-  StartTracing();
   // start tracing early enables to capture nodes creation at piProgramCreate
   //  and Kernel Task sycl file/line info is captured, as exampple shows at a Node Creation
   // Emit external correlation id records by marking section of code by
@@ -311,6 +322,8 @@ int main(int argc, char *argv[]) {
   sycl::queue queue(dev, sycl::async_handler{}, prop_list);   // Main runandcheck kernel
   sycl::queue queue1(dev, sycl::async_handler{}, prop_list);  // Main runandcheck kernel
 
+  PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
+  StartTracing();
   PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(
       pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid));
   PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(

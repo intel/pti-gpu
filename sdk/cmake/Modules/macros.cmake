@@ -34,7 +34,7 @@ endmacro()
 macro(FindOpenCLLibrary TARGET)
   if(WIN32)
     if(NOT OpenCL_FOUND)
-      find_package(OpenCL 2.1)
+      find_package(OpenCL 3.0)
     endif()
   else()
     if(DEFINED ENV{LD_LIBRARY_PATH})
@@ -53,7 +53,7 @@ macro(FindOpenCLLibrary TARGET)
   if(EXISTS ${OpenCL_LIBRARY})
     message(STATUS
       "OpenCL library is found at ${OpenCL_LIBRARY}")
-    target_link_libraries (${TARGET} ${OpenCL_LIBRARY})
+    #target_link_libraries (${TARGET} ${OpenCL_LIBRARY})
   else()
     message(FATAL_ERROR
       "OpenCL library is not found. "
@@ -62,53 +62,8 @@ macro(FindOpenCLLibrary TARGET)
   endif()
 endmacro()
 
-macro(FindOpenCLHeaders TARGET)
-  if(WIN32)
-    if(NOT OpenCL_FOUND)
-      find_package(OpenCL 2.1)
-    endif()
-  else()
-    include(CheckIncludeFileCXX)
-    CHECK_INCLUDE_FILE_CXX(CL/cl.h OpenCL_INCLUDE_DIRS)
-    if (OpenCL_INCLUDE_DIRS)
-      include(CheckTypeSize)
-      set(CMAKE_EXTRA_INCLUDE_FILES "CL/cl.h")
-      CHECK_TYPE_SIZE(cl_kernel_sub_group_info CL_KERNEL_SUB_GROUP_INFO_SIZE LANGUAGE CXX)
-      set(CMAKE_EXTRA_INCLUDE_FILES)
-      if(NOT CL_KERNEL_SUB_GROUP_INFO_SIZE)
-        set(OpenCL_INCLUDE_DIRS 0)
-      endif()
-    endif()
-  endif()
-
-  if(NOT OpenCL_INCLUDE_DIRS)
-    RequirePythonInterp()
-    set(OPENCL_INC_PATH "${CMAKE_BINARY_DIR}")
-
-    message(STATUS "OpenCL headers are not found, will be downloaded automatically")
-
-    add_custom_target(cl_headers ALL
-                      DEPENDS "${OPENCL_INC_PATH}/CL/cl.h"
-                              "${OPENCL_INC_PATH}/CL/cl_gl.h"
-                              "${OPENCL_INC_PATH}/CL/cl_version.h"
-                              "${OPENCL_INC_PATH}/CL/cl_platform.h")
-    add_custom_command(OUTPUT "${OPENCL_INC_PATH}/CL/cl.h"
-                              "${OPENCL_INC_PATH}/CL/cl_gl.h"
-                              "${OPENCL_INC_PATH}/CL/cl_version.h"
-                              "${OPENCL_INC_PATH}/CL/cl_platform.h"
-                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_cl_headers.py" "${OPENCL_INC_PATH}" "${CMAKE_BINARY_DIR}")
-
-    target_include_directories(${TARGET} PUBLIC "${OPENCL_INC_PATH}")
-    add_dependencies(${TARGET} cl_headers)
-  else()
-    target_include_directories (${TARGET} PUBLIC ${OpenCL_INCLUDE_DIRS})
-  endif()
-  target_compile_options(${TARGET}
-    PRIVATE -DCL_TARGET_OPENCL_VERSION=210)
-endmacro()
-
 macro(GetOpenCLTracingHeaders TARGET)
-  set(OPENCL_TRACING_INC_PATH "${CMAKE_BINARY_DIR}")
+  set(OPENCL_TRACING_INC_PATH "${PROJECT_BINARY_DIR}")
   RequirePythonInterp()
 
   add_custom_target(cl_tracing_headers ALL
@@ -118,10 +73,13 @@ macro(GetOpenCLTracingHeaders TARGET)
   add_custom_command(OUTPUT ${OPENCL_TRACING_INC_PATH}/CL/tracing_api.h
                             ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h
                             ${OPENCL_TRACING_INC_PATH}/CL/cl_ext_private.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_cl_tracing_headers.py" ${OPENCL_TRACING_INC_PATH} ${CMAKE_BINARY_DIR})
+                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/src/opencl/get_cl_tracing_headers.py" ${OPENCL_TRACING_INC_PATH} ${PROJECT_BINARY_DIR})
+
+  message(STATUS
+        "GetOpenCL is at ${PTI_CMAKE_MACRO_DIR}")
 
   target_include_directories(${TARGET}
-    PUBLIC "${OPENCL_TRACING_INC_PATH}")
+    PRIVATE "${OPENCL_TRACING_INC_PATH}")
   add_dependencies(${TARGET}
     cl_tracing_headers)
 endmacro()
@@ -848,6 +806,32 @@ macro(FindL0Headers TARGET)
   set(CMAKE_REQUIRED_INCLUDES)
 endmacro()
 
+macro(FindHeadersPathOCL TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target)
+  message(STATUS "FindHeadersPath custom_target only route")
+  RequirePythonInterp()
+  find_path(L0_INC_PATH
+    NAMES level_zero
+    PATHS ENV CPATH)
+  if (NOT L0_INC_PATH)
+    message(FATAL_ERROR
+      "Level Zero headers path is not found.\n"
+      "You may need to install oneAPI Level Zero Driver to fix this issue.")
+  else()
+    message(STATUS "OCL headers are found at ${L0_INC_PATH}")
+  endif()
+
+  set(L0_GEN_INC_PATH "${CMAKE_BINARY_DIR}")
+  set(OCL_DIR_PATH "${CMAKE_BINARY_DIR}/CL")
+  add_custom_target(${custom_target} ALL
+                    DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME})
+  add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
+                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${OCL_DIR_PATH}")
+  target_include_directories(${TARGET}
+    PRIVATE "${L0_INC_PATH}/CL")
+  add_dependencies(${TARGET}
+    ${custom_target})
+endmacro()
+
 macro(FindL0HeadersPath TARGET L0_GEN_SCRIPT)
   RequirePythonInterp()
   find_path(L0_INC_PATH
@@ -873,6 +857,7 @@ macro(FindL0HeadersPath TARGET L0_GEN_SCRIPT)
 endmacro()
 
 macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET)
+  message(STATUS "FindHeadersPath custom_target plus L0 target route")
   RequirePythonInterp()
 
   # Use the target that links level zero to find the level zero library
@@ -895,7 +880,7 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET
   add_custom_target(${custom_target} ALL
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME})
   add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
-                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${PROJECT_BINARY_DIR}/include/pti" )
+                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${compute-runtime_SOURCE_DIR}/opencl/CL" "${PROJECT_BINARY_DIR}/include/pti")
   target_include_directories(${TARGET}
     PUBLIC "$<BUILD_INTERFACE:${L0_GEN_INC_PATH}>")
   add_dependencies(${TARGET}
@@ -1317,7 +1302,6 @@ macro(AddProjectVersionInfo TARGET)
   endif()
 endmacro()
 
-
 #
 # Check whether to use experimental/filesystem or filesystem.
 #
@@ -1396,3 +1380,126 @@ macro(CheckExperimentalFilesystem)
     endif()
   endif()
 endmacro()
+
+macro(GetOpenCL)
+  if(NOT OpenCL_INCLUDE_DIR)
+    if (NOT TARGET OpenCL::Headers)
+      find_package(OpenCLHeaders QUIET)
+    endif()
+    if (NOT TARGET OpenCL::Headers)
+      include(FetchContent)
+      if(CMAKE_VERSION VERSION_LESS "3.24")
+        FetchContent_Declare(
+          OpenCL-Headers
+          URL https://github.com/KhronosGroup/OpenCL-Headers/archive/refs/tags/v2024.10.24.tar.gz
+          URL_HASH
+          SHA256=159f2a550592bae49859fee83d372acd152328fdf95c0dcd8b9409f8fad5db93
+        )
+      else()
+        FetchContent_Declare(
+          OpenCL-Headers
+          URL https://github.com/KhronosGroup/OpenCL-Headers/archive/refs/tags/v2024.10.24.tar.gz
+          URL_HASH
+          SHA256=159f2a550592bae49859fee83d372acd152328fdf95c0dcd8b9409f8fad5db93
+          DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+        )
+      endif()
+      FetchContent_MakeAvailable(OpenCL-Headers)
+    endif()
+    if(TARGET OpenCL::Headers)
+      get_target_property(OpenCL_INCLUDE_DIR OpenCL::Headers SOURCE_DIR)
+    endif()
+  endif()
+
+  find_package(OpenCL)
+
+  if (NOT TARGET OpenCL::OpenCL)
+    find_package(OpenCLICDLoader QUIET)
+  endif()
+
+  if (NOT TARGET OpenCL::OpenCL)
+    include(FetchContent)
+    if(CMAKE_VERSION VERSION_LESS "3.24")
+      FetchContent_Declare(
+        OpenCL-ICD-Loader
+        URL https://github.com/KhronosGroup/OpenCL-ICD-Loader/archive/refs/tags/v2024.10.24.tar.gz
+        URL_HASH
+        SHA256=95f2f0cda375b13d2760290df044ebea9c6ff954a7d7faa0867422442c9174dc
+      )
+    else()
+      FetchContent_Declare(
+        OpenCL-ICD-Loader
+        URL https://github.com/KhronosGroup/OpenCL-ICD-Loader/archive/refs/tags/v2024.10.24.tar.gz
+        URL_HASH
+        SHA256=95f2f0cda375b13d2760290df044ebea9c6ff954a7d7faa0867422442c9174dc
+        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+      )
+    endif()
+    FetchContent_MakeAvailable(OpenCL-ICD-Loader)
+    if (UNIX)
+      # Unhide symbols since we aren't delivering this binary.
+      target_compile_definitions(OpenCL PRIVATE
+        CL_API_ENTRY=__attribute__\(\(visibility\ \(\"default\"\)\)\))
+    endif()
+  endif()
+endmacro()
+
+macro(GetOpenCLTracing)
+  if (NOT TARGET OpenCL::TracingHeaders)
+    find_package(OpenCLTracing QUIET)
+  endif()
+  if (NOT TARGET OpenCL::TracingHeaders)
+    include(FetchContent)
+    if(NOT Git_FOUND)
+      find_package(Git REQUIRED)
+    endif()
+
+    # The Intel OpenCL Tracing headers are in the compute-runtime repo. However,
+    # they are a little bit scattered. This patch re-organizes them along with
+    # fixes an include.
+    if(NOT compute-runtime_POPULATED)
+      FetchContent_Declare(
+          compute-runtime
+          GIT_REPOSITORY https://github.com/intel/compute-runtime.git
+          GIT_TAG 625e7e0d87e3df7a0eb5dae88452092366c8f85b # 24.39.31294.12
+          PATCH_COMMAND ${GIT_EXECUTABLE} apply ${PROJECT_SOURCE_DIR}/cmake/Modules/0001-organize-tracing-headers.patch
+      )
+
+      FetchContent_Populate(compute-runtime)
+    endif()
+
+    if(compute-runtime_POPULATED)
+      if (NOT TARGET OpenCL::TracingHeaders)
+        add_library(OpenCLTracing INTERFACE IMPORTED)
+        add_library(OpenCL::TracingHeaders ALIAS OpenCLTracing)
+        set_target_properties(OpenCLTracing PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES ${compute-runtime_SOURCE_DIR}/opencl)
+      endif()
+    endif()
+
+  endif()
+endmacro()
+
+macro(GetOpenCLExtensionLoader)
+  if (NOT TARGET OpenCL::OpenCLExt)
+    find_package(OpenCLExtensionLoader QUIET)
+  endif()
+  if (NOT TARGET OpenCL::OpenCLExt)
+    include(FetchContent)
+    FetchContent_Declare(
+        opencl-extension-loader
+        GIT_REPOSITORY https://github.com/bashbaug/opencl-extension-loader.git
+        GIT_TAG a4f024ddeabd217fbb129e5fdfb659f155140b09 # top of main
+    )
+    FetchContent_MakeAvailable(opencl-extension-loader)
+    target_compile_options(OpenCLExt PRIVATE
+      $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-function>
+      $<$<CXX_COMPILER_ID:Clang>:-Wno-unused-function>
+      $<$<CXX_COMPILER_ID:GNU>:-Wno-unused-function>
+      )
+    set_target_properties(OpenCLExt
+                          PROPERTIES
+                          POSITION_INDEPENDENT_CODE ON)
+  endif()
+endmacro()
+

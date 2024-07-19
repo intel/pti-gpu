@@ -37,4 +37,4 @@ if (NOT TARGET Pti::pti_view)
 endif()
 
 target_link_libraries(dpc_gemm_threaded PUBLIC Threads::Threads Pti::pti_view
-  LevelZero::headers)
+  LevelZero::level-zero OpenCL::OpenCL)

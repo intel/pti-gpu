@@ -194,6 +194,7 @@ class SyclCollector {
   static XPTI_CALLBACK_API void TpCallback(uint16_t TraceType, xpti::trace_event_data_t* /*Parent*/,
                                            xpti::trace_event_data_t* Event, uint64_t,
                                            const void* UserData) {
+    SPDLOG_DEBUG("In {}", __FUNCTION__);
     auto Payload = xptiQueryPayload(Event);
     uint64_t Time = utils::GetTime();
 

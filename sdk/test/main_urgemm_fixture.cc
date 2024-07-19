@@ -43,6 +43,8 @@
 namespace syclex = sycl::ext::oneapi::experimental;
 
 namespace {
+bool l0_backend_found = false;
+bool opencl_backend_found = false;
 bool memory_view_record_created = false;
 bool kernel_view_record_created = false;
 bool sycl_runtime_record_created = false;
@@ -156,14 +158,14 @@ float RunAndCheck(ur_kernel_handle_t kernel, ur_device_handle_t device, ur_conte
   return Check(c, expected_result);
 }
 
-ur_result_t GetL0Adapter(std::vector<ur_adapter_handle_t>& adapters, unsigned int& idx) {
+ur_result_t GetAdapter(std::vector<ur_adapter_handle_t>& adapters, unsigned int& idx) {
   unsigned int index = 0;
   for (auto adapter : adapters) {
     ur_adapter_backend_t backend;
     UR_CHECK_SUCCESS(urAdapterGetInfo(adapter, UR_ADAPTER_INFO_BACKEND,
                                       sizeof(ur_adapter_backend_t), &backend, nullptr));
 
-    if (backend == UR_ADAPTER_BACKEND_LEVEL_ZERO) {
+    if ((backend == UR_ADAPTER_BACKEND_LEVEL_ZERO) || (backend == UR_ADAPTER_BACKEND_OPENCL)) {
       idx = index;
       return UR_RESULT_SUCCESS;
     }
@@ -181,21 +183,29 @@ void ComputeUsingUr(std::vector<float>& a, std::vector<float>& b, std::vector<fl
 
   uint32_t count = 0;
   uint32_t dcount = 0;
+  uint32_t pcount = 0;
 
   UR_CHECK_SUCCESS(urAdapterGet(0, nullptr, &count));
   std::vector<ur_adapter_handle_t> adapters(count);
   UR_CHECK_SUCCESS(urAdapterGet(count, adapters.data(), nullptr));
 
   unsigned int idx;
-  UR_CHECK_SUCCESS(GetL0Adapter(adapters, idx));
+  UR_CHECK_SUCCESS(GetAdapter(adapters, idx));
 
-  std::vector<ur_platform_handle_t> platforms(count);
-  UR_CHECK_SUCCESS(urPlatformGet(&adapters[idx], 1, 1, platforms.data(), nullptr));
+  UR_CHECK_SUCCESS(urPlatformGet(&adapters[idx], 1, 1, nullptr, &pcount));
+  std::cout << "Number of platforms: " << pcount << "\n";
+  std::vector<ur_platform_handle_t> platforms(pcount);
+  UR_CHECK_SUCCESS(urPlatformGet(&adapters[idx], 1, pcount, platforms.data(), nullptr));
 
-  UR_CHECK_SUCCESS(urDeviceGet(platforms[0], UR_DEVICE_TYPE_GPU, 0, nullptr, &dcount));
+  idx = 0;
+  for (auto p : platforms) {
+    UR_CHECK_SUCCESS(urDeviceGet(p, UR_DEVICE_TYPE_GPU, 0, nullptr, &dcount));
+    if (dcount) break;
+    idx++;
+  }
   std::vector<ur_device_handle_t> devices(dcount);
   UR_CHECK_SUCCESS(
-      urDeviceGet(platforms.front(), UR_DEVICE_TYPE_GPU, dcount, devices.data(), nullptr));
+      urDeviceGet(platforms[idx], UR_DEVICE_TYPE_GPU, dcount, devices.data(), nullptr));
 
   ur_context_handle_t hContext;
   UR_CHECK_SUCCESS(urContextCreate(1, &devices[0], nullptr, &hContext));
@@ -252,6 +262,8 @@ class MainUrFixtureTest : public ::testing::Test {
     rejected_buffer_calls = 0;
     completed_buffer_calls = 0;
     completed_buffer_used_bytes = 0;
+    l0_backend_found = false;
+    opencl_backend_found = false;
     memory_view_record_created = false;
     kernel_view_record_created = false;
     sycl_runtime_record_created = false;
@@ -325,7 +337,6 @@ class MainUrFixtureTest : public ::testing::Test {
             pti_view_record_sycl_runtime* rec =
                 reinterpret_cast<pti_view_record_sycl_runtime*>(ptr);
             std::string function_name = rec->_name;
-            std::cout << "Runtime_recs: " << function_name << "\n";
             if ((function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
               sycl_spv_kernel_seen = true;
             } else if ((function_name.find("EnqueueMemBufferFill") != std::string::npos)) {
@@ -376,16 +387,16 @@ class MainUrFixtureTest : public ::testing::Test {
   void ComputeUsingSycl(std::vector<float>& a, std::vector<float>& b, std::vector<float>& c,
                         unsigned size, unsigned repeat_count, float expected_result) {
     sycl::queue q;
-    bool l0_backend_found = false;
     for (auto platform : sycl::platform::get_platforms()) {
       std::vector<sycl::device> gpu_devices = platform.get_devices();
-      if (platform.get_backend() == sycl::backend::ext_oneapi_level_zero) {
+      if ((platform.get_backend() == sycl::backend::ext_oneapi_level_zero) ||
+          (platform.get_backend() == sycl::backend::opencl)) {
         q = sycl::queue(gpu_devices[0]);
-        l0_backend_found = true;
+        l0_backend_found = (q.get_backend() == sycl::backend::ext_oneapi_level_zero);
+        opencl_backend_found = (q.get_backend() == sycl::backend::opencl);
       }
     }
 
-    PTI_ASSERT(l0_backend_found);
     std::string module_name = "gemm.spv";
     std::cout << utils::GetExecutablePath() + module_name << std::endl;
     std::ifstream spv_stream(utils::GetExecutablePath() + module_name, std::ios::binary);
@@ -467,7 +478,7 @@ TEST_F(MainUrFixtureTest, syclGemmSpvRuntimeRecordsDetected) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_EQ(sycl_spv_kernel_seen, true);
-  EXPECT_EQ(sycl_spv_special_rec_seen, false);
+  if (l0_backend_found) EXPECT_EQ(sycl_spv_special_rec_seen, false);
   EXPECT_EQ(sycl_spv_mem_buffer_read_seen, true);
   EXPECT_EQ(sycl_spv_mem_buffer_copy_seen, true);
   if (!is_integrated_graphics) EXPECT_EQ(sycl_spv_mem_buffer_write_seen, true);

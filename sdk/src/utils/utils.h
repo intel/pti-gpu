@@ -75,6 +75,14 @@ inline uint64_t GetTime(clockid_t id) {
   PTI_ASSERT(status == 0);
   return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
 }
+
+inline uint64_t ConvertClockMonotonicToRaw(uint64_t clock_monotonic) {
+  uint64_t raw = GetTime(CLOCK_MONOTONIC_RAW);
+  uint64_t monotonic = GetTime(CLOCK_MONOTONIC);
+  return (raw > monotonic) ? clock_monotonic + (raw - monotonic)
+                           : clock_monotonic - (monotonic - raw);
+}
+
 #endif
 
 inline uint64_t GetMonotonicRawTime() {
@@ -288,6 +296,20 @@ inline uint32_t GetTid() {
 #else
 #error "SYS_gettid is unavailable on this system"
 #endif
+#endif
+}
+
+inline uint64_t GetSystemTime() {
+#if defined(_WIN32)
+  LARGE_INTEGER ticks{};
+  LARGE_INTEGER frequency{};
+  BOOL status = QueryPerformanceFrequency(&frequency);
+  PTI_ASSERT(status != 0);
+  status = QueryPerformanceCounter(&ticks);
+  PTI_ASSERT(status != 0);
+  return ticks.QuadPart * (NSEC_IN_SEC / frequency.QuadPart);
+#else
+  return GetTime(CLOCK_MONOTONIC_RAW);
 #endif
 }
 

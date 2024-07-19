@@ -69,12 +69,10 @@ struct ZeKernelGroupSize {
   uint32_t z;
 };
 
-enum class KernelCommandType { kInvalid = 0, kKernel = 1, kMemory = 2, kCommand = 3 };
-
 struct ZeKernelCommandProps {
   std::string name;
   KernelCommandType type = KernelCommandType::kInvalid;
-  ZeMemoryCommandRoute route;
+  UniMemoryCommandRoute route;
   size_t simd_width;
   size_t bytes_transferred;
   std::array<uint32_t, 3> group_count;
@@ -823,7 +821,11 @@ class ZeCollector {
       rec.tile_ = tile;
       auto it = device_descriptors_.find(command->device);
       PTI_ASSERT(it != device_descriptors_.end());
-      rec.pci_prop_ = it->second.pci_properties;
+      // rec.pci_prop_ = it->second.pci_properties;
+      rec.pci_prop_.domain = it->second.pci_properties.address.domain;
+      rec.pci_prop_.bus = it->second.pci_properties.address.bus;
+      rec.pci_prop_.device = it->second.pci_properties.address.device;
+      rec.pci_prop_.function = it->second.pci_properties.address.function;
       rec.name_ = std::move(name);
       rec.queue_ = command->queue;
       rec.device_ = command->device;
@@ -848,12 +850,20 @@ class ZeCollector {
         if (command->props.src_device != nullptr) {
           auto dev_it = device_descriptors_.find(command->props.src_device);
           PTI_ASSERT(dev_it != device_descriptors_.end());
-          rec.pci_prop_ = dev_it->second.pci_properties;
+          // rec.pci_prop_ = dev_it->second.pci_properties;
+          rec.pci_prop_.domain = dev_it->second.pci_properties.address.domain;
+          rec.pci_prop_.bus = dev_it->second.pci_properties.address.bus;
+          rec.pci_prop_.device = dev_it->second.pci_properties.address.device;
+          rec.pci_prop_.function = dev_it->second.pci_properties.address.function;
         }
         if (command->props.dst_device != nullptr) {
           auto dev_it = device_descriptors_.find(command->props.dst_device);
           PTI_ASSERT(dev_it != device_descriptors_.end());
-          rec.dst_pci_prop_ = dev_it->second.pci_properties;
+          // rec.dst_pci_prop_ = dev_it->second.pci_properties;
+          rec.dst_pci_prop_.domain = dev_it->second.pci_properties.address.domain;
+          rec.dst_pci_prop_.bus = dev_it->second.pci_properties.address.bus;
+          rec.dst_pci_prop_.device = dev_it->second.pci_properties.address.device;
+          rec.dst_pci_prop_.function = dev_it->second.pci_properties.address.function;
         }
         if (command->props.bytes_transferred > 0) {
           rec.bytes_xfered_ = command->props.bytes_transferred;
@@ -1681,7 +1691,7 @@ class ZeCollector {
     SPDLOG_TRACE("In {}", __FUNCTION__);
     PTI_ASSERT(!name.empty());
 
-    ZeMemoryCommandRoute route;
+    UniMemoryCommandRoute route;
     ze_device_handle_t hSrcDevice = nullptr;
     ze_device_handle_t hDstDevice = nullptr;
 

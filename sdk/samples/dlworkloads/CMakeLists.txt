@@ -86,4 +86,5 @@ if (NOT TARGET LevelZero::headers)
 endif()
 
 target_include_directories(dlworkload SYSTEM PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
-target_link_libraries(dlworkload DNNL::dnnl MKL::MKL MKL::MKL_SYCL oneDPL Pti::pti_view LevelZero::headers)
+target_link_libraries(dlworkload DNNL::dnnl MKL::MKL MKL::MKL_SYCL oneDPL
+  Pti::pti_view LevelZero::headers)

@@ -114,6 +114,7 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
   PTI_THROW(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
   PTI_THROW(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_OPENCL_CALLS));
 }
 
 void StopTracing() {
@@ -123,6 +124,7 @@ void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
   PTI_THROW(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
   PTI_THROW(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_OPENCL_CALLS));
 }
 
 void ProvideBuffer(unsigned char** buf, std::size_t* buf_size) {
@@ -321,10 +323,35 @@ int main(int argc, char* argv[]) {
 
     StartTracing();
     sycl::device dev;
+    sycl::queue queue, q, q_l0, q_ocl;
     dev = sycl::device(sycl::gpu_selector_v);
     sycl::property_list prop_list{sycl::property::queue::in_order(),
                                   sycl::property::queue::enable_profiling()};
-    sycl::queue queue(dev, sycl::async_handler{}, prop_list);
+    queue = sycl::queue(dev, sycl::async_handler{}, prop_list);
+    bool ocl_backend_found = false;
+    bool l0_backend_found = false;
+    for (auto platform : sycl::platform::get_platforms()) {
+      std::vector<sycl::device> gpu_devices = platform.get_devices();
+      if ((platform.get_backend() == sycl::backend::ext_oneapi_level_zero) ||
+          (platform.get_backend() == sycl::backend::opencl)) {
+        for (auto device : gpu_devices) {
+          if (device.is_gpu()) {
+            q = sycl::queue(gpu_devices[0], sycl::async_handler{}, prop_list);
+            if (platform.get_backend() == sycl::backend::ext_oneapi_level_zero) {
+              l0_backend_found = true;
+              std::cout << "L0 gpu backend found\n";
+              q_l0 = q;
+            }
+            if (platform.get_backend() == sycl::backend::opencl) {
+              ocl_backend_found = true;
+              std::cout << "OCL gpu backend found\n";
+              q_ocl = q;
+            }
+          }
+        }
+      }
+    }
+
     if (argc > 1 && strcmp(argv[1], "cpu") == 0) {
       dev = sycl::device(sycl::cpu_selector_v);
       std::cerr << "PTI doesn't support cpu profiling yet" << '\n';
@@ -337,13 +364,30 @@ int main(int argc, char* argv[]) {
 
     float expected_result = A_VALUE * B_VALUE * size;
 
-    auto threadFunction = [&queue](unsigned _size, unsigned _repeat_count, float _expected_result) {
+    auto threadFunctionL0 = [&q_l0](unsigned _size, unsigned _repeat_count,
+                                    float _expected_result) {
       std::vector<float> a(_size * _size, A_VALUE);
       std::vector<float> b(_size * _size, B_VALUE);
       std::vector<float> c(_size * _size, 0.0f);
 
       auto start = std::chrono::steady_clock::now();
-      Compute(queue, a, b, c, _size, _repeat_count, _expected_result);
+      Compute(q_l0, a, b, c, _size, _repeat_count, _expected_result);
+      auto end = std::chrono::steady_clock::now();
+      std::chrono::duration<float> time = end - start;
+
+      if (verbose) {
+        std::cout << "\t-- Total execution time: " << time.count() << " sec" << std::endl;
+      }
+    };
+
+    auto threadFunctionOCL = [&q_ocl](unsigned _size, unsigned _repeat_count,
+                                      float _expected_result) {
+      std::vector<float> a(_size * _size, A_VALUE);
+      std::vector<float> b(_size * _size, B_VALUE);
+      std::vector<float> c(_size * _size, 0.0f);
+
+      auto start = std::chrono::steady_clock::now();
+      Compute(q_ocl, a, b, c, _size, _repeat_count, _expected_result);
       auto end = std::chrono::steady_clock::now();
       std::chrono::duration<float> time = end - start;
 
@@ -362,8 +406,15 @@ int main(int argc, char* argv[]) {
 
     std::vector<std::thread> the_threads;
     for (unsigned i = 0; i < thread_count; i++) {
-      std::thread t = std::thread(threadFunction, size, repeat_count, expected_result);
-      the_threads.push_back(std::move(t));
+      std::thread t;
+      if (l0_backend_found) {
+        t = std::thread(threadFunctionL0, size, repeat_count, expected_result);
+        the_threads.push_back(std::move(t));
+      }
+      if (ocl_backend_found) {
+        t = std::thread(threadFunctionOCL, size, repeat_count, expected_result);
+        the_threads.push_back(std::move(t));
+      }
     }
 
     for (auto& th : the_threads) {

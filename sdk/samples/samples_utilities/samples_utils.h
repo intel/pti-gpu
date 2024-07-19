@@ -256,6 +256,19 @@ void dump_record(pti_view_record_zecalls* record) {
   std::cout << "ZeCall Correlation Id: " << record->_correlation_id << '\n';
 }
 
+void dump_record(pti_view_record_oclcalls* record) {
+  if (NULL == record) return;
+  const char* pName = nullptr;
+  PTI_THROW(ptiViewGetCallbackIdName(record->_callback_id, &pName));
+  std::cout << "OclCall Function Name: " << pName << '\n';
+  std::cout << "OclCall Function CBID: " << record->_callback_id << '\n';
+  std::cout << "OclCall Start Time: " << record->_start_timestamp << '\n';
+  std::cout << "  OclCall End Time: " << record->_end_timestamp << '\n';
+  std::cout << "OclCall Process Id: " << record->_process_id << '\n';
+  std::cout << "OclCall Thread Id: " << record->_thread_id << '\n';
+  std::cout << "OclCall Correlation Id: " << record->_correlation_id << '\n';
+}
+
 void dump_record(pti_view_record_sycl_runtime* record) {
   if (NULL == record) return;
   std::cout << "Sycl Function Name: " << record->_name << '\n';
@@ -271,6 +284,7 @@ void dump_record(pti_view_record_overhead* record) {
   std::cout << "Overhead Kind : " << ptiViewOverheadKindToString(record->_overhead_kind) << '\n';
   std::cout << "Overhead Time Duration(ns): " << record->_overhead_duration_ns << '\n';
   std::cout << "Overhead Count: " << record->_overhead_count << '\n';
+  std::cout << "Overhead ApiId: " << record->_api_id << '\n';
   std::cout << "Overhead Start Timestamp(ns): " << record->_overhead_start_timestamp_ns << '\n';
   std::cout << "Overhead End Timestamp(ns): " << record->_overhead_end_timestamp_ns << '\n';
   std::cout << "Overhead ThreadId: " << record->_overhead_thread_id << '\n';

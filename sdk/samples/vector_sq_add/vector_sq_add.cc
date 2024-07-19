@@ -5,8 +5,6 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#include <level_zero/ze_api.h>
-
 #include <cmath>
 #include <iostream>
 #include <map>
@@ -39,6 +37,7 @@ void StopTracing() {
 
 constexpr std::size_t kVectorSize = 5000;
 
+/*
 void PrintQueueInfo(const sycl::queue &sycl_queue) {
   auto queue_type = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(sycl_queue);
 #if __LIBSYCL_MAJOR_VERSION > 6 || (__LIBSYCL_MAJOR_VERSION == 6 && __LIBSYCL_MINOR_VERSION >= 2)
@@ -72,6 +71,7 @@ void PrintQueueInfo(const sycl::queue &sycl_queue) {
             << '\n';
 #endif
 }
+*/
 
 //************************************
 // Vector square in SYCL on device: modifies each input vector
@@ -316,12 +316,15 @@ int main() {
         }));
 
 #if __INTEL_LLVM_COMPILER >= 20240000
-    sycl::property_list prop{sycl::property::queue::in_order()};
+    auto d_selector{sycl::gpu_selector_v};
+    sycl::property_list prop{sycl::property::queue::enable_profiling(),
+                             sycl::property::queue::in_order()};
+    sycl::queue q(d_selector, prop);
 #else
     sycl::property_list prop{};
-#endif
     sycl::queue q(sycl::gpu_selector_v, prop);
-    PrintQueueInfo(q);
+#endif
+    // PrintQueueInfo(q);
 
     if (q.get_device().has(sycl::aspect::fp64)) {
       RunProfiledVecSqAdd<double>(q);

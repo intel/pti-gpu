@@ -38,7 +38,7 @@ if (NOT TARGET LevelZero::headers)
   find_package(LevelZero REQUIRED)
 endif()
 
-target_link_libraries(onemkl_gemm_exe PUBLIC MKL::MKL MKL::MKL_SYCL Pti::pti_view LevelZero::headers)
+target_link_libraries(onemkl_gemm_exe PUBLIC MKL::MKL MKL::MKL_SYCL Pti::pti_view LevelZero::level-zero)
 target_include_directories(onemkl_gemm_exe
                            PRIVATE "${PROJECT_SOURCE_DIR}/../../src/utils"
                            "${PROJECT_SOURCE_DIR}/../samples_utilities")

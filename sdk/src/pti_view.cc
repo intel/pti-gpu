@@ -328,3 +328,20 @@ pti_result ptiViewGetCallbackIdName(uint32_t id, const char** name) {
   };
   return PTI_SUCCESS;
 }
+
+pti_result ptiViewSetOclProfiling() {
+  try {
+    return Instance().OclTurnOnQueueTracing();
+  } catch (const std::overflow_error& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::runtime_error& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::exception& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}

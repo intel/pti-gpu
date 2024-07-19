@@ -24,6 +24,7 @@ size_t completed_buffer_used_bytes = 0;
 uint64_t eid_ = 11;
 pti_result popNullPtrResult = pti_result::PTI_SUCCESS;
 bool special_sycl_rec_present = false;
+bool opencl_backend = false;
 bool memory_view_record_created = false;
 bool kernel_view_record_created = false;
 bool kernel_has_sycl_file_info = false;
@@ -38,6 +39,11 @@ bool zecall_good_id_name = false;
 bool zecall_bad_id_name = false;
 bool zecall_present = false;
 std::set<uint32_t> zecall_corrids_already_seen;
+bool oclcall_corrids_unique = true;
+bool oclcall_good_id_name = false;
+bool oclcall_bad_id_name = false;
+bool oclcall_present = false;
+std::set<uint32_t> oclcall_corrids_already_seen;
 bool sycl_has_all_records = false;
 uint64_t memory_bytes_copied = 0;
 uint64_t memory_view_record_count = 0;
@@ -60,7 +66,6 @@ uint64_t user_real_timestamp = 0;
 // TODO - make the enable type param more generic (maybe a bitmap of somesort) so that we can enable
 // a mishmash of types
 void StartTracing(bool enable_only_zecalls = false) {
-  std::cout << "StartTracing.......\n";
   if (!enable_only_zecalls) {
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
@@ -69,6 +74,7 @@ void StartTracing(bool enable_only_zecalls = false) {
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_OPENCL_CALLS), pti_result::PTI_SUCCESS);
   } else {
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
   }
@@ -83,6 +89,7 @@ void StopTracing(bool enable_only_zecalls = false) {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_OPENCL_CALLS), pti_result::PTI_SUCCESS);
   } else {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
   }
@@ -173,6 +180,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     eid_ = 11;
     popNullPtrResult = pti_result::PTI_SUCCESS;
     special_sycl_rec_present = false;
+    opencl_backend = false;
     memory_view_record_created = false;
     kernel_view_record_created = false;
     kernel_has_sycl_file_info = false;
@@ -185,6 +193,11 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     zecall_bad_id_name = false;
     zecall_present = false;
     zecall_corrids_already_seen.clear();
+    oclcall_corrids_unique = true;
+    oclcall_good_id_name = false;
+    oclcall_bad_id_name = false;
+    oclcall_present = false;
+    oclcall_corrids_already_seen.clear();
     memory_bytes_copied = 0;
     memory_view_record_count = 0;
     kernel_view_record_count = 0;
@@ -322,6 +335,26 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
           if (status != pti_result::PTI_SUCCESS) zecall_bad_id_name = true;
           break;
         }
+        case pti_view_kind::PTI_VIEW_OPENCL_CALLS: {
+          pti_view_record_oclcalls* rec = reinterpret_cast<pti_view_record_oclcalls*>(ptr);
+          samples_utils::dump_record(reinterpret_cast<pti_view_record_oclcalls*>(ptr));
+          uint32_t this_corrid = rec->_correlation_id;
+          oclcall_present = true;
+          std::cout << "OCL CBID: " << rec->_callback_id << ": " << this_corrid << "\n";
+          if (oclcall_corrids_unique && oclcall_corrids_already_seen.find(this_corrid) !=
+                                            oclcall_corrids_already_seen.end()) {
+            oclcall_corrids_unique = false;
+
+            std::cout << this_corrid << " is not unique since already seen in oclalls before. \n";
+          }
+          oclcall_corrids_already_seen.insert(this_corrid);
+          const char* pName = nullptr;
+          pti_result status = ptiViewGetCallbackIdName(rec->_callback_id, &pName);
+          if (pti_result::PTI_SUCCESS == status) oclcall_good_id_name = true;
+          status = ptiViewGetCallbackIdName(-1, &pName);
+          if (status != pti_result::PTI_SUCCESS) oclcall_bad_id_name = true;
+          break;
+        }
         case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
           std::string function_name = reinterpret_cast<pti_view_record_sycl_runtime*>(ptr)->_name;
           if ((function_name.find("zeCommandListAppendLaunchKernel") != std::string::npos)) {
@@ -401,10 +434,13 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
                                      eid_ + 40);
 
     sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
-    sycl::queue queue(dev_, sycl::async_handler{}, prop_list);
+    // sycl::queue queue(dev_, sycl::async_handler{}, prop_list);
+    sycl::queue queue(dev_, sycl::async_handler{});
+    opencl_backend = (queue.get_backend() == sycl::backend::opencl);
 
     std::cout << "DPC++ Matrix Multiplication (matrix size: " << size_ << " x " << size_
               << ", repeats " << repeat_count_ << " times)" << std::endl;
+    std::cout << "opencl backend: " << opencl_backend << "\n";
     std::cout << "Target device: "
               << queue.get_info<sycl::info::queue::device>().get_info<sycl::info::device::name>()
               << std::endl;
@@ -686,6 +722,7 @@ TEST_F(MainFixtureTest, OnlyLastIdExternalViewRecords) {
 TEST_F(MainFixtureTest, OverheadRecordsPresentViewRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
+  if (opencl_backend) GTEST_SKIP();
   EXPECT_GT(num_of_overhead_recs, 0ULL);
 }
 
@@ -693,6 +730,7 @@ TEST_F(MainFixtureTest, OverheadRecordsPresentViewRecords) {
 TEST_F(MainFixtureTest, OverheadRecordsKindTypeStringified) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
+  if (opencl_backend) GTEST_SKIP();
   EXPECT_EQ(overhead_kind_stringified, true);
 }
 
@@ -700,6 +738,7 @@ TEST_F(MainFixtureTest, OverheadRecordsKindTypeStringified) {
 TEST_F(MainFixtureTest, OverheadRecordsCountsAllOnesViewRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
+  if (opencl_backend) GTEST_SKIP();
   EXPECT_EQ(num_of_overhead_counts, num_of_overhead_recs);
 }
 
@@ -726,7 +765,7 @@ TEST_F(MainFixtureTest, NegTestNullBufferSize) {
 TEST_F(MainFixtureTest, ValidateNotImplementedViewReturn) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   EXPECT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
-  EXPECT_EQ(ptiViewEnable(PTI_VIEW_OPENCL_CALLS), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
+  EXPECT_EQ(ptiViewEnable(PTI_VIEW_OPENCL_CALLS), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_CPU_KERNEL), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
   EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
 }
@@ -807,9 +846,19 @@ TEST_F(MainFixtureTest, ValidateNullptrTSCallbackFromUser) {
 TEST_F(MainFixtureTest, UniqueCorrIdsAllZeCalls) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
+  if (opencl_backend) GTEST_SKIP();
   EXPECT_EQ(zecall_corrids_unique, true);
   EXPECT_EQ(zecall_good_id_name, true);
   EXPECT_EQ(zecall_bad_id_name, true);
+}
+
+TEST_F(MainFixtureTest, UniqueCorrIdsAllOclCalls) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunGemm();
+  if (!opencl_backend) GTEST_SKIP();
+  EXPECT_EQ(oclcall_corrids_unique, true);
+  EXPECT_EQ(oclcall_good_id_name, true);
+  EXPECT_EQ(oclcall_bad_id_name, true);
 }
 
 TEST_F(MainFixtureTest, OnlyZeCallsTraced) {
@@ -819,6 +868,7 @@ TEST_F(MainFixtureTest, OnlyZeCallsTraced) {
   RunGemmNoTrace();
   StopTracing(enable_only_zecalls);
   ptiFlushAllViews();
+  if (opencl_backend) GTEST_SKIP();
   EXPECT_EQ(zecall_good_id_name, true);
   EXPECT_EQ(zecall_bad_id_name, true);
 }
@@ -835,6 +885,8 @@ TEST_P(MainFixtureTest, ZeCallsGeneration) {
   if (zecall) ASSERT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
 
   RunGemmNoTrace();
+
+  if (opencl_backend) GTEST_SKIP();
 
   if (kernel) ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   if (sycl) ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);

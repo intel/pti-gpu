@@ -1,0 +1,40 @@
+diff --git a/opencl/extensions/public/cl_ext_private.h b/opencl/CL/cl_ext_private.h
+similarity index 100%
+rename from opencl/extensions/public/cl_ext_private.h
+rename to opencl/CL/cl_ext_private.h
+diff --git a/opencl/extensions/public/cl_gl_private_intel.h b/opencl/CL/cl_gl_private_intel.h
+similarity index 100%
+rename from opencl/extensions/public/cl_gl_private_intel.h
+rename to opencl/CL/cl_gl_private_intel.h
+diff --git a/opencl/extensions/public/cl_gl_private_intel_structures.h b/opencl/CL/cl_gl_private_intel_structures.h
+similarity index 100%
+rename from opencl/extensions/public/cl_gl_private_intel_structures.h
+rename to opencl/CL/cl_gl_private_intel_structures.h
+diff --git a/opencl/source/tracing/tracing_api.h b/opencl/CL/tracing_api.h
+similarity index 98%
+rename from opencl/source/tracing/tracing_api.h
+rename to opencl/CL/tracing_api.h
+index 24d94ce5e4..bab1a5cffc 100644
+--- a/opencl/source/tracing/tracing_api.h
++++ b/opencl/CL/tracing_api.h
+@@ -7,7 +7,7 @@
+ 
+ #pragma once
+ 
+-#include "opencl/source/tracing/tracing_types.h"
++#include <CL/tracing_types.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
+diff --git a/opencl/source/tracing/tracing_handle.h b/opencl/CL/tracing_handle.h
+similarity index 100%
+rename from opencl/source/tracing/tracing_handle.h
+rename to opencl/CL/tracing_handle.h
+diff --git a/opencl/source/tracing/tracing_notify.h b/opencl/CL/tracing_notify.h
+similarity index 100%
+rename from opencl/source/tracing/tracing_notify.h
+rename to opencl/CL/tracing_notify.h
+diff --git a/opencl/source/tracing/tracing_types.h b/opencl/CL/tracing_types.h
+similarity index 100%
+rename from opencl/source/tracing/tracing_types.h
+rename to opencl/CL/tracing_types.h

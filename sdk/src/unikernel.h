@@ -18,6 +18,8 @@
 #include "pti/pti_view.h"
 #include "utils.h"
 
+enum class KernelCommandType { kInvalid = 0, kKernel = 1, kMemory = 2, kCommand = 3 };
+
 class UniCorrId {
  public:
   static uint32_t GetUniCorrId(void) {
@@ -38,6 +40,12 @@ class UniKernelId {
   inline static std::atomic<uint64_t> kernel_id_ = 1;  // start with 1
 };
 
+enum FLOW_DIR {
+  FLOW_NUL = 0,
+  FLOW_D2H = 1,
+  FLOW_H2D = 2,
+};
+
 #define GET_MEMCPY_TYPE(SRC_TYPE, DST_TYPE, RESULT_TYPE)                   \
   if (src_type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_##SRC_TYPE && \
       dst_type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_##DST_TYPE) { \
@@ -48,11 +56,13 @@ class UniKernelId {
  * \internal
  * Represets the route of memory copy/fill command
  */
-struct ZeMemoryCommandRoute {
+struct UniMemoryCommandRoute {
   pti_view_memory_type src_type;
   pti_view_memory_type dst_type;
+  void* src_device_id = nullptr;
+  void* dst_device_id = nullptr;
   bool peer_2_peer;
-  ZeMemoryCommandRoute()
+  UniMemoryCommandRoute()
       : src_type(pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY),
         dst_type(pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY),
         peer_2_peer(false) {}
@@ -97,50 +107,11 @@ struct ZeMemoryCommandRoute {
   }
 };
 
-struct ZeKernelCommandExecutionRecord {
-  uint64_t sycl_node_id_;
-  uint64_t sycl_queue_id_ = PTI_INVALID_QUEUE_ID;
-  uint32_t sycl_invocation_id_;
-  uint64_t sycl_task_begin_time_;
-  uint64_t sycl_enqk_begin_time_;
-  std::string source_file_name_;
-  const char* sycl_function_name_ = nullptr;
-  uint32_t source_line_number_;
-
-  uint64_t kid_;
-  uint32_t cid_;
-  uint32_t tid_;
-  uint32_t pid_;
-  int32_t tile_;
-  uint64_t append_time_;
-  uint64_t submit_time_;
-  uint64_t start_time_;
-  uint64_t end_time_;
-  ze_pci_ext_properties_t pci_prop_;
-  uint32_t engine_ordinal_;
-  uint32_t engine_index_;
-
-  ze_command_queue_handle_t queue_;
-  ze_device_handle_t device_;    // in case of memcpy -- represents source
-  ze_context_handle_t context_;  // in case of memcpy -- represents source
-
-  ZeMemoryCommandRoute route_;
-  ze_device_handle_t dst_device_;  // in case of memcpy -- represents destination (nullptr else)
-  ze_pci_ext_properties_t dst_pci_prop_;  // in case of memcpy -- represents destination
-
-  uint8_t src_device_uuid[PTI_MAX_DEVICE_UUID_SIZE];
-  uint8_t dst_device_uuid[PTI_MAX_DEVICE_UUID_SIZE];
-
-  bool implicit_scaling_;
-  std::string name_;
-  const char* sycl_func_name_;
-  size_t bytes_xfered_;
-  size_t value_set_;
-
-  uint32_t callback_id_;
-  uint64_t api_start_time_;
-  uint64_t api_end_time_;
-  ze_result_t result_;
+struct UniPciProps {
+  uint32_t domain = 0;
+  uint32_t bus = 0;
+  uint32_t device = 0;
+  uint32_t function = 0;
 };
 
 // This structure and thread_local object enables collectors to avoid retrieving pid and tid
@@ -170,6 +141,54 @@ inline thread_local PidTidInfo thread_local_pid_tid_info = {utils::GetPid(), uti
 struct SpecialCallsData {
   uint32_t sycl_rec_present = 0;  // sycl runtime rec is not present.
   bool zecall_disabled = true;    // zecalls disabled?
+  bool oclcall_disabled = true;   // opencl calls disabled?
+};
+
+// TODO-OCL -- change name to Uni throughout repo
+struct ZeKernelCommandExecutionRecord {
+  uint64_t sycl_node_id_;
+  uint64_t sycl_queue_id_ = PTI_INVALID_QUEUE_ID;
+  uint32_t sycl_invocation_id_;
+  uint64_t sycl_task_begin_time_;
+  uint64_t sycl_enqk_begin_time_;
+  std::string source_file_name_;
+  const char* sycl_function_name_ = nullptr;
+  uint32_t source_line_number_;
+
+  uint64_t kid_;
+  uint32_t cid_;
+  uint32_t tid_;
+  uint32_t pid_;
+  int32_t tile_;
+  uint64_t append_time_;
+  uint64_t submit_time_;
+  uint64_t start_time_;
+  uint64_t end_time_;
+  UniPciProps pci_prop_;
+  uint32_t engine_ordinal_;
+  uint32_t engine_index_;
+
+  void* queue_;
+  void* device_;                 // in case of memcpy -- represents source
+  ze_context_handle_t context_;  // in case of memcpy -- represents source
+
+  UniMemoryCommandRoute route_;
+  void* dst_device_;          // in case of memcpy -- represents destination (nullptr else)
+  UniPciProps dst_pci_prop_;  // in case of memcpy -- represents destination
+
+  uint8_t src_device_uuid[PTI_MAX_DEVICE_UUID_SIZE];
+  uint8_t dst_device_uuid[PTI_MAX_DEVICE_UUID_SIZE];
+
+  bool implicit_scaling_;
+  std::string name_;
+  const char* sycl_func_name_;
+  size_t bytes_xfered_;
+  size_t value_set_;
+
+  uint32_t callback_id_;
+  uint64_t api_start_time_;
+  uint64_t api_end_time_;
+  ze_result_t result_;
 };
 
 //
