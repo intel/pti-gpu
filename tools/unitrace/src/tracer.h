@@ -215,11 +215,9 @@ class UniTracer {
 
     if (ze_collector_ != nullptr) {
       ze_collector_->DisableTracing();
-      delete ze_collector_;
+      ze_collector_->Finalize();
     }
 
-    // report after ze_collector_ is destructed
-    // local stats are sweeped in deconstructor
     Report();
 
     ClExtCollector::Destroy();
@@ -245,7 +243,16 @@ class UniTracer {
         options_.GetLogFileName() << std::endl;
     }
 
-    if (chrome_logger_) {
+    if (ze_collector_ != nullptr) {
+      delete ze_collector_;
+    }
+    if (cl_cpu_collector_ != nullptr) {
+      delete cl_cpu_collector_;
+    }
+    if (cl_gpu_collector_ != nullptr) {
+      delete cl_gpu_collector_;
+    }
+    if (chrome_logger_ != nullptr) {
       delete chrome_logger_;
     }
   }

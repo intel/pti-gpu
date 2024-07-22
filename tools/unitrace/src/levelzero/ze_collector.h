@@ -1155,8 +1155,8 @@ class ZeCollector {
 
   ZeCollector& operator=(const ZeCollector& that) = delete;
 
-  ~ZeCollector() {
-    
+  void Finalize() {
+
     ProcessAllCommandsSubmitted(nullptr);
 
     if (tracer_ != nullptr) {
