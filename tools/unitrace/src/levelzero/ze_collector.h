@@ -697,11 +697,12 @@ struct ZeCommand {
   ZeKernelGroupSize group_size_;
   ze_group_count_t group_count_;
   ZeKernelCommandType type_;
-  ze_kernel_timestamp_result_t *volatile kernel_timestamp_;
-  ze_kernel_timestamp_result_t *volatile redirected_kernel_timestamp_;
-  volatile uint64_t *volatile device_global_timestamps_;
-  int kernel_timestamp_slot_;
-  int *redirected_kernel_timestamp_slot_;
+  std::vector<ze_kernel_timestamp_result_t *> *timestamps_on_event_reset_;  // points to timestamps_on_event_reset_ in the command list
+  ze_kernel_timestamp_result_t **timestamps_on_commands_completion_;	// points to timestamps_on_commands_completion_ in command list
+  uint64_t *device_global_timestamps_;	// points to device_global_timestamps_
+  int timestamp_seq_;	// sequence number in the command list for timestamps
+  std::vector<int> *index_timestamps_on_commands_completion_;	// indices to timestamps_on_commands_completion_
+  std::vector<int> *index_timestamps_on_event_reset_;	// indices to timestamps_on_event_reset_
   bool implicit_scaling_;
   bool immediate_;
 };
@@ -1001,7 +1002,7 @@ struct ZeCommandQueue {
 };
 
 
-constexpr static int max_num_commands_in_command_list_ = 128;
+constexpr static int number_timestamps_per_slice_ = 128;
 constexpr static int cache_line_size_ = 64;
 
 struct ZeCommandList {
@@ -1019,14 +1020,15 @@ struct ZeCommandList {
   bool implicit_scaling_;
   std::vector<ZeCommand *> commands_;	// if non-immediate command list
   std::vector<ZeCommandMetricQuery *> metric_queries_;	// if non-immediate command list
-  ze_kernel_timestamp_result_t *volatile kernel_timestamps_;	// timestamp slots on host
-  ze_kernel_timestamp_result_t *volatile redirected_kernel_timestamps_;	// redirected timestamp slots on host
-  int next_free_timestamp_slot_;
-  std::map<ze_event_handle_t, int> event_timestamp_slots_;	// map event to timestamp slot
-  std::vector<ze_event_handle_t> timestamp_events_to_signal_;
-  int timestamp_redirected_slots_[max_num_commands_in_command_list_];
-  volatile uint64_t device_global_timestamps_[max_num_commands_in_command_list_ * 2];
-  int next_free_device_global_timestamps_slot_;
+  std::vector<ze_kernel_timestamp_result_t *> timestamps_on_event_reset_; // timestamps queried on event reset
+  ze_kernel_timestamp_result_t *timestamps_on_commands_completion_; // timestamps queried on commands completion
+  int num_timestamps_;	// total number of timestamps
+  int num_timestamps_on_event_reset_;	// total number of timestamps queried on event reset
+  std::map<ze_event_handle_t, int> event_to_timestamp_seq_; // map event to timestamp sequence in command list
+  std::vector<int> index_timestamps_on_commands_completion_;	// indices to timestamps_on_commands_completion_ for each command
+  std::vector<int> index_timestamps_on_event_reset_;	// indices to timestamps_on_event_reset_ for each command
+  std::vector<uint64_t *> device_global_timestamps_;	// device timestamps on host
+  int num_device_global_timestamps_;
   ze_event_handle_t timestamp_event_to_signal_;
 };
 
@@ -1161,7 +1163,9 @@ class ZeCollector {
 
     if (tracer_ != nullptr) {
       ze_result_t status = zelTracerDestroy(tracer_);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (status != ZE_RESULT_SUCCESS) {
+        std::cerr << "[ERROR] Failed to destroy tracer (" << status << ")" << std::endl;
+      }
     }
 
     global_device_submissions_mutex_.lock();
@@ -1179,7 +1183,10 @@ class ZeCollector {
       }
       metric_activations_.clear();
       for (auto& context : metric_contexts_) {
-        zeContextDestroy(context);
+        auto status = zeContextDestroy(context);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] Failed to destroy conext for metrics query (" << status << ")" << std::endl;
+        }
       }
       metric_contexts_.clear();
     }
@@ -1462,7 +1469,7 @@ class ZeCollector {
       ZeCommand *command = *it;
 
       bool processed = false;
-      if ((command->device_global_timestamps_ != nullptr) || (command->kernel_timestamp_ != nullptr)) {
+      if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_!= nullptr)) {
         if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
           ProcessCommandSubmitted(local_device_submissions_, command, kids, false);
           processed = true;
@@ -1510,7 +1517,7 @@ class ZeCollector {
           ZeCommand *command = *it;
     
           bool processed = false;
-          if ((command->device_global_timestamps_ != nullptr) || (command->kernel_timestamp_ != nullptr)) {
+          if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
             if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
               ProcessCommandSubmitted(local_submissions, command, kids, false);
               processed = true;
@@ -1554,7 +1561,7 @@ class ZeCollector {
       ZeCommand *command = *it;
 
       bool processed = false;
-      if ((command->device_global_timestamps_ != nullptr) || (command->kernel_timestamp_ != nullptr)) {
+      if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
         if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
           ProcessCommandSubmitted(local_device_submissions_, command, kids, false);
           processed = true;
@@ -2126,7 +2133,7 @@ class ZeCollector {
       }
       else {
         bool processed = false;
-        if ((command->device_global_timestamps_ != nullptr) || (command->kernel_timestamp_ != nullptr)) {
+        if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
           if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
             ProcessCommandSubmitted(local_device_submissions_, command, nullptr, false);
             processed = true;
@@ -2186,7 +2193,7 @@ class ZeCollector {
       }
       else {
         bool processed = false;
-        if ((command->device_global_timestamps_ != nullptr) || (command->kernel_timestamp_ != nullptr)) {
+        if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
           if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
             ProcessCommandSubmitted(local_device_submissions_, command, nullptr, false);
             processed = true;
@@ -2301,12 +2308,15 @@ class ZeCollector {
         timestamp.global.kernelEnd = command->device_global_timestamps_[1];
       }
       else {
-        if (command->kernel_timestamp_) {
-          if (command->redirected_kernel_timestamp_slot_[command->kernel_timestamp_slot_] == -1) {
-            timestamp = command->kernel_timestamp_[command->kernel_timestamp_slot_];
+        if (command->timestamps_on_event_reset_) {
+          int slot = command->index_timestamps_on_commands_completion_->at(command->timestamp_seq_);
+	  if (slot == -1) {
+            slot = command->index_timestamps_on_event_reset_->at(command->timestamp_seq_);
+	    ze_kernel_timestamp_result_t *ts = command->timestamps_on_event_reset_->at(slot / number_timestamps_per_slice_);
+            timestamp = ts[slot % number_timestamps_per_slice_];
           }
           else {
-            timestamp = command->redirected_kernel_timestamp_[command->redirected_kernel_timestamp_slot_[command->kernel_timestamp_slot_]];
+            timestamp = (*(command->timestamps_on_commands_completion_))[slot];
           }
         }
         else {
@@ -2462,7 +2472,17 @@ class ZeCollector {
       desc = new ZeCommandList;
       UniMemory::ExitIfOutOfMemory((void *)(desc));
     }
-    desc->next_free_timestamp_slot_ = 0;
+
+    desc->num_timestamps_ = 0;
+    desc->num_timestamps_on_event_reset_ = 0;
+    desc->timestamps_on_commands_completion_ = nullptr;
+    desc->timestamps_on_event_reset_.clear();
+    desc->event_to_timestamp_seq_.clear();
+    desc->index_timestamps_on_commands_completion_.clear();
+    desc->index_timestamps_on_event_reset_.clear();
+    desc->num_device_global_timestamps_ = 0;
+    desc->device_global_timestamps_.clear();
+
     command_lists_mutex_.unlock();
 
     desc->cmdlist_ = command_list;
@@ -2473,24 +2493,10 @@ class ZeCollector {
     desc->engine_index_ = index;;	// valid if immediate command list
 
     if (immediate == false) {
-      ze_kernel_timestamp_result_t *ts = nullptr;
-
-      ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
-      auto status = zeMemAllocHost(context, &host_alloc_desc, max_num_commands_in_command_list_ * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      desc->kernel_timestamps_ = ts;
-      status = zeMemAllocHost(context, &host_alloc_desc, max_num_commands_in_command_list_ * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      desc->redirected_kernel_timestamps_ = ts;
       desc->timestamp_event_to_signal_ = event_cache_.GetEvent(context);
       zeEventHostSignal(desc->timestamp_event_to_signal_); // set to signal state to unblock first zeCommandQueueExecuteCommandLists() call
-      for (int i = 0; i < max_num_commands_in_command_list_; i++) {
-        desc->timestamp_redirected_slots_[i] = -1;
-      }
     }
     else {
-      desc->kernel_timestamps_ = nullptr;
-      desc->redirected_kernel_timestamps_ = nullptr;
       desc->timestamp_event_to_signal_ = nullptr;
     }
 
@@ -2525,11 +2531,34 @@ class ZeCollector {
           }
         }
         it->second->commands_.clear();
-        it->second->event_timestamp_slots_.clear();
-        zeMemFree(it->second->context_, it->second->kernel_timestamps_);
-        zeMemFree(it->second->context_, it->second->redirected_kernel_timestamps_);
-        zeMemFree(it->second->context_, (void *)(it->second->device_global_timestamps_));
+        it->second->event_to_timestamp_seq_.clear();
+        ze_result_t status;
+ 	for (auto ts : it->second->timestamps_on_event_reset_) {
+          status = zeMemFree(it->second->context_, ts);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[ERROR] Failed to free memory (" << status << ")" << std::endl;
+            exit(-1);
+          }
+	}
+        it->second->timestamps_on_event_reset_.clear();
+	for (auto ts : it->second->device_global_timestamps_) {
+          status = zeMemFree(it->second->context_, ts);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[ERROR] Failed to free memory (" << status << ")" << std::endl;
+            exit(-1);
+          }
+	}
+        it->second->device_global_timestamps_.clear();
+        status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] Failed to free memory (" << status << ")" << std::endl;
+          exit(-1);
+        }
+        it->second->timestamps_on_commands_completion_ = nullptr;
+        it->second->index_timestamps_on_commands_completion_.clear();
+        it->second->index_timestamps_on_event_reset_.clear();
         event_cache_.ReleaseEvent(it->second->timestamp_event_to_signal_);
+        it->second->timestamp_event_to_signal_ = nullptr;
       }
       command_lists_.erase(it);
     }
@@ -2561,12 +2590,20 @@ class ZeCollector {
           }
         }
         it->second->commands_.clear();
-        it->second->event_timestamp_slots_.clear();
-        it->second->next_free_timestamp_slot_ = 0;
-        it->second->next_free_device_global_timestamps_slot_ = 0;
-        for (int i = 0; i < max_num_commands_in_command_list_; i++) {
-          it->second->timestamp_redirected_slots_[i] = -1;
+        it->second->event_to_timestamp_seq_.clear();
+        it->second->num_timestamps_ = 0;
+        it->second->num_timestamps_on_event_reset_ = 0;
+	it->second->index_timestamps_on_commands_completion_.clear();
+	it->second->index_timestamps_on_event_reset_.clear();
+        ze_result_t status;
+        status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] Failed to free memory (" << status << ")" << std::endl;
+          exit(-1);
         }
+        it->second->timestamps_on_commands_completion_ = nullptr;
+        it->second->device_global_timestamps_.clear();
+        it->second->num_device_global_timestamps_ = 0;
       }
     }
 
@@ -2968,6 +3005,7 @@ class ZeCollector {
       desc->command_list_ = command_list;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
+
       desc->device_global_timestamps_ = nullptr;
 
       if (query != nullptr) {
@@ -2983,11 +3021,13 @@ class ZeCollector {
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
       if (it->second->immediate_) {
-        desc->kernel_timestamp_ = nullptr;
-        desc->redirected_kernel_timestamp_ = nullptr;
+        desc->timestamps_on_event_reset_ = nullptr;
+        desc->timestamps_on_commands_completion_ = nullptr;
         desc->timestamp_event_ = nullptr;
-        desc->kernel_timestamp_slot_ = -1;
-        desc->redirected_kernel_timestamp_slot_ = nullptr;
+        desc->timestamp_seq_ = -1;
+        desc->index_timestamps_on_commands_completion_ = nullptr;
+        desc->index_timestamps_on_event_reset_ = nullptr;
+
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
         desc->append_time_ = host_timestamp;
@@ -3010,18 +3050,17 @@ class ZeCollector {
 
         command_lists_mutex_.lock();
 
-        int slot = it->second->next_free_timestamp_slot_++;
-        if (slot >= max_num_commands_in_command_list_) {
-          std::cerr << "[ERROR] No more timstamp slots for command list are available" << std::endl;
-          exit(-1);
-        }
-        it->second->event_timestamp_slots_.insert({event_to_signal, slot});
+        int seq = it->second->num_timestamps_++;
+	it->second->index_timestamps_on_commands_completion_.push_back(-1);
+	it->second->index_timestamps_on_event_reset_.push_back(-1);
+        it->second->event_to_timestamp_seq_.insert({event_to_signal, seq});
         
-        desc->kernel_timestamp_slot_ = slot;
-        desc->kernel_timestamp_ = it->second->kernel_timestamps_;
-        desc->redirected_kernel_timestamp_ = it->second->redirected_kernel_timestamps_;
+        desc->timestamp_seq_ = seq;
+        desc->timestamps_on_event_reset_ = &(it->second->timestamps_on_event_reset_);
+        desc->timestamps_on_commands_completion_ = &(it->second->timestamps_on_commands_completion_);
         desc->timestamp_event_ = it->second->timestamp_event_to_signal_;
-        desc->redirected_kernel_timestamp_slot_ = it->second->timestamp_redirected_slots_;
+        desc->index_timestamps_on_commands_completion_ = &(it->second->index_timestamps_on_commands_completion_);
+        desc->index_timestamps_on_event_reset_ = &(it->second->index_timestamps_on_event_reset_);
 
         it->second->commands_.push_back(desc);
         if (query != nullptr) {
@@ -3102,11 +3141,12 @@ class ZeCollector {
       desc->tid_ = utils::GetTid();
 
       desc->device_global_timestamps_ = nullptr;
-      desc->kernel_timestamp_ = nullptr;
-      desc->redirected_kernel_timestamp_ = nullptr;
+      desc->timestamps_on_event_reset_ = nullptr;
+      desc->timestamps_on_commands_completion_ = nullptr;
       desc->timestamp_event_ = nullptr;
-      desc->kernel_timestamp_slot_ = -1;
-      desc->redirected_kernel_timestamp_slot_ = nullptr;
+      desc->timestamp_seq_ = -1;
+      desc->index_timestamps_on_commands_completion_ = nullptr;
+      desc->index_timestamps_on_event_reset_ = nullptr;
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -3220,12 +3260,14 @@ class ZeCollector {
       desc->queue_ = nullptr;
       desc->mem_size_ = size;
       desc->tid_ = utils::GetTid();
+
       desc->device_global_timestamps_ = nullptr;
-      desc->kernel_timestamp_ = nullptr;
-      desc->redirected_kernel_timestamp_ = nullptr;
+      desc->timestamps_on_event_reset_ = nullptr;
+      desc->timestamps_on_commands_completion_ = nullptr;
       desc->timestamp_event_ = nullptr;
-      desc->kernel_timestamp_slot_ = -1;
-      desc->redirected_kernel_timestamp_slot_ = nullptr;
+      desc->timestamp_seq_ = -1;
+      desc->index_timestamps_on_commands_completion_ = nullptr;
+      desc->index_timestamps_on_event_reset_ = nullptr;
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -3341,12 +3383,14 @@ class ZeCollector {
       desc->mem_size_ = size;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
+
       desc->device_global_timestamps_ = nullptr;
-      desc->kernel_timestamp_ = nullptr;
-      desc->redirected_kernel_timestamp_ = nullptr;
+      desc->timestamps_on_event_reset_ = nullptr;
+      desc->timestamps_on_commands_completion_ = nullptr;
       desc->timestamp_event_ = nullptr;
-      desc->kernel_timestamp_slot_ = -1;
-      desc->redirected_kernel_timestamp_slot_ = nullptr;
+      desc->timestamp_seq_ = -1;
+      desc->index_timestamps_on_commands_completion_ = nullptr;
+      desc->index_timestamps_on_event_reset_ = nullptr;
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -3448,7 +3492,7 @@ class ZeCollector {
       desc->command_list_ = command_list;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
-      desc->kernel_timestamp_ = nullptr;
+
       desc->device_global_timestamps_ = nullptr;
 
       if (query != nullptr) {
@@ -3462,11 +3506,11 @@ class ZeCollector {
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
       if (it->second->immediate_) {
-        desc->kernel_timestamp_ = nullptr;
-        desc->redirected_kernel_timestamp_ = nullptr;
+        desc->timestamps_on_event_reset_ = nullptr;
+        desc->timestamps_on_commands_completion_ = nullptr;
         desc->timestamp_event_ = nullptr;
-        desc->kernel_timestamp_slot_ = -1;
-        desc->redirected_kernel_timestamp_slot_ = nullptr;
+        desc->timestamp_seq_ = -1;
+        desc->index_timestamps_on_commands_completion_ = nullptr;
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
         desc->append_time_ = host_timestamp;
@@ -3489,18 +3533,17 @@ class ZeCollector {
 
         command_lists_mutex_.lock();
 
-        int slot = it->second->next_free_timestamp_slot_++;
-        if (slot >= max_num_commands_in_command_list_) {
-          std::cerr << "[ERROR] No more timstamp slots for command list are available" << std::endl;
-          exit(-1);
-        }
-        it->second->event_timestamp_slots_.insert({event_to_signal, slot});
+        int seq = it->second->num_timestamps_++;
+	it->second->index_timestamps_on_commands_completion_.push_back(-1);
+	it->second->index_timestamps_on_event_reset_.push_back(-1);
+        it->second->event_to_timestamp_seq_.insert({event_to_signal, seq});
         
-        desc->kernel_timestamp_slot_ = slot;
-        desc->kernel_timestamp_ = it->second->kernel_timestamps_;
-        desc->redirected_kernel_timestamp_ = it->second->redirected_kernel_timestamps_;
+        desc->timestamp_seq_ = seq;
+        desc->timestamps_on_event_reset_ = &(it->second->timestamps_on_event_reset_);
+        desc->timestamps_on_commands_completion_ = &(it->second->timestamps_on_commands_completion_);
         desc->timestamp_event_ = it->second->timestamp_event_to_signal_;
-        desc->redirected_kernel_timestamp_slot_ = it->second->timestamp_redirected_slots_;
+        desc->index_timestamps_on_commands_completion_ = &(it->second->index_timestamps_on_commands_completion_);
+        desc->index_timestamps_on_event_reset_ = &(it->second->index_timestamps_on_event_reset_);
 
         it->second->commands_.push_back(desc);
         if (query != nullptr) {
@@ -3516,7 +3559,7 @@ class ZeCollector {
     }
   }
 
-  void AppendCommand(ZeCollector *collector, ZeDeviceCommandHandle handle, ZeCommandList *cl, std::vector<uint64_t> *kids, int slot) {
+  void AppendCommand(ZeCollector *collector, ZeDeviceCommandHandle handle, ZeCommandList *cl, std::vector<uint64_t> *kids, uint64_t *dts) {
 
     if (local_device_submissions_.IsFinalized()) {
       return;
@@ -3556,18 +3599,21 @@ class ZeCollector {
       desc->command_list_ = cl->cmdlist_;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
-      desc->kernel_timestamp_ = nullptr;
-      desc->redirected_kernel_timestamp_ = nullptr;
-      desc->timestamp_event_ = nullptr;
-      desc->kernel_timestamp_slot_ = -1;
-      desc->redirected_kernel_timestamp_slot_ = nullptr;
 
-      if ((slot >= (max_num_commands_in_command_list_ * 2)) || (slot < 0)) {
+      desc->timestamps_on_event_reset_ = nullptr;
+      desc->timestamps_on_commands_completion_ = nullptr;
+      desc->timestamp_seq_ = -1;
+      desc->index_timestamps_on_commands_completion_ = nullptr;
+      desc->index_timestamps_on_event_reset_ = nullptr;
+
+      if (dts == nullptr) {
         std::cerr << "[ERROR] Invalid timestamp slot" << std::endl;
         exit(-1);
       }
       else {
-        desc->device_global_timestamps_ = &(cl->device_global_timestamps_[slot]);
+        // dts points to end timestmap but we need start timestamp too which is immediately followed by end timestamp
+        // hence dts - 1
+        desc->device_global_timestamps_ = dts - 1;	// dts points to end timestmap but start timestamp is needed also which immediately 
         desc->timestamp_event_ = cl->timestamp_event_to_signal_;
       }
       
@@ -4100,23 +4146,54 @@ class ZeCollector {
     collector->command_lists_mutex_.lock();
     auto it = collector->command_lists_.find(*(params->phCommandList));
     if (it != collector->command_lists_.end()) {
-      auto it2 = it->second->event_timestamp_slots_.find(*(params->phEvent));
-      if (it2 != it->second->event_timestamp_slots_.end()) {
-        auto status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), 1, (ze_event_handle_t *)(params->phEvent), (void *)&(it->second->kernel_timestamps_[it2->second]), nullptr, nullptr, 1, (ze_event_handle_t *)(params->phEvent));
+      auto it2 = it->second->event_to_timestamp_seq_.find(*(params->phEvent));
+      if (it2 != it->second->event_to_timestamp_seq_.end()) {
+        int slot = it->second->num_timestamps_on_event_reset_++;
+	it->second->index_timestamps_on_event_reset_[it2->second] = slot;
+        ze_kernel_timestamp_result_t *ts = nullptr;
+	int slice = slot / number_timestamps_per_slice_;
+        if (it->second->timestamps_on_event_reset_.size() <= slice) {
+
+          ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
+          auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
+          UniMemory::ExitIfOutOfMemory((void *)(ts));
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[ERROR] Failed to allocate host memory for timestamps (" << status << ")" << std::endl;
+            exit(-1);
+          }
+          it->second->timestamps_on_event_reset_.push_back(ts);
+	}
+	else {
+          ts = it->second->timestamps_on_event_reset_[slice];
+	}
+	int idx = slot % number_timestamps_per_slice_;
+        auto status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), 1, (ze_event_handle_t *)(params->phEvent), (void *)&(ts[idx]), nullptr, nullptr, 1, (ze_event_handle_t *)(params->phEvent));
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to get kernel timestamps (" << status << ")" << std::endl;
           exit(-1);
         }
-        it->second->event_timestamp_slots_.erase(it2);
+        it->second->event_to_timestamp_seq_.erase(it2);
       }
 
       if (UniController::IsCollectionEnabled()) {
         // each command or kernel needs two slots: one for start and one for end
-        if (it->second->next_free_device_global_timestamps_slot_ >= (max_num_commands_in_command_list_ + max_num_commands_in_command_list_)) {
-          std::cerr << "[ERROR] No more device timstamp slots for command list are available" << std::endl;
-          exit(-1);
+	uint64_t *dts = nullptr;
+	int slice = it->second->num_device_global_timestamps_ / (2 * number_timestamps_per_slice_);
+	if (it->second->device_global_timestamps_.size() <= slice) {
+          ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
+          auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(uint64_t) * 2, cache_line_size_, (void **)&dts);
+          UniMemory::ExitIfOutOfMemory((void *)(dts));
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[ERROR] Failed to allocate host memory for timestamps (" << status << ")" << std::endl;
+            exit(-1);
+          }
+          it->second->device_global_timestamps_.push_back(dts);
         }
-        auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)&(it->second->device_global_timestamps_[it->second->next_free_device_global_timestamps_slot_]), nullptr, 0, nullptr);
+        else {
+          dts = it->second->device_global_timestamps_.at(slice);
+        }
+	int idx = it->second->num_device_global_timestamps_ % (2 * number_timestamps_per_slice_);
+        auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)&(dts[idx]), nullptr, 0, nullptr);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to get device global timestamps (" << status << ")" << std::endl;
           exit(-1);
@@ -4124,11 +4201,11 @@ class ZeCollector {
         
         collector->PrepareToAppendKernelCommand(collector, it->second);
 
-        *instance_data = reinterpret_cast<void*>(it->second->next_free_device_global_timestamps_slot_);
-        it->second->next_free_device_global_timestamps_slot_ += 2; // start timestamp and end timestamp
+        *instance_data = reinterpret_cast<void *>(&(dts[idx]) + 1);
+        it->second->num_device_global_timestamps_ += 2; // start timestamp and end timestamp
       }
       else {
-        *instance_data = reinterpret_cast<void*>(-1);
+        *instance_data = nullptr;
       }
     }
     collector->command_lists_mutex_.unlock();
@@ -4144,13 +4221,14 @@ class ZeCollector {
       collector->command_lists_mutex_.lock();
       auto it = collector->command_lists_.find(*(params->phCommandList));
       if (it != collector->command_lists_.end()) {
-        int slot = reinterpret_cast<int>(*((int *)instance_data));
-        if (slot != -1) {
-          auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)(&(it->second->device_global_timestamps_[slot + 1])), nullptr, 0, nullptr);
+        uint64_t *dts = (*((uint64_t **)instance_data));
+        if (dts != nullptr) {
+          auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)(dts), nullptr, 0, nullptr);
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[ERROR] Failed to get device global timestamps (" << status << ")" << std::endl;
+            exit(-1);
           }
-          collector->AppendCommand(collector, EventReset, it->second, kids, slot); 
+          collector->AppendCommand(collector, EventReset, it->second, kids, dts); 
         }
       }
       collector->command_lists_mutex_.unlock();
@@ -4211,19 +4289,27 @@ class ZeCollector {
     collector->command_lists_mutex_.lock();
     auto it = collector->command_lists_.find(*(params->phCommandList));
     if (it != collector->command_lists_.end()) {
-      int num_events = it->second->event_timestamp_slots_.size();
+      int num_events = it->second->event_to_timestamp_seq_.size();
       if (num_events) {
         ze_event_handle_t events[num_events];
       
-        // write timestamps to contiguous memory slots, so use it->second->redirected_kernel_timestamps_ which is guaranteed to be contiguous
-        // zeCommandListAppendEventReset() may have punched hole in it->second->kernel_timestamps_
         int i = 0;
-        for (auto it2 = it->second->event_timestamp_slots_.begin(); it2 != it->second->event_timestamp_slots_.end(); it2++, i++) {
+        for (auto it2 = it->second->event_to_timestamp_seq_.begin(); it2 != it->second->event_to_timestamp_seq_.end(); it2++, i++) {
           events[i] = it2->first;
-          it->second->timestamp_redirected_slots_[it2->second] = i;
+          it->second->index_timestamps_on_commands_completion_[it2->second] = i;
         }
 
-        auto status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events, (void *)it->second->redirected_kernel_timestamps_, nullptr, it->second->timestamp_event_to_signal_, num_events, events);
+        ze_kernel_timestamp_result_t *ts = nullptr;
+
+        ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
+        auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, i * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
+        UniMemory::ExitIfOutOfMemory((void *)(ts));
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] Failed to allocate host memory for timestamps (" << status << ")" << std::endl;
+        }
+        it->second->timestamps_on_commands_completion_ = ts;
+
+        status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events, (void *)it->second->timestamps_on_commands_completion_, nullptr, it->second->timestamp_event_to_signal_, num_events, events);
         if (status != ZE_RESULT_SUCCESS){
           std::cerr << "[ERROR] Failed to get kernel timestamps (" << status << ")" << std::endl;
         }
@@ -4236,8 +4322,8 @@ class ZeCollector {
         }
       }
 
-      if (!it->second->event_timestamp_slots_.empty()) {
-        it->second->event_timestamp_slots_.clear();
+      if (!it->second->event_to_timestamp_seq_.empty()) {
+        it->second->event_to_timestamp_seq_.clear();
       }
     }
     collector->command_lists_mutex_.unlock();
