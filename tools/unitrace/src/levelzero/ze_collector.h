@@ -786,13 +786,21 @@ struct ZeDeviceSubmissions {
     // Explicitly initialize ZeCommand members.
     command->instance_id_ = 0;
     command->event_ = nullptr;
-    command->timestamp_event_ = nullptr;
     command->device_ = nullptr;
     command->append_time_ = 0;
     command->submit_time_ = 0;
     command->submit_time_device_ = 0;
     command->command_list_ = nullptr;
     command->queue_ = nullptr;
+    command->mem_size_ = 0;
+
+    command->timestamp_seq_ = -1;
+    command->timestamp_event_ = nullptr;
+    command->timestamps_on_event_reset_ = nullptr;  // points to timestamps_on_event_reset_ in the command list
+    command->timestamps_on_commands_completion_ = nullptr;    // points to timestamps_on_commands_completion_ in command list
+    command->device_global_timestamps_ = nullptr;
+    command->index_timestamps_on_commands_completion_ = nullptr;   // indices to timestamps_on_commands_completion_
+    command->index_timestamps_on_event_reset_ = nullptr;
 
     return command;
   }
@@ -4148,7 +4156,8 @@ class ZeCollector {
     
     collector->command_lists_mutex_.lock();
     auto it = collector->command_lists_.find(*(params->phCommandList));
-    if (it != collector->command_lists_.end()) {
+    if ((it != collector->command_lists_.end()) && !(it->second->immediate_)) {
+      // TODO: handle immediate command list?
       auto it2 = it->second->event_to_timestamp_seq_.find(*(params->phEvent));
       if (it2 != it->second->event_to_timestamp_seq_.end()) {
         int slot = it->second->num_timestamps_on_event_reset_++;
@@ -4223,7 +4232,8 @@ class ZeCollector {
     
       collector->command_lists_mutex_.lock();
       auto it = collector->command_lists_.find(*(params->phCommandList));
-      if (it != collector->command_lists_.end()) {
+      if ((it != collector->command_lists_.end()) && !(it->second->immediate_)) {
+        // TODO: handle immediate command list?
         uint64_t *dts = (*((uint64_t **)instance_data));
         if (dts != nullptr) {
           auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)(dts), nullptr, 0, nullptr);
