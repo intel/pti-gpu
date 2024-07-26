@@ -2534,27 +2534,30 @@ class ZeCollector {
         it->second->event_to_timestamp_seq_.clear();
         ze_result_t status;
  	for (auto ts : it->second->timestamps_on_event_reset_) {
-          status = zeMemFree(it->second->context_, ts);
-          if (status != ZE_RESULT_SUCCESS) {
-            std::cerr << "[ERROR] Failed to free memory (" << status << ")" << std::endl;
-            exit(-1);
+          if (ts != nullptr) {
+            status = zeMemFree(it->second->context_, ts);
+            if (status != ZE_RESULT_SUCCESS) {
+              std::cerr << "[WARNING] Failed to free event timestamp memory (" << status << ")" << std::endl;
+            }
           }
 	}
         it->second->timestamps_on_event_reset_.clear();
 	for (auto ts : it->second->device_global_timestamps_) {
-          status = zeMemFree(it->second->context_, ts);
-          if (status != ZE_RESULT_SUCCESS) {
-            std::cerr << "[ERROR] Failed to free memory (" << status << ")" << std::endl;
-            exit(-1);
+          if (ts != nullptr) {
+            status = zeMemFree(it->second->context_, ts);
+            if (status != ZE_RESULT_SUCCESS) {
+              std::cerr << "[WARNING] Failed to free global timestamp memory (" << status << ")" << std::endl;
+            }
           }
 	}
         it->second->device_global_timestamps_.clear();
-        status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
-        if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[ERROR] Failed to free memory (" << status << ")" << std::endl;
-          exit(-1);
+        if (it->second->timestamps_on_commands_completion_ != nullptr) {
+          status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[WARNING] Failed to free command timestamp memory (" << status << ")" << std::endl;
+          }
+          it->second->timestamps_on_commands_completion_ = nullptr;
         }
-        it->second->timestamps_on_commands_completion_ = nullptr;
         it->second->index_timestamps_on_commands_completion_.clear();
         it->second->index_timestamps_on_event_reset_.clear();
         event_cache_.ReleaseEvent(it->second->timestamp_event_to_signal_);
@@ -2595,13 +2598,14 @@ class ZeCollector {
         it->second->num_timestamps_on_event_reset_ = 0;
 	it->second->index_timestamps_on_commands_completion_.clear();
 	it->second->index_timestamps_on_event_reset_.clear();
-        ze_result_t status;
-        status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
-        if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[ERROR] Failed to free memory (" << status << ")" << std::endl;
-          exit(-1);
+        if (it->second->timestamps_on_commands_completion_ != nullptr) {
+          ze_result_t status;
+          status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[WARNING] Failed to free command timestamp memory (" << status << ")" << std::endl;
+          }
+          it->second->timestamps_on_commands_completion_ = nullptr;
         }
-        it->second->timestamps_on_commands_completion_ = nullptr;
         it->second->device_global_timestamps_.clear();
         it->second->num_device_global_timestamps_ = 0;
       }
@@ -3565,6 +3569,11 @@ class ZeCollector {
       return;
     }
 
+    if (dts == nullptr) {
+      std::cerr << "[WARNING] Invalid timestamp slot" << std::endl;
+      return;	// ignore this command
+    }
+
     uint64_t command_id;
     bool found = false;
 
@@ -3606,16 +3615,10 @@ class ZeCollector {
       desc->index_timestamps_on_commands_completion_ = nullptr;
       desc->index_timestamps_on_event_reset_ = nullptr;
 
-      if (dts == nullptr) {
-        std::cerr << "[ERROR] Invalid timestamp slot" << std::endl;
-        exit(-1);
-      }
-      else {
-        // dts points to end timestmap but we need start timestamp too which is immediately followed by end timestamp
-        // hence dts - 1
-        desc->device_global_timestamps_ = dts - 1;	// dts points to end timestmap but start timestamp is needed also which immediately 
-        desc->timestamp_event_ = cl->timestamp_event_to_signal_;
-      }
+      // dts points to end timestmap but we need start timestamp too which is immediately followed by end timestamp
+      // hence dts - 1
+      desc->device_global_timestamps_ = dts - 1;	// dts points to end timestmap but start timestamp is needed also which immediately 
+      desc->timestamp_event_ = cl->timestamp_event_to_signal_;
       
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
       if (cl->immediate_) {
