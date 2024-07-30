@@ -38,7 +38,6 @@ uint64_t memory_view_record_count = 0;
 uint64_t kernel_view_record_count = 0;
 bool buffer_size_atleast_largest_record = false;
 bool ze_initialization_succeeded = false;
-bool ze_tracing_enabled_env = true;
 bool capture_records = false;
 std::vector<pti_view_record_memory_copy> copy_records;
 std::vector<pti_view_record_kernel> kernel_records;
@@ -466,9 +465,6 @@ class MainZeFixtureTest : public ::testing::Test {
   }
 
   void SetUp() override {  // Called right after constructor before each test
-    if (!ze_tracing_enabled_env) {
-      GTEST_SKIP();
-    }
     buffer_cb_registered = true;
     requested_buffer_calls = 0;
     rejected_buffer_calls = 0;
@@ -637,8 +633,20 @@ class MainZeFixtureTest : public ::testing::Test {
  * It creates two immediate command lists, do not synchronize on events but rather poll them and
  * destroy them after they found signaled
  * so it verified that such case profiled correctly
+ *
+ * This test is to be skipped if Local Profiling is not available,
+ * Because this test specifics are
+ * 1) not having "usual" synchronization but rather realy on events polling,
+ * 2) destroying events as soon as they are signaled
+ * and such case is not handled by Full API Profiling mode implementation so far -
+ * as Full API Profiling mode doesn't create any special events but rather relies on
+ * intercepting EventPool creation and so makeing all events with Timestamp property
+ *
  */
 TEST_F(MainZeFixtureTest, ProfilingSuccededWhenEventPolling) {
+  if (pti_result::PTI_SUCCESS != ptiViewGPULocalAvailable()) {
+    GTEST_SKIP();
+  }
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   capture_records = true;
   repeat_count = 1;
