@@ -8,7 +8,7 @@ This repository describes the ways of collecting performance data for Intel(R) P
 ## License
 Samples for Profiling Tools Interfaces for GPU (PTI for GPU) are distributed under the MIT License.
 
-You may obtain a copy of the License at https://opensource.org/licenses/MIT
+You may obtain a copy of the License at https://opensource.org/license/MIT
 
 ## Supported OS
 - Linux
@@ -65,8 +65,8 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
     - [cl_hot_functions](samples/cl_hot_functions) - provides a list of hottest OpenCL(TM) API calls by backend (CPU and GPU);
     - [cl_hot_kernels](samples/cl_hot_kernels) - provides a list of hottest OpenCL(TM) kernels by backend (CPU and GPU);
     - [cl_debug_info](samples/cl_debug_info) - prints source and assembly (GEN ISA) for kernels on GPU;
-    - [cl_gpu_metrics](samples/cl_gpu_metrics) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle (based on continuous  metrics collection mode);
-    - [cl_gpu_query](samples/cl_gpu_query) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle (based on query  metrics collection mode);
+    - [cl_gpu_metrics](samples/cl_gpu_metrics) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle (based on continuous metrics collection mode);
+    - [cl_gpu_query](samples/cl_gpu_query) - provides a list of hottest OpenCL(TM) GPU kernels along with percent of cycles it was active, stall and idle (based on query metrics collection mode);
 - tools for Level Zero, DPC++ (with Level Zero backend) and OpenMP* GPU offload (with Level Zero backend):
     - [ze_hot_functions](samples/ze_hot_functions) - provides a list of hottest Level Zero API calls;
     - [ze_hot_kernels](samples/ze_hot_kernels) - provides a list of hottest Level Zero kernels;
@@ -87,7 +87,7 @@ You may obtain a copy of the License at https://opensource.org/licenses/MIT
 - [CMake](https://cmake.org/) (version 3.12 and above)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Python](https://www.python.org/) (version 3.6 and above)
-- On Linux one have to be a part of `video` (Ubuntu 18 and below) or `render` (Ubuntu 19 and above) user group to do any computations on Intel(R) Processor Graphics:
+- On Linux one has to be a part of the `video` (Ubuntu 18 and below) or `render` (Ubuntu 19 and above) user group to do any computations on Intel(R) Processor Graphics:
     ```sh
     sudo usermod -a -G video <username>
     # OR
