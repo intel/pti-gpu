@@ -9,6 +9,7 @@
 #include "samples_utils.h"
 #include "utils.h"
 #include "utils/sycl_config_info.h"
+#include "utils/test_helpers.h"
 
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
@@ -676,6 +677,14 @@ TEST_F(MainFixtureTest, ValidateSwitchedTSCallbackFromUser) {
   ASSERT_GT(before_switch_last_kernel_ts,
             last_kernel_timestamp);             // real clock raw value > than monotonic raw
   ASSERT_GT(after_run, last_kernel_timestamp);  // in same domain so monotonically increasing
+}
+
+TEST_F(MainFixtureTest, ValidateNullptrTSCallbackFromUser) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  EXPECT_NE(ptiViewSetTimestampCallback(nullptr), pti_result::PTI_SUCCESS);
+  EXPECT_GT(ptiViewGetTimestamp(), 0ULL);
+  RunGemm();
+  EXPECT_GT(ptiViewGetTimestamp(), 0ULL);
 }
 
 namespace {
