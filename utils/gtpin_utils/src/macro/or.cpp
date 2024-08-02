@@ -17,7 +17,7 @@ using namespace gtpin_prof;
 dst: register, src0: register, src1: register
 */
 
-GtGenProcedure OrTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure OrTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                      const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                      GtPredicate predicate) {
   GtGenProcedure proc;
@@ -49,7 +49,7 @@ GtGenProcedure OrTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
   return proc;
 }
 
-GtGenProcedure OrXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure OrXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                        const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                        GtPredicate predicate) {
   GtGenProcedure proc;
@@ -85,12 +85,12 @@ GtGenProcedure OrXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        const GtRegRegion&, GtExecMask, GtPredicate)>
     OrFunctionsTable = {
         {GED_MODEL_TGL, &OrTgl}, {GED_MODEL_XE_HP, &OrXeHpc}, {GED_MODEL_XE_HPC, &OrXeHpc}};
 
-GtGenProcedure Macro::Or(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Or(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                          const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                          GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
@@ -117,7 +117,7 @@ GtGenProcedure Macro::Or(IGtKernelInstrument& instrumentor, const GtDstRegion& d
 dst: register, src0: register, src1: immediate
 */
 
-GtGenProcedure OriTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure OriTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                       const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                       GtPredicate predicate) {
   GtGenProcedure proc;
@@ -160,7 +160,7 @@ GtGenProcedure OriTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
   return proc;
 }
 
-GtGenProcedure OriXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure OriXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                         const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                         GtPredicate predicate) {
   GtGenProcedure proc;
@@ -195,12 +195,12 @@ GtGenProcedure OriXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& ds
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        const GtImm&, GtExecMask, GtPredicate)>
     OriFunctionsTable = {
         {GED_MODEL_TGL, &OriTgl}, {GED_MODEL_XE_HP, &OriXeHpc}, {GED_MODEL_XE_HPC, &OriXeHpc}};
 
-GtGenProcedure Macro::Or(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Or(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                          const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                          GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&

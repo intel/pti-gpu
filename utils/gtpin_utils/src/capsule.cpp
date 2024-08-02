@@ -16,10 +16,10 @@
 
 #include "capsule.hpp"
 
+#include <cmath>
+
 #include "api/gtpin_api.h"
 #include "def_gpu.hpp"
-
-#include <cmath>
 
 using namespace gtpin;
 using namespace gtpin_prof;
@@ -27,29 +27,26 @@ using namespace gtpin_prof;
 /**
  * Macro defines helper functions which is used in instrumentation process.
  */
-bool Macro::Is64BitCountersSupport(IGtKernelInstrument& instrumentor) {
+bool Macro::Is64BitCountersSupport(const IGtKernelInstrument& instrumentor) {
   return (instrumentor.Coder().InstructionFactory().CanAccessAtomically(GED_DATA_TYPE_uq));
 }
-size_t Macro::GetCounterSizeBytes(IGtKernelInstrument& instrumentor) {
+size_t Macro::GetCounterSizeBytes(const IGtKernelInstrument& instrumentor) {
   return ((Is64BitCountersSupport(instrumentor)) ? sizeof(uint64_t) : sizeof(uint32_t));
 }
-GED_DATA_TYPE Macro::GetCounterDataType(IGtKernelInstrument& instrumentor) {
+GED_DATA_TYPE Macro::GetCounterDataType(const IGtKernelInstrument& instrumentor) {
   return ((Is64BitCountersSupport(instrumentor)) ? GED_DATA_TYPE_uq : GED_DATA_TYPE_ud);
 }
-GED_DATA_TYPE Macro::GetCounterDataTypeSigned(IGtKernelInstrument& instrumentor) {
+GED_DATA_TYPE Macro::GetCounterDataTypeSigned(const IGtKernelInstrument& instrumentor) {
   return ((Is64BitCountersSupport(instrumentor)) ? GED_DATA_TYPE_q : GED_DATA_TYPE_d);
 }
-GtVregType Macro::GetCounterVregType(IGtKernelInstrument& instrumentor) {
+GtVregType Macro::GetCounterVregType(const IGtKernelInstrument& instrumentor) {
   return ((Is64BitCountersSupport(instrumentor)) ? GtVregType(VREG_TYPE_QWORD)
                                                  : GtVregType(VREG_TYPE_DWORD));
 }
-uint32_t Macro::GetNumTiles(IGtKernelInstrument& instrumentor) {
-  /// TODO: reimplement address calculation without MUL operation
-  // Disabled by now due to problems in addr calculation
-  // return ((instrumentor.Coder().IsTileIdSupported()) ?
-  //         GTPin_GetCore()->GenArch().MaxTiles(instrumentor.Kernel().GpuPlatform())
-  //         : 1);
-  return 1;
+uint32_t Macro::GetNumTiles(const IGtKernelInstrument& instrumentor) {
+  return ((instrumentor.Coder().IsTileIdSupported())
+              ? GTPin_GetCore()->GenArch().MaxTiles(instrumentor.Kernel().GpuPlatform())
+              : 1);
 }
 GtVregType Macro::GetVregType(size_t sizeBits) {
   PTI_ASSERT((64 >= sizeBits) && "Incorrect size");
@@ -105,7 +102,7 @@ uint64_t Macro::GetMaskBySize(size_t sizeBits) {
 
 uint64_t Macro::GetMaskBySizeBytes(size_t sizeBytes) { return Macro::GetMaskBySize(sizeBytes * 8); }
 
-GtReg Macro::GetSubReg(IGtKernelInstrument& instrumentor, size_t regNum, size_t subRegIdx,
+GtReg Macro::GetSubReg(const IGtKernelInstrument& instrumentor, size_t regNum, size_t subRegIdx,
                        size_t subRegSizeBytes) {
   return GetSubReg(regNum, subRegIdx, subRegSizeBytes,
                    instrumentor.Coder().InstructionFactory().GenModel().GrfRegSize());
@@ -121,7 +118,7 @@ GtReg Macro::GetSubReg(size_t regNum, size_t subRegIdx, size_t subRegSizeBytes, 
 /**
  * Procedure defines helper functions which is used in instrumentation process.
  */
-GtGenProcedure Procedure::CounterInc(IGtKernelInstrument& instrumentor,
+GtGenProcedure Procedure::CounterInc(const IGtKernelInstrument& instrumentor,
                                      GtProfileArray& profileArray, GtReg baseAddrReg,
                                      GtReg tempAddrReg, uint64_t dataOffsetBytes,
                                      GED_DATA_TYPE counterDataType, GtExecMask execMask,
@@ -145,13 +142,11 @@ GtGenProcedure Procedure::CounterInc(IGtKernelInstrument& instrumentor,
   return proc;
 }
 
-GtGenProcedure Procedure::CounterAdd(IGtKernelInstrument& instrumentor,
+GtGenProcedure Procedure::CounterAdd(const IGtKernelInstrument& instrumentor,
                                      GtProfileArray& profileArray, GtReg baseAddrReg,
                                      GtReg tempAddrReg, GtReg dataReg, uint64_t dataOffsetBytes,
                                      GtExecMask execMask, GtReg offsetBytesReg,
                                      GtPredicate predicate) {
-  PTI_ASSERT(offsetBytesReg == NullReg() && "Not implemented yet");
-
   auto dataGedType = Macro::GetGedIntDataTypeBytes(dataReg.ElementSize());
   PTI_ASSERT(instrumentor.Coder().InstructionFactory().CanAccessAtomically(dataGedType) &&
              "Atomic accesses with such size is not available on this HW");
@@ -166,6 +161,9 @@ GtGenProcedure Procedure::CounterAdd(IGtKernelInstrument& instrumentor,
   GtGenProcedure proc;
 
   profileArray.ComputeRelAddress(coder, proc, tempAddrReg, baseAddrReg, dataOffsetBytes);
+  if (offsetBytesReg != NullReg()) {
+    coder.ComputeRelAddress(proc, tempAddrReg, tempAddrReg, GtReg(offsetBytesReg, 4, 0), predicate);
+  }
   proc += insF.MakeAtomicAdd(NullReg(), tempAddrReg, dataReg, GtDataType(dataGedType), execMask)
               .SetPredicate(predicate);
 
@@ -174,25 +172,26 @@ GtGenProcedure Procedure::CounterAdd(IGtKernelInstrument& instrumentor,
 }
 
 // baseAddrReg register with already calculated value of base addr
-GtGenProcedure Procedure::AtomicStore(IGtKernelInstrument& instrumentor,
+GtGenProcedure Procedure::AtomicStore(const IGtKernelInstrument& instrumentor,
                                       GtProfileArray& profileArray, GtReg baseAddrReg,
                                       GtReg tempAddrReg, GtReg dataReg, uint64_t dataOffsetBytes,
                                       GtExecMask execMask, GtReg offsetBytesReg,
                                       GtPredicate predicate) {
-  PTI_ASSERT(offsetBytesReg == NullReg() && "Not implemented yet");
-
   const IGtGenCoder& coder = instrumentor.Coder();
 
   GtGenProcedure proc;
 
   profileArray.ComputeRelAddress(coder, proc, tempAddrReg, baseAddrReg, dataOffsetBytes);
+  if (offsetBytesReg != NullReg()) {
+    coder.ComputeRelAddress(proc, tempAddrReg, tempAddrReg, GtReg(offsetBytesReg, 4, 0), predicate);
+  }
   proc += Macro::AtomicStore(instrumentor, tempAddrReg, dataReg, execMask, predicate);
 
   ANNOTATION(proc)
   return proc;
 }
 
-GtGenProcedure Procedure::ComputeSimdMask(IGtKernelInstrument& instrumentor, GtReg simdMaskReg,
+GtGenProcedure Procedure::ComputeSimdMask(const IGtKernelInstrument& instrumentor, GtReg simdMaskReg,
                                           bool maskCtrl, uint32_t execMask, GtPredicate pred) {
   GtGenProcedure proc;
 
@@ -201,13 +200,13 @@ GtGenProcedure Procedure::ComputeSimdMask(IGtKernelInstrument& instrumentor, GtR
   ANNOTATION(proc)
   return proc;
 }
-GtGenProcedure Procedure::ComputeSimdMask(IGtKernelInstrument& instrumentor, GtReg simdMaskReg,
+GtGenProcedure Procedure::ComputeSimdMask(const IGtKernelInstrument& instrumentor, GtReg simdMaskReg,
                                           const IGtIns& gtpinIns) {
   return Procedure::ComputeSimdMask(instrumentor, simdMaskReg, !gtpinIns.IsWriteMaskEnabled(),
                                     gtpinIns.ExecMask().Bits(), gtpinIns.Predicate());
 }
 
-GtGenProcedure Procedure::IsCacheLineAligned(IGtKernelInstrument& instrumentor,
+GtGenProcedure Procedure::IsCacheLineAligned(const IGtKernelInstrument& instrumentor,
                                              GtReg addrRegCheckReg, size_t channelOffset,
                                              GtReg simdMaskReg, GtReg tempData1Reg,
                                              GtReg tempData2Reg, size_t mathWidthBytes) {
@@ -218,7 +217,6 @@ GtGenProcedure Procedure::IsCacheLineAligned(IGtKernelInstrument& instrumentor,
 
   const IGtGenCoder& coder = instrumentor.Coder();
   IGtInsFactory& insF = coder.InstructionFactory();
-  IGtVregFactory& vregs = coder.VregFactory();
   const GED_DATA_TYPE SIMD_DATA_TYPE = Macro::GetGedIntDataTypeBytes(MAX_SIMD_WIDTH_BYTES);
   const GED_DATA_TYPE MATH_DATA_TYPE = Macro::GetGedIntDataTypeBytes(mathWidthBytes);
 
@@ -264,7 +262,7 @@ GtGenProcedure Procedure::IsCacheLineAligned(IGtKernelInstrument& instrumentor,
   return proc;
 }
 
-GtGenProcedure Procedure::IsCacheLineAligned(IGtKernelInstrument& instrumentor,
+GtGenProcedure Procedure::IsCacheLineAligned(const IGtKernelInstrument& instrumentor,
                                              const IGtIns& gtpinIns, GtReg simdMaskReg,
                                              GtReg tempData1Reg, GtReg tempData2Reg,
                                              size_t mathWidthBytes) {
@@ -275,7 +273,7 @@ GtGenProcedure Procedure::IsCacheLineAligned(IGtKernelInstrument& instrumentor,
                                        simdMaskReg, tempData1Reg, tempData2Reg, mathWidthBytes);
 }
 
-GtGenProcedure Procedure::IsCacheLineAlignedFlag(IGtKernelInstrument& instrumentor,
+GtGenProcedure Procedure::IsCacheLineAlignedFlag(const IGtKernelInstrument& instrumentor,
                                                  GtReg addrRegCheckReg, size_t channelOffset,
                                                  GtReg simdMaskReg, GtReg tempData1Reg,
                                                  GtReg flagReg) {
@@ -323,7 +321,7 @@ GtGenProcedure Procedure::IsCacheLineAlignedFlag(IGtKernelInstrument& instrument
   return proc;
 }
 
-GtGenProcedure Procedure::IsCacheLineAlignedFlag(IGtKernelInstrument& instrumentor,
+GtGenProcedure Procedure::IsCacheLineAlignedFlag(const IGtKernelInstrument& instrumentor,
                                                  const IGtIns& gtpinIns, GtReg simdMaskReg,
                                                  GtReg tempData1Reg, GtReg flagReg) {
   DcSendMsg msg(gtpinIns.GetGedIns());
@@ -333,36 +331,36 @@ GtGenProcedure Procedure::IsCacheLineAlignedFlag(IGtKernelInstrument& instrument
                                            simdMaskReg, tempData1Reg, flagReg);
 }
 
-GtGenProcedure Procedure::CalcBaseAddr(IGtKernelInstrument& instrumentor,
+GtGenProcedure Procedure::CalcBaseAddr(const IGtKernelInstrument& instrumentor,
                                        GtProfileArray& profileArray, GtReg baseAddrReg,
                                        size_t recordIndex, size_t numTiles) {
   const IGtGenCoder& coder = instrumentor.Coder();
-  IGtInsFactory& insF = coder.InstructionFactory();
 
   GtGenProcedure proc;
 
   if (numTiles == 1) {
     profileArray.ComputeAddress(coder, proc, baseAddrReg, recordIndex);
   } else {
-    /// tiled data is not supported due to problems in address calculation do
-    /// calc of 1 tile instead.
-    profileArray.ComputeAddress(coder, proc, baseAddrReg, recordIndex);
+    IGtVregFactory& vregs = coder.VregFactory();
+    GtReg tileIdReg = {baseAddrReg, sizeof(uint32_t), 0};
+    GtReg addrOffsetReg = vregs.MakeScratch(VREG_TYPE_DWORD);
 
-    /// Tiled version:
-    // GtReg tileIdReg = {data64, sizeof(uint32_t), 0};
-    // proc += insF.MakeRegZero(baseAddrReg);
-    // coder.LoadTileId(proc, tileIdReg);
-    // proc += insF.MakeMul(tileIdReg, tileIdReg, profileArray.ChunkSize());
-    // proc += insF.MakeAdd(tileIdReg, tileIdReg, profileArray.RecordSize() *
-    // recordIndex); profileArray.ComputeAddress(coder, proc, baseAddrReg,
-    // tileIdReg);
+    coder.LoadTileId(proc, tileIdReg);
+
+    proc +=
+        Macro::Mov(instrumentor, addrOffsetReg, GtImm((recordIndex * numTiles), GED_DATA_TYPE_ud));
+    proc += Macro::Add(instrumentor, addrOffsetReg, addrOffsetReg, tileIdReg);
+    proc += Macro::Mul(instrumentor, addrOffsetReg, addrOffsetReg,
+                       GtImm(profileArray.RecordSize(), GED_DATA_TYPE_ud));
+
+    profileArray.ComputeAddress(coder, proc, baseAddrReg, addrOffsetReg);
   }
 
   ANNOTATION(proc)
   return proc;
 }
 
-GtGenProcedure Procedure::AdjustDistributionWithinBounds(IGtKernelInstrument& instrumentor,
+GtGenProcedure Procedure::AdjustDistributionWithinBounds(const IGtKernelInstrument& instrumentor,
                                                          GtReg valueReg, size_t bucketsNum,
                                                          GtReg flagReg) {
   GED_DATA_TYPE signedValueType = Macro::GetGedIntDataTypeBytesSigned(valueReg.ElementSize());
@@ -401,7 +399,7 @@ GtGenProcedure Procedure::AdjustDistributionWithinBounds(IGtKernelInstrument& in
 /// addrWidthBytes Uses address == -1 as no address marker. Result, number of
 /// cache lines, is stored in clCounterReg
 #define INVALID_ADDRESS -1
-GtGenProcedure Procedure::CacheLinesCount(IGtKernelInstrument& instrumentor, GtReg clCounterReg,
+GtGenProcedure Procedure::CacheLinesCount(const IGtKernelInstrument& instrumentor, GtReg clCounterReg,
                                           GtReg simdMaskReg, uint32_t execSize,
                                           GtReg addrRegCheckReg, size_t channelOffset,
                                           const uint32_t addrWidthBytes, GtReg flagReg) {
@@ -501,7 +499,7 @@ GtGenProcedure Procedure::CacheLinesCount(IGtKernelInstrument& instrumentor, GtR
 }
 #undef INVALID_ADDRESS
 
-GtGenProcedure Procedure::CacheLinesCount(IGtKernelInstrument& instrumentor, GtReg clCounterReg,
+GtGenProcedure Procedure::CacheLinesCount(const IGtKernelInstrument& instrumentor, GtReg clCounterReg,
                                           GtReg simdMaskReg, const IGtIns& gtpinIns,
                                           GtReg flagReg) {
   DcSendMsg msg(gtpinIns.GetGedIns());

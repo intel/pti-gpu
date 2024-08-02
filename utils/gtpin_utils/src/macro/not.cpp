@@ -17,7 +17,7 @@ using namespace gtpin_prof;
 dst: register, src0: register
 */
 
-GtGenProcedure NotTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure NotTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                       const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;
@@ -46,7 +46,7 @@ GtGenProcedure NotTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
   return proc;
 }
 
-GtGenProcedure NotXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure NotXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                         const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
   if (dst.DataType().Size() == 8 && src0.DataType().Size() == 8) {
     GtGenProcedure proc;
@@ -66,12 +66,12 @@ GtGenProcedure NotXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& ds
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        GtExecMask, GtPredicate)>
     NotFunctionsTable = {
         {GED_MODEL_TGL, &NotTgl}, {GED_MODEL_XE_HP, &NotXeHpc}, {GED_MODEL_XE_HPC, &NotXeHpc}};
 
-GtGenProcedure Macro::Not(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Not(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
              "Destination size should be no less than source size");
@@ -95,7 +95,7 @@ GtGenProcedure Macro::Not(IGtKernelInstrument& instrumentor, const GtDstRegion& 
 dst: register, src0: immediate
 */
 
-GtGenProcedure Macro::Not(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Not(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtImm& srcI1, GtExecMask execMask, GtPredicate predicate) {
   size_t mask = Macro::GetMaskBySizeBytes(dst.DataType().Size());  // 0b11111..111
   PTI_ASSERT(srcI1.Value() <= mask && "Immediate value is too large for the destination size");

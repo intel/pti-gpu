@@ -17,7 +17,7 @@ using namespace gtpin_prof;
 dst: register, src0: register, src1: register
 */
 
-GtGenProcedure ShrXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure ShrXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                         const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                         GtPredicate predicate) {
   GtGenProcedure proc;
@@ -44,11 +44,11 @@ GtGenProcedure ShrXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& ds
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        const GtRegRegion&, GtExecMask, GtPredicate)>
     ShrFunctionsTable = {{GED_MODEL_XE_HP, &ShrXeHpc}, {GED_MODEL_XE_HPC, &ShrXeHpc}};
 
-GtGenProcedure Macro::Shr(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Shr(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                           GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
@@ -74,7 +74,7 @@ GtGenProcedure Macro::Shr(IGtKernelInstrument& instrumentor, const GtDstRegion& 
 dst: register, src0: register, src1: immediate
 */
 
-GtGenProcedure ShriXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure ShriXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                          const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                          GtPredicate predicate) {
   GtGenProcedure proc;
@@ -101,11 +101,11 @@ GtGenProcedure ShriXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& d
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        const GtImm&, GtExecMask, GtPredicate)>
     ShriFunctionsTable = {{GED_MODEL_XE_HP, &ShriXeHpc}, {GED_MODEL_XE_HPC, &ShriXeHpc}};
 
-GtGenProcedure Macro::Shr(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Shr(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                           GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&

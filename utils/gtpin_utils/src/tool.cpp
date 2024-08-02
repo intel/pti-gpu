@@ -18,6 +18,8 @@
 
 #include <algorithm>
 
+#include "capsule.hpp"
+
 using namespace gtpin_prof;
 
 GTPinTool::GTPinTool(const ToolFactorySPtr factory)
@@ -131,7 +133,7 @@ PROF_STATUS GTPinTool::PostProcData(KernelDataSPtr kernel, InvocationDataSPtr in
 }
 
 PROF_STATUS GTPinTool::AllocateResources(KernelDataSPtr kernelData,
-                                         gtpin::IGtKernelInstrument& instrumentor) {
+                                         const gtpin::IGtKernelInstrument& instrumentor) {
   PTI_ASSERT(kernelData->IsRecordSizeSet() &&
              "Record size not initialized. Check \"AnalyzeKernel\" function");
   PTI_ASSERT((kernelData->GetRecordSize() != 0) &&
@@ -143,9 +145,10 @@ PROF_STATUS GTPinTool::AllocateResources(KernelDataSPtr kernelData,
     SetDefaultBuckets(kernelData, instrumentor);
   }
 
-  kernelData->m_profileArray =
-      gtpin::GtProfileArray(kernelData->GetRecordSize(), kernelData->GetSiteOfInstrumentNum(),
-                            kernelData->GetBucketsNum());
+  kernelData->m_profileArray = gtpin::GtProfileArray(
+      kernelData->GetRecordSize(),
+      kernelData->GetSiteOfInstrumentNum() * kernelData->GetCollectedTilesNum(),
+      kernelData->GetBucketsNum());
   gtpin::IGtProfileBufferAllocator& allocator = instrumentor.ProfileBufferAllocator();
   if (!kernelData->m_profileArray.Allocate(allocator)) {
     return PROF_STATUS::ERROR;
@@ -163,12 +166,18 @@ PROF_STATUS GTPinTool::InitProfileData(KernelDataSPtr kernelData,
   auto invocation = kernelData->m_invocations[dispatcher.DispatchId()];
   PTI_ASSERT(invocation != nullptr && "Invocation data was not initialized");
 
-  for (const auto& rdc : kernelData->GetResultDataCommon()) {
-    invocation->m_resultData.push_back(m_factory->MakeResultData(rdc));
-    PTI_ASSERT(invocation->m_resultData.back() != nullptr && "Fail to add ResultData");
+  invocation->m_tileResultData.resize(kernelData->GetCollectedTilesNum());
+  for (size_t tileId = 0; tileId < kernelData->GetCollectedTilesNum(); tileId++) {
+    auto& resData = invocation->m_tileResultData[tileId];
+    for (const auto& rdc : kernelData->GetResultDataCommon()) {
+      resData.push_back(m_factory->MakeResultData(rdc));
+      PTI_ASSERT(resData.back() != nullptr && "Fail to add ResultData");
+      resData.back()->m_tileId = tileId;
+    }
+
+    PTI_ASSERT(resData.size() == kernelData->GetResultsNum() &&
+               "Invalid number of result data objects");
   }
-  PTI_ASSERT(invocation->m_resultData.size() == kernelData->GetResultsNum() &&
-             "Invalid number of result data objects");
 
   return PROF_STATUS::SUCCESS;
 }
@@ -177,9 +186,9 @@ PROF_STATUS GTPinTool::InitBuffer(KernelDataSPtr kernelData, gtpin::IGtKernelDis
   gtpin::IGtProfileBuffer* buffer = dispatcher.CreateProfileBuffer();
   PTI_ASSERT(buffer != nullptr && "Profile buffer was not created");
 
-  bool success = kernelData->m_profileArray.Initialize(*buffer);
+  bool result = kernelData->m_profileArray.Initialize(*buffer);
 
-  return (success) ? PROF_STATUS::SUCCESS : PROF_STATUS::ERROR;
+  return (result) ? PROF_STATUS::SUCCESS : PROF_STATUS::ERROR;
 }
 
 PROF_STATUS GTPinTool::ReadProfileData(KernelDataSPtr kernelData,
@@ -193,21 +202,26 @@ PROF_STATUS GTPinTool::ReadProfileData(KernelDataSPtr kernelData,
   auto invocation = kernelData->m_invocations[dispatcher.DispatchId()];
   PTI_ASSERT(invocation != nullptr && "Invocation data was not initialized");
 
-  char* recordChar = new char[m_factory->GetRecordSize()];
+  char* recordChar = new char[kernelData->GetRecordSize()];
   RawRecord* record = reinterpret_cast<RawRecord*>(recordChar);
 
+  size_t tileNum = kernelData->GetCollectedTilesNum();
   for (size_t i = 0; i < kernelData->GetSiteOfInstrumentNum(); i++) {
     for (uint32_t threadBucket = 0; threadBucket < kernelData->m_profileArray.NumThreadBuckets();
          ++threadBucket) {
-      if (!kernelData->m_profileArray.Read(*buffer, record, i, 1, threadBucket)) {
-        delete[] recordChar;
-        return PROF_STATUS::ERROR;
-      } else {
-        PTI_ASSERT((record != nullptr) && "Record is corrupted");
-        auto site = kernelData->GetSiteOfInstrument(i);
-        for (const auto& resultData : GetResultDataForSiteOfInstrument(invocation, site)) {
-          status = Accumulate(kernelData, resultData, site, record);
-          PTI_ASSERT((PROF_STATUS::SUCCESS == status) && "Fail to accumulate result data");
+      for (size_t tileId = 0; tileId < tileNum; tileId++) {
+        if (!kernelData->m_profileArray.Read(*buffer, record, i * tileNum + tileId, 1,
+                                             threadBucket)) {
+          delete[] recordChar;
+          return PROF_STATUS::ERROR;
+        } else {
+          PTI_ASSERT((record != nullptr) && "Record is corrupted");
+          auto site = kernelData->GetSiteOfInstrument(i);
+          for (const auto& resultData : GetResultDataForSiteOfInstrument(invocation, site)) {
+            if (resultData->GetTileId() != tileId) continue;
+            status = Accumulate(kernelData, resultData, site, record);
+            PTI_ASSERT((PROF_STATUS::SUCCESS == status) && "Fail to accumulate result data");
+          }
         }
       }
     }
@@ -231,6 +245,9 @@ KernelDataSPtr GTPinTool::CreateKernelInStorage(const gtpin::IGtKernelInstrument
   // Create kernel data in storage
   auto kernelData = m_factory->MakeKernelData(instrumentor);
   SetRecordSize(kernelData, m_factory->GetRecordSize());
+  SetCollectedTiles(
+      kernelData,
+      (m_control->EnablePerTileCollection(instrumentor) ? kernelData->GetTilesNum() : 1));
 
   m_applicationData->m_kernels.insert({kernelId, kernelData});
 
@@ -253,11 +270,15 @@ std::vector<KernelId> GTPinTool::GetKernelIds() {
 }
 size_t GTPinTool::AddResultData(KernelDataSPtr kernelData, ResultDataCommonSPtr resultDataCommon) {
   kernelData->m_resultDataCommon.push_back(resultDataCommon);
-  return kernelData->m_resultDataCommon.size() - 1;
+  return kernelData->m_resultDataCommon.size() -
+         1;  // return result data common ID (just index in array)
 }
 void GTPinTool::IncKernelRuns(KernelDataSPtr kernelData) { kernelData->m_kernelRuns++; }
 void GTPinTool::SetRecordSize(KernelDataSPtr kernelData, uint32_t recordSize) {
   kernelData->m_recordSize = recordSize;
+}
+void GTPinTool::SetCollectedTiles(KernelDataSPtr kernelData, uint32_t collectTilesNum) {
+  kernelData->m_collectedTilesNum = collectTilesNum;
 }
 void GTPinTool::SetBucketsNum(KernelDataSPtr kernelData, size_t buckets) {
   kernelData->m_buckets = buckets;
@@ -287,8 +308,10 @@ void GTPinTool::SetInvocationCollected(KernelDataSPtr kernelData,
 std::vector<ResultDataSPtr> GTPinTool::GetResultDataForSiteOfInstrument(
     InvocationDataSPtr invocation, SiteOfInstrumentSPtr siteOfInstrument) {
   std::vector<ResultDataSPtr> resultData;
-  for (const auto& idx : siteOfInstrument->m_results) {
-    resultData.push_back(invocation->GetResultData(idx));
+  for (size_t tileId = 0; tileId < invocation->m_tileResultData.size(); tileId++) {
+    for (const auto& idx : siteOfInstrument->m_results) {
+      resultData.push_back(invocation->GetResultData(tileId, idx));
+    }
   }
   return resultData;
 }

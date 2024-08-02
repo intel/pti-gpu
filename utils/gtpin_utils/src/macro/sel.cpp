@@ -15,7 +15,7 @@ using namespace gtpin_prof;
 dst: register, src0: register, src1: register
 */
 
-GtGenProcedure Macro::Sel(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Sel(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                           GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
@@ -33,7 +33,7 @@ GtGenProcedure Macro::Sel(IGtKernelInstrument& instrumentor, const GtDstRegion& 
 dst: register, src0: register, src1: immediate
 */
 
-GtGenProcedure Macro::Sel(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Sel(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                           GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&

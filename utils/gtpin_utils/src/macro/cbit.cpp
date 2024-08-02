@@ -17,7 +17,7 @@ using namespace gtpin_prof;
 dst: register, src0: register
 */
 
-GtGenProcedure CbitXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure CbitXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                          const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
   if (src0.DataType().Size() == 1 && dst.DataType().Size() == 1) {
     GtGenProcedure proc;
@@ -61,11 +61,11 @@ GtGenProcedure CbitXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& d
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        GtExecMask, GtPredicate)>
     CbitFunctionsTable = {{GED_MODEL_XE_HP, &CbitXeHpc}, {GED_MODEL_XE_HPC, &CbitXeHpc}};
 
-GtGenProcedure Macro::Cbit(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Cbit(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                            const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
   // Destination size may be less than source size
 
@@ -88,7 +88,7 @@ GtGenProcedure Macro::Cbit(IGtKernelInstrument& instrumentor, const GtDstRegion&
 dst: register, src0: immediate
 */
 
-GtGenProcedure Macro::Cbit(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Cbit(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                            const GtImm& srcI1, GtExecMask execMask, GtPredicate predicate) {
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;

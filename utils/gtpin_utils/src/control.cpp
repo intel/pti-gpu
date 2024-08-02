@@ -24,16 +24,25 @@ bool DefaultControl::ShouldInstrument(const KernelBuildDescriptor& buildDescr) c
   return true;
 }
 
-bool DefaultControl::ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const {
+bool DefaultControl::EnablePerTileCollection(const KernelBuildDescriptor& buildDescr) const {
   return true;
 }
 
-static gtpin::KnobVector<int> knobKernelRun("kernel-run", {}, "Kernel run to profile");
+bool DefaultControl::ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const {
+  return true;
+}
 
 bool GTPinKnobControl::ShouldInstrument(const KernelBuildDescriptor& buildDescr) const {
   return true;
 }
 
+static gtpin::Knob<bool> knobPerTileCollection("per-tile-collection", false,
+                                               "Collect data with tile granularity");
+bool GTPinKnobControl::EnablePerTileCollection(const KernelBuildDescriptor& buildDescr) const {
+  return knobPerTileCollection;
+}
+
+static gtpin::KnobVector<int> knobKernelRun("kernel-run", {}, "Kernel run to profile");
 bool GTPinKnobControl::ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const {
   if (!gtpin::IsKernelExecProfileEnabled(execDescr.gtExecDesc, execDescr.gpuPlatform)) return false;
 

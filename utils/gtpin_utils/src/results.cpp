@@ -12,12 +12,14 @@
 #include "results.hpp"
 
 #include "api/gtpin_api.h"
+#include "capsule.hpp"
 
 using namespace gtpin_prof;
 
 ResultData::ResultData(ResultDataCommonSPtr resultDataCommon)
     : m_resultDataCommon(resultDataCommon){};
 const ResultDataCommonSPtr ResultData::GetCommon() const { return m_resultDataCommon; }
+size_t ResultData::GetTileId() const { return m_tileId; };
 
 InvocationData::InvocationData(const KernelExecDescriptor& execDescr)
     : m_runNum(execDescr.runIdx),
@@ -27,8 +29,16 @@ bool InvocationData::IsValid() const { return (m_dispatchId != -1); }
 const KernelRun InvocationData::GetRunNum() const { return m_runNum; }
 const KernelRun InvocationData::GetGlobalRunNum() const { return m_globalRunNum; }
 const DispatchId InvocationData::GetDispatchId() const { return m_dispatchId; }
-const std::vector<ResultDataSPtr> InvocationData::GetResults() const { return m_resultData; }
-const ResultDataSPtr InvocationData::GetResultData(size_t idx) const { return m_resultData[idx]; }
+size_t InvocationData::GetCollectedTilesNum() const { return m_tileResultData.size(); }
+const std::vector<ResultDataSPtr> InvocationData::GetResults(size_t tileId) const {
+  PTI_ASSERT(tileId < m_tileResultData.size());
+  return m_tileResultData[tileId];
+}
+const ResultDataSPtr InvocationData::GetResultData(size_t tileId, size_t idx) const {
+  auto res = GetResults(tileId);
+  PTI_ASSERT(idx < res.size());
+  return res[idx];
+}
 bool InvocationData::IsCollected() const { return m_collected; }
 
 SourcePoint::SourcePoint(const std::string file, const int line, const int column,
@@ -52,7 +62,10 @@ const std::string AsmRecord::GetAsmLineOrig() const { return m_asmLineOrig; }
 const SourcePoint AsmRecord::GetSourcePoint() const { return m_sourcePoint; }
 
 KernelData::KernelData(const gtpin::IGtKernelInstrument& instrumentor)
-    : m_kernelName(instrumentor.Kernel().Name()), m_kernelId(instrumentor.Kernel().Id()) {
+    : m_kernelName(instrumentor.Kernel().Name()),
+      m_kernelId(instrumentor.Kernel().Id()),
+      m_tilesNum(Macro::GetNumTiles(instrumentor)) {
+  PTI_ASSERT(m_tilesNum > 0);
   // origAsm
   const gtpin::IGtCfg& cfg = instrumentor.Cfg();
   for (const auto& bblPtr : cfg.Bbls()) {
@@ -80,6 +93,8 @@ const uint32_t KernelData::GetRecordSize() const { return m_recordSize; }
 const size_t KernelData::GetSiteOfInstrumentNum() const { return m_sitesOfInterest.size(); }
 const size_t KernelData::GetResultsNum() const { return m_resultDataCommon.size(); }
 const size_t KernelData::GetBucketsNum() const { return m_buckets; }
+const size_t KernelData::GetTilesNum() const { return m_tilesNum; }
+const size_t KernelData::GetCollectedTilesNum() const { return m_collectedTilesNum; }
 const SiteOfInstrumentSPtr KernelData::GetSiteOfInstrument(size_t idx) const {
   PTI_ASSERT(idx < m_sitesOfInterest.size());
   return m_sitesOfInterest.at(idx);

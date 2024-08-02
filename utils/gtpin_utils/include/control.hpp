@@ -25,6 +25,7 @@ class ControlBase {
  public:
   virtual ~ControlBase() = default;
   virtual bool ShouldInstrument(const KernelBuildDescriptor& buildDescr) const = 0;
+  virtual bool EnablePerTileCollection(const KernelBuildDescriptor& buildDescr) const = 0;
   virtual bool ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const = 0;
 };
 
@@ -37,6 +38,7 @@ class DefaultControl : public ControlBase {
   using ControlBase::ControlBase;
   virtual ~DefaultControl() = default;
   bool ShouldInstrument(const KernelBuildDescriptor& buildDescr) const final;
+  bool EnablePerTileCollection(const KernelBuildDescriptor& buildDescr) const final;
   bool ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const final;
 };
 
@@ -49,6 +51,7 @@ class GTPinKnobControl : public ControlBase {
   using ControlBase::ControlBase;
   virtual ~GTPinKnobControl() = default;
   bool ShouldInstrument(const KernelBuildDescriptor& buildDescr) const final;
+  bool EnablePerTileCollection(const KernelBuildDescriptor& buildDescr) const final;
   bool ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const final;
 };
 

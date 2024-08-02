@@ -17,7 +17,7 @@ using namespace gtpin_prof;
 dst: register, src0: register, src1: register
 */
 
-GtGenProcedure AndXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure AndXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                         const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                         GtPredicate predicate) {
   GtGenProcedure proc;
@@ -53,11 +53,11 @@ GtGenProcedure AndXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& ds
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        const GtRegRegion&, GtExecMask, GtPredicate)>
     AndFunctionsTable = {{GED_MODEL_XE_HP, &AndXeHpc}, {GED_MODEL_XE_HPC, &AndXeHpc}};
 
-GtGenProcedure Macro::And(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::And(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                           GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
@@ -84,7 +84,7 @@ GtGenProcedure Macro::And(IGtKernelInstrument& instrumentor, const GtDstRegion& 
 dst: register, src0: register, src1: immediate
 */
 
-GtGenProcedure AndiXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure AndiXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                          const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                          GtPredicate predicate) {
   GtGenProcedure proc;
@@ -119,11 +119,11 @@ GtGenProcedure AndiXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& d
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        const GtImm&, GtExecMask, GtPredicate)>
     AndiFunctionsTable = {{GED_MODEL_XE_HP, &AndiXeHpc}, {GED_MODEL_XE_HPC, &AndiXeHpc}};
 
-GtGenProcedure Macro::And(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::And(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                           GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&

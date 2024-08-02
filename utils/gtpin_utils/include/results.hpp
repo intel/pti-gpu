@@ -48,9 +48,11 @@ class ResultData {
   ResultData(ResultData&) = delete;
   ResultData operator=(ResultData&) = delete;
   const ResultDataCommonSPtr GetCommon() const;
+  size_t GetTileId() const;
 
  private:
   const ResultDataCommonSPtr m_resultDataCommon;
+  size_t m_tileId;
   friend class GTPinTool;
 };
 
@@ -89,8 +91,9 @@ class InvocationData {
   const KernelRun GetRunNum() const;
   const KernelRun GetGlobalRunNum() const;
   const DispatchId GetDispatchId() const;
-  const std::vector<ResultDataSPtr> GetResults() const;
-  const ResultDataSPtr GetResultData(size_t idx) const;
+  size_t GetCollectedTilesNum() const;
+  const std::vector<ResultDataSPtr> GetResults(size_t tileId) const;
+  const ResultDataSPtr GetResultData(size_t tileId, size_t idx) const;
   bool IsCollected() const;
 
  private:
@@ -99,7 +102,7 @@ class InvocationData {
   DispatchId m_dispatchId = -1;
   bool m_collected = false;
 
-  std::vector<ResultDataSPtr> m_resultData;
+  std::vector<std::vector<ResultDataSPtr>> m_tileResultData;
 
   friend class GTPinTool;
 };
@@ -168,6 +171,8 @@ class KernelData {
   const size_t GetSiteOfInstrumentNum() const;
   const size_t GetResultsNum() const;
   const size_t GetBucketsNum() const;
+  const size_t GetTilesNum() const;  ///> HW number of tiles
+  const size_t GetCollectedTilesNum() const;
   const SiteOfInstrumentSPtr GetSiteOfInstrument(size_t idx) const;
   std::vector<ResultDataCommonSPtr> GetResultDataCommon() const;
 
@@ -187,6 +192,8 @@ class KernelData {
   uint32_t m_recordSize = -1;
   size_t m_buckets = 0;
   size_t m_kernelRuns = 0;
+  size_t m_tilesNum = 0;
+  size_t m_collectedTilesNum = 0;
   gtpin::GtProfileArray m_profileArray;
 
   friend class GTPinTool;

@@ -17,7 +17,7 @@ using namespace gtpin_prof;
 dst: register, src0: register
 */
 
-GtGenProcedure MovTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure MovTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                       const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;
@@ -46,13 +46,13 @@ GtGenProcedure MovTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        GtExecMask, GtPredicate)>
     MovFunctionsTable = {
         {GED_MODEL_TGL, &MovTgl},
 };
 
-GtGenProcedure Macro::Mov(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Mov(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
              "Destination size should be no less than source size");
@@ -76,7 +76,7 @@ GtGenProcedure Macro::Mov(IGtKernelInstrument& instrumentor, const GtDstRegion& 
 dst: register, src0: immediate
 */
 
-GtGenProcedure MoviTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure MoviTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                        const GtImm& srcI1, GtExecMask execMask, GtPredicate predicate) {
   if (srcI1.DataType().Size() == 1 && dst.DataType().Size() == 1) {
     GtGenProcedure proc;
@@ -111,7 +111,7 @@ GtGenProcedure MoviTgl(IGtKernelInstrument& instrumentor, const GtDstRegion& dst
   return proc;
 }
 
-GtGenProcedure MoviXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure MoviXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                          const GtImm& srcI1, GtExecMask execMask, GtPredicate predicate) {
   if (srcI1.DataType().Size() == 1 && dst.DataType().Size() == 1) {
     GtGenProcedure proc;
@@ -146,12 +146,12 @@ GtGenProcedure MoviXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& d
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtImm&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtImm&,
                                        GtExecMask, GtPredicate)>
     MoviFunctionsTable = {
         {GED_MODEL_TGL, &MoviTgl}, {GED_MODEL_XE_HP, &MoviXeHpc}, {GED_MODEL_XE_HPC, &MoviXeHpc}};
 
-GtGenProcedure Macro::Mov(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Mov(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtImm& srcI1, GtExecMask execMask, GtPredicate predicate) {
   uint64_t mask = Macro::GetMaskBySizeBytes(dst.DataType().Size());
   PTI_ASSERT(srcI1.Value() <= mask && "Immediate value is too large for the destination size");

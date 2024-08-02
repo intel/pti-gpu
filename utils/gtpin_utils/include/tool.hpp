@@ -160,7 +160,7 @@ class GTPinTool : public gtpin::IGtTool {
    * @return The status of the operation.
    */
   PROF_STATUS AllocateResources(KernelDataSPtr kernelData,
-                                gtpin::IGtKernelInstrument& instrumentor);
+                                const gtpin::IGtKernelInstrument& instrumentor);
 
   /**
    * @brief Initializes the profiling data.
@@ -201,6 +201,7 @@ class GTPinTool : public gtpin::IGtTool {
   size_t AddResultData(KernelDataSPtr kernelData, ResultDataCommonSPtr resultDataCommon);
   void IncKernelRuns(KernelDataSPtr kernelData);
   void SetRecordSize(KernelDataSPtr kernelData, uint32_t recordSize);
+  void SetCollectedTiles(KernelDataSPtr kernelData, uint32_t collectTilesNum);
   void SetBucketsNum(KernelDataSPtr kernelData, size_t buckets);
   void SetDefaultBuckets(KernelDataSPtr kernelData, const gtpin::IGtKernelInstrument& instrumentor);
   void AddSiteOfInstrument(KernelDataSPtr kernelData, SiteOfInstrumentSPtr siteOfInstrument);

@@ -13,7 +13,7 @@
 using namespace gtpin;
 using namespace gtpin_prof;
 
-GtGenProcedure AtomicStoreXeHpc(IGtKernelInstrument& instrumentor, GtReg addrReg, GtReg dataReg,
+GtGenProcedure AtomicStoreXeHpc(const IGtKernelInstrument& instrumentor, GtReg addrReg, GtReg dataReg,
                                 GtExecMask execMask, GtPredicate predicate) {
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;
@@ -45,11 +45,11 @@ GtGenProcedure AtomicStoreXeHpc(IGtKernelInstrument& instrumentor, GtReg addrReg
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, GtReg, GtReg, GtExecMask, GtPredicate)>
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, GtReg, GtReg, GtExecMask, GtPredicate)>
     AtomicStoreFunctionsTable = {{GED_MODEL_XE_HP, &AtomicStoreXeHpc},
                                  {GED_MODEL_XE_HPC, &AtomicStoreXeHpc}};
 
-GtGenProcedure Macro::AtomicStore(IGtKernelInstrument& instrumentor, GtReg addrReg, GtReg dataReg,
+GtGenProcedure Macro::AtomicStore(const IGtKernelInstrument& instrumentor, GtReg addrReg, GtReg dataReg,
                                   GtExecMask execMask, GtPredicate predicate) {
   PTI_ASSERT(dataReg.SubRegNum() == 0 &&
              "Data register should have sub-register number == 0. Try to use "

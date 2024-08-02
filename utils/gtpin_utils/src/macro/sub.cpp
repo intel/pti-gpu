@@ -17,13 +17,13 @@ using namespace gtpin_prof;
 dst: register, src0: register, src1: register
 */
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        const GtRegRegion&, GtExecMask, GtPredicate)>
     SubFunctionsTable = {
 
 };
 
-GtGenProcedure Macro::Sub(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Sub(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                           GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
@@ -50,7 +50,7 @@ GtGenProcedure Macro::Sub(IGtKernelInstrument& instrumentor, const GtDstRegion& 
 dst: register, src0: register, src1: immediate
 */
 
-GtGenProcedure SubiXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure SubiXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                          const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                          GtPredicate predicate) {
   GtGenProcedure proc;
@@ -64,11 +64,11 @@ GtGenProcedure SubiXeHpc(IGtKernelInstrument& instrumentor, const GtDstRegion& d
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
                                        const GtImm&, GtExecMask, GtPredicate)>
     SubiFunctionsTable = {{GED_MODEL_XE_HP, &SubiXeHpc}, {GED_MODEL_XE_HPC, &SubiXeHpc}};
 
-GtGenProcedure Macro::Sub(IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+GtGenProcedure Macro::Sub(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                           GtPredicate predicate) {
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&

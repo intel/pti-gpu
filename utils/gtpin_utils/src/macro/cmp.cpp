@@ -18,11 +18,11 @@ dst: register, src0: register, src1: register
 */
 
 std::map<GED_MODEL,
-         GtGenProcedure (*)(IGtKernelInstrument&, GtCondModifier, GtReg, const GtRegRegion&,
+         GtGenProcedure (*)(const IGtKernelInstrument&, GtCondModifier, GtReg, const GtRegRegion&,
                             const GtRegRegion&, GtExecMask, GtPredicate)>
     CmpFunctionsTable = {};
 
-GtGenProcedure Macro::Cmp(IGtKernelInstrument& instrumentor, GtCondModifier cond, GtReg flagReg,
+GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifier cond, GtReg flagReg,
                           const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                           GtPredicate predicate) {
 #ifndef DISABLE_MACRO_WORKAROUNDS
@@ -44,11 +44,11 @@ GtGenProcedure Macro::Cmp(IGtKernelInstrument& instrumentor, GtCondModifier cond
 dst: register, src0: register, src1: immediate
 */
 
-std::map<GED_MODEL, GtGenProcedure (*)(IGtKernelInstrument&, GtCondModifier, GtReg,
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, GtCondModifier, GtReg,
                                        const GtRegRegion&, const GtImm&, GtExecMask, GtPredicate)>
     CmpiFunctionsTable = {};
 
-GtGenProcedure Macro::Cmp(IGtKernelInstrument& instrumentor, GtCondModifier cond, GtReg flagReg,
+GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifier cond, GtReg flagReg,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                           GtPredicate predicate) {
 #ifndef DISABLE_MACRO_WORKAROUNDS

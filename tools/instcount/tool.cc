@@ -45,56 +45,65 @@ class InstCountWriter : public InstCountWriterBase {
       std::cerr << ") ===\n";
 
       size_t resultsNum = kernelData->GetResultsNum();
-      std::vector<size_t> instCount(resultsNum);
-      std::vector<size_t> simdCount(resultsNum);
-      size_t maxInstCount = 0;
-      size_t maxSimdCount = 0;
-
-      for (size_t idx = 0; idx < resultsNum; idx++) {
-        for (const auto& invocationDataPair : kernelData->GetInvocations()) {
-          auto invocationData =
-              std::dynamic_pointer_cast<InstCountInvocationData>(invocationDataPair.second);
-          PTI_ASSERT(invocationData != nullptr);
-          auto resultData =
-              std::dynamic_pointer_cast<InstCountResultData>(invocationData->GetResultData(idx));
-          PTI_ASSERT(resultData != nullptr);
-          instCount[idx] += resultData->instructionCounter;
-          simdCount[idx] += resultData->simdActiveLaneCounter;
-        }
-        maxInstCount = std::max(maxInstCount, instCount[idx]);
-        maxSimdCount = std::max(maxSimdCount, simdCount[idx]);
-      }
-      std::string maxInstCountStr = std::to_string(maxInstCount);
-      std::string maxSimdCountStr = std::to_string(maxSimdCount);
-
-      auto assembly = kernelData->GetOrigAsm();
-      auto resultDataCommon = kernelData->GetResultDataCommon();
-      gtpin::BblId bblId = -1;
-      for (size_t idx = 0; idx < resultsNum; idx++) {
-        auto rdc = std::dynamic_pointer_cast<InstCountResultDataCommon>(resultDataCommon[idx]);
-        PTI_ASSERT(rdc != nullptr);
-        if (bblId != rdc->bblId) {
-          bblId = rdc->bblId;
-          std::cerr << "///  Basic block #" << bblId << "\n";
+      for (size_t tileId = 0; tileId < kernelData->GetCollectedTilesNum(); tileId++) {
+        if (kernelData->GetCollectedTilesNum() > 1) {
+          std::cerr << "--- Tile #" << tileId << " of " << kernelData->GetCollectedTilesNum()
+                    << " collected" << std::endl;
         }
 
-        InstructionOffset offset = rdc->offset;
-        std::cerr << "[" << std::dec << std::setw(maxInstCountStr.size() + 1) << instCount[idx];
-        if (maxSimdCount > 0) {
-          std::cerr << "|" << std::dec << std::setw(maxSimdCountStr.size() + 1) << simdCount[idx];
+        std::vector<size_t> instCount(resultsNum);
+        std::vector<size_t> simdCount(resultsNum);
+        size_t maxInstCount = 0;
+        size_t maxSimdCount = 0;
+
+        for (size_t idx = 0; idx < resultsNum; idx++) {
+          for (const auto& invocationDataPair : kernelData->GetInvocations()) {
+            auto invocationData =
+                std::dynamic_pointer_cast<InstCountInvocationData>(invocationDataPair.second);
+            PTI_ASSERT(invocationData != nullptr);
+            auto resultData = std::dynamic_pointer_cast<InstCountResultData>(
+                invocationData->GetResultData(tileId, idx));
+            PTI_ASSERT(resultData != nullptr);
+            instCount[idx] += resultData->instructionCounter;
+            simdCount[idx] += resultData->simdActiveLaneCounter;
+          }
+          maxInstCount = std::max(maxInstCount, instCount[idx]);
+          maxSimdCount = std::max(maxSimdCount, simdCount[idx]);
         }
-        std::cerr << "] 0x" << std::setw(6) << std::hex << std::setfill('0') << offset
-                  << std::setfill(' ') << std::dec << " : ";
-        if (assembly.size() > idx)
-          std::cerr << assembly[idx].GetAsmLineOrig();
-        else
-          std::cerr << " no assembly";
-        std::cerr << std::endl;
+        std::string maxInstCountStr = std::to_string(maxInstCount);
+        std::string maxSimdCountStr = std::to_string(maxSimdCount);
+
+        auto assembly = kernelData->GetOrigAsm();
+        auto resultDataCommon = kernelData->GetResultDataCommon();
+        gtpin::BblId bblId = -1;
+        for (size_t idx = 0; idx < resultsNum; idx++) {
+          auto rdc = std::dynamic_pointer_cast<InstCountResultDataCommon>(resultDataCommon[idx]);
+          PTI_ASSERT(rdc != nullptr);
+          if (bblId != rdc->bblId) {
+            bblId = rdc->bblId;
+            std::cerr << "///  Basic block #" << bblId << "\n";
+          }
+
+          InstructionOffset offset = rdc->offset;
+          std::cerr << "[" << std::dec << std::setw(maxInstCountStr.size() + 1) << instCount[idx];
+          if (maxSimdCount > 0) {
+            std::cerr << "|" << std::dec << std::setw(maxSimdCountStr.size() + 1) << simdCount[idx];
+          }
+          std::cerr << "] 0x" << std::setw(6) << std::hex << std::setfill('0') << offset
+                    << std::setfill(' ') << std::dec << " : ";
+          if (assembly.size() > idx)
+            std::cerr << assembly[idx].GetAsmLineOrig();
+          else
+            std::cerr << " no assembly";
+          std::cerr << std::endl;
+        }
       }
     }
   }
 };
 
+static gtpin::Knob<bool> knobPerTileCollection("per-tile-collection", false,
+                                               "Collect data with tile granularity");
 static gtpin::KnobVector<int> knobKernelRun("kernel-run", {}, "Kernel run to profile");
 static gtpin::Knob<bool> knobDisableSimdCollection("disable-simd", false,
                                                    "Disable collection of SIMD active lanes");
@@ -103,6 +112,9 @@ class InstCountGTPinControl : public InstCountControl {
   using InstCountControl::InstCountControl;
 
   bool ShouldInstrument(const KernelBuildDescriptor& buildDescr) const final { return true; }
+  bool EnablePerTileCollection(const KernelBuildDescriptor& buildDescr) const final {
+    return knobPerTileCollection;
+  }
   bool ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const final {
     if (!gtpin::IsKernelExecProfileEnabled(execDescr.gtExecDesc, execDescr.gpuPlatform))
       return false;

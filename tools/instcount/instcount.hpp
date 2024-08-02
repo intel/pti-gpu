@@ -272,6 +272,10 @@ class InstCountControlDefault : public InstCountControl {
 
   bool ShouldInstrument(const KernelBuildDescriptor& buildDescr) const final { return true; }
 
+  bool EnablePerTileCollection(const KernelBuildDescriptor& buildDescr) const final {
+    return false;
+  }
+
   bool ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const final { return true; }
 };
 
