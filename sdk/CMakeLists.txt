@@ -115,7 +115,7 @@ endif()
 # It is an IPEX requirement for PTI to link against the LTS version of the
 # Level Zero Loader.
 # However, for best results, we recommend installing, Level Zero Loader >=
-# 1.16.15.
+# 1.17.25.
 # Notice about loader versions:
 #  * 1.15.8 supports dynamic tracing i.e. ze[Enable/Disable]TracingLayer.
 #  * 1.16.1 supports Level-Zero core Introspection API introduced in Spec 1.9.
@@ -124,6 +124,8 @@ endif()
 #      use the feature. Currently supported in the Intel GPU rolling release
 #      drivers.
 #  * 1.16.15 fixes a critical bug in ze[Enable/Disable]TracingLayer.
+#  * 1.17.25 fixes a bug in ze[Enable/Disable]TracingLayer.
+#   * Fixes compatiblity with zet*/zes* APIs.
 if(NOT PROJECT_IS_TOP_LEVEL)
   find_package(LevelZero 1.14.0 REQUIRED)
 else()

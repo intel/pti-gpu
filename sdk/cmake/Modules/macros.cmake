@@ -1091,8 +1091,14 @@ macro(GetGTest)
     FetchContent_MakeAvailable(googletest)
     target_compile_options(gmock_main PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
     target_compile_options(gmock PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
-    target_compile_options(gtest PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
-    target_compile_options(gtest_main PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
+    target_compile_options(gtest PRIVATE
+      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:Release>:-Wno-deprecated-declarations>>
+      $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>
+    )
+    target_compile_options(gtest_main PRIVATE
+      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:Release>:-Wno-deprecated-declarations>>
+      $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>
+    )
   endif()
 endmacro()
 
@@ -1122,8 +1128,8 @@ macro(GetLevelZero)
   if (NOT TARGET LevelZero::level-zero)
     # Need zelEnableTracingLayer
     set(LZ_VER_MAJOR "1")
-    set(LZ_VER_MINOR "16")
-    set(LZ_VER_PATCH "15")
+    set(LZ_VER_MINOR "17")
+    set(LZ_VER_PATCH "25")
     set(LZ_VER "${LZ_VER_MAJOR}.${LZ_VER_MINOR}.${LZ_VER_PATCH}")
 
     include(FetchContent)
@@ -1132,7 +1138,7 @@ macro(GetLevelZero)
         URL
         https://github.com/oneapi-src/level-zero/archive/refs/tags/v${LZ_VER}.tar.gz
         URL_HASH
-        SHA256=dba50f512c7da81c8d2c487f04c0fcf0ffff79a41f88a90658c96680e7c97be6
+        SHA256=3cfa1eb001d5974efed3002b6a5e6e687c7413141b3ae26e8bdac8085acddb9e
     )
     # Prevent content from automatically being installed with PTI
     FetchContent_GetProperties(LevelZero)
