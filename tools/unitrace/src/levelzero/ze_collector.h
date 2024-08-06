@@ -2502,7 +2502,12 @@ class ZeCollector {
 
     if (immediate == false) {
       desc->timestamp_event_to_signal_ = event_cache_.GetEvent(context);
-      zeEventHostSignal(desc->timestamp_event_to_signal_); // set to signal state to unblock first zeCommandQueueExecuteCommandLists() call
+      // set to signal state to unblock first zeCommandQueueExecuteCommandLists() call
+      auto status = zeEventHostSignal(desc->timestamp_event_to_signal_);
+      if (status != ZE_RESULT_SUCCESS) {
+        std::cerr << "[ERROR] Failed to signal timestamp event in command list" << std::endl;
+        exit(-1);
+      }
     }
     else {
       desc->timestamp_event_to_signal_ = nullptr;
@@ -3506,6 +3511,12 @@ class ZeCollector {
       desc->tid_ = utils::GetTid();
 
       desc->device_global_timestamps_ = nullptr;
+      desc->timestamp_seq_ = -1;
+      desc->timestamps_on_event_reset_ = nullptr;
+      desc->timestamps_on_commands_completion_ = nullptr;
+      desc->timestamp_event_ = nullptr;
+      desc->index_timestamps_on_commands_completion_ = nullptr;
+      desc->index_timestamps_on_event_reset_ = nullptr;
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -3518,11 +3529,6 @@ class ZeCollector {
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
       if (it->second->immediate_) {
-        desc->timestamps_on_event_reset_ = nullptr;
-        desc->timestamps_on_commands_completion_ = nullptr;
-        desc->timestamp_event_ = nullptr;
-        desc->timestamp_seq_ = -1;
-        desc->index_timestamps_on_commands_completion_ = nullptr;
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
         desc->append_time_ = host_timestamp;
@@ -3539,23 +3545,12 @@ class ZeCollector {
         }
       }
       else {
+        // TODO: what happens if an event associated with a barrier gets reset?
         desc->append_time_ = host_timestamp;
         desc->immediate_ = false;
         desc->command_metric_query_ = desc_query;
 
         command_lists_mutex_.lock();
-
-        int seq = it->second->num_timestamps_++;
-	it->second->index_timestamps_on_commands_completion_.push_back(-1);
-	it->second->index_timestamps_on_event_reset_.push_back(-1);
-        it->second->event_to_timestamp_seq_.insert({event_to_signal, seq});
-        
-        desc->timestamp_seq_ = seq;
-        desc->timestamps_on_event_reset_ = &(it->second->timestamps_on_event_reset_);
-        desc->timestamps_on_commands_completion_ = &(it->second->timestamps_on_commands_completion_);
-        desc->timestamp_event_ = it->second->timestamp_event_to_signal_;
-        desc->index_timestamps_on_commands_completion_ = &(it->second->index_timestamps_on_commands_completion_);
-        desc->index_timestamps_on_event_reset_ = &(it->second->index_timestamps_on_event_reset_);
 
         it->second->commands_.push_back(desc);
         if (query != nullptr) {
@@ -3617,9 +3612,9 @@ class ZeCollector {
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
 
+      desc->timestamp_seq_ = -1;
       desc->timestamps_on_event_reset_ = nullptr;
       desc->timestamps_on_commands_completion_ = nullptr;
-      desc->timestamp_seq_ = -1;
       desc->index_timestamps_on_commands_completion_ = nullptr;
       desc->index_timestamps_on_event_reset_ = nullptr;
 
