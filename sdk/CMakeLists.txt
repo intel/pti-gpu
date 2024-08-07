@@ -292,3 +292,7 @@ endif()
 if(BUILD_TESTING AND PTI_FUZZ)
   add_subdirectory(fuzz)
 endif()
+
+if(PROJECT_IS_TOP_LEVEL AND PTI_INSTALL)
+  include(cmake/packaging.cmake)
+endif()

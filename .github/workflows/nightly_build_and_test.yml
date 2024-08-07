@@ -27,10 +27,13 @@ jobs:
         include:
           - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
             uploadname: "ubuntu22.4-2024.1.1"
+            preset: linux-icpx-debug
           - container: ${{ vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 }}
             uploadname: "rocky8-2024.1.1"
+            preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_0 }} 
             uploadname: "ubuntu22.4-2024.1.0"
+            preset: linux-icpx-debug
 
     container: 
       image: ${{ matrix.container }}
@@ -49,14 +52,14 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --preset linux-icpx-release
-          cmake --build --preset linux-icpx-release -j $(($(nproc)/2))
+          cmake --preset ${{ matrix.preset }}
+          cmake --build --preset ${{ matrix.preset }} -j $(($(nproc)/2))
 
       - name: Test
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --output-on-failure --preset linux-icpx-release
+          ctest --output-on-failure --preset ${{ matrix.preset }}
 
       - name: Build AddressSanitizer
         working-directory: sdk
@@ -105,17 +108,19 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           ctest --preset linux-tsan --output-on-failure -L samples
 
-      - name: Install SDK
+      - name: Package SDK
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --install build-linux-icpx-release --config Release --prefix out
+          cpack -G TGZ --config build-${{ matrix.preset }}/CPackConfig.cmake
 
       - name: Upload SDK
         uses: actions/upload-artifact@v4
         with:
-          name: "PTI-SDK-${{ matrix.uploadname }}"
-          path: sdk/out
+          name: "PTI-SDK-PKG-${{ matrix.preset }}-${{ matrix.uploadname }}"
+          path: |
+            sdk/pti*.tar.gz
+            sdk/pti*.tar.gz*
 
   pti-tools-build-and-test:
     name: Test pti library Ubuntu-22-04

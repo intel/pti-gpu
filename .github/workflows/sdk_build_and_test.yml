@@ -31,6 +31,7 @@ jobs:
         include:
           - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
             uploadname: "ubuntu22.4-2024.1.1"
+            preset: linux-icpx-release
 
     container: 
       image: ${{ matrix.container }}
@@ -49,14 +50,14 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          cmake --preset linux-icpx-release
-          cmake --build --preset linux-icpx-release -j $(($(nproc)/2))
+          cmake --preset ${{ matrix.preset }}
+          cmake --build --preset ${{ matrix.preset }} -j $(($(nproc)/2))
 
       - name: Test
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --output-on-failure --preset linux-icpx-release
+          ctest --output-on-failure --preset ${{ matrix.preset }}
 
       - name: Build AddressSanitizer
         working-directory: sdk
@@ -105,18 +106,6 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           ctest --preset linux-tsan --output-on-failure -L samples
 
-      - name: Install SDK
-        working-directory: sdk
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          cmake --install build-linux-icpx-release --config Release --prefix out
-
-      - name: Upload SDK
-        uses: actions/upload-artifact@v4
-        with:
-          name: "PTI-SDK-${{ matrix.uploadname }}"
-          path: sdk/out
-
   win-lib-build-and-test:
     name: Test pti-lib on Windows
     runs-on: [self-hosted, Windows, pti]
@@ -126,6 +115,12 @@ jobs:
       run:
         shell: cmd
         working-directory: sdk
+
+    strategy:
+      matrix:
+        include:
+          - preset: windows-ci-release
+            build-dir: wbr
 
     if: vars.PTI_RUN_TESTS == 1
 
@@ -165,9 +160,9 @@ jobs:
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
           set /A JOBS=%NUMBER_OF_PROCESSORS%/2
-          rmdir /S /Q wbr
-          cmake --preset windows-ci-release
-          cmake --build --preset windows-ci-release --parallel %JOBS%
+          rmdir /S /Q ${{ matrix.build-dir }}
+          cmake --preset ${{ matrix.preset }}
+          cmake --build --preset ${{ matrix.preset }} --parallel %JOBS%
 
       - name: Test
         run: |
@@ -177,17 +172,5 @@ jobs:
           REM TODO Kernel name demangling not supported on Windows yet.
           REM TODO Tests need to be run without \DNDEBUG set
           REM TODO OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
-          ctest --output-on-failure --preset windows-ci-release -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords"
+          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords"
 
-      - name: Install Lib
-        run: |
-          @echo off
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          cmake --install wbr --config Release --prefix out
-
-      - name: Upload SDK
-        uses: actions/upload-artifact@v4
-        with:
-          name: "PTI-SDK-WIN"
-          path: sdk/out
