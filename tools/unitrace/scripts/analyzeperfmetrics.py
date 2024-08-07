@@ -10,11 +10,18 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages as pdf
 
+from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
+from urllib.parse import unquote
+
 import os
+import io
+import socket
+import ssl
 import sys
 import re
 import subprocess
 import argparse
+import tempfile
 
 def ParseArguments():
     argparser = argparse.ArgumentParser(description = "GPU Kernel Performance Hardware Metrics Analyzer")
@@ -24,8 +31,11 @@ def ParseArguments():
     argparser.add_argument('-i', '--instance', type = int, default = 1, help = "kernel instance. all instances if < 1 (1 or the first instance by default)")
     argparser.add_argument('-m', '--metrics', help = "list of comma-separated metric names")
     argparser.add_argument('-o', '--output', help = "output file in text format if -l is present, PDF format regardless of file extension if -k is not present or if instance < 1")
+    argparser.add_argument('-p', '--https', action = 'store_true', help = "start https server")
+    argparser.add_argument('-c', '--certificate', help = "certificate file for https server")
+    argparser.add_argument('-e', '--key', help = "private key file for https server")
     argparser.add_argument('-s', '--shaderdump', help = "shader dump folder for stall analysis")
-    argparser.add_argument('-r', '--report', help = "stall analysis report, stdout by default")
+    argparser.add_argument('-r', '--report', help = "stall analysis report in plain text")
     argparser.add_argument('-y', '--ylabel', help = "label for Y axis")
     argparser.add_argument('-x', '--xlabel', default = "Time", help = "label for X axis (defaut is \"Time\")")
     argparser.add_argument('-t', '--title', default = "Performance Metrics", help = "performance metric plot title")
@@ -116,7 +126,7 @@ def FindBB(bbs, ins):	# find BB of an instruction
 
     return None, None	# never reaches here
 
-def AnalyzeStalls(kernel, args, stalldf, report):
+def AnalyzeStalls(kernel, args, stalldf):
     shaders = os.listdir(args.shaderdump)
     files = []	# .asm files
 
@@ -135,8 +145,9 @@ def AnalyzeStalls(kernel, args, stalldf, report):
                         asmfiles.append(f)
 
     if (len(asmfiles) == 0):
-        print("Not found .asm file for " + kernel)
-        return
+        msg = "Not found .asm file for " + kernel
+        print(msg)
+        return msg
 
     asm = asmfiles[0]
     if (len(asmfiles) > 1):	# kernel has been retried, found the latest one
@@ -193,10 +204,10 @@ def AnalyzeStalls(kernel, args, stalldf, report):
     df = df[df["SbidStall[Events]"] > 0]	# drop 0s
     df = df.sort_values(by = ["SbidStall[Events]"], ascending = False)
 
-    print("Kernel: " + kernel, file = report)
-    print("Assembly with instruction addresses: " + asm, file = report)
-    print("***********************************************************************************************", file = report)
-    print("Sbid Stalls: ", file = report)
+    report = "Kernel: " + kernel + "\n"
+    report += "Assembly with instruction addresses: " + asm + "\n"
+    report += "***********************************************************************************************\n"
+    report += "Sbid Stalls: \n"
 
     for index, row in df.iterrows():
         ip = row["IP[Address]"]
@@ -309,25 +320,25 @@ def AnalyzeStalls(kernel, args, stalldf, report):
 
                         j = j + 1
 
-                    print("\nInstruction", file = report)
-                    print("  " + ins, file = report)
+                    report += "\nInstruction\n"
+                    report += "  " + ins + "\n";
                     if (source_line_stalled != None):
-                        print("  " + instructions[source_line_stalled][3:], file = report)
+                        report += "  " + instructions[source_line_stalled][3:] + "\n"
                         if (source_file_stalled != None):
-                            print("  " + instructions[source_file_stalled][3:], file = report)
+                            report += "  " + instructions[source_file_stalled][3:] + "\n"
 
                     if ((len(source_lines_stall) > 0) or (len(ins_stall_not_line_resolved) > 0)):
-                        print("is stalled potentially by", file = report)
+                        report += "is stalled potentially by\n"
                         for i, line in source_lines_stall.items():
-                            print("  instruction", file = report)
-                            print("    " + instructions[i], file = report)
-                            print("    " + instructions[line][3:], file = report)
-                            print("    " + instructions[source_files_stall[i]][3:], file = report)
+                            report += "  instruction\n"
+                            report += "    " + instructions[i] + "\n"
+                            report += "    " + instructions[line][3:] + "\n"
+                            report += "    " + instructions[source_files_stall[i]][3:] + "\n"
                         for i in ins_stall_not_line_resolved:
-                            print("  instruction", file = report)
-                            print("    " + instructions[i], file = report)
+                            report += "  instruction\n"
+                            report += "    " + instructions[i] + "\n"
                     else:
-                        print("is stalled", file = report)
+                        report += "is stalled\n"
 
                     break
 
@@ -342,8 +353,8 @@ def AnalyzeStalls(kernel, args, stalldf, report):
             continue
         df = df.sort_values(by = [t], ascending = False)
 
-        print("***********************************************************************************************", file = report)
-        print(t.split("Stall")[0] + " Stalls: ", file = report)
+        report += "***********************************************************************************************\n"
+        report += t.split("Stall")[0] + " Stalls: \n"
 
         for index, row in df.iterrows():
             ip = row["IP[Address]"]
@@ -371,34 +382,96 @@ def AnalyzeStalls(kernel, args, stalldf, report):
                                 if ((ins_stalled_not_line_resolved == None) and (ins_stalled_not_file_resolved == None)):
                                     break	# we are done
 
-                        print("\nInstruction", file = report)
-                        print("  " + ins, file = report)
+                        report += "\nInstruction\n"
+                        report += "  " + ins + "\n"
                         if (source_line_stalled != None):
-                            print("  " + instructions[source_line_stalled][3:], file = report)
+                            report += "  " + instructions[source_line_stalled][3:] + "\n"
                             if (source_file_stalled != None):
-                                print("  " + instructions[source_file_stalled][3:], file = report)
+                                report += "  " + instructions[source_file_stalled][3:] + "\n"
 
-                        print("is stalled", file = report)
+                        report += "is stalled\n"
 
                         break
 
-    print("===============================================================================================", file = report)
+    report += "===============================================================================================\n"
+    return report
 
-def AnalyzeStallMetrics(args, header, last):
-    report_out = sys.stdout
+def WriteOutStallReport(report, p): # p is PDF object
+    if (p is None): # p should already be created, but just in case
+        return  # do nothing
+
+    lines = report.split('\n')
+    page = ""
+    num = 0
+    page_size = 48  # number of lines per page
+    line_width = 160 # number of characters per line
+    font_size = 4
+    for line in lines:
+        if (len(line) == 0):    # empty line
+            line = "\n"
+        s = 0
+        while (len(line[s:]) > line_width):
+            page += line[s:s + line_width]
+            page += '\n'
+            num += 1
+            if (num == page_size):
+                fig = plt.figure()
+                plt.axis('off')
+                page = page.replace('$', '\$')  # escape '$'
+                plt.text(0.0, 0.0, page, fontsize = font_size, ha = 'left', wrap = True)
+                fig.savefig(p, format = 'pdf')
+                plt.close(fig) # close figure
+                page = ""  # reset for next page
+                num = 0
+            s += line_width
+        if (s < len(line)):
+            page += line[s:]
+            page += '\n'
+            num += 1
+            if (num == page_size):
+                fig = plt.figure()
+                plt.axis('off')
+                page = page.replace('$', '\$')
+                plt.text(0.0, 0.0, page, fontsize = font_size, ha = 'left', wrap = True)
+                fig.savefig(p, format = 'pdf')
+                plt.close(fig) # close figure
+                page = ""  # reset for next page
+                num = 0
+            
+    # don't forget the last page
+    if (num != 0):
+        fig = plt.figure()
+        plt.axis('off')
+        page = page.replace('$', '\$')
+        plt.text(0.0, 0.0, page, fontsize = font_size, ha = 'left', wrap = True)
+        fig.savefig(p, format = 'pdf')
+        plt.close(fig) # close figure
+
+    return
+
+def AnalyzeStallMetrics(args, header, last, kernel, http = False):
+
+    if ((http == True) and (kernel is None)):
+        return None, None
+
+    buf = None
+    stall_analysis_report_out = None
     if (args.shaderdump is not None):
         if (os.path.isdir(args.shaderdump) == False):
-            print("Shader dump folder " + args.shaderdump + " does not exist")
-            return
-        if (args.report is not None):
-            report_out = open(args.report, "w")
+            msg = "Shader dump folder " + args.shaderdump + " does not exist"
+            if (http == False):
+                print(msg)
+            return msg, None
+        if ((http == False) and (args.report is not None)):
+            stall_analysis_report_out = open(args.report, "w")
 
     # only read lines from headerlinenumber to lastline
     df = pd.read_csv(args.input, skiprows = header, nrows = last - header - 1, skip_blank_lines = False, skipinitialspace = True)
 
     stalls = ["ControlStall[Events]", "PipeStall[Events]", "SendStall[Events]", "DistStall[Events]", "SbidStall[Events]", "SyncStall[Events]", "InstrFetchStall[Events]", "OtherStall[Events]"]
 
-    if (args.kernel is None):
+    ins_per_page = 100  # number of instuctions to histogram per page
+    if (kernel is None):    # http is False
         # all kernels
         start = 0
         stop = -1
@@ -424,15 +497,15 @@ def AnalyzeStallMetrics(args, header, last):
                             xticks.append(i)
 
                         df3 = df3.reset_index()
-                        numpages = (df3.shape[0] + (100 - 1)) // 100 # multiple charts if more than 100 instructions are stalled
+                        numpages = (df3.shape[0] + (ins_per_page - 1)) // ins_per_page # multiple charts if more than ins_per_page instructions are stalled
                         if (numpages > 1):
                             for page in range(1, numpages + 1):
-                                df4 = df3[100 * (page - 1) : min([100 * page, df3.shape[0]])]
+                                df4 = df3[ins_per_page * (page - 1) : min([ins_per_page * page, df3.shape[0]])]
                                 if (df4.shape[0] > 1):
                                     ax = df4.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
                                 else:
                                     ax = df4.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                                ax.set_xticks(xticks[100 * (page - 1) :  min([100 * page, df3.shape[0]])], labels = xlabels[100 * (page - 1) :  min([100 * page, df3.shape[0]])], rotation = 90, fontsize = 4)
+                                ax.set_xticks(xticks[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], labels = xlabels[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], rotation = 90, fontsize = 4)
                                 plt.grid(visible = True, which = 'both', axis = 'y')
                                 plt.legend(loc = 'best', fontsize = 4)
                                 plt.title(label = args.title + "\n(" + kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
@@ -459,7 +532,13 @@ def AnalyzeStallMetrics(args, header, last):
                             plt.close(fig)	# close figure to save memory
 
                         if (args.shaderdump is not None):
-                            AnalyzeStalls(kernel, args, df2, report_out)
+                            report = AnalyzeStalls(kernel, args, df2)
+                            if (stall_analysis_report_out is not None):
+                                print(report, file = stall_analysis_report_out)
+                            if (p == None):
+                                p = pdf(args.output)
+                            WriteOutStallReport(report, p)
+            
                         print("\nAnalyzed kernel " + kernel)
                     else:
                         print("\nNo stall events for kernel " + kernel)
@@ -483,15 +562,15 @@ def AnalyzeStallMetrics(args, header, last):
                 xticks.append(i)
 
             df3 = df3.reset_index()
-            numpages = (df3.shape[0] + (100 - 1)) // 100 # multiple charts if more than 100 instructions are stalled
+            numpages = (df3.shape[0] + (ins_per_page - 1)) // ins_per_page  # multiple charts if more than ins_per_page instructions are stalled
             if (numpages > 1):
                 for page in range(1, numpages + 1):
-                    df4 = df3[100 * (page - 1) : min([100 * page, df3.shape[0]])]
+                    df4 = df3[ins_per_page * (page - 1) : min([ins_per_page * page, df3.shape[0]])]
                     if (df4.shape[0] > 1):
                         ax = df4.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
                     else:
                         ax = df4.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                    ax.set_xticks(xticks[100 * (page - 1) :  min([100 * page, df3.shape[0]])], labels = xlabels[100 * (page - 1) :  min([100 * page, df3.shape[0]])], rotation = 90, fontsize = 4)
+                    ax.set_xticks(xticks[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], labels = xlabels[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], rotation = 90, fontsize = 4)
                     plt.grid(visible = True, which = 'both', axis = 'y')
                     plt.legend(loc = 'best', fontsize = 4)
                     plt.title(label = args.title + "\n(" + kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
@@ -506,7 +585,7 @@ def AnalyzeStallMetrics(args, header, last):
                     ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
                 else:
                     ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-    
+
                 ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
                 plt.grid(visible = True, which = 'both', axis = 'y')
                 plt.legend(loc = 'best', fontsize = 4)
@@ -519,7 +598,13 @@ def AnalyzeStallMetrics(args, header, last):
                 plt.close(fig)	# close figure to save memory
 
             if (args.shaderdump is not None):
-                AnalyzeStalls(kernel, args, df2, report_out)
+                report = AnalyzeStalls(kernel, args, df2)
+                if (stall_analysis_report_out is not None):
+                    print(report, file = stall_analysis_report_out)
+                if (p == None):
+                    p = pdf(args.output)
+                WriteOutStallReport(report, p)
+
             print("\nAnalyzed kernel " + kernel)
         else:
             print("\nNo stall events for kernel " + kernel)
@@ -528,9 +613,9 @@ def AnalyzeStallMetrics(args, header, last):
             p.close()
             print("\nStall metric charts are stored in file " + args.output + " in PDF format")
 
-        if ((args.shaderdump is not None) and (args.report is not None)):
-            report_out.close()
-            print("Stall report is in file " + args.report)
+        if ((args.shaderdump is not None) and (args.report is not None) and (stall_analysis_report_out is not None)):
+            stall_analysis_report_out.close()
+            print("Stall report is also stored in file " + args.report)
 
     else:
         counting = True
@@ -539,7 +624,7 @@ def AnalyzeStallMetrics(args, header, last):
         kernelfound = False
 
         for index, row in df.iterrows():
-            if (row['Kernel'] == args.kernel):
+            if (row['Kernel'] == kernel):
                 if (kernelfound == False):
                     start = index
                     kernelfound = True
@@ -549,8 +634,10 @@ def AnalyzeStallMetrics(args, header, last):
                     break
 
         if (kernelfound == False):
-            print("No metric data for kernel " + args.kernel)
-            return
+            msg = "No metric data for kernel " + kernel
+            if (http == False):
+                print(msg)
+            return msg, None
 
         if (stop == -1):
             stop = df.shape[0]
@@ -569,24 +656,30 @@ def AnalyzeStallMetrics(args, header, last):
                 xticks.append(i)
 
             df3 = df3.reset_index()
-            numpages = (df3.shape[0] + (100 - 1)) // 100 # multiple charts if more than 100 instructions are stalled
-            if (numpages > 1):
+            numpages = (df3.shape[0] + (ins_per_page - 1)) // ins_per_page # multiple charts if more than ins_per_page instructions are stalled
+            p = None
+            if (http == False):
                 p = pdf(args.output)
+            else:
+                tmpdir = tempfile.TemporaryDirectory()
+                tmpfile = os.path.join(tmpdir.name, "stallchart.pdf")
+                p = pdf(tmpfile)
+
+            if (numpages > 1):
                 for page in range(1, numpages + 1):
-                    df4 = df3[100 * (page - 1) : min([100 * page, df3.shape[0]])]
+                    df4 = df3[ins_per_page * (page - 1) : min([ins_per_page * page, df3.shape[0]])]
                     if (df4.shape[0] > 1):
                         ax = df4.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
                     else:
                         ax = df4.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                    ax.set_xticks(xticks[100 * (page - 1) :  min([100 * page, df3.shape[0]])], labels = xlabels[100 * (page - 1) :  min([100 * page, df3.shape[0]])], rotation = 90, fontsize = 4)
+                    ax.set_xticks(xticks[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], labels = xlabels[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], rotation = 90, fontsize = 4)
                     plt.grid(visible = True, which = 'both', axis = 'y')
                     plt.legend(loc = 'best', fontsize = 4)
-                    plt.title(label = args.title + "\n(" + args.kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
+                    plt.title(label = args.title + "\n(" + kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
                     plt.tight_layout()
                     fig = ax.get_figure()
                     fig.savefig(p, format = 'pdf')
                     plt.close(fig)	# close figure to save memory
-                p.close()
             else:
                 if (df3.shape[0] > 1):
                     ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
@@ -595,20 +688,39 @@ def AnalyzeStallMetrics(args, header, last):
                 ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
                 plt.grid(visible = True, which = 'both', axis = 'y')
                 plt.legend(loc = 'best', fontsize = 4)
-                plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+                plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
                 plt.tight_layout()
-                plt.savefig(args.output)
+                fig = ax.get_figure()
+                fig.savefig(p, format = 'pdf')
+                plt.close(fig)
 
             if (args.shaderdump is not None):
-                AnalyzeStalls(args.kernel, args, df2, report_out)
+                report = AnalyzeStalls(kernel, args, df2)
+                if ((http == False) and (stall_analysis_report_out is not None)):
+                    print(report, file = stall_analysis_report_out)
+                WriteOutStallReport(report, p)
 
-            print("\nStall metric chart in file " + args.output + " has been successfully generated.")
+            if (p != None):
+                p.close()
+
+            if (http == True):
+                buf = io.BytesIO()
+                fp = open(tmpfile, "rb")
+                buf.write(fp.read())
+                fp.close()
+                os.remove(tmpfile)
+                tmpdir.cleanup()
+
+            if (http == False):
+                print("\nStall metric chart in file " + args.output + " has been successfully generated.")
         else:
-            print("\nNo stall events for kernel " + args.kernel + " in the input data")
+            print("\nNo stall events for kernel " + kernel + " in the input data")
 
-        if ((args.shaderdump is not None) and (args.report is not None)):
-            report_out.close()
-            print("Stall report is in file " + args.report)
+        if ((http == False) and (args.shaderdump is not None) and (args.report is not None) and (stall_analysis_report_out is not None)):
+            stall_analysis_report_out.close()
+            print("Stall report is also stored in file " + args.report)
+
+    return None, buf
 
 def PlotKernelInstancePerfMetrics(args, kernel, df, metrics):
     k = 0
@@ -920,6 +1032,181 @@ def List(args):
     if (args.output is not None):
         of.close()
 
+def HttpAnalyzeStallMetrics(args, header, last, kname):
+    return AnalyzeStallMetrics(args, header, last, kname, http = True)
+
+def HttpAnalyzePerfMetrics(args, header, last, kname, instance):
+    df = pd.read_csv(args.input, skiprows = header, nrows = last - header - 1, skip_blank_lines = False, skipinitialspace = True)
+    df = df.loc[df['GlobalInstanceId'] == float(instance)]
+    if (df.shape[0] == 0):
+        return None, None
+    
+    buf = None
+    metrics = args.metrics.split(sep = ',')
+    metrics_cleansed = []
+    for metric in metrics:
+        me = metric.strip()			# strip off leading and trailing whitespaces
+        if (me not in df.columns):
+            msg = "No metric data for " + metric + ". Is the metric name correctly spelled?"
+            return msg, None
+        else:
+            metrics_cleansed.append(me)
+    
+    df2 = df[metrics_cleansed]
+    
+    if (df2.shape[0] > 0):
+        if (df2.shape[0] > 1):
+            ax = df2.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = args.ylabel)
+        else:
+            ax = df2.plot(y = metrics_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = args.ylabel)
+        plt.grid(visible = True, which = 'both', axis = 'y')
+        plt.legend(loc = 'best', fontsize = 4)
+        kernel = df.iloc[0]['Kernel']
+        plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
+        plt.tight_layout()
+    
+        buf = io.BytesIO()
+        fig = ax.get_figure()
+        fig.savefig(buf, format = 'pdf')
+        plt.close(fig)  # close figure to save memory
+        return None, buf
+
+def GenerateSelfSignedCertificate(cert, key):
+    # construct command to generate a self-signed certificate and private key
+    command = ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-keyout", key, "-out", cert, "-days", "365", "-nodes", "-subj", "/CN=localhost"]
+
+    try:
+        subprocess.run(command, check = True)
+        print(f"Self-signed certificate and private key have been generated.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error occurred while generating self-signed certificate: {e}", file = sys.stderr)
+
+def PerfMetricsHTTPServer(args):
+    try:
+        sections = []
+        with open(args.input, "r") as f:
+            linenum = 0
+            header = 0
+            devicefound = False
+            eustall = False
+            for row in f:
+                if (("OtherStall[Events]," in row) or (row.startswith("Kernel,"))):      # found header
+                    header = linenum
+                    if ("OtherStall[Events]," in row):
+                        eustall = True
+                if (("=== Device" in row) and ("Metrics ===" in row)):
+                    if (devicefound == False):		# found device
+                        devicefound = True
+                    else:
+                        if (devicefound == True):	# done with the device of interest
+                            sections.append([header, linenum])
+                            devicefound = False
+                linenum += 1
+
+            sections.append([header, linenum])
+
+        class PerfMetricsRequestHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if (self.client_address[0] != "127.0.0.1"):
+                    return
+
+                request = unquote(self.path).split("/")  # format is name/instance
+                if (request[1] == "favicon.ico"): # ignore
+                    return
+
+                self.send_response(200)
+                if (len(request) < 3):
+                    self.send_header('Content-type', 'text/plain')
+                    self.end_headers()
+                    self.wfile.write(b'Invalid')
+                    return
+
+                kname = request[1].strip('"')   # strip leading and trailing double quotes
+                instance = request[2]
+
+                if ((instance == "") or (instance.isdigit() == False)):
+                    self.send_header('Content-type', 'text/plain')
+                    self.end_headers()
+                    self.wfile.write(b'Invalid')
+                    return
+
+                if (eustall == True):   # strip kernel shape for stall sampling
+                    pos = kname.rfind('[')
+                    if (pos != -1):
+                        kname = kname[0:pos]
+
+                msg = None
+                buf = None
+                for sec in sections:
+                    # only read lines from headerlinenumber to lastline
+
+                    last = sec[1]
+                    header = sec[0]
+                    if (eustall == True):
+                        msg, buf = HttpAnalyzeStallMetrics(args, header, last, kname)
+                    else:
+                        msg, buf = HttpAnalyzePerfMetrics(args, header, last, kname, instance)
+
+                    if (buf is not None):
+                        buf.seek(0)
+                        try:
+                            self.send_header('Content-type', 'application/pdf')
+                            self.end_headers()
+                            self.wfile.write(buf.read())
+                        except BrokenPipeError:
+                            print("Try again please")
+                        finally:
+                            return
+                    else:
+                        if (msg is not None):
+                            break
+
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                if (msg is not None):
+                    self.wfile.write(bytes(msg, 'utf-8'))
+                else:
+                    self.wfile.write(b'No metric data collected')
+
+        cert = args.certificate
+        key = args.key
+        tmpdir = None
+        if ((cert == None) and (key == None)):
+            # generate a self signed certificate
+            print("No certificate or private key is provided.")
+            print("Generating a self-signed certificate...")
+            tmpdir = tempfile.TemporaryDirectory()
+            cert = os.path.join(tmpdir.name, "selfsigned.crt")
+            key = os.path.join(tmpdir.name, "private.key")
+            GenerateSelfSignedCertificate(cert, key)
+        else:
+            if (cert is None):
+                print("Certificate file is missing")
+                return
+            if (key is None):
+                print("Private key file is missing")
+                return
+
+            if (os.path.isfile(cert) == False):
+                print("Certificate file " + cert + " does not exist")
+                return
+            if (os.path.isfile(key) == False):
+                print("Private key file " + key + " does not exist")
+                return
+
+        httpd = ThreadingHTTPServer(('localhost', 8000), PerfMetricsRequestHandler)
+
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        httpd.socket = context.wrap_socket(httpd.socket, server_side = True)
+        if (tmpdir is not None):
+            tmpdir.cleanup()
+        httpd.serve_forever()
+
+    except KeyboardInterrupt:
+        print("Goodbye!")
+        return
+
 def main(args):
     if (os.path.isfile(args.input) == False):
         print("File " + args.input + " does not exist or cannot be opened")
@@ -931,6 +1218,12 @@ def main(args):
 
     if (args.list == True):
         List(args)
+        return
+
+    if (args.https == True):
+        print("No output to file")
+        print("Options -o/--output, -r/--report, -k/--kernel, -i/--instance and -d/--device are ignored if they are present")
+        PerfMetricsHTTPServer(args)
         return
 
     if (args.output is None):
@@ -976,7 +1269,7 @@ def main(args):
             return
         AnalyzePerfMetrics(args, header, last)
     else:
-        AnalyzeStallMetrics(args, header, last)
+        AnalyzeStallMetrics(args, header, last, args.kernel)
 
 if __name__== "__main__":
     main(ParseArguments())

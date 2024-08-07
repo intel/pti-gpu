@@ -35,6 +35,27 @@ static inline std::string GetHostName(void) {
   return hname;
 }
 
+static std::string EncodeURI(const std::string &input) {
+  std::ostringstream encoded;
+  encoded.fill('0');
+  encoded << std::hex;
+
+  for (auto c : input) {
+    // accepted characters
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      encoded << c;
+      continue;
+    }
+
+    // percent-encoded otherwise
+    encoded << std::uppercase;
+    encoded << '%' << std::setw(2) << int(c);
+    encoded << std::nouppercase;
+  }
+
+  return encoded.str();
+}
+
 static std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
 static uint32_t mpi_rank = std::atoi(rank.c_str());
 
@@ -374,6 +395,12 @@ class TraceBuffer {
       device_event_buffer_flushed_ = false;
       host_event_buffer_flushed_ = false;
       finalized_.store(false, std::memory_order_release);
+      if ((utils::GetEnv("UNITRACE_MetricQuery") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
+        metrics_enabled_ = true;
+      }
+      else {
+        metrics_enabled_ = false;
+      }
 
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);	// use this lock to protect trace_buffers_
       
@@ -483,11 +510,12 @@ class TraceBuffer {
         pkt.tid = device_tid;
         pkt.pid = device_pid;
         pkt.kernel_command_id = rec.kernel_command_id_;
+	std::string kname = GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
         if (rec.implicit_scaling_) {
-          pkt.name = "Tile #" + std::to_string(rec.tile_) + ": " + GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
+          pkt.name = "Tile #" + std::to_string(rec.tile_) + ": " + kname;
         }
         else {
-          pkt.name = GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
+          pkt.name = kname;
         }
         pkt.api_id = ZeKernelTracingId;
         pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
@@ -495,6 +523,9 @@ class TraceBuffer {
         pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
         pkt.cat = gpu_op;
         pkt.args = "\"id\": \"" + std::to_string(rec.kid_) + "\"";
+	if (metrics_enabled_) {
+          pkt.args += ", \"metrics\": \"https://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
+	}
         logger_->Log(pkt.Stringify());
       }
 
@@ -707,6 +738,7 @@ class TraceBuffer {
     bool host_event_buffer_flushed_;
     bool device_event_buffer_flushed_;
     std::atomic<bool> finalized_;
+    bool metrics_enabled_;
 };
 
 thread_local TraceBuffer thread_local_buffer_;
@@ -745,6 +777,13 @@ class ClTraceBuffer {
       device_event_buffer_flushed_ = false;
       host_event_buffer_flushed_ = false;
       finalized_.store(false, std::memory_order_release);
+      if ((utils::GetEnv("UNITRACE_MetricQuery") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
+        metrics_enabled_ = true;
+      }
+      else {
+        metrics_enabled_ = false;
+      }
+
 
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);	// use this lock to protect trace_buffers_
       
@@ -856,17 +895,21 @@ class ClTraceBuffer {
         pkt.pid = device_pid;
         pkt.kernel_command_id = rec.kernel_command_id_;
 
+	std::string kname = GetClKernelCommandName(rec.kernel_command_id_);
         if (rec.implicit_scaling_) {
-          pkt.name = "Tile #" + std::to_string(rec.tile_) + ": " + GetClKernelCommandName(rec.kernel_command_id_);
+          pkt.name = "Tile #" + std::to_string(rec.tile_) + ": " + kname;
         }
         else {
-          pkt.name = GetClKernelCommandName(rec.kernel_command_id_);
+          pkt.name = kname;
         }
         pkt.api_id = ClKernelTracingId;
         pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
         pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
         pkt.cat = gpu_op;
         pkt.args = "\"id\": \"" + std::to_string(rec.kid_) + "\"";
+	if (metrics_enabled_) {
+          pkt.args += ", \"metrics\": \"https://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
+	}
         logger_->Log(pkt.Stringify());
       }
 
@@ -1063,6 +1106,7 @@ class ClTraceBuffer {
     bool host_event_buffer_flushed_;
     bool device_event_buffer_flushed_;
     std::atomic<bool> finalized_;
+    bool metrics_enabled_;
 };
 
 thread_local ClTraceBuffer cl_thread_local_buffer_;

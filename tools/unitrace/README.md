@@ -617,10 +617,10 @@ To get a kernel shader dump, run the application with environment variables **IG
 After you run unitrace using **--stall-sampling**, you can run the same script to analyze stalls:
 
     ```sh
-     python ~/Box/private/applications.analyzers.profilingtoolsinterfaces.sdk/tools/unitrace/scripts/analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf ./stallmetrics.56789.csv
+     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf ./stallmetrics.56789.csv
     ```
 
-In addition to the stall statistics chart, a stall analysis report is generated:
+In addition to the stall statistics chart, a stall analysis report is also generated:
 
 ```sh
 Kernel: main::{lambda(auto:1)#3}
@@ -653,14 +653,81 @@ The report shows not only the instruction and the location (address, source line
 
 To eliminate or reduce the stalls, you need to fix the cause.
 
-The stall analysis report can also be stored in a text file for later reference:
+The stall analysis report can also be stored in a text file if you prefer:
 
 
     ```sh
-     python ~/Box/private/applications.analyzers.profilingtoolsinterfaces.sdk/tools/unitrace/scripts/analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf -r stallreport.txt ./stallmetrics.56789.csv
+     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf -r stallreport.txt ./stallmetrics.56789.csv
     ```
 
+## View Kernel Performance Metrics in Browser
 
+If you use **-k** or **--stall-sampling** option together with **--chrome-kernel-logging** or **--chrome-device-logging** option, you can view performance metrics of each kernel instance by selecting the kernel instance then following the metrics link in the "Arguments" in the browser.
+
+    
+    ```sh
+     $ unitrace -k --chrome-kernel-logging -o perf.csv ./testapp
+     ... ...
+
+     [INFO] Log is stored in perf.1092793.csv
+     [INFO] Timeline is stored in testapp.1092793.json
+     [INFO] Device metrics are stored in perf.metrics.1092768.csv
+    ```
+
+The performance metrics are stored in file **perf.metrics.1092768.csv** and the event trace is stored in the .json file. 
+
+Run **analyzeperfmetrics.py** in a shell window with **-p** option, for example:
+
+    ```sh
+     $ python analyzeperfmetrics.py -p -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],
+     XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Stall and Utilizations" -t "Stall and Utilizations" ./perf.metrics.1092768.csv
+    ```
+
+The **-p** option starts a server. If no certificate and private key are provided, a self-signed certificate and private key will be generated and used.
+    
+
+Now load the event trace .json file into https://ui.perfetto.dev:
+
+
+![Performance Metrics Through Event Trace!](/tools/unitrace/doc/images/perfmetricstrace.png)
+    
+
+Once you click the link next to **metrics:** in the **"Arguments"**, another browser window is opened:
+
+
+![Performance Metrics Browswe Window!](/tools/unitrace/doc/images/perfmetricsbrowser.png)
+
+
+The metrics shown in the browser are the metrics passed to the **-m** option when you start **analyzeperfmetrics.py**. If you stop and restart **analyzeperfmetrics.py** with a different set of metrics passed to **-m** option, for example:
+
+    ```sh
+     $ python analyzeperfmetrics.py -p -m "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes]" -y "Bytes" -t "L3 Traffic" ./grfbasic.metrics.1092768.csv
+    ```
+
+Refreshing the same link will show the new metrics:
+
+![Performance Metrics Browswe Window #2!](/tools/unitrace/doc/images/perfmetricsbrowser2.png)
+
+In case of stall sampling, for example:
+
+    ```sh
+     $ unitrace --stall-sampling --chrome-kernel-logging -o perfstall.csv ./testapp
+    ```
+
+No **-m** option is required for **analyzeperfmetrics.py**:
+
+    ```sh
+    python analyzeperfmetrics.py -s ./dump.1 -p ./perfstall.metrics.564289.csv -t "XVE Stall Statistics and Report"
+    ```
+
+Rereshing the same link will show stall statistics by type and instruction address:
+
+![Stall Statistics!](/tools/unitrace/doc/images/stallstatistics.png)
+
+followed by source stall analysis report:
+
+![Stall Report!](/tools/unitrace/doc/images/stallreport.png)
+ 
 ## Query Trace Events
 
 Search in https://ui.perfetto.dev/ can be done in command or SQL. After loading the trace file user can switch to SQL mode by typing ":" in the search box, then the user can type in the SQL query statement(s) and navigate to the events of interest from the query result, as shown below.
