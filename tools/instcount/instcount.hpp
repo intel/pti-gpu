@@ -168,6 +168,13 @@ class InstCountResultData : public ResultData {
   size_t instructionCounter = 0;     // Counter for the total number of instructions.
 };
 
+using InstCountApplicationDataSPtr = std::shared_ptr<InstCountApplicationData>;
+using InstCountKernelDataSPtr = std::shared_ptr<InstCountKernelData>;
+using InstCountInvocationDataSPtr = std::shared_ptr<InstCountInvocationData>;
+using InstCountResultDataSPtr = std::shared_ptr<InstCountResultData>;
+using InstCountSiteOfInstrumentSPtr = std::shared_ptr<InstCountSiteOfInstrument>;
+using InstCountResultDataCommonSPtr = std::shared_ptr<InstCountResultDataCommon>;
+
 /**
  * Class representing the InstCountFactory.
  * It extends the ToolFactory class.
@@ -237,9 +244,43 @@ class InstCountFactory : public ToolFactory {
  *        It extends the WriterBase class.
  *        Provides a common interface for writing data specific to the InstCountGTPinTool.
  */
-class InstCountWriterBase : public WriterBase {
+class InstCountWriterBase : public virtual WriterBase {
  public:
   using WriterBase::WriterBase;
+  virtual ~InstCountWriterBase() = default;
+
+ protected:
+  // WriterBase interface implementation. It casts structures to InstCount types and calls InstCount
+  // specific functions for writing the data
+  bool WriteApplicationData(const ApplicationDataSPtr res) override;
+  bool WriteKernelData(const ApplicationDataSPtr res, const KernelDataSPtr kernelData) override;
+  bool WriteInvocationData(const ApplicationDataSPtr res, const KernelDataSPtr kernelData,
+                           const InvocationDataSPtr invocationData) override;
+  bool WriteResultData(const ApplicationDataSPtr res, const KernelDataSPtr kernelData,
+                       const InvocationDataSPtr invocationData, const ResultDataSPtr resultData,
+                       const ResultDataCommonSPtr resultDataCommon, size_t tileId) override;
+
+  // InstCount specific functions for writing data, which operates InstCount structures
+  virtual bool WriteInstCountApplicationData(const InstCountApplicationDataSPtr res) {
+    return false;
+  }
+  virtual bool WriteInstCountKernelData(const InstCountApplicationDataSPtr res,
+                                        const InstCountKernelDataSPtr kernelData) {
+    return false;
+  }
+  virtual bool WriteInstCountInvocationData(const InstCountApplicationDataSPtr res,
+                                            const InstCountKernelDataSPtr kernelData,
+                                            const InstCountInvocationDataSPtr invocationData) {
+    return false;
+  }
+  virtual bool WriteInstCountResultData(const InstCountApplicationDataSPtr res,
+                                        const InstCountKernelDataSPtr kernelData,
+                                        const InstCountInvocationDataSPtr invocationData,
+                                        const InstCountResultDataSPtr resultData,
+                                        const InstCountResultDataCommonSPtr resultDataCommon,
+                                        size_t tileId) {
+    return false;
+  }
 };
 
 /**

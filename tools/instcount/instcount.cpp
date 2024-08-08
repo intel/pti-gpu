@@ -171,3 +171,65 @@ PROF_STATUS InstCountGTPinTool::Accumulate(KernelDataSPtr kernelData,
 
   return PROF_STATUS::SUCCESS;
 }
+
+/// Next functions casts data structures to InstCount types and calls InstCount specific functions
+/// for writing the data
+bool InstCountWriterBase::WriteApplicationData(const ApplicationDataSPtr res) {
+  auto instCountApplicationData = std::dynamic_pointer_cast<InstCountApplicationData>(res);
+  PTI_ASSERT(instCountApplicationData != nullptr);
+  return WriteInstCountApplicationData(instCountApplicationData);
+}
+
+bool InstCountWriterBase::WriteKernelData(const ApplicationDataSPtr res,
+                                          const KernelDataSPtr kernelData) {
+  auto instCountApplicationData = std::dynamic_pointer_cast<InstCountApplicationData>(res);
+  PTI_ASSERT(instCountApplicationData != nullptr);
+
+  auto instCountKernelData = std::dynamic_pointer_cast<InstCountKernelData>(kernelData);
+  PTI_ASSERT(instCountKernelData != nullptr);
+
+  return WriteInstCountKernelData(instCountApplicationData, instCountKernelData);
+}
+
+bool InstCountWriterBase::WriteInvocationData(const ApplicationDataSPtr res,
+                                              const KernelDataSPtr kernelData,
+                                              const InvocationDataSPtr invocationData) {
+  auto instCountApplicationData = std::dynamic_pointer_cast<InstCountApplicationData>(res);
+  PTI_ASSERT(instCountApplicationData != nullptr);
+
+  auto instCountKernelData = std::dynamic_pointer_cast<InstCountKernelData>(kernelData);
+  PTI_ASSERT(instCountKernelData != nullptr);
+
+  auto instCountInvocationData = std::dynamic_pointer_cast<InstCountInvocationData>(invocationData);
+  PTI_ASSERT(instCountInvocationData != nullptr);
+
+  return WriteInstCountInvocationData(instCountApplicationData, instCountKernelData,
+                                      instCountInvocationData);
+}
+
+bool InstCountWriterBase::WriteResultData(const ApplicationDataSPtr res,
+                                          const KernelDataSPtr kernelData,
+                                          const InvocationDataSPtr invocationData,
+                                          const ResultDataSPtr resultData,
+                                          const ResultDataCommonSPtr resultDataCommon,
+                                          size_t tileId) {
+  auto instCountApplicationData = std::dynamic_pointer_cast<InstCountApplicationData>(res);
+  PTI_ASSERT(instCountApplicationData != nullptr);
+
+  auto instCountKernelData = std::dynamic_pointer_cast<InstCountKernelData>(kernelData);
+  PTI_ASSERT(instCountKernelData != nullptr);
+
+  auto instCountInvocationData = std::dynamic_pointer_cast<InstCountInvocationData>(invocationData);
+  PTI_ASSERT(instCountInvocationData != nullptr);
+
+  auto instCountResultData = std::dynamic_pointer_cast<InstCountResultData>(resultData);
+  PTI_ASSERT(instCountResultData != nullptr);
+
+  auto instCountResultDataCommon =
+      std::dynamic_pointer_cast<InstCountResultDataCommon>(resultDataCommon);
+  PTI_ASSERT(instCountResultDataCommon != nullptr);
+
+  return WriteInstCountResultData(instCountApplicationData, instCountKernelData,
+                                  instCountInvocationData, instCountResultData,
+                                  instCountResultDataCommon, tileId);
+}

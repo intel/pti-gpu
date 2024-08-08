@@ -1,0 +1,73 @@
+@startuml
+
+title Simplified class diagram for writer class tree
+
+package profiler {
+    package "pti gtpin tool (inst count)" {
+        package "gtpin sdk" {
+            abstract WriterBase {
+                +WriterBase()
+                +WriterBase(std::vector<WriterBaseSPtr>)
+                {abstract} +~WriterBase()
+                {abstract} +Init()
+                {abstract} +Write(AppData)
+                {abstract} #WriteKernelData(AppData, KerData)
+                {abstract} #WriteKernelData(AppData, KerData)
+                {abstract} #WriteInvocationData(AppData, KerData, InocData)
+                {abstract} #WriteResultData(AppData, KerData, InocData, ResData, ResDataComm, tileId)
+            }
+            note right of WriterBase::Write(AppData)
+                Write(AppData) has default implementation that calls Write** functions
+            end note
+
+            class StreamWriter {
+                +StreamWriter(std::ostream&)
+                +GetStream()
+                -m_stream
+            }
+
+            class JsonWriterBase {
+                +Write(AppData)
+            }
+            note right of JsonWriterBase
+                JsonWriterBase is a base class for all JSON writers.
+                The Write(..) function is redefined in this 
+                class to implement default functionality of
+                dumping common parts to JSON stream
+            end note
+
+            WriterBase <|-- JsonWriterBase : public virtual to avoid diamond problem
+            StreamWriter <|-- JsonWriterBase : uses stream functionality
+        }
+
+        class InstCountWriterBase {
+            {abstract} #WriteInstCountApplicationData(InstCountAppData)
+            {abstract} #WriteInstCountKernelData(InstCountAppData, InstCountKerData)
+            {abstract} #WriteInstCountInvocationData(InstCountAppData, InstCountKerData, InstCountInocData)
+            {abstract} #WriteInstCountResultData(InstCountAppData, InstCountKerData, InstCountInocData, InstCountResData, InstCountResDataComm, tileId)
+
+            {abstract} #WriteKernelData(AppData, KerData)
+            {abstract} #WriteKernelData(AppData, KerData)
+            {abstract} #WriteInvocationData(AppData, KerData, InocData)
+            {abstract} #WriteResultData(AppData, KerData, InocData, ResData, ResDataComm, tileId)
+        }
+
+        note top of InstCountWriterBase
+            Casts and passes base classes to InstCount classes functions
+        end note
+
+        WriterBase <|-- InstCountWriterBase: public virtual to avoid diamond problem
+    }
+    
+    class InstCountJsonWriter {
+        #WriteInstCountApplicationData(InstCountAppData)
+        #WriteInstCountKernelData(InstCountAppData, InstCountKerData)
+        #WriteInstCountInvocationData(InstCountAppData, InstCountKerData, InstCountInocData)
+        #WriteInstCountResultData(InstCountAppData, InstCountKerData, InstCountInocData, InstCountResData, InstCountResDataComm, tileId)
+    }
+
+    note right: InstCountWriterBase Uses Writer() function from JsonWriterBase
+
+    InstCountWriterBase <|-- InstCountJsonWriter
+    JsonWriterBase <|-- InstCountJsonWriter
+}

@@ -166,7 +166,6 @@ class KernelData {
   const std::vector<uint8_t> GetOrigBinary() const;
   const size_t GetKernelRun() const;
   const std::unordered_map<DispatchId, InvocationDataSPtr> GetInvocations() const;
-
   const uint32_t GetRecordSize() const;
   const size_t GetSiteOfInstrumentNum() const;
   const size_t GetResultsNum() const;
@@ -175,6 +174,7 @@ class KernelData {
   const size_t GetCollectedTilesNum() const;
   const SiteOfInstrumentSPtr GetSiteOfInstrument(size_t idx) const;
   std::vector<ResultDataCommonSPtr> GetResultDataCommon() const;
+  ResultDataCommonSPtr GetResultDataCommon(size_t idx) const;
 
   bool IsRecordSizeSet();
   bool IsBucketsSet();

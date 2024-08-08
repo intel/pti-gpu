@@ -23,34 +23,31 @@ using namespace gtpin_prof;
 
 // Tool specific implementation of Writer and Control /////////////////////////
 
-class InstCountWriter : public InstCountWriterBase {
+/// Generates text report for InstCount profile data
+class InstCountTxtWriter : public InstCountWriterBase, public TxtWriterBase {
  public:
-  InstCountWriter() = default;
-  virtual ~InstCountWriter() = default;
-  void Write(const ApplicationDataSPtr res) const final {
-    std::cerr << "[INFO] : [ Instruction count "
-              << "| SIMD active lanes count"
-              << " ] total for all invocations" << std::endl;
-    for (const auto& kernelDataPair : res->GetKernels()) {
-      auto kernelData = std::dynamic_pointer_cast<InstCountKernelData>(kernelDataPair.second);
-      PTI_ASSERT(kernelData != nullptr);
-      std::cerr << "=== " << kernelData->GetKernelName() << "(runs "
-                << kernelData->GetInvocations().size() << " times";
-      size_t collectedTimes = 0;
-      for (const auto& invocationDataPair : kernelData->GetInvocations()) {
-        if (invocationDataPair.second->IsCollected()) collectedTimes++;
+  using TxtWriterBase::TxtWriterBase;
+  virtual ~InstCountTxtWriter() = default;
+  bool WriteInstCountApplicationData(const InstCountApplicationDataSPtr res) {
+    GetStream()
+        << "\n[INFO] : [ Instruction count | SIMD active lanes count ] total for all invocations\n";
+    return false;
+  }
+  bool WriteInstCountKernelData(const InstCountApplicationDataSPtr res,
+                                const InstCountKernelDataSPtr kernelData) {
+    size_t resultsNum = kernelData->GetResultsNum();
+    for (size_t tileId = 0; tileId < kernelData->GetCollectedTilesNum(); tileId++) {
+      if (kernelData->GetCollectedTilesNum() > 1) {
+        GetStream() << "--- Tile #" << tileId << " of " << kernelData->GetCollectedTilesNum()
+                    << " collected" << std::endl;
       }
-      if (collectedTimes != kernelData->GetInvocations().size())
-        std::cout << ", collected " << collectedTimes << " times";
-      std::cerr << ") ===\n";
 
       size_t resultsNum = kernelData->GetResultsNum();
       for (size_t tileId = 0; tileId < kernelData->GetCollectedTilesNum(); tileId++) {
         if (kernelData->GetCollectedTilesNum() > 1) {
-          std::cerr << "--- Tile #" << tileId << " of " << kernelData->GetCollectedTilesNum()
+           GetStream() << "--- Tile #" << tileId << " of " << kernelData->GetCollectedTilesNum()
                     << " collected" << std::endl;
         }
-
         std::vector<size_t> instCount(resultsNum);
         std::vector<size_t> simdCount(resultsNum);
         size_t maxInstCount = 0;
@@ -81,24 +78,43 @@ class InstCountWriter : public InstCountWriterBase {
           PTI_ASSERT(rdc != nullptr);
           if (bblId != rdc->bblId) {
             bblId = rdc->bblId;
-            std::cerr << "///  Basic block #" << bblId << "\n";
+            GetStream() << "///  Basic block #" << bblId << "\n";
           }
 
           InstructionOffset offset = rdc->offset;
-          std::cerr << "[" << std::dec << std::setw(maxInstCountStr.size() + 1) << instCount[idx];
+          GetStream() << "[" << std::dec << std::setw(maxInstCountStr.size() + 1) << instCount[idx];
           if (maxSimdCount > 0) {
-            std::cerr << "|" << std::dec << std::setw(maxSimdCountStr.size() + 1) << simdCount[idx];
+            GetStream() << "|" << std::dec << std::setw(maxSimdCountStr.size() + 1) << simdCount[idx];
           }
-          std::cerr << "] 0x" << std::setw(6) << std::hex << std::setfill('0') << offset
+          GetStream() << "] 0x" << std::setw(6) << std::hex << std::setfill('0') << offset
                     << std::setfill(' ') << std::dec << " : ";
           if (assembly.size() > idx)
-            std::cerr << assembly[idx].GetAsmLineOrig();
+            GetStream() << assembly[idx].GetAsmLineOrig();
           else
-            std::cerr << " no assembly";
-          std::cerr << std::endl;
+            GetStream() << " no assembly";
+          GetStream() << std::endl;
         }
       }
     }
+    return true;
+  }
+};
+
+/// Generates JSON report for InstCount profile data
+class InstCountJsonWriter : public InstCountWriterBase, public JsonWriterBase {
+ public:
+  using JsonWriterBase::JsonWriterBase;
+  bool WriteInstCountResultData(const InstCountApplicationDataSPtr res,
+                                const InstCountKernelDataSPtr kernelData,
+                                const InstCountInvocationDataSPtr invocationData,
+                                const InstCountResultDataSPtr resultData,
+                                const InstCountResultDataCommonSPtr resultDataCommon,
+                                size_t tileId) final {
+    GetStream() << "\"instruction_counter\":" << resultData->instructionCounter;
+    GetStream() << ",\"simd_active_lane_counter\":" << resultData->simdActiveLaneCounter;
+    GetStream() << ",\"bbl_id\":" << resultDataCommon->bblId;
+    GetStream() << ",\"offset\":" << resultDataCommon->offset;
+    return false;
   }
 };
 
@@ -107,6 +123,7 @@ static gtpin::Knob<bool> knobPerTileCollection("per-tile-collection", false,
 static gtpin::KnobVector<int> knobKernelRun("kernel-run", {}, "Kernel run to profile");
 static gtpin::Knob<bool> knobDisableSimdCollection("disable-simd", false,
                                                    "Disable collection of SIMD active lanes");
+static gtpin::Knob<bool> knobJsonOutput("json-output", false, "Print results in JSON format");
 class InstCountGTPinControl : public InstCountControl {
  public:
   using InstCountControl::InstCountControl;
@@ -143,6 +160,8 @@ extern "C" PTI_EXPORT void Usage() {
   std::cout << "Options:" << std::endl;
   std::cout << "--disable-simd                 "
             << "Disable SIMD active lanes collection" << std::endl;
+  std::cout << "--json-output                  "
+            << "Print results in JSON format" << std::endl;
 }
 
 extern "C" PTI_EXPORT int ParseArgs(int argc, char* argv[]) {
@@ -150,6 +169,9 @@ extern "C" PTI_EXPORT int ParseArgs(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--disable-simd") == 0) {
       utils::SetEnv("GIC_DisableSimd", "1");
+      app_index++;
+    } else if (strcmp(argv[i], "--json-output") == 0) {
+      utils::SetEnv("GIC_JsonOutput", "1");
       app_index++;
     } else if (strcmp(argv[i], "--version") == 0) {
 #ifdef PTI_VERSION
@@ -170,7 +192,7 @@ extern "C" PTI_EXPORT void SetToolEnv() {
 
 // Internal Tool Interface ////////////////////////////////////////////////////
 
-std::shared_ptr<InstCountWriter> writer;
+std::shared_ptr<InstCountWriterBase> writer;
 std::shared_ptr<InstCountControl> control;
 std::unique_ptr<InstCountGTPinProfiler> profiler;
 
@@ -184,9 +206,18 @@ void EnableProfiling() {
   if (!value.empty() && value == "1") {
     args.push_back("--disable-simd");
   }
+  value = utils::GetEnv("GIC_JsonOutput");
+  if (!value.empty() && value == "1") {
+    args.push_back("--json-output");
+  }
   ConfigureGTPin(args.size(), args.data());
 
-  writer = std::make_shared<InstCountWriter>();
+  if (knobJsonOutput) {
+    writer = std::make_shared<InstCountJsonWriter>(std::cerr);
+  } else {
+    writer = std::make_shared<InstCountTxtWriter>(std::cerr);
+  }
+
   control = std::make_shared<InstCountGTPinControl>();
   profiler = std::make_unique<InstCountGTPinProfiler>(writer, control);
 

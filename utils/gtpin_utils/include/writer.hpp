@@ -31,16 +31,8 @@ namespace gtpin_prof {
 class WriterBase {
  public:
   WriterBase() = default;
+  WriterBase(const std::vector<WriterBaseSPtr> writers);
   virtual ~WriterBase() = default;
-
-  /**
-   * @brief Write data.
-   *
-   * This function is responsible for writing the profiler data.
-   *
-   * @param res - The profiler data to write.
-   */
-  virtual void Write(const ApplicationDataSPtr res) const = 0;
 
   /**
    * @brief Initialize the writer.
@@ -50,45 +42,132 @@ class WriterBase {
    * @return true if the writer is successfully initialized, false otherwise.
    */
   virtual bool Init();
-};
-
-/**
- * @class MultipleWriter
- * @brief Class that allows using multiple writers.
- *
- * This class allows using multiple writer objects to write profiler data.
- */
-class MultipleWriter : public WriterBase {
- public:
-  /**
-   * @brief Constructs a MultipleWriter object with the given list of writers.
-   *
-   * @param writers - The list of writer objects.
-   */
-  MultipleWriter(std::vector<WriterBaseSPtr> writers);
-  virtual ~MultipleWriter() = default;
 
   /**
-   * @brief Initialize all writers in the list.
+   * @brief Write data.
    *
-   * This function initializes all the writer objects in the list of writers.
-   *
-   * @return true if all writers are successfully initialized, false if any writer fails to
-   * initialize.
-   */
-  bool Init() final;
-
-  /**
-   * @brief Write data using all writers.
-   *
-   * This function writes the profiler data using all the writer objects in the list.
+   * This function is responsible for writing the profiler data.
    *
    * @param res - The profiler data to write.
    */
-  void Write(const ApplicationDataSPtr res) const final;
+  virtual void Write(const ApplicationDataSPtr res);
+
+ protected:
+  /**
+   * @brief Write application data.
+   *
+   * This function is responsible for writing the application data.
+   *
+   * @param res - The application data to write.
+   * @return true if no need to continue writing the application data with default flow.
+   */
+  virtual bool WriteApplicationData(const ApplicationDataSPtr res);
+
+  /**
+   * @brief Write kernel data.
+   *
+   * This function is responsible for writing the kernel data.
+   *
+   * @param res - The application data to write.
+   * @param kernelData - The kernel data to write.
+   * @return true if no need to continue writing the data with default flow.
+   */
+  virtual bool WriteKernelData(const ApplicationDataSPtr res, const KernelDataSPtr kernelData);
+
+  /**
+   * @brief Write invocation data.
+   *
+   * This function is responsible for writing the invocation data.
+   *
+   * @param res - The application data to write.
+   * @param kernelData - The kernel data to write.
+   * @param invocationData - The invocation data to write.
+   * @return true if no need to continue writing the data with default flow.
+   */
+  virtual bool WriteInvocationData(const ApplicationDataSPtr res, const KernelDataSPtr kernelData,
+                                   const InvocationDataSPtr invocationData);
+
+  /**
+   * @brief Write result data.
+   *
+   * This function is responsible for writing the result data.
+   *
+   * @param res - The application data to write.
+   * @param kernelData - The kernel data to write.
+   * @param invocationData - The invocation data to write.
+   * @param resultData - The result data to write.
+   * @param resultDataCommon - The common result data to write.
+   * @param tileId - The tile ID.
+   * @return true if no need to continue writing the data with default flow.
+   */
+  virtual bool WriteResultData(const ApplicationDataSPtr res, const KernelDataSPtr kernelData,
+                               const InvocationDataSPtr invocationData,
+                               const ResultDataSPtr resultData,
+                               const ResultDataCommonSPtr resultDataCommon, size_t tileId);
 
  private:
   const std::vector<WriterBaseSPtr> m_writers;
+};
+
+/**
+ * @brief The StreamWriter class is responsible for writing data to an output stream.
+ */
+class StreamWriter {
+ public:
+  StreamWriter(std::ostream& stream);
+  virtual ~StreamWriter() = default;
+
+ protected:
+  /**
+   * @brief Returns the underlying output stream.
+   *
+   * @return A reference to the output stream.
+   */
+  inline std::ostream& GetStream() { return m_stream; }
+
+  std::ostream& m_stream;
+};
+
+/**
+ * @brief Base class for writing text data.
+ *
+ * This class inherits from StreamWriter and WriterBase, and provides a base implementation for
+ * writing text data.
+ */
+class TxtWriterBase : public StreamWriter, public virtual WriterBase {
+ public:
+  using StreamWriter::StreamWriter;
+  virtual ~TxtWriterBase() = default;
+
+  /**
+   * @brief Writes the given application data.
+   *
+   * This function is used to write the provided application data to a stream.
+   *
+   * @param res The application data to be written.
+   */
+  void Write(const ApplicationDataSPtr res) override;
+};
+
+/**
+ * @brief Base class for writing JSON data.
+ *
+ * This class inherits from StreamWriter and WriterBase, and provides a base implementation for
+ * writing text data.
+ */
+class JsonWriterBase : public StreamWriter, public virtual WriterBase {
+ public:
+  using StreamWriter::StreamWriter;
+  virtual ~JsonWriterBase() = default;
+
+  /**
+   * @brief Writes the given application data.
+   *
+   * This function is used to write the provided application data to a stream.
+   *
+   * @param res The application data to be written.
+   */
+  void Write(const ApplicationDataSPtr res) override;
 };
 
 }  // namespace gtpin_prof

@@ -171,3 +171,10 @@ set PATH=%PATH%;<gtpin>\Profilers\Lib\intel64
 set PATH=%PATH%;<iga_dll_path>
 instcount.exe ..\..\cl_gemm\build\cl_gemm.exe
 ```
+
+The options can be one or more of the following:
+```console
+--disable-simd                 Disable SIMD active lanes collection
+--json-output                  Print results in JSON format
+--version                      Print version
+```

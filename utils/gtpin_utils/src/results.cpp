@@ -102,6 +102,10 @@ const SiteOfInstrumentSPtr KernelData::GetSiteOfInstrument(size_t idx) const {
 std::vector<ResultDataCommonSPtr> KernelData::GetResultDataCommon() const {
   return m_resultDataCommon;
 }
+ResultDataCommonSPtr KernelData::GetResultDataCommon(size_t idx) const {
+  PTI_ASSERT(idx < m_resultDataCommon.size());
+  return m_resultDataCommon[idx];
+}
 bool KernelData::IsRecordSizeSet() { return m_recordSize != -1; }
 bool KernelData::IsBucketsSet() { return m_buckets != 0; }
 
