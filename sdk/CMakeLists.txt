@@ -14,14 +14,13 @@ project(
   LANGUAGES C CXX
 )
 
+# Global Settings
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin CACHE STRING "")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE STRING "")
 
 ProjectIsTopLevel()
 RemoveNDebugFlag()
 SetBuildType()
-CheckIfSyclIsAvailable()
-GetSpdlog()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(CMAKE_EXPORT_COMPILE_COMMANDS)
@@ -62,10 +61,46 @@ set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
 CheckSOVersion(${PTI_API_SOVERSION})
 
+if(PTI_DEBUG)
+  add_compile_definitions(PTI_DEBUG)
+endif()
+
+# Check and Get Dependencies
+GetSpdlog()
+
+find_package(Xpti)
+
+# Why version 1.14.0?
+# It is an IPEX requirement for PTI to link against the LTS version of the
+# Level Zero Loader.
+# However, for best results, we recommend installing, Level Zero Loader >=
+# 1.17.25.
+# Notice about loader versions:
+#  * 1.15.8 supports dynamic tracing i.e. ze[Enable/Disable]TracingLayer.
+#  * 1.16.1 supports Level-Zero core Introspection API introduced in Spec 1.9.
+#   *  Notice: this supports the new API, but not the new feature (local
+#      collection). One needs to install a compatible Level Zero driver to
+#      use the feature. Currently supported in the Intel GPU rolling release
+#      drivers.
+#  * 1.16.15 fixes a critical bug in ze[Enable/Disable]TracingLayer.
+#  * 1.17.25 fixes a bug in ze[Enable/Disable]TracingLayer.
+#   * Fixes compatiblity with zet*/zes* APIs.
+if(NOT PROJECT_IS_TOP_LEVEL)
+  find_package(LevelZero 1.14.0 REQUIRED)
+else()
+  find_package(LevelZero 1.14.0)
+endif()
+
+if(NOT TARGET LevelZero::level-zero)
+  GetLevelZero()
+endif()
+
+find_package(Threads REQUIRED)
+
+# Build PTI libraries.
 configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
                ${PROJECT_BINARY_DIR}/include/pti/pti_version.h)
 
-find_package(Xpti)
 
 # https://cmake.org/cmake/help/latest/guide/importing-exporting/index.html
 add_library(pti_all INTERFACE)
@@ -111,33 +146,6 @@ if (WIN32)
   AddProjectVersionInfo(pti)
 endif()
 
-# Why version 1.14.0?
-# It is an IPEX requirement for PTI to link against the LTS version of the
-# Level Zero Loader.
-# However, for best results, we recommend installing, Level Zero Loader >=
-# 1.17.25.
-# Notice about loader versions:
-#  * 1.15.8 supports dynamic tracing i.e. ze[Enable/Disable]TracingLayer.
-#  * 1.16.1 supports Level-Zero core Introspection API introduced in Spec 1.9.
-#   *  Notice: this supports the new API, but not the new feature (local
-#      collection). One needs to install a compatible Level Zero driver to
-#      use the feature. Currently supported in the Intel GPU rolling release
-#      drivers.
-#  * 1.16.15 fixes a critical bug in ze[Enable/Disable]TracingLayer.
-#  * 1.17.25 fixes a bug in ze[Enable/Disable]TracingLayer.
-#   * Fixes compatiblity with zet*/zes* APIs.
-if(NOT PROJECT_IS_TOP_LEVEL)
-  find_package(LevelZero 1.14.0 REQUIRED)
-else()
-  find_package(LevelZero 1.14.0)
-endif()
-
-if(NOT TARGET LevelZero::level-zero)
-  GetLevelZero()
-endif()
-
-find_package(Threads REQUIRED)
-
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
 
@@ -177,9 +185,6 @@ target_compile_definitions(
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
 
-if(PTI_DEBUG)
-  add_compile_definitions(PTI_DEBUG)
-endif()
 
 target_link_libraries(
   pti_view
@@ -201,6 +206,7 @@ if(BUILD_TESTING AND PTI_BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
+# Targets / Install phase
 export(
   TARGETS pti_all pti pti_view
   FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/PtiTargets.cmake"

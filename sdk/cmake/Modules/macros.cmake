@@ -1089,16 +1089,16 @@ macro(GetGTest)
         ON
         CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
-    target_compile_options(gmock_main PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
-    target_compile_options(gmock PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
-    target_compile_options(gtest PRIVATE
+
+    set(PTI_GTEST_COMPILE_OPTIONS
       $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:Release>:-Wno-deprecated-declarations>>
-      $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>
-    )
-    target_compile_options(gtest_main PRIVATE
-      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:Release>:-Wno-deprecated-declarations>>
-      $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>
-    )
+      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:RelWithDebInfo>:-Wno-deprecated-declarations>>
+      $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
+
+    target_compile_options(gmock_main PRIVATE ${PTI_GTEST_COMPILE_OPTIONS})
+    target_compile_options(gmock PRIVATE ${PTI_GTEST_COMPILE_OPTIONS})
+    target_compile_options(gtest PRIVATE ${PTI_GTEST_COMPILE_OPTIONS})
+    target_compile_options(gtest_main PRIVATE ${PTI_GTEST_COMPILE_OPTIONS})
   endif()
 endmacro()
 

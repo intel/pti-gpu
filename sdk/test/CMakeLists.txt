@@ -1,4 +1,5 @@
-getgtest()
+CheckIfSyclIsAvailable()
+GetGTest()
 
 enable_testing()
 
