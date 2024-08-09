@@ -79,13 +79,17 @@ struct ZeMetricQueryPools {
     const std::lock_guard<std::mutex> lock(query_pool_mutex_);
     for (auto it = query_pool_map_.begin(); it != query_pool_map_.end(); it++) {
       status = zetMetricQueryDestroy(it->first);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (status != ZE_RESULT_SUCCESS) {
+        std::cerr << "[WARNING] Failed to destory metric query (" << status << ")" << std::endl;
+      }
     }
     query_pool_map_.clear();
 
     for (auto it = pools_.begin(); it != pools_.end(); it++) {
       status = zetMetricQueryPoolDestroy(*it);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (status != ZE_RESULT_SUCCESS) {
+        std::cerr << "[WARNING] Failed to destory metric query pool (" << status << ")" << std::endl;
+      }
     }
     
     pools_.clear();
@@ -107,18 +111,27 @@ struct ZeMetricQueryPools {
       zet_metric_query_pool_handle_t pool;
 
       status = zetMetricQueryPoolCreate(context, device, group, &desc, &pool);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (status != ZE_RESULT_SUCCESS) {
+        std::cerr << "[ERROR] Failed to create metric query pool (" << status << ")" << std::endl;
+        _Exit(-1);	// immediately exit
+      }
       pools_.push_back(pool);
 
       std::vector<zet_metric_query_handle_t> queries;
       for (int i = 0; i < pool_size_ - 1; i++) {
         status = zetMetricQueryCreate(pool, i, &query);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] Failed to create metric query (" << status << ")" << std::endl;
+          _Exit(-1);	// exit immediately
+        }
         queries.push_back(query);
         query_pool_map_.insert({query, {context, device, group}});
       }
       status = zetMetricQueryCreate(pool, pool_size_ - 1, &query);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (status != ZE_RESULT_SUCCESS) {
+        std::cerr << "[ERROR] Failed to create metric query (" << status << ")" << std::endl;
+        _Exit(-1);	// exit immediately
+      }
       query_pool_map_.insert({query, {context, device, group}});
       
       free_pool_.insert({{context, device, group}, std::move(queries)});
@@ -131,17 +144,26 @@ struct ZeMetricQueryPools {
         zet_metric_query_pool_handle_t pool;
 
         status = zetMetricQueryPoolCreate(context, device, group, &desc, &pool);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] Failed to create metric query pool (" << status << ")" << std::endl;
+          _Exit(-1);	// immediately exit
+        }
         pools_.push_back(pool);
 
         for (int i = 0; i < pool_size_ - 1; i++) {
           status = zetMetricQueryCreate(pool, i, &query);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[ERROR] Failed to create metric query (" << status << ")" << std::endl;
+            _Exit(-1);	// exit immediately
+          }
           it->second.push_back(query);
           query_pool_map_.insert({query, {context, device, group}});
         }
         status = zetMetricQueryCreate(pool, pool_size_ - 1, &query);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] Failed to create metric query (" << status << ")" << std::endl;
+          _Exit(-1);	// exit immediately
+        }
         query_pool_map_.insert({query, {context, device, group}});
       }
       else {
@@ -176,7 +198,10 @@ struct ZeMetricQueryPools {
       return;
     }
     ze_result_t status = zetMetricQueryReset(query);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (status != ZE_RESULT_SUCCESS) {
+      std::cerr << "[ERROR] Failed to reset metric query (" << status << ")" << std::endl;
+      _Exit(-1);	// exit immediately
+    }
   }
 };
  
@@ -1172,7 +1197,7 @@ class ZeCollector {
     if (tracer_ != nullptr) {
       ze_result_t status = zelTracerDestroy(tracer_);
       if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[ERROR] Failed to destroy tracer (" << status << ")" << std::endl;
+        std::cerr << "[WARNING] Failed to destroy tracer (" << status << ")" << std::endl;
       }
     }
 
@@ -1187,13 +1212,16 @@ class ZeCollector {
 
     if (options_.metric_query) {
       for (auto it = metric_activations_.begin(); it != metric_activations_.end(); it++) {
-        zetContextActivateMetricGroups(it->first, it->second, 0, nullptr);
+        auto status = zetContextActivateMetricGroups(it->first, it->second, 0, nullptr);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[WARNING] Failed to deactivate metric groups (" << status << ")" << std::endl;
+        }
       }
       metric_activations_.clear();
       for (auto& context : metric_contexts_) {
         auto status = zeContextDestroy(context);
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[ERROR] Failed to destroy conext for metrics query (" << status << ")" << std::endl;
+          std::cerr << "[WARNING] Failed to destroy conext for metrics query (" << status << ")" << std::endl;
         }
       }
       metric_contexts_.clear();
@@ -1931,10 +1959,6 @@ class ZeCollector {
   }
 
   void DumpKernelProfiles(void) {
-    ze_device_handle_t device = nullptr;
-    int did = -1;
-    zet_metric_group_handle_t group = nullptr;
-    std::vector<std::string> metric_names;
 
     if (options_.stall_sampling) {
       kernel_command_properties_mutex_.lock();
@@ -2040,83 +2064,104 @@ class ZeCollector {
     }
 
     // metric query
-    correlator_->Log("\n== Kernel Metrics ==\n\n");
 
-    for (auto it = global_kernel_profiles_.begin(); it != global_kernel_profiles_.end(); it++) {
-      if ((it->second.metrics_ == nullptr) || it->second.metrics_->empty()) {
-        continue;
+    while (1) {
+      if (global_kernel_profiles_.empty()) {
+        break;	// done
       }
-
-      std::string kname = GetZeKernelCommandName(it->second.kernel_command_id_, it->second.group_count_, it->second.mem_size_);
-
-      if (device != it->second.device_) {
-        device = it->second.device_;
-        auto it2 = devices_->find(it->second.device_);
-        
-        if (it2 == devices_->end()) {
-          // should never get here
+      ze_device_handle_t device = nullptr;
+      int did = -1;
+      zet_metric_group_handle_t group = nullptr;
+      std::vector<std::string> metric_names;
+      for (auto it = global_kernel_profiles_.begin(); it != global_kernel_profiles_.end();) {
+        if ((it->second.metrics_ == nullptr) || it->second.metrics_->empty()) {
+          it = global_kernel_profiles_.erase(it);
+          continue;
+        }
+  
+        if (it->second.device_ == nullptr) {
+          // shoule never get here
+          it = global_kernel_profiles_.erase(it);
           continue;
         }
 
-        did = it2->second.id_;
-        group = it2->second.metric_group_;
-        metric_names = GetMetricNames(it2->second.metric_group_);
-        PTI_ASSERT(!metric_names.empty());
-      }
-
-      uint32_t num_samples = 0;
-      uint32_t num_metrics = 0;
-      ze_result_t status = zetMetricGroupCalculateMultipleMetricValuesExp(
-        group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-        it->second.metrics_->size(), it->second.metrics_->data(), &num_samples, &num_metrics,
-        nullptr, nullptr);
-
-      if ((status == ZE_RESULT_SUCCESS) && (num_samples > 0) && (num_metrics > 0)) {
-        std::vector<uint32_t> samples(num_samples);
-        std::vector<zet_typed_value_t> metrics(num_metrics);
-
-        status = zetMetricGroupCalculateMultipleMetricValuesExp(
-          group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-          it->second.metrics_->size(), it->second.metrics_->data(), &num_samples, &num_metrics,
-          samples.data(), metrics.data());
-
-        if (status == ZE_RESULT_SUCCESS) {
-          std::string header("\nKernel,Device,SubDeviceId,");
+        if (device == nullptr) {
+          auto it2 = devices_->find(it->second.device_);
+          
+          if (it2 == devices_->end()) {
+            // should never get here
+            it = global_kernel_profiles_.erase(it);
+            continue;
+          }
+  
+          device = it->second.device_;
+          did = it2->second.id_;
+          group = it2->second.metric_group_;
+          metric_names = GetMetricNames(it2->second.metric_group_);
+          PTI_ASSERT(!metric_names.empty());
+          correlator_->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
+          std::string header("\nKernel,GlobalInstanceId,SubDeviceId,");
           for (auto& metric : metric_names) {
             header += metric + ",";
           }
           header += "\n";
           correlator_->Log(header);
-    
-          std::string str;
-          for (uint32_t i = 0; i < num_samples; ++i) {
-            str = kname + ",";
-            str += std::to_string(did) + ",";
-            str += std::to_string(i) + ",";
-    
-            uint32_t size = samples[i];
-            PTI_ASSERT(size == metric_names.size());
-    
-            const zet_typed_value_t *value = metrics.data() + i * size;
-            for (int j = 0; j < size; ++j) {
-              str += PrintTypedValue(value[j]);
-              str += ",";
+        }
+        else {
+          if (it->second.device_ != device) {
+            it++;  // different device, dump later
+            continue;
+          }
+        }
+  
+        std::string kname = GetZeKernelCommandName(it->second.kernel_command_id_, it->second.group_count_, it->second.mem_size_);
+        uint32_t num_samples = 0;
+        uint32_t num_metrics = 0;
+        ze_result_t status = zetMetricGroupCalculateMultipleMetricValuesExp(
+          group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+          it->second.metrics_->size(), it->second.metrics_->data(), &num_samples, &num_metrics,
+          nullptr, nullptr);
+  
+        if ((status == ZE_RESULT_SUCCESS) && (num_samples > 0) && (num_metrics > 0)) {
+          std::vector<uint32_t> samples(num_samples);
+          std::vector<zet_typed_value_t> metrics(num_metrics);
+  
+          status = zetMetricGroupCalculateMultipleMetricValuesExp(
+            group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+            it->second.metrics_->size(), it->second.metrics_->data(), &num_samples, &num_metrics,
+            samples.data(), metrics.data());
+  
+          if (status == ZE_RESULT_SUCCESS) {
+            std::string str;
+            for (uint32_t i = 0; i < num_samples; ++i) {
+              str = kname + ",";
+              str += std::to_string(it->second.instance_id_) + ",";
+              str += std::to_string(i) + ",";
+      
+              uint32_t size = samples[i];
+              PTI_ASSERT(size == metric_names.size());
+      
+              const zet_typed_value_t *value = metrics.data() + i * size;
+              for (int j = 0; j < size; ++j) {
+                str += PrintTypedValue(value[j]);
+                str += ",";
+              }
+              str += "\n";
             }
             str += "\n";
+      
+            correlator_->Log(str);
           }
-    
-          correlator_->Log(str);
+          else {
+            std::cerr << "[WARNING] Not able to calculate metrics" << std::endl;
+          }
         }
         else {
           std::cerr << "[WARNING] Not able to calculate metrics" << std::endl;
         }
-      }
-      else {
-        std::cerr << "[WARNING] Not able to calculate metrics" << std::endl;
+        it = global_kernel_profiles_.erase(it);
       }
     }
-
-    global_kernel_profiles_.clear();
   }
 
   void ProcessCommandsSubmittedOnSignaledEvent(ze_event_handle_t event, std::vector<uint64_t> *kids) {

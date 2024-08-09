@@ -340,7 +340,7 @@ class ClCollector {
         ClKernelProfileRecord record = profile_records_[record_idx];
         auto it = present_cl_devices_.find(record.device_);
         if (it == present_cl_devices_.end()) {
-          std::cerr<<"Invalid device is found\n";
+          std::cerr << "[ERROR] Invalid device is found\n";
           return;
         }
         auto device_id = it->second;
@@ -349,7 +349,7 @@ class ClCollector {
         } else {
           std::vector<ClKernelProfileRecord> new_recs;
           new_recs.push_back(record);
-          device_kprofiles[device_id] = new_recs;
+          device_kprofiles[device_id] = std::move(new_recs);
         }
       }
 
@@ -933,7 +933,7 @@ class ClCollector {
         if (ze_ended < ze_started) {
           ze_ended += ((mask + 1)* ns_per_cycle);
         }
-        ClKernelProfileRecord rec{device, instance->kernel_id, ze_started, ze_ended, name};
+        ClKernelProfileRecord rec{device, instance->kernel_id, ze_started, ze_ended, std::move(name)};
 
         profile_records_.push_back(std::move(rec));
       }
