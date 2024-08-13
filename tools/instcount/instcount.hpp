@@ -233,8 +233,8 @@ class InstCountFactory : public ToolFactory {
    * @param resultDataCommon The shared pointer to the common result data.
    * @return The shared pointer to the InstCountResultData.
    */
-  ResultDataSPtr MakeResultData(ResultDataCommonSPtr resultDataCommon) const final {
-    return std::make_shared<InstCountResultData>(resultDataCommon);
+  ResultDataSPtr MakeResultData(ResultDataCommonSPtr resultDataCommon, size_t tileId) const final {
+    return std::make_shared<InstCountResultData>(resultDataCommon, tileId);
   }
 };
 

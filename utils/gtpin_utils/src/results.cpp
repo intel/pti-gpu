@@ -16,8 +16,8 @@
 
 using namespace gtpin_prof;
 
-ResultData::ResultData(ResultDataCommonSPtr resultDataCommon)
-    : m_resultDataCommon(resultDataCommon){};
+ResultData::ResultData(ResultDataCommonSPtr resultDataCommon, size_t tileId)
+    : m_resultDataCommon(resultDataCommon), m_tileId(tileId){};
 const ResultDataCommonSPtr ResultData::GetCommon() const { return m_resultDataCommon; }
 size_t ResultData::GetTileId() const { return m_tileId; };
 

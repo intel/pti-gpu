@@ -170,9 +170,8 @@ PROF_STATUS GTPinTool::InitProfileData(KernelDataSPtr kernelData,
   for (size_t tileId = 0; tileId < kernelData->GetCollectedTilesNum(); tileId++) {
     auto& resData = invocation->m_tileResultData[tileId];
     for (const auto& rdc : kernelData->GetResultDataCommon()) {
-      resData.push_back(m_factory->MakeResultData(rdc));
+      resData.push_back(m_factory->MakeResultData(rdc, tileId));
       PTI_ASSERT(resData.back() != nullptr && "Fail to add ResultData");
-      resData.back()->m_tileId = tileId;
     }
 
     PTI_ASSERT(resData.size() == kernelData->GetResultsNum() &&

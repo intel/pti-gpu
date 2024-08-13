@@ -43,7 +43,7 @@ class ResultDataCommon {
  */
 class ResultData {
  public:
-  ResultData(ResultDataCommonSPtr resultDataCommon);
+  ResultData(ResultDataCommonSPtr resultDataCommon, size_t tileId);
   virtual ~ResultData() = default;
   ResultData(ResultData&) = delete;
   ResultData operator=(ResultData&) = delete;
