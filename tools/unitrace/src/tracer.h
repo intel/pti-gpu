@@ -53,14 +53,9 @@ class UniTracer {
       exit(-1);
     }
 
-    #ifdef __unix__
-      cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
-      cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
-    #else
-      // Win_TODO: Need to enable opencl later
-      cl_device_id cl_cpu_device = 0;
-      cl_device_id cl_gpu_device = 0;
-    #endif
+    cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
+    cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
+
     UniTracer* tracer = new UniTracer(options);
     UniMemory::ExitIfOutOfMemory((void *)tracer);
 
