@@ -20,6 +20,16 @@
 #include <thread>
 #include <unordered_map>
 
+XPTI_CALLBACK_API void xptiTraceFinish(const char* stream_name);
+XPTI_CALLBACK_API void tpCallback(uint16_t TraceType,
+    xpti::trace_event_data_t* Parent,
+    xpti::trace_event_data_t* Event,
+    uint64_t Instance, const void* UserData);
+XPTI_CALLBACK_API void xptiTraceInit(unsigned int major_version,
+    unsigned int minor_version,
+    const char* version_str,
+    const char* stream_name);
+
 typedef void (*OnXptiLoggingCallback)(EVENT_TYPE etype, const char *name, uint64_t start_ts, uint64_t end_ts);
 
 class XptiCollector {
@@ -66,7 +76,7 @@ XPTI_CALLBACK_API void tpCallback(uint16_t trace_type,
                                   xpti::trace_event_data_t *event,
                                   uint64_t instance, const void *user_data);
 
-XPTI_CALLBACK_API void xptiTraceInit(unsigned int major_version,
+void xptiTraceInit(unsigned int major_version,
                                      unsigned int minor_version,
                                      const char *version_str,
                                      const char *stream_name) {
@@ -118,7 +128,8 @@ std::string truncate(std::string Name) {
   }
 }
 
-XPTI_CALLBACK_API void xptiTraceFinish(const char *stream_name) {
+void xptiTraceFinish(const char* stream_name)
+{
   // We do nothing here
 }
 
@@ -139,7 +150,7 @@ enum XPTI_EVENT {
   
 static thread_local uint64_t xpti_event_start_ts[XPTI_EVENT_LAST];
 
-XPTI_CALLBACK_API void tpCallback(uint16_t TraceType,
+void tpCallback(uint16_t TraceType,
                                   xpti::trace_event_data_t *Parent,
                                   xpti::trace_event_data_t *Event,
                                   uint64_t Instance, const void *UserData) {

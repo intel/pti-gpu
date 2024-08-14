@@ -29,8 +29,12 @@
 
 static inline std::string GetHostName(void) {
   char hname[256];
-
+#ifdef _WIN32
+  DWORD size = sizeof(hname);
+  GetComputerNameA(hname, &size);
+#else
   gethostname(hname, sizeof(hname));
+#endif
   hname[255] = 0;
   return hname;
 }
@@ -437,7 +441,6 @@ class TraceBuffer {
           }
           host_event_buffer_flushed_ = true;
         }
-
         for (auto& slice : device_event_buffer_) {
           free(slice);
         }
@@ -447,7 +450,6 @@ class TraceBuffer {
           free(slice);
         }
         host_event_buffer_.clear();
-
         trace_buffers_->erase(this);
       }
     }
@@ -477,7 +479,6 @@ class TraceBuffer {
         if (buffer_capacity_ == -1) {
           HostEventRecord *her = (HostEventRecord *)(malloc(sizeof(HostEventRecord) * slice_capacity_));
           UniMemory::ExitIfOutOfMemory((void *)(her));
-
           host_event_buffer_.push_back(her);
           current_host_event_buffer_slice_++;
           next_host_event_index_ = 0;
@@ -666,8 +667,9 @@ class TraceBuffer {
       pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
       //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started);
       pkt.rank = mpi_rank;
-      pkt.name = rec.name_;
-
+      if (rec.valid_name_ == true) {
+        pkt.name = std::string(rec.name_);
+      }
       logger_->Log(pkt.Stringify());
     }
 
@@ -692,7 +694,6 @@ class TraceBuffer {
     
     
     void Finalize() {
-      
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       if (!finalized_.exchange(true)) {
         if (!device_event_buffer_flushed_) {
@@ -1027,8 +1028,9 @@ class ClTraceBuffer {
       pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
       //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started);
       pkt.rank = mpi_rank;
-      pkt.name = rec.name_;
-
+      if (rec.valid_name_ == true) {
+        pkt.name = std::string(rec.name_);
+      }
       logger_->Log(pkt.Stringify());
     }
 
@@ -1183,7 +1185,7 @@ class ChromeLogger {
         else {
           str += "RANK " + std::to_string(mpi_rank) + " HOST<" + pmi_hostname + ">\"}}";
         }
-            
+
         const std::lock_guard<std::mutex> lock(device_pid_tid_map_lock_);
 
         for (auto it = device_pid_map_.cbegin(); it != device_pid_map_.cend(); it++) {
@@ -1239,7 +1241,7 @@ class ChromeLogger {
             }
           }
         }
-    
+
         for (auto it = cl_device_pid_map_.cbegin(); it != cl_device_pid_map_.cend(); it++) {
           uint32_t device_pid = std::get<0>(it->second);
           str += ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
@@ -1292,9 +1294,8 @@ class ChromeLogger {
             }
           }
         }
-    
+
         str += "\n]\n}\n";
-      
         logger_->Log(str);
         delete logger_;
         std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
@@ -1314,9 +1315,17 @@ class ChromeLogger {
     static void XptiLoggingCallback(EVENT_TYPE etype, const char *name, uint64_t start_ts, uint64_t end_ts) {
       if (!thread_local_buffer_.IsFinalized()) {
         HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
-
         rec->type_ = etype;
-        rec->name_ = name;
+
+        auto str_len = std::strlen(name);
+        if (str_len > 255) {
+          str_len = 255;
+          std::cout<<"Warning : API name length is longer than tracer supported length hence some charaters will get dropped\n";
+        }
+
+        memcpy(rec->name_, name, str_len);
+        rec->name_[str_len] = '\0';
+        rec->valid_name_ = true;
         rec->api_id_ = XptiTracingId;
         rec->start_time_ = start_ts;
         if (etype == EVENT_COMPLETE) {
@@ -1332,7 +1341,17 @@ class ChromeLogger {
         HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
 
         rec->type_ = EVENT_COMPLETE;
-        rec->name_ = name;
+
+        auto str_len = std::strlen(name);
+        if (str_len > 255) {
+          str_len = 255;
+          std::cout<<"Warning : API name length is longer than tracer supported length hence some charaters will get dropped\n";
+        }
+
+        memcpy(rec->name_, name, str_len);
+        rec->name_[str_len] = '\0';
+        rec->valid_name_ = true;
+
         rec->api_id_ = IttTracingId;
         rec->start_time_ = start_ts;
         rec->end_time_ = end_ts;
@@ -1346,7 +1365,17 @@ class ChromeLogger {
       if (!thread_local_buffer_.IsFinalized()) {
         HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
         rec->type_ = EVENT_COMPLETE;
-        rec->name_ = name;
+
+        auto str_len = std::strlen(name);
+        if (str_len > 255) {
+          str_len = 255;
+          std::cout<<"Warning : API name length is longer than tracer supported length hence some charaters will get dropped\n";
+        }
+
+        memcpy(rec->name_, name, str_len);
+        rec->name_[str_len] = '\0';
+        rec->valid_name_ = true;
+
         rec->api_id_ = IttTracingId;
         rec->start_time_ = start_ts;
         rec->end_time_ = end_ts;
@@ -1364,7 +1393,6 @@ class ChromeLogger {
     }
 
     static void ZeChromeKernelLoggingCallback(uint64_t kid, uint64_t tid, uint64_t start, uint64_t end, uint32_t ordinal, uint32_t index, int32_t tile, const ze_device_handle_t device, const uint64_t kernel_command_id, bool implicit_scaling, const ze_group_count_t &group_count, size_t mem_size) {
-
       if (thread_local_buffer_.IsFinalized()) {
         return;
       }
@@ -1422,7 +1450,6 @@ class ChromeLogger {
 
     static void ChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
       uint64_t started, uint64_t ended) {
-
       if (thread_local_buffer_.IsFinalized()) {
         return;
       }
@@ -1434,6 +1461,7 @@ class ChromeLogger {
       rec->start_time_ = started;
       rec->end_time_ = ended;
       rec->id_ = 0;
+      rec->valid_name_ = false;
       thread_local_buffer_.BufferHostEvent();
 
       if ((kids != nullptr) && (flow_dir == FLOW_H2D)) {
@@ -1444,10 +1472,10 @@ class ChromeLogger {
           rec->api_id_ = DepTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
+          rec->valid_name_ = false;
           thread_local_buffer_.BufferHostEvent();
         }
       }
-
       if ((kids != nullptr) && (flow_dir == FLOW_D2H)) {
         for (auto id : *kids) {
           rec = thread_local_buffer_.GetHostEvent();
@@ -1456,6 +1484,7 @@ class ChromeLogger {
           rec->api_id_ = DepTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
+          rec->valid_name_ = false;
           thread_local_buffer_.BufferHostEvent();
         }
       }
@@ -1473,6 +1502,7 @@ class ChromeLogger {
       rec->start_time_ = started;
       rec->end_time_ = ended;
       rec->id_ = 0;
+      rec->valid_name_ = false;
       cl_thread_local_buffer_.BufferHostEvent();
 
       if ((kids != nullptr) && (flow_dir == FLOW_H2D)) {
@@ -1483,6 +1513,7 @@ class ChromeLogger {
           rec->api_id_ = DepTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
+          rec->valid_name_ = false;
           cl_thread_local_buffer_.BufferHostEvent();
         }
       }
@@ -1495,6 +1526,7 @@ class ChromeLogger {
           rec->api_id_ = DepTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
+          rec->valid_name_ = false;
           cl_thread_local_buffer_.BufferHostEvent();
         }
       }

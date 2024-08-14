@@ -9,11 +9,14 @@
 #include <filesystem>
 #include <csignal>
 #include <sys/types.h>
+
+#ifdef __unix__
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/resource.h>
-
 #include <dlfcn.h>
+#endif
+
 #include <stdlib.h>
 
 #include "ze_metrics.h"
@@ -21,7 +24,12 @@
 #include "version.h"
 #include "unitrace_commit_hash.h"
 
-#define LIB_UNITRACE_TOOL_NAME	"libunitrace_tool.so"
+#ifdef __unix__
+  #define LIB_UNITRACE_TOOL_NAME	"libunitrace_tool.so"
+#else
+  #define LIB_UNITRACE_TOOL_NAME	"unitrace_tool.dll"
+#endif
+
 #if BUILD_WITH_MPI
 #define LIB_UNITRACE_MPI_NAME	"libunitrace_mpi.so"
 #endif
@@ -244,8 +252,13 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--chrome-sycl-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeSyclLogging", "1");
       utils::SetEnv("XPTI_TRACE_ENABLE", "1");
+#ifdef _WIN32
+      utils::SetEnv("XPTI_SUBSCRIBERS", "unitrace_tool.dll");
+      utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "xptifw.dll");
+#else
       utils::SetEnv("XPTI_SUBSCRIBERS", "libunitrace_tool.so");
       utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "libxptifw.so");
+#endif
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-ccl-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
@@ -337,24 +350,6 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_MetricGroup", argv[i]);
       app_index += 2;
-#if 0
-    } else if (strcmp(argv[i], "--filter") == 0) {
-      ++i;
-      utils::SetEnv("UNITRACE_TraceKernelFilter", "1");
-      utils::SetEnv("UNITRACE_TraceKernelString", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--filter-file") == 0) {
-      ++i;
-      utils::SetEnv("UNITRACE_TraceKernelFilterFile", "1");
-      utils::SetEnv("UNITRACE_TraceKernelFilePath", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--filter-in") == 0) {
-      utils::SetEnv("UNITRACE_TraceKernelFilterIn", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--filter-out") == 0) {
-      utils::SetEnv("UNITRACE_TraceKernelFilterOut", "1");
-      ++app_index;
-#endif /* 0 */
     } else if (strcmp(argv[i], "--stall-sampling") == 0) {
       stall_sampling = true;
       ++app_index;
@@ -513,6 +508,7 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
+#ifdef __unix__
   struct rlimit	rlim;
   rlim.rlim_cur = RLIM_INFINITY;
   rlim.rlim_max = RLIM_INFINITY;
@@ -523,6 +519,7 @@ int main(int argc, char *argv[]) {
     rlim.rlim_cur = rlim.rlim_max;
     setrlimit(RLIMIT_STACK, &rlim);
   }
+#endif
 
   std::string executable_path = utils::GetExecutablePath();
 
@@ -612,6 +609,7 @@ int main(int argc, char *argv[]) {
   utils::SetEnv("LD_PRELOAD", preload.c_str());
   utils::SetEnv("PTI_ENABLE", "1");
 
+#ifndef _WIN32
   if ((utils::GetEnv("UNITRACE_RawMetrics") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
 
     // UNITRACE_MetricQuery is not set
@@ -677,11 +675,39 @@ int main(int argc, char *argv[]) {
     }
   }
   else {
-    if (execvp(app_args[0], app_args.data())) {
-      std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
-      Usage(argv[0]);
-    }
-  }
-
+#endif
+    #ifdef _WIN32
+      // handle windows here
+      PROCESS_INFORMATION ProcessInfo;
+      STARTUPINFO StartupInfo;
+      ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+      StartupInfo.cb = sizeof(StartupInfo);
+      
+      auto argCount = 0;
+      std::string cmdLine = "";
+      for (; argCount < app_args.size()-1; ++argCount){
+        cmdLine += app_args[argCount];
+        cmdLine += " ";
+      }
+      LPSTR cmd_line = const_cast<char*>(cmdLine.c_str());
+      if (CreateProcessA(app_args[0], cmd_line,
+          NULL, NULL, TRUE, 0, NULL,
+          NULL, &StartupInfo, &ProcessInfo))
+      {
+        WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+        CloseHandle(ProcessInfo.hThread);
+        CloseHandle(ProcessInfo.hProcess);
+      }else{
+        std::cout<<"Error: Could not launch application\n";
+      }
+    #else
+      if (execvp(app_args[0], app_args.data())) {
+        std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
+        Usage(argv[0]);
+      }
+    #endif
+#ifdef __unix__
+  } // end of else
+#endif
   return 0;
 }

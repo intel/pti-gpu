@@ -53,9 +53,14 @@ class UniTracer {
       exit(-1);
     }
 
-    cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
-    cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
-
+    #ifdef __unix__
+      cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
+      cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
+    #else
+      // Win_TODO: Need to enable opencl later
+      cl_device_id cl_cpu_device = 0;
+      cl_device_id cl_gpu_device = 0;
+    #endif
     UniTracer* tracer = new UniTracer(options);
     UniMemory::ExitIfOutOfMemory((void *)tracer);
 
@@ -101,7 +106,6 @@ class UniTracer {
         itt_collector = IttCollector::Create(nullptr);
     }
 
-        
     if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||
         tracer->CheckOption(TRACE_DEVICE_TIMELINE) ||
         tracer->CheckOption(TRACE_KERNEL_SUBMITTING) ||
@@ -129,7 +133,6 @@ class UniTracer {
       collector_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
       collector_options.kernels_per_tile = tracer->CheckOption(TRACE_KERNELS_PER_TILE);
     }
-
 
     if (tracer->CheckOption(TRACE_CALL_LOGGING) ||
         tracer->CheckOption(TRACE_CHROME_CALL_LOGGING) ||

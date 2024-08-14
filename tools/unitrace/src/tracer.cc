@@ -12,6 +12,14 @@
 #include "version.h"
 #include "unitrace_tool_commit_hash.h"
 
+#ifdef __unix__
+  #define ATTRIB_CONSTOR __attribute__((constructor))
+  #define ATTRIB_DESTOR __attribute__((destructor))
+#else
+  #define ATTRIB_CONSTOR
+  #define ATTRIB_DESTOR
+#endif
+
 static UniTracer* tracer = nullptr;
 
 static TraceOptions ReadArgs() {
@@ -163,7 +171,7 @@ std::string get_version() {
   return std::string(UNITRACE_VERSION) + " ("+ std::string(COMMIT_HASH) + ")";
 }
 
-void __attribute__((constructor)) Init(void) {
+void ATTRIB_CONSTOR Init(void) {
   std::string value = utils::GetEnv("PTI_ENABLE");
   if (value != "1") {
     return;
@@ -184,7 +192,8 @@ void __attribute__((constructor)) Init(void) {
   }
 }
 
-void __attribute__((destructor)) Fini(void) {
+
+void ATTRIB_DESTOR Fini(void) {
   std::string value = utils::GetEnv("PTI_ENABLE");
   if (value != "1") {
     return;
@@ -195,3 +204,27 @@ void __attribute__((destructor)) Fini(void) {
     tracer = nullptr;
   }
 }
+
+#ifdef _WIN32
+BOOL WINAPI DllMain(
+    HINSTANCE hinstDLL,  // handle to DLL module
+    DWORD fdwReason,     // reason for calling function
+    LPVOID lpReserved)  // reserved
+{
+  switch (fdwReason)
+  {
+    case DLL_PROCESS_ATTACH:
+      Init();
+      break;
+    case DLL_THREAD_ATTACH:
+      break;
+    case DLL_THREAD_DETACH:
+      break;
+    case DLL_PROCESS_DETACH:
+      Fini();
+      break;
+  }
+  return TRUE;
+}
+#endif
+

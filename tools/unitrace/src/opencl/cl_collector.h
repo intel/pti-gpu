@@ -634,7 +634,8 @@ class ClCollector {
         else {
           std::vector<cl_device_id> subdevs(subcount);
           status = clCreateSubDevices(dev, props, subcount, subdevs.data(), nullptr);
-          PTI_ASSERT(status == CL_SUCCESS);
+          //win_todo: For windows client PC there is not sub device hence need better handling
+          //PTI_ASSERT(status == CL_SUCCESS);
           for (auto subdev : subdevs) {
             ClDevice subcd;
 
@@ -792,14 +793,23 @@ class ClCollector {
     // This is workaround due to driver bug. In some cases driver does not give right timestamp
     int64_t time_diff = queued - instance->device_sync;
     uint64_t time_shift = ((time_diff > 0) ? time_diff : 0);
-
     host_queued = instance->host_sync + time_shift;
+    //Win_Todo: Investigate why sometime "submitted > started" is happening
+#ifdef _WIN32
+    time_diff = queued <= submitted ? (submitted - queued) : 0;
+    host_submitted = host_queued + time_diff;
+    time_diff = submitted <= started ? (started - submitted) : 0;
+    host_started = host_submitted + time_diff;
+    time_diff = started <= ended ? (ended - started) : 0;
+    host_ended = host_started + time_diff;
+#else
     PTI_ASSERT(queued <= submitted);
     host_submitted = host_queued + (submitted - queued);
     PTI_ASSERT(submitted <= started);
     host_started = host_submitted + (started - submitted);
     PTI_ASSERT(started <= ended);
     host_ended = host_started + (ended - started);
+#endif
   }
 
   void PrintOutOffloadedCommand(std::string& name, cl_device_id& device, uint64_t appended, uint64_t submitted, uint64_t kernel_start, uint64_t kernel_end) {
@@ -982,13 +992,13 @@ class ClCollector {
       PTI_ASSERT(instance->event != nullptr);
       cl_int event_status = utils::cl::GetEventStatus(instance->event);
       if (event_status == CL_COMPLETE) {
-	if (instance->sub_device_list.size()) {
+        if (instance->sub_device_list.size()) {
           for (size_t i = 0; i < instance->sub_device_list.size(); ++i) {
             ProcessKernelInstance(instance,instance->sub_device_list[i]);
-	  };
-	} else {
+          }
+        } else {
           ProcessKernelInstance(instance,-1);
-	};
+        }
         it = kernel_instance_list_.erase(it);
       } else {
         ++it;

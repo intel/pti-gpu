@@ -114,6 +114,10 @@ class IttCollector {
     const uint32_t kTimeLength = 20;
     const uint32_t kPercentLength = 12;
 
+    if (ccl_function_info_map.empty()) {
+      return "";
+    }
+
     std::set< std::pair<std::string, ittFunction>,
               utils::Comparator > sorted_list(
         ccl_function_info_map.begin(), ccl_function_info_map.end());

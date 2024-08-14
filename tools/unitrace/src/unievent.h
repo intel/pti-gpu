@@ -42,7 +42,8 @@ typedef struct HostEventRecord_ {
   uint64_t id_;
   uint64_t start_time_;
   uint64_t end_time_;
-  std::string name_;
+  char name_[256];
+  bool valid_name_ = false;
   API_TRACING_ID api_id_;
   EVENT_TYPE type_;
 

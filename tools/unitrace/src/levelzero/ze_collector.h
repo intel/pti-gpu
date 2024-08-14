@@ -20,7 +20,10 @@
 #include <string>
 #include <vector>
 #include <cmath>
+
+#ifdef __unix__
 #include <dlfcn.h>
+#endif
 
 #include <level_zero/ze_api.h>
 #include <level_zero/layers/zel_tracing_api.h>
@@ -1193,13 +1196,15 @@ class ZeCollector {
   void Finalize() {
 
     ProcessAllCommandsSubmitted(nullptr);
-
+  // Win_Todo: For windows zelTracerDestroy is returning ZE_RESULT_ERROR_UNINITIALIZED error
+  #ifndef _WIN32
     if (tracer_ != nullptr) {
       ze_result_t status = zelTracerDestroy(tracer_);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[WARNING] Failed to destroy tracer (" << status << ")" << std::endl;
       }
     }
+  #endif
 
     global_device_submissions_mutex_.lock();
     if (global_device_submissions_) {
@@ -1279,10 +1284,13 @@ class ZeCollector {
         "    Time (%), " +
         std::string(std::max(int(kTimeLength - sizeof("Average (ns)") + 1), 0), ' ') + "Average (ns), " +
         std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') + "Min (ns), " +
-        std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') + "Max (ns)\n"; 
-        
-      correlator_->Log(str);
-
+        std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') + "Max (ns)\n";
+      #ifdef _WIN32
+        // Win_Todo : ostream is failing for larger buffer
+        std::cout<<str;
+      #else
+        correlator_->Log(str);
+      #endif
       int i = 0;
       for (auto& it : sorted_list) {
         uint64_t call_count = it.second.call_count_;
@@ -1301,7 +1309,12 @@ class ZeCollector {
           std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
           std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
           std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
-        correlator_->Log(str);
+#ifdef _WIN32
+            //Win_Todo: ofstream is failing for larger buffer size hence need special handling
+            std::cout<<str;
+#else
+            correlator_->Log(str);
+#endif
         i++;
       }
   
@@ -1429,8 +1442,11 @@ class ZeCollector {
   }
 
   void DisableTracing() {
+    // Win_Todo: For windows zelTracerSetEnabled() returns ZE_RESULT_ERROR_UNINITIALIZED error
+  #ifndef _WIN32
     ze_result_t status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  #endif
   }
 
   uint64_t CalculateTotalFunctionTime() const {
@@ -1468,8 +1484,12 @@ class ZeCollector {
              "Average (ns), " + std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') +
              "Min (ns), " + std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') +
              "Max (ns)\n";
+#ifdef _WIN32
+      // Win_Todo: ostream is failing on Windows hence need a better handling
+      std::cout<<str;
+#else
       correlator_->Log(str);
-  
+#endif
       for (auto& stat : sorted_list) {
         const std::string function = get_symbol(API_TRACING_ID(stat.first));
         uint64_t time = stat.second.total_time_;
@@ -1486,8 +1506,15 @@ class ZeCollector {
               std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
               std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
               std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
-        correlator_->Log(str);
+#ifdef _WIN32
+      // Win_Todo: ostream is failing on Windows hence need a better handling
+      std::cout<<str;
+#else
+      correlator_->Log(str);
+#endif
       }
+    } else{
+      std::cout<<"total_duration is zero hence returning from here\n";
     }
     global_host_time_stats_mutex_.unlock();
   }
@@ -4201,11 +4228,10 @@ class ZeCollector {
       auto it2 = it->second->event_to_timestamp_seq_.find(*(params->phEvent));
       if (it2 != it->second->event_to_timestamp_seq_.end()) {
         int slot = it->second->num_timestamps_on_event_reset_++;
-	it->second->index_timestamps_on_event_reset_[it2->second] = slot;
+	      it->second->index_timestamps_on_event_reset_[it2->second] = slot;
         ze_kernel_timestamp_result_t *ts = nullptr;
-	int slice = slot / number_timestamps_per_slice_;
+	      int slice = slot / number_timestamps_per_slice_;
         if (it->second->timestamps_on_event_reset_.size() <= slice) {
-
           ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
           auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
           UniMemory::ExitIfOutOfMemory((void *)(ts));
@@ -4214,11 +4240,11 @@ class ZeCollector {
             exit(-1);
           }
           it->second->timestamps_on_event_reset_.push_back(ts);
-	}
-	else {
+	      }
+        else {
           ts = it->second->timestamps_on_event_reset_[slice];
-	}
-	int idx = slot % number_timestamps_per_slice_;
+        }
+	      int idx = slot % number_timestamps_per_slice_;
         auto status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), 1, (ze_event_handle_t *)(params->phEvent), (void *)&(ts[idx]), nullptr, nullptr, 1, (ze_event_handle_t *)(params->phEvent));
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to get kernel timestamps (" << status << ")" << std::endl;
@@ -4229,9 +4255,9 @@ class ZeCollector {
 
       if (UniController::IsCollectionEnabled()) {
         // each command or kernel needs two slots: one for start and one for end
-	uint64_t *dts = nullptr;
-	int slice = it->second->num_device_global_timestamps_ / (2 * number_timestamps_per_slice_);
-	if (it->second->device_global_timestamps_.size() <= slice) {
+	      uint64_t *dts = nullptr;
+	      int slice = it->second->num_device_global_timestamps_ / (2 * number_timestamps_per_slice_);
+	      if (it->second->device_global_timestamps_.size() <= slice) {
           ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
           auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(uint64_t) * 2, cache_line_size_, (void **)&dts);
           UniMemory::ExitIfOutOfMemory((void *)(dts));
@@ -4244,7 +4270,7 @@ class ZeCollector {
         else {
           dts = it->second->device_global_timestamps_.at(slice);
         }
-	int idx = it->second->num_device_global_timestamps_ % (2 * number_timestamps_per_slice_);
+	      int idx = it->second->num_device_global_timestamps_ % (2 * number_timestamps_per_slice_);
         auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)&(dts[idx]), nullptr, 0, nullptr);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to get device global timestamps (" << status << ")" << std::endl;
@@ -4344,7 +4370,7 @@ class ZeCollector {
     if (it != collector->command_lists_.end()) {
       int num_events = it->second->event_to_timestamp_seq_.size();
       if (num_events) {
-        ze_event_handle_t events[num_events];
+        std::vector<ze_event_handle_t> events(num_events);
       
         int i = 0;
         for (auto it2 = it->second->event_to_timestamp_seq_.begin(); it2 != it->second->event_to_timestamp_seq_.end(); it2++, i++) {
@@ -4362,7 +4388,7 @@ class ZeCollector {
         }
         it->second->timestamps_on_commands_completion_ = ts;
 
-        status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events, (void *)it->second->timestamps_on_commands_completion_, nullptr, it->second->timestamp_event_to_signal_, num_events, events);
+        status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events.data(), (void *)it->second->timestamps_on_commands_completion_, nullptr, it->second->timestamp_event_to_signal_, num_events, events.data());
         if (status != ZE_RESULT_SUCCESS){
           std::cerr << "[ERROR] Failed to get kernel timestamps (" << status << ")" << std::endl;
         }
@@ -4573,10 +4599,11 @@ typedef struct _zex_kernel_register_file_size_exp_t {
         size_t kname_size = 0;
         status = zeKernelGetName(kernel, &kname_size, nullptr);
         if ((status == ZE_RESULT_SUCCESS) && (kname_size > 0)) {
-          char kname[kname_size];
+          char* kname = (char*) malloc(kname_size);
           status = zeKernelGetName(kernel, &kname_size, kname);
           PTI_ASSERT(status == ZE_RESULT_SUCCESS);
           desc.name_ = std::string(kname);
+          free(kname);
         }
         else {
           desc.name_ = "UnknownKernel";
