@@ -28,7 +28,6 @@
 #include <level_zero/ze_api.h>
 #include <level_zero/layers/zel_tracing_api.h>
 
-#include "correlator.h"
 #include "utils.h"
 #include "ze_event_cache.h"
 #include "ze_utils.h"
@@ -1145,7 +1144,7 @@ class ZeCollector {
  public: // Interface
 
   static ZeCollector* Create(
-      Correlator* correlator,
+      Logger *logger,
       CollectorOptions options,
       OnZeKernelFinishCallback kcallback = nullptr,
       OnZeFunctionFinishCallback fcallback = nullptr,
@@ -1155,11 +1154,11 @@ class ZeCollector {
         ZE_MAJOR_VERSION(version) >= 1 &&
         ZE_MINOR_VERSION(version) >= 2);
 
-    PTI_ASSERT(correlator != nullptr);
+    PTI_ASSERT(logger != nullptr);
 
     std::string data_dir_name = utils::GetEnv("UNITRACE_DataDir");
     ZeCollector* collector = new ZeCollector(
-        correlator, options, kcallback, fcallback, callback_data, data_dir_name);
+        logger, options, kcallback, fcallback, callback_data, data_dir_name);
 
     UniMemory::ExitIfOutOfMemory((void *)(collector));
 
@@ -1196,15 +1195,15 @@ class ZeCollector {
   void Finalize() {
 
     ProcessAllCommandsSubmitted(nullptr);
-  // Win_Todo: For windows zelTracerDestroy is returning ZE_RESULT_ERROR_UNINITIALIZED error
-  #ifndef _WIN32
+    // Win_Todo: For windows zelTracerDestroy is returning ZE_RESULT_ERROR_UNINITIALIZED error
+#ifndef _WIN32
     if (tracer_ != nullptr) {
       ze_result_t status = zelTracerDestroy(tracer_);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[WARNING] Failed to destroy tracer (" << status << ")" << std::endl;
       }
     }
-  #endif
+#endif /* _WIN32 */
 
     global_device_submissions_mutex_.lock();
     if (global_device_submissions_) {
@@ -1279,18 +1278,18 @@ class ZeCollector {
       // sizeof("Kernel") is 7, not 6 
       std::string str(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ');
       str += "Kernel, " +
-        std::string(std::max(int(kCallsLength - sizeof("Calls") + 1), 0), ' ') + "Calls, " +
-        std::string(std::max(int(kTimeLength - sizeof("Time (ns)") + 1), 0), ' ') + "Time (ns), " +
+      std::string(std::max(int(kCallsLength - sizeof("Calls") + 1), 0), ' ') + "Calls, " +
+      std::string(std::max(int(kTimeLength - sizeof("Time (ns)") + 1), 0), ' ') + "Time (ns), " +
         "    Time (%), " +
-        std::string(std::max(int(kTimeLength - sizeof("Average (ns)") + 1), 0), ' ') + "Average (ns), " +
-        std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') + "Min (ns), " +
-        std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') + "Max (ns)\n";
-      #ifdef _WIN32
-        // Win_Todo : ostream is failing for larger buffer
-        std::cout<<str;
-      #else
-        correlator_->Log(str);
-      #endif
+      std::string(std::max(int(kTimeLength - sizeof("Average (ns)") + 1), 0), ' ') + "Average (ns), " +
+      std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') + "Min (ns), " +
+      std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') + "Max (ns)\n";
+#ifdef _WIN32
+      // Win_Todo : ostream is failing for larger buffer
+      std::cout << str;
+#else /* _WIN32 */
+      logger_->Log(str);
+#endif /* _WIN32 */
       int i = 0;
       for (auto& it : sorted_list) {
         uint64_t call_count = it.second.call_count_;
@@ -1302,19 +1301,19 @@ class ZeCollector {
         
         str = std::string(std::max(int(max_name_size - knames[i].length()), 0), ' ');
         str += knames[i] + ", " +
-          std::string(std::max(int(kCallsLength - std::to_string(call_count).length()), 0), ' ') +  std::to_string(call_count) + ", " +
-          std::string(std::max(int(kTimeLength - std::to_string(time).length()), 0), ' ') + std::to_string(time) + ", " +
-          std::string(std::max(int(sizeof("   Time (%)") - std::to_string(percent_time).length()), 0), ' ') +
-          std::to_string(percent_time) + ", " +
-          std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
-          std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
-          std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
+        std::string(std::max(int(kCallsLength - std::to_string(call_count).length()), 0), ' ') +  std::to_string(call_count) + ", " +
+        std::string(std::max(int(kTimeLength - std::to_string(time).length()), 0), ' ') + std::to_string(time) + ", " +
+        std::string(std::max(int(sizeof("   Time (%)") - std::to_string(percent_time).length()), 0), ' ') +
+        std::to_string(percent_time) + ", " +
+        std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
+        std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
+        std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
 #ifdef _WIN32
-            //Win_Todo: ofstream is failing for larger buffer size hence need special handling
-            std::cout<<str;
-#else
-            correlator_->Log(str);
-#endif
+        //Win_Todo: ofstream is failing for larger buffer size hence need special handling
+        std::cout << str;
+#else /* _WIN32 */
+        logger_->Log(str);
+#endif /* _WIN32 */
         i++;
       }
   
@@ -1322,7 +1321,7 @@ class ZeCollector {
       str = "\n\n=== Kernel Properties ===\n\n";
       str = str + std::string(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ') +
         "Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread\n";
-      correlator_->Log(str);
+      logger_->Log(str);
   
       i = -1; 
       for (auto& it : sorted_list) {
@@ -1359,7 +1358,7 @@ class ZeCollector {
           str += std::string(sizeof("Register File Size Per Thread") - sizeof("unknown") + 1, ' ') +
                  "unknown\n";
         }
-        correlator_->Log(str);
+        logger_->Log(str);
       }
     }
 
@@ -1410,7 +1409,7 @@ class ZeCollector {
              std::string(std::max(int(kTimeLength - sizeof("Execute (ns)") + 1), 0), ' ') +
              "Execute (ns),  Execute (%)\n";
      
-      correlator_->Log(str);
+      logger_->Log(str);
 
       int i = 0;
       for (auto& it : sorted_list) {
@@ -1432,7 +1431,7 @@ class ZeCollector {
                std::to_string(it.second.execute_time_) + ", " +
                std::string(std::max(int(sizeof("Execute (%)") - std::to_string(device_percent).length()), 0), ' ') +
                std::to_string(device_percent) + "\n";
-        correlator_->Log(str);
+        logger_->Log(str);
         i++;
       }
     }
@@ -1443,10 +1442,10 @@ class ZeCollector {
 
   void DisableTracing() {
     // Win_Todo: For windows zelTracerSetEnabled() returns ZE_RESULT_ERROR_UNINITIALIZED error
-  #ifndef _WIN32
+#ifndef _WIN32
     ze_result_t status = zelTracerSetEnabled(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  #endif
+#endif /* _WIN32 */
   }
 
   uint64_t CalculateTotalFunctionTime() const {
@@ -1465,7 +1464,7 @@ class ZeCollector {
   void PrintFunctionsTable() const {
     global_host_time_stats_mutex_.lock();
     std::set<std::pair<uint32_t, ZeFunctionTime>, utils::Comparator> sorted_list(
-        global_host_time_stats_->begin(), global_host_time_stats_->end());
+      global_host_time_stats_->begin(), global_host_time_stats_->end());
 
     uint64_t total_time = 0;
     size_t max_name_size = 0;
@@ -1486,10 +1485,10 @@ class ZeCollector {
              "Max (ns)\n";
 #ifdef _WIN32
       // Win_Todo: ostream is failing on Windows hence need a better handling
-      std::cout<<str;
-#else
-      correlator_->Log(str);
-#endif
+      std::cout << str;
+#else /* _WIN32 */
+      logger_->Log(str);
+#endif /* _WIN32 */
       for (auto& stat : sorted_list) {
         const std::string function = get_symbol(API_TRACING_ID(stat.first));
         uint64_t time = stat.second.total_time_;
@@ -1507,14 +1506,12 @@ class ZeCollector {
               std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
               std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
 #ifdef _WIN32
-      // Win_Todo: ostream is failing on Windows hence need a better handling
-      std::cout<<str;
-#else
-      correlator_->Log(str);
-#endif
+        // Win_Todo: ostream is failing on Windows hence need a better handling
+        std::cout << str;
+#else /* _WIN32 */
+        logger_->Log(str);
+#endif /* _WIN32 */
       }
-    } else{
-      std::cout<<"total_duration is zero hence returning from here\n";
     }
     global_host_time_stats_mutex_.unlock();
   }
@@ -1659,13 +1656,13 @@ class ZeCollector {
  private: // Implementation
 
   ZeCollector(
-      Correlator* correlator,
+      Logger *logger,
       CollectorOptions options,
       OnZeKernelFinishCallback kcallback,
       OnZeFunctionFinishCallback fcallback,
       void* callback_data,
       std::string& data_dir_name)
-      : correlator_(correlator),
+      : logger_(logger),
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
@@ -2092,6 +2089,34 @@ class ZeCollector {
 
     // metric query
 
+    std::string logfile = logger_->GetLogFileName();
+    Logger *metric_logger = nullptr;
+    std::string filename;
+    if (logfile.empty()) {
+      metric_logger = logger_;	// output to stdout
+    }
+    else {
+      size_t pos = logfile.find_first_of('.');
+
+      if (pos == std::string::npos) {
+        filename = logfile;
+      } else {
+        filename = logfile.substr(0, pos);
+      }
+
+      filename = filename + ".metrics";
+
+      if (pos != std::string::npos) {
+        filename = filename + logfile.substr(pos);
+      }
+      metric_logger = new Logger(filename, true, true);
+      if (metric_logger == nullptr) {
+	      std::cerr << "[ERROR] Failed to create metric data file" << std::endl;
+	      exit(-1);
+      }
+    }
+
+
     while (1) {
       if (global_kernel_profiles_.empty()) {
         break;	// done
@@ -2126,13 +2151,13 @@ class ZeCollector {
           group = it2->second.metric_group_;
           metric_names = GetMetricNames(it2->second.metric_group_);
           PTI_ASSERT(!metric_names.empty());
-          correlator_->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
+          metric_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
           std::string header("\nKernel,GlobalInstanceId,SubDeviceId,");
           for (auto& metric : metric_names) {
             header += metric + ",";
           }
           header += "\n";
-          correlator_->Log(header);
+          metric_logger->Log(header);
         }
         else {
           if (it->second.device_ != device) {
@@ -2177,7 +2202,7 @@ class ZeCollector {
             }
             str += "\n";
       
-            correlator_->Log(str);
+            metric_logger->Log(str);
           }
           else {
             std::cerr << "[WARNING] Not able to calculate metrics" << std::endl;
@@ -2188,6 +2213,11 @@ class ZeCollector {
         }
         it = global_kernel_profiles_.erase(it);
       }
+    }
+
+    if (metric_logger != logger_) {
+      std::cerr << "[INFO] Kernel metrics are stored in " << filename << std::endl;
+      delete metric_logger; // close metric data file
     }
   }
 
@@ -2350,7 +2380,7 @@ class ZeCollector {
       std::to_string(command->submit_time_) + " (submit) " +
       std::to_string(kernel_start) + " (start) " +
       std::to_string(kernel_end) + " (end)\n";
-    correlator_->Log(str);
+    logger_->Log(str);
   }
 
   inline void LogCommandCompleted(const ZeCommand *command, const ze_kernel_timestamp_result_t& timestamp, int tile) {
@@ -2390,9 +2420,9 @@ class ZeCollector {
       else {
         if (command->timestamps_on_event_reset_) {
           int slot = command->index_timestamps_on_commands_completion_->at(command->timestamp_seq_);
-	  if (slot == -1) {
+          if (slot == -1) {
             slot = command->index_timestamps_on_event_reset_->at(command->timestamp_seq_);
-	    ze_kernel_timestamp_result_t *ts = command->timestamps_on_event_reset_->at(slot / number_timestamps_per_slice_);
+            ze_kernel_timestamp_result_t *ts = command->timestamps_on_event_reset_->at(slot / number_timestamps_per_slice_);
             timestamp = ts[slot % number_timestamps_per_slice_];
           }
           else {
@@ -2400,14 +2430,32 @@ class ZeCollector {
           }
         }
         else {
-          std::cerr << "[ERROR] Failed to get timestamps on device";
+          std::cerr << "[ERROR] Failed to get timestamps on device" << std::endl;
           return;
+        }
+      }
+      if (timestamp.global.kernelStart == timestamp.global.kernelEnd) {
+        std::cerr << "[WARNING] Kernel starting timestamp and ending timestamp on the device are the same (" << timestamp.global.kernelStart << ")" << std::endl;
+        if (command->event_ != nullptr) {
+          ze_result_t status;
+          status = zeEventQueryStatus(command->event_);
+          if (status == ZE_RESULT_SUCCESS) {
+            std::cerr << "[WARNING] Trying to query event for timestamps" << std::endl;
+            status = zeEventQueryKernelTimestamp(command->event_, &timestamp);
+            if (status != ZE_RESULT_SUCCESS) {
+              // do not panic
+              std::cerr << "[WARNING] Unable to query event for timestamps" << std::endl;
+            }
+	  }
         }
       }
     }
     else {
       ze_result_t status = zeEventQueryKernelTimestamp(command->event_, &timestamp);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (status != ZE_RESULT_SUCCESS) {
+        std::cerr << "[ERROR] Unable to query event for timestamps" << std::endl;
+        return;
+      }
     }
 
     uint64_t device_freq = command->device_timer_frequency_;
@@ -4756,7 +4804,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
  private: // Data
   zel_tracer_handle_t tracer_ = nullptr;
   CollectorOptions options_;
-  Correlator* correlator_ = nullptr;
+  Logger *logger_ = nullptr;
   OnZeKernelFinishCallback kcallback_ = nullptr;
   OnZeFunctionFinishCallback fcallback_ = nullptr;
   void* callback_data_ = nullptr;

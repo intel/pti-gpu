@@ -15,6 +15,8 @@ class TraceGuard {
     ++inactive_count_;
   }
 
+  TraceGuard(const TraceGuard& that) = delete;
+
   ~TraceGuard() {
     PTI_ASSERT(inactive_count_ > 0);
     --inactive_count_;

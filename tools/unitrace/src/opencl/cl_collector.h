@@ -21,9 +21,9 @@
 
 #include "cl_api_tracer.h"
 #include "cl_utils.h"
-#include "correlator.h"
 #include "trace_guard.h"
 #include "collector_options.h"
+#include "logger.h"
 #include "unikernel.h"
 #include "unicontrol.h"
 
@@ -159,13 +159,9 @@ struct ClKernelProfileRecord {
   std::string kernel_name_;
 };
 
-typedef void (*OnClFunctionFinishCallback)(
-    std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
-    uint64_t started, uint64_t ended);
+typedef void (*OnClFunctionFinishCallback)(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id, uint64_t started, uint64_t ended);
 
-typedef void (*OnClExtFunctionFinishCallback)(
-    std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const cl_ext_api_id api_id,
-    uint64_t started, uint64_t ended);
+typedef void (*OnClExtFunctionFinishCallback)(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const cl_ext_api_id api_id, uint64_t started, uint64_t ended);
 
 
 // Metric collection happens via level-0 interfaces hence these function.
@@ -177,9 +173,7 @@ inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
   }
 
   cl_device_pci_bus_info_khr pci_info{};
-  cl_int status = clGetDeviceInfo(
-      device, CL_DEVICE_PCI_BUS_INFO_KHR,
-      sizeof(cl_device_pci_bus_info_khr), &pci_info, nullptr);
+  cl_int status = clGetDeviceInfo(device, CL_DEVICE_PCI_BUS_INFO_KHR, sizeof(cl_device_pci_bus_info_khr), &pci_info, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
 
   return pci_info;
@@ -207,12 +201,8 @@ inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
   return nullptr;
 }
 
-void OnEnterFunction(
-    cl_function_id function, cl_callback_data* data,
-    uint64_t start, ClCollector* collector);
-void OnExitFunction(
-    cl_function_id function, cl_callback_data* data,
-    uint64_t start, uint64_t end, ClCollector* collector);
+void OnEnterFunction(cl_function_id function, cl_callback_data* data, uint64_t start, ClCollector* collector);
+void OnExitFunction(cl_function_id function, cl_callback_data* data, uint64_t start, uint64_t end, ClCollector* collector);
 
 inline std::string GetVerboseName(const ClKernelProps* props) {
   PTI_ASSERT(props != nullptr);
@@ -250,20 +240,20 @@ class ClCollector {
  public: // Interface
   static ClCollector* Create(
       cl_device_id device,
-      Correlator* correlator,
+      Logger *logger,
       CollectorOptions options,
       OnClKernelFinishCallback kcallback = nullptr,
       OnClFunctionFinishCallback fcallback = nullptr,
       OnClExtFunctionFinishCallback extfcallback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
-    PTI_ASSERT(correlator != nullptr);
+    PTI_ASSERT(logger != nullptr);
     TraceGuard guard;
 
     std::string data_dir_name = utils::GetEnv("UNITRACE_DataDir");
 
     ClCollector* collector = new ClCollector(
-        device, correlator, options, kcallback, fcallback, extfcallback, callback_data, data_dir_name);
+        device, logger, options, kcallback, fcallback, extfcallback, callback_data, data_dir_name);
     PTI_ASSERT(collector != nullptr);
 
     collector->SetKernelTracingPoints();
@@ -427,8 +417,7 @@ class ClCollector {
         std::setw(kTimeLength) << max_duration << std::endl;
     }
 
-    PTI_ASSERT(correlator_ != nullptr);
-    correlator_->Log(stream.str());
+    logger_->Log(stream.str());
   }
 
   void PrintSubmissionTable() const {
@@ -488,17 +477,11 @@ class ClCollector {
           std::fixed << execute_percent << "," << std::endl;
     }
 
-    PTI_ASSERT(correlator_ != nullptr);
-    correlator_->Log(stream.str());
+    logger_->Log(stream.str());
   }
 
   const ClFunctionInfoMap& GetFunctionInfoMap() const {
     return function_info_map_;
-  }
-
-  uint64_t GetKernelId() const {
-    PTI_ASSERT(correlator_ != nullptr);
-    return correlator_->GetKernelId();
   }
 
   bool NeedTid() const {
@@ -514,8 +497,7 @@ class ClCollector {
   }
 
   void Log(const std::string& text) {
-    PTI_ASSERT(correlator_ != nullptr);
-    correlator_->Log(text);
+    logger_->Log(text);
   }
 
   void PrintFunctionsTable() const {
@@ -563,14 +545,13 @@ class ClCollector {
         std::setw(kTimeLength) << max_duration << std::endl;
     }
 
-    PTI_ASSERT(correlator_ != nullptr);
-    correlator_->Log(stream.str());
+    logger_->Log(stream.str());
   }
 
  private: // Implementation Details
   ClCollector(
       cl_device_id device,
-      Correlator* correlator,
+      Logger *logger,
       CollectorOptions options,
       OnClKernelFinishCallback kcallback,
       OnClFunctionFinishCallback fcallback,
@@ -578,7 +559,7 @@ class ClCollector {
       void* callback_data,
       std::string& data_dir_name)
       : device_(device),
-        correlator_(correlator),
+        logger_(logger),
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
@@ -586,7 +567,7 @@ class ClCollector {
         callback_data_(callback_data),
         data_dir_name_(data_dir_name) {
     PTI_ASSERT(device_ != nullptr);
-    PTI_ASSERT(correlator_ != nullptr);
+    PTI_ASSERT(logger_ != nullptr);
 
     device_type_ = utils::cl::GetDeviceType(device);
     PTI_ASSERT( device_type_ == CL_DEVICE_TYPE_CPU || device_type_ == CL_DEVICE_TYPE_GPU);
@@ -820,7 +801,7 @@ class ClCollector {
       submitted << " (submit) " <<
       kernel_start << " (start) " <<
       kernel_end << " (end)" << std::endl;
-    correlator_->Log(stream.str());
+    logger_->Log(stream.str());
   }
 
   inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
@@ -864,17 +845,8 @@ class ClCollector {
 
       uint64_t host_queued = 0, host_submitted = 0;
       uint64_t host_started = 0, host_ended = 0;
-      ComputeHostTimestamps(
-          instance,
-          started, ended,
-          host_queued, host_submitted,
-          host_started, host_ended);
-
-      AddKernelInfo(
-        name,
-        host_submitted - host_queued,
-        host_started - host_submitted,
-        host_ended - host_started);
+      ComputeHostTimestamps(instance, started, ended, host_queued, host_submitted, host_started, host_ended);
+      AddKernelInfo(name, host_submitted - host_queued, host_started - host_submitted, host_ended - host_started);
 
       bool implicit = false;
 
@@ -898,10 +870,7 @@ class ClCollector {
       }
 
       if (kcallback_ != nullptr) {
-        kcallback_(
-            pciInfo, device, queue, tile, implicit,
-            instance->kernel_id,
-            host_started, host_ended);
+        kcallback_(pciInfo, device, queue, tile, implicit, instance->kernel_id, host_started, host_ended);
       }
 
       if (options_.metric_stream) {
@@ -998,7 +967,7 @@ class ClCollector {
           }
         } else {
           ProcessKernelInstance(instance,-1);
-        }
+	}
         it = kernel_instance_list_.erase(it);
       } else {
         ++it;
@@ -1153,8 +1122,7 @@ class ClCollector {
   }
 
   template <typename T>
-  static void OnEnterEnqueueKernel(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnEnterEnqueueKernel(cl_callback_data* data, ClCollector* collector) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(collector->device_ != nullptr);
@@ -1162,12 +1130,7 @@ class ClCollector {
     ClEnqueueData* enqueue_data = new ClEnqueueData;
     enqueue_data->event = nullptr;
 
-    utils::cl::GetTimestamps(
-        collector->device_, &enqueue_data->host_sync, &enqueue_data->device_sync);
-
-    PTI_ASSERT(collector->correlator_ != nullptr);
-    //enqueue_data->host_sync =
-    //  collector->correlator_->GetTimestamp(enqueue_data->host_sync);
+    utils::cl::GetTimestamps(collector->device_, &enqueue_data->host_sync, &enqueue_data->device_sync);
 
     const T* params = reinterpret_cast<const T*>(data->functionParams);
     PTI_ASSERT(params != nullptr);
@@ -1180,16 +1143,13 @@ class ClCollector {
   }
 
   template<typename T>
-  static void OnExitEnqueueKernel(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueKernel(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    ClEnqueueData* enqueue_data =
-      reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
+    ClEnqueueData* enqueue_data = reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
 
-    cl_int* return_value =
-      reinterpret_cast<cl_int*>(data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
       const T* params = reinterpret_cast<const T*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
@@ -1197,8 +1157,7 @@ class ClCollector {
       PTI_ASSERT(*(params->event) != nullptr);
       cl_int status = CL_SUCCESS;
 
-      if (*(params->event) !=
-          reinterpret_cast<cl_event*>(data->correlationData)) {
+      if (*(params->event) != reinterpret_cast<cl_event*>(data->correlationData)) {
         status = clRetainEvent(**(params->event));
         PTI_ASSERT(status == CL_SUCCESS);
       }
@@ -1208,8 +1167,7 @@ class ClCollector {
       instance->event = **(params->event);
 
       cl_kernel kernel = *(params->kernel);
-      instance->props.name = utils::cl::GetKernelName(
-          kernel, collector->options_.demangle);
+      instance->props.name = utils::cl::GetKernelName(kernel, collector->options_.demangle);
 
       cl_command_queue queue = *(params->commandQueue);
       PTI_ASSERT(queue != nullptr);
@@ -1246,8 +1204,9 @@ class ClCollector {
       }
 
       instance->kernel_id = UniKernelInstanceId::GetKernelInstanceId();
-      PTI_ASSERT(collector->correlator_ != nullptr);
-      collector->correlator_->SetKernelId(instance->kernel_id);
+      if (kid) {
+        *kid = instance->kernel_id;
+      }
       instance->need_to_process = UniController::IsCollectionEnabled();
 
       PTI_ASSERT(enqueue_data != nullptr);
@@ -1260,9 +1219,7 @@ class ClCollector {
     }
   }
 
-  static void OnExitEnqueueTransfer(
-      std::string name, size_t bytes_transferred, cl_event* event,
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueTransfer(std::string name, size_t bytes_transferred, cl_event* event, cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(event != nullptr);
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
@@ -1284,12 +1241,12 @@ class ClCollector {
     instance->props.size = 0;
 
     instance->kernel_id = UniKernelInstanceId::GetKernelInstanceId();
-    PTI_ASSERT(collector->correlator_ != nullptr);
-    collector->correlator_->SetKernelId(instance->kernel_id);
+    if (kid) {
+      *kid = instance->kernel_id;
+    }
     instance->need_to_process = UniController::IsCollectionEnabled();
 
-    ClEnqueueData* enqueue_data =
-      reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
+    ClEnqueueData* enqueue_data = reinterpret_cast<ClEnqueueData*>(data->correlationData[0]);
     PTI_ASSERT(enqueue_data != nullptr);
     instance->device_sync = enqueue_data->device_sync;
     instance->host_sync = enqueue_data->host_sync;
@@ -1299,8 +1256,7 @@ class ClCollector {
     delete enqueue_data;
   }
 
-  static void OnExitEnqueueReadBuffer(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueReadBuffer(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
@@ -1312,9 +1268,7 @@ class ClCollector {
             data->functionParams);
       PTI_ASSERT(params != nullptr);
 
-      OnExitEnqueueTransfer(
-          "clEnqueueReadBuffer", *(params->cb),
-          *(params->event), data, collector);
+      OnExitEnqueueTransfer( "clEnqueueReadBuffer", *(params->cb), *(params->event), data, collector, kid);
 
       if (*params->blockingRead) {
         collector->ProcessKernelInstances();
@@ -1322,22 +1276,16 @@ class ClCollector {
     }
   }
 
-  static void OnExitEnqueueWriteBuffer(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueWriteBuffer(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueWriteBuffer* params =
-        reinterpret_cast<const cl_params_clEnqueueWriteBuffer*>(
-            data->functionParams);
+      const cl_params_clEnqueueWriteBuffer* params = reinterpret_cast<const cl_params_clEnqueueWriteBuffer*>( data->functionParams);
       PTI_ASSERT(params != nullptr);
 
-      OnExitEnqueueTransfer(
-          "clEnqueueWriteBuffer", *(params->cb),
-          *(params->event), data, collector);
+      OnExitEnqueueTransfer( "clEnqueueWriteBuffer", *(params->cb), *(params->event), data, collector, kid);
 
       if (*params->blockingWrite) {
         collector->ProcessKernelInstances();
@@ -1345,289 +1293,206 @@ class ClCollector {
     }
   }
 
-  static void OnExitEnqueueCopyBuffer(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueCopyBuffer(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueCopyBuffer* params =
-        reinterpret_cast<const cl_params_clEnqueueCopyBuffer*>(
-            data->functionParams);
+      const cl_params_clEnqueueCopyBuffer* params = reinterpret_cast<const cl_params_clEnqueueCopyBuffer*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
-      OnExitEnqueueTransfer(
-          "clEnqueueCopyBuffer", *(params->cb),
-          *(params->event), data, collector);
+      OnExitEnqueueTransfer("clEnqueueCopyBuffer", *(params->cb), *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueFillBuffer(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueFillBuffer(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueFillBuffer* params =
-        reinterpret_cast<const cl_params_clEnqueueFillBuffer*>(
-            data->functionParams);
+      const cl_params_clEnqueueFillBuffer* params = reinterpret_cast<const cl_params_clEnqueueFillBuffer*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
-      OnExitEnqueueTransfer(
-          "clEnqueueFillBuffer", *(params->size),
-          *(params->event), data, collector);
+      OnExitEnqueueTransfer("clEnqueueFillBuffer", *(params->size), *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueReadBufferRect(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueReadBufferRect(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueReadBufferRect* params =
-        reinterpret_cast<const cl_params_clEnqueueReadBufferRect*>(
-            data->functionParams);
+      const cl_params_clEnqueueReadBufferRect* params = reinterpret_cast<const cl_params_clEnqueueReadBufferRect*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const size_t* region = *params->region;
       PTI_ASSERT(region != nullptr);
       size_t bytes_transferred = region[0] * region[1] * region[2];
 
-      OnExitEnqueueTransfer(
-          "clEnqueueReadBufferRect", bytes_transferred,
-          *(params->event), data, collector);
+      OnExitEnqueueTransfer("clEnqueueReadBufferRect", bytes_transferred, *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueWriteBufferRect(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueWriteBufferRect(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>( data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueWriteBufferRect* params =
-        reinterpret_cast<const cl_params_clEnqueueWriteBufferRect*>(
-            data->functionParams);
+      const cl_params_clEnqueueWriteBufferRect* params = reinterpret_cast<const cl_params_clEnqueueWriteBufferRect*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const size_t* region = *params->region;
       PTI_ASSERT(region != nullptr);
       size_t bytes_transferred = region[0] * region[1] * region[2];
 
-      OnExitEnqueueTransfer(
-          "clEnqueueWriteBufferRect", bytes_transferred,
-          *(params->event), data, collector);
+      OnExitEnqueueTransfer("clEnqueueWriteBufferRect", bytes_transferred, *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueCopyBufferRect(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueCopyBufferRect(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueCopyBufferRect* params =
-        reinterpret_cast<const cl_params_clEnqueueCopyBufferRect*>(
-            data->functionParams);
+      const cl_params_clEnqueueCopyBufferRect* params = reinterpret_cast<const cl_params_clEnqueueCopyBufferRect*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const size_t* region = *params->region;
       PTI_ASSERT(region != nullptr);
       size_t bytes_transferred = region[0] * region[1] * region[2];
 
-      OnExitEnqueueTransfer(
-          "clEnqueueCopyBufferRect", bytes_transferred,
-          *(params->event), data, collector);
+      OnExitEnqueueTransfer("clEnqueueCopyBufferRect", bytes_transferred, *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueReadImage(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueReadImage(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueReadImage* params =
-        reinterpret_cast<const cl_params_clEnqueueReadImage*>(
-            data->functionParams);
+      const cl_params_clEnqueueReadImage* params = reinterpret_cast<const cl_params_clEnqueueReadImage*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const size_t* region = *(params->region);
       PTI_ASSERT(region != nullptr);
 
       size_t element_size = 0;
-      cl_int status = clGetImageInfo(
-          *(params->image), CL_IMAGE_ELEMENT_SIZE,
-          sizeof(size_t), &element_size, nullptr);
+      cl_int status = clGetImageInfo(*(params->image), CL_IMAGE_ELEMENT_SIZE, sizeof(size_t), &element_size, nullptr);
       PTI_ASSERT(status == CL_SUCCESS);
 
-      size_t bytes_transferred =
-        region[0] * region[1] * region[2] * element_size;
-      OnExitEnqueueTransfer(
-          "clEnqueueReadImage", bytes_transferred,
-          *(params->event), data, collector);
+      size_t bytes_transferred = region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer("clEnqueueReadImage", bytes_transferred, *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueWriteImage(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueWriteImage(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueWriteImage* params =
-        reinterpret_cast<const cl_params_clEnqueueWriteImage*>(
-            data->functionParams);
+      const cl_params_clEnqueueWriteImage* params = reinterpret_cast<const cl_params_clEnqueueWriteImage*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const size_t* region = *(params->region);
       PTI_ASSERT(region != nullptr);
 
       size_t element_size = 0;
-      cl_int status = clGetImageInfo(
-          *(params->image), CL_IMAGE_ELEMENT_SIZE,
-          sizeof(size_t), &element_size, nullptr);
+      cl_int status = clGetImageInfo(*(params->image), CL_IMAGE_ELEMENT_SIZE, sizeof(size_t), &element_size, nullptr);
       PTI_ASSERT(status == CL_SUCCESS);
 
-      size_t bytes_transferred =
-        region[0] * region[1] * region[2] * element_size;
-      OnExitEnqueueTransfer(
-          "clEnqueueWriteImage", bytes_transferred,
-          *(params->event), data, collector);
+      size_t bytes_transferred = region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer("clEnqueueWriteImage", bytes_transferred, *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueCopyImage(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueCopyImage(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueCopyImage* params =
-        reinterpret_cast<const cl_params_clEnqueueCopyImage*>(
-            data->functionParams);
+      const cl_params_clEnqueueCopyImage* params = reinterpret_cast<const cl_params_clEnqueueCopyImage*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const size_t* region = *(params->region);
       PTI_ASSERT(region != nullptr);
 
       size_t element_size = 0;
-      cl_int status = clGetImageInfo(
-          *(params->srcImage), CL_IMAGE_ELEMENT_SIZE,
-          sizeof(size_t), &element_size, nullptr);
+      cl_int status = clGetImageInfo(*(params->srcImage), CL_IMAGE_ELEMENT_SIZE, sizeof(size_t), &element_size, nullptr);
       PTI_ASSERT(status == CL_SUCCESS);
 
-      size_t bytes_transferred =
-        region[0] * region[1] * region[2] * element_size;
-      OnExitEnqueueTransfer("clEnqueueCopyImage", bytes_transferred,
-                            *(params->event), data, collector);
+      size_t bytes_transferred = region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer("clEnqueueCopyImage", bytes_transferred, *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueFillImage(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueFillImage(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueFillImage* params =
-        reinterpret_cast<const cl_params_clEnqueueFillImage*>(
-            data->functionParams);
+      const cl_params_clEnqueueFillImage* params = reinterpret_cast<const cl_params_clEnqueueFillImage*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const size_t* region = *(params->region);
       PTI_ASSERT(region != nullptr);
 
       size_t element_size = 0;
-      cl_int status = clGetImageInfo(
-          *(params->image), CL_IMAGE_ELEMENT_SIZE,
-          sizeof(size_t), &element_size, nullptr);
+      cl_int status = clGetImageInfo(*(params->image), CL_IMAGE_ELEMENT_SIZE, sizeof(size_t), &element_size, nullptr);
       PTI_ASSERT(status == CL_SUCCESS);
 
-      size_t bytes_transferred =
-        region[0] * region[1] * region[2] * element_size;
-      OnExitEnqueueTransfer(
-          "clEnqueueFillImage", bytes_transferred,
-          *(params->event), data, collector);
+      size_t bytes_transferred = region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer("clEnqueueFillImage", bytes_transferred, *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueCopyImageToBuffer(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueCopyImageToBuffer(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueCopyImageToBuffer* params =
-        reinterpret_cast<const cl_params_clEnqueueCopyImageToBuffer*>(
-            data->functionParams);
+      const cl_params_clEnqueueCopyImageToBuffer* params = reinterpret_cast<const cl_params_clEnqueueCopyImageToBuffer*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const size_t* region = *(params->region);
       PTI_ASSERT(region != nullptr);
 
       size_t element_size = 0;
-      cl_int status = clGetImageInfo(
-          *(params->srcImage), CL_IMAGE_ELEMENT_SIZE,
-          sizeof(size_t), &element_size, nullptr);
+      cl_int status = clGetImageInfo(*(params->srcImage), CL_IMAGE_ELEMENT_SIZE, sizeof(size_t), &element_size, nullptr);
       PTI_ASSERT(status == CL_SUCCESS);
 
-      size_t bytes_transferred =
-        region[0] * region[1] * region[2] * element_size;
-      OnExitEnqueueTransfer(
-          "clEnqueueCopyImageToBuffer", bytes_transferred,
-          *(params->event), data, collector);
+      size_t bytes_transferred = region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer( "clEnqueueCopyImageToBuffer", bytes_transferred, *(params->event), data, collector, kid);
     }
   }
 
-  static void OnExitEnqueueCopyBufferToImage(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitEnqueueCopyBufferToImage(cl_callback_data* data, ClCollector* collector, uint64_t *kid) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clEnqueueCopyBufferToImage* params =
-        reinterpret_cast<const cl_params_clEnqueueCopyBufferToImage*>(
-            data->functionParams);
+      const cl_params_clEnqueueCopyBufferToImage* params = reinterpret_cast<const cl_params_clEnqueueCopyBufferToImage*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const size_t* region = *(params->region);
       PTI_ASSERT(region != nullptr);
 
       size_t element_size = 0;
-      cl_int status = clGetImageInfo(
-          *(params->dstImage), CL_IMAGE_ELEMENT_SIZE,
-          sizeof(size_t), &element_size, nullptr);
+      cl_int status = clGetImageInfo(*(params->dstImage), CL_IMAGE_ELEMENT_SIZE, sizeof(size_t), &element_size, nullptr);
       PTI_ASSERT(status == CL_SUCCESS);
 
-      size_t bytes_transferred =
-        region[0] * region[1] * region[2] * element_size;
-      OnExitEnqueueTransfer(
-          "clEnqueueCopyBufferToImage", bytes_transferred,
-          *(params->event), data, collector);
+      size_t bytes_transferred = region[0] * region[1] * region[2] * element_size;
+      OnExitEnqueueTransfer("clEnqueueCopyBufferToImage", bytes_transferred, *(params->event), data, collector, kid);
     }
   }
 
@@ -1641,14 +1506,11 @@ class ClCollector {
     collector->ProcessKernelInstances();
   }
 
-  static void OnEnterReleaseEvent(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnEnterReleaseEvent(cl_callback_data* data, ClCollector* collector) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    const cl_params_clReleaseEvent* params =
-      reinterpret_cast<const cl_params_clReleaseEvent*>(
-          data->functionParams);
+    const cl_params_clReleaseEvent* params = reinterpret_cast<const cl_params_clReleaseEvent*>(data->functionParams);
     PTI_ASSERT(params != nullptr);
 
     if (*(params->event) != nullptr) {
@@ -1656,17 +1518,13 @@ class ClCollector {
     }
   }
 
-  static void OnExitWaitForEvents(
-      cl_callback_data* data, ClCollector* collector) {
+  static void OnExitWaitForEvents(cl_callback_data* data, ClCollector* collector) {
     PTI_ASSERT(data != nullptr);
     PTI_ASSERT(collector != nullptr);
 
-    cl_int* return_value = reinterpret_cast<cl_int*>(
-        data->functionReturnValue);
+    cl_int* return_value = reinterpret_cast<cl_int*>(data->functionReturnValue);
     if (*return_value == CL_SUCCESS) {
-      const cl_params_clWaitForEvents* params =
-        reinterpret_cast<const cl_params_clWaitForEvents*>(
-            data->functionParams);
+      const cl_params_clWaitForEvents* params = reinterpret_cast<const cl_params_clWaitForEvents*>(data->functionParams);
       PTI_ASSERT(params != nullptr);
 
       const cl_event* event_list = *(params->eventList);
@@ -1678,7 +1536,7 @@ class ClCollector {
     }
   }
 
-  static void KernelTracingCallBack(cl_function_id function, cl_callback_data* callback_data, void* user_data) {
+  static void KernelTracingCallBack(cl_function_id function, cl_callback_data* callback_data, void* user_data, uint64_t *kid) {
     if (TraceGuard::Inactive()) return;
 
     TraceGuard guard;
@@ -1698,110 +1556,93 @@ class ClCollector {
       }
     } else if (function == CL_FUNCTION_clEnqueueNDRangeKernel) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(callback_data, collector);
       } else {
-        OnExitEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(
-            callback_data, collector);
+        OnExitEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueTask) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueTask>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueTask>(callback_data, collector);
       } else {
-        OnExitEnqueueKernel<cl_params_clEnqueueTask>(
-            callback_data, collector);
+        OnExitEnqueueKernel<cl_params_clEnqueueTask>(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueReadBuffer) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueReadBuffer>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueReadBuffer>(callback_data, collector);
       } else {
-        OnExitEnqueueReadBuffer(callback_data, collector);
+        OnExitEnqueueReadBuffer(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueWriteBuffer) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueWriteBuffer>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueWriteBuffer>(callback_data, collector);
       } else {
-        OnExitEnqueueWriteBuffer(callback_data, collector);
+        OnExitEnqueueWriteBuffer(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueCopyBuffer) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBuffer>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBuffer>(callback_data, collector);
       } else {
-        OnExitEnqueueCopyBuffer(callback_data, collector);
+        OnExitEnqueueCopyBuffer(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueFillBuffer) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueFillBuffer>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueFillBuffer>(callback_data, collector);
       } else {
-        OnExitEnqueueFillBuffer(callback_data, collector);
+        OnExitEnqueueFillBuffer(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueReadBufferRect) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueReadBufferRect>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueReadBufferRect>(callback_data, collector);
       } else {
-        OnExitEnqueueReadBufferRect(callback_data, collector);
+        OnExitEnqueueReadBufferRect(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueWriteBufferRect) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueWriteBufferRect>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueWriteBufferRect>(callback_data, collector);
       } else {
-        OnExitEnqueueWriteBufferRect(callback_data, collector);
+        OnExitEnqueueWriteBufferRect(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueCopyBuffer) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBuffer>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBuffer>(callback_data, collector);
       } else {
-        OnExitEnqueueCopyBuffer(callback_data, collector);
+        OnExitEnqueueCopyBuffer(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueReadImage) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueReadImage>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueReadImage>(callback_data, collector);
       } else {
-        OnExitEnqueueReadImage(callback_data, collector);
+        OnExitEnqueueReadImage(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueWriteImage) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueWriteImage>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueWriteImage>(callback_data, collector);
       } else {
-        OnExitEnqueueWriteImage(callback_data, collector);
+        OnExitEnqueueWriteImage(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueCopyImage) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueCopyImage>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyImage>(callback_data, collector);
       } else {
-        OnExitEnqueueCopyImage(callback_data, collector);
+        OnExitEnqueueCopyImage(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueFillImage) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueFillImage>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueFillImage>(callback_data, collector);
       } else {
-        OnExitEnqueueFillImage(callback_data, collector);
+        OnExitEnqueueFillImage(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueCopyImageToBuffer) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueCopyImageToBuffer>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyImageToBuffer>(callback_data, collector);
       } else {
-        OnExitEnqueueCopyImageToBuffer(callback_data, collector);
+        OnExitEnqueueCopyImageToBuffer(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clEnqueueCopyBufferToImage) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBufferToImage>(
-            callback_data, collector);
+        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBufferToImage>(callback_data, collector);
       } else {
-        OnExitEnqueueCopyBufferToImage(callback_data, collector);
+        OnExitEnqueueCopyBufferToImage(callback_data, collector, kid);
       }
     } else if (function == CL_FUNCTION_clFinish) {
       if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
@@ -1822,7 +1663,7 @@ class ClCollector {
     }
   }
 
-  static void TracingCallBack( cl_function_id function, cl_callback_data* callback_data, void* user_data) {
+  static void TracingCallBack(cl_function_id function, cl_callback_data* callback_data, void* user_data) {
     if (TraceGuard::Inactive()) return;
 
     ClCollector* collector = reinterpret_cast<ClCollector*>(user_data);
@@ -1836,13 +1677,13 @@ class ClCollector {
       end_time = collector->GetTimestamp();
     }
       
+    uint64_t kid = KERNEL_INSTANCE_ID_INVALID;
     if (collector->options_.kernel_tracing && collector->kernel_tracing_points_enabled[function]) {
-      KernelTracingCallBack(function, callback_data, user_data);
+      KernelTracingCallBack(function, callback_data, user_data, &kid);
     }
 
     TraceGuard guard;
     if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-      PTI_ASSERT(collector->correlator_ != nullptr);
       if (!UniController::IsCollectionEnabled()) {
         //*reinterpret_cast<uint64_t*>(callback_data->correlationData) = 0;
         return;
@@ -1871,26 +1712,24 @@ class ClCollector {
         callback_data->functionName, end_time - start_time);
 
       if (collector->options_.call_logging) {
-        OnExitFunction(
-            function, callback_data, start_time, end_time, collector);
+        OnExitFunction(function, callback_data, start_time, end_time, collector);
       }
 
       if (collector->fcallback_ != nullptr) {
         FLOW_DIR flow_dir = FLOW_NUL;
-        std::vector<uint64_t> kernel_id;
+        std::vector<uint64_t> kids;
         if (function == CL_FUNCTION_clEnqueueNDRangeKernel ||
             function == CL_FUNCTION_clWaitForEvents ||
             function == CL_FUNCTION_clEnqueueReadBuffer ||
             function == CL_FUNCTION_clEnqueueWriteBuffer) {
           flow_dir = (function == CL_FUNCTION_clWaitForEvents ? FLOW_D2H : FLOW_H2D);
-          PTI_ASSERT(collector->correlator_ != nullptr);
-          kernel_id.push_back(collector->correlator_->GetKernelId());
+	  if (kid != KERNEL_INSTANCE_ID_INVALID) {
+	    kids.push_back(kid);
+	  }
         }
 
         API_TRACING_ID api_id = (API_TRACING_ID)(OCLStartTracingId + function);
-        collector->fcallback_(
-            (kernel_id.empty() ? nullptr: &kernel_id), flow_dir,
-            api_id, start_time, end_time);
+        collector->fcallback_((kids.empty() ? nullptr: &kids), flow_dir, api_id, start_time, end_time);
       }
     }
 
@@ -1909,8 +1748,7 @@ class ClCollector {
     if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
       if (function == CL_FUNCTION_clGetExtensionFunctionAddress) {
         const cl_params_clGetExtensionFunctionAddress* params =
-          reinterpret_cast<const cl_params_clGetExtensionFunctionAddress*>(
-              callback_data->functionParams);
+          reinterpret_cast<const cl_params_clGetExtensionFunctionAddress*>(callback_data->functionParams);
         SET_EXTENSION_FUNCTION(clHostMemAllocINTEL);
         SET_EXTENSION_FUNCTION(clDeviceMemAllocINTEL);
         SET_EXTENSION_FUNCTION(clSharedMemAllocINTEL);
@@ -1920,12 +1758,9 @@ class ClCollector {
         SET_EXTENSION_FUNCTION(clEnqueueMemcpyINTEL);
         SET_EXTENSION_FUNCTION(clGetDeviceGlobalVariablePointerINTEL);
         SET_EXTENSION_FUNCTION(clGetKernelSuggestedLocalWorkSizeINTEL);
-      } else if (function ==
-                 CL_FUNCTION_clGetExtensionFunctionAddressForPlatform) {
+      } else if (function == CL_FUNCTION_clGetExtensionFunctionAddressForPlatform) {
         const cl_params_clGetExtensionFunctionAddressForPlatform* params =
-          reinterpret_cast<
-              const cl_params_clGetExtensionFunctionAddressForPlatform*>(
-                  callback_data->functionParams);
+          reinterpret_cast<const cl_params_clGetExtensionFunctionAddressForPlatform*>(callback_data->functionParams);
         SET_EXTENSION_FUNCTION(clHostMemAllocINTEL);
         SET_EXTENSION_FUNCTION(clDeviceMemAllocINTEL);
         SET_EXTENSION_FUNCTION(clSharedMemAllocINTEL);
@@ -1962,7 +1797,7 @@ class ClCollector {
 
   // Data
   ClApiTracer* tracer_ = nullptr;
-  Correlator* correlator_ = nullptr;
+  Logger *logger_ = nullptr;
 
   CollectorOptions options_;
 

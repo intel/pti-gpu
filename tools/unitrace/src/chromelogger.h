@@ -1120,9 +1120,7 @@ class ChromeLogger {
     bool filter_in_ = false;  // --filter-in suggests only include/collect these kernel names in output (filter-out is reverse of this and excludes/drops these)
     std::set<std::string> filter_strings_set_;
     std::string chrome_trace_file_name_;
-    Correlator* correlator_ = nullptr;
-    ChromeLogger(const TraceOptions& options, Correlator* correlator, const char* filename) : options_(options) {
-      correlator_ = correlator;
+    ChromeLogger(const TraceOptions& options, const char* filename) : options_(options) {
       chrome_trace_file_name_ = TraceOptions::GetChromeTraceFileName(filename);
       if (this->CheckOption(TRACE_OUTPUT_DIR_PATH)) {
           std::string dir = utils::GetEnv("UNITRACE_TraceOutputDir");
@@ -1302,8 +1300,8 @@ class ChromeLogger {
       }
     };
 
-    static ChromeLogger* Create(const TraceOptions& options, Correlator* correlator, const char* filename) {
-      ChromeLogger *chrome_logger  = new ChromeLogger(options, correlator, filename);
+    static ChromeLogger* Create(const TraceOptions& options, const char* filename) {
+      ChromeLogger *chrome_logger  = new ChromeLogger(options, filename);
       UniMemory::ExitIfOutOfMemory((void *)(chrome_logger));
       return chrome_logger;
     };

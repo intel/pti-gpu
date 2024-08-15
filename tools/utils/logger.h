@@ -23,7 +23,10 @@ class Logger {
     }
     lazy_flush_ = lazy_flush;
     lock_free_ = lock_free;
+    log_file_name_ = filename;
   }
+
+  Logger(const Logger& that) = delete;
 
   ~Logger() {
     if (file_.is_open()) {
@@ -69,7 +72,12 @@ class Logger {
     }
   }
 
+  std::string GetLogFileName() const {
+    return log_file_name_;
+  }
+
  private:
+  std::string log_file_name_;
   std::mutex lock_;
   std::ofstream file_;
   bool lazy_flush_;

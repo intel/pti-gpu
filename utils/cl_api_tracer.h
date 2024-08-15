@@ -29,6 +29,8 @@ class ClApiTracer {
     }
   }
 
+  ClApiTracer(const ClApiTracer& that) = delete;
+
   ~ClApiTracer() {
     if (handle_ != nullptr) {
       cl_int status = CL_SUCCESS;

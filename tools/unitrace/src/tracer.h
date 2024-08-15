@@ -18,6 +18,7 @@
 #include "cl_ext_collector.h"
 #include "cl_ext_callbacks.h"
 #include "trace_options.h"
+#include "logger.h"
 #include "utils.h"
 #include "ze_collector.h"
 #include "cl_collector.h"
@@ -162,7 +163,7 @@ class UniTracer {
       if (tracer->CheckOption(TRACE_OPENCL)) {
         if (cl_cpu_device != nullptr) {
           cl_cpu_collector = ClCollector::Create(
-              cl_cpu_device, &tracer->correlator_,
+              cl_cpu_device, &tracer->logger_,
               collector_options, cl_kcallback, cl_fcallback, cl_extfcallback, tracer);
           if (cl_cpu_collector == nullptr) {
             std::cerr <<
@@ -174,7 +175,7 @@ class UniTracer {
   
         if (cl_gpu_device != nullptr) {
           cl_gpu_collector = ClCollector::Create(
-              cl_gpu_device, &tracer->correlator_,
+              cl_gpu_device, &tracer->logger_,
               collector_options, cl_kcallback, cl_fcallback, cl_extfcallback, tracer);
           if (cl_gpu_collector == nullptr) {
             std::cerr <<
@@ -196,7 +197,7 @@ class UniTracer {
         }
       }
   
-      ze_collector = ZeCollector::Create(&tracer->correlator_, collector_options, ze_kcallback, ze_fcallback, tracer);
+      ze_collector = ZeCollector::Create(&tracer->logger_, collector_options, ze_kcallback, ze_fcallback, tracer);
       if (ze_collector == nullptr) {
         std::cerr <<
           "[WARNING] Unable to create kernel collector for L0 backend" <<
@@ -209,7 +210,7 @@ class UniTracer {
   }
 
   ~UniTracer() {
-    total_execution_time_ = correlator_.GetTimestamp();
+    total_execution_time_ = utils::GetSystemTime() - start_time_;
 
     if (ze_collector_ != nullptr) {
       ze_collector_->DisableTracing();
@@ -231,7 +232,7 @@ class UniTracer {
       // If CCL summary is not enbled summary string will be empty
       std::string summary = itt_collector->CclSummaryReport();
       if (summary.size() > 0){
-        correlator_.Log(summary);
+        logger_.Log(summary);
       }
       delete itt_collector;
     }
@@ -265,11 +266,12 @@ class UniTracer {
  private:
   UniTracer(const TraceOptions& options)
       : options_(options),
-        correlator_(options.GetLogFileName(),
-          CheckOption(TRACE_CONDITIONAL_COLLECTION)) {
+        logger_(options.GetLogFileName(),
+        CheckOption(TRACE_CONDITIONAL_COLLECTION)) {
 
+    start_time_ = utils::GetSystemTime();
     if (CheckOption(TRACE_CHROME_CALL_LOGGING) || CheckOption(TRACE_CHROME_KERNEL_LOGGING) || CheckOption(TRACE_CHROME_DEVICE_LOGGING) || CheckOption(TRACE_CHROME_SYCL_LOGGING) || CheckOption(TRACE_CHROME_ITT_LOGGING)) {
-      chrome_logger_ = ChromeLogger::Create(options, &correlator_, GetChromeTraceFileName().c_str());
+      chrome_logger_ = ChromeLogger::Create(options, GetChromeTraceFileName().c_str());
     }
 
   }
@@ -319,7 +321,7 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      correlator_.Log(str);
+      logger_.Log(str);
       collector->PrintFunctionsTable();
     }
   }
@@ -333,7 +335,7 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      correlator_.Log(str);
+      logger_.Log(str);
       collector->PrintKernelsTable();
     }
   }
@@ -347,7 +349,7 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      correlator_.Log(str);
+      logger_.Log(str);
       collector->PrintFunctionsTable();
     }
   }
@@ -361,7 +363,7 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      correlator_.Log(str);
+      logger_.Log(str);
       collector->PrintKernelsTable();
     }
   }
@@ -375,7 +377,7 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      correlator_.Log(str);
+      logger_.Log(str);
       collector->PrintSubmissionTable();
     }
   }
@@ -389,7 +391,7 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      correlator_.Log(str);
+      logger_.Log(str);
       collector->PrintSubmissionTable();
     }
   }
@@ -473,7 +475,7 @@ class UniTracer {
       }
     }
 
-    correlator_.Log(str);
+    logger_.Log(str);
 
     if (ze_collector != nullptr) {
       if (stype == "API") {
@@ -500,7 +502,7 @@ class UniTracer {
       }
     }
 
-    correlator_.Log("\n");
+    logger_.Log("\n");
   }
 
   void ReportKernelSubmission(
@@ -555,7 +557,7 @@ class UniTracer {
       }
     }
 
-    correlator_.Log(str);
+    logger_.Log(str);
 
     if (ze_collector != nullptr) {
       PrintSubmissionTable(ze_collector, "L0");
@@ -567,7 +569,7 @@ class UniTracer {
       PrintSubmissionTable(cl_gpu_collector, "CL GPU");
     }
 
-    correlator_.Log("\n");
+    logger_.Log("\n");
   }
 
   void Report() {
@@ -592,13 +594,14 @@ class UniTracer {
           cl_gpu_collector_,
           "Device");
     }
-    correlator_.Log("\n");
+    logger_.Log("\n");
   }
 
  private:
   TraceOptions options_;
 
-  Correlator correlator_;
+  Logger logger_;
+  uint64_t start_time_;
   uint64_t total_execution_time_ = 0;
 
   ZeCollector* ze_collector_ = nullptr;

@@ -11,6 +11,9 @@
 
 #include <level_zero/layers/zel_tracing_api.h>
 
+#define KERNEL_ID_INVALID		0
+#define KERNEL_INSTANCE_ID_INVALID	0
+
 class UniKernelId{
   public:
     static uint64_t GetKernelId(void) {

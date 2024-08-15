@@ -2569,9 +2569,6 @@ static void clEnqueueWriteBufferOnExit(
     stream << "<TID:" << utils::GetTid() << "> ";
   }
   stream << data->functionName;
-  if (collector->GetKernelId() > 0) {
-    stream << "(" << collector->GetKernelId() << ")";
-  }
   stream << " [" << (end - start) << " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
@@ -3636,9 +3633,6 @@ static void clEnqueueNDRangeKernelOnExit(
     stream << "<TID:" << utils::GetTid() << "> ";
   }
   stream << data->functionName;
-  if (collector->GetKernelId() > 0) {
-    stream << "(" << collector->GetKernelId() << ")";
-  }
   stream << " [" << (end - start) << " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
@@ -4033,9 +4027,6 @@ static void clEnqueueReadBufferOnExit(
     stream << "<TID:" << utils::GetTid() << "> ";
   }
   stream << data->functionName;
-  if (collector->GetKernelId() > 0) {
-    stream << "(" << collector->GetKernelId() << ")";
-  }
   stream << " [" << (end - start) << " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);

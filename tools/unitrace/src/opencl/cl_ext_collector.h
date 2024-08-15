@@ -7,9 +7,9 @@
 #ifndef PTI_TOOLS_CL_TRACER_CL_EXT_COLLECTOR_H_
 #define PTI_TOOLS_CL_TRACER_CL_EXT_COLLECTOR_H_
 
+#include <string>
 #include <CL/cl.h>
 
-#include "correlator.h"
 #include "pti_assert.h"
 
 class ClCollector;

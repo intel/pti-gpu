@@ -371,7 +371,6 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
       f.write("    " + cb + "(params, global_user_data, instance_user_data); \n")
     f.write("  }\n")
     f.write("\n")
-  f.write("  PTI_ASSERT(collector->correlator_ != nullptr);\n")
   f.write("\n")
   f.write("  if (!UniController::IsCollectionEnabled()) {\n")
   #f.write("    (((ZeInstanceData *)(*instance_user_data))->api_instance_data) = 0;\n")
@@ -645,7 +644,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
           f.write("      str += std::to_string((*(params->p" + name + "))->flags) + \"}\";\n")
           f.write("    }\n")
   f.write("    str += \"\\n\";\n")
-  f.write("    collector->correlator_->Log(str);\n")
+  f.write("    collector->logger_->Log(str);\n")
   f.write("  }\n")
   
   f.write("  uint64_t start_time_host = 0;\n")
@@ -681,7 +680,6 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
     
     f.write("\n")
 
-  f.write("  PTI_ASSERT(collector->correlator_ != nullptr);\n")
   f.write("\n")
   f.write("  if (!UniController::IsCollectionEnabled()) {\n")
   f.write("      return;\n")
@@ -791,7 +789,7 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
     f.write("    }\n")
     f.write("    free(p);\n")
 
-  f.write("    collector->correlator_->Log(str);\n")
+  f.write("    collector->logger_->Log(str);\n")
   f.write("  }\n")
   f.write("\n")
   f.write("  if (collector->fcallback_ != nullptr) {\n")
