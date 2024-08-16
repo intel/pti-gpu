@@ -1718,30 +1718,47 @@ class ZeCollector {
     ze_result_t status = ZE_RESULT_SUCCESS;
     uint32_t num_drivers = 0;
     status = zeDriverGet(&num_drivers, nullptr);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (status != ZE_RESULT_SUCCESS) {
+      std::cerr << "[ERROR] Unable to get driver" << std::endl;
+      exit(-1);
+    }
+
     if (num_drivers > 0) {
       int32_t did = 0;
       std::vector<ze_driver_handle_t> drivers(num_drivers);
       std::vector<ze_context_handle_t> contexts;
       status = zeDriverGet(&num_drivers, drivers.data());
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (status != ZE_RESULT_SUCCESS) {
+        std::cerr << "[ERROR] Unable to get driver" << std::endl;
+        exit(-1);
+      }
+
       for (auto driver : drivers) {
         ze_context_handle_t context = nullptr;
         if (options_.metric_query) {
           ze_context_desc_t cdesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC, nullptr, 0};
 
           status = zeContextCreate(driver, &cdesc, &context);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[ERROR] Unable to create context for metrics" << std::endl;
+            exit(-1);
+          }
           metric_contexts_.push_back(context);
         }
 
         uint32_t num_devices = 0;
         status = zeDeviceGet(driver, &num_devices, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[WARNING] Unable to get device" << std::endl;
+          num_devices = 0;
+        }
         if (num_devices) {
           std::vector<ze_device_handle_t> devices(num_devices);
           status = zeDeviceGet(driver, &num_devices, devices.data());
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[WARNING] Unable to get device" << std::endl;
+            devices.clear();
+          }
           for (auto device : devices) {
             ZeDevice desc;
   
@@ -1757,7 +1774,10 @@ class ZeCollector {
 
             ze_pci_ext_properties_t pci_device_properties;
             ze_result_t status = zeDevicePciGetPropertiesExt(device, &pci_device_properties);
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            if (status != ZE_RESULT_SUCCESS) {
+              std::cerr << "[WARNING] Unable to get device PCI properties" << std::endl;
+              memset(&pci_device_properties, 0, sizeof(pci_device_properties));  // dummy device properties
+            }
             desc.pci_properties_ = pci_device_properties;
 
             desc.driver_ = driver;
@@ -1765,26 +1785,39 @@ class ZeCollector {
 
             uint32_t num_sub_devices = 0;
             status = zeDeviceGetSubDevices(device, &num_sub_devices, nullptr);
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-            desc.num_subdevices_ = num_sub_devices;
+            if (status != ZE_RESULT_SUCCESS) {
+              std::cerr << "[WARNING] Unable to get sub-devices" << std::endl;
+              desc.num_subdevices_ = 0;
+            }
+            else {
+              desc.num_subdevices_ = num_sub_devices;
+            }
 
             if (options_.metric_query) {
               uint32_t num_groups = 0;
               zet_metric_group_handle_t group = nullptr;
               status = zetMetricGroupGet(device, &num_groups, nullptr);
-              PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+              if (status != ZE_RESULT_SUCCESS) {
+                std::cerr << "[ERROR] Unable to get metric group" << std::endl;
+                exit(-1);
+              }
               if (num_groups > 0) {
                 std::vector<zet_metric_group_handle_t> groups(num_groups, nullptr);
                 status = zetMetricGroupGet(device, &num_groups, groups.data());
-                PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+                if (status != ZE_RESULT_SUCCESS) {
+                  std::cerr << "[ERROR] Unable to get metric group" << std::endl;
+                  exit(-1);
+                }
 
                 for (uint32_t k = 0; k < num_groups; ++k) {
                   zet_metric_group_properties_t group_props{};
                   group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
                   status = zetMetricGroupGetProperties(groups[k], &group_props);
-                  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
+                  if (status != ZE_RESULT_SUCCESS) {
+                    std::cerr << "[ERROR] Unable to get metric group properties" << std::endl;
+                    exit(-1);
+                  }
                   
                   if ((strcmp(group_props.name, utils::GetEnv("UNITRACE_MetricGroup").c_str()) == 0) && (group_props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED)) {
                     group = groups[k];
@@ -1794,7 +1827,10 @@ class ZeCollector {
               }
 
               status = zetContextActivateMetricGroups(context, device, 1, &group);
-              PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+              if (status != ZE_RESULT_SUCCESS) {
+                std::cerr << "[ERROR] Unable to activate metric groups" << std::endl;
+                exit(-1);
+              }
               metric_activations_.insert({context, device});
 
               desc.metric_group_ = group;
@@ -1807,7 +1843,10 @@ class ZeCollector {
             uint64_t ticks;
 
             status = zeDeviceGetGlobalTimestamps(device, &host_time, &ticks);
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            if (status != ZE_RESULT_SUCCESS) {
+              std::cerr << "[ERROR] Unable to get global timestamps" << std::endl;
+              exit(-1);
+            }
 
             desc.host_time_origin_ = host_time;
 
@@ -1817,7 +1856,10 @@ class ZeCollector {
               std::vector<ze_device_handle_t> sub_devices(num_sub_devices);
 
               status = zeDeviceGetSubDevices(device, &num_sub_devices, sub_devices.data());
-              PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+              if (status != ZE_RESULT_SUCCESS) {
+                std::cerr << "[WARNING] Unable to get sub-devices" << std::endl;
+                num_sub_devices = 0;
+              }
 
               for (int j = 0; j < num_sub_devices; j++) {
                 ZeDevice sub_desc;
@@ -1835,13 +1877,19 @@ class ZeCollector {
   
                 ze_pci_ext_properties_t pci_device_properties;
                 ze_result_t status = zeDevicePciGetPropertiesExt(sub_devices[j], &pci_device_properties);
-                PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+                if (status != ZE_RESULT_SUCCESS) {
+                  std::cerr << "[WARNING] Unable to get device PCI properties" << std::endl;
+                  memset(&pci_device_properties, 0, sizeof(pci_device_properties)); // dummy device properties
+                }
                 sub_desc.pci_properties_ = pci_device_properties;
   
                 uint64_t ticks;
                 uint64_t host_time;
                 status = zeDeviceGetGlobalTimestamps(sub_devices[j], &host_time, &ticks);
-                PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+                if (status != ZE_RESULT_SUCCESS) {
+                  std::cerr << "[ERROR] Unable to get global timestamps" << std::endl;
+                  exit(-1);
+                }
 
                 sub_desc.host_time_origin_ = host_time;
   

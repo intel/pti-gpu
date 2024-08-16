@@ -582,23 +582,32 @@ class ClCollector {
     status = clGetPlatformIDs(0, nullptr, &pcount);
     
     if ((status != CL_SUCCESS) || (pcount == 0)) {
+      std::cerr << "[WARNING] Unable to get platform identifiers" << std::endl;
       return; 
     }
 
     std::vector<cl_platform_id> platforms(pcount, nullptr);
     status = clGetPlatformIDs(pcount, platforms.data(), nullptr);
-    PTI_ASSERT(status == CL_SUCCESS);
+    if (status != CL_SUCCESS) {
+      std::cerr << "[WARNING] Unable to get platform identifiers" << std::endl;
+      return;
+    }
 
     for (auto plat : platforms) {
       cl_uint dcount = 0;
 
       status = clGetDeviceIDs(plat, type, 0, nullptr, &dcount);
-      if ((status != CL_SUCCESS) || (dcount == 0)) 
+      if ((status != CL_SUCCESS) || (dcount == 0)) {
+        std::cerr << "[WARNING] Unable to get device identifiers" << std::endl;
         continue;
+      }
 
       std::vector<cl_device_id> devs(dcount, nullptr);
       status = clGetDeviceIDs(plat, type, dcount, devs.data(), nullptr);
-      PTI_ASSERT(status == CL_SUCCESS);
+      if (status != CL_SUCCESS) {
+        std::cerr << "[WARNING] Unable to get device identifiers" << std::endl;
+        continue;
+      }
 
       for (auto dev : devs) {
         ClDevice cd;
@@ -615,17 +624,22 @@ class ClCollector {
         else {
           std::vector<cl_device_id> subdevs(subcount);
           status = clCreateSubDevices(dev, props, subcount, subdevs.data(), nullptr);
-          //win_todo: For windows client PC there is not sub device hence need better handling
-          //PTI_ASSERT(status == CL_SUCCESS);
-          for (auto subdev : subdevs) {
-            ClDevice subcd;
+          if (status != CL_SUCCESS) {
+            // TODO: check on Windows
+            std::cerr << "[WARNING] Unable to create sub-devices" << std::endl;
+            subdevs.clear();
+          }
+          else {
+            for (auto subdev : subdevs) {
+              ClDevice subcd;
 
-            subcd.id_ = subdev;
-            subcd.isroot_ = false;
-            subcd.parent_ = dev;
-            subcd.subdevs_ = std::vector<cl_device_id>();
-            device_map_.insert({subdev, subcd});
-            present_cl_devices_.insert({subdev,present_cl_devices_.size()});
+              subcd.id_ = subdev;
+              subcd.isroot_ = false;
+              subcd.parent_ = dev;
+              subcd.subdevs_ = std::vector<cl_device_id>();
+              device_map_.insert({subdev, subcd});
+              present_cl_devices_.insert({subdev,present_cl_devices_.size()});
+            }
           }
           cd.subdevs_ = std::move(subdevs);
         }
