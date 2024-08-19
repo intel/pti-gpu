@@ -31,6 +31,7 @@ bool kernel_has_task_begin0_record = false;
 bool kernel_has_enqk_begin0_record = false;
 bool demangled_kernel_name = false;
 bool kernel_launch_func_name = false;
+bool sycl_has_all_records = false;
 uint64_t memory_bytes_copied = 0;
 uint64_t memory_view_record_count = 0;
 uint64_t kernel_view_record_count = 0;
@@ -173,6 +174,7 @@ class MainFixtureTest : public ::testing::Test {
     perf_time = 0;
     last_kernel_timestamp = 0;
     user_real_timestamp = 0;
+    sycl_has_all_records = false;
   };
 
   void TearDown() override {
@@ -280,6 +282,8 @@ class MainFixtureTest : public ::testing::Test {
           std::string function_name = reinterpret_cast<pti_view_record_sycl_runtime*>(ptr)->_name;
           if (function_name.find("piEnqueueKernelLaunch") != std::string::npos) {
             kernel_launch_func_name = true;
+          } else if (function_name.find("piEventsWait") != std::string::npos) {
+            sycl_has_all_records = true;
           }
           break;
         }
@@ -511,9 +515,74 @@ TEST_F(MainFixtureTest, RequestedAndCompletedBuffers) {
 }
 
 TEST_F(MainFixtureTest, SyclRunTimeFunctionCheck) {
+  int32_t env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_EQ(kernel_launch_func_name, true);
+  if (env_value == 1) {
+    EXPECT_EQ(sycl_has_all_records, true);  // user has requested all records in buffer via env var.
+  } else {
+    EXPECT_EQ(sycl_has_all_records, false);  // default is reduced sycl records in buffer.
+  }
+}
+
+// Explicitly ask for all sycl records
+TEST_F(MainFixtureTest, SyclRunTimeHasAllRecords) {
+  int32_t env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
+  if (env_value == 1) {
+    EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+    RunGemm();
+    EXPECT_EQ(sycl_has_all_records, true);
+  } else {
+    GTEST_SKIP();
+  }
+}
+
+// Default is reduced sycl records
+TEST_F(MainFixtureTest, SyclRunTimeTraceEnvNotSet) {
+  int32_t env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
+  std::cout << "env_value: " << env_value << "\n";
+  if (env_value < 0) {
+    EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+    RunGemm();
+    EXPECT_EQ(sycl_has_all_records, false);
+  } else {
+    GTEST_SKIP();
+  }
+}
+
+TEST_F(MainFixtureTest, SyclRunTimeTraceEnvExplicitlySetON) {
+  int32_t env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
+  if (env_value == 1) {
+    EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+    RunGemm();
+    EXPECT_EQ(sycl_has_all_records, true);
+  } else {
+    GTEST_SKIP();
+  }
+}
+
+TEST_F(MainFixtureTest, SyclRunTimeTraceEnvExplicitlySetOne) {
+  int32_t env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
+  if (env_value == 1) {
+    EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+    RunGemm();
+    EXPECT_EQ(sycl_has_all_records, true);
+  } else {
+    GTEST_SKIP();
+  }
+}
+
+TEST_F(MainFixtureTest, SyclRunTimeTraceEnvExplicitlySetOFF) {
+  int32_t env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
+  std::cout << "env_value: " << env_value << "\n";
+  if (env_value == 0) {
+    EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+    RunGemm();
+    EXPECT_EQ(sycl_has_all_records, false);
+  } else {
+    GTEST_SKIP();
+  }
 }
 
 TEST_F(MainFixtureTest, DeMangledKernelNameCheck) {
@@ -561,6 +630,7 @@ TEST_F(MainFixtureTest, ZeroDiffICLonOroff) {
 // Tests for external_corr_id usage of kind stack --- use only the top/last for
 // the kind.
 TEST_F(MainFixtureTest, OnlyLastIdExternalViewRecords) {
+  if (utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS") != 1) GTEST_SKIP();
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_GT(last_id_records, 0ULL);
@@ -637,8 +707,8 @@ TEST_F(MainFixtureTest, ValidateRealTimestampToUser) {
   ASSERT_GT(user_real_timestamp, last_kernel_timestamp);
 }
 
-// set user ts function in clockmonotonic raw domain -- test output is in increasing timestamps in
-// same domain.
+// set user ts function in clockmonotonic raw domain -- test output is in increasing
+// timestamps in same domain.
 TEST_F(MainFixtureTest, ValidateRealTimestampFromUser) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewSetTimestampCallback(utils::GetTime), pti_result::PTI_SUCCESS);
@@ -675,8 +745,9 @@ TEST_F(MainFixtureTest, ValidateSwitchedTSCallbackFromUser) {
   after_run = utils::GetTime();
 
   ASSERT_GT(before_switch_last_kernel_ts,
-            last_kernel_timestamp);             // real clock raw value > than monotonic raw
-  ASSERT_GT(after_run, last_kernel_timestamp);  // in same domain so monotonically increasing
+            last_kernel_timestamp);  // real clock raw value > than monotonic raw
+  ASSERT_GT(after_run,
+            last_kernel_timestamp);  // in same domain so monotonically increasing
 }
 
 TEST_F(MainFixtureTest, ValidateNullptrTSCallbackFromUser) {

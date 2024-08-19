@@ -203,6 +203,52 @@ inline void SetEnv(const char* name, const char* value) {
   PTI_ASSERT(status == 0);
 }
 
+// Returns:  -1 -- is env not set; 1 if set to 1; 0 otherwise.
+inline int32_t IsSetEnv(const char* name) {
+  PTI_ASSERT(name != nullptr);
+  int32_t env_value = -1;
+#if defined(_WIN32)
+  char* value = nullptr;
+  errno_t status = _dupenv_s(&value, nullptr, name);
+  PTI_ASSERT(status == 0);
+  if (value == nullptr) {
+    return env_value;
+  } else if (std::strcmp(value, "ON") == 0) {
+    return 1;
+  } else if (std::strcmp(value, "OFF") == 0) {
+    return 0;
+  }
+  try {
+    env_value = std::stoi(value);
+  } catch (std::invalid_argument const& /*ex*/) {
+    env_value = 1;  // fallback to default
+  } catch (std::out_of_range const& /*ex*/) {
+    env_value = 1;  // fallback to default
+  }
+  free(value);
+  if (env_value == 1) return 1;
+  return 0;
+#else
+  const char* value = getenv(name);
+  if (value == nullptr) {
+    return env_value;
+  } else if (std::strcmp(value, "ON") == 0) {
+    return 1;
+  } else if (std::strcmp(value, "OFF") == 0) {
+    return 0;
+  }
+  try {
+    env_value = std::stoi(value);
+  } catch (std::invalid_argument const& /*ex*/) {
+    env_value = 1;  // fallback to default
+  } catch (std::out_of_range const& /*ex*/) {
+    env_value = 1;  // fallback to default
+  }
+  if (env_value == 1) return 1;
+  return 0;
+#endif
+}
+
 inline std::string GetEnv(const char* name) {
   PTI_ASSERT(name != nullptr);
 #if defined(_WIN32)

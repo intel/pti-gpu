@@ -16,6 +16,7 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <set>
 #include <string_view>
 #ifdef PTI_DEBUG
 #include <map>
@@ -86,6 +87,20 @@ inline constexpr static std::array<const char* const, 13> kSTraceType = {
     "FunctionWithArgsEnd", "Metadata",    "WaitBegin", "WaitEnd",    "FunctionBegin",
     "FunctionEnd",         "QueueCreate", "Other"};
 
+inline static const std::set<std::string> kCoreApis = {"piextUSMEnqueueFill",
+                                                       "piextUSMEnqueueFill2D",
+                                                       "piextUSMEnqueueMemcpy",
+                                                       "piextUSMEnqueueMemset",
+                                                       "piextUSMEnqueueMemcpy2D",
+                                                       "piextUSMEnqueueMemset2D",
+                                                       "piEnqueueKernelLaunch",
+                                                       "piextEnqueueKernelLaunchCustom",
+                                                       "piextEnqueueCooperativeKernelLaunch",
+                                                       "piEnqueueMemBufferRead",
+                                                       "piEnqueueMemBufferWrite",
+                                                       "piextUSMHostAlloc",
+                                                       "piextUSMDeviceAlloc"};
+
 inline const char* GetTracePointTypeString(xpti::trace_point_type_t trace_type) {
   switch (trace_type) {
     case xpti::trace_point_type_t::task_begin:
@@ -123,6 +138,29 @@ inline std::string Truncate(const std::string& name) {
     return name.substr(pos + 1);
   }
   return name;
+}
+
+inline bool InKernelCoreApis(const char* function_name) {
+  if ((strcmp(function_name, "piEnqueueKernelLaunch") == 0) ||
+      (strcmp(function_name, "piextEnqueueCooperativeKernelLaunch") == 0) ||
+      (strcmp(function_name, "piextEnqueueKernelLaunchCustom") == 0)) {
+    return true;
+  }
+  return false;
+}
+
+inline bool InMemoryCoreApis(const char* function_name) {
+  if ((strcmp(function_name, "piextUSMEnqueueMemcpy") == 0) ||
+      (strcmp(function_name, "piEnqueueMemBufferRead") == 0) ||
+      (strcmp(function_name, "piEnqueueMemBufferWrite") == 0) ||
+      (strcmp(function_name, "piextUSMEnqueueMemset") == 0) ||
+      (strcmp(function_name, "piextUSMEnqueueMemset2d") == 0) ||
+      (strcmp(function_name, "piextUSMEnqueueMemFill") == 0) ||
+      (strcmp(function_name, "piextUSMEnqueueMemFill2d") == 0) ||
+      (strcmp(function_name, "piextUSMEnqueueMemcpy2d") == 0)) {
+    return true;
+  }
+  return false;
 }
 
 class SyclCollector {
@@ -218,11 +256,10 @@ class SyclCollector {
           }
           current_func_task_info.func_pid = pid;
           current_func_task_info.func_tid = tid;
-          if (strcmp(function_name, "piEnqueueKernelLaunch") == 0) {
+          if (InKernelCoreApis(function_name)) {
             sycl_data_kview.sycl_enqk_begin_time_ = Time;
           }
-          if ((strcmp(function_name, "piextUSMEnqueueMemcpy") == 0) ||
-              (strcmp(function_name, "piextUSMEnqueueMemcpy2d") == 0)) {
+          if (InMemoryCoreApis(function_name)) {
             sycl_data_mview.sycl_task_begin_time_ = Time;
           }
           SyclCollector::Instance().sycl_runtime_rec_.pid_ = pid;
@@ -242,15 +279,12 @@ class SyclCollector {
                        current_func_task_info.func_name.data(), current_func_task_info.func_pid,
                        current_func_task_info.func_tid);
           SyclCollector::Instance().sycl_runtime_rec_.cid_ = sycl_data_kview.cid_;
-          if (strcmp(function_name, "piEnqueueKernelLaunch") == 0) {
+          if (InKernelCoreApis(function_name)) {
             SyclCollector::Instance().sycl_runtime_rec_.kid_ = sycl_data_kview.kid_;
             SyclCollector::Instance().sycl_runtime_rec_.sycl_queue_id_ =
                 sycl_data_kview.sycl_queue_id_;
           }
-          if ((strcmp(function_name, "piextUSMEnqueueMemcpy") == 0) ||
-              (strcmp(function_name, "piextUSMEnqueueMemcpy2d") == 0) ||
-              (strcmp(function_name, "piEnqueueMemBufferRead") == 0) ||
-              (strcmp(function_name, "piEnqueueMemBufferWrite") == 0)) {
+          if (InMemoryCoreApis(function_name)) {
             SyclCollector::Instance().sycl_runtime_rec_.kid_ = sycl_data_mview.kid_;
             SyclCollector::Instance().sycl_runtime_rec_.tid_ = sycl_data_mview.tid_;
             SyclCollector::Instance().sycl_runtime_rec_.sycl_queue_id_ =
@@ -258,9 +292,13 @@ class SyclCollector {
           }
           SyclCollector::Instance().sycl_runtime_rec_.end_time_ = Time;
           if (SyclCollector::Instance().acallback_ != nullptr) {
-            if (SyclCollector::Instance().enabled_ && !framework_finalized) {
-              (SyclCollector::Instance().acallback_.load())(
-                  nullptr, SyclCollector::Instance().sycl_runtime_rec_);
+            // Trace all only if explicitly requested.
+            const bool trace_all = (SyclCollector::Instance().trace_all_env_value == 1);
+            if (trace_all || kCoreApis.find(function_name) != kCoreApis.end()) {
+              if (SyclCollector::Instance().enabled_ && !framework_finalized) {
+                (SyclCollector::Instance().acallback_.load())(
+                    nullptr, SyclCollector::Instance().sycl_runtime_rec_);
+              }
             }
             SyclCollector::Instance().sycl_runtime_rec_.kid_ = 0;
             sycl_data_kview.kid_ = 0;
@@ -374,6 +412,7 @@ class SyclCollector {
   SyclCollector(OnSyclRuntimeViewCallback buffer_callback)
       : acallback_(buffer_callback), xptiGetStashedKV(GetStashedFuncPtrFromSharedObject()){};
 
+  int32_t trace_all_env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
   inline static thread_local ZeKernelCommandExecutionRecord sycl_runtime_rec_;
   std::atomic<OnSyclRuntimeViewCallback> acallback_ = nullptr;
   bool sycl_pi_graph_created_ = false;

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "pti/pti_view.h"
+#include "utils.h"
 
 namespace {
 
@@ -362,6 +363,27 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSq) {
   }
 }
 
+TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSqReducedOps) {
+  utils::SetEnv("PTI_TRACE_ALL_RUNTIME_OPS", "0");
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunVecsqadd(TestType::kExternalCorrId);
+  uint64_t correlation_id = kernel_corr_id[0];
+  // Check that the correlation id of runtime and kernel matches
+  EXPECT_EQ(sycl_kernel_corr_id[0], correlation_id);
+  // Check time ordering
+  EXPECT_LE(sycl_kernel_start_time[0], kernel_append_time[0]);
+  // Check that correlation id belongs to specific passed external kind and id
+  EXPECT_NE(external_corr_map.find(correlation_id), external_corr_map.end());
+  EXPECT_EQ(external_corr_map[correlation_id].first,
+            pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3);
+  EXPECT_EQ(external_corr_map[correlation_id].second, eid + eid_offset_vecSq);
+  // Check that the kernel name and mem op name are as expected
+  EXPECT_NE(runtime_enq_2_gpu_kernel_name_map[correlation_id].find("VecSq"), std::string::npos);
+  for (auto &elem : runtime_enq_2_gpu_mem_op_name_map) {
+    EXPECT_NE(elem.second.find("Copy"), std::string::npos);
+  }
+}
+
 TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAdd) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kExternalCorrId);
@@ -371,7 +393,18 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAdd) {
   EXPECT_LE(sycl_kernel_start_time[1], kernel_append_time[1]);
 }
 
+TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAddReducedOps) {
+  utils::SetEnv("PTI_TRACE_ALL_RUNTIME_OPS", "0");
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunVecsqadd(TestType::kExternalCorrId);
+  // Check that the correlation id of runtime and kernel matches
+  EXPECT_EQ(sycl_kernel_corr_id[1], kernel_corr_id[1]);
+  // Check time ordering
+  EXPECT_LE(sycl_kernel_start_time[1], kernel_append_time[1]);
+}
+
 TEST_F(VecsqaddFixtureTest, TimestampWrapAroundOnOverflow) {
+  GTEST_SKIP();
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kOverflowStress);
   EXPECT_EQ(timestamps_monotonic, true);

@@ -121,6 +121,21 @@ if(HAVE_SYCL)
   gtest_discover_tests(
     dpcgemm_suite
     DISCOVERY_TIMEOUT 60
+    TEST_PREFIX "RuntimeOpsUnset"
+    PROPERTIES LABELS "unit")
+
+  gtest_discover_tests(
+    dpcgemm_suite
+    DISCOVERY_TIMEOUT 60
+    TEST_PREFIX "RuntimeOpsSetOff"
+    PROPERTIES ENVIRONMENT PTI_TRACE_ALL_RUNTIME_OPS=0
+    PROPERTIES LABELS "unit")
+
+  gtest_discover_tests(
+    dpcgemm_suite
+    DISCOVERY_TIMEOUT 60
+    TEST_PREFIX "RuntimeOpsSetOn"
+    PROPERTIES ENVIRONMENT PTI_TRACE_ALL_RUNTIME_OPS=1
     PROPERTIES LABELS "unit")
 
   gtest_discover_tests(
