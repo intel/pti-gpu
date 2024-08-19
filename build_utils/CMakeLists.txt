@@ -636,7 +636,10 @@ macro(FindL0Library TARGET)
       NAMES ze_loader
       PATHS ${CMAKE_LIBRARY_PATH})
     if(NOT L0_LIB_PATH)
-      foreach(VALUE IN ITEMS $ENV{PATH})
+      # cmake uses '\' as escape sequence hence paths ending with '\' gets merged to next path
+      #  which gives incorrect result. Creating a copy into a new variable eliminates the issue.
+      set(PATH_LIST $ENV{PATH})
+      foreach(VALUE ${PATH_LIST})
         if(VALUE MATCHES "[S|s]ystem32*$")
           set(WIN_SYS_PATH ${VALUE})
           break()
