@@ -1284,12 +1284,7 @@ class ZeCollector {
       std::string(std::max(int(kTimeLength - sizeof("Average (ns)") + 1), 0), ' ') + "Average (ns), " +
       std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') + "Min (ns), " +
       std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') + "Max (ns)\n";
-#ifdef _WIN32
-      // Win_Todo : ostream is failing for larger buffer
-      std::cout << str;
-#else /* _WIN32 */
       logger_->Log(str);
-#endif /* _WIN32 */
       int i = 0;
       for (auto& it : sorted_list) {
         uint64_t call_count = it.second.call_count_;
@@ -1308,12 +1303,7 @@ class ZeCollector {
         std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
         std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
         std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
-#ifdef _WIN32
-        //Win_Todo: ofstream is failing for larger buffer size hence need special handling
-        std::cout << str;
-#else /* _WIN32 */
-        logger_->Log(str);
-#endif /* _WIN32 */
+        logger_->Log(str);  
         i++;
       }
   
@@ -1483,12 +1473,7 @@ class ZeCollector {
              "Average (ns), " + std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') +
              "Min (ns), " + std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') +
              "Max (ns)\n";
-#ifdef _WIN32
-      // Win_Todo: ostream is failing on Windows hence need a better handling
-      std::cout << str;
-#else /* _WIN32 */
       logger_->Log(str);
-#endif /* _WIN32 */
       for (auto& stat : sorted_list) {
         const std::string function = get_symbol(API_TRACING_ID(stat.first));
         uint64_t time = stat.second.total_time_;
@@ -1505,12 +1490,8 @@ class ZeCollector {
               std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
               std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
               std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
-#ifdef _WIN32
-        // Win_Todo: ostream is failing on Windows hence need a better handling
-        std::cout << str;
-#else /* _WIN32 */
         logger_->Log(str);
-#endif /* _WIN32 */
+  
       }
     }
     global_host_time_stats_mutex_.unlock();
