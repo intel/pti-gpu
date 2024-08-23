@@ -140,7 +140,26 @@ struct PtiViewRecordHandler {
       collector_ =
           ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback, nullptr);
       overhead::SetOverheadCallback(OverheadCollectionCallback);
+      // Get timevalue in nanoseconds for frequency of sync between clock sources
+      // (clock_monotonic_raw and by default clock_realtime)
+      //   Default is 1millisecond --- we allow any value closely bounded by 1second to
+      //   1microsecond.
+      std::string env_string = utils::GetEnv("PTI_CONV_CLOCK_SYNC_TIME_NS");
+      if (!env_string.empty()) {
+        try {
+          int64_t env_value = std::stoi(env_string);
+          if (env_value >= NSEC_IN_USEC &&
+              env_value <= NSEC_IN_SEC)     // are we within 1micro to 1sec bounds?
+            sync_clocks_every = env_value;  // reset it.
+
+        } catch (std::invalid_argument const& /*ex*/) {
+          sync_clocks_every = kDefaultSyncTime;  // default conversion sync time -- 1 ms.
+        } catch (std::out_of_range const& /*ex*/) {
+          sync_clocks_every = kDefaultSyncTime;  // default conversion sync time -- 1 ms.
+        }
+      }
       timestamp_of_last_ts_shift_ = utils::GetTime();  // CLOCK_MONOTONIC_RAW or equivalent
+      SPDLOG_INFO("\tClock Sync time (ns) set at: {}", sync_clocks_every);
       ts_shift_ = utils::ConversionFactorMonotonicRawToUnknownClock(user_provided_ts_func_ptr_);
     }
   }
@@ -449,9 +468,8 @@ struct PtiViewRecordHandler {
   inline int64_t GetTimeShift() {
     const std::lock_guard<std::mutex> lock(timestamp_api_mtx_);
 
-    uint64_t now = utils::GetTime();       // CLOCK_MONOTONIC_RAW or equivalent
-    constexpr auto kEpsilon = 1000000000;  // 1 second.
-    if ((now - timestamp_of_last_ts_shift_) > kEpsilon) {
+    uint64_t now = utils::GetTime();  // CLOCK_MONOTONIC_RAW or equivalent
+    if ((now - timestamp_of_last_ts_shift_) > sync_clocks_every) {
       timestamp_of_last_ts_shift_ = utils::GetTime();  // CLOCK_MONOTONIC_RAW or equivalent
       ts_shift_ = utils::ConversionFactorMonotonicRawToUnknownClock(user_provided_ts_func_ptr_);
     }
@@ -508,6 +526,10 @@ struct PtiViewRecordHandler {
   int64_t ts_shift_ = 0;  // conversion factor for switching from default clock to user provided
                           // one(defaults to monotonic raw)
   uint64_t timestamp_of_last_ts_shift_ = 0;  // every 1 second we recalculate time_shift_
+  inline static constexpr auto kDefaultSyncTime = 1000000ULL;
+  uint64_t sync_clocks_every =
+      kDefaultSyncTime;  // time in nanoseconds, sync every millisecond by default --- this can be
+                         // overridden by the env variable PTI_CONV_CLOCK_SYNC_TIME_NS.
 };
 
 // Required to access buffer from ze_collector callbacks
