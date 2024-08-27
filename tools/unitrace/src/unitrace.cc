@@ -10,29 +10,28 @@
 #include <csignal>
 #include <sys/types.h>
 
-#ifdef __unix__
+#if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <dlfcn.h>
-#endif
+#endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
 #include <stdlib.h>
-
 #include "ze_metrics.h"
 #include "utils.h"
 #include "version.h"
 #include "unitrace_commit_hash.h"
 
-#ifdef __unix__
-  #define LIB_UNITRACE_TOOL_NAME	"libunitrace_tool.so"
-#else
-  #define LIB_UNITRACE_TOOL_NAME	"unitrace_tool.dll"
-#endif
+#if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
+#define LIB_UNITRACE_TOOL_NAME	"libunitrace_tool.so"
+#else /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
+#define LIB_UNITRACE_TOOL_NAME	"unitrace_tool.dll"
+#endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
 #if BUILD_WITH_MPI
 #define LIB_UNITRACE_MPI_NAME	"libunitrace_mpi.so"
-#endif
+#endif /* BUILD_WITH_MPI */
 
 static ZeMetricProfiler* metric_profiler = nullptr;
 
@@ -74,7 +73,7 @@ void Usage(char * progname) {
     "--chrome-mpi-logging           " <<
     "Trace MPI" <<
     std::endl;
-#endif
+#endif /* BUILD_WITH_MPI */
   std::cout <<
     "--chrome-sycl-logging          " <<
     "Trace SYCL runtime and plugin" <<
@@ -508,7 +507,7 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-#ifdef __unix__
+#if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
   struct rlimit	rlim;
   rlim.rlim_cur = RLIM_INFINITY;
   rlim.rlim_max = RLIM_INFINITY;
@@ -519,7 +518,7 @@ int main(int argc, char *argv[]) {
     rlim.rlim_cur = rlim.rlim_max;
     setrlimit(RLIMIT_STACK, &rlim);
   }
-#endif
+#endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
   std::string executable_path = utils::GetExecutablePath();
 
@@ -675,39 +674,35 @@ int main(int argc, char *argv[]) {
     }
   }
   else {
-#endif
-    #ifdef _WIN32
-      // handle windows here
-      PROCESS_INFORMATION ProcessInfo;
-      STARTUPINFO StartupInfo;
-      ZeroMemory(&StartupInfo, sizeof(StartupInfo));
-      StartupInfo.cb = sizeof(StartupInfo);
+    if (execvp(app_args[0], app_args.data())) {
+      std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
+      Usage(argv[0]);
+    }
+  }
+#else /* _WIN32 */
+  // handle windows here
+  PROCESS_INFORMATION ProcessInfo;
+  STARTUPINFO StartupInfo;
+  ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+  StartupInfo.cb = sizeof(StartupInfo);
       
-      auto argCount = 0;
-      std::string cmdLine = "";
-      for (; argCount < app_args.size()-1; ++argCount){
-        cmdLine += app_args[argCount];
-        cmdLine += " ";
-      }
-      LPSTR cmd_line = const_cast<char*>(cmdLine.c_str());
-      if (CreateProcessA(app_args[0], cmd_line,
-          NULL, NULL, TRUE, 0, NULL,
-          NULL, &StartupInfo, &ProcessInfo))
-      {
-        WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
-        CloseHandle(ProcessInfo.hThread);
-        CloseHandle(ProcessInfo.hProcess);
-      }else{
-        std::cout<<"Error: Could not launch application\n";
-      }
-    #else
-      if (execvp(app_args[0], app_args.data())) {
-        std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
-        Usage(argv[0]);
-      }
-    #endif
-#ifdef __unix__
-  } // end of else
-#endif
+  auto argCount = 0;
+  std::string cmdLine = "";
+  for (; argCount < app_args.size()-1; ++argCount) {
+    cmdLine += app_args[argCount];
+    cmdLine += " ";
+  }
+  LPSTR cmd_line = const_cast<char*>(cmdLine.c_str());
+  if (CreateProcessA(app_args[0], cmd_line, NULL, NULL, TRUE, 0, NULL, NULL, &StartupInfo, &ProcessInfo)) {
+    WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+    CloseHandle(ProcessInfo.hThread);
+    CloseHandle(ProcessInfo.hProcess);
+  }
+  else {
+    std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
+    Usage(argv[0]);
+  }
+#endif /* _WIN32 */
+
   return 0;
 }
