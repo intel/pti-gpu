@@ -609,7 +609,6 @@ class UniTracer {
   ClCollector* cl_cpu_collector_ = nullptr;
   ClCollector* cl_gpu_collector_ = nullptr;
 
-  std::string chrome_trace_file_name_;
   ChromeLogger* chrome_logger_ = nullptr;
 };
 

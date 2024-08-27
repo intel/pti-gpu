@@ -76,6 +76,10 @@ class Logger {
     return log_file_name_;
   }
 
+  std::iostream::pos_type GetLogFilePosition() {
+    return file_.tellp();
+  }
+
  private:
   std::string log_file_name_;
   std::mutex lock_;

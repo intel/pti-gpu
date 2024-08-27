@@ -1119,8 +1119,12 @@ class ChromeLogger {
     bool filtering_on_ = true;
     bool filter_in_ = false;  // --filter-in suggests only include/collect these kernel names in output (filter-out is reverse of this and excludes/drops these)
     std::set<std::string> filter_strings_set_;
+    std::string process_name_;
     std::string chrome_trace_file_name_;
+    std::iostream::pos_type data_start_pos_;
+
     ChromeLogger(const TraceOptions& options, const char* filename) : options_(options) {
+      process_name_ = filename;
       chrome_trace_file_name_ = TraceOptions::GetChromeTraceFileName(filename);
       if (this->CheckOption(TRACE_OUTPUT_DIR_PATH)) {
           std::string dir = utils::GetEnv("UNITRACE_TraceOutputDir");
@@ -1149,6 +1153,7 @@ class ChromeLogger {
 
       logger_->Log("{ \"traceEvents\":[\n");
       logger_->Flush();
+      data_start_pos_ = logger_->GetLogFilePosition();
     };
   public:
     ChromeLogger(const ChromeLogger& that) = delete;
@@ -1293,10 +1298,19 @@ class ChromeLogger {
           }
         }
 
-        str += "\n]\n}\n";
-        logger_->Log(str);
-        delete logger_;
-        std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
+	if (logger_->GetLogFilePosition() == data_start_pos_) {
+          // no data has been logged
+          // remove the log file, but close it first
+          delete logger_;
+          std::remove(chrome_trace_file_name_.c_str());
+          std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
+	}
+	else {
+          str += "\n]\n}\n";
+          logger_->Log(str);
+          delete logger_;
+          std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
+	}
       }
     };
 
