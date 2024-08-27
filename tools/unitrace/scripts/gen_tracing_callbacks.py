@@ -147,6 +147,9 @@ def find_enums(f, enum_map):
       line = remove_comments(lines[i]).strip()
       if not line:
         continue
+      # skip lines starting with hash (c preprocessor lines)
+      if line[0] == '#':
+          continue
       comma_count = get_comma_count(line)
       assert comma_count == 0 or comma_count == 1
       if line.find("=") == -1:
