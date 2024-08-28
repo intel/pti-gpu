@@ -10,8 +10,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "pti/pti.h"
 #include "pti/pti_export.h"
-#include "pti/pti_version.h"
 
 /* clang-format off */
 #if defined(__cplusplus)
@@ -24,28 +24,6 @@ extern "C" {
 #define PTI_MAX_DEVICE_UUID_SIZE 16                         //!< Size of uuid array.
 #define PTI_MAX_PCI_ADDRESS_SIZE 16                         //!< Size of pci address array.
 #define PTI_INVALID_QUEUE_ID 0xFFFFFFFFFFFFFFFF-1           //!< For oneAPI versions earlier than 2024.1.1 -- UINT64_MAX-1
-
-/**
- * @brief Return/Error codes
- */
-typedef enum {
-  PTI_SUCCESS = 0,                        //!< success
-  PTI_STATUS_END_OF_BUFFER = 1,           //!< end of buffer reached, e.g., in ptiViewGetNextRecord
-  PTI_ERROR_NOT_IMPLEMENTED = 2,          //!< functionality not implemented
-  PTI_ERROR_BAD_ARGUMENT = 3,             //!< error code for invalid arguments
-  PTI_ERROR_NO_CALLBACKS_SET = 4,         //!< error due to no callbacks set via ptiViewSetCallbacks
-  PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY = 5,  //!< empty external ID-queue while working with
-                                          //!< PTI_VIEW_EXTERNAL_CORRELATION
-  PTI_ERROR_BAD_TIMESTAMP = 6,            //!< error in timestamp conversion, might be related with the user provided TimestampCallback
-  PTI_ERROR_DRIVER = 50,                  //!< unknown driver error
-  PTI_ERROR_TRACING_NOT_INITIALIZED = 51, //!< installed driver requires tracing enabling with
-                                          //!< setting environment variable ZE_ENABLE_TRACING_LAYER
-                                          //!< to 1
-  PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED = 52, //!< no Local profiling support in the installed
-                                                //!< driver
-
-  PTI_ERROR_INTERNAL = 200                //!< internal error
-} pti_result;
 
 /**
  * @brief Kind of software and hardware operations to be tracked and viewed,
@@ -394,16 +372,16 @@ PTI_EXPORT const char*
 ptiViewMemcpyTypeToString( pti_view_memcpy_type type );
 
 /**
- * @brief Returns current pti host timestamp in nanoseconds. The timestamp is in the same domain as view records timestamps.  
+ * @brief Returns current pti host timestamp in nanoseconds. The timestamp is in the same domain as view records timestamps.
  *
  * @return uint64_t
  */
-PTI_EXPORT uint64_t 
+PTI_EXPORT uint64_t
 ptiViewGetTimestamp();
 
 
 /**
- * @brief User provided timestamping function.  
+ * @brief User provided timestamping function.
  *        This will be used to obtain host timestamps when user registers using the ptiViewSetTimestampCallback.
  *        It is expected that this function will return timestamps in nano seconds.
  */
@@ -411,14 +389,13 @@ typedef uint64_t (*pti_fptr_get_timestamp)( void );
 
 /**
  * @brief Sets callback to user provided timestamping function.  This will replace the default pti host timestamper.
- *        Multiple callbacks that set differing timestamp function, through the session; will result in differing 
+ *        Multiple callbacks that set differing timestamp function, through the session; will result in differing
  *        timestamp domains in the view record buffer.
  *
  * @return pti_result
  */
 pti_result PTI_EXPORT
 ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequested);
-
 
 #if defined(__cplusplus)
 }

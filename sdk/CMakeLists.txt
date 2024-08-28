@@ -146,6 +146,10 @@ if (WIN32)
   AddProjectVersionInfo(pti)
 endif()
 
+target_link_libraries(
+  pti
+  PRIVATE spdlog::spdlog)
+
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
 
@@ -184,7 +188,6 @@ target_compile_definitions(
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
-
 
 target_link_libraries(
   pti_view

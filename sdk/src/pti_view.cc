@@ -8,7 +8,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include <iostream>
+#include <array>
 
 #include "internal_helper.h"
 #include "view_handler.h"

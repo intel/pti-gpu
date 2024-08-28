@@ -10,45 +10,7 @@
 
 // Needs to be in the same namespace as pti_result so leave it outside.
 inline std::ostream& operator<<(std::ostream& out, pti_result result_val) {
-  switch (result_val) {
-    case PTI_SUCCESS:
-      out << "PTI_SUCCESS";
-      break;
-    case PTI_STATUS_END_OF_BUFFER:
-      out << "PTI_STATUS_END_OF_BUFFER";
-      break;
-    case PTI_ERROR_NOT_IMPLEMENTED:
-      out << "PTI_ERROR_NOT_IMPLEMENTED";
-      break;
-    case PTI_ERROR_BAD_ARGUMENT:
-      out << "PTI_ERROR_BAD_ARGUMENT";
-      break;
-    case PTI_ERROR_NO_CALLBACKS_SET:
-      out << "PTI_ERROR_NO_CALLBACKS_SET";
-      break;
-    case PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY:
-      out << "PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY";
-      break;
-    case PTI_ERROR_BAD_TIMESTAMP:
-      out << "PTI_ERROR_BAD_TIMESTAMP";
-      break;
-    case PTI_ERROR_DRIVER:
-      out << "PTI_ERROR_DRIVER";
-      break;
-    case PTI_ERROR_TRACING_NOT_INITIALIZED:
-      out << "PTI_ERROR_TRACING_NOT_INITIALIZED";
-      break;
-    case PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED:
-      out << "PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED";
-      break;
-    case PTI_ERROR_INTERNAL:
-      out << "PTI_ERROR_INTERNAL";
-      break;
-    default:
-      out << "UNKNOWN ERROR: " << static_cast<std::size_t>(result_val);
-      break;
-  }
-
+  out << ptiResultTypeToString(result_val);
   return out;
 }
 

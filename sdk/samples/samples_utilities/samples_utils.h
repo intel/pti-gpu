@@ -12,19 +12,22 @@
 #include "pti/pti_view.h"
 
 namespace samples_utils {
-#define PTI_THROW(X)                                    \
-  do {                                                  \
-    if (X != pti_result::PTI_SUCCESS) {                 \
-      throw std::runtime_error("PTI CALL FAILED: " #X); \
-    }                                                   \
+#define PTI_THROW(X)                                                                      \
+  do {                                                                                    \
+    if (X != pti_result::PTI_SUCCESS) {                                                   \
+      std::string error_msg =                                                             \
+          "PTI CALL FAILED: " #X " WITH ERROR: " + std::string{ptiResultTypeToString(X)}; \
+      throw std::runtime_error(error_msg);                                                \
+    }                                                                                     \
   } while (0)
 
-#define PTI_CHECK_SUCCESS(X)                            \
-  do {                                                  \
-    if (X != pti_result::PTI_SUCCESS) {                 \
-      std::cerr << "PTI CALL FAILED: " #X << std::endl; \
-      std::exit(EXIT_FAILURE);                          \
-    }                                                   \
+#define PTI_CHECK_SUCCESS(X)                                                            \
+  do {                                                                                  \
+    if (X != pti_result::PTI_SUCCESS) {                                                 \
+      std::cerr << "PTI CALL FAILED: " #X << " WITH ERROR " << ptiResultTypeToString(X) \
+                << std::endl;                                                           \
+      std::exit(EXIT_FAILURE);                                                          \
+    }                                                                                   \
   } while (0)
 
 inline constexpr auto kDefaultPtiBufferAlignment = std::align_val_t{1};

@@ -35,7 +35,7 @@ typedef struct pti_version {
  *
  * @return c-string with compiled version of PTI
  */
-PTI_EXPORT const char*  ptiVersionString();
+PTI_EXPORT const char* ptiVersionString();
 
 /**
  * @brief Returns the compiled version of PTI

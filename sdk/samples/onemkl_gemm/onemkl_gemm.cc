@@ -12,13 +12,6 @@
 
 #include "samples_utils.h"
 
-#define PTI_THROW(X)                                    \
-  do {                                                  \
-    if (X != pti_result::PTI_SUCCESS) {                 \
-      throw std::runtime_error("PTI CALL FAILED: " #X); \
-    }                                                   \
-  } while (0)
-
 void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
