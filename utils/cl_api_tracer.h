@@ -7,7 +7,7 @@
 #ifndef PTI_UTILS_CL_API_TRACER_H_
 #define PTI_UTILS_CL_API_TRACER_H_
 
-#include <CL/tracing_api.h>
+#include "opencl/source/tracing/tracing_api.h"
 
 #include "pti_assert.h"
 

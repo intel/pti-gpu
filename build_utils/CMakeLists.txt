@@ -113,25 +113,6 @@ macro(FindOpenCLHeaders TARGET)
     PRIVATE -DCL_TARGET_OPENCL_VERSION=300)
 endmacro()
 
-macro(GetOpenCLTracingHeaders TARGET)
-  set(OPENCL_TRACING_INC_PATH "${CMAKE_BINARY_DIR}")
-  RequirePythonInterp()
-
-  add_custom_target(cl_tracing_headers ALL
-                    DEPENDS ${OPENCL_TRACING_INC_PATH}/CL/tracing_api.h
-                            ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h
-                            ${OPENCL_TRACING_INC_PATH}/CL/cl_ext_private.h)
-  add_custom_command(OUTPUT ${OPENCL_TRACING_INC_PATH}/CL/tracing_api.h
-                            ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h
-                            ${OPENCL_TRACING_INC_PATH}/CL/cl_ext_private.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_cl_tracing_headers.py" ${OPENCL_TRACING_INC_PATH} ${CMAKE_BINARY_DIR})
-
-  target_include_directories(${TARGET}
-    PUBLIC "${OPENCL_TRACING_INC_PATH}")
-  add_dependencies(${TARGET}
-    cl_tracing_headers)
-endmacro()
-
 macro(GetITT TARGET)
   set(ITT_INC_PATH "${CMAKE_BINARY_DIR}")
   RequirePythonInterp()

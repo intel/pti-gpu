@@ -29,11 +29,10 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target)
   endif()
 
   set(L0_GEN_INC_PATH "${CMAKE_BINARY_DIR}")
-  set(OCL_DIR_PATH "${CMAKE_BINARY_DIR}/CL")
   add_custom_target(${custom_target} ALL
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME})
   add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
-                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${OCL_DIR_PATH}")
+                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${CMAKE_SOURCE_DIR}/../../utils/opencl/source/tracing")
   target_include_directories(${TARGET}
     PUBLIC "${L0_GEN_INC_PATH}")
   add_dependencies(${TARGET}
@@ -109,18 +108,11 @@ endif()
 FindOpenCLLibrary(unitrace_tool)
 FindOpenCLHeaders(unitrace_tool)
 
-GetOpenCLTracingHeaders(unitrace_tool)
-
 FindL0Library(unitrace_tool)
 FindL0Headers(unitrace_tool)
 
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_common_header.py" "common_header.gen" gen_common_header)
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_callbacks.py" "tracing.gen" gen_tracing_header)
-
-add_dependencies(gen_common_header
-    cl_tracing_headers)
-add_dependencies(gen_tracing_header
-    cl_tracing_headers)
 
 target_include_directories(unitrace_tool PRIVATE "${L0_INC_PATH}")
 
