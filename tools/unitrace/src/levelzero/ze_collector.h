@@ -4677,10 +4677,15 @@ typedef struct _zex_kernel_register_file_size_exp_t {
         status = zeKernelGetName(kernel, &kname_size, nullptr);
         if ((status == ZE_RESULT_SUCCESS) && (kname_size > 0)) {
           char* kname = (char*) malloc(kname_size);
-          status = zeKernelGetName(kernel, &kname_size, kname);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-          desc.name_ = std::string(kname);
-          free(kname);
+          if (kname != nullptr) {
+            status = zeKernelGetName(kernel, &kname_size, kname);
+            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            desc.name_ = std::string(kname);
+            free(kname);
+          }
+          else {
+            desc.name_ = "UnknownKernel";
+          }
         }
         else {
           desc.name_ = "UnknownKernel";

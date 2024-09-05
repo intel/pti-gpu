@@ -176,12 +176,11 @@ void ATTRIB_CONSTOR Init(void) {
   if (value != "1") {
     return;
   }
-
   std::string unitrace_version = utils::GetEnv("UNITRACE_VERSION");
   if (unitrace_version.size() > 0) {
     auto libunitrace_version = get_version();
     if (unitrace_version.compare(libunitrace_version) != 0) {
-      std::cerr << "[ERROR] Versions of unitrace and libunitrace_tool.so do not match." << std::endl;
+      std::cerr << "[ERROR] Versions of unitrace and " << LIB_UNITRACE_TOOL_NAME << " do not match." << std::endl;
       exit(-1);
     }
   }
