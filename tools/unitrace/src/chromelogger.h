@@ -1302,8 +1302,12 @@ class ChromeLogger {
           // no data has been logged
           // remove the log file, but close it first
           delete logger_;
-          std::remove(chrome_trace_file_name_.c_str());
-          std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
+	  if (std::remove(chrome_trace_file_name_.c_str()) == 0) {
+            std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
+	  }
+	  else {
+            std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ") in file " << chrome_trace_file_name_ << std::endl;
+	  }
 	}
 	else {
           str += "\n]\n}\n";
