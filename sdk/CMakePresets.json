@@ -115,7 +115,8 @@
       "displayName": "Linux Debug x64 Clang Config",
       "description": "Linux Debug x64 Config using Ninja generator and clang compiler",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang_toolchain.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang_toolchain.cmake",
+        "PTI_ENABLE_LOGGING": "ON"
       }
     },
     {

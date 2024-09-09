@@ -5,7 +5,7 @@
 // =============================================================
 #include <iostream>
 #include <vector>
-#include <CL/sycl.hpp>
+#include <sycl/sycl.hpp>
 
 #include "queue.h"
 #include "device_memory.h"

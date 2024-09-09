@@ -15,7 +15,7 @@ TinyTensor run_onedpl_operation_cos(const TinyTensor& inp, sycl::queue *q)
     float *dst = outp.data;
 
     q->submit([&](sycl::handler &h) {
-        h.parallel_for(outp.count(), [=](cl::sycl::item<1> item) {
+        h.parallel_for(outp.count(), [=](sycl::item<1> item) {
             int idx = item.get_id(0);
             dst[idx] = oneapi::dpl::cos(src[idx]);
         });

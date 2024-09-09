@@ -9,6 +9,7 @@
 #include <level_zero/ze_api.h>
 
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <map>
 #include <string>
@@ -284,12 +285,12 @@ void VecSqAddRouter(sycl::queue &sycl_queue, TestType a_test_type) {
   std::vector<T> sq_add2(2 * kVectorSize);
 
   for (size_t i = 0; i < kVectorSize; i++) {
-    a[i] = sin(i);
-    b[i] = cos(i);
-    c[2 * i] = sin(i) * sin(i);
-    c[2 * i + 1] = sin(i);
-    d[2 * i] = cos(i) * cos(i);
-    d[2 * i + 1] = cos(i);
+    a[i] = std::sin(i);
+    b[i] = std::cos(i);
+    c[2 * i] = std::sin(i) * std::sin(i);
+    c[2 * i + 1] = std::sin(i);
+    d[2 * i] = std::cos(i) * std::cos(i);
+    d[2 * i + 1] = std::cos(i);
   }
 
   if (a_test_type == TestType::kRunAll) {

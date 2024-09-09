@@ -49,6 +49,18 @@ The following cache variables may also be set:
 
 # Based on tutorial found in CMake manual:
 # https://cmake.org/cmake/help/latest/manual/cmake-developer.7.html
+
+#
+# Note about PATHS:
+#
+# These are specifically hardcoded fallbacks.
+#
+# * `/opt/intel/oneapi/compiler/latest` - common oneAPI installation location on
+#                                         Linux.
+# * `/opt/sycl` - Intel/LLVM open-source compiler container installation location
+#                 on Linux.
+#
+
 find_path(
   Xpti_INCLUDE_DIR
   NAMES xpti/xpti_trace_framework.h
@@ -56,6 +68,7 @@ find_path(
         ENV CPATH
   PATHS /opt/intel/oneapi/compiler/latest
         /opt/intel/oneapi/compiler/latest/linux
+        /opt/sycl
   PATH_SUFFIXES include
                 linux/include
 )
@@ -67,6 +80,7 @@ find_library(
         ENV LIBRARY_PATH
   PATHS /opt/intel/oneapi/compiler/latest
         /opt/intel/oneapi/compiler/latest/linux
+        /opt/sycl
   PATH_SUFFIXES lib
                 linux/lib
 )
@@ -78,6 +92,7 @@ find_library(
         ENV LIBRARY_PATH
   PATHS /opt/intel/oneapi/compiler/latest
         /opt/intel/oneapi/compiler/latest/linux
+        /opt/sycl
   PATH_SUFFIXES lib
                 linux/lib
 )

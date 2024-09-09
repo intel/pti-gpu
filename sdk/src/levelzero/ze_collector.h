@@ -948,20 +948,21 @@ class ZeCollector {
 
     // exclusive lock of command_list_map_   as we are changing it ("writing" to it)
     // all other accesses to it ("reading") would be protected by shared_lock
-    command_list_map_mutex_.lock();
-    if (command_list_map_.count(command_list)) {
-      ZeCommandListInfo& command_list_info = command_list_map_[command_list];
-      if (command_list_info.immediate) {
-        queue_ordinal_index_map_.erase(reinterpret_cast<ze_command_queue_handle_t>(command_list));
+    {
+      const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
+      if (command_list_map_.count(command_list)) {
+        ZeCommandListInfo& command_list_info = command_list_map_[command_list];
+        if (command_list_info.immediate) {
+          queue_ordinal_index_map_.erase(reinterpret_cast<ze_command_queue_handle_t>(command_list));
+        }
+        command_list_map_.erase(command_list);
       }
-      command_list_map_.erase(command_list);
+
+      PTI_ASSERT(device_descriptors_.count(device) != 0);
+
+      command_list_map_[command_list] = {std::vector<std::unique_ptr<ZeKernelCommand>>(), context,
+                                         device, immediate, oi_pair};
     }
-
-    PTI_ASSERT(device_descriptors_.count(device) != 0);
-
-    command_list_map_[command_list] = {std::vector<std::unique_ptr<ZeKernelCommand>>(), context,
-                                       device, immediate, oi_pair};
-    command_list_map_mutex_.unlock();
 
     if (immediate) {
       if (queue_ordinal_index_map_.count(
@@ -1461,17 +1462,21 @@ class ZeCollector {
     // the container it stored
     std::unique_ptr<ZeKernelCommand> p_command(command);
 
-    if (command_list_info.immediate) {
-      command->submit_time = command->append_time;
-      command->submit_time_device_ =
-          ze_instance_data.timestamp_device;  // append time and submit time are the same
-      command->queue = reinterpret_cast<ze_command_queue_handle_t>(command->command_list);
-      kernel_command_list_.push_back(std::move(p_command));
-      SPDLOG_TRACE("\tcommand: {} pushed to kernel_command_list_", (void*)command);
-      kids->push_back(command->kernel_id);
-    } else {
-      command_list_info.kernel_commands.push_back(std::move(p_command));
-      SPDLOG_TRACE("\tcommand: {} pushed to command_list_info", (void*)command);
+    {
+      const std::lock_guard<std::mutex> lock(lock_);
+
+      if (command_list_info.immediate) {
+        command->submit_time = command->append_time;
+        command->submit_time_device_ =
+            ze_instance_data.timestamp_device;  // append time and submit time are the same
+        command->queue = reinterpret_cast<ze_command_queue_handle_t>(command->command_list);
+        kernel_command_list_.push_back(std::move(p_command));
+        SPDLOG_TRACE("\tcommand: {} pushed to kernel_command_list_", (void*)command);
+        kids->push_back(command->kernel_id);
+      } else {
+        command_list_info.kernel_commands.push_back(std::move(p_command));
+        SPDLOG_TRACE("\tcommand: {} pushed to command_list_info", (void*)command);
+      }
     }
 
     // it could be that event swap was not needed  - in this case event_swap would be 0
@@ -1509,7 +1514,6 @@ class ZeCollector {
                         std::vector<uint64_t>* kids) {
     PTI_ASSERT(command_list != nullptr);
     PTI_ASSERT(kernel != nullptr);
-    const std::lock_guard<std::mutex> lock(lock_);
     SPDLOG_TRACE("In {}", __FUNCTION__);
 
     ZeKernelCommandProps props{};
@@ -1520,10 +1524,13 @@ class ZeCollector {
     props.bytes_transferred = 0;
 
     ZeKernelGroupSize group_size{};
-    if (kernel_group_size_map_.count(kernel) == 0) {
-      group_size = {0, 0, 0};
-    } else {
-      group_size = kernel_group_size_map_[kernel];
+    {
+      const std::lock_guard<std::mutex> lock(lock_);
+      if (kernel_group_size_map_.count(kernel) == 0) {
+        group_size = {0, 0, 0};
+      } else {
+        group_size = kernel_group_size_map_[kernel];
+      }
     }
 
     props.group_size[0] = group_size.x;
@@ -1538,8 +1545,8 @@ class ZeCollector {
 
     ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
-    PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props, signal_event,
-                                  command_list_info, kids);
+    PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
+                                  signal_event, command_list_info, kids);
   }
 
   void PostAppendMemoryCommand(ZeCollector* collector, std::string command_name,
@@ -1578,6 +1585,7 @@ class ZeCollector {
                                   std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}", __FUNCTION__);
     PTI_ASSERT(command_list != nullptr);
+    // TODO: How to protect command_list_info reference?
     ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
     ze_context_handle_t context = command_list_info.context;
@@ -1587,8 +1595,8 @@ class ZeCollector {
         GetTransferProps(std::move(command), bytes_transferred, src_context, src,
                          (dst_context ? dst_context : context), dst);
 
-    PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props, signal_event,
-                                  command_list_info, kids);
+    PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
+                                  signal_event, command_list_info, kids);
   }
 
   void AppendImageMemoryCopyCommand(ZeCollector* collector, std::string command,
@@ -1613,7 +1621,7 @@ class ZeCollector {
 
     // TODO implement image copy support in Local collection model
     if (collector->collection_mode_ != ZeCollectionMode::Local) {
-      PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props,
+      PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
                                     signal_event, command_list_info, kids);
     }
   }
@@ -1636,8 +1644,8 @@ class ZeCollector {
     props.name = std::move(command);
     props.type = KernelCommandType::kCommand;
 
-    PostAppendKernelCommandCommon(collector, (ZeKernelCommand*)*instance_data, props, signal_event,
-                                  command_list_info, kids);
+    PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
+                                  signal_event, command_list_info, kids);
   }
 
   static ZeKernelCommandProps GetTransferProps(std::string name, size_t bytes_transferred,
@@ -2132,9 +2140,10 @@ class ZeCollector {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
 
-      collector->lock_.lock();
-      collector->ProcessCalls(nullptr, &kcexec);
-      collector->lock_.unlock();
+      {
+        const std::lock_guard<std::mutex> lock(collector->lock_);
+        collector->ProcessCalls(nullptr, &kcexec);
+      }
 
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
         collector->acallback_(collector->callback_data_, kcexec);
@@ -2149,10 +2158,11 @@ class ZeCollector {
       PTI_ASSERT(*params->phCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      collector->lock_.lock();
-      collector->ProcessCalls(nullptr, &kcexec);
-      // collector->ResetCommandList(*params->phCommandList);
-      collector->lock_.unlock();
+      {
+        // collector->ResetCommandList(*params->phCommandList);
+        const std::lock_guard<std::mutex> lock(collector->lock_);
+        collector->ProcessCalls(nullptr, &kcexec);
+      }
 
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
         collector->acallback_(collector->callback_data_, kcexec);
@@ -2206,14 +2216,14 @@ class ZeCollector {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+      std::vector<ZeKernelCommandExecutionRecord> kcexec;
       {
-        std::unique_lock lock(collector->lock_);
-        std::vector<ZeKernelCommandExecutionRecord> kcexec;
+        const std::lock_guard<std::mutex> lock(collector->lock_);
         collector->ProcessCalls(kids, &kcexec);
+      }
 
-        if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
-          collector->acallback_(collector->callback_data_, kcexec);
-        }
+      if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+        collector->acallback_(collector->callback_data_, kcexec);
       }
     }
   }
@@ -2260,11 +2270,12 @@ class ZeCollector {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      collector->lock_.lock();
-      collector->ProcessCalls(nullptr, &kcexec);
-      collector->queue_ordinal_index_map_.erase(*params->phCommandQueue);
-      collector->command_queues_.erase(*params->phCommandQueue);
-      collector->lock_.unlock();
+      {
+        const std::lock_guard<std::mutex> lock(collector->lock_);
+        collector->ProcessCalls(nullptr, &kcexec);
+        collector->queue_ordinal_index_map_.erase(*params->phCommandQueue);
+        collector->command_queues_.erase(*params->phCommandQueue);
+      }
 
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
         collector->acallback_(collector->callback_data_, kcexec);
@@ -2298,7 +2309,10 @@ class ZeCollector {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      collector->ProcessCalls(nullptr, nullptr);
+      {
+        const std::lock_guard<std::mutex> lock(collector->lock_);
+        collector->ProcessCalls(nullptr, nullptr);
+      }
       collector->event_cache_.ReleaseContext(*(params->phContext));
       if (collector->collection_mode_ == ZeCollectionMode::Local) {
         collector->swap_event_pool_.Clean(*(params->phContext));

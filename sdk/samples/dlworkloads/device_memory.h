@@ -7,7 +7,7 @@
 #define DEVICE_MEMORY_H_
 
 #include <vector>
-#include <CL/sycl.hpp>
+#include <sycl/sycl.hpp>
 
 // In IPEX/ITEX, device memory are allocated and reused, and released at last.
 // here is a very simple mock for this behavior.

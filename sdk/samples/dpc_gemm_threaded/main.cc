@@ -11,6 +11,7 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <memory>
 #include <sycl/sycl.hpp>
@@ -31,7 +32,7 @@ static float Check(const std::vector<float>& a, float value) {
 
   float eps = 0.0f;
   for (size_t i = 0; i < a.size(); ++i) {
-    eps += fabs((a[i] - value) / value);
+    eps += std::fabs((a[i] - value) / value);
   }
 
   return eps / a.size();
@@ -277,19 +278,18 @@ int main(int argc, char* argv[]) {
   unsigned size = default_size;
 
   try {
-    unsigned temp;
     for (int i = 1; i < argc; i++) {
       if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--size") == 0) {
         i++;
-        temp = std::stoul(argv[i]);
+        auto temp = std::stoul(argv[i]);
         size = (temp < min_size) ? min_size : (temp > max_size) ? max_size : temp;
       } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--threads") == 0) {
         i++;
-        temp = std::stoul(argv[i]);
+        auto temp = std::stoul(argv[i]);
         thread_count = (temp < 1) ? 1 : (temp > max_thread_count) ? max_thread_count : temp;
       } else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--repeat") == 0) {
         i++;
-        temp = std::stoul(argv[i]);
+        auto temp = std::stoul(argv[i]);
         repeat_count = (temp < 1) ? 1 : temp;
       } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
         // verbosity off makes minimal the sample self output -
@@ -312,7 +312,8 @@ int main(int argc, char* argv[]) {
     StartTracing();
     sycl::device dev;
     dev = sycl::device(sycl::gpu_selector_v);
-    sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
+    sycl::property_list prop_list{sycl::property::queue::in_order(),
+                                  sycl::property::queue::enable_profiling()};
     sycl::queue queue(dev, sycl::async_handler{}, prop_list);
     if (argc > 1 && strcmp(argv[1], "cpu") == 0) {
       dev = sycl::device(sycl::cpu_selector_v);

@@ -7,6 +7,7 @@
 
 #include <level_zero/ze_api.h>
 
+#include <cmath>
 #include <iostream>
 #include <map>
 #include <set>
@@ -132,12 +133,12 @@ void RunProfiledVecSqAdd(sycl::queue &sycl_queue) {
   uint64_t corr_id = 0;
 
   for (size_t i = 0; i < kVectorSize; i++) {
-    a[i] = sin(i);
-    b[i] = cos(i);
-    c[2 * i] = sin(i) * sin(i);
-    c[2 * i + 1] = sin(i);
-    d[2 * i] = cos(i) * cos(i);
-    d[2 * i + 1] = cos(i);
+    a[i] = std::sin(i);
+    b[i] = std::cos(i);
+    c[2 * i] = std::sin(i) * std::sin(i);
+    c[2 * i + 1] = std::sin(i);
+    d[2 * i] = std::cos(i) * std::cos(i);
+    d[2 * i + 1] = std::cos(i);
   }
 
   VecSq(sycl_queue, a, b);
