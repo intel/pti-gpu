@@ -265,10 +265,22 @@ if(PTI_INSTALL)
     RENAME "LICENSE.txt"
     COMPONENT Pti_Doc)
 
+
   #
   # This file is only installed in oneAPI drops
   #
   if("${PTI_PRESET_USED}" MATCHES "[lw].*-oneAPI-release")
+
+    include(cmake/bom_macro.cmake)
+
+    set(BOMFILE_DIR "drop_raw")
+    set(BOMFILE_DEV "${BOMFILE_DIR}/pti_dev.txt")
+    set(BOMFILE_RUN "${BOMFILE_DIR}/pti_run.txt")
+
+    install(CODE "
+      file(REMOVE ${BOMFILE_DEV}  ${BOMFILE_RUN}) "
+      COMPONENT Pti_Bom)
+
     install(
       FILES "../third-party-programs.txt"
       DESTINATION "${PTI_INSTALL_LIC_DIR}"
@@ -286,7 +298,25 @@ if(PTI_INSTALL)
         COMPONENT Pti_oneAPI)
     endif()
 
-  endif()
+    bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
+      [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_INCLUDE_DIR}/pti*.h\"]])
+    bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
+      [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/cmake/pti/Pti*.cmake\"]])
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+      [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIC_DIR}/*\"]])
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+      [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/libpti*so.[0-9]*\"]])
+    bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
+      [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/libpti*so\"]])
+    bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
+      [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/*.lib\"]])
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+      [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_BIN_DIR}/*.dll\"]])
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+      [[\"\${CMAKE_INSTALL_PREFIX}/env/*\"]])
+
+ endif()
+
 endif()
 
 if(PTI_BUILD_SAMPLES)
