@@ -30,6 +30,7 @@
 
 #include "overhead_kinds.h"
 #include "unikernel.h"
+#include "utils.h"
 #include "view_buffer.h"
 #include "view_record_info.h"
 #include "ze_collector.h"
@@ -111,7 +112,7 @@ struct PtiViewRecordHandler {
  public:
   using ViewBuffer = pti::view::utilities::ViewBuffer;
   using ViewBufferQueue = pti::view::utilities::ViewBufferQueue;
-  using ViewBufferTable = pti::view::utilities::ViewBufferTable<std::thread::id>;
+  using ViewBufferTable = pti::view::utilities::ViewBufferTable<uint32_t>;
   using ViewEventTable = pti::view::utilities::GuardedUnorderedMap<std::string, ViewInsert>;
   using KernelNameStorageQueue =
       pti::view::utilities::ViewRecordBufferQueue<std::unique_ptr<std::string>>;
@@ -198,11 +199,12 @@ struct PtiViewRecordHandler {
   }
 
   template <typename T>
-  inline void InsertRecord(const T& view_record) {
+  inline void InsertRecord(const T& view_record, uint32_t thread_id) {
     static_assert(std::is_trivially_copyable<T>::value,
                   "One can only insert trivially copyable types into the "
                   "ViewBuffer (view records)");
-    auto& buffer = view_buffers_[std::this_thread::get_id()];
+    const std::lock_guard<std::mutex> lock(insert_record_mtx_);
+    auto& buffer = view_buffers_[thread_id];
 
     if (buffer.IsNull()) {
       RequestNewBuffer(buffer);
@@ -265,13 +267,15 @@ struct PtiViewRecordHandler {
     } else {
       get_new_buffer_(&raw_buffer, &raw_buffer_size);
     }
-    auto buffer_to_replace = view_buffers_.TryTakeElement(std::this_thread::get_id());
+
+    uint32_t tid = utils::GetTid();
+    auto buffer_to_replace = view_buffers_.TryTakeElement(tid);
 
     if (buffer_to_replace) {
       DeliverBuffer(std::move(*buffer_to_replace));
     }
 
-    view_buffers_[std::this_thread::get_id()].Refresh(raw_buffer, raw_buffer_size);
+    view_buffers_[tid].Refresh(raw_buffer, raw_buffer_size);
     callbacks_set_ = true;
 
     return result;
@@ -518,6 +522,9 @@ struct PtiViewRecordHandler {
   mutable std::mutex get_new_buffer_mtx_;
   mutable std::mutex deliver_buffer_mtx_;
   mutable std::mutex timestamp_api_mtx_;
+  mutable std::mutex insert_record_mtx_;  // protecting writing to buffers, as different threads
+                                          // might be writing to the same buffer
+
   ViewEventTable view_event_map_;
   KernelNameStorageQueue kernel_name_storage_;
   ViewBufferTable view_buffers_;
@@ -604,7 +611,7 @@ inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRec
     SPDLOG_TRACE("In {}, ext_id: {}, ext_kind: {}, corr_id: {}", __FUNCTION__,
                  ext_record._external_id, static_cast<uint32_t>(ext_record._external_kind),
                  ext_record._correlation_id);
-    Instance().InsertRecord(ext_record);
+    Instance().InsertRecord(ext_record, rec.tid_);
   }
 }
 
@@ -697,14 +704,14 @@ inline void MemCopyP2PEvent(void* /*data*/, const ZeKernelCommandExecutionRecord
   pti_view_record_memory_copy_p2p record =
       DoCommonMemCopy<pti_view_record_memory_copy_p2p>(p2p, rec);
   SetMemCpyIdsP2P(record, rec);
-  Instance().InsertRecord(record);
+  Instance().InsertRecord(record, record._thread_id);
 }
 
 inline void MemCopyEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
   bool p2p = false;
   pti_view_record_memory_copy record = DoCommonMemCopy<pti_view_record_memory_copy>(p2p, rec);
   SetMemCpyIds(record, rec);
-  Instance().InsertRecord(record);
+  Instance().InsertRecord(record, record._thread_id);
 }
 
 inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
@@ -731,7 +738,7 @@ inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
   record._thread_id = rec.tid_;
   record._mem_op_id = rec.cid_;
   record._correlation_id = rec.cid_;
-  Instance().InsertRecord(record);
+  Instance().InsertRecord(record, record._thread_id);
 }
 
 inline void OverheadCollectionEvent(void* data, const ZeKernelCommandExecutionRecord& /*rec*/) {
@@ -740,9 +747,7 @@ inline void OverheadCollectionEvent(void* data, const ZeKernelCommandExecutionRe
   ohRec->_overhead_start_timestamp_ns =
       ApplyTimeShift(ohRec->_overhead_start_timestamp_ns, ts_shift);
   ohRec->_overhead_end_timestamp_ns = ApplyTimeShift(ohRec->_overhead_end_timestamp_ns, ts_shift);
-  // ohRec->_overhead_api_name =
-  // Instance().InsertKernel(ohRec->_overhead_api_name);
-  Instance().InsertRecord(*ohRec);
+  Instance().InsertRecord(*ohRec, ohRec->_overhead_thread_id);
 }
 
 inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
@@ -762,7 +767,7 @@ inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecor
   record._correlation_id = rec.cid_;
   record._name = rec.sycl_func_name_;
   SPDLOG_TRACE("In {}, name: {}, corr_id: {}", __FUNCTION__, record._name, record._correlation_id);
-  Instance().InsertRecord(record);
+  Instance().InsertRecord(record, record._thread_id);
 }
 
 inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
@@ -798,7 +803,7 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   record._sycl_enqk_begin_timestamp = ApplyTimeShift(rec.sycl_enqk_begin_time_, ts_shift);
   record._sycl_task_begin_timestamp = ApplyTimeShift(rec.sycl_task_begin_time_, ts_shift);
 
-  Instance().InsertRecord(record);
+  Instance().InsertRecord(record, record._thread_id);
 }
 
 inline void SyclRuntimeViewCallback(void* data, ZeKernelCommandExecutionRecord& rec) {

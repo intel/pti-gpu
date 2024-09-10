@@ -118,6 +118,21 @@ if(HAVE_SYCL)
   target_link_libraries(sycl_queue_id PUBLIC Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
 
+  add_executable(multi_threaded_submission multi_threaded_submission.cc)
+
+  target_include_directories(
+    multi_threaded_submission
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/src"
+         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+         "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_compile_options(multi_threaded_submission PRIVATE -fsycl -gline-tables-only)
+  target_link_options(multi_threaded_submission PRIVATE -fsycl -gline-tables-only)
+
+  target_link_libraries(multi_threaded_submission PUBLIC Pti::pti_view GTest::gtest_main
+                                            LevelZero::level-zero)
+
   gtest_discover_tests(
     dpcgemm_suite
     DISCOVERY_TIMEOUT 60
@@ -162,6 +177,13 @@ if(HAVE_SYCL)
 
   gtest_discover_tests(
     no_kernel_overlap
+    DISCOVERY_TIMEOUT 60
+    TEST_LIST TIMESTAMPS_CORRECTNESS_LIST
+    PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
+    PROPERTIES LABELS "functional")
+
+  gtest_discover_tests(
+    multi_threaded_submission
     DISCOVERY_TIMEOUT 60
     TEST_LIST TIMESTAMPS_CORRECTNESS_LIST
     PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
