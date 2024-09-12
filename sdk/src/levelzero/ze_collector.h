@@ -1611,10 +1611,7 @@ class ZeCollector {
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
 
-    size_t bytes_transferred = 0;
-    if (image_size_map_.count(image) == 1) {
-      bytes_transferred = image_size_map_[image];
-    }
+    size_t bytes_transferred = GetImageSize(image);
 
     ZeKernelCommandProps props =
         GetTransferProps(std::move(command), bytes_transferred, context, src, context, dst);

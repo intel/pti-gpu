@@ -24,7 +24,7 @@ using EnumToString = EnumContainer<E, const char*>;
 // Lookup an enum value index from the table evaulated at compile
 // time.
 template <typename E, typename C>
-inline constexpr std::optional<std::size_t> EnumIdx(E my_enum, C container) {
+inline constexpr std::optional<std::size_t> EnumIdx(E my_enum, const C& container) {
   std::size_t count = 0;
   for (const auto& enum_container : container) {
     if (my_enum == enum_container.value_) {

@@ -233,7 +233,7 @@ class A2EventPool {
       CleanReadyEvents(context);
       CleanPools(context);
     } else {
-      for (auto context_handle : event_pool_map_) {
+      for (const auto& context_handle : event_pool_map_) {
         CleanBusyEvents(context_handle.first);
         CleanReadyEvents(context_handle.first);
         CleanPools(context_handle.first);
