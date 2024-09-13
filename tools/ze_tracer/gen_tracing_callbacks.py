@@ -145,7 +145,7 @@ def find_enums(f, enum_map):
     has_unresolved_values = False
     for i in range(start, end):
       line = remove_comments(lines[i]).strip()
-      if not line:
+      if not line or line.startswith('#'):
         continue
       comma_count = get_comma_count(line)
       assert comma_count == 0 or comma_count == 1
