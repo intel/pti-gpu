@@ -16,4 +16,8 @@ STG1=${TGT_FILE##*/${BRK_TOKEN}/}
 STRIPPED_NAME=${STG1#$BRK_TOKEN/}
 echo STG1= ${STG1} STRIPPED_NAME ${STRIPPED_NAME}
 
-echo "DEL"/${STRIPPED_NAME}$':'"INS"/${STRIPPED_NAME}$':'$(cksum ${TGT_FILE}| cut -d ' ' -f 1)$':'ONE$':'$':'INT$':'$(stat -c '%a' ${TGT_FILE}) >> ${TGT_BOM}
+if [[ -L "$4" ]]; then
+  echo "<N/A>"$':'"INS"/${STRIPPED_NAME}$':'$(cksum ${TGT_FILE}| cut -d ' ' -f 1)$':'ONE$'::'INT$':'755$':'$(readlink $TGT_FILE) >> ${TGT_BOM}
+else
+  echo "DEL"/${STRIPPED_NAME}$':'"INS"/${STRIPPED_NAME}$':'$(cksum ${TGT_FILE}| cut -d ' ' -f 1)$':'ONE$':'$':'INT$':'$(stat -c '%a' ${TGT_FILE}) >> ${TGT_BOM}
+fi
