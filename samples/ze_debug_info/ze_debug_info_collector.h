@@ -7,17 +7,18 @@
 #ifndef PTI_SAMPLES_ZE_DEBUG_INFO_ZE_DEBUG_INFO_COLLECTOR_H_
 #define PTI_SAMPLES_ZE_DEBUG_INFO_ZE_DEBUG_INFO_COLLECTOR_H_
 
-#include <iostream>
-#include <iomanip>
-#include <map>
-#include <mutex>
-#include <vector>
-
 #include <level_zero/layers/zel_tracing_api.h>
 
+#include <filesystem>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
+
 #include "elf_parser.h"
-#include "gen_symbols_decoder.h"
-#include "igc_binary_decoder.h"
+#include "gen_binary_decoder.h"
 #include "utils.h"
 #include "ze_utils.h"
 
@@ -34,25 +35,20 @@ struct SourceFileInfo {
 
 struct KernelDebugInfo {
   std::vector<Instruction> instruction_list;
-  std::vector<LineInfo> line_info_list;
-  std::vector<SourceFileInfo> source_info_list;
+  std::vector<SourceMapping> line_info_list;
+  std::unordered_map<uint32_t, SourceFileInfo> source_info_list;
 };
 
 using KernelDebugInfoMap = std::map<std::string, KernelDebugInfo>;
 
 class ZeDebugInfoCollector {
- public: // User Interface
+ public:  // User Interface
   static ZeDebugInfoCollector* Create() {
-    std::cout << "[INFO] At the moment, this sample is incompatible with" <<
-      " IGC's ZE binary format." << std::endl;
-    std::cout << "Run `export IGC_EnableZEBinary=0` to use old format." << std::endl;
-
     ZeDebugInfoCollector* collector = new ZeDebugInfoCollector();
     PTI_ASSERT(collector != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
-    zel_tracer_desc_t tracer_desc = {
-        ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
+    zel_tracer_desc_t tracer_desc = {ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
     zel_tracer_handle_t tracer = nullptr;
     status = zelTracerCreate(&tracer_desc, &tracer);
     if (status != ZE_RESULT_SUCCESS) {
@@ -67,27 +63,23 @@ class ZeDebugInfoCollector {
 
   static void InstructionCallback(int32_t offset, void* data) {}
 
-  static void PrintKernelDebugInfo(
-      std::string kernel_name,
-      const KernelDebugInfo& kernel_debug_info,
-      decltype(InstructionCallback)* callback = InstructionCallback,
-      void* callback_data = nullptr) {
+  static void PrintKernelDebugInfo(std::string kernel_name,
+                                   const KernelDebugInfo& kernel_debug_info,
+                                   decltype(InstructionCallback)* callback = InstructionCallback,
+                                   void* callback_data = nullptr) {
     PTI_ASSERT(!kernel_name.empty());
 
     std::cerr << "===== Kernel: " << kernel_name << " =====" << std::endl;
 
-    const std::vector<Instruction>& instruction_list =
-      kernel_debug_info.instruction_list;
+    const std::vector<Instruction>& instruction_list = kernel_debug_info.instruction_list;
     PTI_ASSERT(instruction_list.size() > 0);
 
-    int last_instruction_address = instruction_list.back().offset;
+    uint64_t last_instruction_address = instruction_list.back().offset;
 
-    const std::vector<LineInfo>& line_info =
-      kernel_debug_info.line_info_list;
+    const std::vector<SourceMapping>& line_info = kernel_debug_info.line_info_list;
     PTI_ASSERT(line_info.size() > 0);
 
-    const std::vector<SourceFileInfo>& source_info_list =
-      kernel_debug_info.source_info_list;
+    const auto& source_info_list = kernel_debug_info.source_info_list;
     PTI_ASSERT(source_info_list.size() > 0);
 
     // Print instructions with no corresponding file
@@ -96,22 +88,20 @@ class ZeDebugInfoCollector {
       bool found = false;
 
       for (size_t l = 0; l < line_info.size(); ++l) {
-        int start_address = line_info[l].address;
-        int end_address = (l + 1 < line_info.size()) ?
-                          line_info[l + 1].address :
-                          last_instruction_address;
+        uint64_t start_address = line_info[l].address;
+        uint64_t end_address =
+            (l + 1 < line_info.size()) ? line_info[l + 1].address : last_instruction_address;
 
-        if (instruction.offset >= start_address &&
-            instruction.offset < end_address) {
+        if (instruction.offset >= start_address && instruction.offset < end_address) {
           found = true;
           break;
         }
       }
 
       if (!found) {
-        std::cerr << "\t\t[" << "0x" << std::setw(5) <<
-          std::setfill('0') << std::hex << std::uppercase <<
-          instruction.offset << "] " << instruction.text;
+        std::cerr << "\t\t["
+                  << "0x" << std::setw(5) << std::setfill('0') << std::hex << std::uppercase
+                  << instruction.offset << "] " << instruction.text;
         callback(instruction.offset, callback_data);
         std::cerr << std::endl;
       }
@@ -119,27 +109,24 @@ class ZeDebugInfoCollector {
 
     // Print info per file
     for (auto& source_info : source_info_list) {
-      std::cerr << "=== File: " << source_info.file_name.c_str() <<
-        " ===" << std::endl;
+      std::cerr << "=== File: " << source_info.second.file_name.c_str() << " ===" << std::endl;
 
-      const std::vector<SourceLine> line_list = source_info.source_line_list;
+      const std::vector<SourceLine> line_list = source_info.second.source_line_list;
       PTI_ASSERT(line_list.size() > 0);
 
       // Print instructions with no corresponding source line
       for (size_t l = 0; l < line_info.size(); ++l) {
         if (line_info[l].line == 0) {
-          int start_address = line_info[l].address;
-          int end_address = (l + 1 < line_info.size()) ?
-                            line_info[l + 1].address :
-                            last_instruction_address;
+          uint64_t start_address = line_info[l].address;
+          uint64_t end_address =
+              (l + 1 < line_info.size()) ? line_info[l + 1].address : last_instruction_address;
 
           for (auto instruction : instruction_list) {
-            if (instruction.offset >= start_address &&
-                instruction.offset < end_address &&
-                source_info.file_id == line_info[l].file) {
-              std::cerr << "\t\t[" << "0x" << std::setw(5) <<
-                std::setfill('0') << std::hex << std::uppercase <<
-                instruction.offset << "] " << instruction.text;
+            if (instruction.offset >= start_address && instruction.offset < end_address &&
+                source_info.second.file_id == line_info[l].file_id) {
+              std::cerr << "\t\t["
+                        << "0x" << std::setw(5) << std::setfill('0') << std::hex << std::uppercase
+                        << instruction.offset << "] " << instruction.text;
               callback(instruction.offset, callback_data);
               std::cerr << std::endl;
             }
@@ -149,23 +136,21 @@ class ZeDebugInfoCollector {
 
       // Print instructions for corresponding source line
       for (auto line : line_list) {
-        std::cerr << "[" << std::setw(5) << std::setfill(' ') << std::dec <<
-          line.number << "] " << line.text << std::endl;
+        std::cerr << "[" << std::setw(5) << std::setfill(' ') << std::dec << line.number << "] "
+                  << line.text << std::endl;
 
         for (size_t l = 0; l < line_info.size(); ++l) {
           if (line_info[l].line == line.number) {
-            int start_address = line_info[l].address;
-            int end_address = (l + 1 < line_info.size()) ?
-                              line_info[l + 1].address :
-                              last_instruction_address;
+            uint64_t start_address = line_info[l].address;
+            uint64_t end_address =
+                (l + 1 < line_info.size()) ? line_info[l + 1].address : last_instruction_address;
 
             for (auto instruction : instruction_list) {
-              if (instruction.offset >= start_address &&
-                  instruction.offset < end_address &&
-                  source_info.file_id == line_info[l].file) {
-                std::cerr << "\t\t[" << "0x" << std::setw(5) <<
-                  std::setfill('0') << std::hex << std::uppercase <<
-                  instruction.offset << "] " << instruction.text;
+              if (instruction.offset >= start_address && instruction.offset < end_address &&
+                  source_info.second.file_id == line_info[l].file_id) {
+                std::cerr << "\t\t["
+                          << "0x" << std::setw(5) << std::setfill('0') << std::hex << std::uppercase
+                          << instruction.offset << "] " << instruction.text;
                 callback(instruction.offset, callback_data);
                 std::cerr << std::endl;
               }
@@ -192,11 +177,9 @@ class ZeDebugInfoCollector {
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
-  const KernelDebugInfoMap& GetKernelDebugInfoMap() const {
-    return kernel_debug_info_map_;
-  }
+  const KernelDebugInfoMap& GetKernelDebugInfoMap() const { return kernel_debug_info_map_; }
 
- private: // Implementation Details
+ private:  // Implementation Details
   ZeDebugInfoCollector() {}
 
   void EnableTracing(zel_tracer_handle_t tracer) {
@@ -213,10 +196,9 @@ class ZeDebugInfoCollector {
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
-  void AddKernel(std::string name,
-                 const std::vector<Instruction>& instruction_list,
-                 const std::vector<LineInfo>& line_info_list,
-                 const std::vector<SourceFileInfo>& source_info_list) {
+  void AddKernel(std::string name, const std::vector<Instruction>& instruction_list,
+                 const std::vector<SourceMapping>& line_info_list,
+                 const std::unordered_map<uint32_t, SourceFileInfo>& source_info_list) {
     PTI_ASSERT(!name.empty());
     PTI_ASSERT(instruction_list.size() > 0);
     PTI_ASSERT(line_info_list.size() > 0);
@@ -224,8 +206,7 @@ class ZeDebugInfoCollector {
 
     const std::lock_guard<std::mutex> lock(lock_);
     PTI_ASSERT(kernel_debug_info_map_.count(name) == 0);
-    kernel_debug_info_map_[name] =
-      {instruction_list, line_info_list, source_info_list};
+    kernel_debug_info_map_[name] = {instruction_list, line_info_list, source_info_list};
   }
 
   static std::vector<SourceLine> ReadSourceFile(const std::string& file_path) {
@@ -251,11 +232,9 @@ class ZeDebugInfoCollector {
     return line_list;
   }
 
- private: // Callbacks
-  static void OnExitKernelCreate(ze_kernel_create_params_t *params,
-                                 ze_result_t result,
-                                 void *global_user_data,
-                                 void **instance_user_data) {
+ private:  // Callbacks
+  static void OnExitKernelCreate(ze_kernel_create_params_t* params, ze_result_t result,
+                                 void* global_user_data, void** instance_user_data) {
     if (result != ZE_RESULT_SUCCESS) {
       return;
     }
@@ -271,36 +250,9 @@ class ZeDebugInfoCollector {
     const char* kernel_name = desc->pKernelName;
     PTI_ASSERT(kernel_name != nullptr);
 
-    size_t native_binary_size = 0;
-    status = zeModuleGetNativeBinary(module, &native_binary_size, nullptr);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    std::vector<uint8_t> native_binary(native_binary_size);
-    status = zeModuleGetNativeBinary(
-        module, &native_binary_size, native_binary.data());
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    PTI_ASSERT(native_binary.size() < (std::numeric_limits<uint32_t>::max)());
-    ElfParser elf_parser(native_binary.data(),
-                        static_cast<uint32_t>(native_binary.size()));
-    std::vector<uint8_t> igc_binary = elf_parser.GetGenBinary();
-    if (igc_binary.size() == 0) {
-      std::cerr << "[WARNING] Unable to get GEN binary" << std::endl;
-      return;
-    }
-
-    IgcBinaryDecoder binary_decoder(igc_binary);
-    std::vector<Instruction> instruction_list =
-      binary_decoder.Disassemble(kernel_name);
-    if (instruction_list.size() == 0) {
-      std::cerr << "[WARNING] Unable to decode kernel binary" << std::endl;
-      return;
-    }
-
     size_t debug_info_size = 0;
-    status = zetModuleGetDebugInfo(
-        module, ZET_MODULE_DEBUG_INFO_FORMAT_ELF_DWARF,
-        &debug_info_size, nullptr);
+    status = zetModuleGetDebugInfo(module, ZET_MODULE_DEBUG_INFO_FORMAT_ELF_DWARF, &debug_info_size,
+                                   nullptr);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     if (debug_info_size == 0) {
       std::cerr << "[WARNING] Unable to find kernel symbols" << std::endl;
@@ -308,50 +260,144 @@ class ZeDebugInfoCollector {
     }
 
     std::vector<uint8_t> debug_info(debug_info_size);
-    status = zetModuleGetDebugInfo(
-        module, ZET_MODULE_DEBUG_INFO_FORMAT_ELF_DWARF,
-        &debug_info_size, debug_info.data());
+    status = zetModuleGetDebugInfo(module, ZET_MODULE_DEBUG_INFO_FORMAT_ELF_DWARF, &debug_info_size,
+                                   debug_info.data());
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    GenSymbolsDecoder symbols_decoder(debug_info);
-    std::vector<std::string> file_list =
-      symbols_decoder.GetFileList(kernel_name);
-    if (file_list.size() == 0) {
-      std::cerr << "[WARNING] Unable to find source files" << std::endl;
+    pti_result res;
+
+    elf_parser_handle_t parserHandle = nullptr;
+    res = ptiElfParserCreate(debug_info.data(), static_cast<uint32_t>(debug_info.size()),
+                             &parserHandle);
+    if (res != PTI_SUCCESS || parserHandle == nullptr) {
+      std::cerr << "[WARNING] : Cannot create elf parser" << std::endl;
       return;
     }
 
-    std::vector<LineInfo> line_info_list =
-      symbols_decoder.GetLineInfo(kernel_name);
-    if (line_info_list.size() == 0) {
-      std::cerr << "[WARNING] Unable to decode kernel line info" << std::endl;
+    bool is_valid = false;
+    res = ptiElfParserIsValid(parserHandle, &is_valid);
+    if (res != PTI_SUCCESS || !is_valid) {
+      std::cerr << "[WARNING] : Constructed Elf parser is not valid" << std::endl;
       return;
     }
 
-    std::vector<SourceFileInfo> source_info_list;
-    for (size_t i = 0; i < file_list.size(); ++i) {
-      std::vector<SourceLine> line_list = ReadSourceFile(file_list[i]);
-      if (line_list.size() == 0) {
-        std::cerr << "[WARNING] Unable to find target source file: " <<
-          file_list[i] << std::endl;
+    uint32_t kernel_num = 0;
+    res = ptiElfParserGetKernelNames(parserHandle, 0, nullptr, &kernel_num);
+    if (res != PTI_SUCCESS) {
+      std::cerr << "Error: Failed to get kernel names" << std::endl;
+      return;
+    }
+
+    if (kernel_num == 0) {
+      std::cerr << "[WARNING] : No kernels found" << std::endl;
+      return;
+    }
+
+    const char** kernel_names_cstr = new const char*[kernel_num];
+
+    res = ptiElfParserGetKernelNames(parserHandle, kernel_num, kernel_names_cstr, nullptr);
+    if (res != PTI_SUCCESS) {
+      std::cerr << "Error: Failed to get kernel names" << std::endl;
+      return;
+    }
+
+    std::vector<std::string> kernel_names;
+    for (uint32_t i = 0; i < kernel_num; ++i) {
+      kernel_names.push_back(kernel_names_cstr[i]);
+    }
+
+    for (uint32_t kernel_idx = 0; kernel_idx < kernel_names.size(); kernel_idx++) {
+      if (kernel_name != kernel_names[kernel_idx]) {
         continue;
       }
 
-      PTI_ASSERT(i + 1 < (std::numeric_limits<uint32_t>::max)());
-      uint32_t file_id = static_cast<uint32_t>(i) + 1;
-      source_info_list.push_back({file_id, file_list[i], line_list});
-    }
+      uint32_t binary_size = 0;
+      const uint8_t* binary = nullptr;
+      uint64_t kernel_address = 0;
 
-    if (source_info_list.size() == 0) {
-      std::cerr << "[WARNING] Unable to find kernel source files" << std::endl;
-      return;
-    }
+      res = ptiElfParserGetBinaryPtr(parserHandle, kernel_idx, &binary, &binary_size,
+                                     &kernel_address);
+      if (res != PTI_SUCCESS || binary_size == 0) {
+        std::cerr << "[WARNING] : Unable to get GEN binary for kernel: " << kernel_name
+                  << std::endl;
+        continue;
+      }
 
-    ZeDebugInfoCollector* collector =
-      reinterpret_cast<ZeDebugInfoCollector*>(global_user_data);
-    PTI_ASSERT(collector != nullptr);
-    collector->AddKernel(kernel_name, instruction_list,
-                         line_info_list, source_info_list);
+      uint32_t gfx_core = 0;
+      res = ptiElfParserGetGfxCore(parserHandle, &gfx_core);
+      if (res != PTI_SUCCESS || gfx_core == 0) {
+        std::cerr << "[WARNING] : Unable to get GEN binary version for kernel: " << kernel_name
+                  << std::endl;
+        continue;
+      }
+
+      GenBinaryDecoder decoder(binary, binary_size, GenBinaryDecoder::GfxCoreToIgaGen(gfx_core));
+      if (!decoder.IsValid()) {
+        std::cerr << "[WARNING] : Unable to create decoder for kernel: " << kernel_name
+                  << std::endl;
+        continue;
+      }
+      std::vector<Instruction> instruction_list = decoder.Disassemble();
+      if (instruction_list.size() == 0) {
+        std::cerr << "[WARNING] : Unable to decode kernel binary for kernel: " << kernel_name
+                  << std::endl;
+        continue;
+      }
+      /// Apply base addr to all instructions
+      for (auto& instruction : instruction_list) {
+        instruction.offset += kernel_address;
+      }
+
+      uint32_t mapping_num = 0;
+      res = ptiElfParserGetSourceMapping(parserHandle, kernel_idx, 0, nullptr, &mapping_num);
+      if (res != PTI_SUCCESS) {
+        std::cerr << "[WARNING] : Failed to get source mapping for kernel ID: " << kernel_idx
+                  << std::endl;
+        continue;
+      }
+
+      std::vector<SourceMapping> line_info_list(mapping_num);
+      res = ptiElfParserGetSourceMapping(parserHandle, kernel_idx, mapping_num,
+                                         line_info_list.data(), nullptr);
+      if (res != PTI_SUCCESS) {
+        std::cerr << "[WARNING] : No source mapping found for kernel ID: " << kernel_idx
+                  << std::endl;
+        continue;
+      }
+
+      std::unordered_map<uint32_t, SourceFileInfo> source_info_list;
+      for (auto line : line_info_list) {
+        if (source_info_list.find(line.file_id) != source_info_list.end()) {
+          continue;
+        }
+        std::filesystem::path fullpath =
+            std::filesystem::path(std::string(line.file_path)) / line.file_name;
+        std::vector<SourceLine> line_list = ReadSourceFile(fullpath);
+        if (line_list.size() == 0) {
+          std::cerr << "[WARNING] : Unable to find target source file for kernel: '" << kernel_name
+                    << "' : " << std::string(line.file_path) + line.file_name << std::endl;
+          continue;
+        }
+
+        PTI_ASSERT(line.file_id < (std::numeric_limits<uint32_t>::max)());
+
+        source_info_list[line.file_id] = {static_cast<uint32_t>(line.file_id), line.file_name,
+                                          line_list};
+      }
+
+      if (source_info_list.size() == 0) {
+        std::cerr << "[WARNING] : Unable to find kernel source files for kernel: " << kernel_name
+                  << std::endl;
+        return;
+      }
+
+      ZeDebugInfoCollector* collector = reinterpret_cast<ZeDebugInfoCollector*>(global_user_data);
+      PTI_ASSERT(collector != nullptr);
+      collector->AddKernel(kernel_name, instruction_list, line_info_list, source_info_list);
+
+      res = ptiElfParserDestroy(parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+    }
   }
 
  private:
@@ -361,4 +407,4 @@ class ZeDebugInfoCollector {
   KernelDebugInfoMap kernel_debug_info_map_;
 };
 
-#endif // PTI_SAMPLES_ZE_DEBUG_INFO_ZE_DEBUG_INFO_COLLECTOR_H_
+#endif  // PTI_SAMPLES_ZE_DEBUG_INFO_ZE_DEBUG_INFO_COLLECTOR_H_

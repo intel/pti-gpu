@@ -16,6 +16,10 @@ if(CMAKE_INCLUDE_PATH)
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
 
+add_subdirectory("${PTI_CMAKE_MACRO_DIR}/../utils/gpu_elf_parser" debug_info_parser)
+FindPtiElfParserHeaders(clt_debug_info)
+target_link_libraries(clt_debug_info debug_info_parser)
+
 FindOpenCLLibrary(clt_debug_info)
 FindOpenCLHeaders(clt_debug_info)
 

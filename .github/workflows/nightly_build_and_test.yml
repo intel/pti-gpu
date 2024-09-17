@@ -183,6 +183,16 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s instcount
 
+      - name: Build-and-test-ze_debug_info
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python ./tests/run.py -s ze_debug_info
+
+      - name: Build-and-test-cl_debug_info
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python ./tests/run.py -s cl_debug_info
+
 
 
   pti-tools-build-and-test-rocky:

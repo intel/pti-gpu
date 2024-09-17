@@ -43,7 +43,6 @@ def run(path, option):
   return None
 
 def main(option):
-  os.environ["IGC_EnableZEBinary"] = "0"
   path = utils.get_sample_build_path("ze_debug_info")
   if option == "dpc":
     log = dpc_gemm.main("gpu")

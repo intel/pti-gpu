@@ -10,30 +10,20 @@ static ZeDebugInfoCollector* collector = nullptr;
 
 // External Tool Interface ////////////////////////////////////////////////////
 
-extern "C" PTI_EXPORT
-void Usage() {
-  std::cout <<
-    "Usage: ./ze_debug_info[.exe] <application> <args>" <<
-    std::endl;
+extern "C" PTI_EXPORT void Usage() {
+  std::cout << "Usage: ./ze_debug_info[.exe] <application> <args>" << std::endl;
 }
 
-extern "C" PTI_EXPORT
-int ParseArgs(int argc, char* argv[]) {
-  return 1;
-}
+extern "C" PTI_EXPORT int ParseArgs(int argc, char* argv[]) { return 1; }
 
-extern "C" PTI_EXPORT
-void SetToolEnv() {
-  utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
-}
+extern "C" PTI_EXPORT void SetToolEnv() { utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1"); }
 
 // Internal Tool Functionality ////////////////////////////////////////////////
 
 static void PrintResults() {
   PTI_ASSERT(collector != nullptr);
 
-  const KernelDebugInfoMap& debug_info_map =
-    collector->GetKernelDebugInfoMap();
+  const KernelDebugInfoMap& debug_info_map = collector->GetKernelDebugInfoMap();
   if (debug_info_map.size() == 0) {
     return;
   }
