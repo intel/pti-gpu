@@ -531,7 +531,7 @@ class ZeMetricProfiler {
         std::map<uint64_t, std::pair<std::string, size_t>> kprops;
         int max_kname_size = 0;
         // enumerate all kernel property files
-        for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir_name_))) {
+        for (const auto& e: CXX_FILESYSTEM_NAMESPACE::directory_iterator(CXX_FILESYSTEM_NAMESPACE::path(data_dir_name_))) {
           // kernel properties file path: <data_dir>/.kprops.<device_id>.<pid>.txt
           if (e.path().filename().string().find(".kprops." + std::to_string(it->second->device_id_)) == 0) {
             std::ifstream kpf = std::ifstream(e.path());
@@ -733,7 +733,7 @@ class ZeMetricProfiler {
       else {
         std::vector<ZeKernelInfo> kinfo;
         // enumerate all kernel time files
-        for (const auto& e: std::filesystem::directory_iterator(std::filesystem::path(data_dir_name_))) {
+        for (const auto& e: CXX_FILESYSTEM_NAMESPACE::directory_iterator(CXX_FILESYSTEM_NAMESPACE::path(data_dir_name_))) {
           // kernel properties file path: <data_dir>/.ktime.<device_id>.<pid>.txt
           if (e.path().filename().string().find(".ktime." + std::to_string(it->second->device_id_)) == 0) {
             std::ifstream kf = std::ifstream(e.path());

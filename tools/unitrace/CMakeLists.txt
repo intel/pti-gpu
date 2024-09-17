@@ -157,6 +157,16 @@ target_include_directories(unitrace_tool PRIVATE "${L0_INC_PATH}")
 # Loader
 
 add_executable(unitrace "${PROJECT_SOURCE_DIR}/src/unitrace.cc")
+
+# Find whether the standard library in use has std::filesystem or
+# std::experimental::filesystem, so that the code can include, call,
+# and link accordingly.
+find_package(Filesystem REQUIRED COMPONENTS Final Experimental)
+target_link_libraries(unitrace std::filesystem)
+target_compile_definitions(unitrace PRIVATE
+    CXX_FILESYSTEM_IS_EXPERIMENTAL=${CXX_FILESYSTEM_IS_EXPERIMENTAL}
+    CXX_FILESYSTEM_NAMESPACE=${CXX_FILESYSTEM_NAMESPACE})
+
 set(_use_mpi 1)
 
 if (BUILD_WITH_MPI)
