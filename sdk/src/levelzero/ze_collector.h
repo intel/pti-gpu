@@ -335,10 +335,11 @@ class ZeCollector {
       collection_state_ = ZeCollectionState::Abnormal;
 
       PTI_ASSERT(global_ref_count == 0);
-      SPDLOG_DEBUG("In {}, L0 Tracing OFF, tid: {}", __FUNCTION__, utils::GetTid());
+      SPDLOG_DEBUG("In {}, L0 Tracing OFF, tid: {}", __FUNCTION__, thread_local_pid_tid_info.tid);
       return;
     }
-    SPDLOG_CRITICAL("In {}, Cannot stop L0 Tracing, tid: {}", __FUNCTION__, utils::GetTid());
+    SPDLOG_CRITICAL("In {}, Cannot stop L0 Tracing, tid: {}", __FUNCTION__,
+                    thread_local_pid_tid_info.tid);
     PTI_ASSERT(false);
     return;
   }
@@ -1021,7 +1022,7 @@ class ZeCollector {
       for (auto it = info.kernel_commands.begin(); it != info.kernel_commands.end(); it++) {
         ZeKernelCommand* command = (*it).get();
         if (!command->tid) {
-          command->tid = utils::GetTid();
+          command->tid = thread_local_pid_tid_info.tid;
         }
         command->queue = queue;
         command->submit_time = host_time_sync;
@@ -1412,7 +1413,7 @@ class ZeCollector {
     command->props = props;
 
     PTI_ASSERT(signal_event != nullptr);
-    command->tid = utils::GetTid();
+    command->tid = thread_local_pid_tid_info.tid;
     uint64_t host_timestamp = ze_instance_data.start_time_host;
     command->append_time = host_timestamp;
     command->kernel_id = UniKernelId::GetKernelId();
@@ -2394,7 +2395,8 @@ class ZeCollector {
         if (ZE_RESULT_SUCCESS == status) {
           PTI_ASSERT(global_ref_count == 0);
           global_ref_count++;
-          SPDLOG_DEBUG(" --- In {}, Tracing ON, tid: {}", __FUNCTION__, utils::GetTid());
+          SPDLOG_DEBUG(" --- In {}, Tracing ON, tid: {}", __FUNCTION__,
+                       thread_local_pid_tid_info.tid);
         }
       }
       parent_collector_->cb_enabled_.acallback = true;
@@ -2423,7 +2425,8 @@ class ZeCollector {
         if (ZE_RESULT_SUCCESS == status) {
           global_ref_count--;
           PTI_ASSERT(global_ref_count == 0);
-          SPDLOG_DEBUG(" --- In {}, Tracing OFF, tid: {}", __FUNCTION__, utils::GetTid());
+          SPDLOG_DEBUG(" --- In {}, Tracing OFF, tid: {}", __FUNCTION__,
+                       thread_local_pid_tid_info.tid);
         }
       }
       parent_collector_->cb_enabled_.acallback = false;

@@ -17,6 +17,22 @@
       }
     },
     {
+      "name": "linux-icpx-reldebuginfo",
+      "displayName": "Linux Release x64 IntelLLVM Ninja Config",
+      "description": "Linux Release x64 Config using Ninja generator and oneAPI compiler",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wformat -Werror -Wformat-security -Werror=format-security -g -fstack-protector-strong -D_FORTIFY_SOURCE=2",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -Wformat -Werror -Wformat-security -Werror=format-security -g -fstack-protector-strong -D_FORTIFY_SOURCE=2",
+        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack",
+        "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack"
+      }
+    },
+
+    {
       "name": "linux-icpx-debug",
       "displayName": "Linux Debug x64 IntelLLVM Ninja Config",
       "description": "Linux Debug x64 Config using Ninja generator and oneAPI compiler",
@@ -220,6 +236,11 @@
     "displayName": "Linux Release x64 IntelLLVM Ninja Build"
   },
   {
+    "name": "linux-icpx-reldebuginfo",
+    "configurePreset": "linux-icpx-reldebuginfo",
+    "displayName": "Linux Release x64 IntelLLVM Ninja Build"
+  },
+  {
     "name": "linux-icpx-debug",
     "configurePreset": "linux-icpx-debug",
     "displayName": "Linux Debug x64 IntelLLVM Ninja Build"
@@ -294,6 +315,14 @@
   {
     "name": "linux-icpx-release",
     "configurePreset": "linux-icpx-release",
+    "displayName": "Linux Release x64 IntelLLVM Tests",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build/lib:$penv{LD_LIBRARY_PATH}"
+    }
+  },
+  {
+    "name": "linux-icpx-reldebuginfo",
+    "configurePreset": "linux-icpx-reldebuginfo",
     "displayName": "Linux Release x64 IntelLLVM Tests",
     "environment": {
       "LD_LIBRARY_PATH": "${sourceDir}/build/lib:$penv{LD_LIBRARY_PATH}"

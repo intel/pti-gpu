@@ -207,6 +207,8 @@ class SyclCollector {
     uint64_t Time = utils::GetTime();
     std::string Name{kUnknownFunctionName};
 
+    // TODO: Truncate is one of hotspots impacting the collection overhead.
+    // Do we really need it??
     if (Payload) {
       if (Payload->name_sid() != xpti::invalid_id) {
         Name = Truncate(Payload->name);
@@ -215,8 +217,8 @@ class SyclCollector {
 
     uint64_t ID = Event ? Event->unique_id : 0;
     uint64_t Instance_ID = Event ? Event->instance_id : 0;
-    uint32_t pid = utils::GetPid();
-    uint32_t tid = utils::GetTid();
+    uint32_t pid = thread_local_pid_tid_info.pid;
+    uint32_t tid = thread_local_pid_tid_info.tid;
 
     const auto trace_type = static_cast<xpti::trace_point_type_t>(TraceType);
 

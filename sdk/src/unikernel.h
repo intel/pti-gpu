@@ -16,6 +16,7 @@
 #include <string>
 
 #include "pti/pti_view.h"
+#include "utils.h"
 
 class UniCorrId {
  public:
@@ -136,6 +137,16 @@ struct ZeKernelCommandExecutionRecord {
   size_t bytes_xfered_;
   size_t value_set_;
 };
+
+// This structure and thread_local object enables collectors to avoid retrieving pid and tid
+// multiple times. Especially taking into account that getting tid is syscall and thus expensive.
+// Collectors just read this structure to get pid and tid.
+struct PidTidInfo {
+  uint32_t pid;
+  uint32_t tid;
+};
+
+inline thread_local PidTidInfo thread_local_pid_tid_info = {utils::GetPid(), utils::GetTid()};
 
 //
 // TODO -- refactor 2nd level callbacks so that callbacks are not bound to

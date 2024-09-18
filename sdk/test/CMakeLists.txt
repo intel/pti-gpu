@@ -1,3 +1,4 @@
+include(macros)
 CheckIfSyclIsAvailable()
 GetGTest()
 
@@ -133,6 +134,36 @@ if(HAVE_SYCL)
   target_link_libraries(multi_threaded_submission PUBLIC Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
 
+  add_executable(dpc_gemm_threaded_profiled perf_dpc_gemm_threaded.cc)
+  add_executable(dpc_gemm_threaded_baseline perf_dpc_gemm_threaded.cc)
+  add_executable(dpc_gemm_threaded_linkonly perf_dpc_gemm_threaded.cc)
+
+  target_include_directories(
+    dpc_gemm_threaded_profiled
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+         "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_compile_options(dpc_gemm_threaded_profiled PRIVATE -fsycl -gline-tables-only)
+  target_compile_options(dpc_gemm_threaded_baseline PRIVATE -fsycl -gline-tables-only)
+  target_compile_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl -gline-tables-only)
+
+  target_compile_definitions(dpc_gemm_threaded_baseline PRIVATE NO_PTI)
+  target_compile_definitions(dpc_gemm_threaded_linkonly PRIVATE NO_PTI)
+
+  target_link_options(dpc_gemm_threaded_profiled PRIVATE -fsycl -gline-tables-only)
+  target_link_options(dpc_gemm_threaded_baseline PRIVATE -fsycl -gline-tables-only)
+  target_link_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl -gline-tables-only)
+
+  target_link_libraries(dpc_gemm_threaded_profiled PUBLIC Threads::Threads Pti::pti_view
+                        LevelZero::level-zero)
+
+  target_link_libraries(dpc_gemm_threaded_linkonly PUBLIC Threads::Threads Pti::pti_view
+                        LevelZero::level-zero)
+
+  target_link_libraries(dpc_gemm_threaded_baseline PUBLIC Threads::Threads)
+
+
   gtest_discover_tests(
     dpcgemm_suite
     DISCOVERY_TIMEOUT 60
@@ -188,6 +219,26 @@ if(HAVE_SYCL)
     TEST_LIST TIMESTAMPS_CORRECTNESS_LIST
     PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
     PROPERTIES LABELS "functional")
+
+  RequirePythonInterp()
+  if(Python_FOUND)
+    add_test(
+      NAME perf-profiling-overhead
+      COMMAND
+        ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 60 profiled
+    )
+
+    add_test(
+      NAME perf-link-overhead
+      COMMAND
+        ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 3 linkonly
+    )
+
+    set_tests_properties(
+      perf-profiling-overhead perf-link-overhead PROPERTIES LABELS "performance")
+    else()
+      message(STATUS "Python not found - will skip performance test")
+  endif()
 
 endif()
 
