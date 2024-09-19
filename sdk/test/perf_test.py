@@ -57,10 +57,8 @@ def run_test(path, test_type="profiled", repetitions=11):
     print("Test type: " + test_type + " Command: ")
     print(command_test)
     print("Repetitions: " + str(repetitions))
-    diff_max = 0.0
-    diff_min = 1000000.0
-    diff_avg = 0.0
-    diffs = []
+    throughput_test = []
+    throughput_baseline = []
     for i in range(repetitions):
         command = path
         print("Running test: " + str(i))
@@ -73,22 +71,26 @@ def run_test(path, test_type="profiled", repetitions=11):
 
         print(stdout_t)
         print(stdout_b)
-        throughput_test = get_value("Throughput", stdout_t)
-        throughput_baseline = get_value("Throughput", stdout_b)
-        diff = (
-            100.0
-            * (float)(throughput_baseline - throughput_test)
-            / (float(throughput_baseline))
-        )
-        diffs.append(diff)
-        diff_avg += diff
-        diff_max = max(diff_max, diff)
-        diff_min = min(diff_min, diff)
+        throughput_test.append(get_value("Throughput", stdout_t))
+        throughput_baseline.append(get_value("Throughput", stdout_b))
 
-    diff_avg /= repetitions
-    diff_med = sorted(diffs)[repetitions // 2]
+    return True, throughput_baseline, throughput_test
 
-    return True, diff_min, diff_avg, diff_med, diff_max
+
+def process_data(values):
+    max_v = 0.0
+    min_v = 1000000.0
+    avg_v = 0.0
+    count = len(values)
+    for i in range(count):
+        avg_v += values[i]
+        max_v = max(max_v, values[i])
+        min_v = min(min_v, values[i])
+
+    avg_v /= count
+    med_v = sorted(values)[count // 2]
+
+    return min_v, avg_v, med_v, max_v
 
 
 def main():
@@ -96,14 +98,39 @@ def main():
     print(" executable path: " + executable_path)
     threshold_overhead = int(sys.argv[2]) if len(sys.argv) > 2 else 60
     test_type = sys.argv[3] if len(sys.argv) > 3 else "profiled"
-    Result, diff_min, diff_avg, diff_med, diff_max = run_test(
-        executable_path, test_type
-    )
+    Result, throughput_baseline, throughput_test = run_test(executable_path, test_type)
     if not Result:
         print("Test failed")
         return 1
     else:
+        min_base, avg_base, med_base, max_base = process_data(throughput_baseline)
+        min_test, avg_test, med_test, max_test = process_data(throughput_test)
         print("Threshold Overhread to pass: " + str(threshold_overhead) + "%")
+        print(
+            "Baseline: min "
+            + format(min_base, ".2f")
+            + " avg: "
+            + format(avg_base, ".2f")
+            + " med: "
+            + format(med_base, ".2f")
+            + " max: "
+            + format(max_base, ".2f")
+        )
+        print(
+            "Test: min "
+            + format(min_test, ".2f")
+            + " avg: "
+            + format(avg_test, ".2f")
+            + " med: "
+            + format(med_test, ".2f")
+            + " max: "
+            + format(max_test, ".2f")
+        )
+
+        diff_med = 100.0 * (float)(med_base - med_test) / (float(med_base))
+        diff_min = 100.0 * (float)(min_base - min_test) / (float(min_base))
+        diff_max = 100.0 * (float)(max_base - max_test) / (float(max_base))
+        diff_avg = 100.0 * (float)(avg_base - avg_test) / (float(avg_base))
         print(
             "Overhead: min "
             + format(diff_min, ".2f")
@@ -114,6 +141,7 @@ def main():
             + " max: "
             + format(diff_max, ".2f")
         )
+
         if diff_med > threshold_overhead:
             print("Test failed")
             return 1
