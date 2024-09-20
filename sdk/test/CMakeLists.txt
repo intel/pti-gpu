@@ -221,24 +221,20 @@ if(HAVE_SYCL)
     PROPERTIES LABELS "functional")
 
   RequirePythonInterp()
-  if(Python_FOUND)
-    add_test(
-      NAME perf-profiling-overhead
-      COMMAND
-        ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 60 profiled
-    )
+  add_test(
+    NAME perf-profiling-overhead
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 60 profiled
+  )
 
-    add_test(
-      NAME perf-link-overhead
-      COMMAND
-        ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 3 linkonly
-    )
+  add_test(
+    NAME perf-link-overhead
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 3 linkonly
+  )
 
-    set_tests_properties(
-      perf-profiling-overhead perf-link-overhead PROPERTIES LABELS "performance")
-    else()
-      message(STATUS "Python not found - will skip performance test")
-  endif()
+  set_tests_properties(
+    perf-profiling-overhead perf-link-overhead PROPERTIES LABELS "performance")
 
 endif()
 
@@ -260,10 +256,6 @@ add_custom_command(
   PRE_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
           ${PROJECT_SOURCE_DIR}/test/gemm.cl ${PTI_TEST_BIN_DIR}/gemm.cl)
-
-if (NOT TARGET LevelZero::level-zero)
-  find_package(LevelZero REQUIRED)
-endif()
 
 target_link_libraries(zegemm_suite PUBLIC Pti::pti_view GTest::gtest_main
                                           GTest::gmock LevelZero::level-zero)

@@ -5,7 +5,7 @@ macro(SetRequiredCMakeVersion)
 endmacro()
 
 macro(RequirePythonInterp)
-  if(NOT DEFINED _Python_EXECUTABLE)
+  if(NOT DEFINED _Python_EXECUTABLE OR NOT TARGET Python::Interpreter)
     find_package(Python COMPONENTS Interpreter REQUIRED)
     set(PYTHON_EXECUTABLE "${Python_EXECUTABLE}")
   else()
