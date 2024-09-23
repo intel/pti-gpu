@@ -233,3 +233,9 @@ CMAKE_PREFIX_PATH=$(prepend_path "${component_root}/lib/cmake/pti" "${CMAKE_PREF
 LD_LIBRARY_PATH=$(prepend_path "${component_root}/lib" "${LD_LIBRARY_PATH:-}") ; export LD_LIBRARY_PATH
 
 LIBRARY_PATH=$(prepend_path "${component_root}/lib" "${LIBRARY_PATH:-}") ; export LIBRARY_PATH
+
+#
+# This variable allows cmake to find PTI in conda environments to
+# bypass the overwritting of the LD_LIBRARY_PATH
+#
+Pti_DIR=${component_root}/lib/cmake/pti; export Pti_DIR

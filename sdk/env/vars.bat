@@ -38,5 +38,11 @@ set "LIB=%PTI_ROOT%\lib;%LIB%"
 set "LIBRARY_PATH=%PTI_ROOT%\lib;%LIBRARY_PATH%"
 set "INCLUDE=%PTI_ROOT%\include;%INCLUDE%"
 
+rem
+rem This variable allows cmake to find PTI in conda environments to
+rem bypass the overwriting of the LD_LIBRARY_PATH
+rem
+set "Pti_DIR=%PTI_ROOT%\lib\cmake\pti"
+
 set "PTI_ROOT="
 set "__this_dir_path="

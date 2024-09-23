@@ -287,15 +287,11 @@ if(PTI_INSTALL)
       COMPONENT Pti_oneAPI)
 
     if (UNIX)
-      install(
-        FILES "env/vars.sh"
-        DESTINATION "env/"
-        COMPONENT Pti_oneAPI)
+      install(FILES "env/vars.sh" DESTINATION "env/" COMPONENT Pti_oneAPI)
+      install(FILES "env/oneapi-vars.sh" DESTINATION "${CMAKE_INSTALL_SYSCONFDIR}/pti" RENAME vars.sh COMPONENT Pti_oneAPI)
     elseif (WIN32)
-      install(
-        FILES "env/vars.bat"
-        DESTINATION "env/"
-        COMPONENT Pti_oneAPI)
+      install(FILES "env/vars.bat" DESTINATION "env/" COMPONENT Pti_oneAPI)
+      install(FILES "env/oneapi-vars.bat" DESTINATION "${CMAKE_INSTALL_SYSCONFDIR}/pti" RENAME vars.bat COMPONENT Pti_oneAPI)
     endif()
 
     bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
@@ -314,6 +310,8 @@ if(PTI_INSTALL)
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_BIN_DIR}/*.dll\"]])
     bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
       [[\"\${CMAKE_INSTALL_PREFIX}/env/*\"]])
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+      [[\"\${CMAKE_INSTALL_PREFIX}/etc/*\"]])
 
  endif()
 
