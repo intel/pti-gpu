@@ -11,6 +11,7 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <memory>
