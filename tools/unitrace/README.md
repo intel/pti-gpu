@@ -185,7 +185,7 @@ By default, device activities are profiled per thread, per Level-Zero engine and
 
 This can potentially take a lot of screen space if a lot of threads use the device and/or multiple Level-Zero engines and/or OpenCL queues are utilized when the trace is viewed in a browser.
 
-One can use **--chrome-no-thread-on-device** to suppress thread data:
+You can use **--chrome-no-thread-on-device** to suppress thread data:
 
 ![Device Activities Per Level-Zero Engine and Per OpenCL Queue!](/tools/unitrace/doc/images/device-per-engine.png)
 
@@ -245,7 +245,7 @@ This option is especially useful when the application is a distributed MPI one.
 ## Activate and Deactivate Tracing and Profiling at Runtime
 
 By default, the application is traced/profiled from the start to the end. In certain cases, however, it is more efficient and desirable to
-dynamically activate and deactivate tracing at runtime. One can do so by using **--conditional-collection** option together with setting and
+dynamically activate and deactivate tracing at runtime. You can do so by using **--conditional-collection** option together with setting and
 unsetting environment variable **"PTI_ENABLE_COLLECTION"** in the application:
 
 ```cpp
@@ -440,7 +440,7 @@ Performance metrics data will be stored in **perfquery.<pid>.csv** file.
 
 ![Metric Query!](/tools/unitrace/doc/images/metric-query.png)
 
-By default, counters in **ComputeBasic** metric group are profiled. One can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
+By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
 
 ### Time-based Metric Sampling
 
@@ -460,7 +460,7 @@ To kernels that take short time, you may find that the default sampling rate is 
    unitrace -k -i 20 -o perfmetrics.csv myapp
    ```
 
-By default, counters in **ComputeBasic** metric group are profiled. One can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
+By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
 
 ### Stall Sampling
 
@@ -561,7 +561,7 @@ Device 0
         "main::{lambda(auto:1)#4}"
 ```
 
-You can also use the -o option to redirect the output to a text file for later reference:
+You can also use the **-o** option to redirect the output to a text file for later reference:
 
    ```sh
    python analyzeperfmetrics.py -l -o contents.txt perfmetrics.12345.csv
@@ -570,13 +570,13 @@ You can also use the -o option to redirect the output to a text file for later r
 
 #### Analyze Kernel Performance Metrics
 
-Once you have the knowledge of the device, the metrics and the kernels in the metric data file, you can run the same script to analyze specific performance metrics of a specific instance of a specific kernel, all instances of a specific kernel or all instances of all kernels executed on a specific device. The performance chart will be stored in either .png or .pdf file, depending on the output format you choose and/or command line options you use.
+Once you have the knowledge of the device, the metrics and the kernels in the metric data file, you can run the same script to analyze specific performance metrics of a specific instance of a specific kernel, all instances of a specific kernel or all instances of all kernels executed on a specific device. The performance chart will be stored in a PDF file. 
 
    ```sh
-   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.png perfmetrics.12345.csv
+   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
    ```
 
-This command plots a chart of XVE stall and function unit utilizations for the **second** instance of kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** profiled on device **0** and stores the chart in file **perfchart.png**.
+This command plots a chart of XVE stall and function unit utilizations for the **second** instance of kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** profiled on device **0** and stores the chart in file **perfchart.pdf**.
 
 ![Analyze Kernel Performance Metrics!](/tools/unitrace/doc/images/perfchart.png)
 
@@ -593,6 +593,18 @@ If **-k** option is not present and instance is 0, all instances of all kernels 
    python analyzeperfmetrics.py -d 0 -i 0 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
 
    ```
+
+The **-m** option can be repeated multiple times to analyze multiple sets of metrics at the same time, for example:
+
+   ```sh
+   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -m "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes]" -y "L3 Cache Read/Write (bytes)" -o perfchart.pdf perfmetrics.12345.csv
+   ```
+
+![Analyze Multiple Performance Metric Sets!](/tools/unitrace/doc/images/perfchart-multi-sets.png)
+
+You can also use the **-b** option together with one or more **-m** options to get bandwidthi data.
+
+![Analyze Multiple Performance Metric Sets and Bandwidths!](/tools/unitrace/doc/images/bandwidth.png)
 
 If the input metric data file has stall sampling events collected using **--stall-sampling** option, the chart generated shows stall events and instruction addresses.
 
