@@ -1373,8 +1373,11 @@ class ZeCollector {
         }
         // both should not be signalled.
         // this verifies that EventReset handled properly, as a lot of events might re-used
-        PTI_ASSERT(ZE_RESULT_NOT_READY == zeEventQueryStatus(signal_event));
-        PTI_ASSERT(ZE_RESULT_NOT_READY == zeEventQueryStatus(swap_event));
+        //
+        // However with UR the behaviour changed - events come signalled
+        // TODO: clarify it with UR
+        // PTI_ASSERT(ZE_RESULT_NOT_READY == zeEventQueryStatus(signal_event));
+        // PTI_ASSERT(ZE_RESULT_NOT_READY == zeEventQueryStatus(swap_event));
 
         command->event_swap = swap_event;
         signal_event = command->event_swap;

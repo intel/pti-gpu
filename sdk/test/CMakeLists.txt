@@ -10,9 +10,27 @@ if (NOT TARGET LevelZero::level-zero)
   find_package(LevelZero REQUIRED)
 endif()
 
-set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin")
+if (NOT TARGET unified-runtime::loader)
+  find_package(unified-runtime)
+endif()
+
+if (NOT TARGET Xpti::xpti)
+  find_package(Xpti)
+endif()
+
+if (NOT TARGET unified-runtime::loader)
+  message(STATUS "The Unified Runtime could not be found. Unified Runtime"
+                 " specific tests will not be built.")
+
+endif()
+
+if (NOT TARGET Xpti::xpti)
+  message(STATUS "Xpti could not be found. Xpti specific tests will not be"
+                 " built.")
+endif()
 
 # Multi-config generators not supported yet, this is an incomplete bandage.
+set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin")
 get_property(PTI_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(PTI_IS_MULTI_CONFIG)
   set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}")
@@ -27,10 +45,7 @@ if(HAVE_SYCL)
            "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(
-    dpcgemm_suite
-    PUBLIC -fsycl -gline-tables-only
-    PRIVATE ${PTI_COMPILE_FLAGS_EXPR})
+  target_compile_options(dpcgemm_suite PUBLIC -fsycl -gline-tables-only)
   target_link_options(dpcgemm_suite PUBLIC -fsycl -gline-tables-only)
   target_compile_definitions(dpcgemm_suite PUBLIC PTI_LEVEL_ZERO=1)
   target_link_libraries(dpcgemm_suite PUBLIC Pti::pti_view GTest::gtest_main LevelZero::level-zero)
@@ -95,7 +110,7 @@ if(HAVE_SYCL)
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
-         "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
+         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
   target_compile_options(mem_ops_test PRIVATE -fsycl -gline-tables-only)
 
@@ -111,7 +126,7 @@ if(HAVE_SYCL)
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
-         "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
+         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
   target_compile_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only)
   target_link_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only)
@@ -126,7 +141,7 @@ if(HAVE_SYCL)
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
-         "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
+         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
   target_compile_options(multi_threaded_submission PRIVATE -fsycl -gline-tables-only)
   target_link_options(multi_threaded_submission PRIVATE -fsycl -gline-tables-only)
@@ -260,13 +275,52 @@ add_custom_command(
 target_link_libraries(zegemm_suite PUBLIC Pti::pti_view GTest::gtest_main
                                           GTest::gmock LevelZero::level-zero)
 
+
+
+if (HAVE_SYCL AND TARGET unified-runtime::loader)
+  add_executable(urgemm_suite main_urgemm_fixture.cc)
+
+  target_include_directories(
+    urgemm_suite
+    PUBLIC "${CMAKE_BINARY_DIR}"
+           "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+           "${PROJECT_SOURCE_DIR}/src"
+           "${PROJECT_SOURCE_DIR}/src/levelzero"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+
+  add_custom_command(
+    TARGET urgemm_suite
+    PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${PROJECT_SOURCE_DIR}/test/gemm.spv ${PTI_TEST_BIN_DIR}/gemm.spv)
+  add_custom_command(
+    TARGET urgemm_suite
+    PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${PROJECT_SOURCE_DIR}/test/gemm.cl ${PTI_TEST_BIN_DIR}/gemm.cl)
+
+  target_compile_options(urgemm_suite  PUBLIC -fsycl -gline-tables-only)
+  target_link_options(urgemm_suite PUBLIC -fsycl -gline-tables-only)
+  target_link_libraries(urgemm_suite PUBLIC Pti::pti_view
+                                            GTest::gtest_main
+                                            GTest::gmock
+                                            LevelZero::level-zero
+                                            unified-runtime::loader)
+  gtest_discover_tests(
+    urgemm_suite
+    DISCOVERY_TIMEOUT 60
+    TEST_LIST URGEMM_SUITE_TEST_LIST
+    PROPERTIES LABELS "unit" "sycl" "unified-runtime")
+endif()
+
 add_executable(view_record_test view_buffer_test.cc)
 
 target_include_directories(
   view_record_test
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
-         "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
+         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
 target_link_libraries(view_record_test PUBLIC Pti::pti_view GTest::gtest_main
                                               spdlog::spdlog
@@ -278,7 +332,7 @@ target_include_directories(
   assert_exception_test
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
-         "${PROJECT_SOURCE_DIR}/src/syclpi" "${PROJECT_SOURCE_DIR}/src/utils")
+         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
 target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_main
                                                    spdlog::spdlog
@@ -309,7 +363,6 @@ gtest_discover_tests(
   DISCOVERY_TIMEOUT 60
   TEST_LIST ASSERT_EXCEPTION_TEST_LIST
   PROPERTIES LABELS "unit")
-
 gtest_discover_tests(
   view_gpu_local_test
   DISCOVERY_TIMEOUT 60

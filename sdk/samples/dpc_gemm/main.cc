@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <sycl/sycl.hpp>
 
 #include "pti/pti_view.h"

@@ -1,5 +1,5 @@
 #
-#Test to match up sycl runtime piEnqueueKernelLaunch function records with L0 kernel view records, via correlation id.
+#Test to match up sycl runtime EnqueueKernelLaunch function records with L0 kernel view records, via correlation id.
 #  -- checks that matched pairs on correlation_id and kernel_id have same threadid.
 #
 #To Run:

@@ -15,6 +15,11 @@ bool p2p_s2d_record = false;
 bool p2p_s2s_record = false;
 bool memfill_m2s = false;
 bool memfill_m2d = false;
+bool sycl_memfill_seen = false;
+bool sycl_memcpy_seen = false;
+bool sycl_host_alloc_seen = false;
+bool sycl_device_alloc_seen = false;
+bool sycl_shared_alloc_seen = false;
 bool uuid_non_unique = false;
 bool memfill_uuid_zero = false;
 bool memcopy_type_valid = false;
@@ -158,6 +163,19 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
       case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
         [[maybe_unused]] std::string function_name =
             reinterpret_cast<pti_view_record_sycl_runtime*>(ptr)->_name;
+        if ((function_name.find("EnqueueUSMFill") != std::string::npos) ||
+            (function_name.find("USMEnqueueMemset") != std::string::npos)) {
+          sycl_memfill_seen = true;
+        } else if ((function_name.find("EnqueueUSMMemcpy") != std::string::npos) ||
+                   (function_name.find("USMEnqueueMemcpy") != std::string::npos)) {
+          sycl_memcpy_seen = true;
+        } else if ((function_name.find("DeviceAlloc") != std::string::npos)) {
+          sycl_device_alloc_seen = true;
+        } else if ((function_name.find("SharedAlloc") != std::string::npos)) {
+          sycl_shared_alloc_seen = true;
+        } else if ((function_name.find("HostAlloc") != std::string::npos)) {
+          sycl_host_alloc_seen = true;
+        }
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
@@ -180,6 +198,7 @@ void p2pTest() {
   platform platform(gpu_selector_v);
 
   std::vector<queue> gpu_queues;
+  std::vector<float*> host_ptrs;
   std::vector<float*> gpu_device_ptrs;
   std::vector<float*> gpu_shared_ptrs;
   std::vector<context> gpu_context;
@@ -196,6 +215,8 @@ void p2pTest() {
           static_cast<float*>(malloc_device(num_root_devices * sizeof(float), gpu_queues[i])));
       gpu_shared_ptrs.push_back(
           static_cast<float*>(malloc_shared(num_root_devices * sizeof(float), gpu_queues[i])));
+      host_ptrs.push_back(
+          static_cast<float*>(malloc_host(num_root_devices * sizeof(float), gpu_queues[i])));
       std::cout << "memset for root device#: " << i << std::endl;
       gpu_queues[i].memset(gpu_device_ptrs[i], 0, num_root_devices * sizeof(float)).wait();
       gpu_queues[i].memset(gpu_shared_ptrs[i], 0, num_root_devices * sizeof(float)).wait();
@@ -267,6 +288,7 @@ void p2pTest() {
   for (uint32_t i = 0; i < num_root_devices; i++) {
     free(gpu_device_ptrs[i], gpu_context[i]);
     free(gpu_shared_ptrs[i], gpu_context[i]);
+    free(host_ptrs[i], gpu_context[i]);
   }
 }
 
@@ -279,6 +301,11 @@ class MemoryOperationFixtureTest : public ::testing::Test {
     p2p_s2s_record = false;
     memfill_m2s = false;
     memfill_m2d = false;
+    sycl_memfill_seen = false;
+    sycl_memcpy_seen = false;
+    sycl_host_alloc_seen = false;
+    sycl_device_alloc_seen = false;
+    sycl_shared_alloc_seen = false;
     uuid_non_unique = false;
     memfill_uuid_zero = false;
     memcopy_type_valid = false;
@@ -408,4 +435,14 @@ TEST_F(MemoryOperationFixtureTest, P2PQueueIdPresent) {
   if (!atleast_2_devices)
     GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
   ASSERT_EQ(queue_id_memp2p_records, true);
+}
+
+TEST_F(MemoryOperationFixtureTest, syclRuntimeRecordsDetected) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  p2pTest();
+  EXPECT_EQ(sycl_host_alloc_seen, true);
+  EXPECT_EQ(sycl_device_alloc_seen, true);
+  EXPECT_EQ(sycl_shared_alloc_seen, true);
+  EXPECT_EQ(sycl_memfill_seen, true);
+  EXPECT_EQ(sycl_memcpy_seen, true);
 }

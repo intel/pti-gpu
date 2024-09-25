@@ -202,7 +202,7 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
         pti_view_record_sycl_runtime *a_sycl_rec =
             reinterpret_cast<pti_view_record_sycl_runtime *>(ptr);
         std::string function_name = a_sycl_rec->_name;
-        if ((sycl_idx < 2) && (function_name.find("piEnqueueKernelLaunch") != std::string::npos)) {
+        if ((sycl_idx < 2) && (function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
           sycl_kernel_corr_id[sycl_idx] = a_sycl_rec->_correlation_id;
           sycl_kernel_start_time[sycl_idx] = a_sycl_rec->_start_timestamp;
           sycl_idx++;

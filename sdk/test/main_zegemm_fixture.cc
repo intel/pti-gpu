@@ -47,9 +47,11 @@ float Check(const std::vector<float>& a, float value) {
 
   float eps = 0.0f;
   for (size_t i = 0; i < a.size(); ++i) {
+    if (i < 10) std::cout << i << ": " << a[i] << "\n";
     eps += fabs((a[i] - value) / value);
   }
 
+  std::cout << "Check: " << eps << ":" << a.size() << " : " << value << "\n";
   return eps / a.size();
 }
 
@@ -112,6 +114,8 @@ float RunWithPollingAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t devic
     return 0.0f;
   }
 
+  std::cout << "Sizes and return values: " << size << " : " << group_size[0] << " : "
+            << group_size[1] << " : " << group_size[2] << "\n";
   uint32_t compute_queue_ordinal = 0;
   uint32_t copy_queue_ordinal = 0;
   if (0 != GetGroupOrdinals(device, compute_queue_ordinal, copy_queue_ordinal)) {
@@ -538,8 +542,8 @@ class MainZeFixtureTest : public ::testing::Test {
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
           if (capture_records) {
-            std::cout << "--- Record Kernel" << '\n';
             pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
+            std::cout << "--- Record Kernel: " << rec->_name << '\n';
             uint64_t duration = rec->_end_timestamp - rec->_start_timestamp;
             std::cout << "  Start: " << rec->_start_timestamp << '\n';
             std::cout << "  End: " << rec->_end_timestamp << '\n';

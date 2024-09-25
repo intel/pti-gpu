@@ -53,13 +53,6 @@ void TestCore(bool do_immediate) {
               << std::endl;
 
     auto dev = sycl::device(sycl::gpu_selector_v);
-    /*  will use it after not supporting compiler 2023
-        sycl::propirty_list prop_immediate{sycl::property::queue::in_order(),
-                                      sycl::ext::intel::property::queue::immediate_command_list()};
-
-        sycl::property_list prop_no_immediate{sycl::property::queue::in_order(),
-                                      sycl::ext::intel::property::queue::no_immediate_command_list()};
-    */
     // Important that queue is in order
     sycl::property_list prop1{sycl::property::queue::in_order(),
                               sycl::ext::intel::property::queue::immediate_command_list()};
@@ -143,9 +136,6 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
     // Called right before destructor after each test
   }
 
-  // This function is for workaround to have every test to run in a separate process
-  void ExitFunction() { _exit(0); }
-
   bool TestForDeviceKernelsOverlap(std::vector<std::pair<uint64_t, uint64_t> >& timestamps) {
     if (timestamps.size() == 0) {
       std::cerr << "--->  ERROR: Empty kernel timestamps array - Not expected " << std::endl;
@@ -223,25 +213,33 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
   }
 
   static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_bytes) {
-    times_buffer_completed++;
-    ASSERT_TRUE(times_buffer_completed == 1)
-        << "ERROR: Not expected to enter to " << __FUNCTION__
-        << " more then 1 time, entered here : " << times_buffer_completed << " times";
+    uint32_t kernel_records_in_buffer = 0;
 
     if (!buf || !used_bytes || !buf_size) {
       std::cerr << "Received empty buffer" << '\n';
       ::operator delete(buf);
       return;
     }
+
     pti_view_record_base* ptr = nullptr;
     while (true) {
       auto buf_status = ptiViewGetNextRecord(buf, used_bytes, &ptr);
       if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
-        std::cout << "Reached End of buffer" << '\n';
+        std::cout << "Reached End of buffer: " << times_buffer_completed
+                  << " Kernel records in buffer: " << kernel_records_in_buffer << '\n';
+        if (kernel_records_in_buffer > 0) {
+          times_buffer_completed++;
+          //  OK to get more buffers as soon as there no kernel records in them
+          //  But kernel records we want safely process from one same buffer
+          ASSERT_TRUE(times_buffer_completed == 1)
+              << "ERROR: Not expected to enter to " << __FUNCTION__
+              << " more then 1 time, entered here : " << times_buffer_completed << " times";
+        }
         break;
       }
       if (buf_status != pti_result::PTI_SUCCESS) {
-        std::cerr << "Found Error Parsing Records from PTI" << '\n';
+        std::cerr << "Found Error Parsing Records in buffer: " << times_buffer_completed
+                  << " PTI buf_status: " << buf_status << '\n';
         break;
       }
       switch (ptr->_view_kind) {
@@ -250,6 +248,7 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
+          kernel_records_in_buffer++;
           pti_view_record_kernel* p_kernel_rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
 
           auto found_issues = pti::test::utils::ValidateTimestamps(
@@ -300,8 +299,6 @@ std::vector<std::pair<uint64_t, uint64_t> >
 
 TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   bool do_immediate = GetParam();
-  // use SetEnv until
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
 
   RunTest(do_immediate);
@@ -316,7 +313,6 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   if (do_immediate) {
     EXPECT_EQ(TestForAppendSubmitAtImmediate(kernel_host_timestamps), true);
   }
-  EXPECT_EXIT(ExitFunction(), testing::ExitedWithCode(0), "");
 }
 
 INSTANTIATE_TEST_SUITE_P(NoKernelOverlapTests, NoKernelOverlapParametrizedTestFixture,

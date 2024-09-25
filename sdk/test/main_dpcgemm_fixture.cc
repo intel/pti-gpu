@@ -281,9 +281,11 @@ class MainFixtureTest : public ::testing::Test {
         }
         case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
           std::string function_name = reinterpret_cast<pti_view_record_sycl_runtime*>(ptr)->_name;
-          if (function_name.find("piEnqueueKernelLaunch") != std::string::npos) {
+          std::cout << "Kernel name sycl: " << function_name << "\n";
+          if ((function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
             kernel_launch_func_name = true;
-          } else if (function_name.find("piEventsWait") != std::string::npos) {
+          } else if ((function_name.find("piEventsWait") != std::string::npos) ||
+                     (function_name.find("urEventWait") != std::string::npos)) {
             sycl_has_all_records = true;
           }
           break;

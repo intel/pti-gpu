@@ -506,7 +506,7 @@ TEST_P(SyclQueueIdFixtureTest, SameQDifferentKernelSameQID) {
   ASSERT_EQ(queue_id_K1, queue_id_K2);
 }
 
-#if __INTEL_LLVM_COMPILER >= 20240101
+#if __INTEL_LLVM_COMPILER >= 20240101 || __LIBSYCL_MAJOR_VERSION >= 8
 TEST_P(SyclQueueIdFixtureTest, DifferentQSameKernelDifferentQID) {
   bool do_immediate = GetParam();
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
@@ -544,14 +544,14 @@ TEST_P(SyclQueueIdFixtureTest, SameQDifferentTemplatedKernelSameQID) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunSyclQueueIdTests(use_same_q = true, use_same_k = false, templated_run = true);
   ASSERT_NE(queue_id_K1, kMaxQueueId);
-#if __INTEL_LLVM_COMPILER >= 20240101
+#if __INTEL_LLVM_COMPILER >= 20240101 || __LIBSYCL_MAJOR_VERSION >= 8
   ASSERT_NE(queue_id_K1, (kMaxQueueId - 1));
 #endif
   ASSERT_NE(queue_id_K2, 0ULL);
   ASSERT_EQ(queue_id_K1, queue_id_K2);
 }
 
-#if __INTEL_LLVM_COMPILER >= 20240101
+#if __INTEL_LLVM_COMPILER >= 20240101 || __LIBSYCL_MAJOR_VERSION >= 8
 TEST_P(SyclQueueIdFixtureTest, DifferentQSameTemplatedKernelDifferentQID) {
   bool do_immediate = GetParam();
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
@@ -591,7 +591,7 @@ TEST_P(SyclQueueIdFixtureTest, QueueIDPresentInAllRecords) {
   ASSERT_EQ(queue_id_memfill_records, true);
 }
 
-#if __INTEL_LLVM_COMPILER >= 20240101
+#if __INTEL_LLVM_COMPILER >= 20240101 || __LIBSYCL_MAJOR_VERSION >= 8
 TEST_P(SyclQueueIdFixtureTest, STQueueIDsUniqueInLoopInstancesStackedQ) {
   bool do_immediate = GetParam();
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");

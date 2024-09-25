@@ -127,7 +127,7 @@ target_include_directories(
          "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
          "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
-          "${PROJECT_SOURCE_DIR}/src/syclpi"
+          "${PROJECT_SOURCE_DIR}/src/sycl"
           "${PROJECT_SOURCE_DIR}/src/levelzero"
           "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -146,9 +146,7 @@ if (WIN32)
   AddProjectVersionInfo(pti)
 endif()
 
-target_link_libraries(
-  pti
-  PRIVATE spdlog::spdlog)
+target_link_libraries(pti PRIVATE spdlog::spdlog)
 
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
@@ -161,7 +159,7 @@ target_include_directories(
          "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
          "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
          "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/syclpi"
+  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/sycl"
           "${PROJECT_SOURCE_DIR}/src/levelzero"
           "${PROJECT_SOURCE_DIR}/src/utils" "${PROJECT_SOURCE_DIR}/src/loader")
 
