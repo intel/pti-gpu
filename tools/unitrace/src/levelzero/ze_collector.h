@@ -3096,7 +3096,7 @@ class ZeCollector {
     return query;
   }
 
-  static void PrepareToAppendKernelCommand(ZeCollector* collector, ZeCommandList *cl) {
+  static void PrepareToAppendKernelCommand(ZeCommandList *cl) {
     ze_result_t status;
     uint64_t host_timestamp;
     uint64_t device_timestamp;	// in ticks
@@ -3482,7 +3482,6 @@ class ZeCollector {
   }
 
   void AppendImageMemoryCopyCommand(
-    ZeCollector *collector, 
     ZeDeviceCommandHandle handle,
     ze_image_handle_t image,
     const void* src,
@@ -3605,7 +3604,6 @@ class ZeCollector {
   }
 
   void AppendCommand(
-      ZeCollector *collector, 
       ZeDeviceCommandHandle handle,
       ze_event_handle_t& event_to_signal,
       zet_metric_query_handle_t& query,
@@ -3712,7 +3710,7 @@ class ZeCollector {
     }
   }
 
-  void AppendCommand(ZeCollector *collector, ZeDeviceCommandHandle handle, ZeCommandList *cl, std::vector<uint64_t> *kids, uint64_t *dts) {
+  void AppendCommand(ZeDeviceCommandHandle handle, ZeCommandList *cl, std::vector<uint64_t> *kids, uint64_t *dts) {
 
     if (local_device_submissions_.IsFinalized()) {
       return;
@@ -4055,7 +4053,7 @@ class ZeCollector {
     zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
-      collector->AppendCommand(collector, Barrier, *(params->phSignalEvent), query,
+      collector->AppendCommand(Barrier, *(params->phSignalEvent), query,
           *(params->phCommandList), kids);
     }
     else {
@@ -4083,7 +4081,7 @@ class ZeCollector {
     zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
-      collector->AppendCommand(collector, MemoryRangesBarrier, *(params->phSignalEvent), query,
+      collector->AppendCommand(MemoryRangesBarrier, *(params->phSignalEvent), query,
           *(params->phCommandList), kids);
     }
     else {
@@ -4181,7 +4179,7 @@ class ZeCollector {
     zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
-      collector->AppendImageMemoryCopyCommand(collector, ImageCopy, *(params->phSrcImage),
+      collector->AppendImageMemoryCopyCommand(ImageCopy, *(params->phSrcImage),
         nullptr, nullptr, *(params->phSignalEvent), query,
         *(params->phCommandList), kids);
     }
@@ -4210,7 +4208,7 @@ class ZeCollector {
     zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
-      collector->AppendImageMemoryCopyCommand(collector, ImageCopyRegion, *(params->phSrcImage),
+      collector->AppendImageMemoryCopyCommand(ImageCopyRegion, *(params->phSrcImage),
         nullptr, nullptr, *(params->phSignalEvent), query,
         *(params->phCommandList), kids);
     }
@@ -4239,7 +4237,7 @@ class ZeCollector {
     zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
-      collector->AppendImageMemoryCopyCommand(collector, ImageCopyToMemory, *(params->phSrcImage),
+      collector->AppendImageMemoryCopyCommand(ImageCopyToMemory, *(params->phSrcImage),
         nullptr, *(params->pdstptr), *(params->phSignalEvent), query,
         *(params->phCommandList), kids);
     }
@@ -4348,7 +4346,7 @@ class ZeCollector {
           exit(-1);
         }
         
-        collector->PrepareToAppendKernelCommand(collector, it->second);
+        collector->PrepareToAppendKernelCommand(it->second);
 
         *instance_data = reinterpret_cast<void *>(&(dts[idx]) + 1);
         it->second->num_device_global_timestamps_ += 2; // start timestamp and end timestamp
@@ -4378,7 +4376,7 @@ class ZeCollector {
             std::cerr << "[ERROR] Failed to get device global timestamps (" << status << ")" << std::endl;
             exit(-1);
           }
-          collector->AppendCommand(collector, EventReset, it->second, kids, dts); 
+          collector->AppendCommand(EventReset, it->second, kids, dts); 
         }
       }
       collector->command_lists_mutex_.unlock();
