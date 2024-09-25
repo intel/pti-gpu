@@ -7,15 +7,19 @@ import utils
 if sys.platform == 'win32':
   file_extention = ".exe"
   file_name_prefix = ""
-  make = ["cmake", "--build", ".", "--config", utils.get_build_flag()]
+  make = ["nmake"]
 else:
   file_extention = ""
   file_name_prefix = "./"
   make = ["make"]
 
 def config(path):
-  cmake = ["cmake",\
-    "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
+  if sys.platform == 'win32':
+    cmake = ["cmake", "-G", "NMake Makefiles", \
+      "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
+  else:
+    cmake = ["cmake",\
+      "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
   stdout, stderr = utils.run_process(cmake, path)
   if stderr and stderr.find("CMake Error") != -1:
     return stderr

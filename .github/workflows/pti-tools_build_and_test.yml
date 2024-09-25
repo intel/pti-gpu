@@ -22,7 +22,7 @@ permissions:
 jobs:
 
   pti-tools-build-and-test:
-    name: Test pti library Ubuntu-22-04
+    name: Test pti tools Ubuntu-22-04
 
     if: vars.PTI_RUN_TESTS == 1
 
@@ -90,3 +90,30 @@ jobs:
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s cl_debug_info
+
+  pti-tools-build-and-test-windows:
+
+    name: Test unitrace on Windows
+
+    if: vars.PTI_RUN_TESTS == 1
+
+    runs-on: [self-hosted, Windows, pti]
+
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+      - name: Clean-up
+        run: |
+          del /S /Q /F *
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build-and-test-unitrace
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          python --version
+          python ./tests/run.py -s unitrace

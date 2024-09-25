@@ -12,13 +12,13 @@
 #include "version.h"
 #include "unitrace_tool_commit_hash.h"
 
-#ifdef __unix__
-  #define ATTRIB_CONSTOR __attribute__((constructor))
-  #define ATTRIB_DESTOR __attribute__((destructor))
-#else
-  #define ATTRIB_CONSTOR
-  #define ATTRIB_DESTOR
-#endif
+#ifdef _WIN32
+#define CONSTRUCTOR
+#define DESTRUCTOR
+#else /* _WIN32 */
+#define CONSTRUCTOR __attribute__((constructor))
+#define DESTRUCTOR __attribute__((destructor))
+#endif /* _WIN32 */
 
 static UniTracer* tracer = nullptr;
 
@@ -171,7 +171,7 @@ std::string get_version() {
   return std::string(UNITRACE_VERSION) + " ("+ std::string(COMMIT_HASH) + ")";
 }
 
-void ATTRIB_CONSTOR Init(void) {
+void CONSTRUCTOR Init(void) {
   std::string value = utils::GetEnv("PTI_ENABLE");
   if (value != "1") {
     return;
@@ -192,7 +192,7 @@ void ATTRIB_CONSTOR Init(void) {
 }
 
 
-void ATTRIB_DESTOR Fini(void) {
+void DESTRUCTOR Fini(void) {
   std::string value = utils::GetEnv("PTI_ENABLE");
   if (value != "1") {
     return;
@@ -225,5 +225,4 @@ BOOL WINAPI DllMain(
   }
   return TRUE;
 }
-#endif
-
+#endif /* _WIN32 */

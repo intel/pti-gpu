@@ -21,9 +21,9 @@
 #include <vector>
 #include <cmath>
 
-#ifdef __unix__
+#if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
 #include <dlfcn.h>
-#endif
+#endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
 #include <level_zero/ze_api.h>
 #include <level_zero/layers/zel_tracing_api.h>

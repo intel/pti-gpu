@@ -14,6 +14,14 @@
 class UniTimer {
 public:
     static void StartUniTimer(void) {
+#if defined(_WIN32)
+        if (frequency_.QuadPart == 0) {
+          if (!QueryPerformanceFrequency(&frequency_)) {
+            std::cerr << "[ERROR] Failed to query performance counter frequency" << std::endl;
+            exit(-1);
+          }
+        }
+#endif /* _WIN32 */
         if ((utils::GetEnv("UNITRACE_SystemTime") != "1") && (epoch_start_time_ == 0)) {
             // loop multiple times to mitigate context switch impact
             for (int i = 0; i < 100; i++) {
@@ -41,20 +49,26 @@ public:
         
     static uint64_t GetHostTimestamp() {
 #if defined(_WIN32)
-        LARGE_INTEGER ticks{0};
-        LARGE_INTEGER frequency{0};
-        BOOL status = QueryPerformanceFrequency(&frequency);
-        status = QueryPerformanceCounter(&ticks);
-        PTI_ASSERT(status != 0);
-        return ticks.QuadPart * (NSEC_IN_SEC / frequency.QuadPart);
+        LARGE_INTEGER ticks;
+        if (!QueryPerformanceCounter(&ticks)) {
+          std::cerr << "[ERROR] Failed to query performance counter" << std::endl;
+          exit(-1);
+        }
+        return ticks.QuadPart * (NSEC_IN_SEC / frequency_.QuadPart);
 #else /* _WIN32 */
-        timespec ts{0};
-        clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+        timespec ts;
+        if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts)) {
+          std::cerr << "[ERROR] Failed to get timestamp" << std::endl;
+          exit(-1);
+        }
         return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
 #endif /* _WIN32 */
     }
 private:
     inline static uint64_t epoch_start_time_ = 0;
+#if defined(_WIN32)
+    inline static LARGE_INTEGER frequency_{0};
+#endif /* _WIN32 */
 };
     
 #endif // PTI_TOOLS_UNITRACE_UNITIMER_H

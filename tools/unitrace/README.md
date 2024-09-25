@@ -26,7 +26,10 @@ Intel(R) GPU applications.
 ```sh
 set up Intel(R) oneAPI environment
 set up Intel(R) MPI Environment (optional)
+```
 
+### Linux
+```sh
 cd <....>/tools/unitrace
 mkdir build
 cd build
@@ -34,6 +37,17 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 or
 cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=0 ..
 make
+```
+
+### Windows
+```sh
+cd <....>\tools\unitrace
+mkdir build
+cd build
+cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release ..
+or
+cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=0 ..
+nmake
 ```
 
 The MPI support is not enabled if **BUILD_WITH_MPI=0** is defined.

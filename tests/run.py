@@ -123,9 +123,10 @@ def test(f, name, option, istool = False):
     module = importlib.import_module("samples." + name)
   log = module.main(option)
 
-  if log:
+  if (log is not None):
+    sys.stdout.write(log)
     sys.stdout.write("FAILED\n")
-    if option:
+    if (option is not None):
       f.write("======= " + name + " (" + option + ") =======\n")
     else:
       f.write("======= " + name + " =======\n")

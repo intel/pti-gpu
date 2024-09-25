@@ -22,8 +22,6 @@ def get_sample_build_path(name):
 
 def get_sample_executable_path(name, build_type = ""):
   path = get_sample_build_path(name)
-  if sys.platform == 'win32' and len(build_type) != 0:
-    path = os.path.join(path, build_type)
   assert os.path.exists(path)
   return path
 

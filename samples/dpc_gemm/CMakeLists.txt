@@ -4,7 +4,6 @@ cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
 if(WIN32)
   set(CMAKE_CXX_COMPILER "dpcpp-cl.exe")
-  set(CMAKE_GENERATOR_TOOLSET "Intel(R) oneAPI DPC++ Compiler")
 else()
   set(CMAKE_CXX_COMPILER "icpx")
 endif()

@@ -551,7 +551,7 @@ int main(int argc, char *argv[]) {
       fclose(fp);
     }
   }
-#endif
+#endif /* BUILD_WITH_MPI */
 
   // Set unitrace version
   auto unitrace_version =  std::string(UNITRACE_VERSION) + " (" +  std::string(COMMIT_HASH) + ")";
@@ -577,7 +577,11 @@ int main(int argc, char *argv[]) {
 
   std::string preload = utils::GetEnv("LD_PRELOAD");
   if (preload.empty()) {
+#ifdef _WIN32
+    preload = lib_path;	// lib_path is needed later
+#else /* _WIN32 */
     preload = std::move(lib_path);
+#endif /* _WIN32 */
   }
   else {
     preload = preload + ":" + lib_path;
@@ -684,23 +688,60 @@ int main(int argc, char *argv[]) {
     }
   }
 #else /* _WIN32 */
-  // handle windows here
-  PROCESS_INFORMATION ProcessInfo;
-  STARTUPINFO StartupInfo;
-  ZeroMemory(&StartupInfo, sizeof(StartupInfo));
-  StartupInfo.cb = sizeof(StartupInfo);
-      
-  auto argCount = 0;
-  std::string cmdLine = "";
-  for (; argCount < app_args.size()-1; ++argCount) {
-    cmdLine += app_args[argCount];
-    cmdLine += " ";
+  std::string cmdline = "";
+  for (int i = 0; i < app_args.size() - 1; ++i) {
+    cmdline += app_args[i];
+    cmdline += " ";
   }
-  LPSTR cmd_line = const_cast<char*>(cmdLine.c_str());
-  if (CreateProcessA(app_args[0], cmd_line, NULL, NULL, TRUE, 0, NULL, NULL, &StartupInfo, &ProcessInfo)) {
-    WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
-    CloseHandle(ProcessInfo.hThread);
-    CloseHandle(ProcessInfo.hProcess);
+
+  PROCESS_INFORMATION pi = {0};
+  STARTUPINFO si = {0};
+  si.cb = sizeof(si);
+      
+  if (CreateProcessA(app_args[0], LPSTR(cmdline.c_str()), nullptr, nullptr, false, CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {
+    BOOL success = FALSE;
+    do {
+      void *pathname = VirtualAllocEx(pi.hProcess, nullptr, lib_path.size() + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+      if (pathname == nullptr) {
+        break;
+      }
+
+      if (!WriteProcessMemory(pi.hProcess, pathname, lib_path.c_str(), lib_path.size() + 1, nullptr)) {
+        break;
+      }
+
+      LPTHREAD_START_ROUTINE loadlibrary = reinterpret_cast<LPTHREAD_START_ROUTINE>(GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA"));
+      if (!loadlibrary) {
+        break;
+      }
+
+      HANDLE thr = CreateRemoteThread(pi.hProcess, nullptr, CREATE_SUSPENDED, loadlibrary, pathname, 0, nullptr);
+      if (!thr) {
+        break;
+      }
+
+      if (WaitForSingleObject(thr, INFINITE) != WAIT_OBJECT_0) {
+        break;
+      }
+      DWORD ret = 0;
+      GetExitCodeThread(thr, &ret);
+      if (ret == 0) {
+        break;
+      }
+
+      CloseHandle(thr);
+      ResumeThread(pi.hThread); 
+      WaitForSingleObject(pi.hProcess, INFINITE);
+      CloseHandle(pi.hThread);
+      CloseHandle(pi.hProcess);
+      success = TRUE;
+    }
+    while (0);
+    
+    if (!success) {
+      std::cerr << "[ERROR] Failed to initialize the tool " << std::endl;
+    }
+
   }
   else {
     std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;

@@ -29,18 +29,30 @@ class ZeEventCache {
   ZeEventCache& operator=(const ZeEventCache& that) = delete;
 
   ~ZeEventCache() {
+    bool destroyed = true;
     for (auto& value : event_map_) {
       for (auto event : value.second) {
         ze_result_t status = ZE_RESULT_SUCCESS;
         status = zeEventDestroy(event);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        if (status != ZE_RESULT_SUCCESS) {
+          destroyed = false;
+        }
       }
     }
+    if (!destroyed) {
+      std::cerr << "[WARNING] Event in event cache is not destroyed" << std::endl;
+    }
+    destroyed = true;
     for (auto& value : event_pools_) {
       for (auto pool : value.second) {
         ze_result_t status = zeEventPoolDestroy(pool);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        if (status != ZE_RESULT_SUCCESS) {
+	  destroyed = false;
+        }
       }
+    }
+    if (!destroyed) {
+      std::cerr << "[WARNING] Event pool in event cache is not destroyed" << std::endl;
     }
   }
 

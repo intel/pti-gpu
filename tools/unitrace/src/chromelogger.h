@@ -63,7 +63,6 @@ static std::string EncodeURI(const std::string &input) {
 static std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
 static uint32_t mpi_rank = std::atoi(rank.c_str());
 
-static std::string process_start_time = std::to_string(UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp()));
 static std::string pmi_hostname = GetHostName();
 
 std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, size_t size, bool detailed);
@@ -1122,8 +1121,10 @@ class ChromeLogger {
     std::string process_name_;
     std::string chrome_trace_file_name_;
     std::iostream::pos_type data_start_pos_;
-
+    uint64_t process_start_time_;
+   
     ChromeLogger(const TraceOptions& options, const char* filename) : options_(options) {
+      process_start_time_ = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
       process_name_ = filename;
       chrome_trace_file_name_ = TraceOptions::GetChromeTraceFileName(filename);
       if (this->CheckOption(TRACE_OUTPUT_DIR_PATH)) {
@@ -1180,7 +1181,7 @@ class ChromeLogger {
 
         std::string str("{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": ");
 
-        str += std::to_string(utils::GetPid()) + ", \"ts\": " + process_start_time + ", \"args\": {\"name\": \"";
+        str += std::to_string(utils::GetPid()) + ", \"ts\": " + std::to_string(process_start_time_) + ", \"args\": {\"name\": \"";
 
         if (rank.empty()) {
           str += "HOST<" + pmi_hostname + ">\"}}";

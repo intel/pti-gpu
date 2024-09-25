@@ -29,6 +29,19 @@
 #include "unimemory.h"
 
 static std::string GetChromeTraceFileName(void) {
+#ifdef _WIN32
+  char str[256];
+  if (GetModuleFileNameA(nullptr, str, sizeof(str))) {
+    std::string name(str);
+    auto pos = name.find_last_of('\\');
+    if (pos == std::string::npos) {
+      return std::move(name);
+    }
+    else {
+      return name.substr(pos + 1);
+    }
+  }
+#else /* _WIN32 */
   std::ifstream comm("/proc/self/comm");
   if (comm) {
     std::string name;
@@ -38,6 +51,7 @@ static std::string GetChromeTraceFileName(void) {
       return std::move(name);
     }
   }
+#endif /* _WIN32 */
 
   // should never get here
   return "unitrace";
