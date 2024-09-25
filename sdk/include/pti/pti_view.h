@@ -26,11 +26,11 @@ extern "C" {
 #define PTI_INVALID_QUEUE_ID 0xFFFFFFFFFFFFFFFF-1           //!< For oneAPI versions earlier than 2024.1.1 -- UINT64_MAX-1
 
 /**
- * @brief Kind of software and hardware operations to be tracked and viewed,
+ * @brief Kinds of software and hardware operations to be tracked and viewed,
  * passed to ptiViewEnable/ptiViewDisable
  */
 typedef enum _pti_view_kind {
-  PTI_VIEW_INVALID = 0,
+  PTI_VIEW_INVALID = 0,                   //!< Invalid
   PTI_VIEW_DEVICE_GPU_KERNEL = 1,         //!< Device kernels
   PTI_VIEW_DEVICE_CPU_KERNEL = 2,         //!< Host (CPU) kernels
   PTI_VIEW_LEVEL_ZERO_CALLS = 3,          //!< Level-Zero APIs tracing
@@ -44,7 +44,7 @@ typedef enum _pti_view_kind {
 } pti_view_kind;
 
 /**
- * @brief Memory type
+ * @brief Memory types
  */
 typedef enum _pti_view_memory_type {
   PTI_VIEW_MEMORY_TYPE_MEMORY = 0,  //!< Unknown memory type
@@ -54,8 +54,8 @@ typedef enum _pti_view_memory_type {
 } pti_view_memory_type;
 
 /**
- * @brief Memory copy type
- * where M=Memory(unknown), D=Device, H=Host
+ * @brief Memory copy types
+ * where M=Memory, D=Device, H=Host, S=Shared
  */
 typedef enum _pti_view_memcpy_type {
   PTI_VIEW_MEMCPY_TYPE_M2M = 0,     //!< Memory to Memory type
@@ -80,7 +80,7 @@ typedef enum _pti_view_memcpy_type {
 } pti_view_memcpy_type;
 
 /**
- *  @brief External correlation kind
+ *  @brief External correlation kinds
  */
 typedef enum _pti_view_external_kind {
   PTI_VIEW_EXTERNAL_KIND_INVALID = 0,   //!< Invalid external kind
@@ -92,15 +92,15 @@ typedef enum _pti_view_external_kind {
 } pti_view_external_kind;
 
 /**
- *  @brief Collection Overhead kind
+ *  @brief Collection Overhead kinds
  */
-typedef enum _pti_view_overhead_kind {
+typedef enum _pti_view_overhead_kind { 
   PTI_VIEW_OVERHEAD_KIND_INVALID = 0,        //!< Invalid overhead kind
   PTI_VIEW_OVERHEAD_KIND_UNKNOWN = 1,        //!< Unknown overhead kind
-  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< overhead due to a resource
-  PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,   //!< overhead due to a buffer flush
-  PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,         //!< overhead due to driver
-  PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< overhead due to L0 api processing time
+  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< Overhead due to a resource 
+  PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,   //!< Overhead due to a buffer flush
+  PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,         //!< Overhead due to driver
+  PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to L0 api processing time
 } pti_view_overhead_kind;
 
 /**
@@ -137,10 +137,10 @@ typedef struct pti_view_record_kernel {
                                                     //!< of device, ns
   uint64_t _sycl_task_begin_timestamp;              //!< Timestamp of kernel submission from SYCL layer,
                                                     //!< ns
-  uint64_t _sycl_enqk_begin_timestamp;
-  uint64_t _sycl_node_id;
-  uint64_t _sycl_queue_id;                               //!< Device front-end queue id
-  uint32_t _sycl_invocation_id;
+  uint64_t _sycl_enqk_begin_timestamp;              //!< Timestamp of enqueue kernel from SYCL layer, ns
+  uint64_t _sycl_node_id;                           //!< SYCL Node ID
+  uint64_t _sycl_queue_id;                          //!< Device front-end queue id
+  uint32_t _sycl_invocation_id;                     //!< SYCL Invocation ID
 } pti_view_record_kernel;
 
 /**
@@ -236,8 +236,8 @@ typedef struct pti_view_record_memory_fill {
   uint64_t _end_timestamp;                          //!< Timestamp of memory fill completion on device, ns
   uint64_t _submit_timestamp;                       //!< Timestamp of memory fill command list submission
                                                     //!< to device, ns
-  uint64_t _bytes;                                  //!< number of bytes filled
-  uint64_t _value_for_set;                          //!< value filled
+  uint64_t _bytes;                                  //!< Number of bytes filled
+  uint64_t _value_for_set;                          //!< Value filled
   uint64_t _sycl_queue_id;                          //!< Device front-end queue id
 } pti_view_record_memory_fill;
 
@@ -270,18 +270,36 @@ typedef struct pti_view_record_overhead {
   pti_view_overhead_kind  _overhead_kind;   //!< Type of overhead
 } pti_view_record_overhead;
 
+
+/**
+ * @brief Function pointer for buffer completed
+ *
+ * @param buffer
+ * @param buffer_size_in_bytes
+ * @param used_bytes
+ * @return void
+ */
 typedef void (*pti_fptr_buffer_completed)(unsigned char* buffer,
                                              size_t buffer_size_in_bytes,
                                              size_t used_bytes);
 
+/**
+ * @brief Function pointer for buffer requested
+ *
+ * @param buffer_ptr
+ * @param buffer_size_in_bytes
+ * @return void
+ */
 typedef void (*pti_fptr_buffer_requested)(unsigned char** buffer_ptr,
                                              size_t* buffer_size_in_bytes);
 
 
 /**
- * @brief Sets callback to user buffer managemnet functions, which implemeneted
+ * @brief Sets callback to user buffer management functions implemented
  * by a user
  *
+ * @param fptr_bufferRequested
+ * @param fptr_bufferCompleted
  * @return pti_result
  */
 pti_result PTI_EXPORT
@@ -321,10 +339,10 @@ pti_result PTI_EXPORT ptiFlushAllViews();
 /**
  * @brief Gets next view record in buffer.
  *
- * @param buffer the buffer initially provided by pti_fptr_buffer_requested
+ * @param buffer The buffer initially provided by pti_fptr_buffer_requested
  * user function and now passd to pti_fptr_buffer_completed
- * @param valid_bytes size of portion of the buffer filled with view records
- * @param record current view record
+ * @param valid_bytes Size of portion of the buffer filled with view records
+ * @param record Current view record
  * @return pti_result
  */
 pti_result PTI_EXPORT
@@ -334,6 +352,8 @@ ptiViewGetNextRecord(uint8_t* buffer, size_t valid_bytes,
 /**
  * @brief Pushes ExternelCorrelationId kind and id for generation of external correlation records
  *
+ * @param external_kind
+ * @param external_id
  * @return pti_result
  */
 pti_result PTI_EXPORT
@@ -342,6 +362,8 @@ ptiViewPushExternalCorrelationId(pti_view_external_kind external_kind, uint64_t 
 /**
  * @brief Pops ExternelCorrelationId kind and id for generation of external correlation records
  *
+ * @param external_kind
+ * @param external_id
  * @return pti_result
  */
 pti_result PTI_EXPORT

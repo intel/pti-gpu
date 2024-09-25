@@ -1,13 +1,13 @@
-# Metrics Collectoin with Intel(R) Metrics Discovery Application Programming Interface
+# Metrics Collection with Intel(R) Metrics Discovery Application Programming Interface
 
 **WARNING: this is NOT a recommended way for metrics collection, use [oneAPI L0 Metrics API](./LevelZero.md) instead**
 
 ## Overview
 [Intel(R) Metrics Discovery Application Programming Interface](https://github.com/intel/metrics-discovery) is an open-source solution for hardware metrics collection on Intel(R) Processor Graphics.
 
-Each **metric** represents one aspect of GPU performance behaviour and has a unique name, e.g. "EuActive" metric shows the percentage of time GPU execution units were active, "L3Misses" gives the number of L3 cache misses, and "GtiReadThroughput" collects an average throughput while reading data through GTI.
+Each **metric** represents one aspect of GPU performance behavior and has a unique name, e.g. "EuActive" metric shows the percentage of time GPU execution units were active, "L3Misses" gives the number of L3 cache misses, and "GtiReadThroughput" collects an average throughput while reading data through GTI.
 
-Different metrics are combined into **metric sets**. Metric set is a unit of collection, so one can collect only a set of metrics instead of each metric separately.
+Different metrics are combined into **metric sets**. A metric set is a unit of collection, so one can collect only a set of metrics instead of each metric separately.
 
 Metric sets in their turn belongs to **metric groups**. Metric sets from different groups can be collected simultaneously, while only a single set from a group can be enabled at a time.
 
@@ -108,7 +108,7 @@ for (uint32_t i = 0; i < device->GetParams()->GlobalSymbolsCount; ++i) {
 ### Enumeration
 To enumerate metrics available on the system one has to iterate over all metric groups, next over all metric sets inside each group and finally over all metrics inside each set.
 
-Every group, set and seprate metric contain a list of properties that helps to determine their purpose (like name or description) as well as to grab some additional information that should be used while collecton (e.g. size of collected data chunks or number of metrics in a set).
+Every group, set, and separate metric contain a list of properties that helps to determine their purpose (like name or description) as well as to grab some additional information that should be used while collecting (e.g. size of collected data chunks or number of metrics in a set).
 
 In addition to metrics, each set includes so called *information* items, that will be collected along with the metrics and show e.g. time when sample was collected, GPU core frequency, report identifier and others.
 ```cpp
@@ -145,19 +145,19 @@ for (uint32_t gid = 0; gid < device->GetParams()->ConcurrentGroupsCount; ++gid) 
 ```
 
 ### Continuous Collection
-Process of metrics collection with Intel(R) Metrics Discovery Application Programming Interface assumes that there is an infinite loop in a seprate thread, where one asks for collected samples periodically, read the data for a chunk of samples and store them into some memory or file (one sample contains all the metics and information items from a metric set).
+The process of metrics collection with Intel(R) Metrics Discovery Application Programming Interface assumes that there is an infinite loop in a separate thread, where one asks for collected samples periodically, read the data for a chunk of samples and store them into some memory or file (one sample contains all the metics and information items from a metric set).
 
 First, one should set sampling interval for collection (in nanoseconds) and determine the size of the buffer with raw results (in bytes).
 
 Sampling interval shouldn't be too small - it's recommended to make it at least 100 microseconds. In general, smaller interval leads to more data and higher overhead.
 
-MD library will periodically give one a chuck with several samples, so the buffer should be large enough to store the whole chunk. One of the strategies here may be to leave this size zero and get the MD library to decide which size is appropriate.
+MD library will periodically give one a chunk with several samples, so the buffer should be large enough to store the whole chunk. One of the strategies here may be to leave this size zero and get the MD library to decide which size is appropriate.
 ```cpp
 uint32_t sampling_interval = 100000; // nanoseconds
 uint32_t buffer_size = 0; // will be defined by MDAPI
 md::TCompletionCode status = md::CC_OK;
 ```
-Next, one should set a type of collection for target metric set. MD library allows to work with multiple APIs, like OpenGL, DirectX, Metal and others, so it's needed to determine explicitely which type of API one wants to employ. In addition to exact API, it's possible to enable the
+Next, one should set a type of collection for target metric set. MD library allows to work with multiple APIs, like OpenGL, DirectX, Metal and others, so it's needed to determine explicitly which type of API one wants to employ. In addition to exact API, it's possible to enable the
 most general collection using `API_TYPE_IOSTREAM` flag.
 ```cpp
 md::IMetricSetLatest* set; // target metric set, see Enumeration section
@@ -166,7 +166,7 @@ assert(status == md::CC_OK);
 ```
 To start collection, call `OpenIoStream` for the group, target metric set belongs to. Multiple groups can be enabled at a time.
 
-As a result, both `sampling_interval` and `buffer_size` may be updated by the values that will be actually used while collection. Based on the new `buffer_size` one should allocate a buffer.
+As a result, both `sampling_interval` and `buffer_size` may be updated by the values that will be actually used while collecting. Based on the new `buffer_size` one should allocate a buffer.
 
 Note, that the call may fail due to lack of access rights for the current user (try "root" on Linux), or too small sampling interval value. Refer to
 [Metrics Discovery (MD) API](https://github.com/intel/metrics-discovery) project to get more information.
@@ -205,7 +205,7 @@ assert(status == md::CC_OK);
 ```
 
 ### Calculation
-Metric reports collected at the previous stage are in raw format and should be post-calculated to become user-readable. To perform calculations one should call `CalculateMetrics` function
+Metric reports collected at the previous stages are in raw format and should be post-calculated to become user-readable. To perform calculations one should call `CalculateMetrics` function
 for target metric set, which gives actual number of calculated reports. Note, that this value may differ from the number of raw reports.
 
 Each calculated report contains an array of metric values and an array of information values, one right after another in memory. An order of values directly corresponds to the order of metrics one can learn while enumeration.
@@ -236,7 +236,7 @@ It's often needed to map collected hardware metrics to a kernel in terms of time
 
 Each metric set contains a special *information* item called `QueryBeginTime` that represents a timestamp (in nanoseconds) for a sample. At the same time one can collect kernel execution intervals using ***Device Activity Tracing*** capabilities. So to map exact sample to the kernel invocation, one need just to check if sample timestamp is in between of kernel start and end timestamps.
 
-The problem is that metrics timestamp one can get with Intel(R) Metrics Discovery Application Programming Interface and kernel timestamps one can get e.g. with OpenCL(TM) or with oneAPI Level Zero (Level Zero) are different and can't be compared directly - so one has to convert them to a single time format first.
+The problem is that metrics timestamps one can get with Intel(R) Metrics Discovery Application Programming Interface and kernel timestamps one can get e.g. with OpenCL(TM) or with oneAPI Level Zero (Level Zero) are different and can't be compared directly - so one has to convert them to a single time format first.
 
 In Intel(R) Metrics Discovery Application Programming Interface library there is a function `GetGpuCpuTimestamps` that allows to bind GPU metrics timestamp to some CPU timestamp (which is based on `CLOCK_MONOTONIC` on Linux and `QueryPerformanceCounter` on Windows).
 
@@ -246,7 +246,7 @@ So the common strategy of metrics to kernels mapping is the following:
     - for OpenCL(TM) - with the help of `clGetDeviceAndHostTimer` function (Time Correlation section [here](../device_activity_tracing/OpenCL.md));
     - for oneAPI Level Zero (Level Zero) - with the help of `zeDeviceGetGlobalTimestamps` function (Time Correlation section [here](../device_activity_tracing/LevelZero.md));
     - on Linux one may need to convert `CLOCK_MONOTONIC_RAW` into `CLOCK_MONOTONIC` to use the same time units;
-3. Compare directly metic CPU timestamp with kernel host start and host end timestamps to perform metrics to kernel correlation.
+3. Compare directly metric CPU timestamp with kernel host start and host end timestamps to perform metrics to kernel correlation.
 
 ### Query-Based Collection for OpenCL(TM)
 An alternative approach could be to collect a single aggregated metric report per each kernel invocation. In some sense such a way may be easier than time-based collection, since one don't need to worry about time correlation (report is already for the kernel) and to deal with separate thread (runtime takes most of the responsibilities on data collection), but from the other hand one will get the only aggregated report per kernel (that may be not enough to analyse over time kernel behaviour). Also such approach is limited to support only specific runtimes (e.g. OpenCL(TM)).
@@ -261,7 +261,7 @@ assert(status == md::CC_OK);
 status = set_->Activate();
 assert(status == md::CC_OK);
 ```
-3. To be able to retrieve metrics for a kernel, one need to create a specific command queue with the help of extension. The argument `configuration` here could be obtained from the target metric set. Note, that `CL_QUEUE_PROFILING_ENABLE` property is required for such a queue:
+3. To be able to retrieve metrics for a kernel, one needs to create a specific command queue with the help of extension. The argument `configuration` here could be obtained from the target metric set. Note, that `CL_QUEUE_PROFILING_ENABLE` property is required for such a queue:
 ```cpp
 cl_command_queue CL_API_CALL
 clCreatePerfCountersCommandQueueINTEL(
@@ -296,7 +296,7 @@ assert(status == md::CC_OK);
 Query-based metrics collection for Level Zero is described [here](./LevelZero.md).
 
 ## Build and Run
-Since Intel(R) Metrics Discovery Application Programming Interface library is loaded dynamically at runtime, there is no need in any special build/run options. Just make sure Intel(R) Metrics Discovery Application Programming Interface library can be found correctly:
+Since Intel(R) Metrics Discovery Application Programming Interface library is loaded dynamically at runtime, there is no need for any special build/run options. Just make sure Intel(R) Metrics Discovery Application Programming Interface library can be found correctly:
 ```sh
 LD_LIBRARY_PATH=$LD_LIBRARY_PATH:<path_to_libigdmd.so> ./<application>
 ```
