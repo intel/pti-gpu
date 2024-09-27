@@ -368,7 +368,8 @@ inline uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
   ze_result_t status = zeDeviceGetProperties(device, &props);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   uint32_t devicemask = (props.deviceId & 0xFF00);
-  if ((devicemask == 0x5600) || (devicemask == 0x4F00) || (devicemask == 0x0B00)) {
+  if ((devicemask == 0x5600) || (devicemask == 0x4F00) || (devicemask == 0x0B00) ||
+      (devicemask == 0x7D00) || (devicemask == 0xE200) || (devicemask == 0x6400) || (devicemask == 0x9A00)) {
       return (1ull << (props.kernelTimestampValidBits - 1)) - 1ull;
   }
   else {

@@ -757,21 +757,21 @@ class ZeMetricProfiler {
               if (kf.eof()) {
                 break;
               }
-              info.global_instance_id = std::strtol(line.c_str(), nullptr, 0);
+              info.global_instance_id = std::strtoll(line.c_str(), nullptr, 0);
               line.clear();
 
               std::getline(kf, line);
               if (kf.eof()) {
                 break;
               }
-              info.metric_start = std::strtol(line.c_str(), nullptr, 0);
+              info.metric_start = std::strtoll(line.c_str(), nullptr, 0);
               line.clear();
 
               std::getline(kf, line);
               if (kf.eof()) {
                 break;
               }
-              info.metric_end = std::strtol(line.c_str(), nullptr, 0);
+              info.metric_end = std::strtoll(line.c_str(), nullptr, 0);
 
               std::getline(kf, info.kernel_name);
               if ((info.metric_start != 0) && (info.metric_end != 0) && (!info.kernel_name.empty())) {

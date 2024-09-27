@@ -688,6 +688,7 @@ int main(int argc, char *argv[]) {
     }
   }
 #else /* _WIN32 */
+  bool metric_profile_is_on = false;
   std::string cmdline = "";
   for (int i = 0; i < app_args.size() - 1; ++i) {
     cmdline += app_args[i];
@@ -714,6 +715,47 @@ int main(int argc, char *argv[]) {
       if (!loadlibrary) {
         break;
       }
+      std::string data_file_path = "";
+      // metric data collection
+      if ((utils::GetEnv("UNITRACE_RawMetrics") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
+        char tpath[MAX_PATH];
+        auto tpath_length = GetTempPathA(MAX_PATH, tpath);
+        if (tpath_length == 0) {
+          std::cerr << "[ERROR] Path for temporary files does not exit." << std::endl;
+          break;
+        }
+
+        if (!std::filesystem::exists(std::filesystem::path(tpath))) {
+          // First check if temporary folder exist
+          std::cerr << "[ERROR] Directory for temporary files does not exist." << std::endl;
+          break;
+        }
+
+        // profiling environment
+        SetProfilingEnvironment();
+        data_file_path = std::string(tpath) + "/.data_files_" + std::to_string(utils::GetPid());
+        auto status = CreateDirectoryA(LPCSTR(data_file_path.c_str()), nullptr);
+        if (status == false) {
+          std::cerr << "[ERROR] Failed to create temporary data folder." << std::endl;
+          break;
+        }
+
+        std::string log_file;
+        if (utils::GetEnv("UNITRACE_LogToFile") == "1") {
+          log_file = utils::GetEnv("UNITRACE_LogFilename");
+        }
+
+        std::signal(SIGABRT, CleanUp);
+        std::signal(SIGFPE, CleanUp);
+        std::signal(SIGILL, CleanUp);
+        std::signal(SIGINT, CleanUp);
+        std::signal(SIGSEGV, CleanUp);
+        std::signal(SIGTERM, CleanUp);
+
+        utils::SetEnv("UNITRACE_DataDir", data_file_path.c_str());
+        EnableProfiling((char*)data_file_path.c_str(), log_file);
+        metric_profile_is_on = true;
+      }
 
       HANDLE thr = CreateRemoteThread(pi.hProcess, nullptr, CREATE_SUSPENDED, loadlibrary, pathname, 0, nullptr);
       if (!thr) {
@@ -732,16 +774,27 @@ int main(int argc, char *argv[]) {
       CloseHandle(thr);
       ResumeThread(pi.hThread); 
       WaitForSingleObject(pi.hProcess, INFINITE);
+
+      if (metric_profile_is_on) {
+        DisableProfiling();
+        if (std::filesystem::exists(std::filesystem::path(data_file_path.c_str()))) {
+          for (const auto& e : std::filesystem::directory_iterator(std::filesystem::path(data_file_path.c_str()))) {
+            std::filesystem::remove_all(e.path());
+          }
+          if (RemoveDirectory(LPCSTR(data_file_path.c_str())) == 0) {
+            std::cerr << "[WARNING] " << data_file_path << " is not removed. Please manually remove it." << std::endl;
+          }
+        }
+      }
       CloseHandle(pi.hThread);
       CloseHandle(pi.hProcess);
       success = TRUE;
     }
     while (0);
-    
+
     if (!success) {
       std::cerr << "[ERROR] Failed to initialize the tool " << std::endl;
     }
-
   }
   else {
     std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
