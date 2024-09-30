@@ -30,6 +30,8 @@ class ZeEventCache {
 
   ~ZeEventCache() {
     bool destroyed = true;
+    const std::lock_guard<std::shared_mutex> lock(lock_);
+
     for (auto& value : event_map_) {
       for (auto event : value.second) {
         ze_result_t status = ZE_RESULT_SUCCESS;
