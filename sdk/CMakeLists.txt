@@ -67,15 +67,16 @@ configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
 
 find_package(Xpti)
 
+if(PTI_DEBUG)
+  add_compile_definitions(PTI_DEBUG)
+endif()
+
 # https://cmake.org/cmake/help/latest/guide/importing-exporting/index.html
 add_library(pti_all INTERFACE)
 add_library(Pti::pti_all ALIAS pti_all)
 
-add_library(pti SHARED "${PROJECT_SOURCE_DIR}/src/pti.cc"
-	               "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
-
-add_library(Pti::pti ALIAS pti)
-
+# formerly pti_view
+add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc")
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
 include(GenerateExportHeader)
@@ -85,22 +86,24 @@ generate_export_header(pti EXPORT_FILE_NAME
 # Suspect we need this since we're sharing across multiple targets
 set(PTI_DEFINE_SYMBOL "pti_EXPORTS")
 
+add_library(Pti::pti ALIAS pti)
+
 target_include_directories(
   pti
   PUBLIC "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
          "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
          "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
          "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src"
-          "${PROJECT_SOURCE_DIR}/src/syclpi"
+  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/syclpi"
           "${PROJECT_SOURCE_DIR}/src/levelzero"
-          "${PROJECT_SOURCE_DIR}/src/utils")
+          "${PROJECT_SOURCE_DIR}/src/utils" "${PROJECT_SOURCE_DIR}/src/loader")
 
 set_target_properties(
   pti
   PROPERTIES VERSION "${PROJECT_VERSION}"
              SOVERSION "${PTI_API_SOVERSION}"
-             POSITION_INDEPENDENT_CODE ON)
+             POSITION_INDEPENDENT_CODE ON
+             DEFINE_SYMBOL "${PTI_DEFINE_SYMBOL}")
 
 if (WIN32)
   set_target_properties(
@@ -109,7 +112,28 @@ if (WIN32)
                DEBUG_POSTFIX "d"
   )
   AddProjectVersionInfo(pti)
+else()
+  set_target_properties(
+    pti
+    PROPERTIES SUFFIX ".so.${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
+  )
 endif()
+
+target_compile_definitions(
+  pti
+  PRIVATE $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
+          $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
+          $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
+          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
+          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
+
+target_link_libraries(
+  pti
+  PUBLIC Threads::Threads
+  PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
+          LevelZero::level-zero
+          spdlog::spdlog_header_only
+          ${CMAKE_DL_LIBS})
 
 # Why version 1.14.0?
 # It is an IPEX requirement for PTI to link against the LTS version of the
@@ -134,10 +158,16 @@ if(NOT TARGET LevelZero::level-zero)
   GetLevelZero()
 endif()
 
+FindHeadersPath(
+  pti "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
+  "tracing.gen" gen_tracing_header LevelZero::level-zero)
+
 find_package(Threads REQUIRED)
 
-add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
-                            "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
+add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/xpti_adapter.cc"
+                            "${PROJECT_SOURCE_DIR}/src/pti.cc"
+                            "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
+                            "${PROJECT_SOURCE_DIR}/src/pti_view_load.cc")
 
 add_library(Pti::pti_view ALIAS pti_view)
 
@@ -169,30 +199,20 @@ endif()
 
 target_compile_definitions(
   pti_view
-  PRIVATE $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
-          $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
+  PRIVATE PTI_VIEW_CORE_LIB_NAME=$<TARGET_FILE_NAME:pti>
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
 
-if(PTI_DEBUG)
-  add_compile_definitions(PTI_DEBUG)
-endif()
-
 target_link_libraries(
   pti_view
-  PUBLIC Threads::Threads Pti::pti
-  PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
-          LevelZero::level-zero
+  PUBLIC
+  PRIVATE LevelZero::headers
           spdlog::spdlog_header_only
           ${CMAKE_DL_LIBS})
 
-FindHeadersPath(
-  pti_view "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
-  "tracing.gen" gen_tracing_header LevelZero::level-zero)
-
 target_link_libraries(
-	pti_all INTERFACE Pti::pti_view Pti::pti)
+	pti_all INTERFACE Pti::pti_view)
 
 include(CTest)
 if(BUILD_TESTING AND PTI_BUILD_TESTING)

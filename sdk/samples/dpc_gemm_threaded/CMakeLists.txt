@@ -24,7 +24,7 @@ target_link_options(dpc_gemm_threaded PRIVATE -fsycl -gline-tables-only)
 target_include_directories(dpc_gemm_threaded PRIVATE
                            "${PROJECT_SOURCE_DIR}/../../src/utils"
                            "${PROJECT_SOURCE_DIR}/../samples_utilities")
-if (NOT TARGET LevelZero::level-zero)
+if (NOT TARGET LevelZero::headers)
   find_package(LevelZero REQUIRED)
 endif()
 
@@ -36,4 +36,5 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-target_link_libraries(dpc_gemm_threaded PUBLIC Threads::Threads Pti::pti_view LevelZero::level-zero)
+target_link_libraries(dpc_gemm_threaded PUBLIC Threads::Threads Pti::pti_view
+  LevelZero::headers)

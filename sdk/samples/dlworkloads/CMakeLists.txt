@@ -81,9 +81,9 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-if (NOT TARGET LevelZero::level-zero)
-  find_package(LevelZero::level-zero REQUIRED)
+if (NOT TARGET LevelZero::headers)
+  find_package(LevelZero REQUIRED)
 endif()
 
 target_include_directories(dlworkload SYSTEM PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
-target_link_libraries(dlworkload DNNL::dnnl MKL::MKL MKL::MKL_SYCL oneDPL Pti::pti_view LevelZero::level-zero)
+target_link_libraries(dlworkload DNNL::dnnl MKL::MKL MKL::MKL_SYCL oneDPL Pti::pti_view LevelZero::headers)

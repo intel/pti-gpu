@@ -150,19 +150,25 @@ struct PtiViewRecordHandler {
   PtiViewRecordHandler(PtiViewRecordHandler&&) = delete;
   PtiViewRecordHandler& operator=(PtiViewRecordHandler&&) = delete;
 
-  virtual ~PtiViewRecordHandler() {
-    try {
-      overhead::overhead_collection_enabled = false;
-      if (collector_) {
-        collector_->DisableTracer();
+  void CleanUp() {
+    if (!deinit_) {
+      try {
+        overhead::overhead_collection_enabled = false;
+        if (collector_) {
+          collector_->DisableTracer();
+        }
+        DisableTracing();
+      } catch ([[maybe_unused]] const std::exception& e) {
+        SPDLOG_ERROR("Exception caught in {}: {}", __FUNCTION__, e.what());
+      } catch (...) {
+        SPDLOG_ERROR("Unknown Exception in {}", __FUNCTION__);
       }
-      DisableTracing();
-    } catch ([[maybe_unused]] const std::exception& e) {
-      SPDLOG_ERROR("Exception caught in {}: {}", __FUNCTION__, e.what());
-    } catch (...) {
-      SPDLOG_ERROR("Unknown Exception in {}", __FUNCTION__);
+      collector_.reset(nullptr);
+      deinit_ = true;
     }
   }
+
+  virtual ~PtiViewRecordHandler() { CleanUp(); }
 
   inline pti_result FlushBuffers() {
     auto result = consumer_.Push([this]() mutable {
@@ -508,6 +514,7 @@ struct PtiViewRecordHandler {
   int64_t ts_shift_ = 0;  // conversion factor for switching from default clock to user provided
                           // one(defaults to monotonic raw)
   uint64_t timestamp_of_last_ts_shift_ = 0;  // every 1 second we recalculate time_shift_
+  std::atomic<bool> deinit_ = false;
 };
 
 // Required to access buffer from ze_collector callbacks

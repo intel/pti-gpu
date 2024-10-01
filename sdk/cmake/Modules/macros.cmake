@@ -1042,7 +1042,7 @@ macro(GetSpdlog)
     FetchContent_MakeAvailable(fmt spdlog)
 
     # Prevent fmt from using exceptions because it could throw while logging.
-    # Disable warning in fmt due to our usage of EHsc. 
+    # Disable warning in fmt due to our usage of EHsc.
     target_compile_definitions(fmt PUBLIC FMT_EXCEPTIONS=0)
     target_compile_options(fmt PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/wd6285 $<$<CONFIG:Release>:/wd4702 /wd6385>>)
     target_compile_definitions(fmt-header-only INTERFACE FMT_EXCEPTIONS=0)
@@ -1179,6 +1179,10 @@ macro(GetLevelZero)
                     "system")
     # Add Alias target to treat it as if we found it via find_packge
     add_library(LevelZero::level-zero ALIAS pti_ze_loader)
+    add_library(LevelZero::headers INTERFACE IMPORTED)
+    set_target_properties(
+      LevelZero::headers
+      PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${LZ_INCLUDE_DIR}")
   endif()
 endmacro()
 

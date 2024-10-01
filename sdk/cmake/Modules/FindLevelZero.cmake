@@ -14,6 +14,8 @@ This module provides the following imported targets, if found:
 
 ``LevelZero::level-zero``
   Level Zero library
+``LevelZero::headers``
+  Level Zero Headers
 
 Result Variables
 ^^^^^^^^^^^^^^^^
@@ -93,7 +95,7 @@ include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(
   LevelZero
   FOUND_VAR LevelZero_FOUND
-  REQUIRED_VARS LevelZero_LIBRARY LevelZero_INCLUDE_DIR
+  REQUIRED_VARS LevelZero_INCLUDE_DIR
   VERSION_VAR LevelZero_VERSION)
 
 if(LevelZero_FOUND AND NOT TARGET LevelZero::level-zero)
@@ -103,6 +105,13 @@ if(LevelZero_FOUND AND NOT TARGET LevelZero::level-zero)
     PROPERTIES IMPORTED_LOCATION "${LevelZero_LIBRARY}"
                INTERFACE_COMPILE_OPTIONS "${PC_level_zero_CFLAGS_OTHER}"
                INTERFACE_INCLUDE_DIRECTORIES "${LevelZero_INCLUDE_DIR}")
+endif()
+
+if(LevelZero_FOUND AND NOT TARGET LevelZero::headers)
+  add_library(LevelZero::headers INTERFACE IMPORTED)
+  set_target_properties(
+    LevelZero::headers
+    PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${LevelZero_INCLUDE_DIR}")
 endif()
 
 mark_as_advanced(LevelZero_INCLUDE_DIR LevelZero_LIBRARY)

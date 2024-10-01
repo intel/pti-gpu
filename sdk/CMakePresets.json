@@ -293,7 +293,7 @@
     "configurePreset": "linux-icpx-release",
     "displayName": "Linux Release x64 IntelLLVM Tests",
     "environment": {
-      "LD_LIBRARY_PATH": "${sourceDir}/build/lib:$penv{LD_LIBRARY_PATH}"
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
     }
   },
   {
@@ -301,7 +301,7 @@
     "configurePreset": "linux-icpx-debug",
     "displayName": "Linux Debug x64 IntelLLVM Tests",
     "environment": {
-      "LD_LIBRARY_PATH": "${sourceDir}/build-debug/lib:$penv{LD_LIBRARY_PATH}"
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
     }
   },
   {
@@ -309,7 +309,7 @@
     "configurePreset": "linux-icpx-make-release",
     "displayName": "Linux Release x64 IntelLLVM Tests",
     "environment": {
-      "LD_LIBRARY_PATH": "${sourceDir}/build/lib:$penv{LD_LIBRARY_PATH}"
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
     }
   },
   {
@@ -317,13 +317,16 @@
     "configurePreset": "linux-icpx-make-debug",
     "displayName": "Linux Debug x64 IntelLLVM Tests",
     "environment": {
-      "LD_LIBRARY_PATH": "${sourceDir}/build/lib:$penv{LD_LIBRARY_PATH}"
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
     }
   },
   {
     "name": "linux-oneAPI-release",
     "configurePreset": "linux-oneAPI-release",
-    "displayName": "Linux oneAPI x64 Release Tests"
+    "displayName": "Linux oneAPI x64 Release Tests",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
+    }
   },
   {
     "name": "linux-asan",

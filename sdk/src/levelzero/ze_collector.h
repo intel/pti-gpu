@@ -229,8 +229,9 @@ class ZeCollector {
 #if !defined(_WIN32)
     // TODO Looks on Windows due to not specified DLLs unload order we hit assert here
     if (tracer_ != nullptr) {
-      ze_result_t status = zelTracerDestroy(tracer_);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      [[maybe_unused]] ze_result_t status = zelTracerDestroy(tracer_);
+      // PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      tracer_ = nullptr;
     }
 #endif
   }

@@ -2,11 +2,15 @@ name: sdk-build-and-test
 
 on:
   push:
-    branches: [ "master" ]
+    branches:
+      - master
+      - release/**
     paths:
       - sdk/**
   pull_request:
-    branches: [ "master" ]
+    branches:
+      - master
+      - release/**
     paths:
       - sdk/**
 
