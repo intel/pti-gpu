@@ -405,7 +405,15 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAddReducedOps) {
 }
 
 TEST_F(VecsqaddFixtureTest, TimestampWrapAroundOnOverflow) {
-  GTEST_SKIP();
+  // TODO: Move this to the fixture if we get more stress tests. However, for now this is our only
+  // one so we will soft disable it until it is enabled in CI.
+  const auto result = utils::GetEnv("PTI_ENABLE_STRESS_TESTS");
+
+  if (result.empty() || result != "1") {
+    GTEST_SKIP() << "Skipping timestamp wrap around test. set PTI_ENABLE_STRESS_TESTS=1 to enable "
+                    "stress tests.";
+  }
+
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kOverflowStress);
   EXPECT_EQ(timestamps_monotonic, true);
