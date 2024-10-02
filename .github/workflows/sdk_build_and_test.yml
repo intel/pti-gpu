@@ -30,8 +30,9 @@ jobs:
       matrix:
         include:
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_24_2_1 }}
-            uploadname: "ubuntu24.4-2024.2.1"
+            uploadname: "ubuntu-24.04.2024.2.1"
             preset: linux-icpx-release
+
 
     container: 
       image: ${{ matrix.container }}

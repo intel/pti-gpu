@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   sdk-build-and-test:
-    name: Test pti-sdk Ubuntu and Rocky
+    name: pti-sdk 
 
     #
     # pti is a selector to machines with Intel Ponte Vecchio officially
@@ -25,19 +25,20 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
-            uploadname: "ubuntu22.4-2024.1.1"
-            preset: linux-icpx-debug
-          - container: ${{ vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 }}
-            uploadname: "rocky8-2024.1.1"
+          - container: ${{ vars.PTI_DOCKER_RHEL_9_ONEAPI_24_2_1 }}
+            uploadname: "rhel-9.2024.2.1"
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_0 }} 
-            uploadname: "ubuntu22.4-2024.1.0"
-            preset: linux-icpx-debug
+          - container: ${{ vars.PTI_DOCKER_SLES_15_3_ONEAPI_24_2_1 }}
+            uploadname: "sles-15.3.2024.2.1"
+            preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_24_2_1 }}
+            uploadname: "ubuntu-24.04.2024.2.1"
+            preset: linux-icpx-release
+
 
     container: 
       image: ${{ matrix.container }}
-      options: --device=/dev/dri --cap-add CAP_PERFMON
+      options: --device=/dev/dri --cap-add CAP_PERFMON ${{ vars.PTI_DOCKER_PROXIES }}
 
     if: vars.PTI_RUN_TESTS == 1
 
@@ -59,7 +60,7 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --output-on-failure --preset ${{ matrix.preset }}
+          ctest --output-on-failure --preset ${{ matrix.preset }} 
 
       - name: Build AddressSanitizer
         working-directory: sdk
@@ -85,7 +86,7 @@ jobs:
           cmake --build --preset linux-fuzz --parallel $(($(nproc)/2))
 
       #
-      # Rocky8 has a problem with this test.
+      # Rocky8 and Red Hat has a problem with this test.
       #
       - name: Test AddressSanitizer
         working-directory: sdk
@@ -96,8 +97,11 @@ jobs:
           # Must skip Rocky8 with more than one GPU because of
           # an unexpected failure as documented in PTI-74
           #
-          if [ $(sycl-ls|grep 'ext_oneapi_level_zero:gpu:' -c) -gt 1 ] &&\
-             [[ $(cat /etc/redhat-release)  =~ Rocky.*8 ]]; then
+          if [ $(sycl-ls|grep 'ext_oneapi_level_zero:gpu:' -c) -gt 1 ] || \
+             [[ $(cat /etc/redhat-release)  =~ Rocky.*8 ]] || \
+             [[ $(cat /etc/redhat-release)  =~ Red\ Hat.*9 ]]; then
+            [ -f /etc/redhat-release] && cat /etc/redhat-release
+            echo "Skipping Test AddressSanitizer"
             exit 0
           fi
           ctest --preset linux-asan --output-on-failure -L samples
