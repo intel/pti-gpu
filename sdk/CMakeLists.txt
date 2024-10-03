@@ -325,6 +325,8 @@ if(PTI_INSTALL)
     bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/*.lib\"]])
     bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+      [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/*.dll\"]])
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_BIN_DIR}/*.dll\"]])
     bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
       [[\"\${CMAKE_INSTALL_PREFIX}/env/*\"]])
