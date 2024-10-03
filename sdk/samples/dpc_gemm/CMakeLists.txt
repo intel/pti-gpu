@@ -16,8 +16,8 @@ endif()
 
 find_package(LevelZero)
 
-if (NOT TARGET LevelZero::level-zero)
-  message(WARNING "${PROJECT_NAME} pti requires level zero")
+if (NOT TARGET LevelZero::headers)
+  message(WARNING "${PROJECT_NAME} pti requires level zero headers")
   return()
 endif()
 
@@ -35,4 +35,4 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-target_link_libraries(dpc_gemm PUBLIC Pti::pti_view LevelZero::level-zero)
+target_link_libraries(dpc_gemm PUBLIC Pti::pti_view PRIVATE LevelZero::headers)

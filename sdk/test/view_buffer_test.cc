@@ -9,7 +9,7 @@
 
 #include "pti/pti_view.h"
 #include "utils/test_helpers.h"
-#include "view_handler.h"
+#include "view_record_info.h"
 
 namespace {
 

@@ -66,7 +66,7 @@ if(HAVE_SYCL)
   target_compile_definitions(vecsqadd_suite PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(vecsqadd_suite PUBLIC Pti::pti_view
-	  GTest::gtest_main LevelZero::level-zero)
+    GTest::gtest_main LevelZero::headers)
 
   add_executable(no_kernel_overlap no_kernel_overlap.cc)
   target_include_directories(
@@ -83,7 +83,7 @@ if(HAVE_SYCL)
   target_compile_definitions(no_kernel_overlap PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(no_kernel_overlap PUBLIC Pti::pti_view
-	  GTest::gtest_main LevelZero::level-zero)
+	  GTest::gtest_main LevelZero::headers)
 
   add_executable(startstop_suite main_startstop_fixture.cc)
   target_include_directories(
@@ -101,7 +101,7 @@ if(HAVE_SYCL)
   target_compile_definitions(startstop_suite PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(startstop_suite PUBLIC Pti::pti_view
-	  GTest::gtest_main LevelZero::level-zero)
+	  GTest::gtest_main LevelZero::headers)
 
   add_executable(mem_ops_test mem_ops_test.cc)
 
@@ -117,7 +117,7 @@ if(HAVE_SYCL)
   target_link_options(mem_ops_test PRIVATE -fsycl -gline-tables-only)
 
   target_link_libraries(mem_ops_test PUBLIC Pti::pti_view GTest::gtest_main
-                                            LevelZero::level-zero)
+    LevelZero::level-zero)
 
   add_executable(sycl_queue_id sycl_queue_id.cc)
 
@@ -132,7 +132,7 @@ if(HAVE_SYCL)
   target_link_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only)
 
   target_link_libraries(sycl_queue_id PUBLIC Pti::pti_view GTest::gtest_main
-                                            LevelZero::level-zero)
+    LevelZero::headers)
 
   add_executable(multi_threaded_submission multi_threaded_submission.cc)
 
@@ -324,7 +324,7 @@ target_include_directories(
 
 target_link_libraries(view_record_test PUBLIC Pti::pti_view GTest::gtest_main
                                               spdlog::spdlog
-                                              LevelZero::level-zero)
+                                              LevelZero::headers)
 
 add_executable(assert_exception_test assert_exception_test.cc)
 
@@ -336,7 +336,8 @@ target_include_directories(
 
 target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_main
                                                    spdlog::spdlog
-                                                   LevelZero::level-zero)
+                                                   LevelZero::level-zero
+                                                   ${CMAKE_DL_LIBS})
 
 add_executable(view_gpu_local_test view_gpu_local_test.cc)
 
@@ -344,8 +345,9 @@ target_include_directories(
   view_gpu_local_test
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include")
 
-target_link_libraries(view_gpu_local_test PUBLIC Pti::pti_view GTest::gtest_main
-                                            LevelZero::level-zero)
+target_link_libraries(view_gpu_local_test PUBLIC Pti::pti_view
+  GTest::gtest_main
+  LevelZero::headers)
 
 
 gtest_discover_tests(

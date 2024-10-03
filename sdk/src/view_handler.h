@@ -170,19 +170,25 @@ struct PtiViewRecordHandler {
   PtiViewRecordHandler(PtiViewRecordHandler&&) = delete;
   PtiViewRecordHandler& operator=(PtiViewRecordHandler&&) = delete;
 
-  virtual ~PtiViewRecordHandler() {
-    try {
-      overhead::overhead_collection_enabled = false;
-      if (collector_) {
-        collector_->DisableTracer();
+  void CleanUp() {
+    if (!deinit_) {
+      try {
+        overhead::overhead_collection_enabled = false;
+        if (collector_) {
+          collector_->DisableTracer();
+        }
+        DisableTracing();
+      } catch ([[maybe_unused]] const std::exception& e) {
+        SPDLOG_ERROR("Exception caught in {}: {}", __FUNCTION__, e.what());
+      } catch (...) {
+        SPDLOG_ERROR("Unknown Exception in {}", __FUNCTION__);
       }
-      DisableTracing();
-    } catch ([[maybe_unused]] const std::exception& e) {
-      SPDLOG_ERROR("Exception caught in {}: {}", __FUNCTION__, e.what());
-    } catch (...) {
-      SPDLOG_ERROR("Unknown Exception in {}", __FUNCTION__);
+      collector_.reset(nullptr);
+      deinit_ = true;
     }
   }
+
+  virtual ~PtiViewRecordHandler() { CleanUp(); }
 
   inline pti_result FlushBuffers() {
     auto result = consumer_.Push([this]() mutable {
@@ -537,6 +543,7 @@ struct PtiViewRecordHandler {
   uint64_t sync_clocks_every =
       kDefaultSyncTime;  // time in nanoseconds, sync every millisecond by default --- this can be
                          // overridden by the env variable PTI_CONV_CLOCK_SYNC_TIME_NS.
+  std::atomic<bool> deinit_ = false;
 };
 
 // Required to access buffer from ze_collector callbacks

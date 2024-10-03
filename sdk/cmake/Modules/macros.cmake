@@ -1204,6 +1204,10 @@ macro(GetLevelZero)
                     "system")
     # Add Alias target to treat it as if we found it via find_packge
     add_library(LevelZero::level-zero ALIAS pti_ze_loader)
+    add_library(LevelZero::headers INTERFACE IMPORTED)
+    set_target_properties(
+      LevelZero::headers
+      PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${LZ_INCLUDE_DIR}")
   endif()
 endmacro()
 
