@@ -17,8 +17,9 @@ using namespace gtpin_prof;
 dst: register, src0: register, src1: register
 */
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtRegRegion&, GtExecMask, GtPredicate)>
+std::map<GED_MODEL,
+         GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+                            const GtRegRegion&, GtExecMask, GtPredicate)>
     SubFunctionsTable = {
 
 };
@@ -64,9 +65,10 @@ GtGenProcedure SubiXeHpc(const IGtKernelInstrument& instrumentor, const GtDstReg
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtImm&, GtExecMask, GtPredicate)>
-    SubiFunctionsTable = {{GED_MODEL_XE_HP, &SubiXeHpc}, {GED_MODEL_XE_HPC, &SubiXeHpc}};
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&,
+                                       const GtRegRegion&, const GtImm&, GtExecMask, GtPredicate)>
+    SubiFunctionsTable = {
+        {GED_MODEL_XE_HP, &SubiXeHpc}, {GED_MODEL_XE_HPC, &SubiXeHpc}, {GED_MODEL_XE2, &SubiXeHpc}};
 
 GtGenProcedure Macro::Sub(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,

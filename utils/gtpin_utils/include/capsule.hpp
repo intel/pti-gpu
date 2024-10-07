@@ -75,20 +75,20 @@ GtReg GetSubReg(size_t regNum, size_t subRegIdx, size_t subRegSizeBytes, size_t 
 GtGenProcedure Mov(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                    const GtRegRegion& src, GtExecMask execMask = EXEC_MASK_1_0,
                    GtPredicate predicate = GtPredicate::MakeNone());
-GtGenProcedure Mov(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst, const GtImm& srcI,
-                   GtExecMask execMask = EXEC_MASK_1_0,
+GtGenProcedure Mov(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                   const GtImm& srcI, GtExecMask execMask = EXEC_MASK_1_0,
                    GtPredicate predicate = GtPredicate::MakeNone());
 GtGenProcedure Not(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                    const GtRegRegion& src, GtExecMask execMask = EXEC_MASK_1_0,
                    GtPredicate predicate = GtPredicate::MakeNone());
-GtGenProcedure Not(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst, const GtImm& srcI,
-                   GtExecMask execMask = EXEC_MASK_1_0,
+GtGenProcedure Not(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                   const GtImm& srcI, GtExecMask execMask = EXEC_MASK_1_0,
                    GtPredicate predicate = GtPredicate::MakeNone());
 GtGenProcedure Cbit(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                     const GtRegRegion& src, GtExecMask execMask = EXEC_MASK_1_0,
                     GtPredicate predicate = GtPredicate::MakeNone());
-GtGenProcedure Cbit(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst, const GtImm& srcI,
-                    GtExecMask execMask = EXEC_MASK_1_0,
+GtGenProcedure Cbit(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                    const GtImm& srcI, GtExecMask execMask = EXEC_MASK_1_0,
                     GtPredicate predicate = GtPredicate::MakeNone());
 GtGenProcedure Add(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                    const GtRegRegion& src0, const GtRegRegion& src1,
@@ -195,8 +195,8 @@ GtGenProcedure AtomicStore(const IGtKernelInstrument& instrumentor, GtProfileArr
                            GtReg offsetBytesReg = NullReg(),
                            GtPredicate predicate = GtPredicate::MakeNone());
 
-GtGenProcedure ComputeSimdMask(const IGtKernelInstrument& instrumentor, GtReg simdMaskReg, bool maskCtrl,
-                               uint32_t execMask, GtPredicate pred);
+GtGenProcedure ComputeSimdMask(const IGtKernelInstrument& instrumentor, GtReg simdMaskReg,
+                               bool maskCtrl, uint32_t execMask, GtPredicate pred);
 GtGenProcedure ComputeSimdMask(const IGtKernelInstrument& instrumentor, GtReg simdMaskReg,
                                const IGtIns& gtpinIns);
 /**
@@ -215,19 +215,21 @@ GtGenProcedure IsCacheLineAligned(const IGtKernelInstrument& instrumentor, const
  * tempData1Reg = 1 in case of active and aligned, 0 otherwise.
  * Checks that SIMD lane 0 is active and cache line is aligned (lower 6 bits of address are 0).
  */
-GtGenProcedure IsCacheLineAlignedFlag(const IGtKernelInstrument& instrumentor, GtReg addrRegCheckReg,
-                                      size_t channelOffset, GtReg simdMaskReg, GtReg tempData1Reg,
+GtGenProcedure IsCacheLineAlignedFlag(const IGtKernelInstrument& instrumentor,
+                                      GtReg addrRegCheckReg, size_t channelOffset,
+                                      GtReg simdMaskReg, GtReg tempData1Reg,
                                       GtReg flagReg = FlagReg(0));
 
-GtGenProcedure IsCacheLineAlignedFlag(const IGtKernelInstrument& instrumentor, const IGtIns& gtpinIns,
-                                      GtReg simdMaskReg, GtReg tempData1Reg,
+GtGenProcedure IsCacheLineAlignedFlag(const IGtKernelInstrument& instrumentor,
+                                      const IGtIns& gtpinIns, GtReg simdMaskReg, GtReg tempData1Reg,
                                       GtReg flagReg = FlagReg(0));
 
 GtGenProcedure CalcBaseAddr(const IGtKernelInstrument& instrumentor, GtProfileArray& profileArray,
                             GtReg baseAddrReg, size_t recordIndex, size_t numTiles);
 
-GtGenProcedure AdjustDistributionWithinBounds(const IGtKernelInstrument& instrumentor, GtReg valueReg,
-                                              size_t bucketsNum, GtReg flagReg = FlagReg(0));
+GtGenProcedure AdjustDistributionWithinBounds(const IGtKernelInstrument& instrumentor,
+                                              GtReg valueReg, size_t bucketsNum,
+                                              GtReg flagReg = FlagReg(0));
 
 GtGenProcedure CacheLinesCount(const IGtKernelInstrument& instrumentor, GtReg clCounterReg,
                                GtReg simdMaskReg, uint32_t execSize, GtReg addrRegCheckReg,

@@ -44,9 +44,40 @@ GtGenProcedure ShrXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegi
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtRegRegion&, GtExecMask, GtPredicate)>
-    ShrFunctionsTable = {{GED_MODEL_XE_HP, &ShrXeHpc}, {GED_MODEL_XE_HPC, &ShrXeHpc}};
+GtGenProcedure ShrXe2(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                      const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
+                      GtPredicate predicate) {
+  GtGenProcedure proc;
+  IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
+  if (dst.DataType().Size() == 1) {
+    proc += insF.MakeShr(dst, src0, src1, execMask).SetPredicate(predicate);
+
+    auto& coder = instrumentor.Coder();
+    auto& vregs = coder.VregFactory();
+    GtReg tmpReg = vregs.MakeScratch(VREG_TYPE_WORD);
+
+    proc += insF.MakeMov(tmpReg, GtImm(0x100, GED_DATA_TYPE_uw), execMask).SetPredicate(predicate);
+    proc += insF.MakeShr(tmpReg, tmpReg,
+                         GtReg(src1.Reg(), ((src1.DataType().Size() > 1) ? 2 : 1), 0), execMask)
+                .SetPredicate(predicate);
+
+    proc += insF.MakeAdd(tmpReg, tmpReg, GtImm(0xFFFF, GED_DATA_TYPE_uw), execMask)
+                .SetPredicate(predicate);
+    GtReg tmpRegL = {tmpReg, 1, 0};
+
+    proc += insF.MakeAnd(dst, dst.Reg(), tmpRegL, execMask).SetPredicate(predicate);
+    return proc;
+  }
+
+  proc += insF.MakeShr(dst, src0, src1, execMask).SetPredicate(predicate);
+  return proc;
+}
+
+std::map<GED_MODEL,
+         GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+                            const GtRegRegion&, GtExecMask, GtPredicate)>
+    ShrFunctionsTable = {
+        {GED_MODEL_XE_HP, &ShrXeHpc}, {GED_MODEL_XE_HPC, &ShrXeHpc}, {GED_MODEL_XE2, &ShrXe2}};
 
 GtGenProcedure Macro::Shr(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
@@ -101,9 +132,30 @@ GtGenProcedure ShriXeHpc(const IGtKernelInstrument& instrumentor, const GtDstReg
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtImm&, GtExecMask, GtPredicate)>
-    ShriFunctionsTable = {{GED_MODEL_XE_HP, &ShriXeHpc}, {GED_MODEL_XE_HPC, &ShriXeHpc}};
+GtGenProcedure ShriXe2(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                       const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
+                       GtPredicate predicate) {
+  GtGenProcedure proc;
+  IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
+
+  if (dst.DataType().Size() == 1) {
+    proc += insF.MakeShr(dst, src0, GtImm(srcI1.Value() & 0xFF, GED_DATA_TYPE_d), execMask)
+                .SetPredicate(predicate);
+    proc += insF.MakeAnd(dst, dst.Reg(),
+                         GtImm(GtImm(Macro::GetMaskBySize(8 - srcI1)), GED_DATA_TYPE_uw), execMask)
+                .SetPredicate(predicate);
+
+    return proc;
+  }
+
+  proc += insF.MakeShr(dst, src0, GtImm(srcI1, GED_DATA_TYPE_w), execMask).SetPredicate(predicate);
+  return proc;
+}
+
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&,
+                                       const GtRegRegion&, const GtImm&, GtExecMask, GtPredicate)>
+    ShriFunctionsTable = {
+        {GED_MODEL_XE_HP, &ShriXeHpc}, {GED_MODEL_XE_HPC, &ShriXeHpc}, {GED_MODEL_XE2, &ShriXe2}};
 
 GtGenProcedure Macro::Shr(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,

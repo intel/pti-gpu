@@ -85,10 +85,39 @@ GtGenProcedure OrXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegio
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtRegRegion&, GtExecMask, GtPredicate)>
-    OrFunctionsTable = {
-        {GED_MODEL_TGL, &OrTgl}, {GED_MODEL_XE_HP, &OrXeHpc}, {GED_MODEL_XE_HPC, &OrXeHpc}};
+GtGenProcedure OrXe2(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                     const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
+                     GtPredicate predicate) {
+  GtGenProcedure proc;
+  IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
+
+  if (dst.DataType().Size() == 8 && src0.DataType().Size() == 8 && src1.DataType().Size() == 8) {
+    GtReg dstL = {dst.Reg(), 4, 0};
+    GtReg dstH = {dst.Reg(), 4, 1};
+
+    GtReg src0L = {src0.Reg(), 4, 0};
+    GtReg src0H = {src0.Reg(), 4, 1};
+
+    GtReg src1L = {src1.Reg(), 4, 0};
+    GtReg src1H = {src1.Reg(), 4, 1};
+
+    proc += insF.MakeOr(dstL, src0L, src1L, execMask).SetPredicate(predicate);
+    proc += insF.MakeOr(dstH, src0H, src1H, execMask).SetPredicate(predicate);
+
+    return proc;
+  }
+
+  proc += insF.MakeOr(dst, src0, src1, execMask).SetPredicate(predicate);
+  return proc;
+}
+
+std::map<GED_MODEL,
+         GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+                            const GtRegRegion&, GtExecMask, GtPredicate)>
+    OrFunctionsTable = {{GED_MODEL_TGL, &OrTgl},
+                        {GED_MODEL_XE_HP, &OrXeHpc},
+                        {GED_MODEL_XE_HPC, &OrXeHpc},
+                        {GED_MODEL_XE2, &OrXe2}};
 
 GtGenProcedure Macro::Or(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                          const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
@@ -195,10 +224,44 @@ GtGenProcedure OriXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegi
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtImm&, GtExecMask, GtPredicate)>
-    OriFunctionsTable = {
-        {GED_MODEL_TGL, &OriTgl}, {GED_MODEL_XE_HP, &OriXeHpc}, {GED_MODEL_XE_HPC, &OriXeHpc}};
+GtGenProcedure OriXe2(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                      const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
+                      GtPredicate predicate) {
+  GtGenProcedure proc;
+  IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
+
+  if (srcI1.DataType().Size() == 1) {
+    proc += insF.MakeOr(dst, src0, GtImm(srcI1 & 0xFF, GED_DATA_TYPE_uw), execMask)
+                .SetPredicate(predicate);
+    return proc;
+  }
+
+  if (dst.DataType().Size() == 8 && src0.DataType().Size() == 8) {
+    GtReg dstL = {dst.Reg(), 4, 0};
+    GtReg dstH = {dst.Reg(), 4, 1};
+
+    GtReg src0L = {src0.Reg(), 4, 0};
+    GtReg src0H = {src0.Reg(), 4, 1};
+
+    proc += insF.MakeOr(dstL, src0L, GtImm(srcI1.Value() & 0xFFFFFFFF, GED_DATA_TYPE_ud), execMask)
+                .SetPredicate(predicate);
+    proc += insF.MakeOr(dstH, src0H, GtImm((srcI1.Value() >> 32) & 0xFFFFFFFF, GED_DATA_TYPE_ud),
+                        execMask)
+                .SetPredicate(predicate);
+
+    return proc;
+  }
+
+  proc += insF.MakeOr(dst, src0, srcI1, execMask).SetPredicate(predicate);
+  return proc;
+}
+
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&,
+                                       const GtRegRegion&, const GtImm&, GtExecMask, GtPredicate)>
+    OriFunctionsTable = {{GED_MODEL_TGL, &OriTgl},
+                         {GED_MODEL_XE_HP, &OriXeHpc},
+                         {GED_MODEL_XE_HPC, &OriXeHpc},
+                         {GED_MODEL_XE2, &OriXe2}};
 
 GtGenProcedure Macro::Or(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                          const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,

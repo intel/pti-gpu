@@ -13,8 +13,8 @@
 using namespace gtpin;
 using namespace gtpin_prof;
 
-GtGenProcedure AtomicStoreXeHpc(const IGtKernelInstrument& instrumentor, GtReg addrReg, GtReg dataReg,
-                                GtExecMask execMask, GtPredicate predicate) {
+GtGenProcedure AtomicStoreXeHpc(const IGtKernelInstrument& instrumentor, GtReg addrReg,
+                                GtReg dataReg, GtExecMask execMask, GtPredicate predicate) {
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;
 
@@ -45,12 +45,13 @@ GtGenProcedure AtomicStoreXeHpc(const IGtKernelInstrument& instrumentor, GtReg a
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, GtReg, GtReg, GtExecMask, GtPredicate)>
+std::map<GED_MODEL,
+         GtGenProcedure (*)(const IGtKernelInstrument&, GtReg, GtReg, GtExecMask, GtPredicate)>
     AtomicStoreFunctionsTable = {{GED_MODEL_XE_HP, &AtomicStoreXeHpc},
                                  {GED_MODEL_XE_HPC, &AtomicStoreXeHpc}};
 
-GtGenProcedure Macro::AtomicStore(const IGtKernelInstrument& instrumentor, GtReg addrReg, GtReg dataReg,
-                                  GtExecMask execMask, GtPredicate predicate) {
+GtGenProcedure Macro::AtomicStore(const IGtKernelInstrument& instrumentor, GtReg addrReg,
+                                  GtReg dataReg, GtExecMask execMask, GtPredicate predicate) {
   PTI_ASSERT(dataReg.SubRegNum() == 0 &&
              "Data register should have sub-register number == 0. Try to use "
              "MakeMsgDataScratch VregFactory interface to allocate data register.");

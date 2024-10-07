@@ -191,8 +191,9 @@ GtGenProcedure Procedure::AtomicStore(const IGtKernelInstrument& instrumentor,
   return proc;
 }
 
-GtGenProcedure Procedure::ComputeSimdMask(const IGtKernelInstrument& instrumentor, GtReg simdMaskReg,
-                                          bool maskCtrl, uint32_t execMask, GtPredicate pred) {
+GtGenProcedure Procedure::ComputeSimdMask(const IGtKernelInstrument& instrumentor,
+                                          GtReg simdMaskReg, bool maskCtrl, uint32_t execMask,
+                                          GtPredicate pred) {
   GtGenProcedure proc;
 
   instrumentor.Coder().ComputeSimdMask(proc, simdMaskReg, maskCtrl, execMask, pred);
@@ -200,8 +201,8 @@ GtGenProcedure Procedure::ComputeSimdMask(const IGtKernelInstrument& instrumento
   ANNOTATION(proc)
   return proc;
 }
-GtGenProcedure Procedure::ComputeSimdMask(const IGtKernelInstrument& instrumentor, GtReg simdMaskReg,
-                                          const IGtIns& gtpinIns) {
+GtGenProcedure Procedure::ComputeSimdMask(const IGtKernelInstrument& instrumentor,
+                                          GtReg simdMaskReg, const IGtIns& gtpinIns) {
   return Procedure::ComputeSimdMask(instrumentor, simdMaskReg, !gtpinIns.IsWriteMaskEnabled(),
                                     gtpinIns.ExecMask().Bits(), gtpinIns.Predicate());
 }
@@ -399,8 +400,8 @@ GtGenProcedure Procedure::AdjustDistributionWithinBounds(const IGtKernelInstrume
 /// addrWidthBytes Uses address == -1 as no address marker. Result, number of
 /// cache lines, is stored in clCounterReg
 #define INVALID_ADDRESS -1
-GtGenProcedure Procedure::CacheLinesCount(const IGtKernelInstrument& instrumentor, GtReg clCounterReg,
-                                          GtReg simdMaskReg, uint32_t execSize,
+GtGenProcedure Procedure::CacheLinesCount(const IGtKernelInstrument& instrumentor,
+                                          GtReg clCounterReg, GtReg simdMaskReg, uint32_t execSize,
                                           GtReg addrRegCheckReg, size_t channelOffset,
                                           const uint32_t addrWidthBytes, GtReg flagReg) {
   /// check registers for minimal requirements
@@ -499,9 +500,9 @@ GtGenProcedure Procedure::CacheLinesCount(const IGtKernelInstrument& instrumento
 }
 #undef INVALID_ADDRESS
 
-GtGenProcedure Procedure::CacheLinesCount(const IGtKernelInstrument& instrumentor, GtReg clCounterReg,
-                                          GtReg simdMaskReg, const IGtIns& gtpinIns,
-                                          GtReg flagReg) {
+GtGenProcedure Procedure::CacheLinesCount(const IGtKernelInstrument& instrumentor,
+                                          GtReg clCounterReg, GtReg simdMaskReg,
+                                          const IGtIns& gtpinIns, GtReg flagReg) {
   DcSendMsg msg(gtpinIns.GetGedIns());
   GtReg addrRegCheckReg = GrfReg(msg.Src0(), 0, msg.AddrSize());
 

@@ -61,9 +61,44 @@ GtGenProcedure CbitXeHpc(const IGtKernelInstrument& instrumentor, const GtDstReg
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       GtExecMask, GtPredicate)>
-    CbitFunctionsTable = {{GED_MODEL_XE_HP, &CbitXeHpc}, {GED_MODEL_XE_HPC, &CbitXeHpc}};
+GtGenProcedure CbitXe2(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                       const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
+  IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
+  GtGenProcedure proc;
+
+  if (src0.DataType().Size() == 1 && dst.DataType().Size() == 1) {
+    auto& coder = instrumentor.Coder();
+    auto& vregs = coder.VregFactory();
+    GtReg tmpReg = vregs.MakeMsgDataScratch(VREG_TYPE_WORD);
+    proc += insF.MakeMov(tmpReg, src0, execMask).SetPredicate(predicate);
+    proc += insF.MakeCbit(dst, tmpReg, execMask).SetPredicate(predicate);
+
+    return proc;
+  }
+
+  if (src0.DataType().Size() == 8) {
+    GtReg src0L = {src0.Reg(), 4, 0};
+    GtReg src0H = {src0.Reg(), 4, 1};
+
+    auto& coder = instrumentor.Coder();
+    auto& vregs = coder.VregFactory();
+    GtReg tmpReg = vregs.MakeScratch(VREG_TYPE_WORD);
+
+    proc += insF.MakeCbit(dst, src0L, execMask).SetPredicate(predicate);
+    proc += insF.MakeCbit(tmpReg, src0H, execMask).SetPredicate(predicate);
+    proc += insF.MakeAdd(dst, dst.Reg(), tmpReg, execMask).SetPredicate(predicate);
+
+    return proc;
+  }
+
+  proc += insF.MakeCbit(dst, src0, execMask).SetPredicate(predicate);
+  return proc;
+}
+
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&,
+                                       const GtRegRegion&, GtExecMask, GtPredicate)>
+    CbitFunctionsTable = {
+        {GED_MODEL_XE_HP, &CbitXeHpc}, {GED_MODEL_XE_HPC, &CbitXeHpc}, {GED_MODEL_XE2, &CbitXe2}};
 
 GtGenProcedure Macro::Cbit(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                            const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {

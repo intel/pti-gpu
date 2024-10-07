@@ -66,10 +66,32 @@ GtGenProcedure NotXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegi
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       GtExecMask, GtPredicate)>
-    NotFunctionsTable = {
-        {GED_MODEL_TGL, &NotTgl}, {GED_MODEL_XE_HP, &NotXeHpc}, {GED_MODEL_XE_HPC, &NotXeHpc}};
+GtGenProcedure NotXe2(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                      const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
+  IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
+  GtGenProcedure proc;
+
+  if (dst.DataType().Size() == 8 && src0.DataType().Size() == 8) {
+    GtReg dstL = {dst.Reg(), 4, 0};
+    GtReg src0L = {src0.Reg(), 4, 0};
+    proc += insF.MakeNot(dstL, src0L, execMask).SetPredicate(predicate);
+    GtReg dstH = {dst.Reg(), 4, 1};
+    GtReg src0H = {src0.Reg(), 4, 1};
+    proc += insF.MakeNot(dstH, src0H, execMask).SetPredicate(predicate);
+
+    return proc;
+  }
+
+  proc += insF.MakeNot(dst, src0, execMask).SetPredicate(predicate);
+  return proc;
+}
+
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&,
+                                       const GtRegRegion&, GtExecMask, GtPredicate)>
+    NotFunctionsTable = {{GED_MODEL_TGL, &NotTgl},
+                         {GED_MODEL_XE_HP, &NotXeHpc},
+                         {GED_MODEL_XE_HPC, &NotXeHpc},
+                         {GED_MODEL_XE2, &NotXe2}};
 
 GtGenProcedure Macro::Not(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
