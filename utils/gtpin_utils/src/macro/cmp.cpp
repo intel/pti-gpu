@@ -22,9 +22,9 @@ std::map<GED_MODEL,
                             const GtRegRegion&, GtExecMask, GtPredicate)>
     CmpFunctionsTable = {};
 
-GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifier cond, GtReg flagReg,
-                          const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
-                          GtPredicate predicate) {
+GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifier cond,
+                          GtReg flagReg, const GtRegRegion& src0, const GtRegRegion& src1,
+                          GtExecMask execMask, GtPredicate predicate) {
 #ifndef DISABLE_MACRO_WORKAROUNDS
   // check if there is a specific implementation for the current model
   GED_MODEL HwModel = instrumentor.Coder().GenModel().Id();
@@ -44,13 +44,29 @@ GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifie
 dst: register, src0: register, src1: immediate
 */
 
+GtGenProcedure CmpiXeHpc(const IGtKernelInstrument& instrumentor, GtCondModifier cond,
+                         GtReg flagReg, const GtRegRegion& src0, const GtImm& srcI1,
+                         GtExecMask execMask, GtPredicate predicate) {
+  uint64_t mask = Macro::GetMaskBySizeBytes(4);
+  PTI_ASSERT(srcI1.Value() <= mask && "Immediate value is too large");
+
+  IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
+  GtGenProcedure proc;
+
+  proc +=
+      insF.MakeCmp(cond, flagReg, src0, GtImm(srcI1, Macro::GetGedIntDataTypeBytes(4)), execMask)
+          .SetPredicate(predicate);
+  return proc;
+}
+
 std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, GtCondModifier, GtReg,
                                        const GtRegRegion&, const GtImm&, GtExecMask, GtPredicate)>
-    CmpiFunctionsTable = {};
+    CmpiFunctionsTable = {
+        {GED_MODEL_XE_HP, &CmpiXeHpc}, {GED_MODEL_XE_HPC, &CmpiXeHpc}, {GED_MODEL_XE2, &CmpiXeHpc}};
 
-GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifier cond, GtReg flagReg,
-                          const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
-                          GtPredicate predicate) {
+GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifier cond,
+                          GtReg flagReg, const GtRegRegion& src0, const GtImm& srcI1,
+                          GtExecMask execMask, GtPredicate predicate) {
 #ifndef DISABLE_MACRO_WORKAROUNDS
   // check if there is a specific implementation for the current model
   GED_MODEL HwModel = instrumentor.Coder().GenModel().Id();

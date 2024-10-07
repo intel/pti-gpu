@@ -17,8 +17,9 @@ using namespace gtpin_prof;
 dst: register, src0: register, src1: register
 */
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtRegRegion&, GtExecMask, GtPredicate)>
+std::map<GED_MODEL,
+         GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+                            const GtRegRegion&, GtExecMask, GtPredicate)>
     AddFunctionsTable = {
 
 };
@@ -88,9 +89,54 @@ GtGenProcedure AddiXeHpc(const IGtKernelInstrument& instrumentor, const GtDstReg
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtImm&, GtExecMask, GtPredicate)>
-    AddiFunctionsTable = {{GED_MODEL_XE_HP, &AddiXeHpc}, {GED_MODEL_XE_HPC, &AddiXeHpc}};
+GtGenProcedure AddiXe2(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                       const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
+                       GtPredicate predicate) {
+  GtGenProcedure proc;
+  IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
+
+  if (srcI1.DataType().Size() == 1) {
+    proc += insF.MakeAdd(dst, src0, GtImm(srcI1.Value() & 0xFF, GED_DATA_TYPE_ud), execMask)
+                .SetPredicate(predicate);
+    return proc;
+  }
+
+  if (dst.DataType().Size() == 8) {
+    if (srcI1.DataType().Size() == 8) {
+      if (src0.DataType().Size() == 8) {
+        GtReg dstL = {dst.Reg(), 4, 0};
+        GtReg dstH = {dst.Reg(), 4, 1};
+
+        GtReg src0L = {src0.Reg(), 4, 0};
+        GtReg src0H = {src0.Reg(), 4, 1};
+
+        proc += insF.MakeAddc(dstL, src0L, GtImm(srcI1.Value() & 0xFFFFFFFF, GED_DATA_TYPE_ud),
+                              execMask)
+                    .SetPredicate(predicate);
+
+        auto& coder = instrumentor.Coder();
+        auto& vregs = coder.VregFactory();
+        GtReg tmpReg = vregs.MakeMsgDataScratch(VREG_TYPE_DWORD);
+        proc += insF.MakeAdd(tmpReg, AccReg(0), src0H, execMask).SetPredicate(predicate);
+        proc += insF.MakeAdd(dstH, tmpReg,
+                             GtImm((srcI1.Value() >> 32) & 0xFFFFFFFF, GED_DATA_TYPE_ud), execMask)
+                    .SetPredicate(predicate);
+        return proc;
+      }
+      PTI_ASSERT(false && "Not Implemented Yet");
+    }
+    proc += insF.MakeAdd(dst, src0, srcI1, execMask).SetPredicate(predicate);
+    return proc;
+  }
+
+  proc += insF.MakeAdd(dst, src0, GtImm(srcI1, dst.DataType()), execMask).SetPredicate(predicate);
+  return proc;
+}
+
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&,
+                                       const GtRegRegion&, const GtImm&, GtExecMask, GtPredicate)>
+    AddiFunctionsTable = {
+        {GED_MODEL_XE_HP, &AddiXeHpc}, {GED_MODEL_XE_HPC, &AddiXeHpc}, {GED_MODEL_XE2, AddiXe2}};
 
 GtGenProcedure Macro::Add(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,

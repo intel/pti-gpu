@@ -46,8 +46,8 @@ GtGenProcedure MovTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       GtExecMask, GtPredicate)>
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&,
+                                       const GtRegRegion&, GtExecMask, GtPredicate)>
     MovFunctionsTable = {
         {GED_MODEL_TGL, &MovTgl},
 };
@@ -146,10 +146,27 @@ GtGenProcedure MoviXeHpc(const IGtKernelInstrument& instrumentor, const GtDstReg
   return proc;
 }
 
+GtGenProcedure MoviXe2(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
+                       const GtImm& srcI1, GtExecMask execMask, GtPredicate predicate) {
+  IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
+  GtGenProcedure proc;
+
+  if (srcI1.DataType().Size() == 1 && dst.DataType().Size() == 1) {
+    proc += insF.MakeMov(dst, GtImm(srcI1.Value(), Macro::GetGedIntDataTypeBytes(sizeof(uint16_t))))
+                .SetPredicate(predicate);
+    return proc;
+  }
+
+  proc += insF.MakeMov(dst, GtImm(srcI1.Value(), dst.DataType())).SetPredicate(predicate);
+  return proc;
+}
+
 std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtImm&,
                                        GtExecMask, GtPredicate)>
-    MoviFunctionsTable = {
-        {GED_MODEL_TGL, &MoviTgl}, {GED_MODEL_XE_HP, &MoviXeHpc}, {GED_MODEL_XE_HPC, &MoviXeHpc}};
+    MoviFunctionsTable = {{GED_MODEL_TGL, &MoviTgl},
+                          {GED_MODEL_XE_HP, &MoviXeHpc},
+                          {GED_MODEL_XE_HPC, &MoviXeHpc},
+                          {GED_MODEL_XE2, &MoviXe2}};
 
 GtGenProcedure Macro::Mov(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtImm& srcI1, GtExecMask execMask, GtPredicate predicate) {

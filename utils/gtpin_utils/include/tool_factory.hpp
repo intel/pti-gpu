@@ -75,7 +75,8 @@ class ToolFactory {
    * @param resultDataCommon A shared pointer to the ResultDataCommon object.
    * @return A shared pointer to the created ResultData object.
    */
-  virtual ResultDataSPtr MakeResultData(ResultDataCommonSPtr resultDataCommon, size_t tileId) const = 0;
+  virtual ResultDataSPtr MakeResultData(ResultDataCommonSPtr resultDataCommon,
+                                        size_t tileId) const = 0;
 
   /**
    * @brief Get the Control object

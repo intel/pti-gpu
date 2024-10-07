@@ -17,8 +17,9 @@ using namespace gtpin_prof;
 dst: register, src0: register, src1: register
 */
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtRegRegion&, GtExecMask, GtPredicate)>
+std::map<GED_MODEL,
+         GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+                            const GtRegRegion&, GtExecMask, GtPredicate)>
     ShlFunctionsTable = {};
 
 GtGenProcedure Macro::Shl(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
@@ -69,9 +70,10 @@ GtGenProcedure ShliXeHpc(const IGtKernelInstrument& instrumentor, const GtDstReg
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtImm&, GtExecMask, GtPredicate)>
-    ShliFunctionsTable = {{GED_MODEL_XE_HP, &ShliXeHpc}, {GED_MODEL_XE_HPC, &ShliXeHpc}};
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&,
+                                       const GtRegRegion&, const GtImm&, GtExecMask, GtPredicate)>
+    ShliFunctionsTable = {
+        {GED_MODEL_XE_HP, &ShliXeHpc}, {GED_MODEL_XE_HPC, &ShliXeHpc}, {GED_MODEL_XE2, &ShliXeHpc}};
 
 GtGenProcedure Macro::Shl(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,

@@ -140,9 +140,11 @@ GtGenProcedure MulXeHpc(const IGtKernelInstrument& instrumentor, const GtDstRegi
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtRegRegion&, GtExecMask, GtPredicate)>
-    MulFunctionsTable = {{GED_MODEL_XE_HP, &MulXeHpc}, {GED_MODEL_XE_HPC, &MulXeHpc}};
+std::map<GED_MODEL,
+         GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
+                            const GtRegRegion&, GtExecMask, GtPredicate)>
+    MulFunctionsTable = {
+        {GED_MODEL_XE_HP, &MulXeHpc}, {GED_MODEL_XE_HPC, &MulXeHpc}, {GED_MODEL_XE2, &MulXeHpc}};
 
 GtGenProcedure Macro::Mul(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
@@ -295,9 +297,10 @@ GtGenProcedure MuliXeHpc(const IGtKernelInstrument& instrumentor, const GtDstReg
   return proc;
 }
 
-std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&, const GtRegRegion&,
-                                       const GtImm&, GtExecMask, GtPredicate)>
-    MuliFunctionsTable = {{GED_MODEL_XE_HP, &MuliXeHpc}, {GED_MODEL_XE_HPC, &MuliXeHpc}};
+std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRegion&,
+                                       const GtRegRegion&, const GtImm&, GtExecMask, GtPredicate)>
+    MuliFunctionsTable = {
+        {GED_MODEL_XE_HP, &MuliXeHpc}, {GED_MODEL_XE_HPC, &MuliXeHpc}, {GED_MODEL_XE2, &MuliXeHpc}};
 
 GtGenProcedure Macro::Mul(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
