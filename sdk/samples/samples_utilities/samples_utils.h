@@ -7,6 +7,7 @@
 #define SAMPLES_UTILS_H_
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 
 #include "pti/pti_view.h"

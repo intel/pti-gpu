@@ -21,12 +21,11 @@
 
 class LibraryLoader {
  public:
+  using SymHandle = void*;
 #if defined(_WIN32)
   using Handle = HMODULE;
-  using SymHandle = FARPROC;
 #else
   using Handle = void*;
-  using SymHandle = void*;
 #endif
   LibraryLoader() {}
 
@@ -62,13 +61,12 @@ class LibraryLoader {
   template <typename T>
   [[nodiscard]] T GetSymbol(const char* sym_name) {
     static_assert(std::is_pointer<T>::value);
-    SymHandle sym_addr = nullptr;
 #if defined(_WIN32)
-    sym_addr = GetProcAddress(handle_, sym_name);
+    auto sym_addr = GetProcAddress(handle_, sym_name);
 #else
-    sym_addr = dlsym(handle_, sym_name);
+    auto sym_addr = dlsym(handle_, sym_name);
 #endif
-    return reinterpret_cast<T>(sym_addr);
+    return reinterpret_cast<T>(reinterpret_cast<SymHandle>(sym_addr));
   }
 
   virtual ~LibraryLoader() {

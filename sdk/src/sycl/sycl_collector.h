@@ -22,20 +22,14 @@
 #include <map>
 #include <memory>
 #endif
-//#include <sycl/ur_api.h>
 
 #include <string>
 #include <xpti/xpti_trace_framework.hpp>
 
 #include "library_loader.h"
+#include "platform_strings.h"
 #include "unikernel.h"
 #include "utils.h"
-
-#if (defined(_WIN32) || defined(_WIN64))
-inline static constexpr std::string_view kXptiLibName = "xptifw.dll";
-#else
-inline static constexpr std::string_view kXptiLibName = "libxptifw.so";
-#endif
 
 inline static constexpr std::string_view kStashedSymbolName = "xptiGetStashedTuple";
 inline static constexpr std::string_view kUnknownFunctionName = "<unknown>";
@@ -212,7 +206,7 @@ class SyclCollector {
   inline static StashedFuncPtr GetStashedFuncPtrFromSharedObject() {
     StashedFuncPtr xptiGetStashedTuple = nullptr;  // NOLINT
     try {
-      auto xpti_lib = LibraryLoader{std::string{kXptiLibName}};
+      auto xpti_lib = LibraryLoader{pti::strings::kXptiLibName};
       xptiGetStashedTuple = xpti_lib.GetSymbol<StashedFuncPtr>(kStashedSymbolName.data());
     } catch ([[maybe_unused]] const std::runtime_error& e) {
       xptiGetStashedTuple = nullptr;
@@ -654,7 +648,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fwdReason, LPVOID /*lpvReserved*/)
     case DLL_PROCESS_ATTACH: {
       utils::SetEnv("XPTI_SUBSCRIBERS", utils::GetPathToSharedObject(hinstDLL).c_str());
       utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER",
-                    utils::GetPathToSharedObject(kXptiLibName.data()).c_str());
+                    utils::GetPathToSharedObject(pti::strings::kXptiLibName).c_str());
       utils::SetEnv("XPTI_TRACE_ENABLE", "1");
       utils::SetEnv("UR_ENABLE_LAYERS", "UR_LAYER_TRACING");
       break;

@@ -155,6 +155,7 @@ target_compile_definitions(
   pti
   PRIVATE $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
           $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
+          $<$<CONFIG:Debug>:PTI_XPTI_FRAMEWORK_DISPATCHER_NAME=$<TARGET_FILE_NAME:Xpti::xpti>>
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
@@ -208,6 +209,7 @@ endif()
 target_compile_definitions(
   pti_view
   PRIVATE PTI_VIEW_CORE_LIB_NAME=$<TARGET_FILE_NAME:pti>
+          $<$<CONFIG:Debug>:PTI_XPTI_FRAMEWORK_DISPATCHER_NAME=$<TARGET_FILE_NAME:Xpti::xpti>>
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
