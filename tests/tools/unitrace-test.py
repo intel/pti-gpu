@@ -5,28 +5,6 @@ import sys
 
 import utils
 
-def config(path):
-  if (sys.platform != 'win32'):
-    cmake = ["cmake",\
-      "-DBUILD_WITH_MPI=0", "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
-  else:
-    cmake = ["cmake",\
-      "-G", "NMake Makefiles", "-DBUILD_WITH_MPI=0", "-DCMAKE_BUILD_TYPE=" + utils.get_build_flag(), ".."]
-  stdout, stderr = utils.run_process(cmake, path)
-  if stderr and stderr.find("CMake Error") != -1:
-    return stderr
-  return None
-
-def build(path):
-  if (sys.platform != 'win32'):
-    stdout, stderr = utils.run_process(["make"], path)
-  else:
-    stdout, stderr = utils.run_process(["nmake"], path)
-
-  if stderr and stderr.lower().find("error") != -1:
-    return stderr
-  return None
-
 samples = [["cl_gemm", "gpu"],
            ["ze_gemm", None],
            ["omp_gemm", "gpu"],
@@ -50,9 +28,16 @@ def run(path, tooloption, app, option):
     else:
       command = ["unitrace", "--opencl", tooloption, app_file, "1024", "1"]
   stdout, stderr = utils.run_process(command, path)
+
   if (stdout is None):
     return "stdout is empty"
   
+  if ('error' in stderr or 'ERROR' in stderr or 'Error' in stderr):
+    print("======================== Test ================================")
+    print(stdout)
+    print(stderr)
+    print("==============================================================")
+
   if (tooloption == "-t"):
     if (stderr is None):
       return "stderr is empty"
@@ -74,19 +59,13 @@ def run(path, tooloption, app, option):
         log = " (" + app + " " + str(occurrences) + " captured but " + str(expected) + " expected) "
       else:
         log = " (" + app + " " + option + " " + str(occurrences) + " captured but " + str(expected) + " expected) "
-      sys.stdout.write(log)
       return log
 
   return None
 
 def main(tooloption):
   path = utils.get_tool_build_path("unitrace")
-  log = config(path)
-  if log is not None:
-    return log
-  log = build(path)
-  if log is not None:
-    return log
+  log = None
     
   for sample in samples:
     for i in range(1, len(sample)):
@@ -94,12 +73,13 @@ def main(tooloption):
       module.main(sample[i])
       runlog = run(path, tooloption, sample[0], sample[i])
       if runlog is not None:
-        log = runlog
-        
-  if log is not None:
-    return log
+        if (log is not None):
+          log = log + runlog
+        else:
+          log = runlog
 
-  return None
+  return log
+
 
 if __name__ == "__main__":
   if len(sys.argv) > 1:

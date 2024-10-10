@@ -35,7 +35,8 @@ tools = [["instcount", "cl", "ze", "dpc"],
          ["memaccess", "cl", "ze", "dpc"],
          ["gpuinfo", "-l", "-i", "-m"],
          ["sysmon", "-p", "-l", "-d"],
-         ["unitrace",
+         ["unitrace-build", "none"],
+         ["unitrace-test",
           "-c", "-h", "-d", "-t", "-s",
           "--chrome-call-logging",
           "--chrome-device-logging",
@@ -107,15 +108,15 @@ def clean():
 
 def test(f, name, option, istool = False):
   if istool:
-    if option:
-      sys.stdout.write("Running tool test for " + name + " (" + option + ")...")
+    if (option and (option != "none")):
+      sys.stdout.write("Running " + name + " (" + option + ")...")
     else:
-      sys.stdout.write("Running tool test for " + name + "...")
+      sys.stdout.write("Running " + name + "...")
   else:
     if option:
-      sys.stdout.write("Running sample test for " + name + " (" + option + ")...")
+      sys.stdout.write("Running sample " + name + " (" + option + ")...")
     else:
-      sys.stdout.write("Running sample test for " + name + "...")
+      sys.stdout.write("Running sample " + name + "...")
   sys.stdout.flush()
 
   if istool:

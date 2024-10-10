@@ -44,10 +44,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build-and-test-unitrace
+      - name: Build-unitrace
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s unitrace
+          python ./tests/run.py -s unitrace-build
+
+      - name: Test-unitrace
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python ./tests/run.py -s unitrace-test
 
       - name: Build-and-test-onetrace
         run: |
@@ -111,9 +116,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build-and-test-unitrace
+      - name: Build-unitrace
         run: |
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          python --version
-          python ./tests/run.py -s unitrace
+          python ./tests/run.py -s unitrace-build
+
+      - name: Test-unitrace
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          python ./tests/run.py -s unitrace-test
