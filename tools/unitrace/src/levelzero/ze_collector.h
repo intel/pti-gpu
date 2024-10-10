@@ -1926,7 +1926,10 @@ class ZeCollector {
     zet_metric_group_properties_t group_props{};
     group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
     ze_result_t status = zetMetricGroupGetProperties(group, &group_props);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (status != ZE_RESULT_SUCCESS) {
+      std::cerr << "[ERROR] Failed to get metric group properties (" << status << ")." << std::endl;
+      exit(-1);
+    }
 
     return group_props.metricCount;
   }

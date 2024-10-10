@@ -42,7 +42,9 @@ inline void PrintDeviceList() {
   ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   if (status != ZE_RESULT_SUCCESS) {
     std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
-    std::cerr << "Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+#ifndef _WIN32
+    std::cerr << "[INFO] Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+#endif /* _WIN32 */
     return;
   }
   
@@ -88,7 +90,9 @@ inline void PrintMetricList(uint32_t device_id) {
   ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   if (status != ZE_RESULT_SUCCESS) {
     std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
-    std::cerr << "Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+#ifndef _WIN32
+    std::cerr << "[INFO] Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+#endif /* _WIN32 */
     return;
   }
 
@@ -1034,7 +1038,9 @@ class ZeMetricProfiler {
     status = zetMetricStreamerOpen(context, device, group, &streamer_desc, event, &streamer);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Failed to open metric streamer (" << status << "). The sampling interval might be too small." << std::endl;
-      std::cerr << "Please also make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+#ifndef _WIN32
+      std::cerr << "[INFO] Please also make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+#endif /* _WIN32 */
 
       status = zeEventDestroy(event);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);

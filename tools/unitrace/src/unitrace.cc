@@ -27,16 +27,6 @@
 #include "version.h"
 #include "unitrace_commit_hash.h"
 
-#if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
-#define LIB_UNITRACE_TOOL_NAME	"libunitrace_tool.so"
-#else /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
-#define LIB_UNITRACE_TOOL_NAME	"unitrace_tool.dll"
-#endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
-
-#if BUILD_WITH_MPI
-#define LIB_UNITRACE_MPI_NAME	"libunitrace_mpi.so"
-#endif /* BUILD_WITH_MPI */
-
 static ZeMetricProfiler* metric_profiler = nullptr;
 
 void Usage(char * progname) {
@@ -474,13 +464,15 @@ int ParseArgs(int argc, char* argv[]) {
   return app_index;
 }
 
-void EnableProfiling(char *dir, std::string& logfile) {
+ZeMetricProfiler *EnableProfiling(char *dir, std::string& logfile) {
   if (zeInit(ZE_INIT_FLAG_GPU_ONLY) != ZE_RESULT_SUCCESS) {
     std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
-    std::cerr << "Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
-    exit(-1);
+#ifndef _WIN32
+    std::cerr << "[INFO] Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+#endif /* _WIN32 */
+    return nullptr;
   }
-  metric_profiler = ZeMetricProfiler::Create(dir, logfile);
+  return ZeMetricProfiler::Create(dir, logfile);
 }
 
 void DisableProfiling() {
@@ -499,7 +491,7 @@ void CleanUp(int sig) {
   for (const auto& e: CXX_FILESYSTEM_NAMESPACE::directory_iterator(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
     CXX_FILESYSTEM_NAMESPACE::remove_all(e.path());
   }
-  if (remove(data_dir)) {
+  if (CXX_FILESYSTEM_NAMESPACE::remove(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
     std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
   }
   _Exit(-1);
@@ -613,10 +605,16 @@ int main(int argc, char *argv[]) {
     SetProfilingEnvironment();
   }
 
-  utils::SetEnv("LD_PRELOAD", preload.c_str());
   utils::SetEnv("PTI_ENABLE", "1");
 
+  std::string logfile;
+  if (utils::GetEnv("UNITRACE_LogToFile") == "1") {
+    logfile = utils::GetEnv("UNITRACE_LogFilename");
+  }
+    
 #ifndef _WIN32
+  utils::SetEnv("LD_PRELOAD", preload.c_str());
+
   if ((utils::GetEnv("UNITRACE_RawMetrics") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
 
     // UNITRACE_MetricQuery is not set
@@ -628,11 +626,6 @@ int main(int argc, char *argv[]) {
       exit(-1);
     }
 
-    std::string logfile;
-    if (utils::GetEnv("UNITRACE_LogToFile") == "1") {
-      logfile = utils::GetEnv("UNITRACE_LogFilename");
-    }
-    
     std::signal(SIGABRT, CleanUp);
     std::signal(SIGFPE, CleanUp);
     std::signal(SIGILL, CleanUp);
@@ -640,7 +633,7 @@ int main(int argc, char *argv[]) {
     std::signal(SIGSEGV, CleanUp);
     std::signal(SIGTERM, CleanUp);
 
-    EnableProfiling(data_dir, logfile);
+    metric_profiler = EnableProfiling(data_dir, logfile);
 
     int child;
 
@@ -659,7 +652,11 @@ int main(int argc, char *argv[]) {
 
       // wait for child process to complete
       while (wait(nullptr) > 0);
-      DisableProfiling();
+
+      if (metric_profiler != nullptr) {
+        DisableProfiling();
+      }
+
       if (CXX_FILESYSTEM_NAMESPACE::exists(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
         for (const auto& e: CXX_FILESYSTEM_NAMESPACE::directory_iterator(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
           CXX_FILESYSTEM_NAMESPACE::remove_all(e.path());
@@ -670,7 +667,10 @@ int main(int argc, char *argv[]) {
       }
     } else {
       std::cerr << "[ERROR] Failed to create child process" << std::endl;
-      DisableProfiling();
+      if (metric_profiler != nullptr) {
+        DisableProfiling();
+      }
+
       if (CXX_FILESYSTEM_NAMESPACE::exists(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
         for (const auto& e: CXX_FILESYSTEM_NAMESPACE::directory_iterator(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
           CXX_FILESYSTEM_NAMESPACE::remove_all(e.path());
@@ -688,7 +688,44 @@ int main(int argc, char *argv[]) {
     }
   }
 #else /* _WIN32 */
-  bool metric_profile_is_on = false;
+  bool metrics_enabled = ((utils::GetEnv("UNITRACE_RawMetrics") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1"));
+
+  // metric data collection
+  if (metrics_enabled) {
+    char tpath[MAX_PATH];
+    auto tpath_length = GetTempPathA(MAX_PATH, tpath);
+    if (tpath_length == 0) {
+      std::cerr << "[ERROR] Path for temporary files does not exit." << std::endl;
+      exit(-1);
+    }
+
+    if (!std::filesystem::exists(std::filesystem::path(tpath))) {
+      // First check if folder for temporary files exist
+      std::cerr << "[ERROR] Directory for temporary files does not exist." << std::endl;
+      exit(-1);
+    }
+
+    // set data_dir for cleaning up
+    data_dir = (char *)malloc(strlen(tpath) + sizeof("\.data.") + 32);	// enough for the data_dir
+    UniMemory::ExitIfOutOfMemory(data_dir);
+    sprintf(data_dir, "%s\.data.%d", tpath, utils::GetPid());
+    auto status = CreateDirectoryA(LPCSTR(data_dir), nullptr);
+    if (status == false) {
+      std::cerr << "[ERROR] Failed to create temporary data folder." << std::endl;
+      free(data_dir);
+      exit(-1);
+    }
+
+    std::signal(SIGABRT, CleanUp);
+    std::signal(SIGFPE, CleanUp);
+    std::signal(SIGILL, CleanUp);
+    std::signal(SIGINT, CleanUp);
+    std::signal(SIGSEGV, CleanUp);
+    std::signal(SIGTERM, CleanUp);
+
+    utils::SetEnv("UNITRACE_DataDir", data_dir);
+  }
+
   std::string cmdline = "";
   for (int i = 0; i < app_args.size() - 1; ++i) {
     cmdline += app_args[i];
@@ -715,47 +752,6 @@ int main(int argc, char *argv[]) {
       if (!loadlibrary) {
         break;
       }
-      std::string data_file_path = "";
-      // metric data collection
-      if ((utils::GetEnv("UNITRACE_RawMetrics") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
-        char tpath[MAX_PATH];
-        auto tpath_length = GetTempPathA(MAX_PATH, tpath);
-        if (tpath_length == 0) {
-          std::cerr << "[ERROR] Path for temporary files does not exit." << std::endl;
-          break;
-        }
-
-        if (!std::filesystem::exists(std::filesystem::path(tpath))) {
-          // First check if temporary folder exist
-          std::cerr << "[ERROR] Directory for temporary files does not exist." << std::endl;
-          break;
-        }
-
-        // profiling environment
-        SetProfilingEnvironment();
-        data_file_path = std::string(tpath) + "/.data_files_" + std::to_string(utils::GetPid());
-        auto status = CreateDirectoryA(LPCSTR(data_file_path.c_str()), nullptr);
-        if (status == false) {
-          std::cerr << "[ERROR] Failed to create temporary data folder." << std::endl;
-          break;
-        }
-
-        std::string log_file;
-        if (utils::GetEnv("UNITRACE_LogToFile") == "1") {
-          log_file = utils::GetEnv("UNITRACE_LogFilename");
-        }
-
-        std::signal(SIGABRT, CleanUp);
-        std::signal(SIGFPE, CleanUp);
-        std::signal(SIGILL, CleanUp);
-        std::signal(SIGINT, CleanUp);
-        std::signal(SIGSEGV, CleanUp);
-        std::signal(SIGTERM, CleanUp);
-
-        utils::SetEnv("UNITRACE_DataDir", data_file_path.c_str());
-        EnableProfiling((char*)data_file_path.c_str(), log_file);
-        metric_profile_is_on = true;
-      }
 
       HANDLE thr = CreateRemoteThread(pi.hProcess, nullptr, CREATE_SUSPENDED, loadlibrary, pathname, 0, nullptr);
       if (!thr) {
@@ -772,22 +768,22 @@ int main(int argc, char *argv[]) {
       }
 
       CloseHandle(thr);
+
+      if (metrics_enabled) {
+        SetProfilingEnvironment();
+	metric_profiler = EnableProfiling(data_dir, logfile);
+      }
+
       ResumeThread(pi.hThread); 
       WaitForSingleObject(pi.hProcess, INFINITE);
 
-      if (metric_profile_is_on) {
-        DisableProfiling();
-        if (std::filesystem::exists(std::filesystem::path(data_file_path.c_str()))) {
-          for (const auto& e : std::filesystem::directory_iterator(std::filesystem::path(data_file_path.c_str()))) {
-            std::filesystem::remove_all(e.path());
-          }
-          if (RemoveDirectory(LPCSTR(data_file_path.c_str())) == 0) {
-            std::cerr << "[WARNING] " << data_file_path << " is not removed. Please manually remove it." << std::endl;
-          }
-        }
-      }
       CloseHandle(pi.hThread);
       CloseHandle(pi.hProcess);
+
+      if (metrics_enabled && (metric_profiler != nullptr)) {
+        DisableProfiling();
+      }
+
       success = TRUE;
     }
     while (0);
@@ -799,6 +795,21 @@ int main(int argc, char *argv[]) {
   else {
     std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
     Usage(argv[0]);
+  }
+
+  if (metrics_enabled) {
+    if (std::filesystem::exists(std::filesystem::path(data_dir))) {
+      for (const auto& e : std::filesystem::directory_iterator(std::filesystem::path(data_dir))) {
+        std::filesystem::remove_all(e.path());
+      }
+      if (RemoveDirectory(LPCSTR(data_dir)) == 0) {
+        std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
+      }
+    }
+  }
+
+  if (data_dir) {
+    free(data_dir);
   }
 #endif /* _WIN32 */
 

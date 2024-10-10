@@ -64,7 +64,9 @@ class UniTracer {
     status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
-      std::cerr << "Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+#ifndef _WIN32
+      std::cerr << "[INFO] Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+#endif /* _WIN32 */
       exit(-1);
     }
 
