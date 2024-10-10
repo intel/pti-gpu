@@ -42,7 +42,7 @@ class DwarfDebugLineParser {
   const uint64_t size_;
   const uint64_t offset_;
   const uint32_t address_width_;
-  DwarfLineNumberProgramHeader header_;
+  DwarfLineNumberProgramHeader header_ = {};
   bool is_valid_ = false;
   bool is_header_processed_ = false;
 };

@@ -102,7 +102,7 @@ std::vector<PathFilename> DwarfDebugLineParser::GetSourceFiles(const char* comp_
     uint32_t directory_index = 0;
     file_data = utils::leb128::Decode32(file_data, directory_index, done);
     PTI_ASSERT(done);
-    PTI_ASSERT(directory_index < dir_list.size() && directory_index >= 0);
+    PTI_ASSERT(directory_index < dir_list.size());
 
     uint32_t time = 0;
     file_data = utils::leb128::Decode32(file_data, time, done);
@@ -115,11 +115,13 @@ std::vector<PathFilename> DwarfDebugLineParser::GetSourceFiles(const char* comp_
     source_files.push_back({dir_list[directory_index], file_name});
   }
 
-  return (source_files.size() > 1) ? source_files : std::vector<PathFilename>();
+  return (source_files.size() > 1) ? std::move(source_files) : std::vector<PathFilename>();
 }
 
 template <typename DwarfLineNumberProgramHeaderT>
 void DwarfDebugLineParser::ProcessHeader() {
+  if (!is_valid_) return;
+
   if (size_ < sizeof(DwarfLineNumberProgramHeaderT)) {
     return;
   }
@@ -140,6 +142,9 @@ void DwarfDebugLineParser::ProcessHeader() {
   header_.line_base = header->line_base;
   header_.line_range = header->line_range;
   header_.opcode_base = header->opcode_base;
+
+  PTI_ASSERT(header_.opcode_base <=
+             13);  // One more than num of standard opcodes. For DWARF v3, v4 & v5 it is == 13
 
   header_.standard_opcode_lengths = data_ + sizeof(DwarfLineNumberProgramHeaderT);
   const uint8_t* ptr = header_.standard_opcode_lengths;

@@ -45,9 +45,9 @@ pti_result ptiElfParserCreate(/*IN*/ const uint8_t* data, /*IN*/ uint32_t size,
 
 /**
  * @brief Delete parser
- * @param parser - parser handle to delete
+ * @param parser - pointer to pointer parser handle to delete
  */
-pti_result ptiElfParserDestroy(/*IN*/ elf_parser_handle_t parser);
+pti_result ptiElfParserDestroy(/*IN*/ elf_parser_handle_t* parser);
 
 /**
  * @brief Check if parser is valid

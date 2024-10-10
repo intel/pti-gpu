@@ -277,28 +277,23 @@ class ClDebugInfoCollector {
       return std::vector<uint8_t>();
     }
 
-    uint8_t** binary_list = new uint8_t*[device_list.size()];
-    PTI_ASSERT(binary_list != nullptr);
-    for (size_t i = 0; i < device_list.size(); ++i) {
-      if (binary_size_list[i] > 0) {
-        binary_list[i] = new uint8_t[binary_size_list[i]];
-        PTI_ASSERT(binary_list[i] != nullptr);
-      } else {
-        binary_list[i] = nullptr;
-      }
+    std::vector<std::vector<uint8_t>> binary_list(device_list.size());
+    std::vector<uint8_t*> binary_ptr_list(
+        binary_list.size());  // just pointers to binary_list data, no memory allocation. Used in
+                              // clGetProgramInfo interface as a void**
+
+    for (size_t i = 0; i < binary_list.size(); ++i) {
+      binary_list[i].resize(binary_size_list[i]);
+      binary_ptr_list[i] = binary_list[i].data();
     }
 
-    status = clGetProgramInfo(program, CL_PROGRAM_BINARIES, device_list.size() * sizeof(uint8_t*),
-                              binary_list, nullptr);
+    status = clGetProgramInfo(program, CL_PROGRAM_BINARIES, binary_list.size() * sizeof(uint8_t*),
+                              reinterpret_cast<void**>(binary_ptr_list.data()), nullptr);
     PTI_ASSERT(status == CL_SUCCESS);
 
     std::vector<uint8_t> binary(binary_size_list[target_id]);
-    memcpy(binary.data(), binary_list[target_id], binary_size_list[target_id] * sizeof(uint8_t));
-
-    for (size_t i = 0; i < device_list.size(); ++i) {
-      delete[] binary_list[i];
-    }
-    delete[] binary_list;
+    memcpy(binary.data(), binary_list[target_id].data(),
+           binary_size_list[target_id] * sizeof(uint8_t));
 
     return binary;
   }
@@ -333,29 +328,24 @@ class ClDebugInfoCollector {
       return std::vector<uint8_t>();
     }
 
-    uint8_t** debug_symbols_list = new uint8_t*[device_list.size()];
-    PTI_ASSERT(debug_symbols_list != nullptr);
-    for (size_t i = 0; i < device_list.size(); ++i) {
-      if (debug_size_list[i] > 0) {
-        debug_symbols_list[i] = new uint8_t[debug_size_list[i]];
-        PTI_ASSERT(debug_symbols_list[i] != nullptr);
-      } else {
-        debug_symbols_list[i] = nullptr;
-      }
+    std::vector<std::vector<uint8_t>> debug_symbols_list(device_list.size());
+    std::vector<uint8_t*> debug_symbols_ptr_list(
+        debug_symbols_list.size());  // just pointers to debug_symbols_list data, no memory
+                                     // allocation. Used in clGetProgramInfo interface as a void**
+
+    for (size_t i = 0; i < debug_symbols_list.size(); ++i) {
+      debug_symbols_list[i].resize(debug_size_list[i]);
+      debug_symbols_ptr_list[i] = debug_symbols_list[i].data();
     }
 
     status = clGetProgramInfo(program, CL_PROGRAM_DEBUG_INFO_INTEL,
-                              device_list.size() * sizeof(uint8_t*), debug_symbols_list, nullptr);
+                              debug_symbols_list.size() * sizeof(uint8_t*),
+                              reinterpret_cast<void**>(debug_symbols_ptr_list.data()), nullptr);
     PTI_ASSERT(status == CL_SUCCESS);
 
     std::vector<uint8_t> debug_symbols(debug_size_list[target_id]);
-    memcpy(debug_symbols.data(), debug_symbols_list[target_id],
+    memcpy(debug_symbols.data(), debug_symbols_list[target_id].data(),
            debug_size_list[target_id] * sizeof(uint8_t));
-
-    for (size_t i = 0; i < device_list.size(); ++i) {
-      delete[] debug_symbols_list[i];
-    }
-    delete[] debug_symbols_list;
 
     return debug_symbols;
   }
@@ -429,6 +419,9 @@ class ClDebugInfoCollector {
     res = ptiElfParserIsValid(parserHandle, &is_valid);
     if (res != PTI_SUCCESS || !is_valid) {
       std::cerr << "[WARNING] : Constructed Elf parser is not valid" << std::endl;
+      res = ptiElfParserDestroy(&parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
       return;
     }
 
@@ -436,29 +429,33 @@ class ClDebugInfoCollector {
     res = ptiElfParserGetKernelNames(parserHandle, 0, nullptr, &kernel_num);
     if (res != PTI_SUCCESS) {
       std::cerr << "Error: Failed to get kernel names" << std::endl;
+      res = ptiElfParserDestroy(&parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
       return;
     }
 
     if (kernel_num == 0) {
       std::cerr << "[WARNING] : No kernels found" << std::endl;
+      res = ptiElfParserDestroy(&parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
       return;
     }
 
-    const char** kernel_names_cstr = new const char*[kernel_num];
+    std::vector<const char*> kernel_names(kernel_num);
 
-    res = ptiElfParserGetKernelNames(parserHandle, kernel_num, kernel_names_cstr, nullptr);
+    res = ptiElfParserGetKernelNames(parserHandle, kernel_num, kernel_names.data(), nullptr);
     if (res != PTI_SUCCESS) {
       std::cerr << "Error: Failed to get kernel names" << std::endl;
+      res = ptiElfParserDestroy(&parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
       return;
-    }
-
-    std::vector<std::string> kernel_names;
-    for (uint32_t i = 0; i < kernel_num; ++i) {
-      kernel_names.push_back(kernel_names_cstr[i]);
     }
 
     for (uint32_t kernel_idx = 0; kernel_idx < kernel_names.size(); kernel_idx++) {
-      if (kernel_name != kernel_names[kernel_idx]) {
+      if (kernel_name != std::string(kernel_names[kernel_idx])) {
         continue;
       }
 
@@ -518,11 +515,11 @@ class ClDebugInfoCollector {
 
       std::vector<std::string> file_list;
       uint32_t max_files = 0;
-      for (auto line : line_info_list) {
+      for (const auto& line : line_info_list) {
         max_files = line.file_id > max_files ? line.file_id : max_files;
       }
       file_list.resize(max_files);
-      for (auto line : line_info_list) {
+      for (const auto& line : line_info_list) {
         file_list[line.file_id - 1] = line.file_name;
       }
 
@@ -533,7 +530,7 @@ class ClDebugInfoCollector {
           std::vector<SourceLine> line_list = GetSource(*kernel);
           if (line_list.size() == 0) {
             std::cerr << "[WARNING] Kernel sources are not found" << std::endl;
-            return;
+            continue;
           }
 
           PTI_ASSERT(i + 1 < (std::numeric_limits<uint32_t>::max)());
@@ -546,13 +543,19 @@ class ClDebugInfoCollector {
       if (source_info_list.size() == 0) {
         std::cerr << "[WARNING] : Unable to find kernel source files for kernel: " << kernel_name
                   << std::endl;
+        res = ptiElfParserDestroy(&parserHandle);
+        PTI_ASSERT(res == PTI_SUCCESS);
+        PTI_ASSERT(parserHandle == nullptr);
         return;
       }
 
       collector->AddKernel(kernel_name, instruction_list, line_info_list, source_info_list);
 
-      res = ptiElfParserDestroy(parserHandle);
+      res = ptiElfParserDestroy(&parserHandle);
       PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
+
+      break;
     }
   }
 

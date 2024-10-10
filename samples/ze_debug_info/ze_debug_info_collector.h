@@ -135,7 +135,7 @@ class ZeDebugInfoCollector {
       }
 
       // Print instructions for corresponding source line
-      for (auto line : line_list) {
+      for (const auto& line : line_list) {
         std::cerr << "[" << std::setw(5) << std::setfill(' ') << std::dec << line.number << "] "
                   << line.text << std::endl;
 
@@ -271,6 +271,9 @@ class ZeDebugInfoCollector {
                              &parserHandle);
     if (res != PTI_SUCCESS || parserHandle == nullptr) {
       std::cerr << "[WARNING] : Cannot create elf parser" << std::endl;
+      res = ptiElfParserDestroy(&parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
       return;
     }
 
@@ -278,6 +281,9 @@ class ZeDebugInfoCollector {
     res = ptiElfParserIsValid(parserHandle, &is_valid);
     if (res != PTI_SUCCESS || !is_valid) {
       std::cerr << "[WARNING] : Constructed Elf parser is not valid" << std::endl;
+      res = ptiElfParserDestroy(&parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
       return;
     }
 
@@ -285,29 +291,33 @@ class ZeDebugInfoCollector {
     res = ptiElfParserGetKernelNames(parserHandle, 0, nullptr, &kernel_num);
     if (res != PTI_SUCCESS) {
       std::cerr << "Error: Failed to get kernel names" << std::endl;
+      res = ptiElfParserDestroy(&parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
       return;
     }
 
     if (kernel_num == 0) {
       std::cerr << "[WARNING] : No kernels found" << std::endl;
+      res = ptiElfParserDestroy(&parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
       return;
     }
 
-    const char** kernel_names_cstr = new const char*[kernel_num];
+    std::vector<const char*> kernel_names(kernel_num);
 
-    res = ptiElfParserGetKernelNames(parserHandle, kernel_num, kernel_names_cstr, nullptr);
+    res = ptiElfParserGetKernelNames(parserHandle, kernel_num, kernel_names.data(), nullptr);
     if (res != PTI_SUCCESS) {
       std::cerr << "Error: Failed to get kernel names" << std::endl;
+      res = ptiElfParserDestroy(&parserHandle);
+      PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
       return;
-    }
-
-    std::vector<std::string> kernel_names;
-    for (uint32_t i = 0; i < kernel_num; ++i) {
-      kernel_names.push_back(kernel_names_cstr[i]);
     }
 
     for (uint32_t kernel_idx = 0; kernel_idx < kernel_names.size(); kernel_idx++) {
-      if (kernel_name != kernel_names[kernel_idx]) {
+      if (kernel_name != std::string(kernel_names[kernel_idx])) {
         continue;
       }
 
@@ -366,7 +376,7 @@ class ZeDebugInfoCollector {
       }
 
       std::unordered_map<uint32_t, SourceFileInfo> source_info_list;
-      for (auto line : line_info_list) {
+      for (const auto& line : line_info_list) {
         if (source_info_list.find(line.file_id) != source_info_list.end()) {
           continue;
         }
@@ -388,6 +398,9 @@ class ZeDebugInfoCollector {
       if (source_info_list.size() == 0) {
         std::cerr << "[WARNING] : Unable to find kernel source files for kernel: " << kernel_name
                   << std::endl;
+        res = ptiElfParserDestroy(&parserHandle);
+        PTI_ASSERT(res == PTI_SUCCESS);
+        PTI_ASSERT(parserHandle == nullptr);
         return;
       }
 
@@ -395,8 +408,11 @@ class ZeDebugInfoCollector {
       PTI_ASSERT(collector != nullptr);
       collector->AddKernel(kernel_name, instruction_list, line_info_list, source_info_list);
 
-      res = ptiElfParserDestroy(parserHandle);
+      res = ptiElfParserDestroy(&parserHandle);
       PTI_ASSERT(res == PTI_SUCCESS);
+      PTI_ASSERT(parserHandle == nullptr);
+
+      break;
     }
   }
 

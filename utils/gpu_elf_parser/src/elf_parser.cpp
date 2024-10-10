@@ -41,14 +41,15 @@ pti_result ptiElfParserCreate(const uint8_t* data, uint32_t size, elf_parser_han
   return PTI_SUCCESS;
 }
 
-pti_result ptiElfParserDestroy(elf_parser_handle_t parser) {
+pti_result ptiElfParserDestroy(elf_parser_handle_t* parser) {
   if (parser == nullptr) return PTI_ERROR_BAD_ARGUMENT;
 
-  ElfParser* parser_ = reinterpret_cast<ElfParser*>(parser);
+  ElfParser* parser_ = reinterpret_cast<ElfParser*>(*parser);
   if (parser_->IsValid() == false) {
     return PTI_ERROR_BAD_ARGUMENT;
   }
   delete parser_;
+  *parser = nullptr;
   return PTI_SUCCESS;
 }
 
@@ -359,7 +360,7 @@ std::map<uint64_t, SourceMapping> ElfParser::GetSourceMapping(uint32_t kernel_in
 }
 
 std::map<uint64_t, SourceMapping> ElfParser::GetSourceMapping(std::string kernel_name) {
-  return ElfParser::GetSourceMapping(GetKernelIndex(kernel_name));
+  return ElfParser::GetSourceMapping(GetKernelIndex(std::move(kernel_name)));
 }
 
 template <typename Header, typename SectionHeader>
@@ -370,8 +371,10 @@ bool ElfParser::IsValidHeader(const uint8_t* data, uint32_t size) {
 
   const Header* header = reinterpret_cast<const Header*>(data);
   if (header->machine != EM_INTELGT || header->version == 0 || header->shoff == 0 ||
-      header->shentsize == 0 || header->shentsize != sizeof(SectionHeader) ||
-      header->shoff + header->shentsize * header->shnum > size)
+      header->shentsize == 0u || header->shentsize != sizeof(SectionHeader) ||
+      header->shoff +
+              static_cast<uint64_t>(header->shentsize) * static_cast<uint64_t>(header->shnum) >
+          size)
     return false;
 
   const SectionHeader* sectionHeader = reinterpret_cast<const SectionHeader*>(data + header->shoff);
@@ -385,7 +388,9 @@ bool ElfParser::IsValidHeader(const uint8_t* data, uint32_t size) {
 
 template <typename Header, typename SectionHeader, typename SymtabEntryT>
 bool ElfParser::Init() {
-  PTI_ASSERT(ElfParser::IsValid(data_, size_));
+  if (!ElfParser::IsValid(data_, size_)) {
+    return false;
+  }
 
   /* header */
   const Header* header = reinterpret_cast<const Header*>(data_);
@@ -397,6 +402,10 @@ bool ElfParser::Init() {
   const SectionHeader* strtabSectionHeader = &sectionHeader[header->shstrndx];
   const char* strtab_section_cstr =
       reinterpret_cast<const char*>(&data_[strtabSectionHeader->offset]);
+
+  if (strtabSectionHeader->offset + strtabSectionHeader->size >= size_) {
+    return false;
+  }
 
   uint string_start = 0;
   for (uint i = 0; i < strtabSectionHeader->size; i++) {
@@ -473,7 +482,7 @@ std::vector<SourceMapping> ElfParser::GetSourceMappingNonCached(uint32_t kernel_
       return {};
     }
 
-    for (auto rela : rela_debug_info) {
+    for (const auto& rela : rela_debug_info) {
       if (rela.offset > i && rela.offset < i + size /* in boundaries */) {
         debug_info_units[ptr] = size;
       }
@@ -536,7 +545,7 @@ std::vector<SourceMapping> ElfParser::GetSourceMappingNonCached(uint32_t kernel_
       return {};
     }
 
-    for (auto rela : rela_debug_line) {
+    for (const auto& rela : rela_debug_line) {
       if (rela.offset > offset && rela.offset < offset + size /* in boundaries */
           && debug_line_units.find(offset) == debug_line_units.end()) {
         debug_line_units[offset] = size;
@@ -563,7 +572,6 @@ std::vector<SourceMapping> ElfParser::GetSourceMappingNonCached(uint32_t kernel_
   }
   return mapping;
 }
-
 
 const ElfParser::Section ElfParser::GetSection(const char* section_name) const {
   if (section_name == nullptr) {  // assert instead?
