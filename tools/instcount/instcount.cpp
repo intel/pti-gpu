@@ -40,10 +40,10 @@ class SimdInstrArgs {
            std::make_tuple(other.maskCtrl, other.execMask, other.pred, other.isSendIns);
   }
 
-  bool maskCtrl;
   uint32_t execMask;
   gtpin::GtPredicate pred;
   bool isSendIns;
+  bool maskCtrl;
 };
 
 using SimdInsMap = std::map<SimdInstrArgs, std::shared_ptr<InstCountSiteOfInstrument>>;

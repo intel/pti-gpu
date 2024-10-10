@@ -199,30 +199,19 @@ GtGenProcedure ComputeSimdMask(const IGtKernelInstrument& instrumentor, GtReg si
                                bool maskCtrl, uint32_t execMask, GtPredicate pred);
 GtGenProcedure ComputeSimdMask(const IGtKernelInstrument& instrumentor, GtReg simdMaskReg,
                                const IGtIns& gtpinIns);
-/**
- * Calculation goes in 16 bits due to no need in all 64 bits. The only need in
- * lower 6 bits Result in tempData1Reg reg. 0 - for not CL aligned, !=0 for CL
- * aligned and channel active
- */
-GtGenProcedure IsCacheLineAligned(const IGtKernelInstrument& instrumentor, GtReg addrRegCheckReg,
-                                  size_t channelOffset, GtReg simdMaskReg, GtReg tempData1Reg,
-                                  GtReg tempData2Reg, size_t mathWidthBytes = 2);
-GtGenProcedure IsCacheLineAligned(const IGtKernelInstrument& instrumentor, const IGtIns& gtpinIns,
-                                  GtReg simdMaskReg, GtReg tempData1Reg, GtReg tempData2Reg,
-                                  size_t mathWidthBytes = 2);
+
 /**
  * Faster, but requires flag register. Result in tempData1Reg.
  * tempData1Reg = 1 in case of active and aligned, 0 otherwise.
  * Checks that SIMD lane 0 is active and cache line is aligned (lower 6 bits of address are 0).
  */
-GtGenProcedure IsCacheLineAlignedFlag(const IGtKernelInstrument& instrumentor,
-                                      GtReg addrRegCheckReg, size_t channelOffset,
-                                      GtReg simdMaskReg, GtReg tempData1Reg,
-                                      GtReg flagReg = FlagReg(0));
+GtGenProcedure IsCacheLineAligned(const IGtKernelInstrument& instrumentor, GtReg addrRegCheckReg,
+                                  size_t channelOffset, GtReg simdMaskReg, GtReg tempData1Reg,
+                                  GtReg flagReg = FlagReg(0));
 
-GtGenProcedure IsCacheLineAlignedFlag(const IGtKernelInstrument& instrumentor,
-                                      const IGtIns& gtpinIns, GtReg simdMaskReg, GtReg tempData1Reg,
-                                      GtReg flagReg = FlagReg(0));
+GtGenProcedure IsCacheLineAligned(const IGtKernelInstrument& instrumentor, const IGtIns& gtpinIns,
+                                  GtReg simdMaskReg, GtReg tempData1Reg,
+                                  GtReg flagReg = FlagReg(0));
 
 GtGenProcedure CalcBaseAddr(const IGtKernelInstrument& instrumentor, GtProfileArray& profileArray,
                             GtReg baseAddrReg, size_t recordIndex, size_t numTiles);

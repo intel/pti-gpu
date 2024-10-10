@@ -36,14 +36,13 @@ GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifie
 
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;
-  insF.MakeCmp(cond, flagReg, src0, src1, execMask).SetPredicate(predicate);
+  proc += insF.MakeCmp(cond, flagReg, src0, src1, execMask).SetPredicate(predicate);
   return proc;
 }
 
 /**
 dst: register, src0: register, src1: immediate
 */
-
 GtGenProcedure CmpiXeHpc(const IGtKernelInstrument& instrumentor, GtCondModifier cond,
                          GtReg flagReg, const GtRegRegion& src0, const GtImm& srcI1,
                          GtExecMask execMask, GtPredicate predicate) {
@@ -80,8 +79,9 @@ GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifie
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;
 
-  insF.MakeCmp(cond, flagReg, src0,
-               GtImm(srcI1, Macro::GetGedIntDataTypeBytes(src0.DataType().Size())), execMask)
-      .SetPredicate(predicate);
+  proc +=
+      insF.MakeCmp(cond, flagReg, src0,
+                   GtImm(srcI1, Macro::GetGedIntDataTypeBytes(src0.DataType().Size())), execMask)
+          .SetPredicate(predicate);
   return proc;
 }

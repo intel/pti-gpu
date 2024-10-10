@@ -104,6 +104,8 @@ class InstCountTxtWriter : public InstCountWriterBase, public TxtWriterBase {
 class InstCountJsonWriter : public InstCountWriterBase, public JsonWriterBase {
  public:
   using JsonWriterBase::JsonWriterBase;
+  virtual ~InstCountJsonWriter() = default;
+
   bool WriteInstCountResultData(const InstCountApplicationDataSPtr res,
                                 const InstCountKernelDataSPtr kernelData,
                                 const InstCountInvocationDataSPtr invocationData,
