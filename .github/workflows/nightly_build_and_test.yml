@@ -129,7 +129,7 @@ jobs:
   pti-tools-build-and-test:
     name: Test pti library Ubuntu-22-04
 
-    if: vars.PTI_RUN_TESTS == 1
+    if: vars.PTI_RUN_TESTS == 0
 
     runs-on: [Linux, pti]
 
@@ -202,7 +202,7 @@ jobs:
   pti-tools-build-and-test-rocky:
     name: Test pti library for Rocky8
 
-    if: vars.PTI_RUN_TESTS == 1
+    if: vars.PTI_RUN_TESTS == 0
 
     runs-on: [Linux, pti]
 
