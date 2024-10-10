@@ -86,6 +86,13 @@ As a result, assembly listing annotated with dynamic instruction count and SIMD 
 [      0|       0] 0x000360 :         nop                    
 ```
 
+The following capabilities are available:
+```console
+--disable-simd                 Disable SIMD active lanes collection
+--json-output                  Print results in JSON format
+--version                      Print version
+```
+
 ## Supported OS
 
 - Ubuntu 22.04 (last check: GTPin v4.0, driver 1.3.27912)

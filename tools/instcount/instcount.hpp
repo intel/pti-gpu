@@ -309,15 +309,15 @@ class InstCountControlDefault : public InstCountControl {
  public:
   using InstCountControl::InstCountControl;
 
-  bool ShouldCollectSimdWidth() const final { return true; }
+  bool ShouldCollectSimdWidth() const override { return true; }
 
-  bool ShouldInstrument(const KernelBuildDescriptor& buildDescr) const final { return true; }
+  bool ShouldInstrument(const KernelBuildDescriptor& buildDescr) const override { return true; }
 
-  bool EnablePerTileCollection(const KernelBuildDescriptor& buildDescr) const final {
+  bool EnablePerTileCollection(const KernelBuildDescriptor& buildDescr) const override {
     return false;
   }
 
-  bool ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const final { return true; }
+  bool ShouldProfileEnqueue(const KernelExecDescriptor& execDescr) const override { return true; }
 };
 
 /**

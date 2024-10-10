@@ -32,6 +32,7 @@ samples = [["cl_gemm", "gpu", "cpu"],
            ["dpc_info", "-a", "-l"]]
 
 tools = [["instcount", "cl", "ze", "dpc"],
+         ["memaccess", "cl", "ze", "dpc"],
          ["gpuinfo", "-l", "-i", "-m"],
          ["sysmon", "-p", "-l", "-d"],
          ["unitrace",
