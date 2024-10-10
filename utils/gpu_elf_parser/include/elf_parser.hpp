@@ -105,7 +105,6 @@ class ElfParser {
   template <typename Header, typename SectionHeader, typename SymtabEntryT>
   bool Init();
 
-
   // returns Section structure, which describes elf section with name section_name
   const Section GetSection(const char* section_name) const;
   // returns pointer to section data and size of section in bytes
@@ -123,7 +122,7 @@ class ElfParser {
 
   const uint8_t* data_;
   const uint32_t size_;
-  uint32_t address_width_;
+  uint32_t address_width_ = 0;
 
   std::unordered_map<uint32_t, const char*> strtab_records_;
   std::vector<const char*> kernel_names_;
