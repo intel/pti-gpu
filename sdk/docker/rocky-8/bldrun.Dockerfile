@@ -1,4 +1,4 @@
-FROM redhat/ubi9:9.4-1214
+FROM rockylinux:8
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -6,10 +6,23 @@ WORKDIR /tmp
 
 USER root
 
+RUN dnf -y --setopt=tsflags=nodocs --nogpgcheck update && \
+    dnf install -y --setopt=tsflags=nodocs --nogpgcheck 'dnf-command(config-manager)' && \
+    dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm && \
+    dnf install -y --setopt=tsflags=nodocs --nogpgcheck dnf-plugins-core && \
+    dnf config-manager --set-enabled powertools && \
+    dnf -y --setopt=tsflags=nodocs --nogpgcheck update
+
 #hadolint ignore=DL3008
-RUN dnf update -y && \
-    dnf install -y --setopt=tsflags=nodocs \
-    gcc-c++ procps-ng cmake wget ninja-build python3.12 && dnf clean all
+RUN dnf install -y --setopt=tsflags=nodocs  \
+    gcc-c++ \
+    procps-ng \
+    cmake \
+    wget \
+    ninja-build \
+    which \
+    python3.12 && \
+    dnf clean all
 
 #
 # Install oneAPI
@@ -25,11 +38,12 @@ RUN echo '[oneAPI]' > /etc/yum.repos.d/oneAPI.repo; \
 
 #
 # Setup the appropriate repos for GPU
+# We must use -f to force the Rocky installation of the Rhel driver
 #
-RUN wget https://repositories.intel.com/gpu/rhel/9.4/intel-gpu-rhel-9.4.run && \
-  chmod +x intel-gpu-rhel-9.4.run && \
-  ./intel-gpu-rhel-9.4.run && \
-  dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+RUN wget https://repositories.intel.com/gpu/rhel/8.10/intel-gpu-rhel-8.10.run && \
+  chmod +x intel-gpu-rhel-8.10.run && \
+  ./intel-gpu-rhel-8.10.run -f && \
+  rm ./intel-gpu-rhel-8.10.run
 
 RUN dnf install -y --setopt=tsflags=nodocs \
   intel-opencl intel-media libmfxgen1 libvpl2 \
@@ -39,5 +53,6 @@ RUN dnf install -y --setopt=tsflags=nodocs \
   intel-metrics-library intel-igc-core intel-igc-cm \
   libva libva-utils intel-gmmlib libmetee intel-gsc intel-ocloc \
   intel-igc-opencl-devel level-zero-devel intel-gsc-devel libmetee-devel \
-  level-zero-devel && dnf clean all
+  level-zero-devel && \
+  dnf clean all
 

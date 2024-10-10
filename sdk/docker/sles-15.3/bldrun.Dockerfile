@@ -22,9 +22,9 @@ RUN  zypper refresh && \
       libsystemd0 \
       procps \
       which \
-      python311
+      python312
 
-RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.11 10
+RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.12 10
 
 RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
   rpm --import https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \

@@ -3,7 +3,8 @@ USE_BUILDKIT := 1
 REL_UBUNTU:= ubuntu-24-04
 REL_RHEL:= redhat-9
 REL_SLES:= sles-15.3
-OS_TARGETS:= ${REL_SLES} ${REL_RHEL} ${REL_UBUNTU}
+REL_ROCKY:= rocky-8
+OS_TARGETS:= ${REL_SLES} ${REL_RHEL} ${REL_UBUNTU} ${REL_ROCKY}
 .PHONY:${OS_TARGETS}
 
 ONEAPI_VER=2024.2.1
@@ -11,15 +12,17 @@ ONEAPI_VER=2024.2.1
 targets: ${OS_TARGETS}
 	@echo BUILT ${OS_TARGETS}
 
-VER_UBUNTU:=01
-VER_REDHAT:=01
-VER_SLES:=01
+VER_UBUNTU:=02
+VER_REDHAT:=02
+VER_SLES:=02
+VER_ROCKY:=02
 define getOsVer
 	$(if $(filter $1, ${REL_UBUNTU}),${VER_UBUNTU},\
 	$(if $(filter $1, ${REL_RHEL}),${VER_REDHAT},\
 	$(if $(filter $1, ${REL_SLES}),${VER_SLES},\
+	$(if $(filter $1, ${REL_ROCKY}),${VER_ROCKY},\
 	$(error "Undefined target $1 in getOsVer function") \
-	)))
+	))))
 endef
 
 define ERROR_MESSAGE_TAG
