@@ -408,12 +408,12 @@ class ZeDebugInfoCollector {
       PTI_ASSERT(collector != nullptr);
       collector->AddKernel(kernel_name, instruction_list, line_info_list, source_info_list);
 
-      res = ptiElfParserDestroy(&parserHandle);
-      PTI_ASSERT(res == PTI_SUCCESS);
-      PTI_ASSERT(parserHandle == nullptr);
-
       break;
     }
+
+    res = ptiElfParserDestroy(&parserHandle);
+    PTI_ASSERT(res == PTI_SUCCESS);
+    PTI_ASSERT(parserHandle == nullptr);
   }
 
  private:

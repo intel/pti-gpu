@@ -551,12 +551,12 @@ class ClDebugInfoCollector {
 
       collector->AddKernel(kernel_name, instruction_list, line_info_list, source_info_list);
 
-      res = ptiElfParserDestroy(&parserHandle);
-      PTI_ASSERT(res == PTI_SUCCESS);
-      PTI_ASSERT(parserHandle == nullptr);
-
       break;
     }
+
+    res = ptiElfParserDestroy(&parserHandle);
+    PTI_ASSERT(res == PTI_SUCCESS);
+    PTI_ASSERT(parserHandle == nullptr);
   }
 
   static void Callback(cl_function_id function, cl_callback_data* callback_data, void* user_data) {
