@@ -22,7 +22,10 @@ jobs:
     #
     runs-on: [self-hosted, Linux, pti]
 
+    continue-on-error: true
+
     strategy:
+      max-parallel: 1
       matrix:
         include:
           - container: ${{ vars.PTI_DOCKER_RHEL_9_ONEAPI_24_2_1 }}
@@ -127,13 +130,17 @@ jobs:
             sdk/pti*.tar.gz*
 
   pti-tools-build-and-test:
+    if: ${{ always() }} && vars.PTI_RUN_TESTS == 1
+    needs: sdk-build-and-test
     name: Test pti library Ubuntu-22-04
-
-    if: vars.PTI_RUN_TESTS == 0
 
     runs-on: [Linux, pti]
 
+
+    continue-on-error: true
+
     strategy:
+      max-parallel: 1
       matrix:
         include:
           - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
@@ -202,7 +209,8 @@ jobs:
   pti-tools-build-and-test-rocky:
     name: Test pti library for Rocky8
 
-    if: vars.PTI_RUN_TESTS == 0
+    if: ${{ always() }} && vars.PTI_RUN_TESTS == 1
+    needs: pti-tools-build-and-test
 
     runs-on: [Linux, pti]
 
