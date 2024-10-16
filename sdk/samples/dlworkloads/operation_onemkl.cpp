@@ -5,7 +5,18 @@
 // =============================================================
 #include <mkl_version.h>
 
-#if __INTEL_MKL__ < 2025
+#if (__INTEL_MKL_BUILD_DATE == 20240401)
+
+//
+// This branch accommodates oneAPI 2024.1.1 plus
+// the special version of mkl used for this release
+// identified as l_onemkl_2025.0.0-intel-for-pytorch-gpu-dev-19
+//
+#undef __INTEL_MKL__
+#define __INTEL_MKL__ 2024
+#include <oneapi/mkl/dfti.hpp>
+
+#elif (__INTEL_MKL__ < 2025) 
 #include <oneapi/mkl/dfti.hpp>
 #else
 #include <oneapi/mkl/dft.hpp>
