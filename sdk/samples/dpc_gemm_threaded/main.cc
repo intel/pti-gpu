@@ -113,6 +113,7 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
   PTI_THROW(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS));
 }
 
 void StopTracing() {
@@ -121,6 +122,7 @@ void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
   PTI_THROW(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS));
 }
 
 void ProvideBuffer(unsigned char** buf, std::size_t* buf_size) {
@@ -174,6 +176,14 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cout << "Found Sycl Runtime Record" << '\n';
         samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime*>(ptr));
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        std::cout << "Found Zecalls Record" << '\n';
+        samples_utils::dump_record(reinterpret_cast<pti_view_record_zecalls*>(ptr));
         break;
       }
       case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {

@@ -9,8 +9,11 @@
 #include <spdlog/spdlog.h>
 
 #include <array>
+#include <map>
 
 #include "internal_helper.h"
+#include "pti/pti_cbids_runtime.h"
+#include "tracing_cb_api.gen"
 #include "view_handler.h"
 
 namespace {
@@ -314,4 +317,14 @@ pti_result ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequ
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
   }
+}
+
+// Get callback id function name.
+pti_result ptiViewGetCallbackIdName(uint32_t id, const char** name) {
+  try {
+    *name = pti_callback_api_id_runtime_cb_name.at(id);
+  } catch (const std::out_of_range&) {
+    return pti_result::PTI_ERROR_BAD_ARGUMENT;
+  };
+  return PTI_SUCCESS;
 }

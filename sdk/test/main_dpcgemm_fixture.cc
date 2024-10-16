@@ -32,6 +32,10 @@ bool kernel_has_task_begin0_record = false;
 bool kernel_has_enqk_begin0_record = false;
 bool demangled_kernel_name = false;
 bool kernel_launch_func_name = false;
+bool zecall_corrids_unique = true;
+bool zecall_good_id_name = false;
+bool zecall_bad_id_name = false;
+std::set<uint32_t> zecall_corrids_already_seen;
 bool sycl_has_all_records = false;
 uint64_t memory_bytes_copied = 0;
 uint64_t memory_view_record_count = 0;
@@ -51,22 +55,34 @@ bool buffer_size_atleast_largest_record = false;
 uint64_t last_kernel_timestamp = 0;
 uint64_t user_real_timestamp = 0;
 
-void StartTracing() {
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
+// TODO - make the enable type param more generic (maybe a bitmap of somesort) so that we can enable
+// a mishmash of types
+void StartTracing(bool enable_only_zecalls = false) {
+  if (!enable_only_zecalls) {
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+  } else {
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+  }
 }
 
-void StopTracing() {
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
+void StopTracing(bool enable_only_zecalls = false) {
+  if (!enable_only_zecalls) {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+  } else {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+  }
 }
 
 float Check(const std::vector<float>& a, float value) {
@@ -160,6 +176,10 @@ class MainFixtureTest : public ::testing::Test {
     kernel_timestamps_monotonic = false;
     kernel_has_task_begin0_record = false;
     kernel_has_enqk_begin0_record = false;
+    zecall_corrids_unique = true;
+    zecall_good_id_name = false;
+    zecall_bad_id_name = false;
+    zecall_corrids_already_seen.clear();
     memory_bytes_copied = 0;
     memory_view_record_count = 0;
     kernel_view_record_count = 0;
@@ -277,6 +297,23 @@ class MainFixtureTest : public ::testing::Test {
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
           memory_view_record_created = true;
           memory_view_record_count += 1;
+          break;
+        }
+        case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
+          pti_view_record_zecalls* rec = reinterpret_cast<pti_view_record_zecalls*>(ptr);
+          uint32_t this_corrid = rec->_correlation_id;
+          if (zecall_corrids_unique &&
+              zecall_corrids_already_seen.find(this_corrid) != zecall_corrids_already_seen.end()) {
+            zecall_corrids_unique = false;
+
+            std::cout << this_corrid << " is not unique since already seen in zecalls before. \n";
+          }
+          zecall_corrids_already_seen.insert(this_corrid);
+          const char* pName = nullptr;
+          pti_result status = ptiViewGetCallbackIdName(rec->_callback_id, &pName);
+          if (pti_result::PTI_SUCCESS == status) zecall_good_id_name = true;
+          status = ptiViewGetCallbackIdName(-1, &pName);
+          if (status != pti_result::PTI_SUCCESS) zecall_bad_id_name = true;
           break;
         }
         case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
@@ -682,7 +719,7 @@ TEST_F(MainFixtureTest, NegTestNullBufferSize) {
 
 TEST_F(MainFixtureTest, ValidateNotImplementedViewReturn) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  EXPECT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
+  EXPECT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
   EXPECT_EQ(ptiViewEnable(PTI_VIEW_OPENCL_CALLS), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_CPU_KERNEL), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
   EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
@@ -759,6 +796,25 @@ TEST_F(MainFixtureTest, ValidateNullptrTSCallbackFromUser) {
   EXPECT_GT(ptiViewGetTimestamp(), 0ULL);
   RunGemm();
   EXPECT_GT(ptiViewGetTimestamp(), 0ULL);
+}
+
+TEST_F(MainFixtureTest, UniqueCorrIdsAllZeCalls) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunGemm();
+  EXPECT_EQ(zecall_corrids_unique, true);
+  EXPECT_EQ(zecall_good_id_name, true);
+  EXPECT_EQ(zecall_bad_id_name, true);
+}
+
+TEST_F(MainFixtureTest, OnlyZeCallsTraced) {
+  bool enable_only_zecalls = true;
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  StartTracing(enable_only_zecalls);
+  RunGemmNoTrace();
+  StopTracing(enable_only_zecalls);
+  ptiFlushAllViews();
+  EXPECT_EQ(zecall_good_id_name, true);
+  EXPECT_EQ(zecall_bad_id_name, true);
 }
 
 namespace {

@@ -219,6 +219,19 @@ void dump_record(pti_view_record_memory_fill* record) {
   std::cout << "Memory Fill Type: " << std::dec << record->_mem_type << '\n';
 }
 
+void dump_record(pti_view_record_zecalls* record) {
+  if (NULL == record) return;
+  const char* pName = nullptr;
+  PTI_THROW(ptiViewGetCallbackIdName(record->_callback_id, &pName));
+  std::cout << "ZeCall Function Name: " << pName << '\n';
+  std::cout << "ZeCall Function CBID: " << record->_callback_id << '\n';
+  std::cout << "ZeCall Start Time: " << record->_start_timestamp << '\n';
+  std::cout << "  ZeCall End Time: " << record->_end_timestamp << '\n';
+  std::cout << "ZeCall Process Id: " << record->_process_id << '\n';
+  std::cout << "ZeCall Thread Id: " << record->_thread_id << '\n';
+  std::cout << "ZeCall Correlation Id: " << record->_correlation_id << '\n';
+}
+
 void dump_record(pti_view_record_sycl_runtime* record) {
   if (NULL == record) return;
   std::cout << "Sycl Function Name: " << record->_name << '\n';

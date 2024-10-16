@@ -252,6 +252,7 @@ class SyclCollector {
         // case xpti::trace_point_type_t::function_begin:
         sycl_data_kview.cid_ = UniCorrId::GetUniCorrId();
         sycl_data_mview.cid_ = sycl_data_kview.cid_;
+        SyclCollector::Instance().sycl_runtime_rec_.cid_ = sycl_data_kview.cid_;
 
         if (UserData) {
           const auto* args = static_cast<const xpti::function_with_args_t*>(UserData);
@@ -291,14 +292,14 @@ class SyclCollector {
           const auto* args = static_cast<const xpti::function_with_args_t*>(UserData);
           // const auto* function_name = static_cast<const char*>(UserData);
           const auto* function_name = args->function_name;
-          SPDLOG_TRACE("\tSYCL.UR Function End: {}", function_name);
+          SPDLOG_TRACE("\tSYCL.UR Function End: {}, corr_id: {}", function_name,
+                       sycl_data_kview.cid_);
           PTI_ASSERT(std::strcmp(current_func_task_info.func_name.data(), function_name) == 0);
           PTI_ASSERT(current_func_task_info.func_pid == pid);
           PTI_ASSERT(current_func_task_info.func_tid == tid);
           SPDLOG_TRACE("\tVerified: func: {} - Pid: {} - Tid: {}",
                        current_func_task_info.func_name.data(), current_func_task_info.func_pid,
                        current_func_task_info.func_tid);
-          SyclCollector::Instance().sycl_runtime_rec_.cid_ = sycl_data_kview.cid_;
           if (InKernelCoreApis(function_name)) {
             SyclCollector::Instance().sycl_runtime_rec_.kid_ = sycl_data_kview.kid_;
             SyclCollector::Instance().sycl_runtime_rec_.sycl_queue_id_ =

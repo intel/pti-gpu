@@ -45,6 +45,7 @@
 
 struct CallbacksEnabled {
   std::atomic<bool> acallback = false;
+  std::atomic<bool> fcallback = false;
 };
 
 inline std::atomic<uint64_t> global_ref_count =
@@ -146,6 +147,7 @@ using ZeImageSizeMap = std::map<ze_image_handle_t, size_t>;
 using ZeDeviceMap = std::map<ze_device_handle_t, std::vector<ze_device_handle_t>>;
 
 using OnZeKernelFinishCallback = void (*)(void*, std::vector<ZeKernelCommandExecutionRecord>&);
+using OnZeApiCallsFinishCallback = void (*)(void*, ZeKernelCommandExecutionRecord&);
 
 class ZeCollector {
  public:  // Interface
@@ -157,6 +159,7 @@ class ZeCollector {
   static std::unique_ptr<ZeCollector> Create(std::atomic<pti_result>* pti_state,
                                              CollectorOptions options,
                                              OnZeKernelFinishCallback acallback = nullptr,
+                                             OnZeApiCallsFinishCallback fcallback = nullptr,
                                              void* callback_data = nullptr) {
     SPDLOG_DEBUG("In {}", __FUNCTION__);
     PTI_ASSERT(nullptr != pti_state);
@@ -179,7 +182,7 @@ class ZeCollector {
     }
 
     auto collector =
-        std::unique_ptr<ZeCollector>(new ZeCollector(options, acallback, callback_data));
+        std::unique_ptr<ZeCollector>(new ZeCollector(options, acallback, fcallback, callback_data));
     PTI_ASSERT(collector != nullptr);
     collector->parent_state_ = pti_state;
 
@@ -204,6 +207,7 @@ class ZeCollector {
                                collector->options_.disabled_mode, collector->options_.hybrid_mode);
     SPDLOG_DEBUG("\tCollection_mode: {}", (uint32_t)collector->collection_mode_);
 
+    collector->options_.api_tracing = true;
     collector->EnableTracer(tracer);
 
     status = collector->l0_wrapper_.w_zelEnableTracingLayer();
@@ -356,9 +360,11 @@ class ZeCollector {
   }
 
  private:  // Implementation
-  ZeCollector(CollectorOptions options, OnZeKernelFinishCallback acallback, void* callback_data)
+  ZeCollector(CollectorOptions options, OnZeKernelFinishCallback acallback,
+              OnZeApiCallsFinishCallback fcallback, void* callback_data)
       : options_(options),
         acallback_(acallback),
+        fcallback_(fcallback),
         callback_data_(callback_data),
         event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP),
         swap_event_pool_(512),
@@ -1437,8 +1443,8 @@ class ZeCollector {
         command->corr_id_ = sycl_data_kview.cid_;
       } else {
         command->corr_id_ = UniCorrId::GetUniCorrId();
+        sycl_data_kview.cid_ = command->corr_id_;
       }
-
     } else if (command->props.type == KernelCommandType::kMemory) {
       command->props.src_device = props.src_device;
       command->props.dst_device = props.dst_device;
@@ -1449,6 +1455,7 @@ class ZeCollector {
         command->corr_id_ = sycl_data_mview.cid_;
       } else {
         command->corr_id_ = UniCorrId::GetUniCorrId();
+        sycl_data_mview.cid_ = command->corr_id_;
       }
 
       command->sycl_node_id_ = sycl_data_mview.sycl_node_id_;
@@ -2322,16 +2329,20 @@ class ZeCollector {
     }
   }
 
-#include <tracing.gen>  // Auto-generated callbacks
-
   zel_tracer_handle_t tracer_ = nullptr;
   CollectorOptions options_ = {};
   bool driver_introspection_capable_ = false;
   bool loader_dynamic_tracing_capable_ = false;
   CallbacksEnabled cb_enabled_ = {};
   OnZeKernelFinishCallback acallback_ = nullptr;
+  OnZeApiCallsFinishCallback fcallback_ = nullptr;
   void* callback_data_ = nullptr;
   std::mutex lock_;
+  inline static int32_t trace_all_zecalls = utils::IsSetEnv("PTI_TRACE_ALL_ZECALLS");
+
+#include <pti/pti_cbids_runtime.h>
+
+#include <tracing.gen>  // Auto-generated callbacks
 
   // mode=0 implies full apis; mode=1 implies hybrid apis only (eventpool); mode=2 is Local
   ZeCollectionMode collection_mode_ = ZeCollectionMode::Full;
@@ -2404,6 +2415,7 @@ class ZeCollector {
         }
       }
       parent_collector_->cb_enabled_.acallback = true;
+      parent_collector_->cb_enabled_.fcallback = true;
       if (ZeCollectionMode::Hybrid == parent_collector_->collection_mode_)
         parent_collector_->options_.hybrid_mode = false;
       ref_count++;
@@ -2433,7 +2445,7 @@ class ZeCollector {
                        thread_local_pid_tid_info.tid);
         }
       }
-      parent_collector_->cb_enabled_.acallback = false;
+      parent_collector_->cb_enabled_.fcallback = false;
       if (ZeCollectionMode::Hybrid == parent_collector_->collection_mode_)
         parent_collector_->options_.hybrid_mode = true;
       return ref_count;

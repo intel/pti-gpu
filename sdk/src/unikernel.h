@@ -136,6 +136,9 @@ struct ZeKernelCommandExecutionRecord {
   const char* sycl_func_name_;
   size_t bytes_xfered_;
   size_t value_set_;
+
+  uint32_t callback_id_;
+  ze_result_t result_;
 };
 
 // This structure and thread_local object enables collectors to avoid retrieving pid and tid

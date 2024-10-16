@@ -24,6 +24,7 @@
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
+#include "utils/sycl_config_info.h"
 #include "utils/test_helpers.h"
 #include "ze_utils.h"
 
@@ -231,6 +232,19 @@ class MainUrFixtureTest : public ::testing::Test {
     // Cleanup work for each test
   }
 
+ public:
+  static void SetUpTestSuite() {  // Setup shared resource between tests (GPU)
+    try {
+      dev_ = sycl::device(sycl::gpu_selector_v);
+      if (pti::test::utils::IsIntegratedGraphics(dev_)) {
+        is_integrated_graphics = true;
+      }
+    } catch (const sycl::exception& e) {
+      FAIL() << "Unable to select valid device to run tests on. Check your hardware, driver "
+                "install, or system configuration.";
+    }
+  }
+
   void SetUp() override {  // Called right after constructor before each test
     buffer_cb_registered = true;
     requested_buffer_calls = 0;
@@ -429,6 +443,8 @@ class MainUrFixtureTest : public ::testing::Test {
     auto flush_results = ptiFlushAllViews();
     return flush_results;
   }
+  inline static bool is_integrated_graphics = false;
+  inline static sycl::device dev_;
 };
 
 TEST_F(MainUrFixtureTest, urGemmSpvKernelDetected) {
@@ -446,6 +462,6 @@ TEST_F(MainUrFixtureTest, syclGemmSpvRuntimeRecordsDetected) {
   RunGemm();
   EXPECT_EQ(sycl_spv_kernel_seen, true);
   EXPECT_EQ(sycl_spv_mem_buffer_read_seen, true);
-  EXPECT_EQ(sycl_spv_mem_buffer_write_seen, true);
   EXPECT_EQ(sycl_spv_mem_buffer_copy_seen, true);
+  if (!is_integrated_graphics) EXPECT_EQ(sycl_spv_mem_buffer_write_seen, true);
 }

@@ -231,3 +231,19 @@ pti_result ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequ
     return pti_result::PTI_ERROR_INTERNAL;
   }
 }
+
+pti_result ptiViewGetCallbackIdName(uint32_t id, const char** name) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiViewGetCallbackIdName_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiViewGetCallbackIdName_(id, name);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}

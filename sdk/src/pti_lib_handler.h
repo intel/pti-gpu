@@ -77,6 +77,7 @@ class PtiLibHandler {
   decltype(&ptiViewPopExternalCorrelationId) ptiViewPopExternalCorrelationId_ = nullptr;  // NOLINT
   decltype(&ptiViewGetTimestamp) ptiViewGetTimestamp_ = nullptr;                          // NOLINT
   decltype(&ptiViewSetTimestampCallback) ptiViewSetTimestampCallback_ = nullptr;          // NOLINT
+  decltype(&ptiViewGetCallbackIdName) ptiViewGetCallbackIdName_ = nullptr;                // NOLINT
 
  private:
   PtiLibHandler() {
@@ -115,6 +116,7 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiViewPopExternalCorrelationId);
     PTI_VIEW_GET_SYMBOL(ptiViewGetTimestamp);
     PTI_VIEW_GET_SYMBOL(ptiViewSetTimestampCallback);
+    PTI_VIEW_GET_SYMBOL(ptiViewGetCallbackIdName);
 #undef PTI_VIEW_GET_SYMBOL
   }
   std::unique_ptr<LibraryLoader> pti_view_lib_ = nullptr;

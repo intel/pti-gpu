@@ -29,6 +29,7 @@ void StartTracing() {
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS));
 }
 
 void StopTracing() {
@@ -38,6 +39,7 @@ void StopTracing() {
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS));
 }
 
 void ProvideBuffer(unsigned char **buf, std::size_t *buf_size) {
@@ -93,6 +95,17 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cout << "Found Sycl Runtime Record" << '\n';
         samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        std::cout << "Found Zecalls Record" << '\n';
+        samples_utils::dump_record(reinterpret_cast<pti_view_record_zecalls *>(ptr));
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
@@ -243,6 +256,7 @@ int main(int argc, char *argv[]) {
   int exit_code = EXIT_SUCCESS;
   uint64_t eid = 11;  // external correlation id base.
   PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
+  StartTracing();
   // start tracing early enables to capture nodes creation at piProgramCreate
   //  and Kernel Task sycl file/line info is captured, as exampple shows at a Node Creation
   // Emit external correlation id records by marking section of code by
@@ -333,7 +347,6 @@ int main(int argc, char *argv[]) {
     PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(
         pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_1, &eid));
 
-    StartTracing();
     Compute(std::move(queue), a, b, c, size, repeat_count, expected_result);
     end = std::chrono::steady_clock::now();
     time = end - start;

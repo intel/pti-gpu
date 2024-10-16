@@ -272,6 +272,21 @@ typedef struct pti_view_record_overhead {
 
 
 /**
+ * @brief L0apicalls View record type
+ */
+typedef struct pti_view_record_zecalls {
+  pti_view_record_base _view_kind; //!< Base record
+  uint64_t _start_timestamp;       //!< L0 api call start timestamp, ns
+  uint64_t _end_timestamp;         //!< L0 api call end timestamp, ns
+  uint32_t _process_id;            //!< Process ID of where the zecall observed
+  uint32_t _thread_id;             //!< Thread ID of where the zecall observed
+  uint32_t _callback_id;           //!< Callback id of this zecall 
+  uint32_t _correlation_id;        //!< Correlation id tracking memfill, memcpy and kernel gpu activity
+  ze_result_t _result;             //!< Result status of zecall
+} pti_view_record_zecalls;
+
+
+/**
  * @brief Function pointer for buffer completed
  *
  * @param buffer
@@ -279,9 +294,11 @@ typedef struct pti_view_record_overhead {
  * @param used_bytes
  * @return void
  */
+
 typedef void (*pti_fptr_buffer_completed)(unsigned char* buffer,
                                              size_t buffer_size_in_bytes,
                                              size_t used_bytes);
+
 
 /**
  * @brief Function pointer for buffer requested
@@ -418,6 +435,16 @@ typedef uint64_t (*pti_fptr_get_timestamp)( void );
  */
 pti_result PTI_EXPORT
 ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequested);
+
+/**
+ * @brief Gets callback id name for zeCalls api callback id to user -- the api callbackid is embedded in the pti_view_record_zecalls.
+ * Sample usage -  const char* pName = nullptr;
+ *              -  pti_result status = ptiViewGetCallbackIdName(rec._callback_id, &pName);
+ *
+ * @return pti_result
+ */
+pti_result PTI_EXPORT
+ptiViewGetCallbackIdName(uint32_t id, const char** name);
 
 #if defined(__cplusplus)
 }

@@ -26,7 +26,7 @@ inline constexpr std::array<std::size_t, kSizeOfViewRecordTable> kViewSizeLookup
     kReserved,                                        // PTI_VIEW_INVALID
     sizeof(pti_view_record_kernel),                   // PTI_VIEW_DEVICE_GPU_KERNEL
     kReserved,                                        // PTI_VIEW_DEVICE_CPU_KERNEL
-    kReserved,                                        // PTI_VIEW_LEVEL_ZERO_CALLS
+    sizeof(pti_view_record_zecalls),                  // PTI_VIEW_LEVEL_ZERO_CALLS
     kReserved,                                        // PTI_VIEW_OPENCL_CALLS
     sizeof(pti_view_record_overhead),                 // PTI_VIEW_COLLECTION_OVERHEAD
     sizeof(pti_view_record_sycl_runtime),             // PTI_VIEW_SYCL_RUNTIME_CALLS

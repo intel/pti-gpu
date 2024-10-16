@@ -12,6 +12,16 @@ BEGIN {
         tid = 0;
 }
 
+/ZeCall Thread Id:/ { tid=$4 };
+/ZeCall Start Time:/ { zecall_start_ts = $4 };
+/ZeCall End Time:/ { zecall_end_ts = $4 };
+/^ZeCall Correlation Id:/ && $4 > 0 {
+	zecall[$4]= tid;
+	zecall_start_time[$4]= zecall_start_ts;
+	zecall_end_time[$4]= zecall_end_ts;
+	zecall_line_number[$4]= NR;
+       	};
+
 /Sycl Thread Id:/ { tid=$4 };
 /Sycl Start Time:/ { sycl_start_ts = $4 };
 /Sycl End Time:/ { sycl_end_ts = $4 };
@@ -58,14 +68,22 @@ END {
 		#for (corrId in kthreads) if (kthreads[corrId] != sycl[corrId]) print(corrId);
 		#};
 	for (corrId in kthreads) {
+		if (zecall[corrId] != kthreads[corrId]) {
+		  print(k_type[corrId]);
+		  print ("Correlation Id issues in zecall --- Threads don't match: ", zecall[corrId], kthreads[corrId], k_type[corrId])
+                  print("------------>for correlationId:", corrId, "- zecall line number: ",zecall_line_number[corrId],"- levelZero line number:",k_line_number[corrId]);
+		  corrErr=1;
+		};
 		if (sycl[corrId] != kthreads[corrId]) {
 		  print(k_type[corrId]);
-		  print ("Correlation Id issues --- Threads don't match: ", sycl[corrId], kthreads[corrId], k_type[corrId])
+		  print ("Correlation Id issues in sycl --- Threads don't match: ", sycl[corrId], kthreads[corrId], k_type[corrId])
                   print("------------>for correlationId:", corrId, "- sycl line number: ",sycl_line_number[corrId],"- levelZero line number:",k_line_number[corrId]);
 		  corrErr=1;
 		};
 		if (! (sycl_start_time[corrId] <= k_append_time[corrId] &&
+                  sycl_start_time[corrId] <= zecall_start_time[corrId] &&
                   sycl_end_time[corrId] >= sycl_start_time[corrId] &&
+                  sycl_end_time[corrId] >= zecall_end_time[corrId] &&
                   k_append_time[corrId] <= k_submit_time[corrId] &&
                   k_submit_time[corrId] <= k_start_time[corrId] &&
                   k_start_time[corrId] <= k_end_time[corrId]))

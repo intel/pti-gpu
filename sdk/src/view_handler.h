@@ -48,12 +48,16 @@ inline void MemFillEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void KernelEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
+inline void ZecallEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
 inline void SyclRuntimeEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void OverheadCollectionEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void ZeChromeKernelStagesCallback(void* data,
                                          std::vector<ZeKernelCommandExecutionRecord>& kcexecrec);
+
+inline void ZeApiCallsCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 
 inline void SyclRuntimeViewCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 inline void OverheadCollectionCallback(void* data, ZeKernelCommandExecutionRecord& rec);
@@ -97,6 +101,11 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
             ViewData{"zeCommandListAppendMemoryCopyP2P", MemCopyP2PEvent},
           }
         },
+        {PTI_VIEW_LEVEL_ZERO_CALLS,
+          {
+            ViewData{"ZecallEvent", ZecallEvent},
+          }
+        },
       };
   // clang-format on
   const auto result = view_data_map.find(view);
@@ -110,6 +119,7 @@ inline static std::atomic<bool> external_collection_enabled = false;
 
 struct PtiViewRecordHandler {
  public:
+  inline static int32_t trace_all_zecalls = utils::IsSetEnv("PTI_TRACE_ALL_ZECALLS");
   using ViewBuffer = pti::view::utilities::ViewBuffer;
   using ViewBufferQueue = pti::view::utilities::ViewBufferQueue;
   using ViewBufferTable = pti::view::utilities::ViewBufferTable<uint32_t>;
@@ -138,8 +148,8 @@ struct PtiViewRecordHandler {
     if (!collector_) {
       CollectorOptions collector_options{};
       collector_options.kernel_tracing = true;
-      collector_ =
-          ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback, nullptr);
+      collector_ = ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback,
+                                       ZeApiCallsCallback, nullptr);
       overhead::SetOverheadCallback(OverheadCollectionCallback);
       // Get timevalue in nanoseconds for frequency of sync between clock sources
       // (clock_monotonic_raw and by default clock_realtime)
@@ -296,13 +306,14 @@ struct PtiViewRecordHandler {
     bool l0_collection_type = ((type == pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
+                               (type == pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
 
     //
     // TBD --- implement and remove the checks for below pti_view_kinds
     //
     if ((type == pti_view_kind::PTI_VIEW_DEVICE_CPU_KERNEL) ||
-        (type == pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS) ||
+        //(type == pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS) ||
         (type == pti_view_kind::PTI_VIEW_OPENCL_CALLS)) {
       return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
     }
@@ -364,6 +375,7 @@ struct PtiViewRecordHandler {
     bool l0_collection_type = ((type == pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
+                               (type == pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
 
     if (type == pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD) {
@@ -813,6 +825,22 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   Instance().InsertRecord(record, record._thread_id);
 }
 
+inline void ZecallEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  pti_view_record_zecalls record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS;
+
+  int64_t ts_shift = Instance().GetTimeShift();
+
+  record._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
+  record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
+  record._thread_id = rec.tid_;
+  record._process_id = rec.pid_;
+  record._callback_id = rec.callback_id_;
+  record._result = rec.result_;
+  record._correlation_id = rec.cid_;
+  Instance().InsertRecord(record, record._thread_id);
+}
+
 inline void SyclRuntimeViewCallback(void* data, ZeKernelCommandExecutionRecord& rec) {
   Instance()("SyclRuntimeEvent", data, rec);
 }
@@ -839,4 +867,9 @@ inline void ZeChromeKernelStagesCallback(void* data,
   }
 }
 
+inline void ZeApiCallsCallback([[maybe_unused]] void* data,
+                               [[maybe_unused]] ZeKernelCommandExecutionRecord& rec) {
+  // std::cout << __FUNCTION__ << "\n";
+  Instance()("ZecallEvent", data, rec);
+}
 #endif  // SRC_API_VIEW_HANDLER_H_
