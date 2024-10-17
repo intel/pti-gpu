@@ -37,6 +37,9 @@ jobs:
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_24_2_1 }}
             uploadname: "ubuntu-24.04.2024.2.1"
             preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_ROCKY_9_ONEAPI_24_2_1 }}
+            uploadname: "rocky-9.2024.2.1"
+            preset: linux-icpx-release
 
 
     container: 

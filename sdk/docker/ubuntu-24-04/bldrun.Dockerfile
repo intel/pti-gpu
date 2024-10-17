@@ -42,4 +42,6 @@ RUN apt update -y && \
     libegl-mesa0 libegl1-mesa libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
     libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
     mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo \
-    libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev
+    libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev \
+    intel-metrics-discovery intel-metrics-discovery-dev \
+    intel-metrics-library intel-metrics-library-dev 
