@@ -46,4 +46,6 @@ RUN zypper --non-interactive install -y \
   libigdfcl-devel \
   intel-igc-cm \
   libigfxcmrt-devel \
-  level-zero-devel
+  level-zero-devel \
+  intel-metrics-discovery intel-metrics-discovery-devel \
+  intel-metrics-library intel-metrics-library-devel

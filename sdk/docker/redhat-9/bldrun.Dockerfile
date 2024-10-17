@@ -35,9 +35,14 @@ RUN dnf install -y --setopt=tsflags=nodocs \
   intel-opencl intel-media libmfxgen1 libvpl2 \
   level-zero intel-level-zero-gpu mesa-dri-drivers mesa-vulkan-drivers \
   mesa-vdpau-drivers libdrm mesa-libEGL mesa-libgbm mesa-libGL \
-  mesa-libxatracker libvpl-tools intel-metrics-discovery \
-  intel-metrics-library intel-igc-core intel-igc-cm \
+  mesa-libxatracker libvpl-tools \
+  intel-igc-core intel-igc-cm \
   libva libva-utils intel-gmmlib libmetee intel-gsc intel-ocloc \
   intel-igc-opencl-devel level-zero-devel intel-gsc-devel libmetee-devel \
-  level-zero-devel && dnf clean all
+  level-zero-devel \
+  intel-metrics-discovery \
+  intel-metrics-discovery-devel \
+  intel-metrics-library \
+  intel-metrics-library-devel && \
+  dnf clean all
 
