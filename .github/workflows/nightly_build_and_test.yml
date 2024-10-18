@@ -137,8 +137,6 @@ jobs:
     needs: sdk-build-and-test
     name: Test pti library Ubuntu-22-04
 
-    if: vars.PTI_RUN_TESTS == 1
-
     runs-on: [Linux, pti-2gpu]
 
     continue-on-error: true
