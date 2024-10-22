@@ -26,7 +26,7 @@ std::string ConvertBytesToString(size_t value) {
     return std::to_string(value / BYTES_IN_KB) + "KiB";
   }
   if (value / BYTES_IN_GB < 1) {
-    if (value % (BYTES_IN_MB != 0)) {
+    if ((value % BYTES_IN_MB) != 0) {
       std::stringstream tempstream;
       tempstream << std::fixed << std::setprecision(2) <<
         static_cast<float>(value) / BYTES_IN_MB << "MiB";

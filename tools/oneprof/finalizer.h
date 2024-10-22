@@ -191,7 +191,7 @@ class Finalizer {
     PTI_ASSERT(start < end);
 
     size_t start_index = utils::LowerBound(cache, start);
-    PTI_ASSERT(start_index >= 0 && start_index <= cache.size());
+    PTI_ASSERT(start_index <= cache.size());
     size_t end_index = utils::UpperBound(cache, end);
     PTI_ASSERT(end_index >= 0 && end_index <= cache.size());
     PTI_ASSERT(start_index <= end_index);
@@ -512,6 +512,7 @@ class Finalizer {
     PTI_ASSERT(data_ != nullptr);
 
     uint32_t report_size = GetMetricCount(group);
+    PTI_ASSERT(report_size > 0);
     uint32_t report_count = report_chunk.size() / report_size;
     PTI_ASSERT(report_count * report_size == report_chunk.size());
 

@@ -85,6 +85,11 @@ static void PrintDeviceInfo(const MetricDevice& device) {
   std::cout << "---- Name: " <<
     device->GetParams()->DeviceName << std::endl;
   PTI_ASSERT(device->GetParams()->GlobalSymbolsCount > 0);
+
+  // Save the original format state
+  std::ios originalState(nullptr);
+  originalState.copyfmt(std::cout);
+
   for (uint32_t i = 0; i < device->GetParams()->GlobalSymbolsCount; ++i) {
     md::TGlobalSymbol_1_0* symbol = device->GetGlobalSymbol(i);
     if (symbol->SymbolTypedValue.ValueType == md::VALUE_TYPE_LAST) {
@@ -124,6 +129,9 @@ static void PrintDeviceInfo(const MetricDevice& device) {
     }
     std::cout << std::endl;
   }
+
+  // Restore the original format state
+  std::cout.copyfmt(originalState);
 }
 
 static void PrintMetricsInfo(const MetricDevice& device) {

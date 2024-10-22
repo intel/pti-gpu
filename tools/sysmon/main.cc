@@ -106,6 +106,10 @@ static void PrintShorInfo(
   PTI_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
 
+  // Save the original format state
+  std::ios originalState(nullptr);
+  originalState.copyfmt(std::cout);
+
   std::cout << std::setw(DEL_WIDTH) << std::setfill('=') << '=' << std::endl;
 
   zes_device_properties_t props{ZES_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
@@ -218,6 +222,9 @@ static void PrintShorInfo(
   std::cout << std::endl;
 
   std::cout << std::setw(DEL_WIDTH) << std::setfill('=') << '=' << std::endl;
+
+  // Restore the original format state
+  std::cout.copyfmt(originalState);
 }
 
 static std::vector<zes_process_state_t> GetDeviceProcesses(
@@ -897,6 +904,10 @@ void PrintEngineInfo(
     {ZES_ENGINE_GROUP_FORCE_UINT32, "FORCE_UINT32"}
   };
 
+  // Save the original format state
+  std::ios originalState(nullptr);
+  originalState.copyfmt(std::cout);
+
   if (engine_groups_count > 0) {
     std::vector<zes_engine_handle_t> engine_groups(engine_groups_count);
     status = zesDeviceEnumEngineGroups(
@@ -935,6 +946,9 @@ void PrintEngineInfo(
       std::cout << engines << std::endl;
     }
   }
+
+  // Restore the original format state
+  std::cout.copyfmt(originalState);
 }
 
 void PrintFabricPortInfo(
@@ -1238,6 +1252,9 @@ int main(int argc, char* argv[]) {
   status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
+
+  PTI_ASSERT(mode == MODE_DEVICE_LIST || mode == MODE_DETAILS ||
+             mode == MODE_PROCESSES);
   switch(mode) {
     case MODE_DEVICE_LIST: {
       PrintDeviceList();
@@ -1259,8 +1276,6 @@ int main(int argc, char* argv[]) {
       }
       break;
     }
-    default:
-      break;
   }
 
   return 0;
