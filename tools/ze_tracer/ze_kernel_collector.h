@@ -349,7 +349,7 @@ class ZeKernelCollector {
   void CreateDeviceMap() {
     std::vector<ze_device_handle_t> device_list =
       utils::ze::GetDeviceList();
-    for (auto device : device_list) {
+    for (const auto& device : device_list) {
       std::vector<ze_device_handle_t> sub_device_list =
         utils::ze::GetSubDeviceList(device);
       PTI_ASSERT(device_map_.count(device) == 0);
@@ -371,7 +371,7 @@ class ZeKernelCollector {
 
   ze_device_handle_t GetDeviceForSubDevice(
       ze_device_handle_t sub_device) const {
-    for (auto it : device_map_) {
+    for (const auto& it : device_map_) {
       std::vector<ze_device_handle_t> sub_device_list = it.second;
       for (size_t i = 0; i < sub_device_list.size(); ++i) {
         if (sub_device_list[i] == sub_device) {

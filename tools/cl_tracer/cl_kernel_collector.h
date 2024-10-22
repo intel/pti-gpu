@@ -320,7 +320,7 @@ class ClKernelCollector {
   }
 
   void ReleaseDeviceMap() {
-    for (auto it : device_map_) {
+    for (const auto& it : device_map_) {
       if (!it.second.empty()) {
         utils::cl::ReleaseSubDeviceList(it.second);
       }
@@ -1377,13 +1377,6 @@ class ClKernelCollector {
             callback_data, collector);
       } else {
         OnExitEnqueueWriteBufferRect(callback_data, collector);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueCopyBuffer) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBuffer>(
-            callback_data, collector);
-      } else {
-        OnExitEnqueueCopyBuffer(callback_data, collector);
       }
     } else if (function == CL_FUNCTION_clEnqueueReadImage) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
