@@ -112,6 +112,10 @@ inline void PrintDeviceList() {
     return;
   }
 
+  // Save the original format state
+  std::ios originalState(nullptr);
+  originalState.copyfmt(std::cout);
+
   for (size_t i = 0; i < device_list.size(); ++i) {
     ze_device_properties_t device_properties{
         ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
@@ -129,6 +133,9 @@ inline void PrintDeviceList() {
       std::setw(1) << pci_props.address.function << std::dec << "] " <<
       device_properties.name << std::endl;
   }
+
+  // Restore the original format state
+  std::cout.copyfmt(originalState);
 }
 
 inline std::string GetMetricUnits(const char* units) {
