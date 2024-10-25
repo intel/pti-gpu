@@ -473,12 +473,20 @@ class ZeCollector {
         device, desc.device_timer_frequency, desc.device_timer_mask, desc.uuid);
     PTI_ASSERT(ret);
 
-    ze_pci_ext_properties_t pci_device_properties;
+    ze_pci_ext_properties_t pci_device_properties{};
+    pci_device_properties.pNext = nullptr;
+    pci_device_properties.stype = ZE_STRUCTURE_TYPE_PCI_EXT_PROPERTIES;
 
     overhead::Init();
     ze_result_t status = zeDevicePciGetPropertiesExt(device, &pci_device_properties);
     overhead_fini("zeDevicePciGetPropertiesExt");
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_WARN("Unable to get PCI properties for device {} driver returned 0x{:x}",
+                  static_cast<const void*>(device), static_cast<std::size_t>(status));
+      std::memset(&pci_device_properties.address, 0, sizeof(pci_device_properties.address));
+      std::memset(&pci_device_properties.maxSpeed, 0, sizeof(pci_device_properties.maxSpeed));
+    }
 
     desc.pci_properties = pci_device_properties;
     uint64_t host_time = 0;
