@@ -16,6 +16,8 @@
 
 #include "capsule.hpp"
 
+#include <climits>
+
 #include <cmath>
 
 #include "api/gtpin_api.h"
@@ -70,7 +72,7 @@ GED_DATA_TYPE Macro::GetGedIntDataType(size_t sizeBits) {
   return GED_DATA_TYPE_INVALID;
 }
 GED_DATA_TYPE Macro::GetGedIntDataTypeBytes(size_t sizeBytes) {
-  return GetGedIntDataType(sizeBytes * 8);
+  return GetGedIntDataType(sizeBytes * CHAR_BIT);
 }
 GED_DATA_TYPE Macro::GetGedIntDataTypeSigned(size_t sizeBits) {
   switch (sizeBits) {
@@ -89,7 +91,7 @@ GED_DATA_TYPE Macro::GetGedIntDataTypeSigned(size_t sizeBits) {
   return GED_DATA_TYPE_INVALID;
 }
 GED_DATA_TYPE Macro::GetGedIntDataTypeBytesSigned(size_t sizeBytes) {
-  return GetGedIntDataTypeSigned(sizeBytes * 8);
+  return GetGedIntDataTypeSigned(sizeBytes * CHAR_BIT);
 }
 
 uint64_t Macro::GetMaskBySize(size_t sizeBits) {
@@ -100,7 +102,9 @@ uint64_t Macro::GetMaskBySize(size_t sizeBits) {
   return (1ull << sizeBits) - 1;
 }
 
-uint64_t Macro::GetMaskBySizeBytes(size_t sizeBytes) { return Macro::GetMaskBySize(sizeBytes * 8); }
+uint64_t Macro::GetMaskBySizeBytes(size_t sizeBytes) {
+  return Macro::GetMaskBySize(sizeBytes * CHAR_BIT);
+}
 
 GtReg Macro::GetSubReg(const IGtKernelInstrument& instrumentor, size_t regNum, size_t subRegIdx,
                        size_t subRegSizeBytes) {
@@ -578,7 +582,7 @@ void Analysis::DumpFirstAddresses(Capsule& capsule, const IGtIns& gtpinIns,
     proc += Macro::Mov(capsule.GetInstrumentor(), data64Reg, currAddrReg);
     proc += Procedure::AtomicStore(capsule.GetInstrumentor(), capsule.GetProfileArray(),
                                    capsule.GetBaseAddrReg(), capsule.GetTempAddrReg(), data64Reg,
-                                   addrArrayOffsetBytes + 8 * i);
+                                   addrArrayOffsetBytes + i * CHAR_BIT);
   }
 
   ANNOTATION(proc)

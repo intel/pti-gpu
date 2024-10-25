@@ -79,9 +79,6 @@ GtGenProcedure Macro::Cmp(const IGtKernelInstrument& instrumentor, GtCondModifie
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;
 
-  proc +=
-      insF.MakeCmp(cond, flagReg, src0,
-                   GtImm(srcI1, Macro::GetGedIntDataTypeBytes(src0.DataType().Size())), execMask)
-          .SetPredicate(predicate);
+  proc += insF.MakeCmp(cond, flagReg, src0, srcI1, execMask).SetPredicate(predicate);
   return proc;
 }

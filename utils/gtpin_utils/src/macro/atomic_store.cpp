@@ -52,6 +52,7 @@ std::map<GED_MODEL,
 
 GtGenProcedure Macro::AtomicStore(const IGtKernelInstrument& instrumentor, GtReg addrReg,
                                   GtReg dataReg, GtExecMask execMask, GtPredicate predicate) {
+  MACRO_TRACING_MEMORY
   PTI_ASSERT(dataReg.SubRegNum() == 0 &&
              "Data register should have sub-register number == 0. Try to use "
              "MakeMsgDataScratch VregFactory interface to allocate data register.");
