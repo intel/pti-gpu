@@ -154,11 +154,6 @@ static TraceOptions ReadArgs() {
     flags |= (1 << TRACE_METRIC_STREAM);
   }
 
-  value = utils::GetEnv("UNITRACE_RawMetrics");
-  if (!value.empty()) {
-    flags |= (1 << TRACE_METRIC_STREAM);
-  }
-
   value = utils::GetEnv("UNITRACE_ChromeMpiLogging");
   if (!value.empty()) {
     flags |= (1 << TRACE_CHROME_MPI_LOGGING);

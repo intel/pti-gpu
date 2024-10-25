@@ -188,6 +188,10 @@ void Usage(char * progname) {
     "Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs" <<
     std::endl;
   std::cout <<
+    "--ranks-to-sample <ranks>      " <<
+    "MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks" <<
+    std::endl;
+  std::cout <<
     "--version                      " <<
     "Print version" <<
     std::endl;
@@ -213,6 +217,7 @@ int ParseArgs(int argc, char* argv[]) {
   bool show_metric_list = false;
   bool stall_sampling = false;
   bool metric_sampling = false;
+  std::vector<int> ranks_to_sample;
   int app_index = 1;
 
   for (int i = 1; i < argc; ++i) {
@@ -346,6 +351,42 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--stall-sampling") == 0) {
       stall_sampling = true;
       ++app_index;
+    } else if (strcmp(argv[i], "--ranks-to-sample") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] MPI ranks to sample are not specified" << std::endl;
+        return -1;
+      }
+      char *c = argv[i];
+      char *p = c;
+      // rank identifiers start with a digit
+      if (isdigit(*c) == 0) {
+        std::cout << "[ERROR] Invalid MPI ranks to sample" << std::endl;
+        return -1;
+      }
+      c++;
+      while (*c) {
+        if ((isdigit(*c) == 0) && (*c != ',')) {
+          std::cout << "[ERROR] Invalid MPI ranks to sample" << std::endl;
+          return -1;
+        }
+        if (*c == ',') {
+          *c = 0;
+          ranks_to_sample.push_back(atoi(p));
+          p = c + 1;
+        }
+        c++;
+      }
+      c--;
+      // rank identifiers end with a digit
+      if (isdigit(*c) == 0) {
+        std::cout << "[ERROR] Invalid MPI ranks to sample" << std::endl;
+        return -1;
+      }
+      else {
+        ranks_to_sample.push_back(atoi(p));
+      }
+      app_index += 2;
     } else if (strcmp(argv[i], "--metric-sampling") == 0 || strcmp(argv[i], "-k") == 0) {
       utils::SetEnv("UNITRACE_KernelMetrics", "1");
       metric_sampling = true;
@@ -382,6 +423,32 @@ int ParseArgs(int argc, char* argv[]) {
     }
   }
 
+  if (stall_sampling || metric_sampling) {
+    static std::string myrank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+    if (!myrank.empty()) {
+      if (ranks_to_sample.empty()) {
+        std::cout << "[WARNING] MPI ranks to smaple are not specified" << std::endl;
+      }
+      else {
+        auto r = std::stoi(myrank);
+        bool found = false;
+        for (auto i : ranks_to_sample) {
+          if (r == i) {
+            found = true;
+            break;
+          }
+        } 
+        if (found == false) {
+          // turn off sampling on this rank
+          stall_sampling = false;
+          metric_sampling = false;
+          // reset UNITRACE_KernelMetrics
+          utils::SetEnv("UNITRACE_KernelMetrics", "");
+        }
+      }
+    }
+  }
+
   if (stall_sampling) {
     if (metric_sampling && (utils::GetEnv("UNITRACE_MetricGroup") != "EuStallSampling")) {
       std::cerr << "[ERROR] Stall sampling cannot be enabled together with other metric group sampling" << std::endl;
@@ -394,14 +461,13 @@ int ParseArgs(int argc, char* argv[]) {
   }
 
   if (utils::GetEnv("UNITRACE_MetricQuery") == "1") {
-    if (utils::GetEnv("UNITRACE_RawMetrics") == "1" || utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+    if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
       std::cerr << "[ERROR] Hardware performance metric query mode cannot be used together with time-based mode" << std::endl;
       return 0;
     }
   }
 
-  if ((utils::GetEnv("UNITRACE_MetricQuery") == "1") || (utils::GetEnv("UNITRACE_RawMetrics") == "1") || 
-    (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
+  if ((utils::GetEnv("UNITRACE_MetricQuery") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
     // kernel tracing must be on 
     if (utils::GetEnv("UNITRACE_DeviceTiming").empty() && utils::GetEnv("UNITRACE_ChromeKernelLogging").empty() && utils::GetEnv("UNITRACE_ChromeDeviceLogging").empty()) {
       utils::SetEnv("UNITRACE_DeviceTiming", "1");
@@ -601,7 +667,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (utils::GetEnv("UNITRACE_MetricQuery") == "1") {
-    // UNITRACE_RawMetrics or UNITRACE_KernelMetrics is not set
+    // UNITRACE_KernelMetrics is not set
     SetProfilingEnvironment();
   }
 
@@ -615,7 +681,7 @@ int main(int argc, char *argv[]) {
 #ifndef _WIN32
   utils::SetEnv("LD_PRELOAD", preload.c_str());
 
-  if ((utils::GetEnv("UNITRACE_RawMetrics") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
+  if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
 
     // UNITRACE_MetricQuery is not set
     SetProfilingEnvironment();
@@ -688,7 +754,7 @@ int main(int argc, char *argv[]) {
     }
   }
 #else /* _WIN32 */
-  bool metrics_enabled = ((utils::GetEnv("UNITRACE_RawMetrics") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1"));
+  bool metrics_enabled = (utils::GetEnv("UNITRACE_KernelMetrics") == "1");
 
   // metric data collection
   if (metrics_enabled) {

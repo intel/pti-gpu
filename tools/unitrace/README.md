@@ -100,7 +100,9 @@ The options can be one or more of the following:
 --device-list                  Print available devices
 --metric-list                  Print available metric groups and metrics
 --stall-sampling               Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs
+--ranks-to-sample <ranks>      MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks
 --version                      Print version
+--help                         Show the help message and exit
 ```
 
 ## Level Zero or Level Zero + OpenCL
@@ -456,7 +458,7 @@ Performance metrics data will be stored in **perfquery.<pid>.csv** file.
 
 By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
 
-### Time-based Metric Sampling
+### Sample Metrics in Time-based Mode
 
 Different from **--metric-query [-q]** option, the **--metric-sampling [-k]** option profile hardware metrics in time-based sampling mode.
 
@@ -467,7 +469,7 @@ Performance metrics data will be stored in **perfmetrics.<pid>.csv** file.
 
 ![Metric Sampling!](/tools/unitrace/doc/images/metric-sampling.png)
 
-To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be changed using **--sampling-interval [-i]** option, for example:
+To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option, for example:
 
 
    ```sh
@@ -476,13 +478,21 @@ To kernels that take short time, you may find that the default sampling rate is 
 
 By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
 
-### Stall Sampling
+### Sample Stalls at Instruction Level
 
 The **--stall-sampling** works on Intel(R) Data Center GPU Max Series and later products.
 
 ![Metric Query!](/tools/unitrace/doc/images/stall-sampling.png)
 
-To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be changed using **--sampling-interval [-i]** option.
+To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option.
+
+### Sample Metrics of MPI Ranks
+
+If the workload is an MPI application, sampling multiple ranks running on the same node with **-k** or **--stall-sampling** is usually unnecessary. You can use option **--ranks-to-sample** to specify which rank/ranks to sample. If the workload has 8 ranks running on 2 nodes with 4 ranks each, for example, you can sample rank #0 on one node and rank #4 on the other node:
+
+   ```sh
+   mpiexec -n 8 -ppn 4 unitrace -k -o perfmetrics.csv --ranks-to-sample 0,4 <app>
+   ```
 
 ### Analyze Performance Metrics
 
