@@ -13,6 +13,63 @@
 #define INVALID_NUM static_cast<size_t>(-1)
 #define DEFAULT_MATH_WIDTH_BYTES 4
 
+// #define ENABLE_MACRO_TRACING /// disabled by default, use for debug & new HW enabling
+#ifdef ENABLE_MACRO_TRACING
+#include <iostream>
+
+#define MACRO_TRACING_IMM_SUFFIX "_i "
+#define MACRO_TRACING_REG_SUFFIX "_r "
+
+#define MACRO_TRACING_COMMON                                                          \
+  std::cerr << "MACRO_TRACING " << __FUNCTION__ << "(" << execMask.ExecSize() << "|M" \
+            << execMask.ChannelOffset() << ") "
+
+#define MACRO_TRACING_COMMON_MATH \
+  MACRO_TRACING_COMMON << dst.DataType().ToString() << MACRO_TRACING_REG_SUFFIX
+
+#define MACRO_TRACING_3I                                                               \
+  MACRO_TRACING_COMMON_MATH << src0.DataType().ToString() << MACRO_TRACING_REG_SUFFIX  \
+                            << srcI1.DataType().ToString() << MACRO_TRACING_IMM_SUFFIX \
+                            << std::endl;
+
+#define MACRO_TRACING_3                                                               \
+  MACRO_TRACING_COMMON_MATH << src0.DataType().ToString() << MACRO_TRACING_REG_SUFFIX \
+                            << src1.DataType().ToString() << MACRO_TRACING_REG_SUFFIX \
+                            << std::endl;
+
+#define MACRO_TRACING_2I \
+  MACRO_TRACING_COMMON_MATH << srcI1.DataType().ToString() << MACRO_TRACING_IMM_SUFFIX << std::endl;
+
+#define MACRO_TRACING_2 \
+  MACRO_TRACING_COMMON_MATH << src0.DataType().ToString() << MACRO_TRACING_REG_SUFFIX << std::endl;
+
+#define MACRO_TRACING_MEMORY \
+  MACRO_TRACING_COMMON << "A" << addrReg.ElementSize() * 8 << MACRO_TRACING_REG_SUFFIX << std::endl;
+
+#else
+#define MACRO_TRACING_IMM_SUFFIX ""
+#define MACRO_TRACING_REG_SUFFIX ""
+
+#define MACRO_TRACING_COMMON execMask;
+
+#define MACRO_TRACING_COMMON_MATH MACRO_TRACING_COMMON dst;
+
+#define MACRO_TRACING_3I          \
+  MACRO_TRACING_COMMON_MATH src0; \
+  srcI1;
+
+#define MACRO_TRACING_3           \
+  MACRO_TRACING_COMMON_MATH src0; \
+  src1;
+
+#define MACRO_TRACING_2I MACRO_TRACING_COMMON_MATH srcI1;
+
+#define MACRO_TRACING_2 MACRO_TRACING_COMMON_MATH src0;
+
+#define MACRO_TRACING_MEMORY MACRO_TRACING_COMMON addrReg;
+
+#endif
+
 #include <api/gtpin_api.h>
 
 #include <type_traits>

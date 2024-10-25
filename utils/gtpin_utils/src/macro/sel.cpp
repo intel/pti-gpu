@@ -18,6 +18,7 @@ dst: register, src0: register, src1: register
 GtGenProcedure Macro::Sel(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtRegRegion& src1, GtExecMask execMask,
                           GtPredicate predicate) {
+  MACRO_TRACING_3
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
              "Destination size should be no less than source size");
   PTI_ASSERT(dst.DataType().Size() >= src1.DataType().Size() &&
@@ -36,6 +37,7 @@ dst: register, src0: register, src1: immediate
 GtGenProcedure Macro::Sel(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, const GtImm& srcI1, GtExecMask execMask,
                           GtPredicate predicate) {
+  MACRO_TRACING_3I
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
              "Destination size should be no less than source size");
   uint64_t mask = Macro::GetMaskBySizeBytes(dst.DataType().Size());
@@ -44,6 +46,6 @@ GtGenProcedure Macro::Sel(const IGtKernelInstrument& instrumentor, const GtDstRe
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;
 
-  proc += insF.MakeSel(dst, src0, GtImm(srcI1, dst.DataType()), execMask).SetPredicate(predicate);
+  proc += insF.MakeSel(dst, src0, srcI1, execMask).SetPredicate(predicate);
   return proc;
 }

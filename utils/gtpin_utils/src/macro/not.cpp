@@ -42,7 +42,7 @@ GtGenProcedure NotTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion
     return proc;
   }
 
-  proc += insF.MakeMov(dst, src0, execMask).SetPredicate(predicate);
+  proc += insF.MakeNot(dst, src0, execMask).SetPredicate(predicate);
   return proc;
 }
 
@@ -95,6 +95,7 @@ std::map<GED_MODEL, GtGenProcedure (*)(const IGtKernelInstrument&, const GtDstRe
 
 GtGenProcedure Macro::Not(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtRegRegion& src0, GtExecMask execMask, GtPredicate predicate) {
+  MACRO_TRACING_2
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
              "Destination size should be no less than source size");
 
@@ -119,6 +120,7 @@ dst: register, src0: immediate
 
 GtGenProcedure Macro::Not(const IGtKernelInstrument& instrumentor, const GtDstRegion& dst,
                           const GtImm& srcI1, GtExecMask execMask, GtPredicate predicate) {
+  MACRO_TRACING_2I
   size_t mask = Macro::GetMaskBySizeBytes(dst.DataType().Size());  // 0b11111..111
   PTI_ASSERT(srcI1.Value() <= mask && "Immediate value is too large for the destination size");
 
