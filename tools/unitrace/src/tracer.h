@@ -65,7 +65,7 @@ class UniTracer {
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
 #ifndef _WIN32
-      std::cerr << "[INFO] Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+      std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid are set to 0." << std::endl;
 #endif /* _WIN32 */
       exit(-1);
     }

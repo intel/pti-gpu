@@ -82,7 +82,7 @@ struct ZeMetricQueryPools {
     for (auto it = query_pool_map_.begin(); it != query_pool_map_.end(); it++) {
       status = zetMetricQueryDestroy(it->first);
       if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[WARNING] Failed to destory metric query (" << status << ")" << std::endl;
+        std::cerr << "[WARNING] Failed to destroy metric query (" << status << ")" << std::endl;
       }
     }
     query_pool_map_.clear();
@@ -90,7 +90,7 @@ struct ZeMetricQueryPools {
     for (auto it = pools_.begin(); it != pools_.end(); it++) {
       status = zetMetricQueryPoolDestroy(*it);
       if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[WARNING] Failed to destory metric query pool (" << status << ")" << std::endl;
+        std::cerr << "[WARNING] Failed to destroy metric query pool (" << status << ")" << std::endl;
       }
     }
     
@@ -1225,7 +1225,7 @@ class ZeCollector {
       for (auto& context : metric_contexts_) {
         auto status = zeContextDestroy(context);
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[WARNING] Failed to destroy conext for metrics query (" << status << ")" << std::endl;
+          std::cerr << "[WARNING] Failed to destroy context for metrics query (" << status << ")" << std::endl;
         }
       }
       metric_contexts_.clear();

@@ -43,14 +43,14 @@ inline void PrintDeviceList() {
   if (status != ZE_RESULT_SUCCESS) {
     std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
 #ifndef _WIN32
-    std::cerr << "[INFO] Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+    std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid are set to 0." << std::endl;
 #endif /* _WIN32 */
     return;
   }
   
   std::vector<ze_device_handle_t> device_list = utils::ze::GetDeviceList();
   if (device_list.empty()) {
-    std::cout << "[WARNING] No device found" << std::endl;
+    std::cout << "[WARNING] No devices found" << std::endl;
     return;
   }
 
@@ -91,7 +91,7 @@ inline void PrintMetricList(uint32_t device_id) {
   if (status != ZE_RESULT_SUCCESS) {
     std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
 #ifndef _WIN32
-    std::cerr << "[INFO] Please make sure /proc/sys/dev/i915/perf_stream_paranoid is set to 0." << std::endl;
+    std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid are set to 0." << std::endl;
 #endif /* _WIN32 */
     return;
   }
