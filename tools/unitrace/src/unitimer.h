@@ -39,12 +39,18 @@ public:
         return epoch_start_time_ + systime;
     }
     
-    static uint64_t GetEpochTimeInUs(uint64_t systime) {
-        return ((epoch_start_time_ + systime) / 1000);
+    static double GetEpochTimeInUs(uint64_t systime) {
+        // (double(1.0) * (epoch_start_time_ + systime) / 1000.0);
+        uint64_t us = (epoch_start_time_ + systime) / 1000;
+        uint64_t ns = (epoch_start_time_ + systime) % 1000;
+        return double(us) + (double(ns) * 0.001);
     }
         
-    static uint64_t GetTimeInUs(uint64_t systime) {
-        return (systime / 1000);
+    static double GetTimeInUs(uint64_t systime) {
+        // (double(1.0) * systime / 1000.0);
+        uint64_t us = systime / 1000;
+        uint64_t ns = systime % 1000;
+        return double(us) + (double(ns) * 0.001);
     }
         
     static uint64_t GetHostTimestamp() {

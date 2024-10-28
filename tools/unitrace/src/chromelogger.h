@@ -92,8 +92,8 @@ typedef struct TraceDataPacket_ {
   uint64_t kernel_command_id;
   std::string name;
   std::string cname;
-  uint64_t ts;
-  uint64_t dur;
+  double ts;
+  double dur;
   std::string args;
   API_TRACING_ID api_id;
 
@@ -519,7 +519,6 @@ class TraceBuffer {
         }
         pkt.api_id = ZeKernelTracingId;
         pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-        //pkt.dur = UniTimer::GetEpochTimeInUs(rec.end_time_) - UniTimer::GetEpochTimeInUs(rec.start_time_);
         pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
         pkt.cat = gpu_op;
         pkt.args = "\"id\": \"" + std::to_string(rec.kid_) + "\"";
@@ -538,7 +537,7 @@ class TraceBuffer {
           pkt.api_id = DepTracingId;
           pkt.id = rec.kid_;
           pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-          pkt.dur = (uint64_t)(-1);
+          pkt.dur = double((uint64_t)(-1));
           pkt.cat = data_flow;
           pkt.rank = mpi_rank;
           logger_->Log(pkt.Stringify());
@@ -552,7 +551,7 @@ class TraceBuffer {
           pkt.api_id = DepTracingId;
           pkt.id = rec.kid_;
           pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-          pkt.dur = (uint64_t)(-1);
+          pkt.dur = double((uint64_t)(-1));
           pkt.cat = data_flow_sync;
           pkt.rank = mpi_rank;
           logger_->Log(pkt.Stringify());
@@ -587,23 +586,6 @@ class TraceBuffer {
         pkt.ph = 'X';
         pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
 
-/*
-        std::string str_kids = "";
-        if (kids == nullptr) {
-          str_kids = "0";
-        }
-        else {
-          int i = 0;
-          for (auto id : *kids) {
-            if (i != 0) {
-              str_kids += ",";
-            }
-            str_kids += std::to_string(id);
-            i++;
-          }
-        }
-        pkt.args = "\"id\": \"" + str_kids + "\"";
-*/
         if(rec.api_type_ == MPI) {
           MpiArgs args = rec.mpi_args_;
 
@@ -631,29 +613,29 @@ class TraceBuffer {
       }
       else if (rec.type_ == EVENT_DURATION_START) {
         pkt.ph = 'B';
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = cpu_op;
       }
       else if (rec.type_ == EVENT_DURATION_END) {
         pkt.ph = 'E';
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = cpu_op;
       }
       else if (rec.type_ == EVENT_FLOW_SOURCE) {
         pkt.ph = 's';
         pkt.id = rec.id_;
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = data_flow;
       }
       else if (rec.type_ == EVENT_FLOW_SINK) {
         pkt.ph = 't';
         pkt.id = rec.id_;
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = data_flow_sync;
       }
       else if (rec.type_ == EVENT_MARK) {
         pkt.ph = 'R';
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = cpu_op;
       }
       else {
@@ -664,7 +646,6 @@ class TraceBuffer {
       pkt.pid = GetPid();
       pkt.api_id = rec.api_id_;
       pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-      //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started);
       pkt.rank = mpi_rank;
       if(rec.name_ != nullptr) {
         pkt.name = std::string(rec.name_);
@@ -924,7 +905,7 @@ class ClTraceBuffer {
           pkt.api_id = DepTracingId;
           pkt.id = rec.kid_;
           pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-          pkt.dur = (uint64_t)(-1);
+          pkt.dur = double((uint64_t)(-1));
           pkt.cat = data_flow;
           pkt.rank = mpi_rank;
           logger_->Log(pkt.Stringify());
@@ -938,7 +919,7 @@ class ClTraceBuffer {
           pkt.api_id = DepTracingId;
           pkt.id = rec.kid_;
           pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-          pkt.dur = (uint64_t)(-1);
+          pkt.dur = double((uint64_t)(-1));
           pkt.cat = data_flow_sync;
           pkt.rank = mpi_rank;
           logger_->Log(pkt.Stringify());
@@ -972,51 +953,33 @@ class ClTraceBuffer {
       if (rec.type_ == EVENT_COMPLETE) {
         pkt.ph = 'X';
         pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
-
-/*
-        std::string str_kids = "";
-        if (kids == nullptr) {
-          str_kids = "0";
-        }
-        else {
-          int i = 0;
-          for (auto id : *kids) {
-            if (i != 0) {
-              str_kids += ",";
-            }
-            str_kids += std::to_string(id);
-            i++;
-          }
-        }
-        pkt.args = "\"id\": \"" + str_kids + "\"";
-*/
         pkt.cat = cpu_op;
       }
       else if (rec.type_ == EVENT_DURATION_START) {
         pkt.ph = 'B';
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = cpu_op;
       }
       else if (rec.type_ == EVENT_DURATION_END) {
         pkt.ph = 'E';
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = cpu_op;
       }
       else if (rec.type_ == EVENT_FLOW_SOURCE) {
         pkt.ph = 's';
         pkt.id = rec.id_;
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = data_flow;
       }
       else if (rec.type_ == EVENT_FLOW_SINK) {
         pkt.ph = 't';
         pkt.id = rec.id_;
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = data_flow_sync;
       }
       else if (rec.type_ == EVENT_MARK) {
         pkt.ph = 'R';
-        pkt.dur = (uint64_t)(-1);
+        pkt.dur = double((uint64_t)(-1));
         pkt.cat = cpu_op;
       }
       else {
@@ -1027,7 +990,6 @@ class ClTraceBuffer {
       pkt.pid = GetPid();
       pkt.api_id = rec.api_id_;
       pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-      //pkt.dur = UniTimer::GetEpochTimeInUs(ended) - UniTimer::GetEpochTimeInUs(started);
       pkt.rank = mpi_rank;
       if(rec.name_ != nullptr) {
         pkt.name = std::string(rec.name_);
