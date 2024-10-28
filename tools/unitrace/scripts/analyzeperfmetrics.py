@@ -152,12 +152,19 @@ def AnalyzeStalls(kernel, args, stalldf):
 
     asm = asmfiles[0]
     if (len(asmfiles) > 1):	# kernel has been retried, found the latest one
-        ctime = os.path.getctime(asm)
+        # find the longest name length
+        # the latest one has the longest name
+        max_asm_file_name_len = 0
         for f in asmfiles:
-            t = os.path.getctime(f)
-            if (t > ctime):
-                ctime = t
+            if (len(f) > max_asm_file_name_len):
+                max_asm_file_name_len = len(f)
                 asm = f
+        # find the largest name in alphabetical order
+        # the latest one has the largest name
+        for f in asmfiles:
+            if (len(f) == max_asm_file_name_len):
+                if (asm < f):
+                    asm = f
 
     ip = 0
     addressed = True
