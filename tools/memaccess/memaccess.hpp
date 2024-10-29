@@ -270,7 +270,7 @@ using MemAccessResultDataCommonSPtr = std::shared_ptr<MemAccessResultDataCommon>
  * Provides implementation for creating instances of the MemAccessGTPinTool and related data
  * structures.
  */
-class MemAccessFactory : public ToolFactory {
+class MemAccessFactory final : public ToolFactory {
   mutable int32_t strideNum = -1;
 
  public:

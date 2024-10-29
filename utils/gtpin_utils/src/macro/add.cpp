@@ -40,9 +40,9 @@ GtGenProcedure AddTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion
       proc += insF.MakeMov(dstL, GtReg(dst.Reg(), sizeof(uint32_t), 0)).SetPredicate(predicate);
     }
 
-    GtReg src0L = {src0.Reg(), std::min(4u, src0.DataType().Size()), 0};
+    GtReg src0L = {src0.Reg(), std::min(static_cast<uint32_t>(sizeof(uint32_t)), src0.DataType().Size()), 0};
 
-    GtReg src1L = {src1.Reg(), std::min(4u, src1.DataType().Size()), 0};
+    GtReg src1L = {src1.Reg(), std::min(static_cast<uint32_t>(sizeof(uint32_t)), src1.DataType().Size()), 0};
     GtReg src1H = NullReg();
     if (src1.DataType().Size() == 8) {
       src1H = {src1.Reg(), 4, 1};
@@ -133,7 +133,7 @@ GtGenProcedure AddiTgl(const IGtKernelInstrument& instrumentor, const GtDstRegio
       proc += insF.MakeMov(dstL, GtReg(dst.Reg(), sizeof(uint32_t), 0)).SetPredicate(predicate);
     }
 
-    GtReg src0L = {src0.Reg(), std::min(4u, src0.DataType().Size()), 0};
+    GtReg src0L = {src0.Reg(), std::min(static_cast<uint32_t>(sizeof(uint32_t)), src0.DataType().Size()), 0};
 
     proc +=
         insF.MakeAddc(dstL, src0L, GtImm(srcI1.Value() & 0xFFFF'FFFF, GED_DATA_TYPE_ud), execMask)
