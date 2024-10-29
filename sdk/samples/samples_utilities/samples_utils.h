@@ -63,6 +63,30 @@ inline void AlignedDealloc(T* buf_ptr) {
   return AlignedDealloc<T>(buf_ptr, kDefaultPtiBufferAlignment);
 }
 
+template <typename... T>
+constexpr std::size_t ValidateTimestamps(T... args) {
+  using TimestampType = std::common_type_t<T...>;
+  constexpr auto count = sizeof...(args);
+  static_assert(count > 1, "Must provide more than one timestamp to validate");
+  std::size_t found_issues = 0;
+  TimestampType prev_stamp = 0;
+
+  // Use fold expressions to find issues with timestamps
+  // https://en.cppreference.com/w/cpp/language/fold
+  // this could probably be simplified if we do not care about the number of
+  // timestamp issues (we might be able to remove the lambda).
+  (
+      [&] {
+        auto next_stamp = args;
+        if (!(prev_stamp <= next_stamp)) {
+          found_issues++;
+        }
+        prev_stamp = next_stamp;
+      }(),
+      ...);
+  return found_issues;
+}
+
 //
 // Returns:    True  - if a_list passed in is a monotonically increasing sequence.
 //             False - if not.

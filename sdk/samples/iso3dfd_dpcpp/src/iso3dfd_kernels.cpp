@@ -36,10 +36,10 @@
 #endif
 
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 
 #include "iso3dfd.h"
-
 
 #define NSEC_IN_USEC 1000
 #define MSEC_IN_SEC  1000
@@ -68,7 +68,10 @@ inline uint64_t GetTime() {
 #else
  timespec ts{0, 0};
  int status = clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
- assert(status == 0);
+ if(status) {
+   std::cerr << "Error while getting time: " << std::strerror(errno) << '\n';
+   std::abort();
+ }
  return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
 #endif
   }

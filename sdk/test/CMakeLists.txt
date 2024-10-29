@@ -1,4 +1,5 @@
 include(macros)
+RemoveNDebugFlag() # For SYCL Function Name
 CheckIfSyclIsAvailable()
 GetGTest()
 
@@ -349,6 +350,12 @@ target_link_libraries(view_gpu_local_test PUBLIC Pti::pti_view
   GTest::gtest_main
   LevelZero::headers)
 
+add_executable(pti_assert_test pti_assert_test.cc)
+
+target_include_directories(pti_assert_test PUBLIC
+  "${PROJECT_SOURCE_DIR}/src/utils")
+
+target_link_libraries(pti_assert_test PUBLIC GTest::gtest_main)
 
 gtest_discover_tests(
   zegemm_suite

@@ -148,20 +148,6 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
   }
   pti_view_record_base* ptr = nullptr;
 
-  [[maybe_unused]] auto validate_timestamps = [](uint64_t count, ...) {
-    va_list args;
-    va_start(args, count);
-    if (1LU == count) return;
-    uint64_t prev_stamp = va_arg(args, uint64_t);
-    uint64_t next_stamp = 0LU;
-    for (uint64_t i = 1; i < count; ++i) {
-      next_stamp = va_arg(args, uint64_t);
-      assert(prev_stamp <= next_stamp);
-      prev_stamp = next_stamp;
-    }
-    va_end(args);
-    return;
-  };
   while (true) {
     auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
     if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
@@ -215,8 +201,13 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
-        validate_timestamps(4, p_memory_rec->_append_timestamp, p_memory_rec->_submit_timestamp,
-                            p_memory_rec->_start_timestamp, p_memory_rec->_end_timestamp);
+        auto issues = samples_utils::ValidateTimestamps(
+            p_memory_rec->_append_timestamp, p_memory_rec->_submit_timestamp,
+            p_memory_rec->_start_timestamp, p_memory_rec->_end_timestamp);
+        if (issues) {
+          std::cerr << "Memcopy Timestamp error on line: " << __LINE__ << '\n';
+          std::exit(EXIT_FAILURE);
+        }
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
@@ -231,8 +222,13 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
-        validate_timestamps(4, p_memory_rec->_append_timestamp, p_memory_rec->_submit_timestamp,
-                            p_memory_rec->_start_timestamp, p_memory_rec->_end_timestamp);
+        auto issues = samples_utils::ValidateTimestamps(
+            p_memory_rec->_append_timestamp, p_memory_rec->_submit_timestamp,
+            p_memory_rec->_start_timestamp, p_memory_rec->_end_timestamp);
+        if (issues) {
+          std::cerr << "Memfill Timestamp error on line: " << __LINE__ << '\n';
+          std::exit(EXIT_FAILURE);
+        }
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
@@ -246,10 +242,14 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
-        validate_timestamps(6, p_kernel_rec->_sycl_task_begin_timestamp,
-                            p_kernel_rec->_sycl_enqk_begin_timestamp,
-                            p_kernel_rec->_append_timestamp, p_kernel_rec->_submit_timestamp,
-                            p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp);
+        auto issues = samples_utils::ValidateTimestamps(
+            p_kernel_rec->_sycl_task_begin_timestamp, p_kernel_rec->_sycl_enqk_begin_timestamp,
+            p_kernel_rec->_append_timestamp, p_kernel_rec->_submit_timestamp,
+            p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp);
+        if (issues) {
+          std::cerr << "Kernel Timestamp error on line: " << __LINE__ << '\n';
+          std::exit(EXIT_FAILURE);
+        }
         break;
       }
       default: {
