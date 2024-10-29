@@ -26,13 +26,13 @@ GtGenProcedure AndTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion
     GtReg dstL = {dst.Reg(), 4, 0};
     GtReg dstH = {dst.Reg(), 4, 1};
 
-    GtReg src0L = {src0.Reg(), std::min(4u, src0.DataType().Size()), 0};
+    GtReg src0L = {src0.Reg(), std::min(static_cast<uint32_t>(sizeof(uint32_t)), src0.DataType().Size()), 0};
     GtReg src0H = NullReg();
     if (src0.DataType().Size() == 8) {
       src0H = {src0.Reg(), 4, 1};
     }
 
-    GtReg src1L = {src1.Reg(), std::min(4u, src1.DataType().Size()), 0};
+    GtReg src1L = {src1.Reg(), std::min(static_cast<uint32_t>(sizeof(uint32_t)), src1.DataType().Size()), 0};
     GtReg src1H = NullReg();
     if (src1.DataType().Size() == 8) {
       src1H = {src1.Reg(), 4, 1};

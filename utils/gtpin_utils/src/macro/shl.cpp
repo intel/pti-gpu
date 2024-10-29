@@ -26,7 +26,7 @@ GtGenProcedure ShlTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
 
   GtReg src1Dw = {src1.Reg(),
-                  std::min(static_cast<size_t>(src1.DataType().Size()), sizeof(uint32_t)), 0};
+                  std::min(static_cast<uint32_t>(sizeof(uint32_t)), src1.DataType().Size()), 0};
 
   if (dst.DataType().Size() == 8) {
     PTI_ASSERT(false && "Not supported");
