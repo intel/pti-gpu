@@ -268,6 +268,7 @@ def AnalyzeStalls(kernel, args, stalldf):
                         if (len(bbs_to_check) <= j):
                             break
                         bid, start, end = bbs_to_check[j]
+                        break_at = end
                         for addr2, ins2 in enumerate(reversed(instructions[start : end + 1])):
                             if (len(sbids_stalled) > 0):
                                 if ((ins2.startswith("//") == False) and ("//" in ins2) and (re.match("/\* *\[", ins2) is not None)):
@@ -312,17 +313,42 @@ def AnalyzeStalls(kernel, args, stalldf):
                             if (len(sbids_stalled) == 0):
                                 if (source_available == False):
                                     done = True
-                                    break;
-                                else:	# we are not done until source lines and files are resolved
-                                        if ((ins_stalled_not_line_resolved == None) and (ins_stalled_not_file_resolved == None)):
-                                            if ((len(ins_stall_not_line_resolved) == 0) and (len(ins_stall_not_file_resolved) == 0)):
-                                                done = True
-                                                break	# we are done
+                                else:
+                                    if ((ins_stalled_not_line_resolved == None) and (ins_stalled_not_file_resolved == None)):
+                                        if ((len(ins_stall_not_line_resolved) == 0) and (len(ins_stall_not_file_resolved) == 0)):
+                                            done = True
+
+                                break_at = end - addr2
+                                break
 
                         if (done == False):
-                            for b in bbs[bid].get_preds():
-                                bb = bbs[b]
-                                bbs_to_check.append((b, bb.get_head(), bb.get_tail()))
+                            if (len(sbids_stalled) == 0):
+                                # scan backward for source line and file
+                                for addr3, ins3 in enumerate(reversed(instructions[0 : break_at])):
+                                    if (re.match("// *Line", ins3) is not None):
+                                        if (ins_stalled_not_line_resolved != None): # source line of stalled instruction
+                                            source_line_stalled = break_at - 1 - addr3
+                                            ins_stalled_not_line_resolved = None
+
+                                        for i in ins_stall_not_line_resolved:
+                                            source_lines_stall[i] = break_at - 1 - addr3
+                                        ins_stall_not_line_resolved.clear()
+
+                                    if (re.match("// *File", ins3) is not None):
+                                        if (ins_stalled_not_file_resolved != None): # source file of stalled instruction
+                                            source_file_stalled = break_at - 1 - addr3
+                                            ins_stalled_not_file_resolved = None
+
+                                        for i in ins_stall_not_file_resolved:
+                                            source_files_stall[i] = break_at - 1 - addr3
+                                        ins_stall_not_file_resolved.clear()
+
+                                done = True
+                                break
+                            else:
+                                for b in bbs[bid].get_preds():
+                                    bb = bbs[b]
+                                    bbs_to_check.append((b, bb.get_head(), bb.get_tail()))
                         else:
                             break
 
@@ -341,7 +367,10 @@ def AnalyzeStalls(kernel, args, stalldf):
                             report += "  instruction\n"
                             report += "    " + instructions[i] + "\n"
                             report += "    " + instructions[line][3:] + "\n"
-                            report += "    " + instructions[source_files_stall[i]][3:] + "\n"
+                            if (i in source_files_stall):
+                                report += "    " + instructions[source_files_stall[i]][3:] + "\n"
+                            else:
+                                report += "    File: unknown\n"
                         for i in ins_stall_not_line_resolved:
                             report += "  instruction\n"
                             report += "    " + instructions[i] + "\n"
