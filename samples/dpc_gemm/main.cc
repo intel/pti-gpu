@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
+#include <cmath>
 #include <string.h>
 
 #include <memory>
@@ -21,7 +22,7 @@ static float Check(const std::vector<float>& a, float value) {
 
   float eps = 0.0f;
   for (size_t i = 0; i < a.size(); ++i) {
-    eps += fabs((a[i] - value) / value);
+    eps += std::fabs((a[i] - value) / value);
   }
 
   return eps / a.size();

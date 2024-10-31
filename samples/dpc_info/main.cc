@@ -45,126 +45,12 @@ std::string ConvertBytesToString(size_t value) {
 
 std::ostream& operator<<(std::ostream& out, sycl::aspect sycl_aspect) {
   switch (sycl_aspect) {
-    case sycl::aspect::cpu:
-      out << "cpu";
+#define __SYCL_ASPECT(X, Y) \
+    case sycl::aspect::X: \
+      out << "" #X; \
       break;
-    case sycl::aspect::gpu:
-      out << "gpu";
-      break;
-    case sycl::aspect::accelerator:
-      out << "accelerator";
-      break;
-    case sycl::aspect::custom:
-      out << "custom";
-      break;
-    case sycl::aspect::emulated:
-      out << "emulated";
-      break;
-    case sycl::aspect::host_debuggable:
-      out << "host_debuggable";
-      break;
-    case sycl::aspect::fp16:
-      out << "fp16";
-      break;
-    case sycl::aspect::fp64:
-      out << "fp64";
-      break;
-    case sycl::aspect::atomic64:
-      out << "atomic64";
-      break;
-    case sycl::aspect::image:
-      out << "image";
-      break;
-    case sycl::aspect::online_compiler:
-      out << "online_compiler";
-      break;
-    case sycl::aspect::online_linker:
-      out << "online_linker";
-      break;
-    case sycl::aspect::queue_profiling:
-      out << "queue_profiling";
-      break;
-    case sycl::aspect::usm_device_allocations:
-      out << "usm_device_allocations";
-      break;
-    case sycl::aspect::usm_host_allocations:
-      out << "usm_host_allocations";
-      break;
-    case sycl::aspect::usm_atomic_host_allocations:
-      out << "usm_atomic_host_allocations";
-      break;
-    case sycl::aspect::usm_shared_allocations:
-      out << "usm_shared_allocations";
-      break;
-    case sycl::aspect::usm_atomic_shared_allocations:
-      out << "usm_atomic_shared_allocations";
-      break;
-    case sycl::aspect::usm_system_allocations:
-      out << "usm_system_allocations";
-      break;
-#if defined(SYCL_IMPLEMENTATION_INTEL)
-    case sycl::aspect::ext_intel_pci_address:
-      out << "ext_intel_pci_address";
-      break;
-    case sycl::aspect::ext_intel_gpu_eu_count:
-      out << "ext_intel_gpu_eu_count";
-      break;
-    case sycl::aspect::ext_intel_gpu_eu_simd_width:
-      out << "ext_intel_gpu_eu_simd_width";
-      break;
-    case sycl::aspect::ext_intel_gpu_slices:
-      out << "ext_intel_gpu_slices";
-      break;
-    case sycl::aspect::ext_intel_gpu_subslices_per_slice:
-      out << "ext_intel_gpu_subslices_per_slice";
-      break;
-    case sycl::aspect::ext_intel_gpu_eu_count_per_subslice:
-      out << "ext_intel_gpu_eu_count_per_subslice";
-      break;
-    case sycl::aspect::ext_intel_max_mem_bandwidth:
-      out << "ext_intel_max_mem_bandwidth";
-      break;
-    case sycl::aspect::ext_intel_mem_channel:
-      out << "ext_intel_mem_channel";
-      break;
-    case sycl::aspect::ext_intel_device_info_uuid:
-      out << "ext_intel_device_info_uuid";
-      break;
-    case sycl::aspect::ext_intel_gpu_hw_threads_per_eu:
-      out << "ext_intel_gpu_hw_threads_per_eu";
-      break;
-    case sycl::aspect::ext_intel_free_memory:
-      out << "ext_intel_free_memory";
-      break;
-    case sycl::aspect::ext_intel_device_id:
-      out << "ext_intel_device_id";
-      break;
-    case sycl::aspect::ext_intel_memory_clock_rate:
-      out << "ext_intel_memory_clock_rate";
-      break;
-    case sycl::aspect::ext_intel_memory_bus_width:
-      out << "ext_intel_memory_bus_width";
-      break;
-#if __LIBSYCL_MAJOR_VERSION > 6
-    case sycl::aspect::ext_intel_legacy_image:
-      out << "ext_intel_legacy_image";
-      break;
-#endif
-#endif
-#if defined(SYCL_IMPLEMENTATION_ONEAPI)
-    case sycl::aspect::ext_oneapi_srgb:
-      out << "ext_oneapi_srgb";
-      break;
-    case sycl::aspect::ext_oneapi_native_assert:
-      out << "ext_oneapi_native_assert";
-      break;
-    case sycl::aspect::ext_oneapi_cuda_async_barrier:
-      out << "ext_oneapi_cuda_async_barrier";
-      break;
-    case sycl::aspect::ext_oneapi_bfloat16_math_functions:
-      out << "ext_oneapi_bfloat16_math_functions";
-      break;
-#endif
+#include <sycl/info/aspects.def>
+#undef __SYCL_ASPECT
     default:
       out << "<unknown-aspect: " << static_cast<std::size_t>(sycl_aspect) << ">";
       break;
@@ -263,7 +149,7 @@ int main(int argc, char* argv[]) {
         std::string version =
           device.get_info<sycl::info::device::version>();
         std::cout << std::setw(TEXT_WIDTH) << std::left <<
-          TAB + "Device SYCL Vesrion " << version << std::endl;
+          TAB + "Device SYCL Version " << version << std::endl;
 
         sycl::info::device_type device_type =
           device.get_info<sycl::info::device::device_type>();
