@@ -36,7 +36,7 @@ RUN wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
 
 RUN apt update -y && \
     apt install -y \
-    intel-basekit=2024.2.1-98 \
+    intel-basekit=2025.0.0-884 \
     intel-opencl-icd intel-level-zero-gpu libze1 \
     intel-media-va-driver-non-free libmfx1 libmfxgen1 libvpl2 \
     libegl-mesa0 libegl1-mesa libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
