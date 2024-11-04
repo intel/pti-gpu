@@ -311,12 +311,14 @@ def gen_exit_callback(
 
     if func in ze_gen_func_list:
         f.write(
-            "  if (collector->cb_enabled_.fcallback && collector->fcallback_ != nullptr) {\n"
+            "  ZeKernelCommand *kc = static_cast<ZeKernelCommand*>(*instance_user_data);\n"
         )
-    else:
-        f.write(
-            "  if ((trace_all_zecalls==1 || trace_all_zecalls==-1)&& collector->cb_enabled_.fcallback && collector->fcallback_ != nullptr) {\n"
-        )
+        f.write("  kc->callback_id_ = zeCommandListAppendLaunchKernel_id;\n")
+        f.write("  kc->api_start_time_ = start_time_host;\n")
+        f.write("  kc->api_end_time_ = end_time_host;\n")
+    f.write(
+        "  if (collector->cb_enabled_.fcallback && collector->fcallback_ != nullptr) {\n"
+    )
     f.write("    ZeKernelCommandExecutionRecord rec = {};\n")
     f.write("    rec.start_time_ = start_time_host;\n")
     f.write("    rec.end_time_ = end_time_host;\n")

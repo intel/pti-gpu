@@ -13,9 +13,12 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <sycl/kernel_bundle.hpp>
+#include <sycl/sycl.hpp>
 #include <vector>
 
 #include "pti/pti_view.h"
+#include "samples_utils.h"
 #include "utils.h"
 #include "utils/test_helpers.h"
 #include "ze_utils.h"
@@ -28,6 +31,7 @@
 namespace {
 constexpr size_t kPtiDeviceId = 0;  // run on first device
 
+uint64_t eid_ = 11;
 size_t requested_buffer_calls = 0;
 size_t rejected_buffer_calls = 0;  // Buffer requests that are called and rejected by the API
 size_t completed_buffer_calls = 0;
@@ -39,19 +43,51 @@ uint64_t kernel_view_record_count = 0;
 bool buffer_size_atleast_largest_record = false;
 bool ze_initialization_succeeded = false;
 bool capture_records = false;
+bool special_record_seen = false;
+bool sycl_runtime_launch_seen = false;
+bool zecall_record_seen = false;
+bool external_corrid_special_record_seen = false;
+uint32_t num_special_records = 0;
+uint32_t num_sycl_runtime_launch_records = 0;
+uint64_t corrid_in_special_record = 0;
+uint64_t external_corrid_in_ext_rec = 0;
 std::vector<pti_view_record_memory_copy> copy_records;
 std::vector<pti_view_record_kernel> kernel_records;
+
+// TODO - make the enable type param more generic (maybe a bitmap of somesort) so that we can enable
+// a mishmash of types
+void StartTracing(bool include_sycl_runtime = false, bool include_zecalls = false,
+                  bool include_gpu_kernels = true) {
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
+  if (include_gpu_kernels)
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  if (include_sycl_runtime)
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  if (include_zecalls) ASSERT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+}
+
+void StopTracing(bool include_sycl_runtime = false, bool include_zecalls = false,
+                 bool include_gpu_kernels = true) {
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
+  if (include_gpu_kernels)
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  if (include_sycl_runtime)
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  if (include_zecalls)
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+}
 
 float Check(const std::vector<float>& a, float value) {
   PTI_ASSERT(value > MAX_EPS);
 
   float eps = 0.0f;
   for (size_t i = 0; i < a.size(); ++i) {
-    if (i < 10) std::cout << i << ": " << a[i] << "\n";
     eps += fabs((a[i] - value) / value);
   }
-
-  std::cout << "Check: " << eps << ":" << a.size() << " : " << value << "\n";
   return eps / a.size();
 }
 
@@ -395,6 +431,31 @@ float RunAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device, ze_conte
   return Check(c, expected_result);
 }
 
+void ComputeUsingSycl(std::vector<float>& a, unsigned repeat_count) {
+  sycl::queue q;
+  for (auto platform : sycl::platform::get_platforms()) {
+    std::vector<sycl::device> gpu_devices = platform.get_devices();
+    if (platform.get_backend() == sycl::backend::ext_oneapi_level_zero) {
+      q = sycl::queue(gpu_devices[0]);
+    }
+  }
+
+  try {
+    sycl::buffer<float, 1> a_buf(a.data(), a.size());
+    sycl::range<1> num_items{a.size()};
+    for (unsigned i = 0; i < repeat_count; ++i) {
+      sycl::event event = q.submit([&](sycl::handler& cgh) {
+        auto a_acc = a_buf.get_access<sycl::access::mode::write>(cgh);
+        cgh.parallel_for(num_items, [=](auto i) { a_acc[i] = i; });
+      });
+      q.wait_and_throw();
+    }
+  } catch (const sycl::exception& e) {
+    std::cout << "[ERROR] " << e.what() << std::endl;
+    throw;
+  }
+}
+
 void Compute(ze_device_handle_t device, ze_driver_handle_t driver, const std::vector<float>& a,
              const std::vector<float>& b, std::vector<float>& c, unsigned size,
              unsigned repeat_count, float expected_result, bool with_polling = false) {
@@ -458,16 +519,8 @@ void Compute(ze_device_handle_t device, ze_driver_handle_t driver, const std::ve
 
 }  // namespace
 
-class MainZeFixtureTest : public ::testing::Test {
+class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, bool>> {
  protected:
-  MainZeFixtureTest() {
-    // Setup work for each test
-  }
-
-  ~MainZeFixtureTest() override {
-    // Cleanup work for each test
-  }
-
   void SetUp() override {  // Called right after constructor before each test
     buffer_cb_registered = true;
     requested_buffer_calls = 0;
@@ -479,6 +532,14 @@ class MainZeFixtureTest : public ::testing::Test {
     memory_view_record_count = 0;
     kernel_view_record_count = 0;
     capture_records = false;
+    special_record_seen = false;
+    sycl_runtime_launch_seen = false;
+    zecall_record_seen = false;
+    external_corrid_special_record_seen = false;
+    num_special_records = 0;
+    num_sycl_runtime_launch_records = 0;
+    corrid_in_special_record = 0;
+    external_corrid_in_ext_rec = 0;
     copy_records.clear();
     kernel_records.clear();
   }
@@ -538,12 +599,41 @@ class MainZeFixtureTest : public ::testing::Test {
           memory_view_record_count += 1;
           break;
         }
+        case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
+          pti_view_record_external_correlation* aExtRec =
+              reinterpret_cast<pti_view_record_external_correlation*>(ptr);
+          external_corrid_special_record_seen = true;
+          external_corrid_in_ext_rec = aExtRec->_correlation_id;
+          break;
+        }
+        case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+          pti_view_record_sycl_runtime* rec = reinterpret_cast<pti_view_record_sycl_runtime*>(ptr);
+          std::string function_name = reinterpret_cast<pti_view_record_sycl_runtime*>(ptr)->_name;
+          std::cout << "--- Record Special Sycl: " << rec->_correlation_id << ": " << rec->_name
+                    << '\n';
+          if (strcmp(rec->_name, "zeCommandListAppendLaunchKernel") == 0) {
+            special_record_seen = true;
+            num_special_records++;
+            corrid_in_special_record = rec->_correlation_id;
+          } else if ((function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
+            sycl_runtime_launch_seen = true;
+            num_sycl_runtime_launch_records++;
+          }
+          break;
+        }
+        case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
+          [[maybe_unused]] pti_view_record_zecalls* rec =
+              reinterpret_cast<pti_view_record_zecalls*>(ptr);
+          zecall_record_seen = true;
+          break;
+        }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
+          pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
           if (capture_records) {
-            pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
             std::cout << "--- Record Kernel: " << rec->_name << '\n';
+            std::cout << "  Cid: " << rec->_correlation_id << '\n';
             uint64_t duration = rec->_end_timestamp - rec->_start_timestamp;
             std::cout << "  Start: " << rec->_start_timestamp << '\n';
             std::cout << "  End: " << rec->_end_timestamp << '\n';
@@ -593,7 +683,8 @@ class MainZeFixtureTest : public ::testing::Test {
     buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy);
   }
 
-  int RunGemm(bool with_polling = false) {
+  int RunGemm(bool with_polling = false, bool include_sycl_runtime = false,
+              bool include_zecalls = false, bool include_gpu_kernels = true, bool addSycl = false) {
     ze_result_t status = ZE_RESULT_SUCCESS;
     status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     ze_initialization_succeeded = (status == ZE_RESULT_SUCCESS);
@@ -605,9 +696,7 @@ class MainZeFixtureTest : public ::testing::Test {
       return 0;
     }
 
-    ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL);
-    ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
-    ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
+    StartTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels);
 
     std::cout << "Level Zero Matrix Multiplication (matrix size: " << size << " x " << size
               << ", repeats " << repeat_count << " times)" << std::endl;
@@ -616,16 +705,24 @@ class MainZeFixtureTest : public ::testing::Test {
     std::vector<float> a(size * size, A_VALUE);
     std::vector<float> b(size * size, B_VALUE);
     std::vector<float> c(size * size, 0.0f);
+    StopTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels);
 
     auto start = std::chrono::steady_clock::now();
     float expected_result = A_VALUE * B_VALUE * size;
+
+    StartTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels);
+    PTI_CHECK_SUCCESS(ptiViewPushExternalCorrelationId(
+        pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid_));
+
     Compute(device, driver, a, b, c, size, repeat_count, expected_result, with_polling);
+    if (addSycl) ComputeUsingSycl(a, repeat_count);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
 
-    ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
-    ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
-    ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
+    PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(
+        pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid_));
+    StopTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels);
+
     std::cout << "Total execution time: " << time.count() << " sec" << std::endl;
     auto flush_results = ptiFlushAllViews();
     return flush_results;
@@ -763,6 +860,55 @@ TEST_F(MainZeFixtureTest, NegTestNullBufferSize) {
   ASSERT_EQ(rejected_buffer_calls, 1 * repeat_count);
 }
 
+TEST_F(MainZeFixtureTest, SyclBasedAndZeBasedKernelLaunchesPresent) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunGemm(
+      false, true, false, true,
+      true);  // enable sycl and kernel view kinds only. Additionally run Sycl based launch kernel.
+  EXPECT_EQ(special_record_seen, true);
+  EXPECT_EQ(num_special_records, repeat_count);
+  EXPECT_EQ(sycl_runtime_launch_seen, true);
+  EXPECT_EQ(num_sycl_runtime_launch_records, repeat_count);
+  EXPECT_EQ(num_sycl_runtime_launch_records + num_special_records, kernel_view_record_count);
+}
+
+// Zecalls Disabled, Sycl Enabled, no sycl api fires, gpu kernel enabled and fires
+TEST_P(MainZeFixtureTest, SpecialRecordPresent) {
+  // GetParam returns 3 valued tuple: values correspond to (from left to right)
+  //     whether we enable the viewkinds for --- sycl, zecalls, kernel.
+  auto [sycl, zecall, kernel] = GetParam();
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  RunGemm(false, sycl, zecall, kernel);  // polling, sycl, zecalls --- enabled/disabled
+  if (sycl == true && zecall == false && kernel == true) {
+    EXPECT_EQ(special_record_seen, true);
+    EXPECT_EQ(zecall_record_seen, false);
+    EXPECT_EQ(external_corrid_special_record_seen, true);
+    EXPECT_EQ(corrid_in_special_record, external_corrid_in_ext_rec);
+    EXPECT_GT(corrid_in_special_record, 0UL);
+    EXPECT_EQ(num_special_records, repeat_count);
+  } else {
+    EXPECT_EQ(special_record_seen, false);
+    EXPECT_EQ(zecall_record_seen, zecall);
+    EXPECT_EQ(external_corrid_special_record_seen, false);
+    EXPECT_EQ(corrid_in_special_record, external_corrid_in_ext_rec);
+    EXPECT_EQ(corrid_in_special_record, 0UL);
+  }
+  /*
+    std::ostringstream oss;
+    oss << "SpecialRecordPresenceTest_enabled_values_" << sycl << ":" << zecall << ":" << kernel;
+    SCOPED_TRACE(oss.str());  // Set the test name for better readability on a failing test.
+  */
+}
+
+// Tuple values correspond to (from left to right) whether we enable the viewkinds for --- sycl,
+// zecalls, kernel.
+INSTANTIATE_TEST_SUITE_P(MainZeTests, MainZeFixtureTest,
+                         ::testing::Values(std::make_tuple(true, false, true),
+                                           std::make_tuple(true, false, false),
+                                           std::make_tuple(true, true, true),
+                                           std::make_tuple(false, false, true),
+                                           std::make_tuple(false, true, true)));
+
 using pti::test::utils::CreateFullBuffer;
 using pti::test::utils::RecordInserts;
 
@@ -780,7 +926,7 @@ class GetNextRecordTestSuite : public ::testing::Test {
                                    RecordInserts<pti_view_record_memory_fill, kNumMemRecs>,
                                    RecordInserts<pti_view_record_external_correlation, kNumExtRecs>,
                                    RecordInserts<pti_view_record_kernel, kNumKernelRecs>,
-                                   RecordInserts<pti_view_record_overhead, kNumOhRecs> >()) {}
+                                   RecordInserts<pti_view_record_overhead, kNumOhRecs>>()) {}
   std::vector<unsigned char> test_buf_;
 };
 

@@ -135,6 +135,31 @@ if(HAVE_SYCL)
   target_link_libraries(sycl_queue_id PUBLIC Pti::pti_view GTest::gtest_main
     LevelZero::headers)
 
+  add_executable(zegemm_suite main_zegemm_fixture.cc)
+
+  target_include_directories(
+    zegemm_suite
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+
+  add_custom_command(
+    TARGET zegemm_suite
+    PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${PROJECT_SOURCE_DIR}/test/gemm.spv ${PTI_TEST_BIN_DIR}/gemm.spv)
+  add_custom_command(
+    TARGET zegemm_suite
+    PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${PROJECT_SOURCE_DIR}/test/gemm.cl ${PTI_TEST_BIN_DIR}/gemm.cl)
+
+  target_compile_options(zegemm_suite  PUBLIC -fsycl -gline-tables-only)
+  target_link_options(zegemm_suite PUBLIC -fsycl -gline-tables-only)
+  target_link_libraries(zegemm_suite PUBLIC Pti::pti_view GTest::gtest_main
+                                          GTest::gmock LevelZero::level-zero)
+
   add_executable(multi_threaded_submission multi_threaded_submission.cc)
 
   target_include_directories(
@@ -230,6 +255,12 @@ if(HAVE_SYCL)
     PROPERTIES LABELS "functional")
 
   gtest_discover_tests(
+    zegemm_suite
+    DISCOVERY_TIMEOUT 60
+    TEST_LIST ZEGEMM_SUITE_TEST_LIST
+    PROPERTIES LABELS "unit")
+
+  gtest_discover_tests(
     multi_threaded_submission
     DISCOVERY_TIMEOUT 60
     TEST_LIST TIMESTAMPS_CORRECTNESS_LIST
@@ -253,28 +284,6 @@ if(HAVE_SYCL)
     perf-profiling-overhead perf-link-overhead PROPERTIES LABELS "performance")
 
 endif()
-
-add_executable(zegemm_suite main_zegemm_fixture.cc)
-
-target_include_directories(
-  zegemm_suite
-  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
-         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
-
-add_custom_command(
-  TARGET zegemm_suite
-  PRE_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          ${PROJECT_SOURCE_DIR}/test/gemm.spv ${PTI_TEST_BIN_DIR}/gemm.spv)
-add_custom_command(
-  TARGET zegemm_suite
-  PRE_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          ${PROJECT_SOURCE_DIR}/test/gemm.cl ${PTI_TEST_BIN_DIR}/gemm.cl)
-
-target_link_libraries(zegemm_suite PUBLIC Pti::pti_view GTest::gtest_main
-                                          GTest::gmock LevelZero::level-zero)
 
 
 
@@ -357,11 +366,6 @@ target_include_directories(pti_assert_test PUBLIC
 
 target_link_libraries(pti_assert_test PUBLIC GTest::gtest_main)
 
-gtest_discover_tests(
-  zegemm_suite
-  DISCOVERY_TIMEOUT 60
-  TEST_LIST ZEGEMM_SUITE_TEST_LIST
-  PROPERTIES LABELS "unit")
 gtest_discover_tests(
   view_record_test
   DISCOVERY_TIMEOUT 60

@@ -62,6 +62,11 @@ inline void ZeApiCallsCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 inline void SyclRuntimeViewCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 inline void OverheadCollectionCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 
+enum class internal_result {
+  kStatusSuccess = 0,
+  kStatusViewNotEnabled = 1,  //!< status due to a pti_view_kind not enabled
+};
+
 struct ViewData {
   const char* fn_name = "";
   ViewInsert callback;
@@ -119,7 +124,6 @@ inline static std::atomic<bool> external_collection_enabled = false;
 
 struct PtiViewRecordHandler {
  public:
-  inline static int32_t trace_all_zecalls = utils::IsSetEnv("PTI_TRACE_ALL_ZECALLS");
   using ViewBuffer = pti::view::utilities::ViewBuffer;
   using ViewBufferQueue = pti::view::utilities::ViewBufferQueue;
   using ViewBufferTable = pti::view::utilities::ViewBufferTable<uint32_t>;
@@ -313,7 +317,6 @@ struct PtiViewRecordHandler {
     // TBD --- implement and remove the checks for below pti_view_kinds
     //
     if ((type == pti_view_kind::PTI_VIEW_DEVICE_CPU_KERNEL) ||
-        //(type == pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS) ||
         (type == pti_view_kind::PTI_VIEW_OPENCL_CALLS)) {
       return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
     }
@@ -457,12 +460,14 @@ struct PtiViewRecordHandler {
     return result;
   }
 
-  inline void operator()(const std::string& key, void* data,
-                         const ZeKernelCommandExecutionRecord& rec) {
+  inline internal_result operator()(const std::string& key, void* data,
+                                    const ZeKernelCommandExecutionRecord& rec) {
     auto view_event_callback = view_event_map_.TryFindElement(key);
     if (view_event_callback) {
       (*view_event_callback)(data, rec);
+      return internal_result::kStatusSuccess;
     }
+    return internal_result::kStatusViewNotEnabled;
   }
 
   inline const char* InsertKernel(const std::string& name) {
@@ -474,6 +479,17 @@ struct PtiViewRecordHandler {
 
   inline pti_result GetState() { return state_; }
   inline void SetState(pti_result new_state) { state_ = new_state; }
+
+  inline SpecialCallsData& GetSpecialCallsData(const uint32_t& corrId) {
+    const std::lock_guard<std::mutex> lock(set_special_calls_map_mtx_);
+    return map_spcalls_suppression[corrId];
+  }
+
+  inline void SetSpecialCallsData(const uint32_t& corrId,
+                                  const SpecialCallsData& special_rec_data) {
+    const std::lock_guard<std::mutex> lock(set_special_calls_map_mtx_);
+    map_spcalls_suppression[corrId] = special_rec_data;
+  }
 
   inline pti_result GPULocalAvailable() {
     if (collector_) {
@@ -542,6 +558,7 @@ struct PtiViewRecordHandler {
   mutable std::mutex timestamp_api_mtx_;
   mutable std::mutex insert_record_mtx_;  // protecting writing to buffers, as different threads
                                           // might be writing to the same buffer
+  mutable std::mutex set_special_calls_map_mtx_;
 
   ViewEventTable view_event_map_;
   KernelNameStorageQueue kernel_name_storage_;
@@ -556,6 +573,8 @@ struct PtiViewRecordHandler {
       kDefaultSyncTime;  // time in nanoseconds, sync every millisecond by default --- this can be
                          // overridden by the env variable PTI_CONV_CLOCK_SYNC_TIME_NS.
   std::atomic<bool> deinit_ = false;
+
+  std::map<uint32_t, SpecialCallsData> map_spcalls_suppression;
 };
 
 // Required to access buffer from ze_collector callbacks
@@ -787,6 +806,12 @@ inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecor
   record._name = rec.sycl_func_name_;
   SPDLOG_TRACE("In {}, name: {}, corr_id: {}", __FUNCTION__, record._name, record._correlation_id);
   Instance().InsertRecord(record, record._thread_id);
+  std::string a_string = record._name;
+  if (a_string.find("EnqueueKernelLaunch") != std::string::npos) {
+    SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
+    special_rec_data.sycl_rec_present = 1;
+    Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
+  }
 }
 
 inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
@@ -822,6 +847,33 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   record._sycl_enqk_begin_timestamp = ApplyTimeShift(rec.sycl_enqk_begin_time_, ts_shift);
   record._sycl_task_begin_timestamp = ApplyTimeShift(rec.sycl_task_begin_time_, ts_shift);
 
+#if defined(PTI_TRACE_SYCL)
+  SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
+  // We generate special sycl record corresponding to L0 api call -- zeCommandListAppendLaunchKernel
+  // *only* when
+  //     ZECALL is disabled, SYCL is enabled, GPU_KERNEL is enabled
+  //     and
+  //     no corresponding sycl record is present for the kernel launch captured here.
+
+  if (special_rec_data.sycl_rec_present == 0 && special_rec_data.zecall_disabled &&
+      SyclCollector::Instance().Enabled()) {  // generate special record only if no sycl rec
+                                              // (sycl_rec_present is 0) and sycl enabled and
+                                              // zecalls disabled enabled and kernel is enabled.
+    pti_view_record_sycl_runtime special_rec;
+    special_rec._view_kind._view_kind = pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS;
+    special_rec._name = "zeCommandListAppendLaunchKernel";
+    special_rec._start_timestamp = ApplyTimeShift(rec.api_start_time_, ts_shift);
+    special_rec._end_timestamp = ApplyTimeShift(rec.api_end_time_, ts_shift);
+    special_rec._thread_id = rec.tid_;
+    special_rec._process_id = rec.pid_;
+    special_rec._correlation_id = rec.cid_;
+    if (external_collection_enabled) {
+      GenerateExternalCorrelationRecords(rec);  // use rec since only corrid is needed from it.
+    }
+
+    Instance().InsertRecord(special_rec, special_rec._thread_id);
+  }
+#endif
   Instance().InsertRecord(record, record._thread_id);
 }
 
@@ -869,7 +921,12 @@ inline void ZeChromeKernelStagesCallback(void* data,
 
 inline void ZeApiCallsCallback([[maybe_unused]] void* data,
                                [[maybe_unused]] ZeKernelCommandExecutionRecord& rec) {
-  // std::cout << __FUNCTION__ << "\n";
-  Instance()("ZecallEvent", data, rec);
+  internal_result status = Instance()("ZecallEvent", data, rec);
+  // Assume zecalls are disabled unless we know it is not so.
+  if (status == internal_result::kStatusSuccess) {
+    SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
+    special_rec_data.zecall_disabled = false;
+    Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
+  }
 }
 #endif  // SRC_API_VIEW_HANDLER_H_

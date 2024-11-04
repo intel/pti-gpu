@@ -112,6 +112,9 @@ struct ZeKernelCommand {
   std::string source_file_name_;
   uint32_t source_line_number_ = 0;
   uint32_t corr_id_ = 0;
+  uint32_t callback_id_ = 0;
+  uint64_t api_start_time_ = 0;  // in ns
+  uint64_t api_end_time_ = 0;    // in ns
 };
 
 struct ZeCommandQueue {
@@ -806,6 +809,7 @@ class ZeCollector {
       rec.kid_ = command->kernel_id;
       rec.tid_ = command->tid;
       rec.cid_ = command->corr_id_;
+      rec.callback_id_ = command->callback_id_;
       rec.append_time_ = command->append_time;
       rec.submit_time_ = command->submit_time;
       rec.start_time_ = host_start;
@@ -2346,7 +2350,6 @@ class ZeCollector {
   OnZeApiCallsFinishCallback fcallback_ = nullptr;
   void* callback_data_ = nullptr;
   std::mutex lock_;
-  inline static int32_t trace_all_zecalls = utils::IsSetEnv("PTI_TRACE_ALL_ZECALLS");
 
 #include <pti/pti_cbids_runtime.h>
 

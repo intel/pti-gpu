@@ -23,6 +23,7 @@ size_t completed_buffer_calls = 0;
 size_t completed_buffer_used_bytes = 0;
 uint64_t eid_ = 11;
 pti_result popNullPtrResult = pti_result::PTI_SUCCESS;
+bool special_sycl_rec_present = false;
 bool memory_view_record_created = false;
 bool kernel_view_record_created = false;
 bool kernel_has_sycl_file_info = false;
@@ -35,6 +36,7 @@ bool kernel_launch_func_name = false;
 bool zecall_corrids_unique = true;
 bool zecall_good_id_name = false;
 bool zecall_bad_id_name = false;
+bool zecall_present = false;
 std::set<uint32_t> zecall_corrids_already_seen;
 bool sycl_has_all_records = false;
 uint64_t memory_bytes_copied = 0;
@@ -58,6 +60,7 @@ uint64_t user_real_timestamp = 0;
 // TODO - make the enable type param more generic (maybe a bitmap of somesort) so that we can enable
 // a mishmash of types
 void StartTracing(bool enable_only_zecalls = false) {
+  std::cout << "StartTracing.......\n";
   if (!enable_only_zecalls) {
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
@@ -146,7 +149,7 @@ void Compute(sycl::queue queue, const std::vector<float>& a, const std::vector<f
 }
 }  // namespace
 
-class MainFixtureTest : public ::testing::Test {
+class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, bool>> {
  public:
   static void SetUpTestSuite() {  // Setup shared resource between tests (GPU)
     try {
@@ -169,6 +172,7 @@ class MainFixtureTest : public ::testing::Test {
     completed_buffer_used_bytes = 0;
     eid_ = 11;
     popNullPtrResult = pti_result::PTI_SUCCESS;
+    special_sycl_rec_present = false;
     memory_view_record_created = false;
     kernel_view_record_created = false;
     kernel_has_sycl_file_info = false;
@@ -179,6 +183,7 @@ class MainFixtureTest : public ::testing::Test {
     zecall_corrids_unique = true;
     zecall_good_id_name = false;
     zecall_bad_id_name = false;
+    zecall_present = false;
     zecall_corrids_already_seen.clear();
     memory_bytes_copied = 0;
     memory_view_record_count = 0;
@@ -302,6 +307,7 @@ class MainFixtureTest : public ::testing::Test {
         case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
           pti_view_record_zecalls* rec = reinterpret_cast<pti_view_record_zecalls*>(ptr);
           uint32_t this_corrid = rec->_correlation_id;
+          zecall_present = true;
           if (zecall_corrids_unique &&
               zecall_corrids_already_seen.find(this_corrid) != zecall_corrids_already_seen.end()) {
             zecall_corrids_unique = false;
@@ -318,7 +324,9 @@ class MainFixtureTest : public ::testing::Test {
         }
         case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
           std::string function_name = reinterpret_cast<pti_view_record_sycl_runtime*>(ptr)->_name;
-          std::cout << "Kernel name sycl: " << function_name << "\n";
+          if ((function_name.find("zeCommandListAppendLaunchKernel") != std::string::npos)) {
+            special_sycl_rec_present = true;
+          }
           if ((function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
             kernel_launch_func_name = true;
           } else if ((function_name.find("piEventsWait") != std::string::npos) ||
@@ -581,7 +589,6 @@ TEST_F(MainFixtureTest, SyclRunTimeHasAllRecords) {
 // Default is reduced sycl records
 TEST_F(MainFixtureTest, SyclRunTimeTraceEnvNotSet) {
   int32_t env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
-  std::cout << "env_value: " << env_value << "\n";
   if (env_value < 0) {
     EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
     RunGemm();
@@ -615,7 +622,6 @@ TEST_F(MainFixtureTest, SyclRunTimeTraceEnvExplicitlySetOne) {
 
 TEST_F(MainFixtureTest, SyclRunTimeTraceEnvExplicitlySetOFF) {
   int32_t env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
-  std::cout << "env_value: " << env_value << "\n";
   if (env_value == 0) {
     EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
     RunGemm();
@@ -816,6 +822,43 @@ TEST_F(MainFixtureTest, OnlyZeCallsTraced) {
   EXPECT_EQ(zecall_good_id_name, true);
   EXPECT_EQ(zecall_bad_id_name, true);
 }
+
+TEST_P(MainFixtureTest, ZeCallsGeneration) {
+  // GetParam returns 3 valued tuple: values correspond to (from left to right)
+  //     whether we enable the viewkinds for --- sycl, zecalls, kernel.
+  auto [sycl, zecall, kernel] = GetParam();
+
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+
+  if (kernel) ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  if (sycl) ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  if (zecall) ASSERT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+
+  RunGemmNoTrace();
+
+  if (kernel) ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  if (sycl) ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  if (zecall) ASSERT_EQ(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+
+  if (zecall) {
+    EXPECT_EQ(zecall_present, true);
+    EXPECT_EQ(special_sycl_rec_present, false);
+  } else {
+    // special rec requires (no sycl rec+sycl+kernel enabled+zecalls disabled) -- hence false
+    // expected.
+    EXPECT_EQ(special_sycl_rec_present, false);
+    EXPECT_EQ(zecall_present, false);
+  }
+}
+
+// Tuple values correspond to (from left to right) whether we enable the viewkinds for --- sycl,
+// zecalls, kernel.
+INSTANTIATE_TEST_SUITE_P(
+    MainTests, MainFixtureTest,
+    ::testing::Values(std::make_tuple(true, true, true), std::make_tuple(true, true, false),
+                      std::make_tuple(false, true, true), std::make_tuple(false, true, false),
+                      std::make_tuple(true, false, true), std::make_tuple(true, false, false),
+                      std::make_tuple(false, false, true), std::make_tuple(false, false, false)));
 
 namespace {
 constexpr std::size_t kTestParam1 = 0;

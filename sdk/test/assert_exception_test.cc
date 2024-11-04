@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
+#include <view_handler.h>
 
 #include <cstring>
-
-#include "view_handler.h"
 
 class AssertExceptionFixtureTest : public ::testing::Test {
  protected:

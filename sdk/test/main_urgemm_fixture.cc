@@ -46,6 +46,7 @@ namespace {
 bool memory_view_record_created = false;
 bool kernel_view_record_created = false;
 bool sycl_runtime_record_created = false;
+bool sycl_spv_special_rec_seen = false;
 bool sycl_spv_kernel_seen = false;
 bool sycl_spv_mem_buffer_fill_seen = false;
 bool sycl_spv_mem_buffer_read_seen = false;
@@ -254,6 +255,7 @@ class MainUrFixtureTest : public ::testing::Test {
     memory_view_record_created = false;
     kernel_view_record_created = false;
     sycl_runtime_record_created = false;
+    sycl_spv_special_rec_seen = false;
     sycl_spv_kernel_seen = false;
     sycl_spv_mem_buffer_fill_seen = false;
     sycl_spv_mem_buffer_read_seen = false;
@@ -334,6 +336,9 @@ class MainUrFixtureTest : public ::testing::Test {
               sycl_spv_mem_buffer_write_seen = true;
             } else if ((function_name.find("EnqueueMemBufferCopy") != std::string::npos)) {
               sycl_spv_mem_buffer_copy_seen = true;
+            } else if ((function_name.find("zeCommandListAppendLaunchKernel") !=
+                        std::string::npos)) {
+              sycl_spv_special_rec_seen = true;
             }
             break;
           }
@@ -452,6 +457,7 @@ TEST_F(MainUrFixtureTest, urGemmSpvKernelDetected) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm(true);
   EXPECT_EQ(sycl_spv_kernel_seen, true);
+  EXPECT_EQ(sycl_spv_special_rec_seen, false);
   EXPECT_EQ(sycl_spv_mem_buffer_fill_seen, true);
 }
 
@@ -461,6 +467,7 @@ TEST_F(MainUrFixtureTest, syclGemmSpvRuntimeRecordsDetected) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_EQ(sycl_spv_kernel_seen, true);
+  EXPECT_EQ(sycl_spv_special_rec_seen, false);
   EXPECT_EQ(sycl_spv_mem_buffer_read_seen, true);
   EXPECT_EQ(sycl_spv_mem_buffer_copy_seen, true);
   if (!is_integrated_graphics) EXPECT_EQ(sycl_spv_mem_buffer_write_seen, true);
