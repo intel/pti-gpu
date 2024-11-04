@@ -31,8 +31,10 @@ RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
   zypper addrepo -f -r https://repositories.intel.com/gpu/sles/15sp6/unified/intel-gpu-15sp6.repo && \
   rpm --import https://repositories.intel.com/gpu/intel-graphics.key
 
-RUN zypper --non-interactive install -y \
-  intel-basekit-2024.2.1-98 \
+RUN zypper refresh && \
+  zypper up && \
+  zypper --non-interactive install -y \
+  intel-basekit-2025.0.0-884 \
   intel-level-zero-gpu \
   level-zero \
   intel-gsc \
@@ -48,4 +50,5 @@ RUN zypper --non-interactive install -y \
   libigfxcmrt-devel \
   level-zero-devel \
   intel-metrics-discovery intel-metrics-discovery-devel \
-  intel-metrics-library intel-metrics-library-devel
+  intel-metrics-library intel-metrics-library-devel && \
+  zypper clean -a
