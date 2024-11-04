@@ -285,11 +285,11 @@ int main(int argc, char* argv[]) {
                   std::cout << "------------>     All Monotonic" << std::endl;
                 } else {
                   std::cout << "------------>     Something wrong: NOT All monotonic" << std::endl;
-	              }
-	              if (rec->_sycl_task_begin_timestamp == 0) {
+                }
+                if (rec->_sycl_task_begin_timestamp == 0) {
                   std::cout << "------------>     Something wrong: Sycl Task Begin Time is 0" << std::endl;
                 }
-	              if ( rec->_sycl_enqk_begin_timestamp == 0) {
+                if ( rec->_sycl_enqk_begin_timestamp == 0) {
                  std::cout << "------------>     Something wrong: Sycl Enq Launch Kernel Time is 0" << std::endl;
                 }
               break;

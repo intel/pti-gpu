@@ -25,6 +25,7 @@ inline constexpr static std::array kResultStrTable = {
     PTI_ASSOCIATE_ENUM_MEMBER_TO_DEFAULT(pti_result, PTI_ERROR_DRIVER),
     PTI_ASSOCIATE_ENUM_MEMBER_TO_DEFAULT(pti_result, PTI_ERROR_TRACING_NOT_INITIALIZED),
     PTI_ASSOCIATE_ENUM_MEMBER_TO_DEFAULT(pti_result, PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED),
+    PTI_ASSOCIATE_ENUM_MEMBER_TO_DEFAULT(pti_result, PTI_ERROR_BAD_API_USAGE),
     PTI_ASSOCIATE_ENUM_MEMBER_TO_DEFAULT(pti_result, PTI_ERROR_INTERNAL),
 };
 
@@ -40,6 +41,7 @@ constexpr const char* PtiResultTypeToStringImpl(pti_result result_value) {
     PTI_ENUM_CONVERSION(pti_result, PTI_ERROR_DRIVER, kResultStrTable)
     PTI_ENUM_CONVERSION(pti_result, PTI_ERROR_TRACING_NOT_INITIALIZED, kResultStrTable)
     PTI_ENUM_CONVERSION(pti_result, PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED, kResultStrTable)
+    PTI_ENUM_CONVERSION(pti_result, PTI_ERROR_BAD_API_USAGE, kResultStrTable)
     PTI_ENUM_CONVERSION(pti_result, PTI_ERROR_INTERNAL, kResultStrTable)
   }
   return kResultFallback;

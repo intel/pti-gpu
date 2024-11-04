@@ -171,7 +171,6 @@ FindHeadersPath(
   pti "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
   "tracing.gen" gen_tracing_header LevelZero::level-zero)
 
-
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/xpti_adapter.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
@@ -220,8 +219,54 @@ target_link_libraries(
           spdlog::spdlog
           ${CMAKE_DL_LIBS})
 
+# pti_metrics
+add_library(pti_metrics SHARED "${PROJECT_SOURCE_DIR}/src/pti_metrics.cc"
+                               "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
+
+add_library(Pti::pti_metrics ALIAS pti_metrics)
+
+target_include_directories(
+  pti_metrics
+  PUBLIC "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
+         "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
+         "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
+         "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+          "${PROJECT_SOURCE_DIR}/src/levelzero"
+          "${PROJECT_SOURCE_DIR}/src/utils")
+
+set_target_properties(
+  pti_metrics
+  PROPERTIES VERSION "${PROJECT_VERSION}"
+             SOVERSION "${PTI_API_SOVERSION}"
+             POSITION_INDEPENDENT_CODE ON
+                   DEFINE_SYMBOL "${PTI_DEFINE_SYMBOL}")
+
+if (WIN32)
+  set_target_properties(
+    pti_metrics
+    PROPERTIES OUTPUT_NAME "pti_metrics-${PROJECT_VERSION_MAJOR}-${PROJECT_VERSION_MINOR}"
+               DEBUG_POSTFIX "d"
+  )
+  AddProjectVersionInfo(pti_metrics)
+endif()
+
+target_compile_definitions(
+  pti_metrics
+  PRIVATE $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
+          $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
+          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
+          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
+
 target_link_libraries(
-	pti_all INTERFACE Pti::pti_view)
+  pti_metrics
+  PUBLIC Threads::Threads
+  PRIVATE LevelZero::level-zero
+          spdlog::spdlog
+          ${CMAKE_DL_LIBS})
+
+target_link_libraries(
+	pti_all INTERFACE Pti::pti_view Pti:pti_metrics)
 
 include(CTest)
 if(BUILD_TESTING AND PTI_BUILD_TESTING)
@@ -230,7 +275,7 @@ endif()
 
 # Targets / Install phase
 export(
-  TARGETS pti_all pti pti_view
+  TARGETS pti_all pti pti_view pti_metrics
   FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/PtiTargets.cmake"
   NAMESPACE Pti::)
 
@@ -249,7 +294,7 @@ if(PTI_INSTALL)
     DESTINATION "${PTI_INSTALL_CMAKE_DIR}")
 
   install(
-    TARGETS pti_all pti pti_view
+    TARGETS pti_all pti pti_view pti_metrics
     EXPORT PtiTargets
     LIBRARY DESTINATION ${PTI_INSTALL_LIB_DIR}
             COMPONENT Pti_Runtime
@@ -344,6 +389,7 @@ if(PTI_BUILD_SAMPLES)
  add_subdirectory(samples/vector_sq_add)
  add_subdirectory(samples/onemkl_gemm)
  add_subdirectory(samples/iso3dfd_dpcpp)
+ add_subdirectory(samples/metrics_iso3dfd_dpcpp)
  add_subdirectory(samples/dlworkloads)
 endif()
 

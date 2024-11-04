@@ -10,7 +10,10 @@
 #include <level_zero/ze_api.h>
 #include <level_zero/zet_api.h>
 
+#include <algorithm>
+#include <filesystem>
 #include <limits>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -105,6 +108,7 @@ inline ze_driver_handle_t GetGpuDriver(std::size_t pti_device_id) {
   for (auto* driver : GetDriverList()) {
     for (auto* device : GetDeviceList(driver)) {
       ze_device_properties_t props;
+      std::memset(&props, 0, sizeof(props));
       props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
       props.pNext = nullptr;
       overhead::Init();
@@ -134,6 +138,7 @@ inline ze_device_handle_t GetGpuDevice(std::size_t pti_device_id) {
   for (auto* driver : GetDriverList()) {
     for (auto* device : GetDeviceList(driver)) {
       ze_device_properties_t props;
+      std::memset(&props, 0, sizeof(props));
       props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
       props.pNext = nullptr;
       overhead::Init();
@@ -195,6 +200,7 @@ inline std::string GetDeviceName(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;
   ze_device_properties_t props;
+  std::memset(&props, 0, sizeof(props));
   props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
   props.pNext = nullptr;
   overhead::Init();
@@ -204,9 +210,137 @@ inline std::string GetDeviceName(ze_device_handle_t device) {
   return static_cast<char*>(props.name);
 }
 
+inline std::string GetMetricTypedValue(const zet_typed_value_t& typed_value) {
+  switch (typed_value.type) {
+    case ZET_VALUE_TYPE_UINT32:
+      return std::to_string(typed_value.value.ui32);
+    case ZET_VALUE_TYPE_UINT64:
+      return std::to_string(typed_value.value.ui64);
+    case ZET_VALUE_TYPE_FLOAT32:
+      return std::to_string(typed_value.value.fp32);
+    case ZET_VALUE_TYPE_FLOAT64:
+      return std::to_string(typed_value.value.fp64);
+    case ZET_VALUE_TYPE_BOOL8:
+      return std::to_string(static_cast<uint32_t>(typed_value.value.b8));
+    default:
+      break;
+  }
+  return "UNKNOWN";
+}
+
+inline uint32_t GetMetricCount(zet_metric_group_handle_t group) {
+  PTI_ASSERT(group != nullptr);
+
+  zet_metric_group_properties_t group_props;
+  std::memset(&group_props, 0, sizeof(group_props));
+  group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
+  ze_result_t status = zetMetricGroupGetProperties(group, &group_props);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  return group_props.metricCount;
+}
+
+inline std::string GetMetricUnits(const char* units) {
+  PTI_ASSERT(units != nullptr);
+
+  std::string result = units;
+  if (result.find("null") != std::string::npos) {
+    result = "";
+  } else if (result.find("percent") != std::string::npos) {
+    result = "%";
+  }
+
+  return result;
+}
+
+inline std::vector<std::string> GetMetricList(zet_metric_group_handle_t group) {
+  PTI_ASSERT(group != nullptr);
+
+  uint32_t metric_count = GetMetricCount(group);
+  PTI_ASSERT(metric_count > 0);
+
+  std::vector<zet_metric_handle_t> metric_list(metric_count);
+  ze_result_t status = zetMetricGet(group, &metric_count, metric_list.data());
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  PTI_ASSERT(metric_count == metric_list.size());
+
+  std::vector<std::string> name_list;
+  for (auto metric : metric_list) {
+    zet_metric_properties_t metric_props;
+    std::memset(&metric_props, 0, sizeof(metric_props));
+    metric_props.stype = ZET_STRUCTURE_TYPE_METRIC_PROPERTIES;
+
+    status = zetMetricGetProperties(metric, &metric_props);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    std::string units = GetMetricUnits(metric_props.resultUnits);
+    std::string name = metric_props.name;
+    if (!units.empty()) {
+      name += "[" + units + "]";
+    }
+    name_list.push_back(name);
+  }
+
+  return name_list;
+}
+
+inline uint32_t GetMetricId(const std::vector<std::string>& metric_list,
+                            const std::string& metric_name) {
+  PTI_ASSERT(!metric_list.empty());
+  PTI_ASSERT(!metric_name.empty());
+
+  for (size_t i = 0; i < metric_list.size(); ++i) {
+    if (metric_list[i].find(metric_name) == 0) {
+      return i;
+    }
+  }
+
+  return metric_list.size();
+}
+
+/* Find all metric groups for given device regardless of type
+ *
+ * @param[in] device Target device
+ * @param[out] metric_groups Vector of metric groups found
+ */
+inline void FindMetricGroups(ze_device_handle_t device,
+                             std::vector<zet_metric_group_handle_t>& metric_groups) {
+  PTI_ASSERT(device != nullptr);
+
+  ze_result_t status = ZE_RESULT_SUCCESS;
+  uint32_t group_count = 0;
+  status = zetMetricGroupGet(device, &group_count, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  if (group_count == 0) {
+    return;
+  }
+
+  std::vector<zet_metric_group_handle_t> group_list(group_count, nullptr);
+  status = zetMetricGroupGet(device, &group_count, group_list.data());
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  for (uint32_t i = 0; i < group_count; ++i) {
+    metric_groups.push_back(group_list[i]);
+  }
+}
+
+std::filesystem::path CreateTempDirectory() {
+  auto tmp_dir = std::filesystem::temp_directory_path();
+  std::random_device rand_dev;    // uniformly-distributed integer random number generator
+  std::mt19937 prng(rand_dev());  // pseudorandom number generator
+  std::uniform_int_distribution<uint64_t> rand_num(0);  // random number
+  std::filesystem::path path;
+  std::string dir_name = "pti_" + std::to_string(rand_num(prng));
+  path = tmp_dir / dir_name;
+  std::filesystem::create_directory(path);
+
+  return path;
+}
+
 inline size_t GetKernelMaxSubgroupSize(ze_kernel_handle_t kernel) {
   PTI_ASSERT(kernel != nullptr);
-  ze_kernel_properties_t props{};
+  ze_kernel_properties_t props;
+  std::memset(&props, 0, sizeof(props));
   overhead::Init();
   ze_result_t status = zeKernelGetProperties(kernel, &props);
   overhead_fini("zeKernelGetProperties");
@@ -251,6 +385,7 @@ inline void GetDeviceTimestamps(ze_device_handle_t device, uint64_t* host_timest
 inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_device_properties_t props;
+  std::memset(&props, 0, sizeof(props));
   props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
   props.pNext = nullptr;
   overhead::Init();
@@ -263,6 +398,7 @@ inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
 inline uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
   ze_device_properties_t props;
+  std::memset(&props, 0, sizeof(props));
   props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
   props.pNext = nullptr;
   overhead::Init();
@@ -273,6 +409,24 @@ inline uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
   return ((props.kernelTimestampValidBits == 64)
               ? (std::numeric_limits<uint64_t>::max)()
               : ((1ULL << props.kernelTimestampValidBits) - 1ULL));
+}
+
+inline uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
+  ze_device_properties_t props;
+  std::memset(&props, 0, sizeof(props));
+  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
+  overhead::Init();
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  overhead_fini("zeDeviceGetProperties");
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  uint32_t devicemask = (props.deviceId & 0xFF00);
+  if ((devicemask == 0x5600) || (devicemask == 0x4F00) || (devicemask == 0x0B00)) {
+    return (1ull << (props.kernelTimestampValidBits - 1)) - 1ull;
+  } else {
+    return ((props.kernelTimestampValidBits == 64)
+                ? (std::numeric_limits<uint64_t>::max)()
+                : ((1ull << props.kernelTimestampValidBits) - 1ull));
+  }
 }
 
 inline ze_api_version_t GetDriverVersion(ze_driver_handle_t driver) {
@@ -294,6 +448,7 @@ inline bool GetDeviceTimerFrequency_TimestampMask_UUID(ze_device_handle_t device
   PTI_ASSERT(device != nullptr);
 
   ze_device_properties_t props;
+  std::memset(&props, 0, sizeof(props));
   props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
   props.pNext = nullptr;
   overhead::Init();

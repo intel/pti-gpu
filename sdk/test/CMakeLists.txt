@@ -416,8 +416,13 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   add_test(NAME run-onemkl_gemm_exe COMMAND onemkl_gemm_exe)
   add_test(NAME run-vec_sqadd COMMAND vec_sqadd)
   add_test(NAME run-iso COMMAND iso3dfd 256 256 256 32 8 64 10 gpu)
+  add_test(NAME run-metrics-iso COMMAND metrics_iso3dfd 256 256 256 32 8 64 10 gpu)
 
   set_tests_properties(
     mt-awk-test mt-awk-test-immediate run-dlworkload run-dpc_gemm run-onemkl_gemm_exe run-vec_sqadd
     run-iso PROPERTIES LABELS "functional;samples")
+
+  set_tests_properties(
+    run-metrics-iso PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS "functional;samples;hw-metrics")
+
 endif()
