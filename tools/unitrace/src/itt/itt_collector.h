@@ -19,6 +19,7 @@
 
 static std::string rank_mpi = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
 typedef void (*OnIttLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts);
+typedef void (*OnCclLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, uint64_t buff_size);
 typedef void (*OnMpiLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, size_t src_size, int src_location, int src_tag,
                                      size_t dst_size, int dst_location, int dst_tag);
 
@@ -104,8 +105,21 @@ class IttCollector {
                                     dst_size, dst_location, dst_tag);
     }
   }
+
+  void Log(const char *name, uint64_t start_ts, uint64_t end_ts, uint64_t buff_size) {
+    if (ccl_callback_ == nullptr) {
+      std::cerr<<"[ERROR] CCL logging is enabled but callback is not set.\n";
+      return;
+    }
+    ccl_callback_(name, start_ts, end_ts, buff_size);
+  }
+
   void SetMpiCallback(OnMpiLoggingCallback callback) {
     mpi_callback_ = callback;
+  }
+
+  void SetCclCallback(OnCclLoggingCallback callback) {
+    ccl_callback_ = callback;
   }
 
   std::string CclSummaryReport() const {
@@ -176,6 +190,7 @@ class IttCollector {
 
  private: // Data
   OnIttLoggingCallback callback_ = nullptr;
+  OnCclLoggingCallback ccl_callback_ = nullptr;
   OnMpiLoggingCallback mpi_callback_ = nullptr;
   bool is_itt_ccl_summary_ = false;
   bool is_itt_chrome_logging_on_ = false;
@@ -192,6 +207,7 @@ struct ThreadTaskDescriptor {
   char domain[512];
   char name[512];
   uint64_t start_time;
+  uint64_t buff_size;
 };
 
 thread_local std::stack<ThreadTaskDescriptor> task_desc;
@@ -305,6 +321,7 @@ ITT_EXTERN_C void ITTAPI __itt_task_begin(const __itt_domain *domain, __itt_id t
   }
 
   desc.start_time = UniTimer::GetHostTimestamp();
+  desc.buff_size = 0;
   task_desc.push(desc);
 }
 
@@ -333,7 +350,12 @@ ITT_EXTERN_C void ITTAPI __itt_task_end(const __itt_domain *domain)
       AddFunctionTime(name, end-start);
     }
     if (itt_collector->IsEnableChromeLoggingOn()) {
-      itt_collector->Log(task, start, end);
+      if (task_desc.top().buff_size > 0) {
+        auto buffSize = task_desc.top().buff_size;
+        itt_collector->Log(task, start, end, buffSize);
+      } else {
+        itt_collector->Log(task, start, end);
+      }
     }
     task_desc.pop();
   }
@@ -767,6 +789,19 @@ ITT_EXTERN_C void ITTAPI __itt_task_end_overlapped(const __itt_domain *domain, _
 
 ITT_EXTERN_C void ITTAPI __itt_metadata_add(const __itt_domain *domain, __itt_id id, __itt_string_handle *key, __itt_metadata_type type, size_t count, void *data)
 {
+  if (!UniController::IsCollectionEnabled()) {
+    return;
+  }
+
+  if (!itt_collector->IsCclSummaryOn() && !itt_collector->IsEnableChromeLoggingOn()) {
+    return;
+  }
+
+  uint64_t size = *((uint64_t*)data);
+
+  if (!task_desc.empty() && !strcmp(task_desc.top().domain, domain->nameA)) {
+    task_desc.top().buff_size = size;
+  }
 }
 
 ITT_EXTERN_C void ITTAPI __itt_metadata_str_add(const __itt_domain *domain, __itt_id id, __itt_string_handle *key, const char *data, size_t length)

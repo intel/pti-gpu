@@ -32,11 +32,15 @@ typedef struct MpiArgs_ {
   int dst_tag;
   size_t src_size;
   size_t dst_size;
-}MpiArgs;
+} MpiArgs;
 
 typedef struct IttArgs_ {
 /*Add arguments here*/
-}IttArgs;
+} IttArgs;
+
+typedef struct CclArgs_ {
+  uint64_t buff_size;
+} CclArgs;
 
 typedef struct HostEventRecord_ {
   uint64_t id_;
@@ -49,8 +53,9 @@ typedef struct HostEventRecord_ {
   API_TYPE api_type_ = API_TYPE::NONE;
   union{
     MpiArgs mpi_args_;
+    CclArgs ccl_args_;
     IttArgs itt_args_;
-   };
+  };
 } HostEventRecord;
 
 

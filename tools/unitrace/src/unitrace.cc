@@ -259,6 +259,7 @@ int ParseArgs(int argc, char* argv[]) {
 #endif
       ++app_index;
     } else if (strcmp(argv[i], "--chrome-ccl-logging") == 0) {
+      utils::SetEnv("UNITRACE_ChromeCclLogging", "1");
       utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
       utils::SetEnv("CCL_ITT_LEVEL", "1");
       ++app_index;

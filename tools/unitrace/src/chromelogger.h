@@ -593,7 +593,6 @@ class TraceBuffer {
           std::string str_args = ""; // build arguments
 
           if (args.src_size != 0) {
-            str_args = "";
             str_args += "\"ssize\": " + std::to_string(args.src_size);
             str_args += ", \"src\": " + std::to_string(args.src_location);
             str_args += ", \"stag\": " + std::to_string(args.src_tag);
@@ -607,6 +606,10 @@ class TraceBuffer {
             str_args += ", \"dtag\": " +std::to_string(args.dst_tag);
           }
 
+          pkt.args = std::move(str_args);
+        } else if (rec.api_type_ == CCL) {
+          CclArgs& args = rec.ccl_args_;
+          std::string str_args = "\"ssize\": " + std::to_string(args.buff_size);
           pkt.args = std::move(str_args);
         }
         pkt.cat = cpu_op;
@@ -1332,6 +1335,27 @@ class ChromeLogger {
         rec->start_time_ = start_ts;
         rec->end_time_ = end_ts;
         rec->id_ = 0;
+        thread_local_buffer_.BufferHostEvent();
+      }
+    }
+
+    static void CclLoggingCallback(const char *name, uint64_t start_ts, uint64_t end_ts, uint64_t buff_size) {
+      if (!thread_local_buffer_.IsFinalized()) {
+        HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
+
+        if (name != nullptr) {
+          rec->name_ = strdup(name);
+        } else {
+          rec->name_ = nullptr;
+        }
+
+        rec->type_ = EVENT_COMPLETE;
+        rec->api_id_ = IttTracingId;
+        rec->start_time_ = start_ts;
+        rec->end_time_ = end_ts;
+        rec->id_ = 0;
+        rec->api_type_ = CCL;
+        rec->ccl_args_.buff_size = buff_size;
         thread_local_buffer_.BufferHostEvent();
       }
     }
