@@ -142,7 +142,7 @@ class PtiMetricsProfiler {
     // 2 is for systems with 2 tiles
     // 512 is for extra padding
     // TODO: may need to be adjusted per specific target
-    return max_metric_samples_ * PTI_METRIC_COUNT_MAX * 2 + 512;
+    return static_cast<uint64_t>(max_metric_samples_) * PTI_METRIC_COUNT_MAX * 2 + 512;
   }
 
   virtual ~PtiMetricsProfiler() {

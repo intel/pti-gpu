@@ -705,7 +705,7 @@ int main(int argc, char* argv[]) {
   bool sycl = true;
   bool omp = true;
   bool error = false;
-  bool is_gpu = true;
+  bool is_gpu = false;
   bool is_cpu = false;
 
   size_t n1, n2, n3;
