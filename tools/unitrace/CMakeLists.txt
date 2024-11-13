@@ -158,14 +158,55 @@ target_include_directories(unitrace_tool PRIVATE "${L0_INC_PATH}")
 
 add_executable(unitrace "${PROJECT_SOURCE_DIR}/src/unitrace.cc")
 
-# Find whether the standard library in use has std::filesystem or
-# std::experimental::filesystem, so that the code can include, call,
-# and link accordingly.
-find_package(Filesystem REQUIRED COMPONENTS Final Experimental)
-target_link_libraries(unitrace std::filesystem)
-target_compile_definitions(unitrace PRIVATE
-    CXX_FILESYSTEM_IS_EXPERIMENTAL=${CXX_FILESYSTEM_IS_EXPERIMENTAL}
-    CXX_FILESYSTEM_NAMESPACE=${CXX_FILESYSTEM_NAMESPACE})
+if(UNIX)
+    include(CMakePushCheckState)
+    cmake_push_check_state()
+    cmake_reset_check_state()
+    include(CheckCXXSourceCompiles)
+    string(CONFIGURE [[
+        #include <filesystem>
+        int main()
+        {
+            if (!std::filesystem::exists(std::filesystem::path("/tmp"))) {
+                return 0;
+            }
+            return 1;
+        }
+        ]] code @ONLY)
+    check_cxx_source_compiles("${code}" success)
+    if(success)
+        set(CXX_STD_FILESYSTEM_EXPERIMENTAL 0)
+    else()
+        string(CONFIGURE [[
+        #include <experimental/filesystem>
+        int main()
+        {
+            if (!std::experimental::filesystem::exists(std::experimental::filesystem::path("/tmp"))) {
+                return 0;
+            }
+            return 1;
+        }
+        ]] code @ONLY)
+        set(saved_libs ${CMAKE_REQUIRED_LIBRARIES})
+        set(CMAKE_REQUIRED_LIBRARIES ${saved_libs} "-lstdc++fs")
+        check_cxx_source_compiles("${code}" success)
+        if (success)
+            set(CXX_STD_FILESYSTEM_EXPERIMENTAL 1)
+            target_link_libraries(unitrace stdc++fs)
+        else()
+            set(CMAKE_REQUIRED_LIBRARIES ${saved_libs} "-lc++fs")
+            check_cxx_source_compiles("${code}" success)
+            if (success)
+                set(CXX_STD_FILESYSTEM_EXPERIMENTAL 1)
+                target_link_libraries(unitrace c++fs)
+            else()
+                message(FATAL_ERROR "C++17 filesystem support is required")
+            endif()
+        endif()
+    endif()
+    cmake_pop_check_state()
+    target_compile_definitions(unitrace PRIVATE CXX_STD_FILESYSTEM_EXPERIMENTAL=${CXX_STD_FILESYSTEM_EXPERIMENTAL})
+endif()
 
 set(_use_mpi 1)
 
@@ -184,6 +225,7 @@ target_include_directories(unitrace
 if(UNIX)
   target_link_libraries(unitrace pthread dl)
 endif()
+
 FindL0Library(unitrace)
 FindL0Headers(unitrace)
 GetGitCommitHash(unitrace "${PROJECT_SOURCE_DIR}/scripts/get_commit_hash.py" "unitrace_commit_hash.h" get_git_commit_hash_unitrace)

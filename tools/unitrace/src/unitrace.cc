@@ -6,21 +6,31 @@
 
 #include <array>
 #include <iostream>
-#if CXX_FILESYSTEM_IS_EXPERIMENTAL
-#include <experimental/filesystem>
-#else
-#include <filesystem>
-#endif
-#include <csignal>
-#include <sys/types.h>
 
 #if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
+
+#if CXX_STD_FILESYSTEM_EXPERIMENTAL
+#include <experimental/filesystem>
+#define CXX_STD_FILESYSTEM_NAMESPACE std::experimental::filesystem
+#else /* CXX_STD_FILESYSTEM_EXPERIMENTAL */
+#include <filesystem>
+#define CXX_STD_FILESYSTEM_NAMESPACE std::filesystem
+#endif /* CXX_STD_FILESYSTEM_EXPERIMENTAL */
+
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <dlfcn.h>
+
+#else /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
+
+#include <filesystem>
+#define CXX_STD_FILESYSTEM_NAMESPACE std::filesystem
+
 #endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
+#include <csignal>
 #include <stdlib.h>
 #include "ze_metrics.h"
 #include "utils.h"
@@ -555,10 +565,10 @@ void CleanUp(int sig) {
   if (data_dir == nullptr) {
     return;
   }
-  for (const auto& e: CXX_FILESYSTEM_NAMESPACE::directory_iterator(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
-    CXX_FILESYSTEM_NAMESPACE::remove_all(e.path());
+  for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+    CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
   }
-  if (CXX_FILESYSTEM_NAMESPACE::remove(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
+  if (CXX_STD_FILESYSTEM_NAMESPACE::remove(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
     std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
   }
   _Exit(-1);
@@ -724,9 +734,9 @@ int main(int argc, char *argv[]) {
         DisableProfiling();
       }
 
-      if (CXX_FILESYSTEM_NAMESPACE::exists(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
-        for (const auto& e: CXX_FILESYSTEM_NAMESPACE::directory_iterator(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
-          CXX_FILESYSTEM_NAMESPACE::remove_all(e.path());
+      if (CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+        for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+          CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
         }
         if (remove(data_dir)) {
           std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
@@ -738,9 +748,9 @@ int main(int argc, char *argv[]) {
         DisableProfiling();
       }
 
-      if (CXX_FILESYSTEM_NAMESPACE::exists(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
-        for (const auto& e: CXX_FILESYSTEM_NAMESPACE::directory_iterator(CXX_FILESYSTEM_NAMESPACE::path(data_dir))) {
-          CXX_FILESYSTEM_NAMESPACE::remove_all(e.path());
+      if (CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+        for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+          CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
         }
         if (remove(data_dir)) {
           std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
@@ -766,7 +776,7 @@ int main(int argc, char *argv[]) {
       exit(-1);
     }
 
-    if (!std::filesystem::exists(std::filesystem::path(tpath))) {
+    if (!CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(tpath))) {
       // First check if folder for temporary files exist
       std::cerr << "[ERROR] Directory for temporary files does not exist." << std::endl;
       exit(-1);
@@ -865,9 +875,9 @@ int main(int argc, char *argv[]) {
   }
 
   if (metrics_enabled) {
-    if (std::filesystem::exists(std::filesystem::path(data_dir))) {
-      for (const auto& e : std::filesystem::directory_iterator(std::filesystem::path(data_dir))) {
-        std::filesystem::remove_all(e.path());
+    if (CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+      for (const auto& e : CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+        CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
       }
       if (RemoveDirectory(LPCSTR(data_dir)) == 0) {
         std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
