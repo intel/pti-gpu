@@ -163,40 +163,32 @@ if(UNIX)
     cmake_push_check_state()
     cmake_reset_check_state()
     include(CheckCXXSourceCompiles)
-    string(CONFIGURE [[
-        #include <filesystem>
+    set(code
+        "#include <filesystem>
         int main()
         {
-            if (!std::filesystem::exists(std::filesystem::path("/tmp"))) {
-                return 0;
-            }
-            return 1;
-        }
-        ]] code @ONLY)
-    check_cxx_source_compiles("${code}" success)
-    if(success)
+            return std::filesystem::exists(std::filesystem::path(\"/tmp\"));
+        }")
+    check_cxx_source_compiles("${code}" FILESYSTEM_JUST_WORKS)
+    if(FILESYSTEM_JUST_WORKS)
         set(CXX_STD_FILESYSTEM_EXPERIMENTAL 0)
     else()
-        string(CONFIGURE [[
-        #include <experimental/filesystem>
+    set(code
+        "#include <experimental/filesystem>
         int main()
         {
-            if (!std::experimental::filesystem::exists(std::experimental::filesystem::path("/tmp"))) {
-                return 0;
-            }
-            return 1;
-        }
-        ]] code @ONLY)
+            return std::experimental::filesystem::exists(std::experimental::filesystem::path(\"/tmp\"));
+        }")
         set(saved_libs ${CMAKE_REQUIRED_LIBRARIES})
         set(CMAKE_REQUIRED_LIBRARIES ${saved_libs} "-lstdc++fs")
-        check_cxx_source_compiles("${code}" success)
-        if (success)
+        check_cxx_source_compiles("${code}" FILESYSTEM_NEEDS_LIBSTDCXXFS)
+        if (FILESYSTEM_NEEDS_LIBSTDCXXFS)
             set(CXX_STD_FILESYSTEM_EXPERIMENTAL 1)
             target_link_libraries(unitrace stdc++fs)
         else()
             set(CMAKE_REQUIRED_LIBRARIES ${saved_libs} "-lc++fs")
-            check_cxx_source_compiles("${code}" success)
-            if (success)
+            check_cxx_source_compiles("${code}" FILESYSTEM_NEEDS_LIBCXXFS)
+            if (FILESYSTEM_NEEDS_LIBCXXFS)
                 set(CXX_STD_FILESYSTEM_EXPERIMENTAL 1)
                 target_link_libraries(unitrace c++fs)
             else()
