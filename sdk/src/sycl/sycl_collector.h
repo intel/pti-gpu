@@ -16,14 +16,9 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <string>
 #include <string_view>
 #include <unordered_set>
-#ifdef PTI_DEBUG
-#include <map>
-#include <memory>
-#endif
-
-#include <string>
 #include <xpti/xpti_trace_framework.hpp>
 
 #include "library_loader.h"
@@ -46,30 +41,6 @@ inline constexpr uint64_t kDefaultQueueId = PTI_INVALID_QUEUE_ID;
 using OnSyclRuntimeViewCallback = void (*)(void* data, ZeKernelCommandExecutionRecord& kcexec);
 
 enum class SyclImpl { kPi, kUr };
-
-#ifdef PTI_DEBUG
-
-// keeping this for future SYCL nodes/tasks debug
-struct sycl_node_t {
-  uint64_t _id;
-  uint64_t _node_create_time;
-  std::string _source_file_name;
-  uint32_t _source_line_number;
-  std::string _name;
-  uint32_t _task_begin_count;
-  uint32_t _task_end_count;
-  sycl_node_t(uint64_t id)
-      : _id(id),
-        _node_create_time(0ULL),
-        _source_file_name(kUnknownFunctionName),
-        _source_line_number(0UL),
-        _task_begin_count(0UL),
-        _task_end_count(0UL){};
-};
-
-inline thread_local std::map<uint64_t, std::unique_ptr<sycl_node_t>> s_node_map = {};
-
-#endif
 
 inline thread_local std::map<uint64_t, uint64_t> node_q_map = {};
 struct SyclUrFuncT {
@@ -225,15 +196,6 @@ class SyclCollector {
                                            const void* UserData) {
     auto Payload = xptiQueryPayload(Event);
     uint64_t Time = utils::GetTime();
-    std::string Name{kUnknownFunctionName};
-
-    // TODO: Truncate is one of hotspots impacting the collection overhead.
-    // Do we really need it??
-    if (Payload) {
-      if (Payload->name_sid() != xpti::invalid_id) {
-        Name = Truncate(Payload->name);
-      }
-    }
 
     uint64_t ID = Event ? Event->unique_id : 0;
     uint64_t Instance_ID = Event ? Event->instance_id : 0;
@@ -244,8 +206,7 @@ class SyclCollector {
 
     SPDLOG_TRACE("{}: TraceType: {} - id: {}", Time, GetTracePointTypeString(trace_type),
                  TraceType);
-    SPDLOG_TRACE(" Event_id: {}, Instance_id: {}, pid: {}, tid: {} name: {}", ID, Instance_ID, pid,
-                 tid, Name.c_str());
+    SPDLOG_TRACE(" Event_id: {}, Instance_id: {}, pid: {}, tid: {}", ID, Instance_ID, pid, tid);
 
     switch (trace_type) {
       case xpti::trace_point_type_t::function_with_args_begin:
@@ -332,13 +293,6 @@ class SyclCollector {
         }
         break;
       case xpti::trace_point_type_t::task_begin:
-#ifdef PTI_DEBUG
-        if (s_node_map.find(ID) != s_node_map.end()) {
-          (s_node_map[ID]->_task_begin_count)++;
-        } else {
-          SPDLOG_WARN("Unexpected: Node not found at Task Begin, ID: {}, Name: {}", ID, Name);
-        }
-#endif
         if (Event) {
           xpti::metadata_t* Metadata = xptiQueryMetadata(Event);
           for (const auto& Item : *Metadata) {
@@ -360,13 +314,6 @@ class SyclCollector {
         }
         break;
       case xpti::trace_point_type_t::task_end:
-#ifdef PTI_DEBUG
-        if (s_node_map.find(ID) != s_node_map.end()) {
-          (s_node_map[ID]->_task_end_count)++;
-        } else {
-          SPDLOG_WARN("Unexpected: Node not found at Task End, ID: {}, Name {}", ID, Name);
-        }
-#endif
         break;
       case xpti::trace_point_type_t::queue_create:
         break;
@@ -393,34 +340,6 @@ class SyclCollector {
               sycl_data_mview.sycl_queue_id_ = node_q_map[ID];
             }
           }
-        }
-#ifdef PTI_DEBUG
-        const char* source_file_name = nullptr;
-        uint32_t source_line_number = 0;
-        if (Payload) {
-          source_file_name = Payload->source_file;
-          source_line_number = Payload->line_no;
-        }
-        // From the experiments found that a "simple" Node Created once per
-        // program so if a node (the same kernel task, defined at one specific
-        // source location) is used at multiple threads - only one thread will
-        // create its node. With that below warning is not relevant for "simple"
-        // multi-threaded kernel submission.. but for some time will keep it
-        // around
-        if (s_node_map.find(ID) != s_node_map.end()) {
-          SPDLOG_WARN("Unexpected: Node found before creation, ID: {}, Name: {}", ID, Name);
-        }
-        auto node = std::make_unique<sycl_node_t>(ID);
-        if (source_file_name) {
-          node->_source_file_name = source_file_name;
-        }
-        node->_source_line_number = source_line_number;
-        node->_name = Name;
-        node->_node_create_time = Time;
-        s_node_map[ID] = std::move(node);
-#endif
-        if (Name.find("Memory Transfer (Copy)") != std::string::npos) {
-          sycl_data_mview.sycl_task_begin_time_ = Time;
         }
         break;
       }

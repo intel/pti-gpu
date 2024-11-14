@@ -9,6 +9,7 @@
 
 #include <level_zero/ze_api.h>
 #include <level_zero/zet_api.h>
+#include <pti/pti_cbids_runtime.h>
 
 #include <algorithm>
 #include <limits>
@@ -30,7 +31,7 @@ inline std::vector<ze_driver_handle_t> GetDriverList() {
   uint32_t driver_count = 0;
   overhead::Init();
   status = zeDriverGet(&driver_count, nullptr);
-  overhead_fini("zeDriverGet");
+  overhead_fini(zeDriverGet_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (driver_count == 0) {
@@ -40,7 +41,7 @@ inline std::vector<ze_driver_handle_t> GetDriverList() {
   std::vector<ze_driver_handle_t> driver_list(driver_count);
   overhead::Init();
   status = zeDriverGet(&driver_count, driver_list.data());
-  overhead_fini("zeDriverGet");
+  overhead_fini(zeDriverGet_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return driver_list;
@@ -53,7 +54,7 @@ inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) 
   uint32_t device_count = 0;
   overhead::Init();
   status = zeDeviceGet(driver, &device_count, nullptr);
-  overhead_fini("zeDriverGet");
+  overhead_fini(zeDriverGet_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (device_count == 0) {
@@ -63,7 +64,7 @@ inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) 
   std::vector<ze_device_handle_t> device_list(device_count);
   overhead::Init();
   status = zeDeviceGet(driver, &device_count, device_list.data());
-  overhead_fini("zeDriverGet");
+  overhead_fini(zeDriverGet_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return device_list;
@@ -86,7 +87,7 @@ inline std::vector<ze_device_handle_t> GetSubDeviceList(ze_device_handle_t devic
   uint32_t sub_device_count = 0;
   overhead::Init();
   status = zeDeviceGetSubDevices(device, &sub_device_count, nullptr);
-  overhead_fini("zeDeviceGetSubDevices");
+  overhead_fini(zeDeviceGetSubDevices_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (sub_device_count == 0) {
@@ -96,7 +97,7 @@ inline std::vector<ze_device_handle_t> GetSubDeviceList(ze_device_handle_t devic
   std::vector<ze_device_handle_t> sub_device_list(sub_device_count);
   overhead::Init();
   status = zeDeviceGetSubDevices(device, &sub_device_count, sub_device_list.data());
-  overhead_fini("zeDeviceGetSubDevices");
+  overhead_fini(zeDeviceGetSubDevices_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return sub_device_list;
@@ -113,7 +114,7 @@ inline ze_driver_handle_t GetGpuDriver(std::size_t pti_device_id) {
       props.pNext = nullptr;
       overhead::Init();
       ze_result_t status = zeDeviceGetProperties(device, &props);
-      overhead_fini("zeDeviceGetProperties");
+      overhead_fini(zeDeviceGetProperties_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       if (props.type == ZE_DEVICE_TYPE_GPU) {
         driver_list.push_back(driver);
@@ -143,7 +144,7 @@ inline ze_device_handle_t GetGpuDevice(std::size_t pti_device_id) {
       props.pNext = nullptr;
       overhead::Init();
       ze_result_t status = zeDeviceGetProperties(device, &props);
-      overhead_fini("zeDeviceGetProperties");
+      overhead_fini(zeDeviceGetProperties_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       if (props.type == ZE_DEVICE_TYPE_GPU) {
         device_list.push_back(device);
@@ -191,7 +192,7 @@ inline ze_context_handle_t GetContext(ze_driver_handle_t driver) {
 
   overhead::Init();
   status = zeContextCreate(driver, &context_desc, &context);
-  overhead_fini("zeContextCreate");
+  overhead_fini(zeContextCreate_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return context;
 }
@@ -205,7 +206,7 @@ inline std::string GetDeviceName(ze_device_handle_t device) {
   props.pNext = nullptr;
   overhead::Init();
   status = zeDeviceGetProperties(device, &props);
-  overhead_fini("zeDeviceGetProperties");
+  overhead_fini(zeDeviceGetProperties_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return static_cast<char*>(props.name);
 }
@@ -343,7 +344,7 @@ inline size_t GetKernelMaxSubgroupSize(ze_kernel_handle_t kernel) {
   std::memset(&props, 0, sizeof(props));
   overhead::Init();
   ze_result_t status = zeKernelGetProperties(kernel, &props);
-  overhead_fini("zeKernelGetProperties");
+  overhead_fini(zeKernelGetProperties_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return props.maxSubgroupSize;
 }
@@ -354,14 +355,14 @@ inline std::string GetKernelName(ze_kernel_handle_t kernel, bool demangle = fals
   size_t size = 0;
   overhead::Init();
   ze_result_t status = zeKernelGetName(kernel, &size, nullptr);
-  overhead_fini("zeKernelGetName");
+  overhead_fini(zeKernelGetName_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   PTI_ASSERT(size > 0);
 
   std::vector<char> name(size);
   overhead::Init();
   status = zeKernelGetName(kernel, &size, name.data());
-  overhead_fini("zeKernelGetName");
+  overhead_fini(zeKernelGetName_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   PTI_ASSERT(name[size - 1] == '\0');
 
@@ -378,7 +379,7 @@ inline void GetDeviceTimestamps(ze_device_handle_t device, uint64_t* host_timest
   PTI_ASSERT(device_timestamp != nullptr);
   overhead::Init();
   ze_result_t status = zeDeviceGetGlobalTimestamps(device, host_timestamp, device_timestamp);
-  overhead_fini("zeDeviceGetGlobalTimestamps");
+  overhead_fini(zeDeviceGetGlobalTimestamps_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 }
 
@@ -390,7 +391,7 @@ inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
   props.pNext = nullptr;
   overhead::Init();
   ze_result_t status = zeDeviceGetProperties(device, &props);
-  overhead_fini("zeDeviceGetProperties");
+  overhead_fini(zeDeviceGetProperties_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   return props.timerResolution;
 }
@@ -403,7 +404,7 @@ inline uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
   props.pNext = nullptr;
   overhead::Init();
   ze_result_t status = zeDeviceGetProperties(device, &props);
-  overhead_fini("zeDeviceGetProperties");
+  overhead_fini(zeDeviceGetProperties_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return ((props.kernelTimestampValidBits == 64)
@@ -417,7 +418,7 @@ inline uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
   props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
   overhead::Init();
   ze_result_t status = zeDeviceGetProperties(device, &props);
-  overhead_fini("zeDeviceGetProperties");
+  overhead_fini(zeDeviceGetProperties_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   uint32_t devicemask = (props.deviceId & 0xFF00);
   if ((devicemask == 0x5600) || (devicemask == 0x4F00) || (devicemask == 0x0B00)) {
@@ -435,7 +436,7 @@ inline ze_api_version_t GetDriverVersion(ze_driver_handle_t driver) {
   ze_api_version_t version = ZE_API_VERSION_FORCE_UINT32;
   overhead::Init();
   ze_result_t status = zeDriverGetApiVersion(driver, &version);
-  overhead_fini("zeDriverGetApiVersion");
+  overhead_fini(zeDriverGetApiVersion_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return version;
@@ -453,7 +454,7 @@ inline bool GetDeviceTimerFrequency_TimestampMask_UUID(ze_device_handle_t device
   props.pNext = nullptr;
   overhead::Init();
   ze_result_t status = zeDeviceGetProperties(device, &props);
-  overhead_fini("zeDeviceGetProperties");
+  overhead_fini(zeDeviceGetProperties_id);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   timer_frequency = props.timerResolution;

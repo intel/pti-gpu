@@ -37,11 +37,7 @@ class ZeEventCache {
         ze_result_t status = ZE_RESULT_SUCCESS;
         overhead::Init();
         status = zeEventDestroy(event);
-        {
-          std::string o_api_string = "zeEventDestroy";
-          overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                               o_api_string.c_str());
-        }
+        overhead_fini(zeEventDestroy_id);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       }
     }
@@ -49,11 +45,7 @@ class ZeEventCache {
       for (auto* pool : value.second) {
         overhead::Init();
         ze_result_t status = zeEventPoolDestroy(pool);
-        {
-          std::string o_api_string = "zeEventPoolDestroy";
-          overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                               o_api_string.c_str());
-        }
+        overhead_fini(zeEventPoolDestroy_id);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       }
     }
@@ -92,11 +84,7 @@ class ZeEventCache {
       ze_event_pool_handle_t pool = nullptr;
       overhead::Init();
       status = zeEventPoolCreate(context, &pool_desc, 0, nullptr, &pool);
-      {
-        std::string o_api_string = "zeEventPoolCreate";
-        overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                             o_api_string.c_str());
-      }
+      overhead_fini(zeEventPoolCreate_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       auto pool_iter = event_pools_.find(context);
@@ -112,11 +100,7 @@ class ZeEventCache {
                                       ZE_EVENT_SCOPE_FLAG_HOST, ZE_EVENT_SCOPE_FLAG_HOST};
         overhead::Init();
         status = zeEventCreate(pool, &event_desc, &event);
-        {
-          std::string o_api_string = "zeEventCreate";
-          overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                               o_api_string.c_str());
-        }
+        overhead_fini(zeEventCreate_id);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
         PTI_ASSERT(event_info_map_.count(event) == 0);
@@ -129,11 +113,7 @@ class ZeEventCache {
     result->second.pop_back();
     overhead::Init();
     PTI_ASSERT(zeEventQueryStatus(event) == ZE_RESULT_NOT_READY);
-    {
-      std::string o_api_string = "zeEventQueryStatus";
-      overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                           o_api_string.c_str());
-    }
+    overhead_fini(zeEventQueryStatus_id);
 
     return event;
   }
@@ -148,11 +128,7 @@ class ZeEventCache {
     if (info != event_info_map_.end()) {
       overhead::Init();
       ze_result_t status = zeEventHostReset(event);
-      {
-        std::string o_api_string = "zeEventHostReset";
-        overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                             o_api_string.c_str());
-      }
+      overhead_fini(zeEventHostReset_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
   }
@@ -175,11 +151,7 @@ class ZeEventCache {
     if (result != event_map_.end()) {
       overhead::Init();
       ze_result_t status = zeEventHostReset(event);
-      {
-        std::string o_api_string = "zeEventHostReset";
-        overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                             o_api_string.c_str());
-      }
+      overhead_fini(zeEventHostReset_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       // returning event to vector of available events
       result->second.push_back(event);
@@ -200,11 +172,7 @@ class ZeEventCache {
             ze_result_t status = ZE_RESULT_SUCCESS;
             overhead::Init();
             status = zeEventDestroy(event);
-            {
-              std::string o_api_string = "zeEventDestroy";
-              overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                                   o_api_string.c_str());
-            }
+            overhead_fini(zeEventDestroy_id);
             PTI_ASSERT(status == ZE_RESULT_SUCCESS);
             event_info_map_.erase(event);
           }
@@ -215,11 +183,7 @@ class ZeEventCache {
             ze_result_t status = ZE_RESULT_SUCCESS;
             overhead::Init();
             status = zeEventPoolDestroy(pool);
-            {
-              std::string o_api_string = "zeEventPoolDestroy";
-              overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                                   o_api_string.c_str());
-            }
+            overhead_fini(zeEventPoolDestroy_id);
             PTI_ASSERT(status == ZE_RESULT_SUCCESS);
           }
           event_pools_.erase(iter);

@@ -492,20 +492,12 @@ void Compute(ze_device_handle_t device, ze_driver_handle_t driver, const std::ve
   PTI_ASSERT(status == ZE_RESULT_SUCCESS && kernel != nullptr);
 
   for (unsigned i = 0; i < repeat_count; ++i) {
-    if (i == 0) {  // Enable data collection for the first iteration
-      utils::SetEnv("PTI_ENABLE_COLLECTION", "1");
-    }
-
     float eps =
         (with_polling)
             ? RunWithPollingAndCheck(kernel, device, context, a, b, c, size, expected_result)
             : RunAndCheck(kernel, device, context, a, b, c, size, expected_result);
     std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN") << "CORRECT with accuracy: " << eps
               << std::endl;
-
-    if (i == 0) {  // Disable data collection for the rest iterations
-      utils::SetEnv("PTI_ENABLE_COLLECTION", "");
-    }
   }
 
   status = zeKernelDestroy(kernel);

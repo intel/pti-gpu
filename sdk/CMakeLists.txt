@@ -232,6 +232,9 @@ add_library(pti_metrics SHARED "${PROJECT_SOURCE_DIR}/src/pti_metrics.cc"
 
 add_library(Pti::pti_metrics ALIAS pti_metrics)
 
+# pti_metrics builds on pti - so all generated files need to be ready
+add_dependencies(pti_metrics pti)
+
 target_include_directories(
   pti_metrics
   PUBLIC "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"

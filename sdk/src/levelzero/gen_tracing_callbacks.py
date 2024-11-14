@@ -51,9 +51,7 @@ def gen_func_param_dict(api_files):
 # Generates Individual Type Related function Id files
 # Generates map objects for those ids into the main generated callback api file
 #
-def gen_cbid_files_per_category(
-    dst_path, cb_api_file, func_list, kfunc_list, category_dict
-):
+def gen_cbid_files_per_category(dst_path, cb_api_file, category_dict):
     for category, callback_list in category_dict.items():
         cbids_file_path = os.path.join(dst_path, "pti_cbids_" + category + ".h")
         with open(cbids_file_path, "wt", opener=default_file_opener) as f:
@@ -157,7 +155,7 @@ def gen_api(
     f.write("\n")
     f.write("  overhead::Init();\n")
     f.write("  status = zelTracerSetEnabled(tracer, true);\n")
-    f.write('  overhead_fini("zelTracerSetEnabled");\n')
+    f.write("  overhead_fini(zelTracerSetEnabled_id);\n")
     f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
     f.write("}\n")
     f.write("\n")
@@ -338,8 +336,8 @@ def gen_exit_callback(
         f.write("    sycl_data_mview.cid_ = 0;\n")
     # f.write("    sycl_data_kview.cid_ = 0;\n")
     # f.write("    sycl_data_mview.cid_ = 0;\n")
-    f.write("    rec.pid_ = utils::GetPid();\n")
-    f.write("    rec.tid_ = utils::GetTid();\n")
+    f.write("    rec.pid_ = thread_local_pid_tid_info.pid;\n")
+    f.write("    rec.tid_ = thread_local_pid_tid_info.tid;\n")
     f.write("    rec.result_ = result;\n")
     f.write("    collector->fcallback_(collector->callback_data_, rec);\n")
     f.write("  }\n")
@@ -387,6 +385,37 @@ def gen_callbacks(
         )
         f.write("}\n")
         f.write("\n")
+
+
+def append_undefined_functions(func_list, func_dictionary):
+    """
+    in Level-Zero 14 that PTI uses to build - these functions not defined yet.
+    However for Local profiling PTI relies that these functiond are present in the
+    L0 installed on the system.
+    So we add these functions to the list of functions that will be used to generate CBids
+    """
+    additional_functions = [
+        "zeEventPoolGetFlags",
+        "zeCommandListGetDeviceHandle",
+        "zeCommandListGetContextHandle",
+        "zeCommandListIsImmediate",
+        "zeCommandListImmediateGetIndex",
+        "zeCommandListGetOrdinal",
+        "zeCommandQueueGetIndex",
+        "zeCommandQueueGetOrdinal",
+    ]
+
+    tracing_functions = [
+        "zelTracerSetEnabled",
+        "zelTracerCreate",
+    ]
+
+    for func in additional_functions:
+        if func not in func_dictionary.keys():
+            func_list.append(func)
+
+    for func in tracing_functions:
+        func_list.append(func)
 
 
 def main():
@@ -545,9 +574,12 @@ def main():
         exclude_from_prologue_list,
     )
 
-    gen_cbid_files_per_category(
-        proj_bin_path, dst_cb_api_file, func_list, kfunc_list, category_dict
-    )
+    # add functions that might be undefined in the L0 header used to build PTI
+    # they will  be checked in runtime .. and used if found
+    # here we need to generate CBids for them - that are used in the Overhead collection
+    append_undefined_functions(category_dict["runtime"], func_param_dictionary)
+
+    gen_cbid_files_per_category(proj_bin_path, dst_cb_api_file, category_dict)
 
     dst_file.close()
 

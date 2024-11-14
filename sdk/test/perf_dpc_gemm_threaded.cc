@@ -22,8 +22,6 @@
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
-#else
-#define NSEC_IN_SEC 1000000000
 #endif
 
 #define A_VALUE 0.128f
@@ -115,6 +113,9 @@ constexpr auto kRequestedRecordCount = 1'000ULL;
 constexpr auto kRequestedBufferSize = kRequestedRecordCount * sizeof(pti_view_record_kernel);
 
 std::atomic<uint64_t> g_record_count{0};
+#if defined(CAPTURE_OVERHEAD)
+std::atomic<uint64_t> overhead_time_ns{0};
+#endif
 
 void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
@@ -161,8 +162,16 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
       std::cerr << "Found Error Parsing Records from PTI" << '\n';
       break;
     }
-#if defined(RECORD_PARSE_AND_PRINT)
+#if defined(CAPTURE_OVERHEAD)
     switch (ptr->_view_kind) {
+      case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
+        pti_view_record_overhead* record = reinterpret_cast<pti_view_record_overhead*>(ptr);
+        overhead_time_ns += record->_overhead_duration_ns;
+        // std::cout << " ======== Overhead Time: " << record->_overhead_duration_ns << " ns"
+        //         << "\t\t API Id: " << record->_api_id << '\n';
+        break;
+      }
+#if defined(RECORD_PARSE_AND_PRINT)
       case pti_view_kind::PTI_VIEW_INVALID: {
         std::cout << "Found Invalid Record" << '\n';
         break;
@@ -173,13 +182,6 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cout << "Found Sycl Runtime Record" << '\n';
         samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime*>(ptr));
-        break;
-      }
-      case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
-        std::cout << "---------------------------------------------------"
-                     "-----------------------------"
-                  << '\n';
-        samples_utils::dump_record(reinterpret_cast<pti_view_record_overhead*>(ptr));
         break;
       }
       case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
@@ -252,12 +254,12 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         }
         break;
       }
+#endif  // RECORD_PARSE_AND_PRINT
       default: {
-        std::cerr << "This shouldn't happen" << '\n';
         break;
       }
     }
-#endif  // RECORD_PARSE_AND_PRINT
+#endif  // CAPTURE_OVERHEAD
   }
   samples_utils::AlignedDealloc(buf);
 }
@@ -378,19 +380,28 @@ int main(int argc, char* argv[]) {
         th.join();
       }
     }
+#if defined(NO_PTI)
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
     auto gemm_count = thread_count * repeat_count;
+#endif
 
 #if !defined(NO_PTI)
     StopTracing();
     PTI_THROW(ptiFlushAllViews());
+    auto end = std::chrono::steady_clock::now();
+    std::chrono::duration<float> time = end - start;
+    auto gemm_count = thread_count * repeat_count;
     std::cout << "-- PTI tracing was enabled, Record count: " << g_record_count << '\n';
+#if defined(CAPTURE_OVERHEAD)
+    std::cout << "-- Overhead time: " << (float)overhead_time_ns / (float)NSEC_IN_SEC << " sec"
+              << '\n';
+#endif
 #endif
 
     std::cout << "-- Total execution time: " << time.count() << " sec" << std::endl;
     std::cout << "-- Throughput: " << (int)((float)gemm_count / time.count()) << " gemms of size "
-              << size << "x" << size << " in sec " << std::endl;
+              << size << "x" << size << " in sec" << std::endl;
 
   } catch (const sycl::exception& e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';

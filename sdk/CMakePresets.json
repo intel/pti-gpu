@@ -325,7 +325,7 @@
     "configurePreset": "linux-icpx-reldebuginfo",
     "displayName": "Linux Release x64 IntelLLVM Tests",
     "environment": {
-      "LD_LIBRARY_PATH": "${sourceDir}/build/lib:$penv{LD_LIBRARY_PATH}"
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
     }
   },
   {

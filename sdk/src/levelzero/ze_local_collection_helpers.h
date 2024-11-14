@@ -37,8 +37,10 @@ bool A2AppendBridgeKernel(ze_kernel_handle_t kernel, ze_command_list_handle_t co
                (void*)command_list, (void*)signal_event, (void*)wait_event);
 
   uint32_t count = 1;
+  overhead::Init();
   ze_result_t result =
       zeCommandListAppendLaunchKernel(command_list, kernel, &dim, signal_event, count, &wait_event);
+  overhead_fini(zeCommandListAppendLaunchKernel_id);
   return result == ZE_RESULT_SUCCESS;
 }
 
@@ -65,14 +67,18 @@ bool A2AppendBridgeMemoryCopyOrFill(ze_command_list_handle_t command_list,
     size_t size_here = ((dst == src) || (is_two_devices)) ? size_64 : 0;
     SPDLOG_TRACE("\tAppending Bridge MemoryCopy dst: {}, src: {}, size_here: {}", dst, src,
                  size_here);
+    overhead::Init();
     result = zeCommandListAppendMemoryCopy(command_list, dst, src, size_here, signal_event, count,
                                            &wait_event);
+    overhead_fini(zeCommandListAppendMemoryCopy_id);
   } else {  // MemoryFill
     PTI_ASSERT(size1 >= size2);
     SPDLOG_TRACE("\tAppending Bridge MemoryFill dst: {}, src: {}, size1: {}, size2: {}", dst, src,
                  size1, size2);
+    overhead::Init();
     result = zeCommandListAppendMemoryFill(command_list, dst, src, size2, 0, signal_event, count,
                                            &wait_event);
+    overhead_fini(zeCommandListAppendMemoryFill_id);
   }
   SPDLOG_DEBUG("\t\tBridge MemOp Append result: {}", (uint32_t)result);
   return result == ZE_RESULT_SUCCESS;
@@ -87,7 +93,9 @@ bool A2AppendBridgeBarrier(ze_command_list_handle_t command_list, ze_event_handl
                (void*)command_list, (void*)signal_event, (void*)wait_event);
 
   uint32_t count = 1;
+  overhead::Init();
   ze_result_t result = zeCommandListAppendBarrier(command_list, signal_event, count, &wait_event);
+  overhead_fini(zeCommandListAppendBarrier_id);
   return result == ZE_RESULT_SUCCESS;
 }
 
@@ -269,7 +277,9 @@ class A2EventPool {
                                                 ZE_EVENT_POOL_FLAG_HOST_VISIBLE,
                                             events_per_pool_count_};
     // number of devices: 0 and nullptr as devices -> events visible on all devices
+    overhead::Init();
     status = zeEventPoolCreate(context, &event_pool_desc, 0, nullptr, &event_pool);
+    overhead_fini(zeEventPoolCreate_id);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     return event_pool;
   }
@@ -282,7 +292,9 @@ class A2EventPool {
     ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, index,
                                   //        ZE_EVENT_SCOPE_FLAG_HOST, ZE_EVENT_SCOPE_FLAG_HOST};
                                   ZE_EVENT_SCOPE_FLAG_HOST, 0};
+    overhead::Init();
     zeEventCreate(event_pool, &event_desc, &event);
+    overhead_fini(zeEventCreate_id);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     PTI_ASSERT(event != nullptr);
     return event;
@@ -316,7 +328,9 @@ class A2EventPool {
 
   void CleanReadyEvents(ze_context_handle_t context) {
     for (auto event : ready_event_map_[context]) {
+      overhead::Init();
       ze_result_t status = zeEventHostReset(event);
+      overhead_fini(zeEventHostReset_id);
       if (status != ZE_RESULT_SUCCESS) {
         SPDLOG_DEBUG("\tIn {} zeEventHostReset for event: {} returned {}", __FUNCTION__,
                      (void*)event, (uint32_t)status);
@@ -328,7 +342,9 @@ class A2EventPool {
 
   void CleanPools(ze_context_handle_t context) {
     for (auto pool : event_pool_map_[context]) {
+      overhead::Init();
       ze_result_t status = zeEventPoolDestroy(pool);
+      overhead_fini(zeEventPoolDestroy_id);
       if (status != ZE_RESULT_SUCCESS) {
         SPDLOG_DEBUG("\tIn {} zeEventPoolDestroy for pool: {} returned {}", __FUNCTION__,
                      static_cast<const void*>(pool), (uint32_t)status);
@@ -372,11 +388,15 @@ class A2BridgeKernelPool {
                                       nullptr,
                                       nullptr};
       ze_module_handle_t module = nullptr;
+      overhead::Init();
       ze_result_t status = zeModuleCreate(context, device, &module_desc, &module, nullptr);
+      overhead_fini(zeModuleCreate_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS && module != nullptr);
 
       ze_kernel_desc_t kernel_desc = {ZE_STRUCTURE_TYPE_KERNEL_DESC, nullptr, 0, "empty"};
+      overhead::Init();
       status = zeKernelCreate(module, &kernel_desc, &kernel);
+      overhead_fini(zeKernelCreate_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS && kernel != nullptr);
       kernel_map_.insert({std::pair(context, device), kernel});
       SPDLOG_TRACE("Probe Kernel Created in {} for context: {}, device: {}", __FUNCTION__,

@@ -18,6 +18,7 @@
 #include <level_zero/layers/zel_tracing_register_cb.h>
 #include <level_zero/loader/ze_loader.h>
 #include <level_zero/ze_api.h>
+#include <pti/pti_cbids_runtime.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -193,7 +194,7 @@ class ZeCollector {
     zel_tracer_handle_t tracer = nullptr;
     overhead::Init();
     status = zelTracerCreate(&tracer_desc, &tracer);
-    overhead_fini("zelTracerCreate");
+    overhead_fini(zelTracerCreate_id);
 
     if (status != ZE_RESULT_SUCCESS) {
       SPDLOG_CRITICAL(
@@ -357,7 +358,7 @@ class ZeCollector {
 #if !defined(_WIN32)
     overhead::Init();
     ze_result_t status = zelTracerSetEnabled(tracer_, false);
-    overhead_fini("zelTracerSetEnabled");
+    overhead_fini(zelTracerSetEnabled_id);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 #endif
   }
@@ -394,7 +395,7 @@ class ZeCollector {
 
     overhead::Init();
     ze_result_t status = zeContextCreate(driver, &cdesc, &context);
-    overhead_fini("zeContextCreate");
+    overhead_fini(zeContextCreate_id);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     // Create Event Pool
@@ -405,24 +406,24 @@ class ZeCollector {
 
     overhead::Init();
     status = zeEventPoolCreate(context, &event_pool_desc, 0, nullptr, &event_pool);
-    overhead_fini("zeEventPoolCreate");
+    overhead_fini(zeEventPoolCreate_id);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     // IntrospectionAPI --- return status determines if api's available on this driver.
     ze_event_pool_flags_t event_pool_flags;
     overhead::Init();
     status = l0_wrapper_.w_zeEventPoolGetFlags(event_pool, &event_pool_flags);
-    overhead_fini("zeEventPoolGetFlags");
+    overhead_fini(zeEventPoolGetFlags_id);
 
     // Cleanup
     overhead::Init();
     ze_result_t status1 = zeEventPoolDestroy(event_pool);
-    overhead_fini("zeEventPoolDestroy");
+    overhead_fini(zeEventPoolDestroy_id);
     PTI_ASSERT(status1 == ZE_RESULT_SUCCESS);
 
     overhead::Init();
     status1 = zeContextDestroy(context);
-    overhead_fini("zeContextDestroy");
+    overhead_fini(zeContextDestroy_id);
     PTI_ASSERT(status1 == ZE_RESULT_SUCCESS);
 
     return status;
@@ -455,7 +456,7 @@ class ZeCollector {
         device_properties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
         overhead::Init();
         ze_result_t status = zeDeviceGetProperties(device, &device_properties);
-        overhead_fini("zeDeviceGetProperties");
+        overhead_fini(zeDeviceGetProperties_id);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
         // Checking only on one driver for GPU device
@@ -488,7 +489,7 @@ class ZeCollector {
 
     overhead::Init();
     ze_result_t status = zeDevicePciGetPropertiesExt(device, &pci_device_properties);
-    overhead_fini("zeDevicePciGetPropertiesExt");
+    overhead_fini(zeDevicePciGetPropertiesExt_id);
 
     if (status != ZE_RESULT_SUCCESS) {
       SPDLOG_WARN("Unable to get PCI properties for device {} driver returned 0x{:x}",
@@ -504,7 +505,7 @@ class ZeCollector {
 
     overhead::Init();
     status = zeDeviceGetGlobalTimestamps(device, &host_time, &ticks);
-    overhead_fini("zeDeviceGetGlobalTimestamps");
+    overhead_fini(zeDeviceGetGlobalTimestamps_id);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     device_time = ticks & desc.device_timer_mask;
@@ -625,7 +626,7 @@ class ZeCollector {
     if (!destroyed) {
       overhead::Init();
       status = zeEventQueryStatus(event);
-      overhead_fini("zeEventQueryStatus");
+      overhead_fini(zeEventQueryStatus_id);
     }
     return destroyed;
   }
@@ -639,7 +640,7 @@ class ZeCollector {
     ze_result_t status = ZE_RESULT_SUCCESS;
     overhead::Init();
     status = zeEventQueryStatus(event);
-    overhead_fini("zeEventQueryStatus");
+    overhead_fini(zeEventQueryStatus_id);
     if (status != ZE_RESULT_SUCCESS) {
       SPDLOG_DEBUG("\tIn {} EventQueryStatus returned: {}, Returning...", __FUNCTION__,
                    static_cast<uint32_t>(status));
@@ -696,7 +697,7 @@ class ZeCollector {
     ze_result_t status = ZE_RESULT_SUCCESS;
     overhead::Init();
     status = zeFenceQueryStatus(fence);
-    overhead_fini("zeFenceQueryStatus");
+    overhead_fini(zeFenceQueryStatus_id);
     if (status != ZE_RESULT_SUCCESS) {
       return;
     }
@@ -909,7 +910,7 @@ class ZeCollector {
     SPDLOG_TRACE("\tQuery KernelTimestamp on event: {}", static_cast<const void*>(event_to_query));
     overhead::Init();
     ze_result_t status = zeEventQueryKernelTimestamp(event_to_query, &timestamp);
-    overhead_fini("zeEventQueryKernelTimestamp");
+    overhead_fini(zeEventQueryKernelTimestamp_id);
     if (status != ZE_RESULT_SUCCESS) {
       // sporadic - smth wrong with event from time to time
       SPDLOG_WARN("In {}, zeEventQueryKernelTimestamp returned: {} for event: {}", __FUNCTION__,
@@ -939,13 +940,13 @@ class ZeCollector {
         SPDLOG_TRACE("\tChecking status of event {}", (void*)command->event_self);
         overhead::Init();
         status = zeEventQueryStatus(command->event_self);
-        overhead_fini("zeEventQueryStatus");
+        overhead_fini(zeEventQueryStatus_id);
         if (status == ZE_RESULT_SUCCESS) {
           /* if (collection_mode_ == Local) { // TODO this should be in Debug only
             if (command->event_swap != nullptr) {
               overhead::Init();
               status = zeEventQueryStatus(command->event_swap);
-              overhead_fini("zeEventQueryStatus");
+              overhead_fini(zeEventQueryStatus_id);
               PTI_ASSERT(status == ZE_RESULT_SUCCESS);
             }
           }*/
@@ -1022,8 +1023,10 @@ class ZeCollector {
       // as all command lists submitted to the execution into queue - they are not immediate
       PTI_ASSERT(!info.immediate);
       PTI_ASSERT(info.device != nullptr);
+      overhead::Init();
       ze_result_t status =
           zeDeviceGetGlobalTimestamps(info.device, &host_time_sync, &device_time_sync);
+      overhead_fini(zeDeviceGetGlobalTimestamps_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       if (queue_ordinal_index_map_.count(queue) == 0) {
@@ -1415,7 +1418,9 @@ class ZeCollector {
     uint64_t host_timestamp = 0;
     uint64_t device_timestamp = 0;  // in ticks
 
+    overhead::Init();
     ze_result_t status = zeDeviceGetGlobalTimestamps(device, &host_timestamp, &device_timestamp);
+    overhead_fini(zeDeviceGetGlobalTimestamps_id);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_instance_data.timestamp_host = host_timestamp;
@@ -1686,7 +1691,7 @@ class ZeCollector {
       props.pNext = nullptr;
       overhead::Init();
       ze_result_t status = zeMemGetAllocProperties(src_context, src, &props, &hSrcDevice);
-      overhead_fini("zeMemGetAllocProperties");
+      overhead_fini(zeMemGetAllocProperties_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       switch (props.type) {
@@ -1719,7 +1724,7 @@ class ZeCollector {
       props.pNext = nullptr;
       overhead::Init();
       ze_result_t status = zeMemGetAllocProperties(dst_context, dst, &props, &hDstDevice);
-      overhead_fini("zeMemGetAllocProperties");
+      overhead_fini(zeMemGetAllocProperties_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       switch (props.type) {
@@ -2350,8 +2355,6 @@ class ZeCollector {
   OnZeApiCallsFinishCallback fcallback_ = nullptr;
   void* callback_data_ = nullptr;
   std::mutex lock_;
-
-#include <pti/pti_cbids_runtime.h>
 
 #include <tracing.gen>  // Auto-generated callbacks
 

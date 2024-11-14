@@ -93,10 +93,10 @@ typedef enum _pti_view_external_kind {
 /**
  *  @brief Collection Overhead kinds
  */
-typedef enum _pti_view_overhead_kind { 
+typedef enum _pti_view_overhead_kind {
   PTI_VIEW_OVERHEAD_KIND_INVALID = 0,        //!< Invalid overhead kind
   PTI_VIEW_OVERHEAD_KIND_UNKNOWN = 1,        //!< Unknown overhead kind
-  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< Overhead due to a resource 
+  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< Overhead due to a resource
   PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,   //!< Overhead due to a buffer flush
   PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,         //!< Overhead due to driver
   PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to L0 api processing time
@@ -260,7 +260,8 @@ typedef struct pti_view_record_overhead {
   pti_view_record_base _view_kind;          //!< Base record
   uint64_t _overhead_start_timestamp_ns;    //!< Overhead observation start timestamp, ns
   uint64_t _overhead_end_timestamp_ns;      //!< Overhead observation end timestamp, ns
-  uint64_t _overhead_thread_id;             //!< Thread ID of where the overhead observed
+  uint32_t _overhead_thread_id;             //!< Thread ID of where the overhead observed
+  uint32_t _api_id;                         //!< API id of the overhead
   uint64_t _overhead_count;                 //!< number of views in the overhead region
   uint64_t _overhead_duration_ns;           //!< Cumulative duration of the overhead over
                                             //!< the observation region, could be less than
@@ -279,7 +280,7 @@ typedef struct pti_view_record_zecalls {
   uint64_t _end_timestamp;         //!< L0 api call end timestamp, ns
   uint32_t _process_id;            //!< Process ID of where the zecall observed
   uint32_t _thread_id;             //!< Thread ID of where the zecall observed
-  uint32_t _callback_id;           //!< Callback id of this zecall 
+  uint32_t _callback_id;           //!< Callback id of this zecall
   uint32_t _correlation_id;        //!< Correlation id tracking memfill, memcpy and kernel gpu activity
   ze_result_t _result;             //!< Result status of zecall
 } pti_view_record_zecalls;

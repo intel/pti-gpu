@@ -13,6 +13,7 @@
  * overhead captured is trickled into the buffer stream via buffer callback -
  * ocallback.
  */
+#include <pti/pti_cbids_runtime.h>
 
 #include "unikernel.h"
 #include "utils.h"
@@ -63,7 +64,7 @@ inline void Init() {
     map_overhead_per_kind[{pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME}] = overhead_rec;
   }
 
-  uint64_t tid = utils::GetTid();
+  uint64_t tid = thread_local_pid_tid_info.tid;
   uint64_t start_time_ns = utils::GetTime();
   auto overhead_it =
       map_overhead_per_kind.find({pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME});
@@ -96,7 +97,7 @@ inline void ResetRecord() {
 }
 
 inline void FiniLevel0(OverheadRuntimeType runtime_type,
-                       [[maybe_unused]] const char* api_func_name) {
+                       [[maybe_unused]] pti_callback_api_id_runtime api_id) {
   if (!overhead_collection_enabled) {
     return;
   }
@@ -123,8 +124,8 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
     }
     if ((overhead_it->second._overhead_duration_ns / kOhThreshold) > 1) {
       overhead_it->second._overhead_end_timestamp_ns = end_time_ns;
-      overhead_it->second._overhead_thread_id = utils::GetTid();
-      // overhead_it->second._overhead_api_name = api_func_name; // Turn this
+      overhead_it->second._overhead_thread_id = thread_local_pid_tid_info.tid;
+      overhead_it->second._api_id = api_id;  // Turn this
       // back on if we need to propagate api_name to user.
       if ((runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0) &&
           (ocallback_ != nullptr)) {
@@ -168,10 +169,9 @@ inline void FiniSycl(OverheadRuntimeType runtime_type) {
 
 }  // namespace overhead
 
-static inline void overhead_fini(std::string o_api_string) {
+static inline void overhead_fini(pti_callback_api_id_runtime api_id) {
   // std::string o_api_string = l0_api;
-  overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0,
-                       o_api_string.c_str());
+  overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0, api_id);
 }
 
 #endif  // PTI_TOOLS_OVERHEAD_H_
