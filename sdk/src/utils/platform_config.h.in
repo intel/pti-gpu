@@ -1,0 +1,13 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+#ifndef UTILS_PLATFORM_CONFIG_H_
+#define UTILS_PLATFORM_CONFIG_H_
+
+#cmakedefine PTI_EXPERIMENTAL_FILESYSTEM
+
+#endif  // UTILS_PLATFORM_CONFIG_H_
+

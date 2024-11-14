@@ -21,6 +21,7 @@
 #include <thread>
 
 #include "pti/pti_metrics.h"
+#include "utils/pti_filesystem.h"
 #include "utils/utils.h"
 #include "utils/ze_utils.h"
 
@@ -80,7 +81,7 @@ class PtiMetricsProfiler {
                      pti_metrics_group_handle_t metrics_group_handle) {
     auto data_dir = utils::ze::CreateTempDirectory();
 
-    PTI_ASSERT(std::filesystem::exists(data_dir));
+    PTI_ASSERT(pti::utils::filesystem::exists(data_dir));
     SPDLOG_INFO("Temp dir {}", data_dir.string());
 
     data_dir_name_ = data_dir.generic_string();
@@ -146,7 +147,7 @@ class PtiMetricsProfiler {
   }
 
   virtual ~PtiMetricsProfiler() {
-    std::filesystem::remove_all(data_dir_name_);
+    pti::utils::filesystem::remove_all(data_dir_name_);
     metric_contexts_.clear();
     // Stopping runaway collections in case stop was not called
     for (auto it = device_descriptors_.begin(); it != device_descriptors_.end(); ++it) {

@@ -11,7 +11,6 @@
 #include <level_zero/zet_api.h>
 
 #include <algorithm>
-#include <filesystem>
 #include <limits>
 #include <random>
 #include <string>
@@ -20,6 +19,7 @@
 #include "demangle.h"
 #include "overhead_kinds.h"
 #include "pti_assert.h"
+#include "pti_filesystem.h"
 
 namespace utils {
 namespace ze {
@@ -324,15 +324,15 @@ inline void FindMetricGroups(ze_device_handle_t device,
   }
 }
 
-std::filesystem::path CreateTempDirectory() {
-  auto tmp_dir = std::filesystem::temp_directory_path();
+pti::utils::filesystem::path CreateTempDirectory() {
+  auto tmp_dir = pti::utils::filesystem::temp_directory_path();
   std::random_device rand_dev;    // uniformly-distributed integer random number generator
   std::mt19937 prng(rand_dev());  // pseudorandom number generator
   std::uniform_int_distribution<uint64_t> rand_num(0);  // random number
-  std::filesystem::path path;
+  pti::utils::filesystem::path path;
   std::string dir_name = "pti_" + std::to_string(rand_num(prng));
   path = tmp_dir / dir_name;
-  std::filesystem::create_directory(path);
+  pti::utils::filesystem::create_directory(path);
 
   return path;
 }

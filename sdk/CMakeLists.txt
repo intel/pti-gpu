@@ -59,6 +59,7 @@ set(PTI_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
 set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
 CheckSOVersion(${PTI_API_SOVERSION})
+CheckExperimentalFilesystem()
 
 if(PTI_DEBUG)
   add_compile_definitions(PTI_DEBUG)
@@ -100,6 +101,10 @@ find_package(Threads REQUIRED)
 configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
                ${PROJECT_BINARY_DIR}/include/pti/pti_version.h)
 
+# Generate file with configuration information above.
+configure_file(${PROJECT_SOURCE_DIR}/src/utils/platform_config.h.in
+               ${PROJECT_BINARY_DIR}/platform_config.h
+               @ONLY)
 
 # https://cmake.org/cmake/help/latest/guide/importing-exporting/index.html
 add_library(pti_all INTERFACE)
@@ -165,7 +170,8 @@ target_link_libraries(
   PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
           LevelZero::level-zero
           spdlog::spdlog
-          ${CMAKE_DL_LIBS})
+          ${CMAKE_DL_LIBS}
+          ${FS_LIB})
 
 FindHeadersPath(
   pti "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
@@ -217,7 +223,8 @@ target_link_libraries(
   PUBLIC
   PRIVATE LevelZero::headers
           spdlog::spdlog
-          ${CMAKE_DL_LIBS})
+          ${CMAKE_DL_LIBS}
+          ${FS_LIB})
 
 # pti_metrics
 add_library(pti_metrics SHARED "${PROJECT_SOURCE_DIR}/src/pti_metrics.cc"
@@ -263,7 +270,8 @@ target_link_libraries(
   PUBLIC Threads::Threads
   PRIVATE LevelZero::level-zero
           spdlog::spdlog
-          ${CMAKE_DL_LIBS})
+          ${CMAKE_DL_LIBS}
+          ${FS_LIB})
 
 target_link_libraries(
 	pti_all INTERFACE Pti::pti_view Pti:pti_metrics)
@@ -323,11 +331,13 @@ if(PTI_INSTALL)
     DESTINATION "${PTI_INSTALL_CMAKE_DIR}"
     COMPONENT Pti_Development)
 
-  install(
-    FILES "../LICENSE"
-    DESTINATION "${PTI_INSTALL_LIC_DIR}"
-    RENAME "LICENSE.txt"
-    COMPONENT Pti_Doc)
+  if (EXISTS "../LICENSE")
+    install(
+      FILES "../LICENSE"
+      DESTINATION "${PTI_INSTALL_LIC_DIR}"
+      RENAME "LICENSE.txt"
+      COMPONENT Pti_Doc)
+  endif()
 
 
   #

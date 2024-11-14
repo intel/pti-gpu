@@ -157,8 +157,12 @@ if(HAVE_SYCL)
 
   target_compile_options(zegemm_suite  PUBLIC -fsycl -gline-tables-only)
   target_link_options(zegemm_suite PUBLIC -fsycl -gline-tables-only)
-  target_link_libraries(zegemm_suite PUBLIC Pti::pti_view GTest::gtest_main
-                                          GTest::gmock LevelZero::level-zero)
+
+  target_link_libraries(zegemm_suite PUBLIC Pti::pti_view
+                                            GTest::gtest_main
+                                            GTest::gmock
+                                            LevelZero::level-zero
+                                            ${FS_LIB})
 
   add_executable(multi_threaded_submission multi_threaded_submission.cc)
 
@@ -316,7 +320,8 @@ if (HAVE_SYCL AND TARGET unified-runtime::loader)
                                             GTest::gtest_main
                                             GTest::gmock
                                             LevelZero::level-zero
-                                            unified-runtime::loader)
+                                            unified-runtime::loader
+                                            ${FS_LIB})
   gtest_discover_tests(
     urgemm_suite
     DISCOVERY_TIMEOUT 60
@@ -347,7 +352,8 @@ target_include_directories(
 target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_main
                                                    spdlog::spdlog
                                                    LevelZero::level-zero
-                                                   ${CMAKE_DL_LIBS})
+                                                   ${CMAKE_DL_LIBS}
+                                                   ${FS_LIB})
 
 add_executable(view_gpu_local_test view_gpu_local_test.cc)
 

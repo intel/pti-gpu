@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   sdk-build-and-test:
-    name: pti-sdk 
+    name: Build and Test PTI Lib
 
     #
     # pti is a selector to machines with Intel Ponte Vecchio officially
@@ -148,7 +148,7 @@ jobs:
 
   pti-tools-build-and-test:
     if: vars.PTI_RUN_TESTS == 1
-    name: Test pti library Ubuntu-22-04
+    name: Build and Test PTI Tools
 
     runs-on: [Linux, pti]
 
@@ -160,10 +160,11 @@ jobs:
         include:
           - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
           - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_0 }}
+          - container: ${{ vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 }}
 
     container: 
       image: ${{ matrix.container }}
-      options: --device=/dev/dri --cap-add CAP_PERFMON
+      options: --device=/dev/dri --cap-add CAP_PERFMON ${{ vars.PTI_DOCKER_PROXIES }}
 
     steps:
       - name: Clean-up
@@ -175,12 +176,12 @@ jobs:
       - name: Build-and-test-unitrace
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s unitrace
+          python3 ./tests/run.py -s unitrace
 
       - name: Build-and-test-onetrace
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s onetrace
+          python3 ./tests/run.py -s onetrace
 
       - name: Build-and-test-oneprof
         run: |
@@ -192,87 +193,22 @@ jobs:
           if [ $(sycl-ls|grep 'ext_oneapi_level_zero:gpu:' -c) -gt 1 ]; then
             exit 0
           fi
-          python ./tests/run.py -s oneprof
+          python3 ./tests/run.py -s oneprof
 
       - name: Build-and-test-sysmon
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s sysmon
+          python3 ./tests/run.py -s sysmon
 
       - name: Build-and-test-cl_gpu_metrics
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s cl_gpu_metrics
-
-      - name: Build-and-test-instcount
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s instcount
-
-      - name: Build-and-test-ze_debug_info
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s ze_debug_info
+          python3 ./tests/run.py -s cl_gpu_metrics
 
       - name: Build-and-test-cl_debug_info
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s cl_debug_info
-
-
-
-  pti-tools-build-and-test-rocky:
-    name: Test pti library for Rocky8
-
-    if: vars.PTI_RUN_TESTS == 1
-
-    runs-on: [Linux, pti]
-
-    strategy:
-      matrix:
-        include:
-          - container: ${{ vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 }}
-
-    container: 
-      image: ${{ matrix.container }}
-      options: --device=/dev/dri --cap-add CAP_PERFMON
-
-    steps:
-      - name: Clean-up
-        run:  rm -rf *
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build-and-test-unitrace
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          source /opt/rh/gcc-toolset-13/enable
-          python3.11 ./tests/run.py -s unitrace
-
-      - name: Build-and-test-onetrace
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          source /opt/rh/gcc-toolset-13/enable
-          python3.11 ./tests/run.py -s onetrace
-
-      - name: Build-and-test-oneprof
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          source /opt/rh/gcc-toolset-13/enable
-          python3.11 ./tests/run.py -s oneprof
-
-      - name: Build-and-test-sysmon
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          source /opt/rh/gcc-toolset-13/enable
-          python3.11 ./tests/run.py -s sysmon
-
-      - name: Build-and-test-cl_gpu_metrics
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          source /opt/rh/gcc-toolset-13/enable
-          python3.11 ./tests/run.py -s cl_gpu_metrics
+          python3 ./tests/run.py -s cl_debug_info
 
       #
       # Fix!!
@@ -282,5 +218,14 @@ jobs:
         if: vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 != matrix.container
         run: |
           source /opt/intel/oneapi/setvars.sh
-          source /opt/rh/gcc-toolset-13/enable
-          python3.11 ./tests/run.py -s instcount
+          python3 ./tests/run.py -s instcount
+
+      #
+      # TODO:
+      # Add code to ze_debug_info to handle std::experimental::filesystem case.
+      # 
+      - name: Build-and-test-ze_debug_info
+        if: vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 != matrix.container
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python3 ./tests/run.py -s ze_debug_info
