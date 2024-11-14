@@ -380,7 +380,7 @@ class PtiMetricsProfiler {
 // L0 on Windows doesn't seem to be updating notifyEveryNReports correctly
 // TODO: Remove the windows specific value once issue fixed in L0
 #ifdef _WIN32
-uint32_t PtiMetricsProfiler::max_metric_samples_ = 2048;
+uint32_t PtiMetricsProfiler::max_metric_samples_ = 1024;
 #else
 uint32_t PtiMetricsProfiler::max_metric_samples_ = 32768;
 #endif
