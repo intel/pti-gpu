@@ -12,10 +12,10 @@ ONEAPI_VER=2025.0.0
 targets: ${OS_TARGETS}
 	@echo BUILT ${OS_TARGETS}
 
-VER_UBUNTU:=01
-VER_REDHAT:=01
-VER_SLES:=01
-VER_ROCKY:=01
+VER_UBUNTU:=02
+VER_REDHAT:=02
+VER_SLES:=02
+VER_ROCKY:=02
 define getOsVer
 	$(if $(filter $1, ${REL_UBUNTU}),${VER_UBUNTU},\
 	$(if $(filter $1, ${REL_RHEL}),${VER_REDHAT},\

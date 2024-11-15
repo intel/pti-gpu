@@ -9,7 +9,8 @@ USER root
 #hadolint ignore=DL3008
 RUN dnf update -y && \
     dnf install -y --setopt=tsflags=nodocs \
-    gcc-c++ procps-ng cmake wget ninja-build python3.12 && dnf clean all
+    gcc-c++ procps-ng cmake wget ninja-build python3.12 git && \
+    dnf clean all
 
 #
 # Install oneAPI
@@ -26,12 +27,18 @@ RUN echo '[oneAPI]' > /etc/yum.repos.d/oneAPI.repo; \
 #
 # Setup the appropriate repos for GPU
 #
+# 11/14/2024 Hacking changes:
+# 1)-The dnf update -y pushes rhel to 9.5. To install ./intel-gpu-rhel-9.4.run
+# We must use the -f flag!
+# 2)-I was also forced to add --skip-broken --nobes
+#
 RUN wget https://repositories.intel.com/gpu/rhel/9.4/intel-gpu-rhel-9.4.run && \
   chmod +x intel-gpu-rhel-9.4.run && \
-  ./intel-gpu-rhel-9.4.run && \
+  ./intel-gpu-rhel-9.4.run -y -f && \
   dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
 
 RUN dnf install -y --setopt=tsflags=nodocs \
+  --skip-broken --nobest \
   intel-opencl intel-media libmfxgen1 libvpl2 \
   level-zero intel-level-zero-gpu mesa-dri-drivers mesa-vulkan-drivers \
   mesa-vdpau-drivers libdrm mesa-libEGL mesa-libgbm mesa-libGL \

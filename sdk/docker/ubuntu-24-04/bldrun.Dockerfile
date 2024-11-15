@@ -14,6 +14,7 @@ RUN apt-get update -y && \
     ncurses*\
     wget \
     gpg \
+    git \
     gpg-agent \
     ca-certificates
 
@@ -31,17 +32,19 @@ RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRO
 #
 RUN wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
     gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | \
-    tee /etc/apt/sources.list.d/intel-gpu-jammy.list
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble unified" | \
+    tee /etc/apt/sources.list.d/intel-gpu-noble.list
 
 RUN apt update -y && \
     apt install -y \
     intel-basekit=2025.0.0-884 \
     intel-opencl-icd intel-level-zero-gpu libze1 \
     intel-media-va-driver-non-free libmfx1 libmfxgen1 libvpl2 \
-    libegl-mesa0 libegl1-mesa libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
+    libegl-mesa0 libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
     libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
     mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo \
     libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev \
     intel-metrics-discovery intel-metrics-discovery-dev \
-    intel-metrics-library intel-metrics-library-dev 
+    intel-metrics-library intel-metrics-library-dev  && \
+    apt-get clean -y
+
