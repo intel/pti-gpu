@@ -391,6 +391,12 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
   uint32_t sampling_interval_;
 
  public:
+  PtiStreamMetricsProfiler() = delete;
+  PtiStreamMetricsProfiler(const PtiStreamMetricsProfiler &) = delete;
+  PtiStreamMetricsProfiler &operator=(const PtiStreamMetricsProfiler &) = delete;
+  PtiStreamMetricsProfiler(PtiStreamMetricsProfiler &&) = delete;
+  PtiStreamMetricsProfiler &operator=(PtiStreamMetricsProfiler &&) = delete;
+
   PtiStreamMetricsProfiler(pti_device_handle_t device_handle,
                            pti_metrics_group_handle_t metrics_group_handle,
                            uint32_t sampling_interval)
@@ -782,6 +788,12 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
 class PtiQueryMetricsProfiler : public PtiMetricsProfiler
 {
 public:
+    PtiQueryMetricsProfiler() = delete;
+    PtiQueryMetricsProfiler(const PtiQueryMetricsProfiler &) = delete;
+    PtiQueryMetricsProfiler &operator=(const PtiQueryMetricsProfiler &) = delete;
+    PtiQueryMetricsProfiler(PtiQueryMetricsProfiler &&) = delete;
+    PtiQueryMetricsProfiler &operator=(PtiQueryMetricsProfiler &&) = delete;
+
     PtiQueryMetricsProfiler(std::string &group_name) : PtiMetricsProfiler(group_name) {}
 
     void StartProfiling() {}
@@ -857,13 +869,21 @@ pti_metrics_tracer_functions_t tf;
 class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
  private:
   uint32_t time_aggr_window_;
+  zet_metric_decoder_exp_handle_t metric_decoder_;
 
  public:
+  PtiTraceMetricsProfiler() = delete;
+  PtiTraceMetricsProfiler(const PtiTraceMetricsProfiler &) = delete;
+  PtiTraceMetricsProfiler &operator=(const PtiTraceMetricsProfiler &) = delete;
+  PtiTraceMetricsProfiler(PtiTraceMetricsProfiler &&) = delete;
+  PtiTraceMetricsProfiler &operator=(PtiTraceMetricsProfiler &&) = delete;
+
   PtiTraceMetricsProfiler(pti_device_handle_t device_handle,
                           pti_metrics_group_handle_t metrics_group_handle,
                           uint32_t time_aggr_window)
       : PtiMetricsProfiler(device_handle, metrics_group_handle) {
     time_aggr_window_ = time_aggr_window;
+    metric_decoder_ = nullptr;
   }
 
   ~PtiTraceMetricsProfiler() {}
@@ -1289,12 +1309,15 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     status = zetContextActivateMetricGroups(context, device, 0, &group);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
-
-  zet_metric_decoder_exp_handle_t metric_decoder_;
 };
 
 class PtiMetricsCollectorHandler {
  public:
+  PtiMetricsCollectorHandler(const PtiMetricsCollectorHandler &) = delete;
+  PtiMetricsCollectorHandler &operator=(const PtiMetricsCollectorHandler &) = delete;
+  PtiMetricsCollectorHandler(PtiMetricsCollectorHandler &&) = delete;
+  PtiMetricsCollectorHandler &operator=(PtiMetricsCollectorHandler &&) = delete;
+
   PtiMetricsCollectorHandler() {
     // initially set logging level to warn
     // need to use warnings very carefully, only when absolutely necessary

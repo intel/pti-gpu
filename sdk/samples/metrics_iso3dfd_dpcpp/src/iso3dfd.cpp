@@ -68,6 +68,11 @@ std::mutex global_cout_mtx;
 class MetricsProfiler {
  public:
 
+MetricsProfiler(const MetricsProfiler &) = delete;
+MetricsProfiler &operator=(const MetricsProfiler &) = delete;
+MetricsProfiler(MetricsProfiler &&) = delete;
+MetricsProfiler &operator=(MetricsProfiler &&) = delete;
+
 MetricsProfiler() {
   configured_device_handle_ = NULL;
   configured_group_handle_ = NULL;
