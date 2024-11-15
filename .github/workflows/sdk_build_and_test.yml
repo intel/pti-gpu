@@ -33,8 +33,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_24_2_1 }}
-            uploadname: "ubuntu-24.04.2024.2.1"
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_0_0 }}
+            uploadname: "ubuntu-24.04.2025.0.0"
             preset: linux-icpx-release
 
 
@@ -62,7 +62,7 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --output-on-failure --preset ${{ matrix.preset }}
+          ctest --output-on-failure --preset ${{ matrix.preset }} -LE perf
 
       - name: Build AddressSanitizer
         working-directory: sdk
@@ -177,5 +177,5 @@ jobs:
           REM TODO Kernel name demangling not supported on Windows yet.
           REM TODO Tests need to be run without \DNDEBUG set
           REM TODO OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
-          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords"
+          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords" 
 

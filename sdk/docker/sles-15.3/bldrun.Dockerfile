@@ -22,6 +22,7 @@ RUN  zypper refresh && \
       libsystemd0 \
       procps \
       which \
+      git \
       python312
 
 RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.12 10
@@ -32,7 +33,7 @@ RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
   rpm --import https://repositories.intel.com/gpu/intel-graphics.key
 
 RUN zypper refresh && \
-  zypper up && \
+  zypper up -y && \
   zypper --non-interactive install -y \
   intel-basekit-2025.0.0-884 \
   intel-level-zero-gpu \

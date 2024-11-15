@@ -21,6 +21,7 @@ RUN dnf install -y --setopt=tsflags=nodocs  \
     wget \
     ninja-build \
     which \
+    git \
     python3.12 && \
     dnf clean all
 
