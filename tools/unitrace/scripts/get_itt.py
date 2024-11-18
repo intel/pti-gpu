@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 # =============================================================
 
+import platform
 import os
 import sys
 import shutil
@@ -26,6 +27,20 @@ def copy(src_path, dst_path, file_list):
     assert os.path.isfile(src_file)
 
     shutil.copy(src_file, dst_file)
+
+def build():
+  curr_wrkng_dir = os.getcwd()
+  itt_dir = curr_wrkng_dir + "/ittapi"
+  os.chdir(itt_dir)
+  if platform.system() == 'Windows':
+    os.system("cmake -G \"NMake Makefiles\" .")
+    os.system("nmake")
+    shutil.copyfile("./bin/libittnotify.lib", curr_wrkng_dir+"/libittnotify.lib")
+  else :
+    os.system("cmake .")
+    os.system("make")
+    shutil.copyfile("./bin/libittnotify.a", curr_wrkng_dir+"/libittnotify.a")
+  os.chdir(curr_wrkng_dir)
 
 def main():
   if len(sys.argv) < 4:
@@ -60,5 +75,7 @@ def main():
   src_path = os.path.join(src_path, "legacy")
   copy(src_path, dst_path, ["ittnotify.h"])
 
+  # build ittnotify 
+  build()
 if __name__ == "__main__":
   main()

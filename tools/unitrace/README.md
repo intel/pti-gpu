@@ -21,7 +21,7 @@ Intel(R) GPU applications.
 - Pandas 2.2.1 or later (https://pandas.pydata.org/)
 - Intel(R) MPI (optional)
 
-## Build
+## Build and Install
 
 ```sh
 set up Intel(R) oneAPI environment
@@ -35,8 +35,12 @@ mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 or
-cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=0 ..
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=<0|1> ..
+or
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=<0|1> -DCMAKE_INSTALL_PREFIX=<installpath> ..
 make
+or
+make install
 ```
 
 ### Windows
@@ -47,7 +51,11 @@ cd build
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release ..
 or
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=0 ..
+or
+cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=0 -DCMAKE_INSTALL_PREFIX=<installpath> ..
 nmake
+or
+nmake install
 ```
 
 The MPI support is not enabled if **BUILD_WITH_MPI=0** is defined.

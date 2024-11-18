@@ -599,10 +599,15 @@ int main(int argc, char *argv[]) {
   std::string lib_path = executable_path + LIB_UNITRACE_TOOL_NAME;
   FILE *fp = fopen(lib_path.c_str(), "rb");
   if (fp == nullptr) {
-    use_ld_lib_path = true;
-    lib_path = LIB_UNITRACE_TOOL_NAME;
-  }
-  else {
+    lib_path = executable_path + "/../lib/" + LIB_UNITRACE_TOOL_NAME;
+    fp = fopen(lib_path.c_str(), "rb");
+    if (fp == nullptr) {
+      use_ld_lib_path = true;
+      lib_path = LIB_UNITRACE_TOOL_NAME;
+    } else {
+      fclose(fp);
+    }
+  } else {
     fclose(fp);
   }
 
@@ -613,10 +618,16 @@ int main(int argc, char *argv[]) {
   } else {
     fp = fopen(mpi_interceptor_path.c_str(), "rb");
     if (fp == nullptr) {
-      std::cerr << "[ERROR] Library " << mpi_interceptor_path << " cannot be found or opened. " << std::endl;
-      return -1;
-    }
-    else {
+      mpi_interceptor_path = executable_path + "/../lib/" + LIB_UNITRACE_MPI_NAME;
+      fp = fopen(mpi_interceptor_path.c_str(), "rb");
+      if (fp == nullptr) {
+        std::cerr << "[ERROR] Library " << mpi_interceptor_path << " cannot be found or opened. " << std::endl;
+        return -1;
+      }
+      else {
+        fclose(fp);
+      }
+    } else {
       fclose(fp);
     }
   }

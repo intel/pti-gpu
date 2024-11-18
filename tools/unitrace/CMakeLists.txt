@@ -68,16 +68,14 @@ find_package(PythonInterp 3.9 REQUIRED)
 set(ITT_HASH 47467459a7984988ab838b5108c03ab1cf0a3f73)
 execute_process(COMMAND "${PYTHON_EXECUTABLE}" ${PROJECT_SOURCE_DIR}/scripts/get_itt.py ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR} ${ITT_HASH})
 
-add_subdirectory(${CMAKE_BINARY_DIR}/ittapi)
 if (BUILD_WITH_MPI)
   find_package(MPI REQUIRED)
   add_library(unitrace_mpi SHARED
     "${PROJECT_SOURCE_DIR}/src/mpi/mpi.c")
-  add_dependencies(unitrace_mpi ittnotify)
 
   target_link_libraries(unitrace_mpi
     PUBLIC MPI::MPI_C
-    PRIVATE ${CMAKE_BINARY_DIR}/bin/libittnotify.a)
+    PRIVATE ${CMAKE_BINARY_DIR}/libittnotify.a)
   target_include_directories(unitrace_mpi
     PRIVATE "${PROJECT_SOURCE_DIR}"
     PRIVATE "${I_MPI_ROOT}/include"
@@ -251,8 +249,12 @@ configure_file(${PROJECT_SOURCE_DIR}/scripts/analyzeperfmetrics.py ${CMAKE_BINAR
 configure_file(${PROJECT_SOURCE_DIR}/scripts/addrasm.py ${CMAKE_BINARY_DIR}/scripts/addrasm.py COPYONLY)
 
 # Installation
+install(TARGETS unitrace)
+install(TARGETS unitrace_tool RUNTIME)
+install(FILES ${PROJECT_SOURCE_DIR}/scripts/mergetrace.py DESTINATION scripts)
+install(FILES ${PROJECT_SOURCE_DIR}/scripts/addrasm.py DESTINATION scripts)
+install(FILES ${PROJECT_SOURCE_DIR}/scripts/analyzeperfmetrics.py DESTINATION scripts)
 
-install(TARGETS unitrace unitrace_tool DESTINATION bin)
 if (BUILD_WITH_MPI)
-  install(TARGETS unitrace_mpi DESTINATION bin)
+  install(TARGETS unitrace_mpi RUNTIME)
 endif()
