@@ -389,10 +389,13 @@ def gen_callbacks(
 
 def append_undefined_functions(func_list, func_dictionary):
     """
-    in Level-Zero 14 that PTI uses to build - these functions not defined yet.
-    However for Local profiling PTI relies that these functiond are present in the
-    L0 installed on the system.
-    So we add these functions to the list of functions that will be used to generate CBids
+    In Level-Zero 14 that PTI uses to build - these functions are not defined yet.
+    However, for Local profiling, PTI relies on these functions being present in the
+    L0 that is installed on the system.
+    We add these functions to the list of functions that are used to generate CBids.
+    CBidds are needed for overhead measurments.
+    We generate CBids for the tracing API functions as well. These functions also
+    contribute to the overhead.
     """
     additional_functions = [
         "zeEventPoolGetFlags",
@@ -574,9 +577,10 @@ def main():
         exclude_from_prologue_list,
     )
 
-    # add functions that might be undefined in the L0 header used to build PTI
-    # they will  be checked in runtime .. and used if found
-    # here we need to generate CBids for them - that are used in the Overhead collection
+    # Add functions that may be undefined in the L0 header used to build PTI,
+    # but typically found in runtime (when using recent L0).
+    # They will be used from the list of appended undefined functions here
+    # to generate CBids for them. CBids are needed for overhead collection.
     append_undefined_functions(category_dict["runtime"], func_param_dictionary)
 
     gen_cbid_files_per_category(proj_bin_path, dst_cb_api_file, category_dict)

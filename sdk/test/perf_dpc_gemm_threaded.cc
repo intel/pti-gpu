@@ -121,7 +121,9 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
+#if !defined(CAPTURE_OVERHEAD)
   PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+#endif /* ! CAPTURE_OVERHEAD */
   PTI_THROW(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
 }
 
@@ -129,7 +131,9 @@ void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
+#if !defined(CAPTURE_OVERHEAD)
   PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+#endif /* ! CAPTURE_OVERHEAD */
   PTI_THROW(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
 }
 
@@ -384,7 +388,7 @@ int main(int argc, char* argv[]) {
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
     auto gemm_count = thread_count * repeat_count;
-#endif
+#endif /* NO_PTI */
 
 #if !defined(NO_PTI)
     StopTracing();
@@ -394,14 +398,18 @@ int main(int argc, char* argv[]) {
     auto gemm_count = thread_count * repeat_count;
     std::cout << "-- PTI tracing was enabled, Record count: " << g_record_count << '\n';
 #if defined(CAPTURE_OVERHEAD)
-    std::cout << "-- Overhead time: " << (float)overhead_time_ns / (float)NSEC_IN_SEC << " sec"
+    std::cout << "-- For Overhead View test - only GPU ops and Overhead View are ON (not Sycl) "
               << '\n';
-#endif
-#endif
+    std::cout << "-- Summed from Overhead View records Overhead time: "
+              << static_cast<float>(overhead_time_ns) / static_cast<float>(NSEC_IN_SEC) << " sec"
+              << '\n';
+#endif /* CAPTURE_OVERHEAD */
+#endif /* ! NO_PTI */
 
     std::cout << "-- Total execution time: " << time.count() << " sec" << std::endl;
-    std::cout << "-- Throughput: " << (int)((float)gemm_count / time.count()) << " gemms of size "
-              << size << "x" << size << " in sec" << std::endl;
+    std::cout << "-- Throughput: "
+              << static_cast<int>(static_cast<float>(gemm_count) / time.count())
+              << " gemms of size " << size << "x" << size << " in sec" << std::endl;
 
   } catch (const sycl::exception& e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';

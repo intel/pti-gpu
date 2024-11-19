@@ -9,9 +9,10 @@ test_profiled = [["dpc_gemm_threaded_profiled", "-t", "5", "-r", "50", "-s", "32
 test_linkonly = [["dpc_gemm_threaded_linkonly", "-t", "5", "-r", "50", "-s", "32"]]
 test_baseline = [["dpc_gemm_threaded_baseline", "-t", "5", "-r", "50", "-s", "32"]]
 
-# for overhead test we need to run the baseline with 1 thread and allow bigger GPU kernel
-# the test checks if the reported Overhead time is at least ~ 40% (test parameter) of
-# the elapsed time overhead (=difference between the baseline and the test under profiling)
+# For Overhead View test, we run the baseline with 1 thread and bigger GPU kernel.
+# The test checks if the accumulated Overhead View time is at least
+# the threshold ratio (test parameter) multiplied by the difference between
+# the elapsed times of the baseline and the test under profiling.
 test_overhead = [["dpc_gemm_threaded_overhead", "-t", "1", "-r", "100", "-s", "128"]]
 test_baseline_t_1 = [
     ["dpc_gemm_threaded_baseline", "-t", "1", "-r", "100", "-s", "128"]
@@ -145,7 +146,7 @@ def main():
         if test_type != "overhead":
             print("\nThreshold Overhread to pass: " + str(threshold_overhead) + "% => ")
             print(
-                " Thoughput of the test workload is less not more"
+                " Throughput of the test workload is less not more"
                 " than Threshold Overhread\n"
             )
         else:
@@ -219,8 +220,11 @@ def main():
                 + " sec, Ratio: "
                 + str(captured_overhead_elapsed / elapsed_diff)
             )
-            if captured_overhead_elapsed < threshold_ratio * elapsed_diff:
-                print("Test failed - Too small overhead captured")
+            if elapsed_diff < 0.0:
+                print("Test failed - Negative elapsed diff captured")
+                return 1
+            elif captured_overhead_elapsed < threshold_ratio * elapsed_diff:
+                print("Test failed - Too small Overhead View captured")
                 return 1
             else:
                 return 0

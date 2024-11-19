@@ -54,18 +54,15 @@ void TestCore(bool do_immediate) {
 
     auto dev = sycl::device(sycl::gpu_selector_v);
     // Important that queue is in order
-    sycl::property_list prop1{sycl::property::queue::in_order(),
-                              sycl::ext::intel::property::queue::immediate_command_list()};
-    sycl::property_list prop;
     sycl::queue q;
     if (do_immediate) {
-      sycl::property_list prop1{sycl::property::queue::in_order(),
-                                sycl::ext::intel::property::queue::immediate_command_list()};
-      q = sycl::queue(sycl::gpu_selector_v, prop1);
+      sycl::property_list prop{sycl::property::queue::in_order(),
+                               sycl::ext::intel::property::queue::immediate_command_list()};
+      q = sycl::queue(sycl::gpu_selector_v, prop);
     } else {
-      sycl::property_list prop1{sycl::property::queue::in_order(),
-                                sycl::ext::intel::property::queue::no_immediate_command_list()};
-      q = sycl::queue(sycl::gpu_selector_v, prop1);
+      sycl::property_list prop{sycl::property::queue::in_order(),
+                               sycl::ext::intel::property::queue::no_immediate_command_list()};
+      q = sycl::queue(sycl::gpu_selector_v, prop);
     }
 
     int64_t* a = sycl::malloc_device<int64_t>(vector_size, q);

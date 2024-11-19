@@ -298,11 +298,10 @@ if(HAVE_SYCL)
       ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 8 linkonly
   )
 
-  # this is a special perf test where we allow higher overhead for now
   add_test(
     NAME perf-overhead-view
     COMMAND
-      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 25 overhead
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 50 overhead
   )
 
 

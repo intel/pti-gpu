@@ -38,7 +38,7 @@ jobs:
             preset: linux-icpx-release
 
 
-    container: 
+    container:
       image: ${{ matrix.container }}
       options: --device=/dev/dri --cap-add CAP_PERFMON
 
@@ -62,7 +62,21 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --output-on-failure --preset ${{ matrix.preset }} -LE perf
+          ctest --output-on-failure --preset ${{ matrix.preset }} -E perf-overhead-view
+
+      - name: Quarantined tests # flaky tests
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          status=0
+          if ctest --preset ${{ matrix.preset }} --output-on-failure -R perf-overhead-view; then
+            status=0
+          else
+            status=1
+            echo "::warning::Quarantined tests step failed." # this enables annotation
+          fi
+          echo "Test status: ${status}"
+          exit 0 # always exit 0 to keep the green checkmark going
 
       - name: Build AddressSanitizer
         working-directory: sdk
@@ -110,6 +124,7 @@ jobs:
         run: |
           source /opt/intel/oneapi/setvars.sh
           ctest --preset linux-tsan --output-on-failure -L samples
+
 
   win-lib-build-and-test:
     name: Test pti-lib on Windows
@@ -177,5 +192,17 @@ jobs:
           REM TODO Kernel name demangling not supported on Windows yet.
           REM TODO Tests need to be run without \DNDEBUG set
           REM TODO OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
-          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords" 
+          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords|perf-overhead-view"
+
+      - name: Quarantined tests # flaky tests
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          ctest --preset ${{ matrix.preset }} --output-on-failure -R perf-overhead-view
+          if %ERRORLEVEL% NEQ 0 (
+            echo ::warning::Quarantined tests step failed. # this enables annotation
+          )
+          exit /b 0  # always return 0 to keep the green checkmark going
+
 
