@@ -94,8 +94,6 @@ if (BUILD_WITH_MPI)
 endif()
 
 add_library(unitrace_tool SHARED
-  "${PROJECT_SOURCE_DIR}/src/opencl/cl_ext_collector.cc"
-  "${PROJECT_SOURCE_DIR}/../../utils/trace_guard.cc"
   "${PROJECT_SOURCE_DIR}/src/tracer.cc")
 link_directories(${ONEAPI_COMPILER_HOME}/lib)
 find_package(Xptifw REQUIRED)

@@ -9,6 +9,8 @@
 
 #include <iostream>
 
+#include <CL/cl.h>
+#include <CL/cl_ext_private.h>
 #include <level_zero/layers/zel_tracing_api.h>
 
 #define KERNEL_ID_INVALID		0

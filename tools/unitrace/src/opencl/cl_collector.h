@@ -27,20 +27,14 @@
 #include "unikernel.h"
 #include "unicontrol.h"
 
-// OpenCl Hw metric collection happens via level-zero interface hence below includes
 #include <level_zero/zes_api.h>
 #include "ze_utils.h"
 
 #include "common_header.gen"
 
+#include "cl_intel_ext.h"
+
 class ClCollector;
-
-struct ClInstanceApiData {
-  uint64_t start_time;
-  uint64_t end_time;
-};
-
-static thread_local ClInstanceApiData cl_instance_api_data;
 
 enum ClKernelType {
   KERNEL_TYPE_USER,
@@ -161,10 +155,6 @@ struct ClKernelProfileRecord {
 
 typedef void (*OnClFunctionFinishCallback)(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id, uint64_t started, uint64_t ended);
 
-typedef void (*OnClExtFunctionFinishCallback)(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const cl_ext_api_id api_id, uint64_t started, uint64_t ended);
-
-
-// Metric collection happens via level-0 interfaces hence these function.
 inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
   PTI_ASSERT(device != nullptr);
 
@@ -203,6 +193,43 @@ inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
 
 void OnEnterFunction(cl_function_id function, cl_callback_data* data, uint64_t start, ClCollector* collector);
 void OnExitFunction(cl_function_id function, cl_callback_data* data, uint64_t start, uint64_t end, ClCollector* collector);
+
+template <cl_device_type device_type>
+void *clHostMemAllocINTEL(cl_context context, const cl_mem_properties_intel *properties, size_t size, cl_uint alignment, cl_int *errcode_ret);
+template <cl_device_type device_type>
+void *clDeviceMemAllocINTEL(cl_context context, cl_device_id device, const cl_mem_properties_intel* properties, size_t size, cl_uint alignment, cl_int* errcode_ret);
+template <cl_device_type device_type>
+void *clSharedMemAllocINTEL(cl_context context, cl_device_id device, const cl_mem_properties_intel* properties, size_t size, cl_uint alignment, cl_int* errcode_ret);
+template <cl_device_type device_type>
+cl_int clMemFreeINTEL(cl_context context, void *ptr);
+template <cl_device_type device_type>
+cl_int clGetMemAllocInfoINTEL(cl_context context, const void *ptr, cl_mem_info_intel param_name, size_t param_value_size, void *param_value, size_t *param_value_size_ret);
+template <cl_device_type device_type>
+cl_int clSetKernelArgMemPointerINTEL(cl_kernel kernel, cl_uint arg_index, const void *arg_value);
+template <cl_device_type device_type>
+cl_int clEnqueueMemcpyINTEL(cl_command_queue command_queue, cl_bool blocking, void *dst_ptr, const void *src_ptr,
+        size_t size, cl_uint num_events_in_wait_list, const cl_event *event_wait_list, cl_event *event);
+template <cl_device_type device_type>
+cl_int clGetDeviceGlobalVariablePointerINTEL(cl_device_id device, cl_program program, const char *global_variable_name,
+        size_t *global_variable_size_ret, void **global_variable_pointer_ret);
+template <cl_device_type device_type>
+cl_int clGetKernelSuggestedLocalWorkSizeINTEL(cl_command_queue command_queue, cl_kernel kernel, cl_uint workDim,
+        const size_t *global_work_offset, const size_t *global_work_size, size_t *suggested_local_work_size);
+template <cl_device_type device_type>
+cl_mem clCreateBufferWithPropertiesINTEL( cl_context context, const cl_mem_properties_intel* properties, cl_mem_flags flags, size_t size, void *host_ptr, cl_int *errcode_ret);
+template <cl_device_type device_type>
+cl_int clEnqueueMemsetINTEL(cl_command_queue command_queue, void* dst_ptr, cl_int value, size_t size, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event);
+template <cl_device_type device_type>
+cl_int clEnqueueMigrateMemINTEL(cl_command_queue command_queue, const void* ptr, size_t size, cl_mem_migration_flags flags,
+        cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event);
+template <cl_device_type device_type>
+cl_int clEnqueueMemAdviseINTEL(cl_command_queue command_queue, const void* ptr, size_t size, cl_mem_advice_intel advice,
+        cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event);
+template <cl_device_type device_type>
+cl_int clEnqueueMemFillINTEL(cl_command_queue command_queue, void* dst_ptr, const void* pattern, size_t pattern_size, size_t size,
+        cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event);
+template <cl_device_type device_type>
+cl_int clMemBlockingFreeINTEL( cl_context context, void* ptr);
 
 inline std::string GetVerboseName(const ClKernelProps* props) {
   PTI_ASSERT(props != nullptr);
@@ -244,16 +271,14 @@ class ClCollector {
       CollectorOptions options,
       OnClKernelFinishCallback kcallback = nullptr,
       OnClFunctionFinishCallback fcallback = nullptr,
-      OnClExtFunctionFinishCallback extfcallback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(logger != nullptr);
-    TraceGuard guard;
 
     std::string data_dir_name = utils::GetEnv("UNITRACE_DataDir");
 
     ClCollector* collector = new ClCollector(
-        device, logger, options, kcallback, fcallback, extfcallback, callback_data, data_dir_name);
+        device, logger, options, kcallback, fcallback, callback_data, data_dir_name);
     PTI_ASSERT(collector != nullptr);
 
     collector->SetKernelTracingPoints();
@@ -273,6 +298,13 @@ class ClCollector {
     }
 
     collector->tracer_ = tracer;
+
+    if (collector->device_type_ == CL_DEVICE_TYPE_CPU) {
+      cl_cpu_collector_ = collector;
+    }
+    else {
+      cl_gpu_collector_ = collector;
+    }
 
     return collector;
   }
@@ -548,6 +580,97 @@ class ClCollector {
     logger_->Log(stream.str());
   }
 
+  static ClCollector *GetCollector(cl_device_type device_type) {
+    if (device_type == CL_DEVICE_TYPE_GPU) {
+      return cl_gpu_collector_;
+    }
+    else {
+      return cl_cpu_collector_;
+    }
+  }
+
+  uint64_t GetTimestamp() const {
+    return utils::GetSystemTime();
+  }
+
+  void AddFunctionTime(const std::string& name, uint64_t time) {
+    const std::lock_guard<std::mutex> lock(lock_);
+    if (function_info_map_.count(name) == 0) {
+      function_info_map_[name] = {time, time, time, 1};
+    } else {
+      ClFunction& function = function_info_map_[name];
+      function.total_time += time;
+      if (time < function.min_time) {
+        function.min_time = time;
+      }
+      if (time > function.max_time) {
+        function.max_time = time;
+      }
+      ++function.call_count;
+    }
+  }
+
+  static bool IsTracingNow() {
+    return trace_now_; 
+  }
+
+  static void TracingNowOn() {
+    trace_now_ = true;
+  }
+
+  static void TracingNowOff() {
+    trace_now_ = false;
+  }
+
+  static void PushTraceNesting() {
+    trace_nesting_level_++; 
+    if (trace_nesting_level_ == max_trace_nesting_level_) {
+      std::cerr << "[ERROR] Nest tracing level " << trace_nesting_level_ << " is unsupported" << std::endl;
+      exit(-1);
+    }
+  }
+
+  static void PopTraceNesting() {
+    trace_nesting_level_--; 
+    if (trace_nesting_level_ < -1) {
+      std::cerr << "[ERROR] Nest tracing level " << trace_nesting_level_ << " is unsupported" << std::endl;
+      exit(-1);
+    }
+  }
+
+  static uint64_t GetTraceStartTimeAndPopTraceNesting() {
+    uint64_t t = trace_start_time_[trace_nesting_level_];
+    PopTraceNesting();
+    return t;
+  }
+
+  void PushTraceNestingAndCaptureTraceStartTime(){
+    PushTraceNesting();
+    trace_start_time_[trace_nesting_level_] = GetTimestamp();
+  }
+
+  bool IsHostTimingOn() {
+    return options_.host_timing;
+  }
+
+  bool IsCallLoggingOn() {
+    return options_.call_logging;
+  }
+
+  void *GetClExtFunction(int i) {
+    void *ret;
+    cl_ext_func_lock_.lock_shared();
+    ret = cl_ext_func_[i];
+    cl_ext_func_lock_.unlock();
+    return ret;
+  }
+
+  void InvokeFunctionFinishCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const cl_ext_api_id api_id, uint64_t started, uint64_t ended) {
+    if (fcallback_ != nullptr) {
+      fcallback_(kids, flow_dir, (API_TRACING_ID)api_id, started, ended);
+    }
+  }
+
  private: // Implementation Details
   ClCollector(
       cl_device_id device,
@@ -555,7 +678,6 @@ class ClCollector {
       CollectorOptions options,
       OnClKernelFinishCallback kcallback,
       OnClFunctionFinishCallback fcallback,
-      OnClExtFunctionFinishCallback extfcallback,
       void* callback_data,
       std::string& data_dir_name)
       : device_(device),
@@ -563,15 +685,20 @@ class ClCollector {
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
-        extfcallback_(extfcallback),
         callback_data_(callback_data),
         data_dir_name_(data_dir_name) {
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(logger_ != nullptr);
 
     device_type_ = utils::cl::GetDeviceType(device);
-    PTI_ASSERT( device_type_ == CL_DEVICE_TYPE_CPU || device_type_ == CL_DEVICE_TYPE_GPU);
+    PTI_ASSERT(device_type_ == CL_DEVICE_TYPE_CPU || device_type_ == CL_DEVICE_TYPE_GPU);
     CreateDeviceMap();
+
+    // initialize extension function replacements to nulls
+    const std::lock_guard<std::shared_mutex> lock(cl_ext_func_lock_);
+    for (int i = 0; i < (ClExtApiEnd - ClExtApiStart); i++) {
+      cl_ext_func_[i] = nullptr;
+    }
   }
 
   void CreateDeviceMap() {
@@ -731,7 +858,6 @@ class ClCollector {
 
     cl_event event = instance->event;
     cl_int event_status = utils::cl::GetEventStatus(event);
-    //PTI_ASSERT(event_status == CL_COMPLETE);
     cl_command_queue queue = utils::cl::GetCommandQueue(event);
     PTI_ASSERT(queue != nullptr);
     cl_device_id device = utils::cl::GetDevice(queue);
@@ -740,7 +866,6 @@ class ClCollector {
     auto it = device_map_.find(device); 
     if (it != device_map_.end()) {
       if (it->second.isroot_) {
-        //ClKernelInterval kernel_interval{ name, device, std::vector<ClDeviceInterval>()};
         int i = 0;
         if (it->second.subdevs_.size() > 0) {
           // implicit scaling in COMPOSITE mode
@@ -797,14 +922,14 @@ class ClCollector {
     host_started = host_submitted + time_diff;
     time_diff = started <= ended ? (ended - started) : 0;
     host_ended = host_started + time_diff;
-#else
+#else /* _WIN32 */
     PTI_ASSERT(queued <= submitted);
     host_submitted = host_queued + (submitted - queued);
     PTI_ASSERT(submitted <= started);
     host_started = host_submitted + (started - submitted);
     PTI_ASSERT(started <= ended);
     host_ended = host_started + (ended - started);
-#endif
+#endif /* _WIN32 */
   }
 
   void PrintOutOffloadedCommand(std::string& name, cl_device_id& device, uint64_t appended, uint64_t submitted, uint64_t kernel_start, uint64_t kernel_end) {
@@ -989,9 +1114,7 @@ class ClCollector {
     }
   }
 
-  void AddKernelInfo(
-      std::string name, uint64_t queued_time,
-      uint64_t submit_time, uint64_t execute_time) {
+  void AddKernelInfo(std::string name, uint64_t queued_time, uint64_t submit_time, uint64_t execute_time) {
     PTI_ASSERT(!name.empty());
 
     if (kernel_info_map_.count(name) == 0) {
@@ -1019,9 +1142,7 @@ class ClCollector {
   }
 
 
-  void CalculateKernelLocalSize(
-      const cl_params_clEnqueueNDRangeKernel* params,
-      ClKernelProps* props) {
+  void CalculateKernelLocalSize(const cl_params_clEnqueueNDRangeKernel* params, ClKernelProps* props) {
     PTI_ASSERT(params != nullptr);
     PTI_ASSERT(props != nullptr);
 
@@ -1040,18 +1161,14 @@ class ClCollector {
     }
   }
 
-  void CalculateKernelLocalSize(
-      const cl_params_clEnqueueTask* params,
-      ClKernelProps* props) {
+  void CalculateKernelLocalSize(const cl_params_clEnqueueTask* params, ClKernelProps* props) {
     PTI_ASSERT(props != nullptr);
     props->local_size[0] = 1;
     props->local_size[1] = 1;
     props->local_size[2] = 1;
   }
 
-  void CalculateKernelGlobalSize(
-      const cl_params_clEnqueueNDRangeKernel* params,
-      ClKernelProps* props) {
+  void CalculateKernelGlobalSize(const cl_params_clEnqueueNDRangeKernel* params, ClKernelProps* props) {
     PTI_ASSERT(params != nullptr);
     PTI_ASSERT(props != nullptr);
     props->global_size[0] = 1;
@@ -1064,9 +1181,7 @@ class ClCollector {
     }
   }
 
-  void CalculateKernelGlobalSize(
-      const cl_params_clEnqueueTask* params,
-      ClKernelProps* props) {
+  void CalculateKernelGlobalSize(const cl_params_clEnqueueTask* params, ClKernelProps* props) {
     PTI_ASSERT(props != nullptr);
     props->global_size[0] = 1;
     props->global_size[1] = 1;
@@ -1550,180 +1665,171 @@ class ClCollector {
     }
   }
 
-  static void KernelTracingCallBack(cl_function_id function, cl_callback_data* callback_data, void* user_data, uint64_t *kid) {
-    if (TraceGuard::Inactive()) return;
-
-    TraceGuard guard;
-
-    ClCollector* collector = reinterpret_cast<ClCollector*>(user_data);
-    PTI_ASSERT(collector != nullptr);
-
-    if (function == CL_FUNCTION_clCreateCommandQueueWithProperties) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+  static void KernelTracingCallBackOnEnter(cl_function_id function, ClCollector *collector, cl_callback_data *callback_data, uint64_t *kid) {
+    switch (function) {
+      case CL_FUNCTION_clCreateCommandQueueWithProperties:
         OnEnterCreateCommandQueueWithProperties(callback_data, collector);
-      } else {
-        OnExitCreateCommandQueueWithProperties(callback_data, collector);
-      }
-    } else if (function == CL_FUNCTION_clCreateCommandQueue) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clCreateCommandQueue:
         OnEnterCreateCommandQueue(callback_data, collector);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueNDRangeKernel) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueNDRangeKernel:
         OnEnterEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(callback_data, collector);
-      } else {
-        OnExitEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueTask) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueTask:
         OnEnterEnqueueKernel<cl_params_clEnqueueTask>(callback_data, collector);
-      } else {
-        OnExitEnqueueKernel<cl_params_clEnqueueTask>(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueReadBuffer) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueReadBuffer:
         OnEnterEnqueueKernel<cl_params_clEnqueueReadBuffer>(callback_data, collector);
-      } else {
-        OnExitEnqueueReadBuffer(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueWriteBuffer) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueWriteBuffer:
         OnEnterEnqueueKernel<cl_params_clEnqueueWriteBuffer>(callback_data, collector);
-      } else {
-        OnExitEnqueueWriteBuffer(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueCopyBuffer) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueCopyBuffer:
         OnEnterEnqueueKernel<cl_params_clEnqueueCopyBuffer>(callback_data, collector);
-      } else {
-        OnExitEnqueueCopyBuffer(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueFillBuffer) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueFillBuffer:
         OnEnterEnqueueKernel<cl_params_clEnqueueFillBuffer>(callback_data, collector);
-      } else {
-        OnExitEnqueueFillBuffer(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueReadBufferRect) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueReadBufferRect:
         OnEnterEnqueueKernel<cl_params_clEnqueueReadBufferRect>(callback_data, collector);
-      } else {
-        OnExitEnqueueReadBufferRect(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueWriteBufferRect) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueWriteBufferRect:
         OnEnterEnqueueKernel<cl_params_clEnqueueWriteBufferRect>(callback_data, collector);
-      } else {
-        OnExitEnqueueWriteBufferRect(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueCopyBuffer) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-        OnEnterEnqueueKernel<cl_params_clEnqueueCopyBuffer>(callback_data, collector);
-      } else {
-        OnExitEnqueueCopyBuffer(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueReadImage) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueReadImage:
         OnEnterEnqueueKernel<cl_params_clEnqueueReadImage>(callback_data, collector);
-      } else {
-        OnExitEnqueueReadImage(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueWriteImage) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueWriteImage:
         OnEnterEnqueueKernel<cl_params_clEnqueueWriteImage>(callback_data, collector);
-      } else {
-        OnExitEnqueueWriteImage(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueCopyImage) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueCopyImage:
         OnEnterEnqueueKernel<cl_params_clEnqueueCopyImage>(callback_data, collector);
-      } else {
-        OnExitEnqueueCopyImage(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueFillImage) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueFillImage:
         OnEnterEnqueueKernel<cl_params_clEnqueueFillImage>(callback_data, collector);
-      } else {
-        OnExitEnqueueFillImage(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueCopyImageToBuffer) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueCopyImageToBuffer:
         OnEnterEnqueueKernel<cl_params_clEnqueueCopyImageToBuffer>(callback_data, collector);
-      } else {
-        OnExitEnqueueCopyImageToBuffer(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clEnqueueCopyBufferToImage) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clEnqueueCopyBufferToImage:
         OnEnterEnqueueKernel<cl_params_clEnqueueCopyBufferToImage>(callback_data, collector);
-      } else {
-        OnExitEnqueueCopyBufferToImage(callback_data, collector, kid);
-      }
-    } else if (function == CL_FUNCTION_clFinish) {
-      if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
-        OnExitFinish(collector);
-      }
-    } else if (function == CL_FUNCTION_clReleaseCommandQueue) {
-      if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
-        OnExitReleaseCommandQueue(collector);
-      }
-    } else if (function == CL_FUNCTION_clReleaseEvent) {
-      if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
+        break;
+      case CL_FUNCTION_clFinish:
+      case CL_FUNCTION_clReleaseCommandQueue:
+        break;
+      case CL_FUNCTION_clReleaseEvent:
         OnEnterReleaseEvent(callback_data, collector);
-      }
-    } else if (function == CL_FUNCTION_clWaitForEvents) {
-      if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
+        break;
+      case CL_FUNCTION_clWaitForEvents:
+        break;
+      default:
+        break;
+    }
+  }
+
+  static void KernelTracingCallBackOnExit(cl_function_id function, ClCollector *collector, cl_callback_data *callback_data, uint64_t *kid) {
+    switch(function) {
+      case CL_FUNCTION_clCreateCommandQueueWithProperties:
+        OnExitCreateCommandQueueWithProperties(callback_data, collector);
+        break;
+      case CL_FUNCTION_clCreateCommandQueue:
+        break;
+      case CL_FUNCTION_clEnqueueNDRangeKernel:
+        OnExitEnqueueKernel<cl_params_clEnqueueNDRangeKernel>(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueTask:
+        OnExitEnqueueKernel<cl_params_clEnqueueTask>(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueReadBuffer:
+        OnExitEnqueueReadBuffer(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueWriteBuffer:
+        OnExitEnqueueWriteBuffer(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueCopyBuffer:
+        OnExitEnqueueCopyBuffer(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueFillBuffer:
+        OnExitEnqueueFillBuffer(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueReadBufferRect:
+        OnExitEnqueueReadBufferRect(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueWriteBufferRect:
+        OnExitEnqueueWriteBufferRect(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueReadImage:
+        OnExitEnqueueReadImage(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueWriteImage:
+        OnExitEnqueueWriteImage(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueCopyImage:
+        OnExitEnqueueCopyImage(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueFillImage:
+        OnExitEnqueueFillImage(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueCopyImageToBuffer:
+        OnExitEnqueueCopyImageToBuffer(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clEnqueueCopyBufferToImage:
+        OnExitEnqueueCopyBufferToImage(callback_data, collector, kid);
+        break;
+      case CL_FUNCTION_clFinish:
+        OnExitFinish(collector);
+        break;
+      case CL_FUNCTION_clReleaseCommandQueue:
+        OnExitReleaseCommandQueue(collector);
+        break;
+      case CL_FUNCTION_clReleaseEvent:
+        break;
+      case CL_FUNCTION_clWaitForEvents:
         OnExitWaitForEvents(callback_data, collector);
-      }
+        break;
+      default:
+        break;
     }
   }
 
   static void TracingCallBack(cl_function_id function, cl_callback_data* callback_data, void* user_data) {
-    if (TraceGuard::Inactive()) return;
-
+    if (IsTracingNow()) {
+      // no recursive tracing
+      return;
+    }
     ClCollector* collector = reinterpret_cast<ClCollector*>(user_data);
-    PTI_ASSERT(collector != nullptr);
-    PTI_ASSERT(callback_data != nullptr);
-    PTI_ASSERT(callback_data->correlationData != nullptr);
-    
-    uint64_t end_time;
-    if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
-      // take end timestamp first to avoid tool overhead
-      end_time = collector->GetTimestamp();
-    }
-      
-    uint64_t kid = KERNEL_INSTANCE_ID_INVALID;
-    if (collector->options_.kernel_tracing && collector->kernel_tracing_points_enabled[function]) {
-      KernelTracingCallBack(function, callback_data, user_data, &kid);
-    }
-
-    TraceGuard guard;
     if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-      if (!UniController::IsCollectionEnabled()) {
-        //*reinterpret_cast<uint64_t*>(callback_data->correlationData) = 0;
-        return;
+      if (UniController::IsCollectionEnabled()) {
+        collector->TracingNowOn();
+        uint64_t kid = KERNEL_INSTANCE_ID_INVALID;
+        if (collector->options_.kernel_tracing && collector->kernel_tracing_points_enabled[function]) {
+          KernelTracingCallBackOnEnter(function, collector, callback_data, &kid);
+        }
+
+        if (collector->options_.call_logging) {
+          OnEnterFunction(function, callback_data, collector->GetTimestamp(), collector);
+        }
+
+        collector->TracingNowOff();
+      }
+      collector->PushTraceNestingAndCaptureTraceStartTime();
+    }
+    else {
+      // take end timestamp first to avoid tool overhead
+      uint64_t end_time = collector->GetTimestamp();
+      
+      collector->TracingNowOn();
+      uint64_t kid = KERNEL_INSTANCE_ID_INVALID;
+      if (collector->options_.kernel_tracing && collector->kernel_tracing_points_enabled[function]) {
+        KernelTracingCallBackOnExit(function, collector, callback_data, &kid);
       }
 
-      if (collector->options_.call_logging) {
-        OnEnterFunction(function, callback_data, collector->GetTimestamp(), collector);
+      uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+      if (collector->options_.host_timing) {
+        collector->AddFunctionTime(callback_data->functionName, end_time - start_time);
       }
-
-      cl_instance_api_data.start_time = collector->GetTimestamp();
-      //uint64_t& start_time = *reinterpret_cast<uint64_t*>(
-      //    callback_data->correlationData);
-      //start_time = collector->GetTimestamp();
-    } else {
-      //uint64_t end_time = collector->GetTimestamp();
-      //uint64_t& start_time = *reinterpret_cast<uint64_t*>(
-      //    callback_data->correlationData);
-
-      //if (start_time == 0) {
-      //  return;
-      //}
-
-      cl_instance_api_data.end_time = end_time;
-      uint64_t start_time = cl_instance_api_data.start_time;
-      collector->AddFunctionTime(
-        callback_data->functionName, end_time - start_time);
 
       if (collector->options_.call_logging) {
         OnExitFunction(function, callback_data, start_time, end_time, collector);
@@ -1745,71 +1851,70 @@ class ClCollector {
         API_TRACING_ID api_id = (API_TRACING_ID)(OCLStartTracingId + function);
         collector->fcallback_((kids.empty() ? nullptr: &kids), flow_dir, api_id, start_time, end_time);
       }
-    }
 
-    #define SET_EXTENSION_FUNCTION(name) \
-      if (std::string(#name) == *params->funcName) { \
-        if (collector->device_type_ == CL_DEVICE_TYPE_GPU) { \
-          *reinterpret_cast<decltype(name<CL_DEVICE_TYPE_GPU>)**>( \
-              callback_data->functionReturnValue) = &name<CL_DEVICE_TYPE_GPU>; \
-        } else { \
-          PTI_ASSERT(collector->device_type_ == CL_DEVICE_TYPE_CPU); \
-          *reinterpret_cast<decltype(name<CL_DEVICE_TYPE_CPU>)**>( \
-              callback_data->functionReturnValue) = &name<CL_DEVICE_TYPE_CPU>; \
-        } \
-      }
+      #define REPLACE_INTEL_EXTENSION_FUNCTION(params, name, i, cb_data) \
+        if (strcmp(#name, *(params->funcName)) == 0) { \
+          if (collector->cl_ext_func_[i] == nullptr) { \
+            const std::lock_guard<std::shared_mutex> lock(collector->cl_ext_func_lock_); \
+            if (collector->cl_ext_func_[i] == nullptr) { \
+              collector->cl_ext_func_[i] = *(void **)(cb_data->functionReturnValue); \
+            } \
+          } \
+          if (collector->device_type_ == CL_DEVICE_TYPE_GPU) { \
+            *reinterpret_cast<decltype(name<CL_DEVICE_TYPE_CPU>)**>(cb_data->functionReturnValue) = &name<CL_DEVICE_TYPE_GPU>; \
+          } \
+          else { \
+            *reinterpret_cast<decltype(name<CL_DEVICE_TYPE_CPU>)**>(cb_data->functionReturnValue) = &name<CL_DEVICE_TYPE_CPU>; \
+          } \
+        }
 
-    if (callback_data->site == CL_CALLBACK_SITE_EXIT) {
       if (function == CL_FUNCTION_clGetExtensionFunctionAddress) {
-        const cl_params_clGetExtensionFunctionAddress* params =
-          reinterpret_cast<const cl_params_clGetExtensionFunctionAddress*>(callback_data->functionParams);
-        SET_EXTENSION_FUNCTION(clHostMemAllocINTEL);
-        SET_EXTENSION_FUNCTION(clDeviceMemAllocINTEL);
-        SET_EXTENSION_FUNCTION(clSharedMemAllocINTEL);
-        SET_EXTENSION_FUNCTION(clMemFreeINTEL);
-        SET_EXTENSION_FUNCTION(clGetMemAllocInfoINTEL);
-        SET_EXTENSION_FUNCTION(clSetKernelArgMemPointerINTEL);
-        SET_EXTENSION_FUNCTION(clEnqueueMemcpyINTEL);
-        SET_EXTENSION_FUNCTION(clGetDeviceGlobalVariablePointerINTEL);
-        SET_EXTENSION_FUNCTION(clGetKernelSuggestedLocalWorkSizeINTEL);
+        const cl_params_clGetExtensionFunctionAddress *params =
+          reinterpret_cast<const cl_params_clGetExtensionFunctionAddress *>(callback_data->functionParams);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clHostMemAllocINTEL, ClExtHostMemAllocINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clDeviceMemAllocINTEL, ClExtDeviceMemAllocINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clSharedMemAllocINTEL, ClExtSharedMemAllocINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clMemFreeINTEL, ClExtMemFreeINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clGetMemAllocInfoINTEL, ClExtGetMemAllocInfoINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clSetKernelArgMemPointerINTEL, ClExtSetKernelArgMemPointerINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMemcpyINTEL, ClExtEnqueueMemcpyINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clGetDeviceGlobalVariablePointerINTEL, ClExtGetDeviceGlobalVariablePointerINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clGetKernelSuggestedLocalWorkSizeINTEL, ClExtGetKernelSuggestedLocalWorkSizeINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clCreateBufferWithPropertiesINTEL, ClExtCreateBufferWithPropertiesINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMemsetINTEL, ClExtEnqueueMemsetINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMigrateMemINTEL, ClExtEnqueueMigrateMemINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMemAdviseINTEL, ClExtEnqueueMemAdviseINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMemFillINTEL, ClExtEnqueueMemFillINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clMemBlockingFreeINTEL, ClExtMemBlockingFreeINTEL - ClExtApiStart, callback_data);
       } else if (function == CL_FUNCTION_clGetExtensionFunctionAddressForPlatform) {
-        const cl_params_clGetExtensionFunctionAddressForPlatform* params =
-          reinterpret_cast<const cl_params_clGetExtensionFunctionAddressForPlatform*>(callback_data->functionParams);
-        SET_EXTENSION_FUNCTION(clHostMemAllocINTEL);
-        SET_EXTENSION_FUNCTION(clDeviceMemAllocINTEL);
-        SET_EXTENSION_FUNCTION(clSharedMemAllocINTEL);
-        SET_EXTENSION_FUNCTION(clMemFreeINTEL);
-        SET_EXTENSION_FUNCTION(clGetMemAllocInfoINTEL);
-        SET_EXTENSION_FUNCTION(clSetKernelArgMemPointerINTEL);
-        SET_EXTENSION_FUNCTION(clEnqueueMemcpyINTEL);
-        SET_EXTENSION_FUNCTION(clGetDeviceGlobalVariablePointerINTEL);
-        SET_EXTENSION_FUNCTION(clGetKernelSuggestedLocalWorkSizeINTEL);
+        const cl_params_clGetExtensionFunctionAddressForPlatform *params =
+          reinterpret_cast<const cl_params_clGetExtensionFunctionAddressForPlatform *>(callback_data->functionParams);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clHostMemAllocINTEL, ClExtHostMemAllocINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clDeviceMemAllocINTEL, ClExtDeviceMemAllocINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clSharedMemAllocINTEL, ClExtSharedMemAllocINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clMemFreeINTEL, ClExtMemFreeINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clGetMemAllocInfoINTEL, ClExtGetMemAllocInfoINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clSetKernelArgMemPointerINTEL, ClExtSetKernelArgMemPointerINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMemcpyINTEL, ClExtEnqueueMemcpyINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clGetDeviceGlobalVariablePointerINTEL, ClExtGetDeviceGlobalVariablePointerINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clGetKernelSuggestedLocalWorkSizeINTEL, ClExtGetKernelSuggestedLocalWorkSizeINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clCreateBufferWithPropertiesINTEL, ClExtCreateBufferWithPropertiesINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMemsetINTEL, ClExtEnqueueMemsetINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMigrateMemINTEL, ClExtEnqueueMigrateMemINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMemAdviseINTEL, ClExtEnqueueMemAdviseINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clEnqueueMemFillINTEL, ClExtEnqueueMemFillINTEL - ClExtApiStart, callback_data);
+        REPLACE_INTEL_EXTENSION_FUNCTION(params, clMemBlockingFreeINTEL, ClExtMemBlockingFreeINTEL - ClExtApiStart, callback_data);
       }
+      collector->TracingNowOff();
     }
   }
 
-  uint64_t GetTimestamp() const {
-    return utils::GetSystemTime();
-  }
 
-  void AddFunctionTime(const std::string& name, uint64_t time) {
-    const std::lock_guard<std::mutex> lock(lock_);
-    if (function_info_map_.count(name) == 0) {
-      function_info_map_[name] = {time, time, time, 1};
-    } else {
-      ClFunction& function = function_info_map_[name];
-      function.total_time += time;
-      if (time < function.min_time) {
-        function.min_time = time;
-      }
-      if (time > function.max_time) {
-        function.max_time = time;
-      }
-      ++function.call_count;
-    }
-  }
+  constexpr static int max_trace_nesting_level_ = 2;
+  inline static int trace_nesting_level_ = -1; // in case an extension is called within an OCL call
+  inline static thread_local uint64_t trace_start_time_[max_trace_nesting_level_] = {0}; // start time of traced API 
+  inline static thread_local bool trace_now_ = false; // prevent recursive tracing
 
-  // Data
   ClApiTracer* tracer_ = nullptr;
   Logger *logger_ = nullptr;
 
@@ -1819,7 +1924,6 @@ class ClCollector {
 
   OnClKernelFinishCallback kcallback_ = nullptr;
   OnClFunctionFinishCallback fcallback_ = nullptr;
-  OnClExtFunctionFinishCallback extfcallback_ = nullptr;
   void* callback_data_ = nullptr;
 
   std::mutex lock_;
@@ -1850,7 +1954,1101 @@ class ClCollector {
   std::vector<ClKernelProfileRecord> profile_records_;
   std::map<cl_device_id, uint32_t> present_cl_devices_;
 
-  friend class ClExtCollector;
+  std::shared_mutex cl_ext_func_lock_;	// lock for extension function table
+  void *cl_ext_func_[ClExtApiEnd - ClExtApiStart] = {nullptr};
+
+  inline static ClCollector *cl_gpu_collector_ = nullptr;
+  inline static ClCollector *cl_cpu_collector_ = nullptr;
 };
 
+template <cl_device_type device_type>
+void *clHostMemAllocINTEL(cl_context context, const cl_mem_properties_intel *properties, size_t size, cl_uint alignment, cl_int *errcode_ret) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clHostMemAllocINTEL:";
+  
+        str += " context = " + std::to_string(uint64_t(context));
+        str += " properties = " + std::to_string(uint64_t(properties));
+        str += " size = " + std::to_string(size);
+        str += " alignment = " + std::to_string(alignment);
+        str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (void *(*)(cl_context, const cl_mem_properties_intel *, size_t, cl_uint, cl_int *))(collector->GetClExtFunction(ClExtHostMemAllocINTEL - ClExtApiStart));
+  auto result = f(context, properties, size, alignment, errcode_ret);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clHostMemAllocINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clHostMemAllocINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " result = " + std::to_string(uint64_t(result));
+
+      str += " -> " + std::string(utils::cl::GetErrorString(*errcode_ret));
+      str += " (" + std::to_string(*errcode_ret) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtHostMemAllocINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+
+  return result;
+}
+
+template <cl_device_type device_type>
+void *clDeviceMemAllocINTEL(cl_context context, cl_device_id device, const cl_mem_properties_intel* properties, size_t size, cl_uint alignment, cl_int* errcode_ret) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clDeviceMemAllocINTEL:";
+  
+        str += " context = " + std::to_string(uint64_t(context));
+        str += " device = " + std::to_string(uint64_t(device));
+        str += " properties = " + std::to_string(uint64_t(properties));
+        str += " size = " + std::to_string(size);
+        str += " alignment = " + std::to_string(alignment);
+        str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (void *(*)(cl_context, cl_device_id, const cl_mem_properties_intel *, size_t, cl_uint, cl_int *))(collector->GetClExtFunction(ClExtDeviceMemAllocINTEL - ClExtApiStart));
+  auto result = f(context, device, properties, size, alignment, errcode_ret);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clDeviceMemAllocINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clDeviceMemAllocINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " result = " + std::to_string(uint64_t(result));
+
+      str += " -> " + std::string(utils::cl::GetErrorString(*errcode_ret));
+      str += " (" + std::to_string(*errcode_ret) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtDeviceMemAllocINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+
+  return result;
+}
+
+template <cl_device_type device_type>
+void *clSharedMemAllocINTEL(cl_context context, cl_device_id device, const cl_mem_properties_intel* properties, size_t size, cl_uint alignment, cl_int* errcode_ret) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clSharedMemAllocINTEL:";
+  
+        str += " context = " + std::to_string(uint64_t(context));
+        str += " device = " + std::to_string(uint64_t(device));
+        str += " properties = " + std::to_string(uint64_t(properties));
+        str += " size = " + std::to_string(size);
+        str += " alignment = " + std::to_string(alignment);
+        str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (void *(*)(cl_context, cl_device_id, const cl_mem_properties_intel *, size_t, cl_uint, cl_int *))(collector->GetClExtFunction(ClExtSharedMemAllocINTEL - ClExtApiStart));
+  auto result = f(context, device, properties, size, alignment, errcode_ret);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clSharedMemAllocINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str += "clSharedMemAllocINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " result = " + std::to_string(uint64_t(result));
+
+      if (errcode_ret) {
+        str += " -> " + std::string(utils::cl::GetErrorString(*errcode_ret));
+        str += " (" + std::to_string(*errcode_ret) + ")";
+      }
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtSharedMemAllocINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clMemFreeINTEL(cl_context context, void *ptr) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clMemFreeINTEL:";
+  
+        str += " context = " + std::to_string(uint64_t(context));
+        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_context, void *))(collector->GetClExtFunction(ClExtMemFreeINTEL - ClExtApiStart));
+  auto result = f(context, ptr);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clMemFreeINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clMemFreeINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+      str += " result = " + std::to_string(result);
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtMemFreeINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clGetMemAllocInfoINTEL(cl_context context, const void *ptr, cl_mem_info_intel param_name, size_t param_value_size, void *param_value, size_t *param_value_size_ret) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clGetMemAllocInfoINTEL:";
+  
+        str += " context = " + std::to_string(uint64_t(context));
+        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += " param_name = " + param_name;
+        str += " param_value_size = " + std::to_string(param_value_size);
+        str += " param_value = " + std::to_string(uint64_t(param_value));
+        str += " param_value_size_ret = " + std::to_string(uint64_t(param_value_size_ret));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_context, const void *, cl_mem_info_intel, size_t, void *, size_t *))(collector->GetClExtFunction(ClExtGetMemAllocInfoINTEL - ClExtApiStart));
+  auto result = f(context, ptr, param_name, param_value_size, param_value, param_value_size_ret);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clGetMemAllocInfoINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clGetMemAllocInfoINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtGetMemAllocInfoINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clSetKernelArgMemPointerINTEL(cl_kernel kernel, cl_uint arg_index, const void *arg_value) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clSetKernelArgMemPointerINTEL:";
+  
+        str += " kernel = " + std::to_string(uint64_t(kernel));
+        str += " arg_index = " + std::to_string(arg_index);
+        str += " arg_value = " + std::to_string(uint64_t(arg_value));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_kernel, cl_uint, const void *))(collector->GetClExtFunction(ClExtSetKernelArgMemPointerINTEL - ClExtApiStart));
+  auto result = f(kernel, arg_index, arg_value);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clSetKernelArgMemPointerINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clSetKernelArgMemPointerINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtSetKernelArgMemPointerINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clEnqueueMemcpyINTEL(cl_command_queue command_queue, cl_bool blocking, void *dst_ptr, const void *src_ptr,
+          size_t size, cl_uint num_events_in_wait_list, const cl_event *event_wait_list, cl_event *event) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clEnqueueMemcpyINTEL:";
+        str += " command_queue = " + std::to_string(uint64_t(command_queue));
+        str += " blocking = " + std::to_string(blocking);
+        str += " dst_ptr = " + std::to_string(uint64_t(dst_ptr));
+        str += " src_ptr = " + std::to_string(uint64_t(src_ptr));
+        str += " size = " + std::to_string(size);
+        str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
+        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
+        str += " event = " + std::to_string(uint64_t(event));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_command_queue, cl_bool, void *, const void *, size_t, cl_uint, const cl_event *, cl_event *))(collector->GetClExtFunction(ClExtEnqueueMemcpyINTEL - ClExtApiStart));
+  auto result = f(command_queue, blocking, dst_ptr, src_ptr, size, num_events_in_wait_list, event_wait_list, event);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clEnqueueMemcpyINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clEnqueueMemcpyINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtEnqueueMemcpyINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clGetDeviceGlobalVariablePointerINTEL(cl_device_id device, cl_program program, const char *global_variable_name,
+          size_t *global_variable_size_ret, void **global_variable_pointer_ret) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clGetDeviceGlobalVariablePointerINTEL:";
+        str += " device = " + std::to_string(uint64_t(device));
+        str += " program = " + std::to_string(uint64_t(program));
+        str += " global_variable_name = " + std::string(global_variable_name);
+        str += " global_variable_size_ret = " + std::to_string(uint64_t(global_variable_size_ret));
+        str += " global_variable_pointer_ret = " + std::to_string(uint64_t(global_variable_pointer_ret));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_device_id, cl_program, const char *, size_t *, void **))(collector->GetClExtFunction(ClExtGetDeviceGlobalVariablePointerINTEL- ClExtApiStart));
+  auto result = f(device, program, global_variable_name, global_variable_size_ret, global_variable_pointer_ret);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clGetDeviceGlobalVariablePointerINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clGetDeviceGlobalVariablePointerINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtGetDeviceGlobalVariablePointerINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clGetKernelSuggestedLocalWorkSizeINTEL(cl_command_queue command_queue, cl_kernel kernel, cl_uint workDim,
+          const size_t *global_work_offset, const size_t *global_work_size, size_t *suggested_local_work_size) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clGetKernelSuggestedLocalWorkSizeINTEL:";
+        str += " command_queue = " + std::to_string(uint64_t(command_queue));
+        str += " kernel = " + std::to_string(uint64_t(kernel));
+        str += " workDim = " + std::to_string(workDim);
+        str += " global_work_offset = " + std::to_string(uint64_t(global_work_offset));
+        str += " global_work_size = " + std::to_string(uint64_t(global_work_size));
+        str += " suggested_local_work_size = " + std::to_string(uint64_t(suggested_local_work_size));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_command_queue, cl_kernel, cl_uint, const size_t *, const size_t *, size_t *))(collector->GetClExtFunction(ClExtGetKernelSuggestedLocalWorkSizeINTEL - ClExtApiStart));
+  auto result = f(command_queue, kernel, workDim, global_work_offset, global_work_size, suggested_local_work_size);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clGetKernelSuggestedLocalWorkSizeINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clGetKernelSuggestedLocalWorkSizeINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+      str += " suggested_local_work_size = " + std::to_string(uint64_t(suggested_local_work_size));
+      if (suggested_local_work_size != nullptr) {
+        str += " (" + std::to_string(*suggested_local_work_size) + ")";
+      }
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtGetKernelSuggestedLocalWorkSizeINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_mem clCreateBufferWithPropertiesINTEL(cl_context context, const cl_mem_properties_intel *properties, cl_mem_flags flags, size_t size, void *host_ptr, cl_int *errcode_ret) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clCreateBufferWithPropertiesINTEL:";
+        str += " context = " + std::to_string(uint64_t(context));
+        str += " properties = " + std::to_string(uint64_t(properties));
+        str += " cl_mem_flags = " + std::to_string(flags);
+        str += " size = " + std::to_string(size);
+        str += " host_ptr = " + std::to_string(uint64_t(host_ptr));
+        str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_mem (*)(cl_context, const cl_mem_properties_intel *, cl_mem_flags, size_t, void *, cl_int *))(collector->GetClExtFunction(ClExtCreateBufferWithPropertiesINTEL - ClExtApiStart));
+  auto result = f(context, properties, flags, size, host_ptr, errcode_ret);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clCreateBufferWithPropertiesINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clCreateBufferWithPropertiesINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " result = " + std::to_string(uint64_t(result));
+
+      if (errcode_ret) {
+        str += " -> " + std::string(utils::cl::GetErrorString(*errcode_ret));
+        str += " (" + std::to_string(*errcode_ret) + ")";
+      }
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtCreateBufferWithPropertiesINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clEnqueueMemsetINTEL(cl_command_queue command_queue, void *dst_ptr, cl_int value, size_t size, cl_uint num_events_in_wait_list,
+                const cl_event *event_wait_list, cl_event *event) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clEnqueueMemsetINTEL:";
+        str += " command_queue = " + std::to_string(uint64_t(command_queue));
+        str += " dst_ptr = " + std::to_string(uint64_t(dst_ptr));
+        str += " value = " + std::to_string(value);
+        str += " size = " + std::to_string(size);
+        str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
+        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
+        str += " event = " + std::to_string(uint64_t(event));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_command_queue, void *, cl_int, size_t, cl_uint, const cl_event *, cl_event *))(collector->GetClExtFunction(ClExtEnqueueMemsetINTEL - ClExtApiStart));
+  auto result = f(command_queue, dst_ptr, value, size, num_events_in_wait_list, event_wait_list, event);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clEnqueueMemsetINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clEnqueueMemsetINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtEnqueueMemsetINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clEnqueueMigrateMemINTEL(cl_command_queue command_queue, const void *ptr, size_t size, cl_mem_migration_flags flags,
+        cl_uint num_events_in_wait_list, const cl_event *event_wait_list, cl_event *event) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clEnqueueMigrateMemINTEL:";
+        str += " command_queue = " + std::to_string(uint64_t(command_queue));
+        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += " size = " + std::to_string(size);
+        str += " flags = " + std::to_string(uint64_t(flags));
+        str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
+        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
+        str += " event = " + std::to_string(uint64_t(event));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_command_queue, const void *, size_t, cl_mem_migration_flags, cl_uint, const cl_event *, cl_event *))(collector->GetClExtFunction(ClExtEnqueueMigrateMemINTEL - ClExtApiStart));
+  auto result = f(command_queue, ptr, size, flags, num_events_in_wait_list, event_wait_list, event);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clEnqueueMigrateMemINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clEnqueueMigrateMemINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtEnqueueMigrateMemINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clEnqueueMemAdviseINTEL(cl_command_queue command_queue, const void *ptr, size_t size, cl_mem_advice_intel advice,
+        cl_uint num_events_in_wait_list, const cl_event *event_wait_list, cl_event *event) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clEnqueueMemAdviseINTEL:";
+        str += " command_queue = " + std::to_string(uint64_t(command_queue));
+        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += " size = " + std::to_string(size);
+        str += " advice = " + std::to_string(uint64_t(advice));
+        str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
+        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
+        str += " event = " + std::to_string(uint64_t(event));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_command_queue, const void *, size_t, cl_mem_advice_intel, cl_uint, const cl_event *, cl_event *))(collector->GetClExtFunction(ClExtEnqueueMemAdviseINTEL - ClExtApiStart));
+  auto result = f(command_queue, ptr, size, advice, num_events_in_wait_list, event_wait_list, event);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clEnqueueMemAdviseINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clEnqueueMemAdviseINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtEnqueueMemAdviseINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clEnqueueMemFillINTEL(cl_command_queue command_queue, void *dst_ptr, const void *pattern, size_t pattern_size, size_t size,
+        cl_uint num_events_in_wait_list, const cl_event *event_wait_list, cl_event *event) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clEnqueueMemFillINTEL:";
+        str += " command_queue = " + std::to_string(uint64_t(command_queue));
+        str += " dst_ptr = " + std::to_string(uint64_t(dst_ptr));
+        str += " pattern = " + std::to_string(uint64_t(pattern));
+        str += " pattern_size = " + std::to_string(pattern_size);
+        str += " size = " + std::to_string(size);
+        str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
+        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
+        str += " event = " + std::to_string(uint64_t(event));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_command_queue, void *, const void *, size_t, size_t, cl_uint, const cl_event *, cl_event *))(collector->GetClExtFunction(ClExtEnqueueMemFillINTEL - ClExtApiStart));
+  auto result = f(command_queue, dst_ptr, pattern, pattern_size, size, num_events_in_wait_list, event_wait_list, event);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clEnqueueMemFillINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clEnqueueMemFillINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtEnqueueMemFillINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+  return result;
+}
+
+template <cl_device_type device_type>
+cl_int clMemBlockingFreeINTEL(cl_context context, void *ptr) {
+  ClCollector *collector = ClCollector::GetCollector(device_type);
+
+  if (collector->IsTracingNow() == false) {
+    if (UniController::IsCollectionEnabled()) {
+      if (collector->IsCallLoggingOn()) {
+        collector->TracingNowOn();
+        std::string str;
+        str = ">>>> [" + std::to_string(collector->GetTimestamp()) + "] ";
+        if (collector->NeedPid()) {
+          str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+        }
+        if (collector->NeedTid()) {
+          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        }
+        str += "clMemBlockingFreeINTEL:";
+        str += " context = " + std::to_string(uint64_t(context));
+        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += "\n";
+  
+        collector->Log(str);
+        collector->TracingNowOff();
+      }
+    }
+    collector->PushTraceNestingAndCaptureTraceStartTime();
+  }
+
+  auto f = (cl_int (*)(cl_context, void *))(collector->GetClExtFunction(ClExtMemBlockingFreeINTEL - ClExtApiStart));
+  auto result = f(context, ptr);
+
+  if (collector->IsTracingNow() == false) {
+    // take end timestamp first to avoid tool overhead
+    uint64_t end_time = collector->GetTimestamp();
+    collector->TracingNowOn();
+    uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
+
+    if (collector->IsHostTimingOn()) {
+      collector->AddFunctionTime("clMemBlockingFreeINTEL", end_time - start_time);
+    }
+
+    if (collector->IsCallLoggingOn()) {
+      std::string str;
+      str = "<<<< ["  + std::to_string(end_time) + "] ";
+      if (collector->NeedPid()) {
+        str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
+      }
+      if (collector->NeedTid()) {
+        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+      }
+      str +=  "clMemBlockingFreeINTEL";
+      str += " [" + std::to_string(end_time - start_time) + " ns]";
+
+      str += " -> " + std::string(utils::cl::GetErrorString(result));
+      str += " (" + std::to_string(result) + ")";
+      str += "\n";
+
+      collector->Log(str);
+    }
+
+    collector->InvokeFunctionFinishCallback(nullptr, FLOW_NUL, ClExtMemBlockingFreeINTEL, start_time, end_time);
+    collector->TracingNowOff();
+  }
+
+  return result;
+}
 #endif //PTI_TOOLS_UNITRACE_CL_COLLECTOR_H_

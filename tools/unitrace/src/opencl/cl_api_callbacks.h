@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_TOOLS_CL_TRACER_CL_API_CALLBACKS_H_
-#define PTI_TOOLS_CL_TRACER_CL_API_CALLBACKS_H_
+#ifndef PTI_TOOLS_UNITRACE_CL_API_CALLBACKS_H_
+#define PTI_TOOLS_UNITRACE_CL_API_CALLBACKS_H_
 
 #include <sstream>
 
@@ -7394,4 +7394,4 @@ void OnExitFunction(
   }
 }
 
-#endif // PTI_TOOLS_CL_TRACER_CL_API_CALLBACKS_H_
+#endif /* PTI_TOOLS_UNITRACE_CL_API_CALLBACKS_H_ */

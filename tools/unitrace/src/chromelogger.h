@@ -23,8 +23,6 @@
 #include "unievent.h"
 #include "unimemory.h"
 
-#include "opencl/cl_ext_collector.h"
-
 #include "common_header.gen"
 
 static inline std::string GetHostName(void) {
@@ -114,8 +112,8 @@ typedef struct TraceDataPacket_ {
       name = utils::Demangle(name.data());
     }
     else {
-      if ((cl_ext_api_id)api_id > clExtApiIdStartTraceId && (cl_ext_api_id)api_id < clExtApiIdEndTraceId) {
-        name = cl_ext_api_id_name[api_id - clExtApiIdStartTraceId - 1];
+      if ((cl_ext_api_id)api_id >= ClExtApiStart && (cl_ext_api_id)api_id < ClExtApiEnd) {
+        name = cl_ext_api[api_id - ClExtApiStart];
       } else if ((api_id != OpenClTracingId) && (api_id != XptiTracingId) && (api_id != IttTracingId) && (api_id != ZeKernelTracingId)) {
         // L0 kernel names are already demanged/
         name = get_symbol(api_id);
@@ -1524,11 +1522,6 @@ class ChromeLogger {
           cl_thread_local_buffer_.BufferHostEvent();
         }
       }
-    }
-
-    static void ClExtChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, const cl_ext_api_id api_id,
-      uint64_t started, uint64_t ended) {
-      ClChromeCallLoggingCallback(kids, flow_dir, (API_TRACING_ID)api_id, started, ended);
     }
 };
 

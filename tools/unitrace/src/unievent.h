@@ -58,6 +58,4 @@ typedef struct HostEventRecord_ {
   };
 } HostEventRecord;
 
-
-
 #endif // PTI_TOOLS_UNITRACE_UNIEVENT_H
