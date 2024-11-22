@@ -99,7 +99,7 @@ typedef enum _pti_view_overhead_kind {
   PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< Overhead due to a resource
   PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,   //!< Overhead due to a buffer flush
   PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,         //!< Overhead due to driver
-  PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to L0 api processing time
+  PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to Backend api processing time
 } pti_view_overhead_kind;
 
 /**
@@ -291,11 +291,11 @@ typedef struct pti_view_record_zecalls {
  */
 typedef struct pti_view_record_oclcalls {
   pti_view_record_base _view_kind; //!< Base record
-  uint64_t _start_timestamp;       //!< L0 api call start timestamp, ns
-  uint64_t _end_timestamp;         //!< L0 api call end timestamp, ns
-  uint32_t _process_id;            //!< Process ID of where the zecall observed
-  uint32_t _thread_id;             //!< Thread ID of where the zecall observed
-  uint32_t _callback_id;           //!< Callback id of this zecall 
+  uint64_t _start_timestamp;       //!< OCL api call start timestamp, ns
+  uint64_t _end_timestamp;         //!< OCL api call end timestamp, ns
+  uint32_t _process_id;            //!< Process ID of where the oclcall observed
+  uint32_t _thread_id;             //!< Thread ID of where the oclcall observed
+  uint32_t _callback_id;           //!< Callback id of this oclcall 
   uint32_t _correlation_id;        //!< Correlation id tracking memfill, memcpy and kernel gpu activity
 } pti_view_record_oclcalls;
 
