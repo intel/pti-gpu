@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_TOOLS_CL_TRACER_TRACE_GUARD_H_
-#define PTI_TOOLS_CL_TRACER_TRACE_GUARD_H_
+#ifndef UTILS_TRACE_GUARD_H_
+#define UTILS_TRACE_GUARD_H_
 
 #include "pti_assert.h"
 
@@ -24,4 +24,4 @@ class TraceGuard {
   static thread_local int inactive_count_;
 };
 
-#endif  // PTI_TOOLS_CL_TRACER_TRACE_GUARD_H_
+#endif  // UTILS_TRACE_GUARD_H_

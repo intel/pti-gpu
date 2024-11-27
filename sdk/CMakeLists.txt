@@ -48,7 +48,6 @@ option(PTI_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_BUILD_OCL_EXTERNAL "Build opencl externals with library" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_INSTALL "Install library when invoking --install" ON)
 option(PTI_ENABLE_LOGGING "Enable logging for Pti" OFF)
-option(PTI_DEBUG "Enable code helping to debug Pti" OFF)
 option(PTI_FUZZ "Enable Fuzz Pti" OFF)
 
 include(GNUInstallDirs)
@@ -61,10 +60,6 @@ set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
 CheckSOVersion(${PTI_API_SOVERSION})
 CheckExperimentalFilesystem()
-
-if(PTI_DEBUG)
-  add_compile_definitions(PTI_DEBUG)
-endif()
 
 # Check and Get Dependencies
 GetSpdlog()
@@ -236,11 +231,6 @@ target_compile_definitions(
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
 
-
-if(PTI_DEBUG)
-  add_compile_definitions(PTI_DEBUG)
-endif()
-
 target_link_libraries(
   pti_view
   PUBLIC
@@ -290,9 +280,6 @@ target_compile_definitions(
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
-FindHeadersPath(
-  pti_view "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
-  "tracing.gen" gen_tracing_header LevelZero::level-zero)
 
 target_link_libraries(
   pti_metrics

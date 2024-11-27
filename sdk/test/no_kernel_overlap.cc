@@ -302,7 +302,9 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
 
   RunTest(do_immediate);
-  if (opencl_backend) GTEST_SKIP();
+  // immediate command list is not supported for OpenCL backend,
+  // but still need to check that kernels do not overlap for the default case
+  if (do_immediate && opencl_backend) GTEST_SKIP();
 
   // order of records is not garantie the order of submission and execution of kernels -
   // so let's  sort kernel stamp pairs by device start stamp

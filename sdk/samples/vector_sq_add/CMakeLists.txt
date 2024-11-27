@@ -22,6 +22,8 @@ add_executable(vec_sqadd vector_sq_add.cc)
 
 target_link_options(vec_sqadd PUBLIC -fsycl -gline-tables-only)
 target_compile_options(vec_sqadd PUBLIC -fsycl -gline-tables-only)
+
+
 target_include_directories(vec_sqadd
                            PRIVATE "${PROJECT_SOURCE_DIR}/../../src/utils"
                             "${PROJECT_SOURCE_DIR}/../samples_utilities")
@@ -36,4 +38,5 @@ if (NOT TARGET LevelZero::level-zero)
 endif()
 
 target_link_libraries(vec_sqadd PUBLIC Pti::pti_view LevelZero::level-zero)
+
 

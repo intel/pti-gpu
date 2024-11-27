@@ -295,7 +295,7 @@ typedef struct pti_view_record_oclcalls {
   uint64_t _end_timestamp;         //!< OCL api call end timestamp, ns
   uint32_t _process_id;            //!< Process ID of where the oclcall observed
   uint32_t _thread_id;             //!< Thread ID of where the oclcall observed
-  uint32_t _callback_id;           //!< Callback id of this oclcall 
+  uint32_t _callback_id;           //!< Callback id of this oclcall
   uint32_t _correlation_id;        //!< Correlation id tracking memfill, memcpy and kernel gpu activity
 } pti_view_record_oclcalls;
 
@@ -461,7 +461,7 @@ pti_result PTI_EXPORT
 ptiViewGetCallbackIdName(uint32_t id, const char** name);
 
 /**
- * @brief Turns on opencl lightweight profiling -- this api call needs to be used *before* queue creations 
+ * @brief Turns on opencl lightweight profiling -- this api call needs to be used *before* queue creations
  *        for queues which have commands that need to be profiled.  Enable view_kinds for OpenCL to see the profiled
  *        kernel/memory commands in the buffer.
  *

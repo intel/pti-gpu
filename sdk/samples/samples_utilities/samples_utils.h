@@ -122,7 +122,7 @@ void print_uuid(uint8_t* uuid, std::string additional_string) {
 }
 
 void dump_record(pti_view_record_kernel* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
 
   std::cout << "Kernel Name: " << record->_name << '\n';
   std::cout << "               Ze Kernel Append Time: " << record->_append_timestamp << " ns"
@@ -153,7 +153,7 @@ void dump_record(pti_view_record_kernel* record) {
 }
 
 void dump_record(pti_view_record_memory_copy* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
 
   std::cout << "Memory Op: " << record->_name << '\n';
   std::cout << "Memory Device: " << record->_pci_address << '\n';
@@ -184,7 +184,7 @@ void dump_record(pti_view_record_memory_copy* record) {
 }
 
 void dump_record(pti_view_record_memory_copy_p2p* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
 
   std::cout << "Memory Op: " << record->_name << '\n';
   std::cout << "Memory Source Device: " << record->_src_pci_address << '\n';
@@ -217,7 +217,7 @@ void dump_record(pti_view_record_memory_copy_p2p* record) {
 }
 
 void dump_record(pti_view_record_memory_fill* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
 
   std::cout << "Memory Op: " << record->_name << '\n';
   std::cout << "Memory Device: " << record->_pci_address << '\n';
@@ -244,7 +244,7 @@ void dump_record(pti_view_record_memory_fill* record) {
 }
 
 void dump_record(pti_view_record_zecalls* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
   const char* pName = nullptr;
   PTI_THROW(ptiViewGetCallbackIdName(record->_callback_id, &pName));
   std::cout << "ZeCall Function Name: " << pName << '\n';
@@ -257,10 +257,10 @@ void dump_record(pti_view_record_zecalls* record) {
 }
 
 void dump_record(pti_view_record_oclcalls* record) {
-  if (NULL == record) return;
-  const char* pName = nullptr;
-  PTI_THROW(ptiViewGetCallbackIdName(record->_callback_id, &pName));
-  std::cout << "OclCall Function Name: " << pName << '\n';
+  if (nullptr == record) return;
+  const char* name = nullptr;
+  PTI_THROW(ptiViewGetCallbackIdName(record->_callback_id, &name));
+  std::cout << "OclCall Function Name: " << name << '\n';
   std::cout << "OclCall Function CBID: " << record->_callback_id << '\n';
   std::cout << "OclCall Start Time: " << record->_start_timestamp << '\n';
   std::cout << "  OclCall End Time: " << record->_end_timestamp << '\n';
@@ -270,7 +270,7 @@ void dump_record(pti_view_record_oclcalls* record) {
 }
 
 void dump_record(pti_view_record_sycl_runtime* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
   std::cout << "Sycl Function Name: " << record->_name << '\n';
   std::cout << "Sycl Start Time: " << record->_start_timestamp << '\n';
   std::cout << "Sycl End Time: " << record->_end_timestamp << '\n';
@@ -280,7 +280,7 @@ void dump_record(pti_view_record_sycl_runtime* record) {
 }
 
 void dump_record(pti_view_record_overhead* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
   std::cout << "Overhead Kind : " << ptiViewOverheadKindToString(record->_overhead_kind) << '\n';
   std::cout << "Overhead Time Duration(ns): " << record->_overhead_duration_ns << '\n';
   std::cout << "Overhead Count: " << record->_overhead_count << '\n';
@@ -293,7 +293,7 @@ void dump_record(pti_view_record_overhead* record) {
 }
 
 void dump_record(pti_view_record_external_correlation* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
   std::cout << "External Correlation Kind : " << record->_external_kind << '\n';
   std::cout << "Correlation Id: " << record->_correlation_id << '\n';
   std::cout << "External Id: " << record->_external_id << '\n';

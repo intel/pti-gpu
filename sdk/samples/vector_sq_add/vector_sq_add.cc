@@ -24,6 +24,8 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_OPENCL_CALLS));
   PTI_THROW(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION));
 }
 
@@ -32,6 +34,8 @@ void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_OPENCL_CALLS));
   PTI_THROW(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION));
 }
 
@@ -306,6 +310,22 @@ int main() {
                 samples_utils::dump_record(rec);
                 break;
               }
+              case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                pti_view_record_zecalls *rec = reinterpret_cast<pti_view_record_zecalls *>(ptr);
+                samples_utils::dump_record(rec);
+                break;
+              }
+              case pti_view_kind::PTI_VIEW_OPENCL_CALLS: {
+                std::cout << "---------------------------------------------------"
+                             "-----------------------------"
+                          << '\n';
+                pti_view_record_oclcalls *rec = reinterpret_cast<pti_view_record_oclcalls *>(ptr);
+                samples_utils::dump_record(rec);
+                break;
+              }
               default: {
                 std::cerr << "This shouldn't happen" << '\n';
                 break;
@@ -316,9 +336,17 @@ int main() {
         }));
 
 #if __INTEL_LLVM_COMPILER >= 20240000
+    // TODO select OpenCL GPU device for the target with OpenCL
+    // in meanwhile run the test with ONEAPI_DEVICE_SELECTOR=opencl:gpu
     auto d_selector{sycl::gpu_selector_v};
-    sycl::property_list prop{sycl::property::queue::enable_profiling(),
-                             sycl::property::queue::in_order()};
+
+    pti_result ocl_profile_result = ptiViewSetOclProfiling();
+    if (ocl_profile_result != pti_result::PTI_SUCCESS) {
+      std::cerr << "Error: Failed to set OCL profiling" << '\n';
+      exit_code = EXIT_FAILURE;
+    }
+    // sycl::property_list prop{sycl::property::queue::enable_profiling(),
+    sycl::property_list prop{sycl::property::queue::in_order()};
     sycl::queue q(d_selector, prop);
 #else
     sycl::property_list prop{};

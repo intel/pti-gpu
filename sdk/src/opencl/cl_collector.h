@@ -219,7 +219,7 @@ static bool SetDeviceUUIDinfo(cl_device_id device, uint8_t* ptr) {
     return false;
   }
 
-  cl_uchar uuid[16];
+  cl_uchar uuid[ZE_MAX_DEVICE_UUID_SIZE];
   cl_int status = clGetDeviceInfo(device, CL_DEVICE_UUID_KHR, 16, &uuid, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
 
@@ -244,10 +244,8 @@ class ClCollector {
     PTI_ASSERT(device != nullptr);
     TraceGuard guard;
 
-    std::string data_dir_name = utils::GetEnv("UNITRACE_DataDir");
-
     auto collector = std::unique_ptr<ClCollector>(
-        new ClCollector(device, options, kcallback, fcallback, callback_data, data_dir_name));
+        new ClCollector(device, options, kcallback, fcallback, callback_data));
     PTI_ASSERT(collector != nullptr);
 
     collector->KernelTracingPointsQueuesOnlyOn();
@@ -360,14 +358,13 @@ class ClCollector {
   ClCollector(cl_device_id device, CollectorOptions options, OnClKernelFinishCallback kcallback,
               OnClApiCallsFinishCallback fcallback,
               // OnClExtFunctionFinishCallback extfcallback,
-              void* callback_data, std::string& data_dir_name)
+              void* callback_data)
       : options_(options),
         device_(device),
         kcallback_(kcallback),
         fcallback_(fcallback),
         // extfcallback_(extfcallback),
-        callback_data_(callback_data),
-        data_dir_name_(data_dir_name) {
+        callback_data_(callback_data) {
     PTI_ASSERT(device_ != nullptr);
 
     device_type_ = utils::cl::GetDeviceType(device);
@@ -742,10 +739,10 @@ class ClCollector {
         if (instance->sub_device_list.size()) {
           for (size_t i = 0; i < instance->sub_device_list.size(); ++i) {
             ProcessKernelInstance(instance, instance->sub_device_list[i]);
-          };
+          }
         } else {
           ProcessKernelInstance(instance, -1);
-        };
+        }
         it = kernel_instance_list_.erase(it);
       } else {
         ++it;
@@ -1818,12 +1815,6 @@ class ClCollector {
 
   ClKernelMemInfoMap kernel_mem_info_map_;
 
-  static const uint32_t kFunctionLength = 10;
-  static const uint32_t kKernelLength = 10;
-  static const uint32_t kCallsLength = 12;
-  static const uint32_t kTimeLength = 20;
-  static const uint32_t kPercentLength = 12;
-
   cl_device_type device_type_ = CL_DEVICE_TYPE_ALL;
 
   // OnClApiCallsFinishCallback callback_ = nullptr;
@@ -1831,7 +1822,6 @@ class ClCollector {
   ClFunctionInfoMap function_info_map_;
 
   std::map<std::string, ClKernelProps> kprops_;
-  std::string data_dir_name_;
 
   std::vector<ClKernelProfileRecord> profile_records_;
   bool lw_profiling_on = false;

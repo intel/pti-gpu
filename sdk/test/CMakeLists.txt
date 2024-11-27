@@ -387,15 +387,13 @@ if(HAVE_SYCL)
   add_test(
     NAME perf-profiling-overhead-ocl
     COMMAND
-      bash -c
-      "ONEAPI_DEVICE_SELECTOR=opencl:gpu ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py ${PTI_TEST_BIN_DIR} 66 profiled"
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 66 profiled
   )
 
   add_test(
     NAME perf-link-overhead-ocl
     COMMAND
-      bash -c
-      "ONEAPI_DEVICE_SELECTOR=opencl:gpu ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py ${PTI_TEST_BIN_DIR} 8 linkonly"
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 8 linkonly
   )
 
   add_test(
@@ -404,29 +402,37 @@ if(HAVE_SYCL)
       ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 50 overhead
   )
 
-
-  set_tests_properties(
-    perf-profiling-overhead-ocl perf-link-overhead-ocl PROPERTIES LABELS "performance")
-
   add_test(
     NAME perf-profiling-overhead-l0
     COMMAND
-      bash -c
-      "ONEAPI_DEVICE_SELECTOR=level_zero:gpu ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py ${PTI_TEST_BIN_DIR} 66 profiled"
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 66 profiled
   )
 
   add_test(
     NAME perf-link-overhead-l0
     COMMAND
-      bash -c
-      "ONEAPI_DEVICE_SELECTOR=level_zero:gpu ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py ${PTI_TEST_BIN_DIR} 8 linkonly"
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 8 linkonly
   )
 
   set_tests_properties(
-    perf-profiling-overhead-l0 perf-link-overhead-l0 PROPERTIES LABELS "performance")
+    perf-profiling-overhead-ocl perf-link-overhead-ocl
+    perf-profiling-overhead-l0 perf-link-overhead-l0
+    PROPERTIES LABELS "performance")
 
   set_tests_properties(
     perf-overhead-view PROPERTIES LABELS "performance;functional")
+
+  set_tests_properties(
+    perf-profiling-overhead-ocl
+    perf-link-overhead-ocl
+    PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=opencl:gpu")
+
+  set_tests_properties(
+    perf-profiling-overhead-l0
+    perf-link-overhead-l0
+    perf-overhead-view
+    PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:gpu")
+
 
 endif()
 
@@ -500,8 +506,8 @@ target_include_directories(
   assert_exception_test
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
-         "${TRACING_HEADER_DIR}" 
-         "${PROJECT_SOURCE_DIR}/src/opencl" 
+         "${TRACING_HEADER_DIR}"
+         "${PROJECT_SOURCE_DIR}/src/opencl"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
 target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_main
