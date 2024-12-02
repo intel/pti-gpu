@@ -47,7 +47,6 @@ option(PTI_BUILD_TESTING "Build PTI tests" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_INSTALL "Install library when invoking --install" ON)
 option(PTI_ENABLE_LOGGING "Enable logging for Pti" OFF)
-option(PTI_DEBUG "Enable code helping to debug Pti" OFF)
 option(PTI_FUZZ "Enable Fuzz Pti" OFF)
 
 include(GNUInstallDirs)
@@ -60,10 +59,6 @@ set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
 CheckSOVersion(${PTI_API_SOVERSION})
 CheckExperimentalFilesystem()
-
-if(PTI_DEBUG)
-  add_compile_definitions(PTI_DEBUG)
-endif()
 
 # Check and Get Dependencies
 GetSpdlog()
