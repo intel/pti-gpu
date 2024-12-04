@@ -71,23 +71,20 @@ class XptiCollector {
 
 static XptiCollector *xpti_collector = nullptr;
 
-XPTI_CALLBACK_API void tpCallback(uint16_t trace_type,
-                                  xpti::trace_event_data_t *parent,
-                                  xpti::trace_event_data_t *event,
-                                  uint64_t instance, const void *user_data);
+XPTI_CALLBACK_API void tpCallback(uint16_t trace_type, xpti::trace_event_data_t *parent, xpti::trace_event_data_t *event, uint64_t instance, const void *user_data);
 
-void xptiTraceInit(unsigned int major_version,
-                                     unsigned int minor_version,
-                                     const char *version_str,
-                                     const char *stream_name) {
+void xptiTraceInit(unsigned int major_version, unsigned int minor_version, const char *version_str, const char *stream_name) {
   if ((std::string(stream_name) == "sycl") ||
       (std::string(stream_name) == "sycl.pi") ||
+      (std::string(stream_name) == "ur.call") ||
       //(std::string(stream_name) == "sycl.pi.debug") ||
       (std::string(stream_name) == "sycl.experimental.buffer") ||
       (std::string(stream_name) == "sycl.experimental.mem_alloc")) {
     uint8_t stream = xptiRegisterStream(stream_name);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::function_begin, tpCallback);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::function_end, tpCallback);
+    xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::function_with_args_begin, tpCallback);
+    xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::function_with_args_end, tpCallback);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::task_begin, tpCallback);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::task_end, tpCallback);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::wait_begin, tpCallback);
@@ -148,16 +145,16 @@ enum XPTI_EVENT {
   XPTI_EVENT_LAST
 };
   
-static thread_local uint64_t xpti_event_start_ts[XPTI_EVENT_LAST];
+constexpr static int max_xpti_trace_nesting_level = 8;	// 8 layers should be sufficient for SYCL and runtime
+static thread_local uint64_t xpti_event_start_ts[XPTI_EVENT_LAST][max_xpti_trace_nesting_level];
+static thread_local int xpti_tracing_level = 0;
 
-void tpCallback(uint16_t TraceType,
-                                  xpti::trace_event_data_t *Parent,
-                                  xpti::trace_event_data_t *Event,
-                                  uint64_t Instance, const void *UserData) {
+void tpCallback(uint16_t TraceType, xpti::trace_event_data_t *Parent, xpti::trace_event_data_t *Event, uint64_t Instance, const void *UserData) {
   if (xpti_collector) {
     switch (TraceType) {
       case (uint16_t)xpti::trace_point_type_t::function_begin:
-        xpti_event_start_ts[XPTI_EVENT_FUNC] = UniTimer::GetHostTimestamp();
+        xpti_event_start_ts[XPTI_EVENT_FUNC][xpti_tracing_level] = UniTimer::GetHostTimestamp();
+        xpti_tracing_level++;
         break;
       case (uint16_t)xpti::trace_point_type_t::function_end:
         {
@@ -166,11 +163,13 @@ void tpCallback(uint16_t TraceType,
           if (UserData) {
             name = (const char *)UserData;
           }
-          xpti_collector->Log(EVENT_COMPLETE, (name ? name : "unknwon"), xpti_event_start_ts[XPTI_EVENT_FUNC], ts);
+          xpti_tracing_level--;
+          xpti_collector->Log(EVENT_COMPLETE, (name ? name : "unknwon"), xpti_event_start_ts[XPTI_EVENT_FUNC][xpti_tracing_level], ts);
         }
         break;
       case (uint16_t)xpti::trace_point_type_t::function_with_args_begin:
-        xpti_event_start_ts[XPTI_EVENT_FUNC_WITH_ARGS] = UniTimer::GetHostTimestamp();
+        xpti_event_start_ts[XPTI_EVENT_FUNC_WITH_ARGS][xpti_tracing_level] = UniTimer::GetHostTimestamp();
+        xpti_tracing_level++;
         break;
       case (uint16_t)xpti::trace_point_type_t::function_with_args_end:
         {
@@ -180,11 +179,13 @@ void tpCallback(uint16_t TraceType,
             xpti::function_with_args_t *args = (xpti::function_with_args_t *)UserData;
             name = args->function_name;
           }
-          xpti_collector->Log(EVENT_COMPLETE, name ? name : "unknwon", xpti_event_start_ts[XPTI_EVENT_FUNC_WITH_ARGS], ts);
+          xpti_tracing_level--;
+          xpti_collector->Log(EVENT_COMPLETE, name ? name : "unknwon", xpti_event_start_ts[XPTI_EVENT_FUNC_WITH_ARGS][xpti_tracing_level], ts);
         }
         break;
       case (uint16_t)xpti::trace_point_type_t::task_begin:
-        xpti_event_start_ts[XPTI_EVENT_TASK] = UniTimer::GetHostTimestamp();
+        xpti_event_start_ts[XPTI_EVENT_TASK][xpti_tracing_level] = UniTimer::GetHostTimestamp();
+        xpti_tracing_level++;
         break;
       case (uint16_t)xpti::trace_point_type_t::task_end:
         {
@@ -200,11 +201,13 @@ void tpCallback(uint16_t TraceType,
           }
 #endif /* 0 */
           uint64_t ts = UniTimer::GetHostTimestamp();
-          xpti_collector->Log(EVENT_COMPLETE, "submit", xpti_event_start_ts[XPTI_EVENT_TASK], ts);
+          xpti_tracing_level--;
+          xpti_collector->Log(EVENT_COMPLETE, "submit", xpti_event_start_ts[XPTI_EVENT_TASK][xpti_tracing_level], ts);
         }
         break;
       case (uint16_t)xpti::trace_point_type_t::wait_begin:
-        xpti_event_start_ts[XPTI_EVENT_WAIT] = UniTimer::GetHostTimestamp();
+        xpti_event_start_ts[XPTI_EVENT_WAIT][xpti_tracing_level] = UniTimer::GetHostTimestamp();
+        xpti_tracing_level++;
         break;
       case (uint16_t)xpti::trace_point_type_t::wait_end:
         {
@@ -213,11 +216,13 @@ void tpCallback(uint16_t TraceType,
           if (UserData) {
             name = (const char *)UserData;
           }
-          xpti_collector->Log(EVENT_COMPLETE, (name ? name : "unknown"), xpti_event_start_ts[XPTI_EVENT_WAIT], ts);
+          xpti_tracing_level--;
+          xpti_collector->Log(EVENT_COMPLETE, (name ? name : "unknown"), xpti_event_start_ts[XPTI_EVENT_WAIT][xpti_tracing_level], ts);
         }
         break;
       case (uint16_t)xpti::trace_point_type_t::barrier_begin:
-        xpti_event_start_ts[XPTI_EVENT_WAIT] = UniTimer::GetHostTimestamp();
+        xpti_event_start_ts[XPTI_EVENT_WAIT][xpti_tracing_level] = UniTimer::GetHostTimestamp();
+        xpti_tracing_level++;
         break;
       case (uint16_t)xpti::trace_point_type_t::barrier_end:
         {
@@ -226,7 +231,8 @@ void tpCallback(uint16_t TraceType,
           if (UserData) {
             name = (const char *)UserData;
           }
-          xpti_collector->Log(EVENT_COMPLETE, (name ? name : "unknown"), xpti_event_start_ts[XPTI_EVENT_BARRIER], ts);
+          xpti_tracing_level--;
+          xpti_collector->Log(EVENT_COMPLETE, (name ? name : "unknown"), xpti_event_start_ts[XPTI_EVENT_BARRIER][xpti_tracing_level], ts);
         }
         break;
       case (uint16_t)xpti::trace_point_type_t::graph_create:
@@ -260,21 +266,25 @@ void tpCallback(uint16_t TraceType,
         }
         break;
       case (uint16_t)xpti::trace_point_type_t::mem_alloc_begin:
-        xpti_event_start_ts[XPTI_EVENT_MEM_ALLOC] = UniTimer::GetHostTimestamp();
+        xpti_event_start_ts[XPTI_EVENT_MEM_ALLOC][xpti_tracing_level] = UniTimer::GetHostTimestamp();
+        xpti_tracing_level++;
         break;
       case (uint16_t)xpti::trace_point_type_t::mem_alloc_end:
         {
           uint64_t ts = UniTimer::GetHostTimestamp();
-          xpti_collector->Log(EVENT_COMPLETE, "mem_alloc", xpti_event_start_ts[XPTI_EVENT_MEM_ALLOC], ts);
+          xpti_tracing_level--;
+          xpti_collector->Log(EVENT_COMPLETE, "mem_alloc", xpti_event_start_ts[XPTI_EVENT_MEM_ALLOC][xpti_tracing_level], ts);
         }
         break;
       case (uint16_t)xpti::trace_point_type_t::mem_release_begin:
-        xpti_event_start_ts[XPTI_EVENT_MEM_RELEASE] = UniTimer::GetHostTimestamp();
+        xpti_event_start_ts[XPTI_EVENT_MEM_RELEASE][xpti_tracing_level] = UniTimer::GetHostTimestamp();
+        xpti_tracing_level++;
         break;
       case (uint16_t)xpti::trace_point_type_t::mem_release_end:
         {
           uint64_t ts = UniTimer::GetHostTimestamp();
-          xpti_collector->Log(EVENT_COMPLETE, "mem_release", xpti_event_start_ts[XPTI_EVENT_MEM_RELEASE], ts);
+          xpti_tracing_level--;
+          xpti_collector->Log(EVENT_COMPLETE, "mem_release", xpti_event_start_ts[XPTI_EVENT_MEM_RELEASE][xpti_tracing_level], ts);
         }
         break;
 

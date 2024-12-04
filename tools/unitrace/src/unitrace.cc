@@ -260,6 +260,7 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--chrome-sycl-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeSyclLogging", "1");
       utils::SetEnv("XPTI_TRACE_ENABLE", "1");
+      utils::SetEnv("UR_ENABLE_LAYERS", "UR_LAYER_TRACING");
 #ifdef _WIN32
       utils::SetEnv("XPTI_SUBSCRIBERS", "unitrace_tool.dll");
       utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "xptifw.dll");
