@@ -995,18 +995,16 @@ class ZeMetricProfiler {
       return 0;
     }
 
-    size_t data_size = 0;
-    status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, nullptr);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    PTI_ASSERT(data_size > 0);
-    if (data_size > ssize) {
-      data_size = ssize;
-      std::cerr << "[WARNING] Metric samples dropped." << std::endl;
-    }
-
+    size_t data_size = ssize;
     status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, storage);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
+      std::cerr << "[WARNING] Metric samples dropped." << std::endl;
+    } else if (status != ZE_RESULT_SUCCESS) {
 
+      std::cerr << "[ERROR] zetMetricStreamerReadData failed with error code: "
+                << static_cast<std::size_t>(status) << std::endl;
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    }
     return data_size;
   }
 

@@ -378,13 +378,7 @@ class PtiMetricsProfiler {
   }
 };
 
-// L0 on Windows doesn't seem to be updating notifyEveryNReports correctly
-// TODO: Remove the windows specific value once issue fixed in L0
-#ifdef _WIN32
-uint32_t PtiMetricsProfiler::max_metric_samples_ = 1024;
-#else
 uint32_t PtiMetricsProfiler::max_metric_samples_ = 32768;
-#endif
 
 class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
  private:
@@ -661,17 +655,11 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       return 0;
     }
 
-    size_t data_size = 0;
-    status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, nullptr);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    PTI_ASSERT(data_size > 0);
-    if (data_size > ssize) {
-      data_size = ssize;
-      SPDLOG_WARN("Metric samples dropped.");
-    }
-
+    size_t data_size = ssize;
     status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, storage);
-    if (status != ZE_RESULT_SUCCESS) {
+    if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
+      SPDLOG_WARN("Metric samples dropped.");
+    } else if (status != ZE_RESULT_SUCCESS) {
       SPDLOG_ERROR("zetMetricStreamerReadData failed with error code {:x}",
                    static_cast<std::size_t>(status));
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -1185,17 +1173,15 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
       return 0;
     }
 
-    size_t data_size = 0;
-    status = tf.zetMetricTracerReadDataExp(tracer, &data_size, nullptr);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    PTI_ASSERT(data_size > 0);
-    if (data_size > ssize) {
-      data_size = ssize;
-      SPDLOG_WARN("Metric samples dropped.");
-    }
-
+    size_t data_size = ssize;
     status = tf.zetMetricTracerReadDataExp(tracer, &data_size, storage);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
+      SPDLOG_WARN("Metric samples dropped.");
+    } else if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_ERROR("zetMetricTracerReadData failed with error code {:x}",
+                   static_cast<std::size_t>(status));
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    }
 
     return data_size;
   }
