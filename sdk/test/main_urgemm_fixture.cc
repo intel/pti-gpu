@@ -57,6 +57,7 @@ bool sycl_spv_mem_buffer_read_seen = false;
 bool sycl_spv_mem_buffer_write_seen = false;
 bool sycl_spv_mem_buffer_copy_seen = false;
 uint64_t memory_view_record_count = 0;
+bool memory_view_record_with_zero_uuid = false;
 uint64_t kernel_view_record_count = 0;
 uint64_t sycl_runtime_record_count = 0;
 
@@ -252,6 +253,7 @@ class MainUrFixtureTest : public ::testing::Test {
     sycl_spv_mem_buffer_write_seen = false;
     sycl_spv_mem_buffer_copy_seen = false;
     memory_view_record_count = 0;
+    memory_view_record_with_zero_uuid = false;
     kernel_view_record_count = 0;
     sycl_runtime_record_count = 0;
     capture_records = false;
@@ -279,6 +281,8 @@ class MainUrFixtureTest : public ::testing::Test {
 
     completed_buffer_calls += 1;
     completed_buffer_used_bytes = used_bytes;
+    uint8_t zero_uuid[PTI_MAX_DEVICE_UUID_SIZE];
+    memset(zero_uuid, 0, PTI_MAX_DEVICE_UUID_SIZE);
     pti_view_record_base* ptr = nullptr;
     while (true) {
       auto buf_status = ptiViewGetNextRecord(buf, used_bytes, &ptr);
@@ -297,14 +301,30 @@ class MainUrFixtureTest : public ::testing::Test {
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
           memory_view_record_created = true;
           memory_view_record_count += 1;
+          pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+          std::cout << " --- Found Memory Copy Record" << '\n';
+          samples_utils::dump_record(rec);
+
+          if (memcmp(rec->_device_uuid, zero_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
+            EXPECT_TRUE(false) << "Device UUID is zero, which is not expected";
+            memory_view_record_with_zero_uuid = true;
+          }
           if (capture_records) {
-            pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
             copy_records.push_back(*rec);
           }
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
           memory_view_record_created = true;
+          std::cout << " --- Found Memory Fill Record" << '\n';
+          pti_view_record_memory_fill* rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
+          samples_utils::dump_record(rec);
+
+          if (memcmp(rec->_device_uuid, zero_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
+            EXPECT_TRUE(false) << "Device UUID is zero, which is not expected";
+            memory_view_record_with_zero_uuid = true;
+          }
+
           memory_view_record_count += 1;
           break;
         }
@@ -443,6 +463,7 @@ TEST_F(MainUrFixtureTest, urGemmSpvKernelDetected) {
   RunGemm(true);
   EXPECT_EQ(sycl_spv_kernel_seen, true);
   EXPECT_EQ(sycl_spv_mem_buffer_fill_seen, true);
+  EXPECT_EQ(memory_view_record_with_zero_uuid, false);
 }
 
 // TODO -- add tests for USMFill2D and USMMemcpy2D
@@ -454,4 +475,5 @@ TEST_F(MainUrFixtureTest, syclGemmSpvRuntimeRecordsDetected) {
   EXPECT_EQ(sycl_spv_mem_buffer_read_seen, true);
   EXPECT_EQ(sycl_spv_mem_buffer_write_seen, true);
   EXPECT_EQ(sycl_spv_mem_buffer_copy_seen, true);
+  EXPECT_EQ(memory_view_record_with_zero_uuid, false);
 }

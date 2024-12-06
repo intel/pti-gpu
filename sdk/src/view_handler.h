@@ -737,7 +737,8 @@ inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
   record._value_for_set = rec.value_set_;
 
   GetDeviceId(record._pci_address, rec.pci_prop_);
-  std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
+  // for MemoryFill op the reported device is the destination device, where fill happens
+  std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
   SetMemFillType(record, rec);
 
   // We're storing it in a kernel map so this shouldn't go out of scope
