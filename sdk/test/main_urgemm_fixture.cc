@@ -8,7 +8,13 @@
 #include <level_zero/ze_api.h>
 #include <math.h>
 #include <string.h>
+
+// Unified Runtime header(s) can be found in either directory.
+#if __has_include(<sycl/ur_api.h>)
 #include <sycl/ur_api.h>
+#else
+#include <ur_api.h>
+#endif
 
 #include <chrono>
 #include <cstddef>
