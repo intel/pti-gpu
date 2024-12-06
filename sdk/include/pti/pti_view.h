@@ -156,7 +156,7 @@ typedef struct pti_view_record_sycl_runtime{
 } pti_view_record_sycl_runtime;
 
 /**
- * @brief Memory Copy Operation View record type
+ * @brief Host to Device or Device to Host Memory Copy Operation View record type
  */
 typedef struct pti_view_record_memory_copy {
   pti_view_record_base _view_kind;                  //!< Base record
@@ -167,6 +167,8 @@ typedef struct pti_view_record_memory_copy {
   ze_context_handle_t _context_handle;              //!< Context handle
   const char* _name;                                //!< Back-end API name making a memory copy
   char _pci_address[PTI_MAX_PCI_ADDRESS_SIZE];      //!< Source or Destination Device pci_address
+                                                    //!< Only a single device is represented by
+                                                    //!< this record
   uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Source or Destination Device uuid
   uint64_t _mem_op_id;                              //!< Memory operation ID, unique among
                                                     //!< all memory operations instances

@@ -60,8 +60,6 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t used_byt
   }
 
   pti_view_record_base *ptr = nullptr;
-  uint8_t zero_uuid[PTI_MAX_DEVICE_UUID_SIZE];
-  memset(zero_uuid, 0, PTI_MAX_DEVICE_UUID_SIZE);
   while (true) {
     auto buf_status = ptiViewGetNextRecord(buf, used_bytes, &ptr);
     if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
