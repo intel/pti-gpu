@@ -50,7 +50,7 @@ The path to the Unified Runtime library.
 #
 find_path(
   unified-runtime_INCLUDE_DIR
-  NAMES sycl/ur_api.h
+  NAMES sycl/ur_api.h ur_api.h
   HINTS ENV CMPLR_ROOT
         ENV CPATH
   PATHS /opt/intel/oneapi/compiler/latest
