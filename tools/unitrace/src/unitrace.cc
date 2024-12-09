@@ -38,6 +38,7 @@
 #include "unitrace_commit_hash.h"
 
 static ZeMetricProfiler* metric_profiler = nullptr;
+static bool idle_sampling = false;
 
 void Usage(char * progname) {
   std::cout <<
@@ -403,6 +404,9 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_KernelMetrics", "1");
       metric_sampling = true;
       ++app_index;
+    } else if (strcmp(argv[i], "--idle-sampling") == 0) {
+      idle_sampling = true;
+      ++app_index;
     } else if (strcmp(argv[i], "--system-time") == 0) {
       utils::SetEnv("UNITRACE_SystemTime", "1");
       ++app_index;
@@ -542,7 +546,7 @@ int ParseArgs(int argc, char* argv[]) {
   return app_index;
 }
 
-ZeMetricProfiler *EnableProfiling(char *dir, std::string& logfile) {
+ZeMetricProfiler *EnableProfiling(char *dir, std::string& logfile, bool idle_sampling) {
   if (zeInit(ZE_INIT_FLAG_GPU_ONLY) != ZE_RESULT_SUCCESS) {
     std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
 #ifndef _WIN32
@@ -550,7 +554,7 @@ ZeMetricProfiler *EnableProfiling(char *dir, std::string& logfile) {
 #endif /* _WIN32 */
     return nullptr;
   }
-  return ZeMetricProfiler::Create(dir, logfile);
+  return ZeMetricProfiler::Create(dir, logfile, idle_sampling);
 }
 
 void DisableProfiling() {
@@ -722,7 +726,7 @@ int main(int argc, char *argv[]) {
     std::signal(SIGSEGV, CleanUp);
     std::signal(SIGTERM, CleanUp);
 
-    metric_profiler = EnableProfiling(data_dir, logfile);
+    metric_profiler = EnableProfiling(data_dir, logfile, idle_sampling);
 
     int child;
 
@@ -860,7 +864,7 @@ int main(int argc, char *argv[]) {
 
       if (metrics_enabled) {
         SetProfilingEnvironment();
-	metric_profiler = EnableProfiling(data_dir, logfile);
+	metric_profiler = EnableProfiling(data_dir, logfile, idle_sampling);
       }
 
       ResumeThread(pi.hThread); 

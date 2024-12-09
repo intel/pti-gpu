@@ -33,6 +33,7 @@
 #include "pti_assert.h"
 
 
+constexpr static uint64_t min_dummy_instance_id = 1024 * 1024;	// min dummy instance id if idle sampling is enabled
 constexpr static uint32_t max_metric_size = 512;
 static uint32_t max_metric_samples = 32768;
 
@@ -207,8 +208,8 @@ struct ZeDeviceDescriptor {
 
 class ZeMetricProfiler {
  public:
-  static ZeMetricProfiler* Create(char *dir, std::string& logfilename) {
-    ZeMetricProfiler* profiler = new ZeMetricProfiler(dir, logfilename);
+  static ZeMetricProfiler* Create(char *dir, std::string& logfilename, bool idle_sampling) {
+    ZeMetricProfiler* profiler = new ZeMetricProfiler(dir, logfilename, idle_sampling);
     UniMemory::ExitIfOutOfMemory((void *)(profiler));
 
     profiler->StartProfilingMetrics();
@@ -229,7 +230,7 @@ class ZeMetricProfiler {
   ZeMetricProfiler& operator=(const ZeMetricProfiler& that) = delete;
 
  private:
-  ZeMetricProfiler(char *dir, std::string& logfile) {
+  ZeMetricProfiler(char *dir, std::string& logfile, bool idle_sampling) {
     data_dir_name_ = std::string(dir);
     if (!logfile.empty()) {
       size_t pos = logfile.find_first_of('.');
@@ -257,6 +258,8 @@ class ZeMetricProfiler {
     else {
       log_name_ = logfile;
     }
+
+    idle_sampling_ = idle_sampling;
 
     logger_ = new Logger(log_name_, true, true);
      
@@ -689,7 +692,8 @@ class ZeMetricProfiler {
         field_sizes[0] = max_kname_size; 
         field_sizes[1] = std::max(sizeof("0x00000000") - 1, metric_list[0].size());
         header += std::string(std::max(int(field_sizes[0] + 1 - sizeof("Kernel")), 0), ' ') + "Kernel, ";
-        header += std::string(std::max(int(field_sizes[1] - metric_list[0].length()), 0), ' ') + metric_list[0] + ", ";
+        logger_->Log(header);	// in case the kernel name is too long
+        header = std::string(std::max(int(field_sizes[1] - metric_list[0].length()), 0), ' ') + metric_list[0] + ", ";
         for (int i = 1; i <  metric_list.size(); i++) {
           field_sizes[i + 1] = metric_list[i].size();
           header += metric_list[i] + ", ";
@@ -707,8 +711,9 @@ class ZeMetricProfiler {
               char offset[128];
               snprintf(offset, sizeof(offset), "0x%08lx", (it->first - rit->first));
               line = std::string(std::max(int(field_sizes[0] - rit->second.first.length()), 0), ' ') +
-                     rit->second.first + ", " +
-                     std::string(std::max(int(field_sizes[1] - std::string(offset).length()), 0), ' ') +
+                     rit->second.first + ", ";
+              logger_->Log(line);
+              line = std::string(std::max(int(field_sizes[1] - std::string(offset).length()), 0), ' ') +
                      std::string(offset) + ", " +
                      std::string(std::max(int(field_sizes[2] - std::to_string(it->second.active_).length()), 0), ' ') +
                      std::to_string(it->second.active_) + ", " +
@@ -736,6 +741,7 @@ class ZeMetricProfiler {
       }
       else {
         std::vector<ZeKernelInfo> kinfo;
+        uint64_t max_global_instance_id = 0;
         // enumerate all kernel time files
         for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir_name_))) {
           // kernel properties file path: <data_dir>/.ktime.<device_id>.<pid>.txt
@@ -762,6 +768,9 @@ class ZeMetricProfiler {
                 break;
               }
               info.global_instance_id = std::strtoll(line.c_str(), nullptr, 0);
+              if (info.global_instance_id > max_global_instance_id) {
+                max_global_instance_id = info.global_instance_id;
+              }
               line.clear();
 
               std::getline(kf, line);
@@ -823,6 +832,8 @@ class ZeMetricProfiler {
         
         logger_->Log(header);
 
+        uint64_t dummy_global_instance_id = max_global_instance_id + min_dummy_instance_id;  // for samples that do not belong to any kernel
+
         uint64_t cur_sampling_ts = 0;
         auto kit = kinfo.begin();
         while (!inf.eof()) {
@@ -854,6 +865,7 @@ class ZeMetricProfiler {
 
             const zet_typed_value_t *value = metrics.data();
             bool kernelsampled = false;
+            bool idle = false;	// is the sample collected while the device is idle?
             for (uint32_t i = 0; i < num_samples; ++i) {
   
               uint32_t size = samples[i];
@@ -868,11 +880,17 @@ class ZeMetricProfiler {
                   }
                 }
                 cur_sampling_ts = ts;
-                if ((ts >= kit->metric_start) && (ts < kit->metric_end)) {
+                if ((ts >= kit->metric_start) && (ts <= kit->metric_end)) {
+                  if (idle) {
+                    logger_->Log("\n");	// separate from samples that do not belong to any kernels/commands 
+                    idle = false;
+                  }
+
                   // belong to this kernel
                   kernelsampled = true;
                   str = kit->kernel_name + ", ";
-                  str += std::to_string(kit->global_instance_id) + ", ";
+                  logger_->Log(str);	// in case the kernel name is too long
+                  str = std::to_string(kit->global_instance_id) + ", ";
                   for (int k = 0; k < metric_list.size(); k++) {
                     if (k == ts_idx) {
                       str += std::to_string(ts);
@@ -892,8 +910,35 @@ class ZeMetricProfiler {
                       kernelsampled = false;	// reset for next kernel
                     }
                     kit++;	// move to next kernel
+                    dummy_global_instance_id++;
                     if (kit == kinfo.end()) {
                       break;	// we are done
+                    }
+                  }
+                  else { // ts < kit->metric_start
+                    // does not belong to any kernel/command
+                    if (idle_sampling_) {
+                      auto sz = kit->kernel_name.size();
+                      if (sz > 2) {
+                        str = "\"NoKernel(Before " + kit->kernel_name.substr(1, sz - 2)  + ")\", ";
+                      }
+                      else {
+                        str = "\"NoKernel\", ";
+                      }
+                      logger_->Log(str);	// in case the kernel name is too long
+                      str = std::to_string(dummy_global_instance_id) + ", ";
+                      for (int k = 0; k < metric_list.size(); k++) {
+                        if (k == ts_idx) {
+                          str += std::to_string(ts);
+                        }
+                        else{
+                          str += PrintTypedValue(v[k]);
+                        }
+                        str += ", ";
+                      }
+                      str += "\n";
+                      logger_->Log(str);
+                      idle = true;
                     }
                   }
                 }
@@ -1102,6 +1147,7 @@ class ZeMetricProfiler {
   std::string data_dir_name_;
   Logger* logger_; 
   std::string log_name_;
+  bool idle_sampling_;
 };
 
 #endif // PTI_TOOLS_UNITRACE_LEVEL_ZERO_METRICS_H_
