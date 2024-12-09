@@ -196,7 +196,7 @@ inline uint32_t GetPid() {
 
 inline uint32_t GetTid() {
 #if defined(_WIN32)
-  return GetCurrentThreadId();
+  return (uint32_t)GetCurrentThreadId();
 #else
 #ifdef SYS_gettid
   return (uint32_t)syscall(SYS_gettid);
