@@ -46,6 +46,9 @@ jobs:
           - container: ${{ vars.PTI_DOCKER_SLES_15_3_ONEAPI_25_0_0 }}
             uploadname: "sles-15.3.2025.0.0"
             preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_0_0 }}
+            uploadname: "ubuntu-22.04.2025.0.0"
+            preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_0_0 }}
             uploadname: "ubuntu-24.04.2025.0.0"
             preset: linux-icpx-release
