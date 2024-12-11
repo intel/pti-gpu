@@ -248,7 +248,7 @@ pti_result ptiMetricsStartCollection(pti_device_handle_t device_handle) {
 }
 
 /**
- * @brief Start metrics collection on specified device
+ * @brief Start metrics collection on specified device in paused mode
  * Note: ptiMetricsConfigureCollection must be called first to configure the metric group(s) of
  * interest
  *
@@ -256,7 +256,7 @@ pti_result ptiMetricsStartCollection(pti_device_handle_t device_handle) {
  *
  * @return pti_result
  */
-pti_result ptiMetricsStartCollectionipaused(pti_device_handle_t device_handle) {
+pti_result ptiMetricsStartCollectionPaused(pti_device_handle_t device_handle) {
   try {
     return MetricsCollectorInstance().StartCollectionPaused(device_handle);
   } catch (const std::exception& e) {

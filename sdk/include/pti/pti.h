@@ -37,7 +37,14 @@ typedef enum {
                                            //!< to 1
   PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED = 52,  //!< no Local profiling support in the installed
                                                     //!< driver
-  PTI_ERROR_BAD_API_USAGE = 53,            //!< improper API usage
+
+  PTI_ERROR_METRICS_COLLECTION_NOT_ENABLED = 100, //!< metrics collection not running
+  PTI_ERROR_METRICS_COLLECTION_NOT_DISABLED = 101, //!< metrics collection not stopped
+  PTI_ERROR_METRICS_COLLECTION_NOT_PAUSED = 102, //!< metrics collection not paused
+  PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED = 103, //!< metrics collection already paused
+  PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED = 104, //!< metrics collection already running
+  PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION = 105, //!< bad metrics collection configuration
+
   PTI_ERROR_INTERNAL = 200  //!< internal error
 } pti_result;
 

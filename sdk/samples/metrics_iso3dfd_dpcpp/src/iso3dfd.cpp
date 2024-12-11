@@ -53,13 +53,6 @@
 #include "pti/pti_metrics.h"
 #include "samples_utils.h"
 
-#ifdef __unix__
-# include <unistd.h>
-#elif defined _WIN32
-# include <windows.h>
-#define sleep(x) Sleep(1000 * (x))
-#endif
-
 namespace oneapi {}
 using namespace oneapi;
 
@@ -380,22 +373,20 @@ void StartCollection() {
     exit(-1);
 }
 
-/* Not implemented yet
 void StartCollectionPaused() {
   if(configured_device_handle_ == NULL || ptiMetricsStartCollectionPaused(configured_device_handle_) != PTI_SUCCESS)
     exit(-1);
 }
-
+/* Not implemented yet
 void PauseCollection() {
   if(configured_device_handle_ == NULL || ptiMetricsPauseCollection(configured_device_handle_) != PTI_SUCCESS)
     exit(-1);
 }
-
+*/
 void ResumeCollection() {
   if(configured_device_handle_ == NULL || ptiMetricsResumeCollection(configured_device_handle_) != PTI_SUCCESS)
     exit(-1);
 }
-*/
 
 void StopCollection() {
   if(configured_device_handle_ == NULL || ptiMetricsStopCollection(configured_device_handle_) != PTI_SUCCESS)
@@ -727,7 +718,7 @@ int main(int argc, char* argv[]) {
   pti_metrics_group_type group_type = /*PTI_METRIC_GROUP_TYPE_TRACE_BASED*/ PTI_METRIC_GROUP_TYPE_TIME_BASED;
 
   metrics_profiler->ConfigureMetricGroups(group_name, group_type);
-  metrics_profiler->StartCollection();
+  metrics_profiler->StartCollectionPaused();
 
   auto dev = sycl::device(sycl::gpu_selector_v);
   uint8_t uuid[16];
@@ -891,6 +882,9 @@ int main(int argc, char* argv[]) {
       // Start timer
       dpc_common::TimeInterval t_dpc;
 
+      // Collection started in paused mode, resume
+      metrics_profiler->ResumeCollection();
+
       // Invoke the driver function to perform 3D wave propogation
       // using SYCL version on the selected device
       Iso3dfdDevice(q, next_base, prev_base, vel_base, coeff, n1, n2, n3,
@@ -944,7 +938,7 @@ int main(int argc, char* argv[]) {
   metrics_profiler->StopCollection();
   metrics_profiler->GetCalculatedData();
 
-  sleep(1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
   // TIME metric groups
   group_name = /*"GpuOffload"*/ /*"ComputeBasic"  "MemProfile" "DataportProfile"*/ "L1ProfileReads" /* "L1ProfileSlmBankConflicts" "L1ProfileWrites"*/ ;
@@ -953,9 +947,13 @@ int main(int argc, char* argv[]) {
   //group_name = "tpcs_utilization_and_bw" /* "nic_stms" "dcore0_bmons_bw"*/;
   group_type = /*PTI_METRIC_GROUP_TYPE_TRACE_BASED*/ PTI_METRIC_GROUP_TYPE_TIME_BASED;
   metrics_profiler->ConfigureMetricGroups(group_name, group_type);
-  metrics_profiler->StartCollection();
+  metrics_profiler->StartCollectionPaused();
 
-  sleep(5);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+  metrics_profiler->ResumeCollection();
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
   metrics_profiler->StopCollection();
   metrics_profiler->GetCalculatedData();
