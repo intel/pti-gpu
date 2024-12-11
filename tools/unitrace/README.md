@@ -331,7 +331,7 @@ The result .json file has the rank id embedded as **<application>.<pid>.<rank>.j
 ### View Event Timelines of Multiple MPI Ranks
 
 You can view the result files rank by rank. But often you may want to view the traces from multiple ranks at the same time.
-To view traces from multiple MPI ranks, you can use **mergetrace.py** script to merge them first and then load the merged trace into
+To view traces from multiple MPI ranks, you can use **scripts/tracemerge/mergetrace.py** script to merge them first and then load the merged trace into
 https://ui.perfetto.dev/.
 
 ```sh
@@ -504,7 +504,7 @@ If the workload is an MPI application, sampling multiple ranks running on the sa
 
 ### Analyze Performance Metrics
 
-Once you have the hardware performance metrics data collected, you can use the script **analyzeperfmetrics.py** to analyze the metrics. 
+Once you have the hardware performance metrics data collected, you can use the script **scripts/metrics/analyzeperfmetrics.py** to analyze the metrics. 
 
 #### List Contents of the Metric Data File
 
@@ -634,6 +634,13 @@ The **-m** option can be repeated multiple times to analyze multiple sets of met
 
 ![Analyze Multiple Performance Metric Sets!](/tools/unitrace/doc/images/perfchart-multi-sets.png)
 
+Instead of typing the command options in every run, you can store the options in a text configuration file and use the **-f** or **--config** option to read the options from the file. For example, the command options in the above can be stored in a **myconfig.txt**:
+
+   ```sh
+   python analyzeperfmetrics.py -f myconfig.txt -o perfchart.pdf perfmetrics.12345.csv
+   ```
+
+Please note that input file cannot be in the command option configuration file.
 You can also use the **-b** option together with one or more **-m** options to get bandwidthi data.
 
 ![Analyze Multiple Performance Metric Sets and Bandwidths!](/tools/unitrace/doc/images/bandwidth.png)
@@ -643,6 +650,18 @@ If the input metric data file has stall sampling events collected using **--stal
 ![Analyze Stall Metrics!](/tools/unitrace/doc/images/stallchart.png)
 
 From this chart, we can easily see that the most stalls are **SbidStalls** at instruction **0x000001B8**. To reduce or eliminate the stalls, we need to analyze the stalls at instruction level to find out the cause of the stalls.
+
+##### Use Pre-configured Options #####
+
+A pre-configured option file **metrics/config/ComputeBasic.txt** for **ComputeBasic** (the default metric group) on PVC is provided. You can use it as it is:
+
+   ```sh
+   python analyzeperfmetrics.py -f config/pvc/ComputeBasic.txt -o perfchart.pdf perfmetrics.12345.csv
+   ```
+
+Or you can customize it to create your own recipes. 
+
+You may also want to create configurations for other metric groups and/or devices.
 
 #### Analyze Stalls at Instruction Level
 

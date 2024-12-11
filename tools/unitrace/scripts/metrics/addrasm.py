@@ -1,10 +1,10 @@
+#!/usr/bin/env python3
 #==============================================================
 # Copyright (C) Intel Corporation
 #
 # SPDX-License-Identifier: MIT
 # =============================================================
 
-#!/usr/bin/env python3
 
 import os
 import argparse

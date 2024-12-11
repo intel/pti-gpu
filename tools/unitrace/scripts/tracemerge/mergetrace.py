@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #==============================================================
 # Copyright (C) Intel Corporation
 #
@@ -5,7 +6,6 @@
 # =============================================================
 
 
-#!/usr/bin/env python3
 
 import os
 import argparse
