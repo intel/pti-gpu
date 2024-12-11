@@ -1975,7 +1975,7 @@ void *clHostMemAllocINTEL(cl_context context, const cl_mem_properties_intel *pro
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clHostMemAllocINTEL:";
   
@@ -2013,7 +2013,7 @@ void *clHostMemAllocINTEL(cl_context context, const cl_mem_properties_intel *pro
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clHostMemAllocINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2049,7 +2049,7 @@ void *clDeviceMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clDeviceMemAllocINTEL:";
   
@@ -2088,7 +2088,7 @@ void *clDeviceMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clDeviceMemAllocINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2124,7 +2124,7 @@ void *clSharedMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clSharedMemAllocINTEL:";
   
@@ -2163,7 +2163,7 @@ void *clSharedMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str += "clSharedMemAllocINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2201,7 +2201,7 @@ cl_int clMemFreeINTEL(cl_context context, void *ptr) {
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clMemFreeINTEL:";
   
@@ -2236,7 +2236,7 @@ cl_int clMemFreeINTEL(cl_context context, void *ptr) {
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clMemFreeINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2268,7 +2268,7 @@ cl_int clGetMemAllocInfoINTEL(cl_context context, const void *ptr, cl_mem_info_i
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clGetMemAllocInfoINTEL:";
   
@@ -2307,7 +2307,7 @@ cl_int clGetMemAllocInfoINTEL(cl_context context, const void *ptr, cl_mem_info_i
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clGetMemAllocInfoINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2341,7 +2341,7 @@ cl_int clSetKernelArgMemPointerINTEL(cl_kernel kernel, cl_uint arg_index, const 
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clSetKernelArgMemPointerINTEL:";
   
@@ -2377,7 +2377,7 @@ cl_int clSetKernelArgMemPointerINTEL(cl_kernel kernel, cl_uint arg_index, const 
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clSetKernelArgMemPointerINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2411,7 +2411,7 @@ cl_int clEnqueueMemcpyINTEL(cl_command_queue command_queue, cl_bool blocking, vo
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clEnqueueMemcpyINTEL:";
         str += " command_queue = " + std::to_string(uint64_t(command_queue));
@@ -2451,7 +2451,7 @@ cl_int clEnqueueMemcpyINTEL(cl_command_queue command_queue, cl_bool blocking, vo
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clEnqueueMemcpyINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2486,7 +2486,7 @@ cl_int clGetDeviceGlobalVariablePointerINTEL(cl_device_id device, cl_program pro
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clGetDeviceGlobalVariablePointerINTEL:";
         str += " device = " + std::to_string(uint64_t(device));
@@ -2523,7 +2523,7 @@ cl_int clGetDeviceGlobalVariablePointerINTEL(cl_device_id device, cl_program pro
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clGetDeviceGlobalVariablePointerINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2557,7 +2557,7 @@ cl_int clGetKernelSuggestedLocalWorkSizeINTEL(cl_command_queue command_queue, cl
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clGetKernelSuggestedLocalWorkSizeINTEL:";
         str += " command_queue = " + std::to_string(uint64_t(command_queue));
@@ -2595,7 +2595,7 @@ cl_int clGetKernelSuggestedLocalWorkSizeINTEL(cl_command_queue command_queue, cl
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clGetKernelSuggestedLocalWorkSizeINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2631,7 +2631,7 @@ cl_mem clCreateBufferWithPropertiesINTEL(cl_context context, const cl_mem_proper
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clCreateBufferWithPropertiesINTEL:";
         str += " context = " + std::to_string(uint64_t(context));
@@ -2669,7 +2669,7 @@ cl_mem clCreateBufferWithPropertiesINTEL(cl_context context, const cl_mem_proper
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clCreateBufferWithPropertiesINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2707,7 +2707,7 @@ cl_int clEnqueueMemsetINTEL(cl_command_queue command_queue, void *dst_ptr, cl_in
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clEnqueueMemsetINTEL:";
         str += " command_queue = " + std::to_string(uint64_t(command_queue));
@@ -2746,7 +2746,7 @@ cl_int clEnqueueMemsetINTEL(cl_command_queue command_queue, void *dst_ptr, cl_in
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clEnqueueMemsetINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2780,7 +2780,7 @@ cl_int clEnqueueMigrateMemINTEL(cl_command_queue command_queue, const void *ptr,
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clEnqueueMigrateMemINTEL:";
         str += " command_queue = " + std::to_string(uint64_t(command_queue));
@@ -2819,7 +2819,7 @@ cl_int clEnqueueMigrateMemINTEL(cl_command_queue command_queue, const void *ptr,
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clEnqueueMigrateMemINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2853,7 +2853,7 @@ cl_int clEnqueueMemAdviseINTEL(cl_command_queue command_queue, const void *ptr, 
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clEnqueueMemAdviseINTEL:";
         str += " command_queue = " + std::to_string(uint64_t(command_queue));
@@ -2892,7 +2892,7 @@ cl_int clEnqueueMemAdviseINTEL(cl_command_queue command_queue, const void *ptr, 
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clEnqueueMemAdviseINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2926,7 +2926,7 @@ cl_int clEnqueueMemFillINTEL(cl_command_queue command_queue, void *dst_ptr, cons
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clEnqueueMemFillINTEL:";
         str += " command_queue = " + std::to_string(uint64_t(command_queue));
@@ -2966,7 +2966,7 @@ cl_int clEnqueueMemFillINTEL(cl_command_queue command_queue, void *dst_ptr, cons
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clEnqueueMemFillINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
@@ -2999,7 +2999,7 @@ cl_int clMemBlockingFreeINTEL(cl_context context, void *ptr) {
           str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
         }
         if (collector->NeedTid()) {
-          str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+          str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
         }
         str += "clMemBlockingFreeINTEL:";
         str += " context = " + std::to_string(uint64_t(context));
@@ -3033,7 +3033,7 @@ cl_int clMemBlockingFreeINTEL(cl_context context, void *ptr) {
         str += "<PID:" + std::to_string(utils::GetPid()) + "> ";
       }
       if (collector->NeedTid()) {
-        str += "<TID:" + std::to_string(utils::GetTid()) + "> ";
+        str += "<TID:" + std::to_string((unsigned int)utils::GetTid()) + "> ";
       }
       str +=  "clMemBlockingFreeINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
