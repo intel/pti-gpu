@@ -41,6 +41,14 @@ set(CMAKE_C_VISIBILITY_PRESET "hidden")
 
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
+if(PROJECT_IS_TOP_LEVEL)
+  # Add the current directory to the rpath during the build. On Linux, this
+  # allows dlopen to find the proper modules.
+  if(NOT APPLE)
+    list(APPEND CMAKE_BUILD_RPATH $ORIGIN)
+  endif()
+endif()
+
 option(PTI_BUILD_TESTING "Build PTI tests" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_INSTALL "Install library when invoking --install" ON)
