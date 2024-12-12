@@ -7,6 +7,7 @@
 #define SRC_API_METRICS_HANDLER_H_
 
 #include <level_zero/ze_api.h>
+#include <level_zero/zet_api.h>
 #include <spdlog/cfg/env.h>
 #include <spdlog/pattern_formatter.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -17,7 +18,6 @@
 #include <atomic>
 #include <iostream>
 #include <random>
-#include <sstream>
 #include <thread>
 
 #include "pti/pti_metrics.h"
@@ -956,42 +956,43 @@ PerDeviceQueryMetricsProfilingThread(std::shared_ptr<pti_metrics_device_descript
 /* Trace metrics API hooks */
 using importTracerCreatePtrFnt = ze_result_t (*)(zet_context_handle_t Context, zet_device_handle_t,
                                                  uint32_t, zet_metric_group_handle_t *,
-                                                 zet_metric_tracer_exp_desc_t *, ze_event_handle_t,
-                                                 zet_metric_tracer_exp_handle_t *);
+                                                 external::L0::zet_metric_tracer_exp_desc_t *,
+                                                 ze_event_handle_t,
+                                                 external::L0::zet_metric_tracer_exp_handle_t *);
 
 using importTracerDestroyPtrFnt =
-    ze_result_t (*)(zet_metric_tracer_exp_handle_t metric_tracer_handle);
+    ze_result_t (*)(external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle);
 
-using importTracerEnablePtrFnt =
-    ze_result_t (*)(zet_metric_tracer_exp_handle_t metric_tracer_handle, bool synchronous);
+using importTracerEnablePtrFnt = ze_result_t (*)(
+    external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle, ze_bool_t synchronous);
 
-using importTracerDisablePtrFnt =
-    ze_result_t (*)(zet_metric_tracer_exp_handle_t metric_tracer_handle, bool synchronous);
+using importTracerDisablePtrFnt = ze_result_t (*)(
+    external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle, ze_bool_t synchronous);
 
-using importTracerReadPtrFnt = ze_result_t (*)(zet_metric_tracer_exp_handle_t metric_tracer_handle,
-                                               size_t *raw_data_size, uint8_t *raw_data);
-
+using importTracerReadPtrFnt =
+    ze_result_t (*)(external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle,
+                    size_t *raw_data_size, uint8_t *raw_data);
 using importDecoderCreatePtrFnt =
-    ze_result_t (*)(zet_metric_tracer_exp_handle_t metric_tracer_handle,
-                    zet_metric_decoder_exp_handle_t *metric_decoder_handle);
+    ze_result_t (*)(external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle,
+                    external::L0::zet_metric_decoder_exp_handle_t *metric_decoder_handle);
 
 using importDecoderDestroyPtrFnt =
-    ze_result_t (*)(zet_metric_decoder_exp_handle_t metric_decoder_handle);
+    ze_result_t (*)(external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle);
 
 using importDecoderDecodePtrFnt = ze_result_t (*)(
-    zet_metric_decoder_exp_handle_t metric_decoder_handle, size_t *raw_data_size,
+    external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle, size_t *raw_data_size,
     const uint8_t *raw_data, uint32_t metric_count, zet_metric_handle_t *metric_handle,
-    uint32_t *metric_entries_count, zet_metric_entry_exp_t *metric_entries);
+    uint32_t *metric_entries_count, external::L0::zet_metric_entry_exp_t *metric_entries);
 
 using importDecoderGetDecodableMetricsPtrFnt =
-    ze_result_t (*)(zet_metric_decoder_exp_handle_t metric_decoder_handle, uint32_t *count,
-                    zet_metric_handle_t *metric_handle);
+    ze_result_t (*)(external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle,
+                    uint32_t *count, zet_metric_handle_t *metric_handle);
 
-using importMetricDecodeCalculateMultipleValuesPtrFnt =
-    ze_result_t (*)(zet_metric_decoder_exp_handle_t metric_decoder_handle, size_t *raw_data_size,
-                    const uint8_t *raw_data, zex_metric_calculate_exp_desc_t *calculate_desc,
-                    uint32_t *set_count, uint32_t *metric_results_count_per_set,
-                    uint32_t *total_metric_results_count, zex_metric_result_exp_t *metric_results);
+using importMetricDecodeCalculateMultipleValuesPtrFnt = ze_result_t (*)(
+    external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle, size_t *raw_data_size,
+    const uint8_t *raw_data, external::L0::zex_metric_calculate_exp_desc_t *calculate_desc,
+    uint32_t *set_count, uint32_t *metric_results_count_per_set,
+    uint32_t *total_metric_results_count, external::L0::zex_metric_result_exp_t *metric_results);
 
 struct pti_metrics_tracer_functions_t {
   importTracerCreatePtrFnt zetMetricTracerCreateExp = nullptr;
@@ -1012,7 +1013,7 @@ pti_metrics_tracer_functions_t tf;
 class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
  private:
   uint32_t time_aggr_window_;
-  zet_metric_decoder_exp_handle_t metric_decoder_;
+  external::L0::zet_metric_decoder_exp_handle_t metric_decoder_;
 
  public:
   PtiTraceMetricsProfiler() = delete;
@@ -1110,17 +1111,17 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
           time_aggr_window = kDefaultTimeAggrWindow;
         }
 
-        zex_metric_calculate_exp_desc_t calculate_desc{
-            ZET_STRUCTURE_TYPE_METRIC_CALCULATE_DESC_EXP,
-            nullptr,                                              // pNext
-            0,                                                    // metricGroucount
-            nullptr,                                              // pmetrics_group_handles
-            num_metrics,                                          // metric_count
-            metrics.data(),                                       // metric_handle
-            0,                                                    // timeWindowsCount
-            nullptr,                                              // pCalculateTimeWindows
-            time_aggr_window,                                     // timeAggregationWindow
-            ZET_ENUM_EXP_METRIC_CALCULATE_OPERATION_FLAG_AVERAGE  // operation
+        external::L0::zex_metric_calculate_exp_desc_t calculate_desc{
+            external::L0::ZET_STRUCTURE_TYPE_METRIC_CALCULATE_DESC_EXP,
+            nullptr,           // pNext
+            0,                 // metricGroucount
+            nullptr,           // pmetrics_group_handles
+            num_metrics,       // metric_count
+            metrics.data(),    // metric_handle
+            0,                 // timeWindowsCount
+            nullptr,           // pCalculateTimeWindows
+            time_aggr_window,  // timeAggregationWindow
+            external::L0::ZET_ENUM_EXP_METRIC_CALCULATE_OPERATION_FLAG_AVERAGE  // operation
         };
 
         uint32_t set_count = 0;
@@ -1191,17 +1192,17 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
           status = zetMetricGet(it->second->metrics_group_, &metric_count, metrics.data());
           PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-          zex_metric_calculate_exp_desc_t calculate_desc{
-              ZET_STRUCTURE_TYPE_METRIC_CALCULATE_DESC_EXP,
-              nullptr,                                              // pNext
-              0,                                                    // metricGroucount
-              nullptr,                                              // pmetrics_group_handles
-              metric_count,                                         // metric_count
-              metrics.data(),                                       // metric_handle
-              0,                                                    // timeWindowsCount
-              nullptr,                                              // pCalculateTimeWindows
-              10000,                                                // timeAggregationWindow
-              ZET_ENUM_EXP_METRIC_CALCULATE_OPERATION_FLAG_AVERAGE  // operation
+          external::L0::zex_metric_calculate_exp_desc_t calculate_desc{
+              external::L0::ZET_STRUCTURE_TYPE_METRIC_CALCULATE_DESC_EXP,
+              nullptr,         // pNext
+              0,               // metricGroucount
+              nullptr,         // pmetrics_group_handles
+              metric_count,    // metric_count
+              metrics.data(),  // metric_handle
+              0,               // timeWindowsCount
+              nullptr,         // pCalculateTimeWindows
+              10000,           // timeAggregationWindow
+              external::L0::ZET_ENUM_EXP_METRIC_CALCULATE_OPERATION_FLAG_AVERAGE  // operation
           };
 
           uint32_t report_size = metric_count + 2;  // include two timestamps
@@ -1232,7 +1233,8 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
           PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
           std::vector<uint32_t> metric_results_count_per_set(set_count);
-          std::vector<zex_metric_result_exp_t> metric_results(total_metric_results_count);
+          std::vector<external::L0::zex_metric_result_exp_t> metric_results(
+              total_metric_results_count);
 
           status = tf.zexMetricDecodeCalculateMultipleValuesExp(
               metric_decoder_, &raw_size, raw_metrics.data(), &calculate_desc, &set_count,
@@ -1267,7 +1269,7 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
                           << "\t Metric name: " << metrics_names[result_index] << " | ";
 
                 valid_value.assign((metric_results[output_index].resultStatus ==
-                                    ZET_ENUM_EXP_METRIC_CALCULATE_RESULT_VALID)
+                                    external::L0::ZET_ENUM_EXP_METRIC_CALCULATE_RESULT_VALID)
                                        ? "\tValid"
                                        : "\tInvalid");
                 switch (metrics_result_types[result_index]) {
@@ -1316,8 +1318,8 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   }
 
-  void CaptureRawMetrics(zet_metric_tracer_exp_handle_t tracer, uint8_t *storage, size_t ssize,
-                         std::shared_ptr<pti_metrics_device_descriptor_t> desc,
+  void CaptureRawMetrics(external::L0::zet_metric_tracer_exp_handle_t tracer, uint8_t *storage,
+                         size_t ssize, std::shared_ptr<pti_metrics_device_descriptor_t> desc,
                          bool immediate_save_to_disc = false) {
     ze_result_t status = ZE_RESULT_SUCCESS;
 
@@ -1343,9 +1345,9 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     SaveRawData(desc, storage, data_size, immediate_save_to_disc);
   }
 
-  void PerDeviceTraceMetricsProfilingThread(std::shared_ptr<pti_metrics_device_descriptor_t> desc,
-                                            zet_metric_decoder_exp_handle_t *metric_decoder,
-                                            bool start_paused) {
+  void PerDeviceTraceMetricsProfilingThread(
+      std::shared_ptr<pti_metrics_device_descriptor_t> desc,
+      external::L0::zet_metric_decoder_exp_handle_t *metric_decoder, bool start_paused) {
     PTI_ASSERT(desc != nullptr);
 
     ze_result_t status = ZE_RESULT_SUCCESS;
@@ -1353,11 +1355,12 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     pti_result result = CollectionInitialize(desc);
     PTI_ASSERT(result == PTI_SUCCESS);
 
-    zet_metric_tracer_exp_handle_t tracer = nullptr;
+    external::L0::zet_metric_tracer_exp_handle_t tracer = nullptr;
 
-    zet_metric_tracer_exp_desc_t tracer_desc{
-        {static_cast<zet_structure_type_t>(ZET_STRUCTURE_TYPE_METRIC_TRACER_DESC_EXP), nullptr},
-        max_metric_samples_};
+    external::L0::zet_metric_tracer_exp_desc_t tracer_desc;
+    tracer_desc.stype = external::L0::ZET_STRUCTURE_TYPE_METRIC_TRACER_EXP_DESC;
+    tracer_desc.pNext = nullptr;
+    tracer_desc.notifyEveryNBytes = max_metric_samples_;
 
     status = tf.zetMetricTracerCreateExp(desc->context_, desc->device_, 1, &(desc->metrics_group_),
                                          &tracer_desc, desc->event_, &tracer);
@@ -1851,7 +1854,7 @@ class PtiMetricsCollectorHandler {
               break;
          }
       */
-      case ZET_METRIC_SAMPLING_TYPE_EXP_FLAG_TRACER_BASED: {
+      case external::L0::ZET_METRIC_SAMPLING_TYPE_EXP_FLAG_TRACER_BASED: {
         // TraceMetricsProfiler relies on L0 Trace Metrics API extensions
         if (trace_api_enabled_) {
           uint32_t time_aggr_window = metric_config_params->_time_aggr_window;

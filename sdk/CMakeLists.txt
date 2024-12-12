@@ -21,11 +21,9 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE STRING "")
 ProjectIsTopLevel()
 SetBuildType()
 
+# For developer use with tools like clangd (can be used by vscode and vim
+# plugins).
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-if(CMAKE_EXPORT_COMPILE_COMMANDS)
-  set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
-      ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
-endif()
 
 if(PROJECT_IS_TOP_LEVEL)
   AddFormatTarget()
@@ -275,8 +273,23 @@ target_link_libraries(
 	pti_all INTERFACE Pti::pti_view Pti:pti_metrics)
 
 include(CTest)
+
+if(BUILD_TESTING AND PTI_BUILD_SAMPLES)
+ add_subdirectory(samples/dpc_gemm)
+ add_subdirectory(samples/dpc_gemm_threaded)
+ add_subdirectory(samples/vector_sq_add)
+ add_subdirectory(samples/onemkl_gemm)
+ add_subdirectory(samples/iso3dfd_dpcpp)
+ add_subdirectory(samples/metrics_iso3dfd_dpcpp)
+ add_subdirectory(samples/dlworkloads)
+endif()
+
 if(BUILD_TESTING AND PTI_BUILD_TESTING)
   add_subdirectory(test)
+endif()
+
+if(BUILD_TESTING AND PTI_FUZZ)
+  add_subdirectory(fuzz)
 endif()
 
 # Targets / Install phase
@@ -337,7 +350,6 @@ if(PTI_INSTALL)
       COMPONENT Pti_Doc)
   endif()
 
-
   #
   # This file is only installed in oneAPI drops
   #
@@ -388,21 +400,6 @@ if(PTI_INSTALL)
       [[\"\${CMAKE_INSTALL_PREFIX}/etc/*\"]])
 
  endif()
-
-endif()
-
-if(PTI_BUILD_SAMPLES)
- add_subdirectory(samples/dpc_gemm)
- add_subdirectory(samples/dpc_gemm_threaded)
- add_subdirectory(samples/vector_sq_add)
- add_subdirectory(samples/onemkl_gemm)
- add_subdirectory(samples/iso3dfd_dpcpp)
- add_subdirectory(samples/metrics_iso3dfd_dpcpp)
- add_subdirectory(samples/dlworkloads)
-endif()
-
-if(BUILD_TESTING AND PTI_FUZZ)
-  add_subdirectory(fuzz)
 endif()
 
 if(PROJECT_IS_TOP_LEVEL AND PTI_INSTALL)

@@ -4,18 +4,14 @@
 #include <iostream>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
-#include <type_traits>
 #include <vector>
 
 #include "pti/pti_view.h"
-#include "utils.h"
 #include "utils/test_helpers.h"
-
-using namespace sycl;
 
 namespace {
 
-void vecAdd(sycl::queue& q, int64_t* a, int64_t* b, int64_t* res, int count) {
+void VecAdd(sycl::queue& q, int64_t* a, int64_t* b, int64_t* res, int count) {
   q.submit([&](sycl::handler& h) {
     h.parallel_for(count, [=](sycl::item<1> item) {
       int idx = item.get_id(0);
@@ -24,7 +20,7 @@ void vecAdd(sycl::queue& q, int64_t* a, int64_t* b, int64_t* res, int count) {
   });
 }
 
-void check_results(const int64_t* result, size_t size) {
+void CheckResults(const int64_t* result, size_t size) {
   for (size_t i = 0; i < size; i++) {
     ASSERT_TRUE(result[i] == static_cast<int64_t>(i * 2))
         << "Wrong element at index " << i << ", should be " << i * 2 << ", but got " << result[i];
@@ -47,9 +43,9 @@ void StopTracing() {
 
 void TestCore(bool do_immediate) {
   try {
-    constexpr size_t vector_size = 10 * 1024 * 1024;
-    const size_t repetitions = 10;
-    std::cout << "Adding vectors size: " << vector_size << ", Repetitions: " << repetitions
+    constexpr size_t kVectorSize = 10 * 1024 * 1024;
+    constexpr size_t kRepetitions = 10;
+    std::cout << "Adding vectors size: " << kVectorSize << ", Repetitions: " << kRepetitions
               << std::endl;
 
     auto dev = sycl::device(sycl::gpu_selector_v);
@@ -65,31 +61,36 @@ void TestCore(bool do_immediate) {
       q = sycl::queue(sycl::gpu_selector_v, prop);
     }
 
-    int64_t* a = sycl::malloc_device<int64_t>(vector_size, q);
-    int64_t* b = sycl::malloc_device<int64_t>(vector_size, q);
-    int64_t* c = sycl::malloc_device<int64_t>(vector_size, q);
+    int64_t* a = sycl::malloc_device<int64_t>(kVectorSize, q);
+    int64_t* b = sycl::malloc_device<int64_t>(kVectorSize, q);
+    int64_t* c = sycl::malloc_device<int64_t>(kVectorSize, q);
 
-    int64_t* init_data_host = new int64_t[vector_size];
-    int64_t* zero_data_host = new int64_t[vector_size];
-    int64_t* outp_data_host = new int64_t[vector_size];
+    auto init_data_host = std::make_unique<int64_t[]>(kVectorSize);
+    auto zero_data_host = std::make_unique<int64_t[]>(kVectorSize);
+    auto outp_data_host = std::make_unique<int64_t[]>(kVectorSize);
 
     // init values are meaningfull as result will be checked afterwards
-    for (size_t i = 0; i < vector_size; ++i) {
+    for (int64_t i = 0; i < static_cast<int64_t>(kVectorSize); ++i) {
       init_data_host[i] = i;
-      zero_data_host[i] = 0;
+      zero_data_host[i] = 0LL;
     }
 
     // H2D - once
-    q.memcpy(a, init_data_host, vector_size * sizeof(int64_t)).wait();
-    q.memcpy(b, init_data_host, vector_size * sizeof(int64_t)).wait();
-    q.memcpy(c, zero_data_host, vector_size * sizeof(int64_t)).wait();
+    q.memcpy(a, init_data_host.get(), kVectorSize * sizeof(int64_t)).wait();
+    q.memcpy(b, init_data_host.get(), kVectorSize * sizeof(int64_t)).wait();
+    q.memcpy(c, zero_data_host.get(), kVectorSize * sizeof(int64_t)).wait();
 
-    for (size_t iter = 0; iter < repetitions; iter++) {
-      vecAdd(q, a, b, c, vector_size);
+    for (size_t iter = 0; iter < kRepetitions; iter++) {
+      VecAdd(q, a, b, c, kVectorSize);
     }
     q.wait();
-    q.memcpy(outp_data_host, c, vector_size * sizeof(int64_t)).wait();
-    check_results(outp_data_host, vector_size);
+    q.memcpy(outp_data_host.get(), c, kVectorSize * sizeof(int64_t)).wait();
+
+    CheckResults(outp_data_host.get(), kVectorSize);
+
+    sycl::free(c, q);
+    sycl::free(b, q);
+    sycl::free(a, q);
   } catch (const sycl::exception& e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';
     std::cerr << "\tError code: " << e.code().value() << "\n\tCategory: " << e.category().name()
@@ -99,11 +100,10 @@ void TestCore(bool do_immediate) {
   } catch (...) {
     std::cerr << "Error: Unknown exception caught." << '\n';
   }
-  return;
 }
 }  // namespace
 
-bool compare_pair(std::pair<uint64_t, uint64_t> a_stamps, std::pair<uint64_t, uint64_t> b_stamps) {
+bool ComparePair(std::pair<uint64_t, uint64_t> a_stamps, std::pair<uint64_t, uint64_t> b_stamps) {
   return a_stamps.first < b_stamps.first;
 }
 
@@ -303,7 +303,7 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   // order of records is not garantie the order of submission and execution of kernels -
   // so let's  sort kernel stamp pairs by device start stamp
   std::sort(kernel_device_timestamps_pairs.begin(), kernel_device_timestamps_pairs.end(),
-            compare_pair);
+            ComparePair);
 
   EXPECT_EQ(TestForDeviceKernelsOverlap(kernel_device_timestamps_pairs), true);
   EXPECT_EQ(TestForDeviceKernelDurationNonZero(kernel_device_timestamps_pairs), true);

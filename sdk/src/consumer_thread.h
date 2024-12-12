@@ -24,7 +24,6 @@
 
 #include <atomic>
 #include <future>
-#include <memory>
 #include <thread>
 
 #include "view_buffer.h"

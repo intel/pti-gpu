@@ -150,8 +150,8 @@ void Compute(sycl::queue queue, const std::vector<float>& a, const std::vector<f
 }  // namespace
 
 class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, bool>> {
- public:
-  static void SetUpTestSuite() {  // Setup shared resource between tests (GPU)
+ protected:
+  void SetUp() override {  // Called right after constructor before each test
     try {
       dev_ = sycl::device(sycl::gpu_selector_v);
       if (pti::test::utils::IsIntegratedGraphics(dev_)) {
@@ -161,10 +161,6 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
       FAIL() << "Unable to select valid device to run tests on. Check your hardware, driver "
                 "install, or system configuration.";
     }
-  }
-
- protected:
-  void SetUp() override {  // Called right after constructor before each test
     buffer_cb_registered_ = true;
     requested_buffer_calls = 0;
     rejected_buffer_calls = 0;
@@ -433,8 +429,8 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
   }
 
   // Class members commonly used by all tests in the test suite for MainFixture
-  inline static sycl::device dev_;
-  inline static int expected_mem_transfers_per_mult_ = 4;
+  sycl::device dev_;
+  int expected_mem_transfers_per_mult_ = 4;
   unsigned size_ = 1024;
   unsigned repeat_count_ = 1;
   bool buffer_cb_registered_ = false;

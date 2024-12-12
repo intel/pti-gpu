@@ -21,6 +21,8 @@
 #include <level_zero/ze_api.h>
 #include <level_zero/zet_api.h>
 
+namespace external {
+namespace L0 {
 //////////////////////////////////////////////////////////////////////////////
 /// @brief Handle of metric tracer's object
 typedef struct _zet_metric_tracer_exp_handle_t *zet_metric_tracer_exp_handle_t;
@@ -29,10 +31,13 @@ typedef struct _zet_metric_tracer_exp_handle_t *zet_metric_tracer_exp_handle_t;
 /// @brief Handle of metric decoder's object
 typedef struct _zet_metric_decoder_exp_handle_t *zet_metric_decoder_exp_handle_t;
 
-constexpr uint32_t ZET_METRIC_SAMPLING_TYPE_EXP_FLAG_TRACER_BASED = ZE_BIT(2);
+inline constexpr uint32_t ZET_METRIC_SAMPLING_TYPE_EXP_FLAG_TRACER_BASED = ZE_BIT(2);
+inline constexpr auto ZET_STRUCTURE_TYPE_METRIC_TRACER_EXP_DESC =
+    static_cast<zet_structure_type_t>(0x00010008);
 
 typedef struct _zet_metric_tracer_exp_desc_t {
-  zet_base_desc_t base;
+  zet_structure_type_t stype;
+  const void *pNext;
   uint32_t notifyEveryNBytes;
 } zet_metric_tracer_exp_desc_t;
 
@@ -40,6 +45,8 @@ typedef struct _zet_metric_entry_exp_t {
   zet_value_t value;
   uint64_t timeStamp;
   uint32_t metricIndex;
+  ze_bool_t onSubdevice;
+  uint32_t subdeviceId;
 } zet_metric_entry_exp_t;
 
 typedef enum _zex_metric_calculate_operation_exp_t {
@@ -91,8 +98,6 @@ typedef struct _zex_metric_calculate_exp_desc_t {
   zex_metric_calculate_operation_exp_t operation;
 } zex_metric_calculate_exp_desc_t;
 
-namespace L0 {
-
 ZE_APIEXPORT ze_result_t ZE_APICALL zetMetricTracerCreateExp(
     zet_context_handle_t hContext, zet_device_handle_t hDevice, uint32_t metricGroupCount,
     zet_metric_group_handle_t *phMetricGroups, zet_metric_tracer_exp_desc_t *desc,
@@ -132,5 +137,5 @@ ZE_APIEXPORT ze_result_t ZE_APICALL zexMetricDecodeCalculateMultipleValuesExp(
     zex_metric_result_exp_t *pMetricResults);
 
 }  // namespace L0
-
+}  // namespace external
 #endif  // PTI_TRACE_METRICS_H_

@@ -5,7 +5,6 @@
 // =============================================================
 #include "pti/pti_metrics.h"
 
-#include "internal_helper.h"
 #include "metrics_handler.h"
 
 namespace {

@@ -16,7 +16,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "utils.h"
+#include "overhead_kinds.h"
+#include "pti_assert.h"
 
 /*
  * Misc classes and functions enabling so called "local" collection of GPU device kernels

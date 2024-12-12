@@ -15,10 +15,8 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
-#include <iostream>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <xpti/xpti_trace_framework.hpp>
 
 #include "library_loader.h"
