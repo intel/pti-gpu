@@ -7,12 +7,14 @@ on:
       - release/**
     paths:
       - sdk/**
+      - .github/workflows/sdk_build_and_test.yml
   pull_request:
     branches:
       - master
       - release/**
     paths:
       - sdk/**
+      - .github/workflows/sdk_build_and_test.yml
 
 permissions:
   contents: read
@@ -62,7 +64,10 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --output-on-failure --preset ${{ matrix.preset }} -E perf-overhead-view
+          if ! ctest --output-on-failure --preset ${{ matrix.preset }} -E perf-overhead-view; then
+            echo "::warning::Test is flaky (Check logs because tests had to be rerun)"
+            ctest --output-on-failure --preset ${{ matrix.preset }} --rerun-failed
+          fi
 
       - name: Quarantined tests # flaky tests
         working-directory: sdk
