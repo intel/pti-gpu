@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_TOOLS_COMMON_CHROME_LOGGER_H_
-#define PTI_TOOLS_COMMON_CHROME_LOGGER_H_
+#ifndef PTI_TOOLS_UNITRACE_CHROME_LOGGER_H_
+#define PTI_TOOLS_UNITRACE_CHROME_LOGGER_H_
 
 #include <chrono>
 #include <cstdint>
@@ -68,113 +68,6 @@ ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device
 std::string GetClKernelCommandName(uint64_t id);
 
 static Logger* logger_ = nullptr;
-
-constexpr unsigned char cpu_op = 0;
-constexpr unsigned char gpu_op = 1;
-constexpr unsigned char data_flow = 2;
-constexpr unsigned char data_flow_sync = 3;
-constexpr unsigned char cl_data_flow = 4;
-constexpr unsigned char cl_data_flow_sync = 5;
-
-/* TraceDataPacket: It is a raw data structure which will store traces.
- * At the time of file write it will be converted into to std::string and write into the file.
- * TODO: remove this structure for both OpenCl and Level0
- */
-typedef struct TraceDataPacket_ {
-  unsigned char ph;
-  unsigned char cat;
-  unsigned int rank;
-  uint32_t tid;
-  uint32_t pid;
-  uint64_t id;
-  uint64_t kernel_command_id;
-  std::string name;
-  std::string cname;
-  double ts;
-  double dur;
-  std::string args;
-  API_TRACING_ID api_id;
-
-  /*
-   * Stringify(): creates json format of string from the traceDataPacket
-   */
-  std::string Stringify() {
-    std::string str = "{"; // header
-  
-    str += "\"ph\": \"";
-    str += ph;
-    str += "\"";
-
-    str += ", \"tid\": " + std::to_string(tid);
-    str += ", \"pid\": " + std::to_string(pid);
-
-    if (api_id == ClKernelTracingId) {
-      name = utils::Demangle(name.data());
-    }
-    else {
-      if ((cl_ext_api_id)api_id >= ClExtApiStart && (cl_ext_api_id)api_id < ClExtApiEnd) {
-        name = cl_ext_api[api_id - ClExtApiStart];
-      } else if ((api_id != OpenClTracingId) && (api_id != XptiTracingId) && (api_id != IttTracingId) && (api_id != ZeKernelTracingId)) {
-        // L0 kernel names are already demanged/
-        name = get_symbol(api_id);
-      }
-    }
-    if (!name.empty()) {
-      if (name[0] == '\"') {
-        // name is already quoted
-        str += ", \"name\": " + name;
-      }
-      else {
-        str += ", \"name\": \"" + name + "\"";
-      }
-    }
-    if (!cname.empty()) {
-      if (cname[0] == '\"') {
-        // cname is already quoted
-        str += ", \"cname\": " + cname;
-      }
-      else {
-        str += ", \"cname\": \"" + cname + "\"";
-      }
-    }
-
-    if (cat == cpu_op) {
-      str += ", \"cat\": \"cpu_op\"";
-    }
-    else if (cat == gpu_op) {
-      str += ", \"cat\": \"gpu_op\"";
-    }
-    else if (cat == data_flow) {
-      str += ", \"cat\": \"Flow_H2D_" + std::to_string(id) + "_" + std::to_string(rank) + "\"";
-    }
-    else if (cat == data_flow_sync) {
-      str += ", \"cat\": \"Flow_D2H_" + std::to_string(id) + "_" + std::to_string(rank) + "\"";
-    }
-    else if (cat == cl_data_flow) {
-      str += ", \"cat\": \"CL_Flow_H2D_" + std::to_string(id) + "_" + std::to_string(rank) + "\"";
-    }
-    else if (cat == cl_data_flow_sync) {
-      str += ", \"cat\": \"CL_Flow_D2H_" + std::to_string(id) + "_" + std::to_string(rank) + "\"";
-    }
-
-    // It is always present
-    if (ts != (uint64_t)(-1)) {
-      str += ", \"ts\": " + std::to_string(ts);
-    }
-    if (dur != (uint64_t)(-1)) {
-      str += ", \"dur\": " + std::to_string(dur);
-    }
-    if (!args.empty()) {
-      str += ", \"args\": {" + args + "}";
-    } else {
-      str += ", \"id\": " + std::to_string(id);
-    }
-    // end
-    str += "},\n"; // footer
-  
-    return str;
-  }
-} TraceDataPacket;
 
 std::recursive_mutex logger_lock_; //lock to synchronize file write
 
@@ -325,7 +218,7 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
   uint32_t device_pid;
   uint32_t device_tid;
   const std::lock_guard<std::mutex> lock(device_pid_tid_map_lock_);
-  
+
   ClDeviceTidKey tid_key; memset(&tid_key, 0, sizeof(ClDeviceTidKey));
   tid_key.pci_addr_ = pci;
   tid_key.device_ = device;
@@ -379,7 +272,7 @@ class TraceBuffer {
       }
       ZeKernelCommandExecutionRecord *der = (ZeKernelCommandExecutionRecord *)(malloc(sizeof(ZeKernelCommandExecutionRecord) * slice_capacity_));
       UniMemory::ExitIfOutOfMemory((void *)(der));
-      
+
       device_event_buffer_.push_back(der); 
 
       HostEventRecord *her = (HostEventRecord *)(malloc(sizeof(HostEventRecord) * slice_capacity_));
@@ -404,7 +297,7 @@ class TraceBuffer {
       }
 
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);	// use this lock to protect trace_buffers_
-      
+
       if (trace_buffers_ == NULL) {
         trace_buffers_ = new std::set<TraceBuffer *>;
         UniMemory::ExitIfOutOfMemory((void *)(trace_buffers_));
@@ -421,7 +314,7 @@ class TraceBuffer {
             for (int j = 0; j < slice_capacity_; j++) {
               FlushDeviceEvent(device_event_buffer_[i][j]);
             }
-          }  
+          }
           for (int j = 0; j < next_device_event_index_; j++) {
             FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][j]);
           }
@@ -432,7 +325,7 @@ class TraceBuffer {
             for (int j = 0; j < slice_capacity_; j++) {
               FlushHostEvent(host_event_buffer_[i][j]);
             }
-          }  
+          }
           for (int j = 0; j < next_host_event_index_; j++) {
             FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
           }
@@ -459,7 +352,7 @@ class TraceBuffer {
         if (buffer_capacity_ == -1) {
           ZeKernelCommandExecutionRecord *der = (ZeKernelCommandExecutionRecord *)(malloc(sizeof(ZeKernelCommandExecutionRecord) * slice_capacity_));
           UniMemory::ExitIfOutOfMemory((void *)(der));
-      
+
           device_event_buffer_.push_back(der);
           current_device_event_buffer_slice_++;
           next_device_event_index_ = 0;
@@ -500,61 +393,164 @@ class TraceBuffer {
     uint32_t GetTid() { return tid_; }
     uint32_t GetPid() { return pid_; }
 
-    void FlushDeviceEvent(ZeKernelCommandExecutionRecord& rec) {
-      auto [device_pid, device_tid] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, GetPid(), rec.tid_);
-      {
-        TraceDataPacket pkt{};
-        pkt.ph = 'X';
-        pkt.tid = device_tid;
-        pkt.pid = device_pid;
-        pkt.kernel_command_id = rec.kernel_command_id_;
-	std::string kname = GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
-        if (rec.implicit_scaling_) {
-          pkt.name = "Tile #" + std::to_string(rec.tile_) + ": " + kname;
+    std::string StringifyDeviceEvent(ZeKernelCommandExecutionRecord& rec) {
+      auto [pid, tid] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, pid_, rec.tid_);
+      std::string kname = GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
+      std::string str = "{";
+
+      str += "\"ph\": \"X\"";
+      str += ", \"tid\": " + std::to_string(tid);
+      str += ", \"pid\": " + std::to_string(pid);
+
+      if (rec.implicit_scaling_) {
+        str += ", \"name\": \"Tile #" + std::to_string(rec.tile_) + ": ";
+        if (!kname.empty()) {
+          if (kname[0] == '\"') {
+            str += kname.substr(1, kname.size() - 2);
+          } else {
+            str += kname;
+          }
         }
-        else {
-          pkt.name = kname;
+        str += "\"";
+      } else {
+        if (!kname.empty()) {
+          if (kname[0] == '\"') {
+            // name is already quoted
+            str += ", \"name\": " + kname;
+          } else {
+            str += ", \"name\": \"" + kname + "\"";
+          }
         }
-        pkt.api_id = ZeKernelTracingId;
-        pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-        pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
-        pkt.cat = gpu_op;
-        pkt.args = "\"id\": \"" + std::to_string(rec.kid_) + "\"";
-	if (metrics_enabled_) {
-          pkt.args += ", \"metrics\": \"https://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
-	}
-        logger_->Log(pkt.Stringify());
       }
+
+      str += ", \"cat\": \"gpu_op\"";
+      str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
+      str += ", \"dur\": " + std::to_string(UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_));
+      str += ", \"args\": {\"id\": \"" + std::to_string(rec.kid_) + "\"";
+      if (metrics_enabled_) {
+        str += ", \"metrics\": \"https://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
+      }
+      str += "}},\n";
 
       if (!rec.implicit_scaling_) {
-        {
-          TraceDataPacket pkt{};
-          pkt.ph = 't';
-          pkt.tid = device_tid;
-          pkt.pid = device_pid;
-          pkt.api_id = DepTracingId;
-          pkt.id = rec.kid_;
-          pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-          pkt.dur = double((uint64_t)(-1));
-          pkt.cat = data_flow;
-          pkt.rank = mpi_rank;
-          logger_->Log(pkt.Stringify());
+        str += "{";
+        str += "\"ph\": \"t\"";
+        str += ", \"tid\": " + std::to_string(tid);
+        str += ", \"pid\": " + std::to_string(pid);
+        str += ", \"name\": \"dep\"";
+        str += ", \"cat\": \"Flow_H2D_" + std::to_string(rec.kid_) + "_" + std::to_string(mpi_rank) + "\"";
+        str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
+        str += ", \"id\": " + std::to_string(rec.kid_);
+        str += "},\n";
+
+        str += "{";
+        str += "\"ph\": \"s\"";
+        str += ", \"tid\": " + std::to_string(tid);
+        str += ", \"pid\": " + std::to_string(pid);
+        str += ", \"name\": \"dep\"";
+        str += ", \"cat\": \"Flow_D2H_" + std::to_string(rec.kid_) + "_" + std::to_string(mpi_rank) + "\"";
+        str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
+        str += ", \"id\": " + std::to_string(rec.kid_);
+        str += "},\n";
+      }
+
+      return str;
+    }
+
+    std::string StringifyHostEvent(HostEventRecord& rec) {
+      std::string str = "{";  // header
+
+      if (rec.type_ == EVENT_COMPLETE) {
+        str += "\"ph\": \"X\"";
+      } else if (rec.type_ == EVENT_DURATION_START) {
+        str += "\"ph\": \"B\"";
+      } else if (rec.type_ == EVENT_DURATION_END) {
+        str += "\"ph\": \"E\"";
+      } else if (rec.type_ == EVENT_FLOW_SOURCE) {
+        str += "\"ph\": \"s\"";
+      } else if (rec.type_ == EVENT_FLOW_SINK) {
+        str += "\"ph\": \"t\"";
+      } else if (rec.type_ == EVENT_MARK) {
+        str += "\"ph\": \"R\"";
+      } else {
+        // should never get here
+      }
+
+      str += ", \"tid\": " + std::to_string(tid_);
+      str += ", \"pid\": " + std::to_string(pid_);
+
+      if (rec.type_ == EVENT_FLOW_SOURCE) {
+        str += ", \"name\": \"dep\"";
+        str += ", \"cat\": \"Flow_H2D_" + std::to_string(rec.id_) + "_" + std::to_string(mpi_rank) + "\"";
+      } else if (rec.type_ == EVENT_FLOW_SINK) {
+        str += ", \"name\": \"dep\"";
+        str += ", \"cat\": \"Flow_D2H_" + std::to_string(rec.id_) + "_" + std::to_string(mpi_rank) + "\"";
+      } else {
+        if (rec.name_ != nullptr) {
+          if (rec.name_[0] == '\"') {
+            // name is already quoted
+            str += ", \"name\": " + std::string(rec.name_);
+          } else {
+            str += ", \"name\": \"" + std::string(rec.name_) + "\"";
+          }
+        } else {
+          if ((rec.api_id_ != XptiTracingId) && (rec.api_id_ != IttTracingId)) {
+            str += ", \"name\": \"" + get_symbol(rec.api_id_) + "\"";
+          }
+        }
+        str += ", \"cat\": \"cpu_op\"";
+      }
+
+      // free rec.name_. It is not needed any more
+      if (rec.name_ != nullptr) {
+        free(rec.name_);
+        rec.name_ = nullptr;
+      }
+
+      // It is always present
+      str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
+
+      if (rec.type_ == EVENT_COMPLETE) {
+        str += ", \"dur\": " + std::to_string(UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_));
+      }
+
+      std::string str_args = "";  // build arguments
+      if (rec.api_type_ == MPI) {
+        const MpiArgs& args = rec.mpi_args_;
+
+        bool isFirst = true;  // First argument can be zero and second non zero
+        if (args.src_size != 0) {
+          str_args += "\"ssize\": " + std::to_string(args.src_size);
+          str_args += ", \"src\": " + std::to_string(args.src_location);
+          str_args += ", \"stag\": " + std::to_string(args.src_tag);
+          isFirst = false;
         }
 
-        {
-          TraceDataPacket pkt{};
-          pkt.ph = 's';
-          pkt.tid = device_tid;
-          pkt.pid = device_pid;
-          pkt.api_id = DepTracingId;
-          pkt.id = rec.kid_;
-          pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-          pkt.dur = double((uint64_t)(-1));
-          pkt.cat = data_flow_sync;
-          pkt.rank = mpi_rank;
-          logger_->Log(pkt.Stringify());
+        if (args.dst_size != 0) {
+          str_args += (isFirst ? "" : ", ");
+          str_args += "\"dsize\": " +std::to_string(args.dst_size);
+          str_args += ", \"dst\": " +std::to_string(args.dst_location);
+          str_args += ", \"dtag\": " +std::to_string(args.dst_tag);
         }
+      } else if (rec.api_type_ == CCL) {
+        const CclArgs& args = rec.ccl_args_;
+        str_args += "\"ssize\": " + std::to_string(args.buff_size);
       }
+
+      if (!str_args.empty()) {
+        str += ", \"args\": {" + str_args + "}";
+      } else {
+        str += ", \"id\": " + std::to_string(rec.id_);;
+      }
+
+      // end
+      str += "},\n";  // footer
+
+      return str;
+    }
+
+    void FlushDeviceEvent(ZeKernelCommandExecutionRecord& rec) {
+      logger_->Log(StringifyDeviceEvent(rec));
     }
 
     void FlushDeviceBuffer() {
@@ -567,93 +563,18 @@ class TraceBuffer {
         for (int j = 0; j < slice_capacity_; j++) {
           FlushDeviceEvent(device_event_buffer_[i][j]);
         }
-      }  
+      }
       for (int j = 0; j < next_device_event_index_; j++) {
         FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][j]);
       }
-         
+
       current_device_event_buffer_slice_ = 0;
       next_device_event_index_ = 0;
       device_event_buffer_flushed_ = true;
     }
 
     void FlushHostEvent(HostEventRecord& rec) {
-      TraceDataPacket pkt{};
-
-      if (rec.type_ == EVENT_COMPLETE) {
-        pkt.ph = 'X';
-        pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
-
-        if(rec.api_type_ == MPI) {
-          MpiArgs args = rec.mpi_args_;
-
-          bool isFirst=true; // because first argument can be zero and second non zero
-          std::string str_args = ""; // build arguments
-
-          if (args.src_size != 0) {
-            str_args += "\"ssize\": " + std::to_string(args.src_size);
-            str_args += ", \"src\": " + std::to_string(args.src_location);
-            str_args += ", \"stag\": " + std::to_string(args.src_tag);
-            isFirst = false;
-          }
-
-          if (args.dst_size != 0) {
-            str_args += (isFirst ? "" : ", "); isFirst = false;
-            str_args += "\"dsize\": " +std::to_string(args.dst_size);
-            str_args += ", \"dst\": " +std::to_string(args.dst_location);
-            str_args += ", \"dtag\": " +std::to_string(args.dst_tag);
-          }
-
-          pkt.args = std::move(str_args);
-        } else if (rec.api_type_ == CCL) {
-          CclArgs& args = rec.ccl_args_;
-          std::string str_args = "\"ssize\": " + std::to_string(args.buff_size);
-          pkt.args = std::move(str_args);
-        }
-        pkt.cat = cpu_op;
-      }
-      else if (rec.type_ == EVENT_DURATION_START) {
-        pkt.ph = 'B';
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = cpu_op;
-      }
-      else if (rec.type_ == EVENT_DURATION_END) {
-        pkt.ph = 'E';
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = cpu_op;
-      }
-      else if (rec.type_ == EVENT_FLOW_SOURCE) {
-        pkt.ph = 's';
-        pkt.id = rec.id_;
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = data_flow;
-      }
-      else if (rec.type_ == EVENT_FLOW_SINK) {
-        pkt.ph = 't';
-        pkt.id = rec.id_;
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = data_flow_sync;
-      }
-      else if (rec.type_ == EVENT_MARK) {
-        pkt.ph = 'R';
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = cpu_op;
-      }
-      else {
-        // should never get here
-      }
-
-      pkt.tid = GetTid();
-      pkt.pid = GetPid();
-      pkt.api_id = rec.api_id_;
-      pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-      pkt.rank = mpi_rank;
-      if(rec.name_ != nullptr) {
-        pkt.name = std::string(rec.name_);
-        free(rec.name_);
-        rec.name_ = nullptr;
-      }
-      logger_->Log(pkt.Stringify());
+      logger_->Log(StringifyHostEvent(rec));
     }
 
     void FlushHostBuffer() {
@@ -666,7 +587,7 @@ class TraceBuffer {
         for (int j = 0; j < slice_capacity_; j++) {
           FlushHostEvent(host_event_buffer_[i][j]);
         }
-      }  
+      }
       for (int j = 0; j < next_host_event_index_; j++) {
         FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
       }
@@ -674,8 +595,7 @@ class TraceBuffer {
       next_host_event_index_ = 0;   
       host_event_buffer_flushed_ = true;
     }
-    
-    
+
     void Finalize() {
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       if (!finalized_.exchange(true)) {
@@ -684,7 +604,7 @@ class TraceBuffer {
             for (int j = 0; j < slice_capacity_; j++) {
               FlushDeviceEvent(device_event_buffer_[i][j]);
             }
-          }  
+          }
           for (int j = 0; j < next_device_event_index_; j++) {
             FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][j]);
           }
@@ -695,7 +615,7 @@ class TraceBuffer {
             for (int j = 0; j < slice_capacity_; j++) {
               FlushHostEvent(host_event_buffer_[i][j]);
             }
-          }  
+          }
           for (int j = 0; j < next_host_event_index_; j++) {
             FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
           }
@@ -703,11 +623,11 @@ class TraceBuffer {
         }
       }
     }
-    
+
     bool IsFinalized() {
       return finalized_.load(std::memory_order_acquire);
     }
-    
+
   private:
     int32_t buffer_capacity_;
     int32_t slice_capacity_;	// each buffer can have multiple slices
@@ -727,7 +647,6 @@ class TraceBuffer {
 
 thread_local TraceBuffer thread_local_buffer_;
 
-// TODO: unify trace buffers for both L0 and OCL
 class ClTraceBuffer;
 std::set<ClTraceBuffer *> *cl_trace_buffers_ = nullptr;
 class ClTraceBuffer {
@@ -737,14 +656,13 @@ class ClTraceBuffer {
       if (szstr.empty() || (szstr == "-1")) {
         buffer_capacity_ = -1;
         slice_capacity_ = BUFFER_SLICE_SIZE_DEFAULT;
-      }
-      else {
+      } else {
         buffer_capacity_ = std::stoi(szstr);
         slice_capacity_ = buffer_capacity_;
       }
       ClKernelCommandExecutionRecord *der = (ClKernelCommandExecutionRecord *)(malloc(sizeof(ClKernelCommandExecutionRecord) * slice_capacity_));
       UniMemory::ExitIfOutOfMemory((void *)(der));
-      
+
       device_event_buffer_.push_back(der); 
 
       HostEventRecord *her = (HostEventRecord *)(malloc(sizeof(HostEventRecord) * slice_capacity_));
@@ -763,14 +681,12 @@ class ClTraceBuffer {
       finalized_.store(false, std::memory_order_release);
       if ((utils::GetEnv("UNITRACE_MetricQuery") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
         metrics_enabled_ = true;
-      }
-      else {
+      } else {
         metrics_enabled_ = false;
       }
 
-
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);	// use this lock to protect trace_buffers_
-      
+
       if (cl_trace_buffers_ == nullptr) {
         cl_trace_buffers_ = new std::set<ClTraceBuffer *>;
         UniMemory::ExitIfOutOfMemory((void *)(cl_trace_buffers_));
@@ -787,7 +703,7 @@ class ClTraceBuffer {
             for (int j = 0; j < slice_capacity_; j++) {
               FlushDeviceEvent(device_event_buffer_[i][j]);
             }
-          }  
+          }
           for (int j = 0; j < next_device_event_index_; j++) {
             FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][j]);
           }
@@ -798,7 +714,7 @@ class ClTraceBuffer {
             for (int j = 0; j < slice_capacity_; j++) {
               FlushHostEvent(host_event_buffer_[i][j]);
             }
-          }  
+          }
           for (int j = 0; j < next_host_event_index_; j++) {
             FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
           }
@@ -827,12 +743,11 @@ class ClTraceBuffer {
         if (buffer_capacity_ == -1) {
           ClKernelCommandExecutionRecord *der = (ClKernelCommandExecutionRecord *)(malloc(sizeof(ClKernelCommandExecutionRecord) * slice_capacity_));
           UniMemory::ExitIfOutOfMemory((void *)(der));
-      
+
           device_event_buffer_.push_back(der);
           current_device_event_buffer_slice_++;
           next_device_event_index_ = 0;
-        }
-        else {
+        } else {
           FlushDeviceBuffer();
         }
       }
@@ -848,8 +763,7 @@ class ClTraceBuffer {
           host_event_buffer_.push_back(her);
           current_host_event_buffer_slice_++;
           next_host_event_index_ = 0;
-        }
-        else {
+        } else {
           FlushHostBuffer();
         }
       }
@@ -869,63 +783,73 @@ class ClTraceBuffer {
     uint32_t GetTid() { return tid_; }
     uint32_t GetPid() { return pid_; }
 
-    void FlushDeviceEvent(ClKernelCommandExecutionRecord& rec) {
-      auto [device_pid, device_tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, GetPid(), rec.tid_);
+    std::string StringifyDeviceEvent(ClKernelCommandExecutionRecord& rec) {
+      auto [pid, tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_);
+      std::string kname = GetClKernelCommandName(rec.kernel_command_id_);
 
-      {
-        TraceDataPacket pkt{};
-        pkt.ph = 'X';
-        pkt.tid = device_tid;
-        pkt.pid = device_pid;
-        pkt.kernel_command_id = rec.kernel_command_id_;
+      std::string str = "{";
 
-	std::string kname = GetClKernelCommandName(rec.kernel_command_id_);
-        if (rec.implicit_scaling_) {
-          pkt.name = "Tile #" + std::to_string(rec.tile_) + ": " + kname;
+      str += "\"ph\": \"X\"";
+      str += ", \"tid\": " + std::to_string(tid);
+      str += ", \"pid\": " + std::to_string(pid);
+
+      if (rec.implicit_scaling_) {
+        str += ", \"name\": \"Tile #" + std::to_string(rec.tile_) + ": ";
+        if (!kname.empty()) {
+          if (kname[0] == '\"') {
+            str += kname.substr(1, kname.size() - 2);
+          } else {
+            str += kname;
+          }
         }
-        else {
-          pkt.name = kname;
+        str += "\"";
+      } else {
+        if (!kname.empty()) {
+          if (kname[0] == '\"') {
+            // name is already quoted
+            str += ", \"name\": " + kname;
+          } else {
+            str += ", \"name\": \"" + kname + "\"";
+          }
         }
-        pkt.api_id = ClKernelTracingId;
-        pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-        pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
-        pkt.cat = gpu_op;
-        pkt.args = "\"id\": \"" + std::to_string(rec.kid_) + "\"";
-	if (metrics_enabled_) {
-          pkt.args += ", \"metrics\": \"https://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
-	}
-        logger_->Log(pkt.Stringify());
       }
+
+      str += ", \"cat\": \"gpu_op\"";
+      str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
+      str += ", \"dur\": " + std::to_string(UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_));
+      str += ", \"args\": {\"id\": \"" + std::to_string(rec.kid_) + "\"";
+      if (metrics_enabled_) {
+        str += ", \"metrics\": \"https://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
+      }
+      str += "}},\n";
 
       if (!rec.implicit_scaling_) {
-        {
-          TraceDataPacket pkt{};
-          pkt.ph = 't';
-          pkt.tid = device_tid;
-          pkt.pid = device_pid;
-          pkt.api_id = DepTracingId;
-          pkt.id = rec.kid_;
-          pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-          pkt.dur = double((uint64_t)(-1));
-          pkt.cat = data_flow;
-          pkt.rank = mpi_rank;
-          logger_->Log(pkt.Stringify());
-        }
+        str += "{";
+        str += "\"ph\": \"t\"";
+        str += ", \"tid\": " + std::to_string(tid);
+        str += ", \"pid\": " + std::to_string(pid);
+        str += ", \"name\": \"dep\"";
+        str += ", \"cat\": \"CL_Flow_H2D_" + std::to_string(rec.kid_) + "_" + std::to_string(mpi_rank) + "\"";
+        str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
+        str += ", \"id\": " + std::to_string(rec.kid_);
+        str += "},\n";
 
-        {
-          TraceDataPacket pkt{};
-          pkt.ph = 's';
-          pkt.tid = device_tid;
-          pkt.pid = device_pid;
-          pkt.api_id = DepTracingId;
-          pkt.id = rec.kid_;
-          pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-          pkt.dur = double((uint64_t)(-1));
-          pkt.cat = data_flow_sync;
-          pkt.rank = mpi_rank;
-          logger_->Log(pkt.Stringify());
-        }
+        str += "{";
+        str += "\"ph\": \"s\"";
+        str += ", \"tid\": " + std::to_string(tid);
+        str += ", \"pid\": " + std::to_string(pid);
+        str += ", \"name\": \"dep\"";
+        str += ", \"cat\": \"CL_Flow_D2H_" + std::to_string(rec.kid_) + "_" + std::to_string(mpi_rank) + "\"";
+        str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
+        str += ", \"id\": " + std::to_string(rec.kid_);
+        str += "},\n";
       }
+
+      return str;
+    }
+
+    void FlushDeviceEvent(ClKernelCommandExecutionRecord& rec) {
+      logger_->Log(StringifyDeviceEvent(rec));
     }
 
     void FlushDeviceBuffer() {
@@ -938,66 +862,111 @@ class ClTraceBuffer {
         for (int j = 0; j < slice_capacity_; j++) {
           FlushDeviceEvent(device_event_buffer_[i][j]);
         }
-      }  
+      }
       for (int j = 0; j < next_device_event_index_; j++) {
         FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][j]);
       }
-         
+
       current_device_event_buffer_slice_ = 0;
       next_device_event_index_ = 0;
       device_event_buffer_flushed_ = true;
     }
-    
-    void FlushHostEvent(HostEventRecord& rec) {
-      TraceDataPacket pkt{};
+
+    std::string StringifyHostEvent(HostEventRecord& rec) {
+      std::string str = "{";  // header
 
       if (rec.type_ == EVENT_COMPLETE) {
-        pkt.ph = 'X';
-        pkt.dur = UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_);
-        pkt.cat = cpu_op;
-      }
-      else if (rec.type_ == EVENT_DURATION_START) {
-        pkt.ph = 'B';
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = cpu_op;
-      }
-      else if (rec.type_ == EVENT_DURATION_END) {
-        pkt.ph = 'E';
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = cpu_op;
-      }
-      else if (rec.type_ == EVENT_FLOW_SOURCE) {
-        pkt.ph = 's';
-        pkt.id = rec.id_;
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = data_flow;
-      }
-      else if (rec.type_ == EVENT_FLOW_SINK) {
-        pkt.ph = 't';
-        pkt.id = rec.id_;
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = data_flow_sync;
-      }
-      else if (rec.type_ == EVENT_MARK) {
-        pkt.ph = 'R';
-        pkt.dur = double((uint64_t)(-1));
-        pkt.cat = cpu_op;
-      }
-      else {
+        str += "\"ph\": \"X\"";
+      } else if (rec.type_ == EVENT_DURATION_START) {
+        str += "\"ph\": \"B\"";
+      } else if (rec.type_ == EVENT_DURATION_END) {
+        str += "\"ph\": \"E\"";
+      } else if (rec.type_ == EVENT_FLOW_SOURCE) {
+        str += "\"ph\": \"s\"";
+      } else if (rec.type_ == EVENT_FLOW_SINK) {
+        str += "\"ph\": \"t\"";
+      } else if (rec.type_ == EVENT_MARK) {
+        str += "\"ph\": \"R\"";
+      } else {
         // should never get here
       }
 
-      pkt.tid = GetTid();
-      pkt.pid = GetPid();
-      pkt.api_id = rec.api_id_;
-      pkt.ts = UniTimer::GetEpochTimeInUs(rec.start_time_);
-      pkt.rank = mpi_rank;
-      if(rec.name_ != nullptr) {
-        pkt.name = std::string(rec.name_);
+      str += ", \"tid\": " + std::to_string(tid_);
+      str += ", \"pid\": " + std::to_string(pid_);
+
+      if (rec.type_ == EVENT_FLOW_SOURCE) {
+        str += ", \"name\": \"dep\"";
+        str += ", \"cat\": \"CL_Flow_H2D_" + std::to_string(rec.id_) + "_" + std::to_string(mpi_rank) + "\"";
+      } else if (rec.type_ == EVENT_FLOW_SINK) {
+        str += ", \"name\": \"dep\"";
+        str += ", \"cat\": \"CL_Flow_D2H_" + std::to_string(rec.id_) + "_" + std::to_string(mpi_rank) + "\"";
+      } else {
+        if (rec.name_ != nullptr) {
+          if (rec.name_[0] == '\"') {
+            // name is already quoted
+            str += ", \"name\": " + std::string(rec.name_);
+          } else {
+            str += ", \"name\": \"" + std::string(rec.name_) + "\"";
+          }
+        } else {
+          if ((rec.api_id_ != XptiTracingId) && (rec.api_id_ != IttTracingId)) {
+            str += ", \"name\": \"" + get_symbol(rec.api_id_) + "\"";
+          }
+        }
+        str += ", \"cat\": \"cpu_op\"";
+      }
+
+      // free rec.name_. It is not needed any more
+      if (rec.name_ != nullptr) {
         free(rec.name_);
         rec.name_ = nullptr;
       }
-      logger_->Log(pkt.Stringify());
+
+      // It is always present
+      str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
+
+      if (rec.type_ == EVENT_COMPLETE) {
+        str += ", \"dur\": " + std::to_string(UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_));
+      }
+
+      std::string str_args = "";  // build arguments
+      if (rec.api_type_ == MPI) {
+        const MpiArgs& args = rec.mpi_args_;
+
+        bool isFirst = true;  // First argument can be zero and second non zero
+
+        if (args.src_size != 0) {
+          str_args += "\"ssize\": " + std::to_string(args.src_size);
+          str_args += ", \"src\": " + std::to_string(args.src_location);
+          str_args += ", \"stag\": " + std::to_string(args.src_tag);
+          isFirst = false;
+        }
+
+        if (args.dst_size != 0) {
+          str_args += (isFirst ? "" : ", ");
+          str_args += "\"dsize\": " +std::to_string(args.dst_size);
+          str_args += ", \"dst\": " +std::to_string(args.dst_location);
+          str_args += ", \"dtag\": " +std::to_string(args.dst_tag);
+        }
+      } else if (rec.api_type_ == CCL) {
+        const CclArgs& args = rec.ccl_args_;
+        str_args += "\"ssize\": " + std::to_string(args.buff_size);
+      }
+
+      if (!str_args.empty()) {
+        str += ", \"args\": {" + str_args + "}";
+      } else {
+        str += ", \"id\": " + std::to_string(rec.id_);
+      }
+
+      // end
+      str += "},\n";  // footer
+
+      return str;
+    }
+
+    void FlushHostEvent(HostEventRecord& rec) {
+      logger_->Log(StringifyHostEvent(rec));
     }
 
     void FlushHostBuffer() {
@@ -1010,18 +979,16 @@ class ClTraceBuffer {
         for (int j = 0; j < slice_capacity_; j++) {
           FlushHostEvent(host_event_buffer_[i][j]);
         }
-      }  
+      }
       for (int j = 0; j < next_host_event_index_; j++) {
         FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
       }
       current_host_event_buffer_slice_ = 0;
-      next_host_event_index_ = 0;   
+      next_host_event_index_ = 0;
       host_event_buffer_flushed_ = true;
     }
-    
-    
+
     void Finalize() {
-      
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
       if (!finalized_.exchange(true)) {
         if (!device_event_buffer_flushed_) {
@@ -1029,7 +996,7 @@ class ClTraceBuffer {
             for (int j = 0; j < slice_capacity_; j++) {
               FlushDeviceEvent(device_event_buffer_[i][j]);
             }
-          }  
+          }
           for (int j = 0; j < next_device_event_index_; j++) {
             FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][j]);
           }
@@ -1040,7 +1007,7 @@ class ClTraceBuffer {
             for (int j = 0; j < slice_capacity_; j++) {
               FlushHostEvent(host_event_buffer_[i][j]);
             }
-          }  
+          }
           for (int j = 0; j < next_host_event_index_; j++) {
             FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
           }
@@ -1048,19 +1015,12 @@ class ClTraceBuffer {
         }
       }
     }
-    
+
     bool IsFinalized() {
       return finalized_.load(std::memory_order_acquire);
     }
-    
-  private:
-    // int32_t max_num_buffered_events_;
-    // uint32_t tid_;
-    // uint32_t pid_;
-    // std::vector<TraceDataPacket> buffer_;
-    // bool flushed_;
-    // std::atomic<bool> finalized_;
 
+  private:
     int32_t buffer_capacity_;
     int32_t slice_capacity_;	// each buffer can have multiple slices
     int32_t current_device_event_buffer_slice_;	// device slice in use
@@ -1089,7 +1049,7 @@ class ChromeLogger {
     std::string chrome_trace_file_name_;
     std::iostream::pos_type data_start_pos_;
     uint64_t process_start_time_;
-   
+
     ChromeLogger(const TraceOptions& options, const char* filename) : options_(options) {
       process_start_time_ = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
       process_name_ = filename;
@@ -1100,21 +1060,25 @@ class ChromeLogger {
       }
       std::string tmpString;
       if (this->CheckOption(TRACE_KERNEL_NAME_FILTER)) {
-          if (this->CheckOption(TRACE_K_NAME_FILTER_IN)) filter_in_ = true; 
-	  tmpString = utils::GetEnv("UNITRACE_TraceKernelString");
-	  filter_strings_set_.insert(tmpString);
+        if (this->CheckOption(TRACE_K_NAME_FILTER_IN)) {
+          filter_in_ = true;
+        }
+        tmpString = utils::GetEnv("UNITRACE_TraceKernelString");
+        filter_strings_set_.insert(tmpString);
       } else if (this->CheckOption(TRACE_K_NAME_FILTER_FILE)) {
-              if (this->CheckOption(TRACE_K_NAME_FILTER_IN)) filter_in_ = true; 
-	      std::string kernel_file =  utils::GetEnv("UNITRACE_TraceKernelFilePath"); 
-	      std::ifstream kfile(kernel_file, std::ios::in);
-              PTI_ASSERT(kfile.fail() != 1 && kfile.eof() != 1);
-	      while (!kfile.eof()) {
-                kfile >> tmpString;
-		filter_strings_set_.insert(tmpString);
-	      }
+        if (this->CheckOption(TRACE_K_NAME_FILTER_IN)) {
+          filter_in_ = true;
+        }
+        std::string kernel_file =  utils::GetEnv("UNITRACE_TraceKernelFilePath");
+        std::ifstream kfile(kernel_file, std::ios::in);
+        PTI_ASSERT(kfile.fail() != 1 && kfile.eof() != 1);
+        while (!kfile.eof()) {
+          kfile >> tmpString;
+          filter_strings_set_.insert(tmpString);
+        }
       } else {
-          filtering_on_ = false;
-	  filter_strings_set_.insert("ALL");
+        filtering_on_ = false;
+        filter_strings_set_.insert("ALL");
       }
       logger_ = new Logger(chrome_trace_file_name_.c_str(), true, true);
       UniMemory::ExitIfOutOfMemory((void *)(logger_));
@@ -1122,7 +1086,8 @@ class ChromeLogger {
       logger_->Log("{ \"traceEvents\":[\n");
       logger_->Flush();
       data_start_pos_ = logger_->GetLogFilePosition();
-    };
+    }
+
   public:
     ChromeLogger(const ChromeLogger& that) = delete;
     ChromeLogger& operator=(const ChromeLogger& that) = delete;
@@ -1187,7 +1152,7 @@ class ChromeLogger {
             str += " #" + std::to_string(it->first.device_id_);
           }
 
-          str += "\"}}"; 
+          str += "\"}}";
         }
         for (auto it = device_tid_map_.cbegin(); it != device_tid_map_.cend(); it++) {
           uint32_t device_pid = std::get<0>(it->second);
@@ -1266,31 +1231,29 @@ class ChromeLogger {
           }
         }
 
-	if (logger_->GetLogFilePosition() == data_start_pos_) {
+        if (logger_->GetLogFilePosition() == data_start_pos_) {
           // no data has been logged
           // remove the log file, but close it first
           delete logger_;
-	  if (std::remove(chrome_trace_file_name_.c_str()) == 0) {
+          if (std::remove(chrome_trace_file_name_.c_str()) == 0) {
             std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
-	  }
-	  else {
+          } else {
             std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ") in file " << chrome_trace_file_name_ << std::endl;
-	  }
-	}
-	else {
+          }
+        } else {
           str += "\n]\n}\n";
           logger_->Log(str);
           delete logger_;
           std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
-	}
+        }
       }
-    };
+    }
 
     static ChromeLogger* Create(const TraceOptions& options, const char* filename) {
       ChromeLogger *chrome_logger  = new ChromeLogger(options, filename);
       UniMemory::ExitIfOutOfMemory((void *)(chrome_logger));
       return chrome_logger;
-    };
+    }
 
     bool CheckOption(uint32_t option) {
       return options_.CheckFlag(option);
@@ -1408,7 +1371,6 @@ class ChromeLogger {
     }
 
     // OnenCL tracer callbacks.
-    // TODO: remove TraceDataPacket for performance
     static void ClChromeKernelLoggingCallback(
       cl_device_pci_bus_info_khr& pci,
       cl_device_id device,
@@ -1461,7 +1423,7 @@ class ChromeLogger {
           rec = thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SOURCE;
-          rec->api_id_ = DepTracingId;
+          rec->api_id_ = DummyTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
           rec->name_ = nullptr;
@@ -1473,7 +1435,7 @@ class ChromeLogger {
           rec = thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SINK;
-          rec->api_id_ = DepTracingId;
+          rec->api_id_ = DummyTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
           rec->name_ = nullptr;
@@ -1502,7 +1464,7 @@ class ChromeLogger {
           rec = cl_thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SOURCE;
-          rec->api_id_ = DepTracingId;
+          rec->api_id_ = DummyTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
           rec->name_ = nullptr;
@@ -1515,7 +1477,7 @@ class ChromeLogger {
           rec = cl_thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SINK;
-          rec->api_id_ = DepTracingId;
+          rec->api_id_ = DummyTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
           rec->name_ = nullptr;
@@ -1525,4 +1487,4 @@ class ChromeLogger {
     }
 };
 
-#endif // PTI_TOOLS_COMMON_CHROME_LOGGER_H_
+#endif // PTI_TOOLS_UNITRACE_CHROME_LOGGER_H_

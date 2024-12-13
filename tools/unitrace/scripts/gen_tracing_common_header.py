@@ -40,11 +40,6 @@ def get_ocl_api_list(ocl_path):
       cl_function_id_found = True
   return func_list
 # =================== generate common header =======================
-# func generates internal tracing enums
-def gen_internal_enums(out_file):
-  out_file.write("  InternalStartTracingId,\n")
-  out_file.write('  DepTracingId,\n')
-  out_file.write("  InternalEndTracingId,\n")
 
 # Func generates l0 enums from the list
 def gen_l0_enums(out_file, l0_func_list):
@@ -69,10 +64,9 @@ def gen_enums(out_file, l0_func_list, ocl_func_list):
   # header
   out_file.write("typedef enum {\n")
   # common enums
-  out_file.write("  UnknownTracingId,\n")  
+  out_file.write("  UnknownTracingId,\n")
+  out_file.write("  DummyTracingId,\n")
   out_file.write("  ZeKernelTracingId,\n")
-  # Internal enums
-  gen_internal_enums(out_file)
 
   #l0 enums
   gen_l0_enums(out_file, l0_func_list)
@@ -112,8 +106,6 @@ def gen_symbol_func(file_handle):
   file_handle.write("\n\nstatic std::string get_symbol(API_TRACING_ID id){\n")
   file_handle.write("    if (id == UnknownTracingId) {\n")
   file_handle.write("      return \"UnknownAPIName\";\n")
-  file_handle.write("    } else if (id > InternalStartTracingId && id < InternalEndTracingId) {\n")
-  file_handle.write("      return \"dep\";\n")
   file_handle.write("    } else if (id > L0StartTracingId && id < L0EndTracingId) {\n")
   file_handle.write("      auto index = id - L0StartTracingId;\n")
   file_handle.write("      return tracing_api_name[index-1];\n")

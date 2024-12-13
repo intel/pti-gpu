@@ -35,7 +35,7 @@ typedef struct MpiArgs_ {
 } MpiArgs;
 
 typedef struct IttArgs_ {
-/*Add arguments here*/
+  /*Add arguments here*/
 } IttArgs;
 
 typedef struct CclArgs_ {
@@ -46,7 +46,7 @@ typedef struct HostEventRecord_ {
   uint64_t id_;
   uint64_t start_time_;
   uint64_t end_time_;
-  char* name_ = nullptr;
+  char *name_ = nullptr;
   API_TRACING_ID api_id_;
   EVENT_TYPE type_;
 
