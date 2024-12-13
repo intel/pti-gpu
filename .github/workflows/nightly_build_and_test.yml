@@ -1,6 +1,9 @@
 name: nightly-build-and-test
 
 on:
+  push:
+    paths:
+    - .github/workflows/nightly_build_and_test.yml
   workflow_dispatch:
   schedule:
     - cron: '30 5 * * *' # Daily 5:30 AM UTC / 12:30 AM EST
@@ -83,7 +86,7 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           ONEAPI_VER=${{ matrix.uploadname }}
           ctest --output-on-failure --preset ${{ matrix.preset }} \
-            ${ONEAPI_VER/*2025\.0\.0*/-LE performance}
+            ${ONEAPI_VER/*2025\.0\.0*/-E perf-overhead-view}
 
       - name: Build AddressSanitizer
         working-directory: sdk
