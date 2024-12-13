@@ -634,16 +634,17 @@ The **-m** option can be repeated multiple times to analyze multiple sets of met
 
 ![Analyze Multiple Performance Metric Sets!](/tools/unitrace/doc/images/perfchart-multi-sets.png)
 
-Instead of typing the command options in every run, you can store the options in a text configuration file and use the **-f** or **--config** option to read the options from the file. For example, the command options in the above can be stored in a **myconfig.txt**:
+Instead of typing the command options in every run, you can store the options in a text configuration file and use the **-f** or **--config** option to read the options from the file. For example, the command options above can be stored in a **myconfig.txt**:
 
    ```sh
    python analyzeperfmetrics.py -f myconfig.txt -o perfchart.pdf perfmetrics.12345.csv
    ```
 
-Please note that input file cannot be in the command option configuration file.
-You can also use the **-b** option together with one or more **-m** options to get bandwidthi data.
+Please note that the input file cannot be present in the command option configuration file.
 
-![Analyze Multiple Performance Metric Sets and Bandwidths!](/tools/unitrace/doc/images/bandwidth.png)
+You can also use the **-b** option together with one or more **-m** options to get throughput data.
+
+![Analyze Multiple Performance Metric Sets and Throughputs!](/tools/unitrace/doc/images/throughput.png)
 
 If the input metric data file has stall sampling events collected using **--stall-sampling** option, the chart generated shows stall events and instruction addresses.
 

@@ -40,7 +40,7 @@ def ParseArguments():
     argparser.add_argument('-k', '--kernel', help = "kernel name with shape, all kernels if this option is not specified")
     argparser.add_argument('-i', '--instance', type = int, default = 1, help = "kernel instance. all instances if < 1 (1 or the first instance by default)")
     argparser.add_argument('-m', '--metrics', action = 'append', help = "list of comma-separated metric names")
-    argparser.add_argument('-b', '--bandwidth', action = 'append', help = "list of comma-separated metric names for bandwidth")
+    argparser.add_argument('-b', '--throughput', action = 'append', help = "list of comma-separated metric names for throughput")
     argparser.add_argument('-o', '--output', help = "output file in text format if -l is present, PDF format regardless of file extension if -k is not present or if instance < 1")
     argparser.add_argument('-p', '--https', action = 'store_true', help = "start https server")
     argparser.add_argument('-c', '--certificate', help = "certificate file for https server")
@@ -770,7 +770,7 @@ def AnalyzeStallMetrics(args, header, last, kernel, http = False):
 
     return None, buf
 
-def PlotKernelInstancePerfMetrics(args, kernel, df, metric_sets_cleansed, bandwidths_sets_cleansed, p):
+def PlotKernelInstancePerfMetrics(args, kernel, df, metric_sets_cleansed, throughputs_sets_cleansed, p):
     k = 0
     counting = True
     start = -1
@@ -822,15 +822,15 @@ def PlotKernelInstancePerfMetrics(args, kernel, df, metric_sets_cleansed, bandwi
             break
 
     if (analyzed == True):
-        for bandwidths_cleansed in bandwidths_sets_cleansed:
-            df3 = df2[bandwidths_cleansed]
+        for throughputs_cleansed in throughputs_sets_cleansed:
+            df3 = df2[throughputs_cleansed]
             df3 = (df3.iloc[:, 1:]).div(df3.iloc[:, 0], axis = 0)
     
             if (df3.shape[0] > 0):
                 if (df3.shape[0] > 1):
-                    ax = df3.plot(y = bandwidths_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                    ax = df3.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                 else:
-                    ax = df3.plot(y = bandwidths_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                    ax = df3.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
     
                 plt.grid(visible = True, which = 'both', axis = 'y')
                 plt.legend(loc = 'best', fontsize = 4)
@@ -865,19 +865,19 @@ def AnalyzePerfMetrics(args, header, last):
                 metrics_cleansed.append(me)
         metric_sets_cleansed.append(metrics_cleansed)
 
-    bandwidths_sets_cleansed = []
-    if (args.bandwidth is not None):
-        for bandwidth_set in args.bandwidth:
-            bandwidths = bandwidth_set.split(sep = ',')
-            bandwidths_cleansed = ['GpuTime[ns]']
-            for bandwidth in bandwidths:
-                bw = bandwidth.strip()			# strip off leading and trailing whitespaces
+    throughputs_sets_cleansed = []
+    if (args.throughput is not None):
+        for throughput_set in args.throughput:
+            throughputs = throughput_set.split(sep = ',')
+            throughputs_cleansed = ['GpuTime[ns]']
+            for throughput in throughputs:
+                bw = throughput.strip()			# strip off leading and trailing whitespaces
                 if (bw not in df.columns):
-                    print("No bandwidth data for " + bw)
+                    print("No throughput data for " + bw)
                     return
                 else:
-                    bandwidths_cleansed.append(bw)
-            bandwidths_sets_cleansed.append(bandwidths_cleansed)
+                    throughputs_cleansed.append(bw)
+            throughputs_sets_cleansed.append(throughputs_cleansed)
 
     p = None
     if (args.kernel is None):
@@ -914,15 +914,15 @@ def AnalyzePerfMetrics(args, header, last):
                             break
 
                     if (analyzed == True):
-                        for bandwidths_cleansed in bandwidths_sets_cleansed:
-                            df3 = df2[bandwidths_cleansed]
+                        for throughputs_cleansed in throughputs_sets_cleansed:
+                            df3 = df2[throughputs_cleansed]
                             df3 = (df3.iloc[:, 1:]).div(df3.iloc[:, 0], axis = 0)
     
                             if (df3.shape[0] > 0):
                                 if (df3.shape[0] > 1):
-                                    ax = df3.plot(y = bandwidths_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                                    ax = df3.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                                 else:
-                                    ax = df3.plot(y = bandwidths_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                                    ax = df3.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
         
                                 plt.grid(visible = True, which = 'both', axis = 'y')
                                 plt.legend(loc = 'best', fontsize = 4)
@@ -954,7 +954,7 @@ def AnalyzePerfMetrics(args, header, last):
                 if (pd.isna(kernel) == True):
                     continue
 
-                analyzed, p = PlotKernelInstancePerfMetrics(args, kernel, df, metric_sets_cleansed, bandwidths_sets_cleansed, p)
+                analyzed, p = PlotKernelInstancePerfMetrics(args, kernel, df, metric_sets_cleansed, throughputs_sets_cleansed, p)
                 if (analyzed == True):
                     print("Analyzed kernel " + kernel)
 
@@ -1000,15 +1000,15 @@ def AnalyzePerfMetrics(args, header, last):
                                 break
 
                         if (analyzed):
-                            for bandwidths_cleansed in bandwidths_sets_cleansed:
-                                df3 = df2[bandwidths_cleansed]
+                            for throughputs_cleansed in throughputs_sets_cleansed:
+                                df3 = df2[throughputs_cleansed]
                                 df3 = (df3.iloc[:, 1:]).div(df3.iloc[:, 0], axis = 0)
         
                                 if (df3.shape[0] > 0):
                                     if (df3.shape[0] > 1):
-                                        ax = df3.plot(y = bandwidths_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                                        ax = df3.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                                     else:
-                                        ax = df3.plot(y = bandwidths_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                                        ax = df3.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
             
                                     plt.grid(visible = True, which = 'both', axis = 'y')
                                     plt.legend(loc = 'best', fontsize = 4)
@@ -1061,15 +1061,15 @@ def AnalyzePerfMetrics(args, header, last):
                         break
 
                 if (analyzed == True):
-                    for bandwidths_cleansed in bandwidths_sets_cleansed:
-                        df3 = df2[bandwidths_cleansed]
+                    for throughputs_cleansed in throughputs_sets_cleansed:
+                        df3 = df2[throughputs_cleansed]
                         df3 = (df3.iloc[:, 1:]).div(df3.iloc[:, 0], axis = 0)
     
                         if (df3.shape[0] > 0):
                             if (df3.shape[0] > 1):
-                                ax = df3.plot(y = bandwidths_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                                ax = df3.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                             else:
-                                ax = df3.plot(y = bandwidths_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                                ax = df3.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
     
                             plt.grid(visible = True, which = 'both', axis = 'y')
                             plt.legend(loc = 'best', fontsize = 4)
@@ -1090,7 +1090,7 @@ def AnalyzePerfMetrics(args, header, last):
 
         else:
             # specified kernel specified instance
-            analyzed, p = PlotKernelInstancePerfMetrics(args, args.kernel, df, metric_sets_cleansed, bandwidths_sets_cleansed, p)
+            analyzed, p = PlotKernelInstancePerfMetrics(args, args.kernel, df, metric_sets_cleansed, throughputs_sets_cleansed, p)
             if (analyzed == True):
                 print("Performance metric chart for instance " + str(args.instance) + " of kernel " + args.kernel + " hsa been successfully generated")
             else:
@@ -1225,19 +1225,19 @@ def HttpAnalyzePerfMetrics(args, header, last, kname, instance):
                 metrics_cleansed.append(me)
         metric_sets_cleansed.append(metrics_cleansed)
 
-    bandwidths_sets_cleansed = []
-    if (args.bandwidth is not None):
-        for bandwidth_set in args.bandwidth:
-            bandwidths = bandwidth_set.split(sep = ',')
-            bandwidths_cleansed = ['GpuTime[ns]']
-            for bandwidth in bandwidths:
-                bw = bandwidth.strip()			# strip off leading and trailing whitespaces
+    throughputs_sets_cleansed = []
+    if (args.throughput is not None):
+        for throughput_set in args.throughput:
+            throughputs = throughput_set.split(sep = ',')
+            throughputs_cleansed = ['GpuTime[ns]']
+            for throughput in throughputs:
+                bw = throughput.strip()			# strip off leading and trailing whitespaces
                 if (bw not in df.columns):
                     msg = "No metric data for " + bw + ". Is the metric name correctly spelled?"
                     return msg, None
                 else:
-                    bandwidths_cleansed.append(bw)
-            bandwidths_sets_cleansed.append(bandwidths_cleansed)
+                    throughputs_cleansed.append(bw)
+            throughputs_sets_cleansed.append(throughputs_cleansed)
 
     p = None
     for metrics_cleansed, label in zip(metric_sets_cleansed, args.ylabel):
@@ -1265,14 +1265,14 @@ def HttpAnalyzePerfMetrics(args, header, last, kname, instance):
             break
 
     if (p != None):
-        for bandwidths_cleansed in bandwidths_sets_cleansed:
-            df2 = df[bandwidths_cleansed]
+        for throughputs_cleansed in throughputs_sets_cleansed:
+            df2 = df[throughputs_cleansed]
             df2 = (df2.iloc[:, 1:]).div(df2.iloc[:, 0], axis = 0)
             if (df2.shape[0] > 0):
                 if (df2.shape[0] > 1):
-                    ax = df2.plot(y = bandwidths_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                    ax = df2.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                 else:
-                    ax = df2.plot(y = bandwidths_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Bandwidth(GB/s)')
+                    ax = df2.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
     
                 plt.grid(visible = True, which = 'both', axis = 'y')
                 plt.legend(loc = 'best', fontsize = 4)

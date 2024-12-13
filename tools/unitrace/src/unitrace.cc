@@ -208,7 +208,8 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--help                         " <<
-    "Show the help message and exit" <<
+    "Show this help message and exit" <<
+    "Detailed information is available in the GitHub repository" <<
     std::endl;
 }
 
