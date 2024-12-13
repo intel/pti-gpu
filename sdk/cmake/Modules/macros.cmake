@@ -1131,6 +1131,11 @@ macro(GetLevelZero)
     set(LZ_VER_MINOR "17")
     set(LZ_VER_PATCH "25")
     set(LZ_VER "${LZ_VER_MAJOR}.${LZ_VER_MINOR}.${LZ_VER_PATCH}")
+    set(LZ_BASE_DIR ${CMAKE_CURRENT_BINARY_DIR}/_deps)
+
+    if(FETCHCONTENT_BASE_DIR)
+      set(LZ_BASE_DIR ${FETCHCONTENT_BASE_DIR})
+    endif()
 
     include(FetchContent)
     FetchContent_Declare(
@@ -1173,16 +1178,16 @@ macro(GetLevelZero)
     # <proj_dir>/include/pti/?
     file(GLOB_RECURSE L0_DL_HEADERS
         LIST_DIRECTORIES TRUE
-        "${CMAKE_CURRENT_BINARY_DIR}/_deps/levelzero-src/include/*")
+        "${LZ_BASE_DIR}/levelzero-src/include/*")
 
     file(COPY ${L0_DL_HEADERS}
         DESTINATION
-        ${CMAKE_CURRENT_BINARY_DIR}/_deps/levelzero-headers/include/level_zero/)
+       ${LZ_BASE_DIR}/levelzero-headers/include/level_zero/)
 
     # Add new header path to our new target
     find_path(LZ_INCLUDE_DIR
       NAMES level_zero/ze_api.h
-      HINTS ${CMAKE_CURRENT_BINARY_DIR}/_deps/levelzero-headers
+      HINTS ${LZ_BASE_DIR}/levelzero-headers
       PATH_SUFFIXES include
       NO_PACKAGE_ROOT_PATH
       NO_CMAKE_PATH

@@ -198,9 +198,9 @@ class SyclCollector {
     }
   }
 
-  constexpr bool Enabled() const { return enabled_; }
+  bool Enabled() const { return enabled_; }
 
-  constexpr void StreamsInitialized() { streams_found_ = true; }
+  void StreamsInitialized() { streams_found_ = true; }
 
   //  For compiler versions < 2024.1.1. Manually load xptiGetStashedTuple.
   inline static StashedFuncPtr GetStashedFuncPtrFromSharedObject() {
@@ -451,7 +451,7 @@ class XptiStreamRegistrationHandler {
     return handler;
   }
 
-  constexpr bool RegistrationComplete() const { return stream_count_ >= kNumberOfStreams; }
+  bool RegistrationComplete() const { return stream_count_ >= kNumberOfStreams; }
 
   void InitializeStream(unsigned int /*major_version*/, unsigned int /*minor_version*/,
                         [[maybe_unused]] const char* version_str, const char* stream_name) {
