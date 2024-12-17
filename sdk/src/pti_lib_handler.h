@@ -31,7 +31,7 @@ inline std::string MoveUpOneDirectory(std::string_view dir) {
 }
 
 inline std::string GetPathToWindowsLibraryDirectory() {
-  auto pti_dir = utils::GetPathToSharedObject(GetPathToWindowsLibraryDirectory);
+  auto pti_dir = ::utils::GetPathToSharedObject(GetPathToWindowsLibraryDirectory);
 
   pti_dir = MoveUpOneDirectory(pti_dir);
   if (pti_dir.empty()) {
@@ -84,7 +84,7 @@ class PtiLibHandler {
     try {
       spdlog::set_level(spdlog::level::off);
 
-      auto env_string = utils::GetEnv("PTILOG_LEVEL");
+      auto env_string = ::utils::GetEnv("PTILOG_LEVEL");
       if (!env_string.empty()) {
         spdlog::cfg::helpers::load_levels(env_string);
       }

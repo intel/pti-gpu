@@ -13,8 +13,8 @@
 
 #include "pti/pti_view.h"
 #include "samples_utils.h"
-#include "utils.h"
 
+#define NSEC_IN_SEC 1'000'000'000
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
 #define MAX_EPS 1.0e-4f
@@ -170,7 +170,7 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
 }
 
 static float Check(const std::vector<float> &a, float value) {
-  PTI_ASSERT(value > MAX_EPS);
+  assert(value > MAX_EPS);
 
   float eps = 0.0f;
   for (size_t i = 0; i < a.size(); ++i) {
@@ -193,10 +193,10 @@ void GEMM(const float *a, const float *b, float *c, unsigned size, sycl::id<2> i
 static float RunAndCheck(sycl::queue queue, const std::vector<float> &a,
                          const std::vector<float> &b, std::vector<float> &c, unsigned size,
                          float expected_result) {
-  PTI_ASSERT(size > 0);
-  PTI_ASSERT(a.size() == size * size);
-  PTI_ASSERT(b.size() == size * size);
-  PTI_ASSERT(c.size() == size * size);
+  assert(size > 0);
+  assert(a.size() == size * size);
+  assert(b.size() == size * size);
+  assert(c.size() == size * size);
 
   double time = 0.0;
 

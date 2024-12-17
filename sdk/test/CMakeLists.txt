@@ -49,7 +49,7 @@ if(HAVE_SYCL)
   target_compile_options(dpcgemm_suite PUBLIC -fsycl -gline-tables-only)
   target_link_options(dpcgemm_suite PUBLIC -fsycl -gline-tables-only)
   target_compile_definitions(dpcgemm_suite PUBLIC PTI_LEVEL_ZERO=1)
-  target_link_libraries(dpcgemm_suite PUBLIC Pti::pti_view GTest::gtest_main LevelZero::level-zero)
+  target_link_libraries(dpcgemm_suite PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main LevelZero::level-zero)
 
   add_executable(vecsqadd_suite main_vecsqadd_fixture.cc)
   target_include_directories(
@@ -66,7 +66,7 @@ if(HAVE_SYCL)
 
   target_compile_definitions(vecsqadd_suite PUBLIC PTI_LEVEL_ZERO=1)
 
-  target_link_libraries(vecsqadd_suite PUBLIC Pti::pti_view
+  target_link_libraries(vecsqadd_suite PUBLIC spdlog::spdlog Pti::pti_view
     GTest::gtest_main LevelZero::headers)
 
   add_executable(no_kernel_overlap no_kernel_overlap.cc)
@@ -83,7 +83,7 @@ if(HAVE_SYCL)
 
   target_compile_definitions(no_kernel_overlap PUBLIC PTI_LEVEL_ZERO=1)
 
-  target_link_libraries(no_kernel_overlap PUBLIC Pti::pti_view
+  target_link_libraries(no_kernel_overlap PUBLIC spdlog::spdlog Pti::pti_view
 	  GTest::gtest_main LevelZero::headers)
 
   add_executable(startstop_suite main_startstop_fixture.cc)
@@ -101,7 +101,7 @@ if(HAVE_SYCL)
 
   target_compile_definitions(startstop_suite PUBLIC PTI_LEVEL_ZERO=1)
 
-  target_link_libraries(startstop_suite PUBLIC Pti::pti_view
+  target_link_libraries(startstop_suite PUBLIC spdlog::spdlog Pti::pti_view
 	  GTest::gtest_main LevelZero::headers)
 
   add_executable(mem_ops_test mem_ops_test.cc)
@@ -117,7 +117,7 @@ if(HAVE_SYCL)
 
   target_link_options(mem_ops_test PRIVATE -fsycl -gline-tables-only)
 
-  target_link_libraries(mem_ops_test PUBLIC Pti::pti_view GTest::gtest_main
+  target_link_libraries(mem_ops_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
     LevelZero::level-zero)
 
   add_executable(sycl_queue_id sycl_queue_id.cc)
@@ -132,7 +132,7 @@ if(HAVE_SYCL)
   target_compile_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only)
   target_link_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only)
 
-  target_link_libraries(sycl_queue_id PUBLIC Pti::pti_view GTest::gtest_main
+  target_link_libraries(sycl_queue_id PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
     LevelZero::headers)
 
   add_executable(zegemm_suite main_zegemm_fixture.cc)
@@ -158,7 +158,7 @@ if(HAVE_SYCL)
   target_compile_options(zegemm_suite  PUBLIC -fsycl -gline-tables-only)
   target_link_options(zegemm_suite PUBLIC -fsycl -gline-tables-only)
 
-  target_link_libraries(zegemm_suite PUBLIC Pti::pti_view
+  target_link_libraries(zegemm_suite PUBLIC spdlog::spdlog Pti::pti_view
                                             GTest::gtest_main
                                             GTest::gmock
                                             LevelZero::level-zero
@@ -176,7 +176,7 @@ if(HAVE_SYCL)
   target_compile_options(multi_threaded_submission PRIVATE -fsycl -gline-tables-only)
   target_link_options(multi_threaded_submission PRIVATE -fsycl -gline-tables-only)
 
-  target_link_libraries(multi_threaded_submission PUBLIC Pti::pti_view GTest::gtest_main
+  target_link_libraries(multi_threaded_submission PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
 
   add_executable(dpc_gemm_threaded_profiled perf_dpc_gemm_threaded.cc)
@@ -211,15 +211,15 @@ if(HAVE_SYCL)
   target_link_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl -gline-tables-only)
   target_link_options(dpc_gemm_threaded_overhead PRIVATE -fsycl -gline-tables-only)
 
-  target_link_libraries(dpc_gemm_threaded_profiled PUBLIC Threads::Threads Pti::pti_view
+  target_link_libraries(dpc_gemm_threaded_profiled PUBLIC spdlog::spdlog Threads::Threads Pti::pti_view
                         LevelZero::level-zero)
 
-  target_link_libraries(dpc_gemm_threaded_linkonly PUBLIC Threads::Threads Pti::pti_view
+  target_link_libraries(dpc_gemm_threaded_linkonly PUBLIC spdlog::spdlog Threads::Threads Pti::pti_view
                         LevelZero::level-zero)
 
   target_link_libraries(dpc_gemm_threaded_baseline PUBLIC Threads::Threads)
 
-  target_link_libraries(dpc_gemm_threaded_overhead PUBLIC Threads::Threads Pti::pti_view
+  target_link_libraries(dpc_gemm_threaded_overhead PUBLIC spdlog::spdlog Threads::Threads Pti::pti_view
                         LevelZero::level-zero)
 
 
@@ -340,7 +340,8 @@ if (HAVE_SYCL AND TARGET unified-runtime::loader)
 
   target_compile_options(urgemm_suite  PUBLIC -fsycl -gline-tables-only)
   target_link_options(urgemm_suite PUBLIC -fsycl -gline-tables-only)
-  target_link_libraries(urgemm_suite PUBLIC Pti::pti_view
+  target_link_libraries(urgemm_suite PUBLIC spdlog::spdlog
+                                            Pti::pti_view
                                             GTest::gtest_main
                                             GTest::gmock
                                             LevelZero::level-zero
@@ -361,7 +362,7 @@ target_include_directories(
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
-target_link_libraries(view_record_test PUBLIC Pti::pti_view GTest::gtest_main
+target_link_libraries(view_record_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
                                               spdlog::spdlog
                                               LevelZero::headers)
 
@@ -373,7 +374,7 @@ target_include_directories(
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
-target_link_libraries(assert_exception_test PUBLIC Pti::pti_view GTest::gtest_main
+target_link_libraries(assert_exception_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
                                                    spdlog::spdlog
                                                    LevelZero::level-zero
                                                    ${CMAKE_DL_LIBS}
@@ -385,7 +386,7 @@ target_include_directories(
   view_gpu_local_test
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include")
 
-target_link_libraries(view_gpu_local_test PUBLIC Pti::pti_view
+target_link_libraries(view_gpu_local_test PUBLIC spdlog::spdlog Pti::pti_view
   GTest::gtest_main
   LevelZero::headers)
 

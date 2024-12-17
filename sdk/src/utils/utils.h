@@ -4,6 +4,10 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wignored-attributes"
+#endif
+
 #ifndef PTI_UTILS_UTILS_H_
 #define PTI_UTILS_UTILS_H_
 
@@ -18,17 +22,26 @@
 #include <unistd.h>
 #endif
 
+#include <spdlog/cfg/env.h>
+#include <spdlog/pattern_formatter.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <fstream>
+#include <iostream>
 #include <limits>
+#include <random>
 #include <string>
 #include <type_traits>
 #include <vector>
 
 #include "pti_assert.h"
+#include "pti_filesystem.h"
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
@@ -37,10 +50,10 @@
 
 #define BYTES_IN_MBYTES (1024 * 1024)
 
-#define NSEC_IN_USEC 1000
-#define MSEC_IN_SEC 1000
-#define NSEC_IN_MSEC 1000000
-#define NSEC_IN_SEC 1000000000
+#define NSEC_IN_USEC 1'000
+#define MSEC_IN_SEC 1'000
+#define NSEC_IN_MSEC 1'000'000
+#define NSEC_IN_SEC 1'000'000'000
 
 namespace utils {
 
@@ -134,6 +147,60 @@ inline int64_t ConversionFactorMonotonicRawToUnknownClock(
 }
 
 inline uint64_t GetTime() { return GetMonotonicRawTime(); }
+
+// if enable_logging is false, the logger is set to console and it is off
+// if enable_loging is true
+//  if logfile is empty, then the logger is set to console and it is on
+//  else logfile is not empty, then the logger is set to log file and it is on
+inline std::shared_ptr<spdlog::logger> GetLogStream(bool enable_logging = false,
+                                                    std::string logfile = std::string()) {
+  std::shared_ptr<spdlog::logger> logger;
+  std::random_device rand_dev;    // uniformly-distributed integer random number generator
+  std::mt19937 prng(rand_dev());  // pseudorandom number generator
+  std::uniform_int_distribution<uint64_t> rand_num(0);  // random number
+
+  try {
+    // Default user logger is to the console and it is off
+    auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    console_sink->set_level(spdlog::level::off);
+    logger = std::make_shared<spdlog::logger>("logger_" + fmt::format("{:x}", rand_num(prng)),
+                                              console_sink);
+    if (enable_logging) {
+      if (!logfile.empty()) {
+        // if logfile not empty, then the file is created and the data is logged to it
+        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logfile, true);
+        logger = std::make_shared<spdlog::logger>(
+            "file_logger_" + fmt::format("{:x}", rand_num(prng)), file_sink);
+      } else {
+        // the logging is enabled to the console
+        console_sink->set_level(spdlog::level::debug);
+        logger = std::make_shared<spdlog::logger>("logger_" + fmt::format("{:x}", rand_num(prng)),
+                                                  console_sink);
+      }
+    }
+    auto format = std::make_unique<spdlog::pattern_formatter>(
+        "%v", spdlog::pattern_time_type::local, std::string(""));  // disable eol
+    logger->set_formatter(std::move(format));
+    spdlog::register_logger(logger);
+
+  } catch (const spdlog::spdlog_ex& exception) {
+    std::cerr << "Failed to initialize log file: " << exception.what() << std::endl;
+  }
+  return logger;
+}
+
+inline pti::utils::filesystem::path CreateTempDirectory() {
+  auto tmp_dir = pti::utils::filesystem::temp_directory_path();
+  std::random_device rand_dev;    // uniformly-distributed integer random number generator
+  std::mt19937 prng(rand_dev());  // pseudorandom number generator
+  std::uniform_int_distribution<uint64_t> rand_num(0);  // random number
+  pti::utils::filesystem::path path;
+  std::string dir_name = "pti_" + std::to_string(rand_num(prng));
+  path = tmp_dir / dir_name;
+  pti::utils::filesystem::create_directory(path);
+
+  return path;
+}
 
 inline std::string GetFilePath(const std::string& filename) {
   PTI_ASSERT(!filename.empty());

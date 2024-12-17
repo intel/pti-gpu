@@ -104,7 +104,7 @@ inline bool isMonotonic(std::initializer_list<T> a_list) {
   return true;
 }
 
-std::string stringify_uuid(uint8_t* uuid, std::string additional_string) {
+inline std::string stringify_uuid(uint8_t* uuid, std::string additional_string) {
   std::stringstream sstream;
   sstream << additional_string;
   sstream << std::hex << std::setfill('0');
@@ -117,11 +117,11 @@ std::string stringify_uuid(uint8_t* uuid, std::string additional_string) {
   return sstream.str();
 }
 
-void print_uuid(uint8_t* uuid, std::string additional_string) {
+inline void print_uuid(uint8_t* uuid, std::string additional_string) {
   std::cout << stringify_uuid(uuid, std::move(additional_string)) << std::endl;
 }
 
-void dump_record(pti_view_record_kernel* record) {
+inline void dump_record(pti_view_record_kernel* record) {
   if (NULL == record) return;
 
   std::cout << "Kernel Name: " << record->_name << '\n';
@@ -152,7 +152,7 @@ void dump_record(pti_view_record_kernel* record) {
             << record->_sycl_invocation_id << '\n';
 }
 
-void dump_record(pti_view_record_memory_copy* record) {
+inline void dump_record(pti_view_record_memory_copy* record) {
   if (NULL == record) return;
 
   std::cout << "Memory Op: " << record->_name << '\n';
@@ -183,7 +183,7 @@ void dump_record(pti_view_record_memory_copy* record) {
             << ptiViewMemoryTypeToString(record->_mem_dst) << '\n';
 }
 
-void dump_record(pti_view_record_memory_copy_p2p* record) {
+inline void dump_record(pti_view_record_memory_copy_p2p* record) {
   if (NULL == record) return;
 
   std::cout << "Memory Op: " << record->_name << '\n';
@@ -216,7 +216,7 @@ void dump_record(pti_view_record_memory_copy_p2p* record) {
             << ptiViewMemoryTypeToString(record->_mem_dst) << '\n';
 }
 
-void dump_record(pti_view_record_memory_fill* record) {
+inline void dump_record(pti_view_record_memory_fill* record) {
   if (NULL == record) return;
 
   std::cout << "Memory Op: " << record->_name << '\n';
@@ -243,7 +243,7 @@ void dump_record(pti_view_record_memory_fill* record) {
   std::cout << "Memory Fill Type: " << std::dec << record->_mem_type << '\n';
 }
 
-void dump_record(pti_view_record_zecalls* record) {
+inline void dump_record(pti_view_record_zecalls* record) {
   if (NULL == record) return;
   const char* pName = nullptr;
   PTI_THROW(ptiViewGetCallbackIdName(record->_callback_id, &pName));
@@ -256,7 +256,7 @@ void dump_record(pti_view_record_zecalls* record) {
   std::cout << "ZeCall Correlation Id: " << record->_correlation_id << '\n';
 }
 
-void dump_record(pti_view_record_sycl_runtime* record) {
+inline void dump_record(pti_view_record_sycl_runtime* record) {
   if (NULL == record) return;
   std::cout << "Sycl Function Name: " << record->_name << '\n';
   std::cout << "Sycl Start Time: " << record->_start_timestamp << '\n';
@@ -266,7 +266,7 @@ void dump_record(pti_view_record_sycl_runtime* record) {
   std::cout << "Sycl Correlation Id: " << record->_correlation_id << '\n';
 }
 
-void dump_record(pti_view_record_overhead* record) {
+inline void dump_record(pti_view_record_overhead* record) {
   if (NULL == record) return;
   std::cout << "Overhead Kind : " << ptiViewOverheadKindToString(record->_overhead_kind) << '\n';
   std::cout << "Overhead Time Duration(ns): " << record->_overhead_duration_ns << '\n';
@@ -278,7 +278,7 @@ void dump_record(pti_view_record_overhead* record) {
   //<< record->_overhead_api_name << '\n';
 }
 
-void dump_record(pti_view_record_external_correlation* record) {
+inline void dump_record(pti_view_record_external_correlation* record) {
   if (NULL == record) return;
   std::cout << "External Correlation Kind : " << record->_external_kind << '\n';
   std::cout << "Correlation Id: " << record->_correlation_id << '\n';

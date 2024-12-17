@@ -1,4 +1,4 @@
-//==============================================================
+// ==============================================================
 // Copyright (C) Intel Corporation
 //
 // SPDX-License-Identifier: MIT
@@ -9,9 +9,6 @@
 #include <level_zero/ze_api.h>
 #include <level_zero/zet_api.h>
 #include <spdlog/cfg/env.h>
-#include <spdlog/pattern_formatter.h>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -73,8 +70,6 @@ class PtiMetricsProfiler {
   std::string data_dir_name_;
   // spdlogger for user specific log file
   std::shared_ptr<spdlog::logger> user_logger_;
-  // user specific log file name
-  std::string log_name_;
   // condition variable to wait for the profiling thread to start
   std::condition_variable cv_thread_start_;
   // condition variable for the profiling thread to wait for the profiling state to change
@@ -93,63 +88,18 @@ class PtiMetricsProfiler {
 
   PtiMetricsProfiler(pti_device_handle_t device_handle,
                      pti_metrics_group_handle_t metrics_group_handle) {
-    auto data_dir = utils::ze::CreateTempDirectory();
+    auto data_dir = utils::CreateTempDirectory();
 
     PTI_ASSERT(pti::utils::filesystem::exists(data_dir));
     SPDLOG_INFO("Temp dir {}", data_dir.string());
 
     data_dir_name_ = data_dir.generic_string();
 
-    try {
-      // Default user logger is to the console and it is off
-      auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-      console_sink->set_level(spdlog::level::off);
-      user_logger_ = std::make_shared<spdlog::logger>("logger", console_sink);
+    bool enable_logging = (utils::GetEnv("PTI_LogToFile") == "1");
+    std::string log_filename = enable_logging ? utils::GetEnv("PTI_LogFileName") : "";
 
-      std::string logfile;
-      if (utils::GetEnv("PTI_LogToFile") == "1") {
-        logfile = utils::GetEnv("PTI_LogFileName");
+    user_logger_ = utils::GetLogStream(enable_logging, log_filename);
 
-        if (!logfile.empty()) {
-          size_t pos = logfile.find_first_of('.');
-
-          std::string filename = (pos == std::string::npos) ? logfile : logfile.substr(0, pos);
-          filename = filename + ".metrics." + std::to_string(utils::GetPid());
-
-          std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK")
-                                                                 : utils::GetEnv("PMI_RANK");
-          if (!rank.empty()) {
-            filename = filename + "." + rank;
-          }
-
-          if (pos != std::string::npos) {
-            filename = filename + logfile.substr(pos);
-          }
-
-          // If the user sets PTI_LogToFile and specifies log file name in PTI_LogFileName
-          // Then the file is created and the data is logged to is in json format
-          log_name_ = std::move(filename);
-          auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_name_, true);
-          std::random_device rand_dev;    // uniformly-distributed integer random number generator
-          std::mt19937 prng(rand_dev());  // pseudorandom number generator
-          std::uniform_int_distribution<uint64_t> rand_num(0);  // random number
-          user_logger_ = std::make_shared<spdlog::logger>(
-              "file_logger_" + fmt::format("{:x}", rand_num(prng)), file_sink);
-        } else {
-          // If the user sets PTI_LogToFile but does not specify the log file name, then
-          // the logging is enable to the console in json format
-          log_name_ = "";  // empty log file name causes logger to log to std::cerr
-          console_sink->set_level(spdlog::level::debug);
-          user_logger_ = std::make_shared<spdlog::logger>("logger", console_sink);
-        }
-        auto format = std::make_unique<spdlog::pattern_formatter>(
-            "%v", spdlog::pattern_time_type::local, std::string(""));  // disable eol
-        user_logger_->set_formatter(std::move(format));
-        spdlog::register_logger(user_logger_);
-      }
-    } catch (const spdlog::spdlog_ex &exception) {
-      std::cerr << "Failed to initialize log file: " << exception.what() << std::endl;
-    }
     EnumerateDevices(device_handle, metrics_group_handle);
   }
 

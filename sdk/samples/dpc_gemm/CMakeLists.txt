@@ -26,9 +26,7 @@ add_executable(dpc_gemm main.cc)
 target_link_options(dpc_gemm PUBLIC -fsycl -gline-tables-only)
 target_compile_options(dpc_gemm PUBLIC -fsycl -gline-tables-only)
 
-target_include_directories(dpc_gemm PRIVATE
-  "${PROJECT_SOURCE_DIR}/../../src/utils"
-  "${PROJECT_SOURCE_DIR}/../samples_utilities")
+target_include_directories(dpc_gemm PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities")
 
 # Allow building in-source and out-of-source
 if (NOT TARGET Pti::pti_view)

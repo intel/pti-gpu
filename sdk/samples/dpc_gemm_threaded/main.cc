@@ -19,8 +19,8 @@
 
 #include "pti/pti_view.h"
 #include "samples_utils.h"
-#include "utils.h"
 
+#define NSEC_IN_SEC 1'000'000'000
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
 #define MAX_EPS 1.0e-4f

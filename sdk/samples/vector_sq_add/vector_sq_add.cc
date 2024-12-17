@@ -19,7 +19,6 @@
 
 #include "pti/pti_view.h"
 #include "samples_utils.h"
-#include "utils.h"
 
 void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));

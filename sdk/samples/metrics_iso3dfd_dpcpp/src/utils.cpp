@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
+#include <sstream>
 #include "iso3dfd.h"
 
 /*
@@ -154,7 +155,7 @@ bool WithinEpsilon(float* output, float* reference, const size_t dim_x,
                    const unsigned int radius, const int zadjust = 0,
                    const float delta = 0.01f) {
   std::ofstream error_file;
-  error_file.open("error_diff.txt");
+  std::stringstream error_stream;
 
   bool error = false;
   double norm2 = 0;
@@ -169,7 +170,7 @@ bool WithinEpsilon(float* output, float* reference, const size_t dim_x,
           norm2 += difference * difference;
           if (difference > delta) {
             error = true;
-            error_file << " ERROR: " << ix << ", " << iy << ", " << iz << "   "
+            error_stream << " ERROR: " << ix << ", " << iy << ", " << iz << "   "
                        << *output << "   instead of " << *reference
                        << "  (|e|=" << difference << ")\n";
           }
@@ -180,8 +181,12 @@ bool WithinEpsilon(float* output, float* reference, const size_t dim_x,
     }
   }
 
-  error_file.close();
   norm2 = std::sqrt(norm2);
-  if (error) std::cout << "error (Euclidean norm): " << norm2 << "\n";
+  if (error) {
+     error_file.open("error_diff.txt");
+     error_file << error_stream.str();
+     error_file.close();
+     std::cout << "error (Euclidean norm): " << norm2 << "\n";
+  }
   return error;
 }

@@ -11,16 +11,13 @@
 #include <level_zero/zet_api.h>
 #include <pti/pti_cbids_runtime.h>
 
-#include <algorithm>
-#include <limits>
-#include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
 #include "demangle.h"
 #include "overhead_kinds.h"
 #include "pti_assert.h"
-#include "pti_filesystem.h"
 
 namespace utils {
 namespace ze {
@@ -211,16 +208,20 @@ inline std::string GetDeviceName(ze_device_handle_t device) {
   return static_cast<char*>(props.name);
 }
 
-inline std::string GetMetricTypedValue(const zet_typed_value_t& typed_value) {
+inline std::string GetMetricTypedValue(const zet_typed_value_t& typed_value,
+                                       uint8_t precision = 2) {
+  std::stringstream stream;
   switch (typed_value.type) {
     case ZET_VALUE_TYPE_UINT32:
       return std::to_string(typed_value.value.ui32);
     case ZET_VALUE_TYPE_UINT64:
       return std::to_string(typed_value.value.ui64);
     case ZET_VALUE_TYPE_FLOAT32:
-      return std::to_string(typed_value.value.fp32);
+      stream << std::fixed << std::setprecision(precision) << typed_value.value.fp32;
+      return stream.str();
     case ZET_VALUE_TYPE_FLOAT64:
-      return std::to_string(typed_value.value.fp64);
+      stream << std::fixed << std::setprecision(precision) << typed_value.value.fp64;
+      return stream.str();
     case ZET_VALUE_TYPE_BOOL8:
       return std::to_string(static_cast<uint32_t>(typed_value.value.b8));
     default:
@@ -323,19 +324,6 @@ inline void FindMetricGroups(ze_device_handle_t device,
   for (uint32_t i = 0; i < group_count; ++i) {
     metric_groups.push_back(group_list[i]);
   }
-}
-
-pti::utils::filesystem::path CreateTempDirectory() {
-  auto tmp_dir = pti::utils::filesystem::temp_directory_path();
-  std::random_device rand_dev;    // uniformly-distributed integer random number generator
-  std::mt19937 prng(rand_dev());  // pseudorandom number generator
-  std::uniform_int_distribution<uint64_t> rand_num(0);  // random number
-  pti::utils::filesystem::path path;
-  std::string dir_name = "pti_" + std::to_string(rand_num(prng));
-  path = tmp_dir / dir_name;
-  pti::utils::filesystem::create_directory(path);
-
-  return path;
 }
 
 inline size_t GetKernelMaxSubgroupSize(ze_kernel_handle_t kernel) {
