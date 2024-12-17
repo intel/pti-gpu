@@ -1026,7 +1026,22 @@ class ZeMetricProfiler {
     return name_list;
   }
 
-  static uint64_t ReadMetrics(ze_event_handle_t event, zet_metric_streamer_handle_t  streamer, uint8_t *storage, size_t ssize) {
+  static uint64_t ReadMetrics(zet_metric_streamer_handle_t streamer, uint8_t* storage, size_t ssize) {
+      ze_result_t status = ZE_RESULT_SUCCESS;
+      size_t data_size = ssize;
+      status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, storage);
+      if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
+          std::cerr << "[WARNING] Metric samples dropped." << std::endl;
+      }
+      else if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] zetMetricStreamerReadData failed with error code: "
+              << static_cast<std::size_t>(status) << std::endl;
+          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      }
+      return data_size;
+  }
+
+  static uint64_t EventBasedReadMetrics(ze_event_handle_t event, zet_metric_streamer_handle_t  streamer, uint8_t *storage, size_t ssize) {
     ze_result_t status = ZE_RESULT_SUCCESS;
 
     //status = zeEventHostSynchronize(event, 0);
@@ -1040,17 +1055,7 @@ class ZeMetricProfiler {
       return 0;
     }
 
-    size_t data_size = ssize;
-    status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, storage);
-    if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
-      std::cerr << "[WARNING] Metric samples dropped." << std::endl;
-    } else if (status != ZE_RESULT_SUCCESS) {
-
-      std::cerr << "[ERROR] zetMetricStreamerReadData failed with error code: "
-                << static_cast<std::size_t>(status) << std::endl;
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    }
-    return data_size;
+    return ReadMetrics(streamer, storage, ssize);
   }
 
   static void MetricProfilingThread(ZeDeviceDescriptor *desc) {
@@ -1109,7 +1114,7 @@ class ZeMetricProfiler {
 
     desc->profiling_state_.store(PROFILER_ENABLED, std::memory_order_release);
     while (desc->profiling_state_.load(std::memory_order_acquire) != PROFILER_DISABLED) {
-      uint64_t size = ReadMetrics(event, streamer, raw_metrics, (MAX_METRIC_BUFFER + 512));
+      uint64_t size = EventBasedReadMetrics(event, streamer, raw_metrics, (MAX_METRIC_BUFFER + 512));
       if (size == 0) {
         if (!desc->metric_data_.empty()) {
           desc->metric_file_stream_.write(reinterpret_cast<char*>(desc->metric_data_.data()), desc->metric_data_.size());
@@ -1119,7 +1124,7 @@ class ZeMetricProfiler {
       }
       desc->metric_data_.insert(desc->metric_data_.end(), raw_metrics, raw_metrics + size);
     }
-    auto size = ReadMetrics(event, streamer, raw_metrics, (MAX_METRIC_BUFFER + 512));
+    auto size = ReadMetrics(streamer, raw_metrics, (MAX_METRIC_BUFFER + 512));
     desc->metric_data_.insert(desc->metric_data_.end(), raw_metrics, raw_metrics + size);
     if (!desc->metric_data_.empty()) {
       desc->metric_file_stream_.write(reinterpret_cast<char*>(desc->metric_data_.data()), desc->metric_data_.size());

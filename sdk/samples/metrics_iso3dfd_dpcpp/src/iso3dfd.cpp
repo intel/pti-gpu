@@ -361,7 +361,7 @@ void ConfigureMetricGroups(std::string &group_name, pti_metrics_group_type group
   pti_metrics_group_collection_params_t config_collection_params;
   config_collection_params._struct_size = sizeof(pti_metrics_group_collection_params_t);
   config_collection_params._group_handle = configured_group_handle_;
-  config_collection_params._sampling_interval = 1000000; // ns
+  config_collection_params._sampling_interval = 100000; // ns
   config_collection_params._time_aggr_window = 10000000; // ns
   std::vector<pti_metrics_group_collection_params_t> config_collection_params_buffer = {config_collection_params};
   if (ptiMetricsConfigureCollection(configured_device_handle_, config_collection_params_buffer.data(), group_count) != PTI_SUCCESS)

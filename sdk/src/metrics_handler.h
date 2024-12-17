@@ -524,8 +524,11 @@ class PtiMetricsProfiler {
     }
   }
 };
-
+#ifndef _WIN32
+uint32_t PtiMetricsProfiler::max_metric_samples_ = 2048;
+#else   // Linux
 uint32_t PtiMetricsProfiler::max_metric_samples_ = 32768;
+#endif  //_WIN32
 
 // TODO: experiment with the max capture count to find the optimal number of hw buffer
 // to local buffer reads before writing to disc while minimizing collection overhead
@@ -798,18 +801,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
                          bool immediate_save_to_disc = false) {
     PTI_ASSERT(desc != nullptr);
 
-    ze_result_t status = zeEventQueryStatus(desc->event_);
-    if (!(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY)) {
-      SPDLOG_ERROR("zeEventQueryStatus failed with error code: 0x{:x}",
-                   static_cast<std::size_t>(status));
-    }
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY);
-    if (status == ZE_RESULT_SUCCESS) {
-      status = zeEventHostReset(desc->event_);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    } else { /* ZE_RESULT_NOT_READY */
-      return;
-    }
+    ze_result_t status = ZE_RESULT_SUCCESS;
 
     size_t data_size = ssize;
     status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, storage);
@@ -822,6 +814,28 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
     }
 
     SaveRawData(desc, storage, data_size, immediate_save_to_disc);
+  }
+
+  void EventBasedCaptureRawMetrics(zet_metric_streamer_handle_t streamer, uint8_t *storage,
+                                   size_t ssize,
+                                   std::shared_ptr<pti_metrics_device_descriptor_t> desc) {
+    PTI_ASSERT(desc != nullptr);
+
+    ze_result_t status = zeEventQueryStatus(desc->event_);
+    if (!(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY)) {
+      SPDLOG_ERROR("zeEventQueryStatus failed with error code: 0x{:x}",
+                   static_cast<std::size_t>(status));
+    }
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY);
+
+    if (status == ZE_RESULT_SUCCESS) {
+      status = zeEventHostReset(desc->event_);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    } else { /* ZE_RESULT_NOT_READY */
+      return;
+    }
+    bool immediate_save_to_disc = false;
+    CaptureRawMetrics(streamer, storage, ssize, desc, immediate_save_to_disc);
   }
 
   void PerDeviceStreamMetricsProfilingThread(std::shared_ptr<pti_metrics_device_descriptor_t> desc,
@@ -907,9 +921,8 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
         // Capture hw buffered raw data to local memory. Local memory is not written to disc
         // immediately, It is written to disc after a few hw buffer reads or if local buffer is not
         // empty but no data is captured from the hw buffer in this iteration
-        CaptureRawMetrics(streamer, raw_metrics.data(),
-                          PtiMetricsProfiler::GetMaxMetricBufferSize(),
-                          desc /* immediate_save_to_disc = false */);
+        EventBasedCaptureRawMetrics(streamer, raw_metrics.data(),
+                                    PtiMetricsProfiler::GetMaxMetricBufferSize(), desc);
       }
     }
 
@@ -1321,16 +1334,8 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
   void CaptureRawMetrics(external::L0::zet_metric_tracer_exp_handle_t tracer, uint8_t *storage,
                          size_t ssize, std::shared_ptr<pti_metrics_device_descriptor_t> desc,
                          bool immediate_save_to_disc = false) {
+    PTI_ASSERT(desc != nullptr);
     ze_result_t status = ZE_RESULT_SUCCESS;
-
-    status = zeEventQueryStatus(desc->event_);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY);
-    if (status == ZE_RESULT_SUCCESS) {
-      status = zeEventHostReset(desc->event_);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    } else { /* ZE_RESULT_NOT_READY */
-      return;
-    }
 
     size_t data_size = ssize;
     status = tf.zetMetricTracerReadDataExp(tracer, &data_size, storage);
@@ -1343,6 +1348,24 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     }
 
     SaveRawData(desc, storage, data_size, immediate_save_to_disc);
+  }
+
+  void EventBasedCaptureRawMetrics(external::L0::zet_metric_tracer_exp_handle_t tracer,
+                                   uint8_t *storage, size_t ssize,
+                                   std::shared_ptr<pti_metrics_device_descriptor_t> desc) {
+    PTI_ASSERT(desc != nullptr);
+    ze_result_t status = ZE_RESULT_SUCCESS;
+
+    status = zeEventQueryStatus(desc->event_);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY);
+    if (status == ZE_RESULT_SUCCESS) {
+      status = zeEventHostReset(desc->event_);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    } else { /* ZE_RESULT_NOT_READY */
+      return;
+    }
+    bool immediate_save_to_disc = false;
+    CaptureRawMetrics(tracer, storage, ssize, desc, immediate_save_to_disc);
   }
 
   void PerDeviceTraceMetricsProfilingThread(
@@ -1428,8 +1451,8 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
         // Capture hw buffered raw data to local memory. Local memory is not written to disc
         // immediately, It is written to disc after a few hw buffer reads or if local buffer is not
         // empty but no data is captured from the hw buffer in this iteration
-        CaptureRawMetrics(tracer, raw_metrics.data(), PtiMetricsProfiler::GetMaxMetricBufferSize(),
-                          desc /*, immediate_save_to_disc = false */);
+        EventBasedCaptureRawMetrics(tracer, raw_metrics.data(),
+                                    PtiMetricsProfiler::GetMaxMetricBufferSize(), desc);
       }
     }
 
