@@ -11,6 +11,7 @@
 #include <level_zero/zet_api.h>
 #include <pti/pti_cbids_runtime.h>
 
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <vector>

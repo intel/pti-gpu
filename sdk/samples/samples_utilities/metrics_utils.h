@@ -17,6 +17,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <iomanip>
 #include <random>
 
 #include "pti/pti_metrics.h"
