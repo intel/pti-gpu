@@ -13,7 +13,7 @@
  */
 bool CheckGridDimension(size_t n1, size_t n2, size_t n3, unsigned int dim_x,
                         unsigned int dim_y, unsigned int block_z) {
-  
+
   if (0 == dim_x) {
     std::cout << " ERROR: Invalid Grid Size: DIMX cannot be Zero\n";
     return true;
@@ -26,7 +26,7 @@ bool CheckGridDimension(size_t n1, size_t n2, size_t n3, unsigned int dim_x,
     std::cout << " ERROR: Invalid Grid Size: BLOCKZ cannot be Zero\n";
     return true;
   }
-  
+
   if (n1 % dim_x) {
     std::cout << " ERROR: Invalid Grid Size: n1 should be multiple of DIMX - "
               << dim_x << "\n";
@@ -119,7 +119,7 @@ void Usage(const std::string& programName) {
 void PrintStats(double time, size_t n1, size_t n2, size_t n3,
                 unsigned int nIterations) {
   float throughput_mpoints = 0.0f, mflops = 0.0f, normalized_time = 0.0f;
-  double mbytes = 0.0f;
+  double mbytes = 0.0;
 
   std::cout << "--------------------------------------\n";
   if (0 < nIterations) {

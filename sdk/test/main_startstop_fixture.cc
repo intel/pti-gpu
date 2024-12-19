@@ -242,7 +242,7 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
     }
   }
   ::operator delete(buf);
-};
+}
 
 template <typename T>
 [[maybe_unused]] void InitVectors(std::vector<T> &a, std::vector<T> &b, std::vector<T> &c,

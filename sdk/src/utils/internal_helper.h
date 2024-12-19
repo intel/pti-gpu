@@ -18,7 +18,7 @@ bool IsValid(IntType val, EnumVal V) {
   static_assert(std::is_enum<EnumVal>::value);
   static_assert(std::is_same<EnumType, EnumVal>::value);
   return static_cast<IntType>(V) == val;
-};
+}
 
 template <typename IntType, typename EnumType, typename EnumVal, typename... Next>
 bool IsValid(IntType val, EnumVal V, Next... oth) {
@@ -26,7 +26,7 @@ bool IsValid(IntType val, EnumVal V, Next... oth) {
   static_assert(std::is_same<EnumType, EnumVal>::value);
 
   return static_cast<IntType>(V) == val || IsValid<IntType, EnumType, Next...>(val, oth...);
-};
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 /// @brief Checks is the provided value v belongs to pti_view_kind enums

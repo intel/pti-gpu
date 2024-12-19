@@ -348,7 +348,7 @@ class SyclCollector {
 
  private:
   explicit SyclCollector(OnSyclRuntimeViewCallback buffer_callback)
-      : acallback_(buffer_callback), xptiGetStashedKV(GetStashedFuncPtrFromSharedObject()){};
+      : acallback_(buffer_callback), xptiGetStashedKV(GetStashedFuncPtrFromSharedObject()) {}
 
   int32_t trace_all_env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
   inline static thread_local ZeKernelCommandExecutionRecord sycl_runtime_rec_;

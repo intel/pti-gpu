@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "pti/pti_view.h"
+#include "utils/test_helpers.h"
 
 class ViewGPULocalFixtureTest : public ::testing::Test {
  protected:
@@ -18,7 +19,7 @@ TEST_F(ViewGPULocalFixtureTest, CheckGPULocalViewAvailable) {
   EXPECT_TRUE(result == pti_result::PTI_SUCCESS ||
               result == pti_result::PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED);
 
-  std::cout << "result: " << (uint32_t)result << std::endl;
+  std::cout << "result: " << result << std::endl;
 
   // just exercising two times and verifying the answer is the same
   pti_result result2 = ptiViewGPULocalAvailable();

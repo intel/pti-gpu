@@ -106,7 +106,7 @@ inline std::vector<unsigned char> CreateEmptyBuffer() {
   std::size_t buffer_size = 0;
   ((buffer_size += (RecordInsert::kNumber * sizeof(typename RecordInsert::Type))), ...);
   return std::vector<unsigned char>(buffer_size);
-};
+}
 
 template <typename... RecordInsert>
 inline std::vector<unsigned char> CreateFullBuffer() {

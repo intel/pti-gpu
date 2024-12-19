@@ -197,7 +197,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     last_kernel_timestamp = 0;
     user_real_timestamp = 0;
     sycl_has_all_records = false;
-  };
+  }
 
   void TearDown() override {
     // Called right before destructor after each test

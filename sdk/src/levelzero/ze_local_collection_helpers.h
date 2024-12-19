@@ -116,7 +116,7 @@ class A2EventPool {
   A2EventPool(A2EventPool&&) = delete;
   A2EventPool& operator=(A2EventPool&&) = delete;
   A2EventPool() = delete;
-  A2EventPool(uint32_t events_per_pool) : events_per_pool_count_(events_per_pool){};
+  A2EventPool(uint32_t events_per_pool) : events_per_pool_count_(events_per_pool) {}
   ~A2EventPool() {}
 
   ze_event_handle_t GetEvent(const ze_context_handle_t context) {

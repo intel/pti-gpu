@@ -58,7 +58,9 @@ jobs:
           - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_25_0_0 }}
             uploadname: "rocky-8.2025.0.0"
             preset: linux-icpx-release
-
+          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_25_0_0 }}
+            uploadname: "rocky-8.gxx.2025.0.0"
+            preset: linux-gxx-release
 
     container: 
       image: ${{ matrix.container }}
