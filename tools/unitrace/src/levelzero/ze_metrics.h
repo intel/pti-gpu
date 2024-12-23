@@ -693,10 +693,10 @@ class ZeMetricProfiler {
         field_sizes[1] = std::max(sizeof("0x00000000") - 1, metric_list[0].size());
         header += std::string(std::max(int(field_sizes[0] + 1 - sizeof("Kernel")), 0), ' ') + "Kernel, ";
         logger_->Log(header);	// in case the kernel name is too long
-        header = std::string(std::max(int(field_sizes[1] - metric_list[0].length()), 0), ' ') + metric_list[0] + ", ";
+        header = std::string(std::max(int(field_sizes[1] - metric_list[0].length()), 0), ' ') + metric_list[0];
         for (int i = 1; i <  metric_list.size(); i++) {
           field_sizes[i + 1] = metric_list[i].size();
-          header += metric_list[i] + ", ";
+          header += ", " + metric_list[i];
         }
         
         header += "\n";
@@ -732,7 +732,7 @@ class ZeMetricProfiler {
                      std::string(std::max(int(field_sizes[9] - std::to_string(it->second.insfetch_).length()), 0), ' ') +
                      std::to_string(it->second.insfetch_) + ", " +
                      std::string(std::max(int(field_sizes[10] - std::to_string(it->second.other_).length()), 0), ' ') +
-                     std::to_string(it->second.other_) + ", \n";  
+                     std::to_string(it->second.other_) + "\n";
               logger_->Log(line);
               break;
             }
@@ -823,9 +823,9 @@ class ZeMetricProfiler {
         header += std::to_string(it->second->device_id_) + " Metrics ===\n";
         logger_->Log(header);
 
-        header = "\nKernel, GlobalInstanceId, ";
+        header = "\nKernel, GlobalInstanceId";
         for (int i = 0; i <  metric_list.size(); i++) {
-          header += metric_list[i] + ", ";
+          header += ", " + metric_list[i];
         }
         
         header += "\n";
@@ -890,15 +890,15 @@ class ZeMetricProfiler {
                   kernelsampled = true;
                   str = kit->kernel_name + ", ";
                   logger_->Log(str);	// in case the kernel name is too long
-                  str = std::to_string(kit->global_instance_id) + ", ";
+                  str = std::to_string(kit->global_instance_id);
                   for (int k = 0; k < metric_list.size(); k++) {
+                    str += ", ";
                     if (k == ts_idx) {
                       str += std::to_string(ts);
                     }
                     else{
                       str += PrintTypedValue(v[k]);
                     }
-                    str += ", ";
                   }
                   str += "\n";
                   logger_->Log(str);
@@ -926,15 +926,15 @@ class ZeMetricProfiler {
                         str = "\"NoKernel\", ";
                       }
                       logger_->Log(str);	// in case the kernel name is too long
-                      str = std::to_string(dummy_global_instance_id) + ", ";
+                      str = std::to_string(dummy_global_instance_id);
                       for (int k = 0; k < metric_list.size(); k++) {
+                        str += ", ";
                         if (k == ts_idx) {
                           str += std::to_string(ts);
                         }
                         else{
                           str += PrintTypedValue(v[k]);
                         }
-                        str += ", ";
                       }
                       str += "\n";
                       logger_->Log(str);

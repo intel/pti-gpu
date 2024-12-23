@@ -2184,9 +2184,9 @@ class ZeCollector {
           metric_names = GetMetricNames(it2->second.metric_group_);
           PTI_ASSERT(!metric_names.empty());
           metric_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
-          std::string header("\nKernel,GlobalInstanceId,SubDeviceId,");
+          std::string header("\nKernel,GlobalInstanceId,SubDeviceId");
           for (auto& metric : metric_names) {
-            header += metric + ",";
+            header += "," + metric;
           }
           header += "\n";
           metric_logger->Log(header);
@@ -2220,15 +2220,15 @@ class ZeCollector {
             for (uint32_t i = 0; i < num_samples; ++i) {
               str = kname + ",";
               str += std::to_string(it->second.instance_id_) + ",";
-              str += std::to_string(i) + ",";
+              str += std::to_string(i);
       
               uint32_t size = samples[i];
               PTI_ASSERT(size == metric_names.size());
       
               const zet_typed_value_t *value = metrics.data() + i * size;
               for (int j = 0; j < size; ++j) {
-                str += PrintTypedValue(value[j]);
                 str += ",";
+                str += PrintTypedValue(value[j]);
               }
               str += "\n";
             }
