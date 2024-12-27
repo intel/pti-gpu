@@ -15,12 +15,13 @@
 #include <windows.h>
 
 #include <chrono>
-#else
+#else /* _WIN32 */
 #include <dlfcn.h>
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
-#endif
+#define HMODULE void*
+#endif /* _WIN32 */
 
 #include <spdlog/cfg/env.h>
 #include <spdlog/pattern_formatter.h>
@@ -434,6 +435,30 @@ inline std::string GetPathToSharedObject(const char* name) {
 }
 
 #endif
+
+inline HMODULE LoadLibrary(const char* lib_name) {
+#if defined(_WIN32)
+  return LoadLibraryExA(lib_name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+#else  /* _WIN32 */
+  return dlopen(lib_name, RTLD_LAZY | RTLD_LOCAL);
+#endif /* _WIN32 */
+}
+
+inline void UnloadLibrary(HMODULE lib_handle) {
+#if defined(_WIN32)
+  FreeLibrary(lib_handle);
+#else  /* _WIN32 */
+  dlclose(lib_handle);
+#endif /* _WIN32 */
+}
+
+inline void* GetFunctionPtr(HMODULE lib_handle, const char* func_name) {
+#if defined(_WIN32)
+  return reinterpret_cast<void*>(GetProcAddress(lib_handle, func_name));
+#else  /* _WIN32 */
+  return dlsym(lib_handle, func_name);
+#endif /* _WIN32 */
+}
 
 }  // namespace utils
 

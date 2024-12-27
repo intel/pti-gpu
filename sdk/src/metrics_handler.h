@@ -549,7 +549,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
     PTI_ASSERT(metrics_values_count != nullptr);
     // Option 1: user wants metrics values count
     if (metrics_values_buffer == nullptr) {
-      // Search for the top/parant device; it doesn't have a parent
+      // Search for the top/parent device; it doesn't have a parent
       auto it = device_descriptors_.begin();
       while (it != device_descriptors_.end() && it->second->parent_device_ != nullptr) {
         it++;
@@ -595,7 +595,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
     // Option 2: user wants the buffer filled.
     std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());
 
-    // Search for the top/parant device; it doesn't have a parent
+    // Search for the top/parent device; it doesn't have a parent
     for (auto it = device_descriptors_.begin(); it != device_descriptors_.end(); ++it) {
       if (it->second->parent_device_ != nullptr) {
         // subdevice
@@ -917,11 +917,19 @@ PerDeviceQueryMetricsProfilingThread(std::shared_ptr<pti_metrics_device_descript
 */
 
 /* Trace metrics API hooks */
-using importTracerCreatePtrFnt = ze_result_t (*)(zet_context_handle_t Context, zet_device_handle_t,
-                                                 uint32_t, zet_metric_group_handle_t *,
-                                                 external::L0::zet_metric_tracer_exp_desc_t *,
-                                                 ze_event_handle_t,
-                                                 external::L0::zet_metric_tracer_exp_handle_t *);
+
+// These are available as experimental as part of loader version 1.19.2
+// The loader with these symbols hasn't been released as of yet.
+// Using the symbols directly will cause symbols not found compilation errors if the system does not
+// have a suitable loader version with these symbols.
+// We are attempting to hook the symbols dynamically to decide whether we can use the trace metrics
+// functionality or not without causing compilation errors.
+// Essentially, having a built in backwards compilability mechanism
+using importTracerCreatePtrFnt = ze_result_t (*)(
+    zet_context_handle_t context_handle, zet_device_handle_t device_handle, uint32_t,
+    zet_metric_group_handle_t *metric_group_handle,
+    external::L0::zet_metric_tracer_exp_desc_t *tracer_desc, ze_event_handle_t event_handle,
+    external::L0::zet_metric_tracer_exp_handle_t *tracer_handle);
 
 using importTracerDestroyPtrFnt =
     ze_result_t (*)(external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle);
@@ -942,7 +950,7 @@ using importDecoderCreatePtrFnt =
 using importDecoderDestroyPtrFnt =
     ze_result_t (*)(external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle);
 
-using importDecoderDecodePtrFnt = ze_result_t (*)(
+using importTracerDecodePtrFnt = ze_result_t (*)(
     external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle, size_t *raw_data_size,
     const uint8_t *raw_data, uint32_t metric_count, zet_metric_handle_t *metric_handle,
     uint32_t *metric_entries_count, external::L0::zet_metric_entry_exp_t *metric_entries);
@@ -951,13 +959,35 @@ using importDecoderGetDecodableMetricsPtrFnt =
     ze_result_t (*)(external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle,
                     uint32_t *count, zet_metric_handle_t *metric_handle);
 
-using importMetricDecodeCalculateMultipleValuesPtrFnt = ze_result_t (*)(
-    external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle, size_t *raw_data_size,
-    const uint8_t *raw_data, external::L0::zex_metric_calculate_exp_desc_t *calculate_desc,
-    uint32_t *set_count, uint32_t *metric_results_count_per_set,
-    uint32_t *total_metric_results_count, external::L0::zex_metric_result_exp_t *metric_results);
+// These are available internally only as of 12/24
+using importIntelMetricCalculateOperationCreatePtrFnt = ze_result_t (*)(
+    zet_context_handle_t context_handle, zet_device_handle_t device_handle,
+    external::L0::zet_intel_metric_calculate_exp_desc_t *calculate_desc,
+    external::L0::zet_intel_metric_calculate_operation_exp_handle_t *calculate_op_handle);
+
+using importIntelMetricCalculateOperationDestroyPtrFnt = ze_result_t (*)(
+    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle);
+
+using importIntelMetricCalculateGetReportFormaPtrFnt = ze_result_t (*)(
+    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle,
+    uint32_t *metric_count, zet_metric_handle_t *metrics_handles);
+
+using importIntelMetricDecodeCalculateMultipleValuesPtrFnt = ze_result_t (*)(
+    external::L0::zet_metric_decoder_exp_handle_t decoder_handle, size_t *raw_data_size,
+    const uint8_t *raw_data,
+    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle,
+    uint32_t *set_count, uint32_t *report_count_per_set, uint32_t *metric_report_count,
+    external::L0::zet_intel_metric_result_exp_t *metric_results);
+
+using importIntelMetricDecodeToBinaryBufferPtrFnt = ze_result_t (*)(
+    external::L0::zet_metric_decoder_exp_handle_t decoder_handle, size_t *raw_data_size,
+    const uint8_t *raw_data,
+    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle,
+    external::L0::zet_intel_metric_decoded_buffer_exp_properties_t *decoded_buffer_props,
+    size_t *decoded_buffer_size, uint8_t *decoded_buffer);
 
 struct pti_metrics_tracer_functions_t {
+  // These symbols are available only with later versions of the loader.
   importTracerCreatePtrFnt zetMetricTracerCreateExp = nullptr;
   importTracerDestroyPtrFnt zetMetricTracerDestroyExp = nullptr;
   importTracerEnablePtrFnt zetMetricTracerEnableExp = nullptr;
@@ -965,10 +995,19 @@ struct pti_metrics_tracer_functions_t {
   importTracerReadPtrFnt zetMetricTracerReadDataExp = nullptr;
   importDecoderCreatePtrFnt zetMetricDecoderCreateExp = nullptr;
   importDecoderDestroyPtrFnt zetMetricDecoderDestroyExp = nullptr;
-  importDecoderDecodePtrFnt zetMetricDecoderDecodeExp = nullptr;
+  importTracerDecodePtrFnt zetMetricTracerDecodeExp = nullptr;
   importDecoderGetDecodableMetricsPtrFnt zetMetricDecoderGetDecodableMetricsExp = nullptr;
-  importMetricDecodeCalculateMultipleValuesPtrFnt zexMetricDecodeCalculateMultipleValuesExp =
+
+  // These symbols are available internally only
+  importIntelMetricCalculateOperationCreatePtrFnt zetIntelMetricCalculateOperationCreateExp =
       nullptr;
+  importIntelMetricCalculateOperationDestroyPtrFnt zetIntelMetricCalculateOperationDestroyExp =
+      nullptr;
+  importIntelMetricCalculateGetReportFormaPtrFnt zetIntelMetricCalculateGetReportFormatExp =
+      nullptr;
+  importIntelMetricDecodeCalculateMultipleValuesPtrFnt
+      zetIntelMetricDecodeCalculateMultipleValuesExp = nullptr;
+  importIntelMetricDecodeToBinaryBufferPtrFnt zetIntelMetricDecodeToBinaryBufferExp = nullptr;
 };
 
 pti_metrics_tracer_functions_t tf;
@@ -1032,23 +1071,54 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
                       pti_value_t *metrics_values_buffer, uint32_t *metrics_values_count) {
     PTI_ASSERT(metrics_values_count != nullptr);
     ze_result_t status;
+
+    // Search for the top/parent device; it doesn't have a parent
+    auto it = device_descriptors_.begin();
+    while (it != device_descriptors_.end() && it->second->parent_device_ != nullptr) {
+      it++;
+    }
+
+    if (it == device_descriptors_.end() || it->second->metrics_group_ != metrics_group_handle) {
+      SPDLOG_WARN("Could not find device and metric group");
+      SPDLOG_WARN("Unable to calculate required data buffer size");
+      return;
+    }
+
+    std::ifstream inf =
+        std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
+    PTI_ASSERT(inf.is_open());
+
+    constexpr auto kDefaultTimeAggrWindow = 10000U;
+    uint32_t time_aggr_window = time_aggr_window_ / 1000;  // ns to us
+    if (time_aggr_window_ == 0) {
+      // TODO: Should there be a min and/or max?
+      // TODO: Log message saying that default is used
+      time_aggr_window = kDefaultTimeAggrWindow;
+    }
+
+    // calculate operation description
+    external::L0::zet_intel_metric_calculate_exp_desc_t calculate_desc{
+        external::L0::ZET_INTEL_STRUCTURE_TYPE_METRIC_CALCULATE_DESC_EXP,
+        nullptr,                      // pNext
+        1,                            // metricGroupCount
+        &it->second->metrics_group_,  // phMetricGroups
+        0,                            // metricCount
+        nullptr,                      // phMetrics
+        0,                            // timeWindowsCount
+        nullptr,                      // pCalculateTimeWindows
+        time_aggr_window,             // timeAggregationWindow
+        external::L0::ZET_INTEL_METRIC_CALCULATE_OPERATION_EXP_FLAG_AVERAGE,  // operation
+        0                                                                     // startingTime
+    };
+
+    // Create calaculate operation
+    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle = nullptr;
+    status = tf.zetIntelMetricCalculateOperationCreateExp(it->second->context_, it->second->device_,
+                                                          &calculate_desc, &calculate_op_handle);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
     // Option 1: user wants metrics values count
     if (metrics_values_buffer == nullptr) {
-      // Search for the top/parant device; it doesn't have a parent
-      auto it = device_descriptors_.begin();
-      while (it != device_descriptors_.end() && it->second->parent_device_ != nullptr) {
-        it++;
-      }
-
-      if (it == device_descriptors_.end() || it->second->metrics_group_ != metrics_group_handle) {
-        SPDLOG_WARN("Could not find device and metric group");
-        SPDLOG_WARN("Unable to calculate required data buffer size");
-        return;
-      }
-
-      std::ifstream inf =
-          std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
-      PTI_ASSERT(inf.is_open());
       inf.seekg(0, inf.end);
       uint32_t file_size = inf.tellg();
       inf.seekg(0, inf.beg);  // rewind
@@ -1065,83 +1135,35 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
         status = zetMetricGet(it->second->metrics_group_, &num_metrics, metrics.data());
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-        constexpr auto kDefaultTimeAggrWindow = 10000U;
+        uint32_t report_size = 0;
+        status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
+                                                              nullptr);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        std::cout << "Calculate Report size: " << report_size << "\n";
 
-        uint32_t time_aggr_window = time_aggr_window_ / 1000;  // ns to us
-        if (time_aggr_window_ == 0) {
-          // TODO: Should there be a min and/or max?
-          // TODO: Log message saying that default is used
-          time_aggr_window = kDefaultTimeAggrWindow;
-        }
+        // get report format
+        std::vector<zet_metric_handle_t> metrics_in_report(report_size);
+        status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
+                                                              metrics_in_report.data());
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-        external::L0::zex_metric_calculate_exp_desc_t calculate_desc{
-            external::L0::ZET_STRUCTURE_TYPE_METRIC_CALCULATE_DESC_EXP,
-            nullptr,           // pNext
-            0,                 // metricGroucount
-            nullptr,           // pmetrics_group_handles
-            num_metrics,       // metric_count
-            metrics.data(),    // metric_handle
-            0,                 // timeWindowsCount
-            nullptr,           // pCalculateTimeWindows
-            time_aggr_window,  // timeAggregationWindow
-            external::L0::ZET_ENUM_EXP_METRIC_CALCULATE_OPERATION_FLAG_AVERAGE  // operation
-        };
-
+        // Get total number of sets and reports
+        uint32_t total_report_count = 0;
         uint32_t set_count = 0;
-        uint32_t total_metric_results_count = 0;
+        status = tf.zetIntelMetricDecodeCalculateMultipleValuesExp(
+            metric_decoder_, &raw_size, raw_metrics.data(), calculate_op_handle, &set_count,
+            nullptr, &total_report_count, nullptr);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-        status = tf.zexMetricDecodeCalculateMultipleValuesExp(
-            metric_decoder_, &raw_size, raw_metrics.data(), &calculate_desc, &set_count, nullptr,
-            &total_metric_results_count, nullptr);
-
-        if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
-          SPDLOG_WARN("Unable to calculate required data buffer size");
-        }
-
-        // We are adding two more "synthetic" metrics are begining: start and stop timestamps
-        *metrics_values_count =
-            total_metric_results_count + (total_metric_results_count / num_metrics) * 2;
+        // Note: report size is the number of metrics in the metric group + 2 synthetically added
+        // timestamp markers: start and stop timestamps. Total number of values that will be written
+        // to the buffer is the total number of reports multiplied by the size of each report
+        // (metric_count + 2timestamps)
+        *metrics_values_count = total_report_count * report_size;
       }
-      inf.close();
-      return;
-    }
-
-    // Option 2: user wants the buffer filled.
-    std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());
-
-    // Search for the top/parant device; it doesn't have a parent
-    for (auto it = device_descriptors_.begin(); it != device_descriptors_.end(); ++it) {
-      if (it->second->parent_device_ != nullptr) {
-        // subdevice
-        continue;
-      }
-
-      if (it->second->metrics_group_ != metrics_group_handle) {
-        SPDLOG_WARN("Could not find device and metric group");
-        SPDLOG_WARN("Unable to calculate collected data");
-        return;
-      }
-
-      // Get metric list for metric group collected
-      std::vector<std::string> metric_list;
-      metric_list = utils::ze::GetMetricList(it->second->metrics_group_);
-      PTI_ASSERT(!metric_list.empty());
-      uint32_t metric_count = metric_list.size();
-
-      // get group name for metric group
-      zet_metric_group_properties_t group_props;
-      std::memset(&group_props, 0, sizeof(group_props));
-      group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
-      status = zetMetricGroupGetProperties(it->second->metrics_group_, &group_props);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      std::string group_name = group_props.name;
-
-      // open input file stream where metrics data is saved
-      std::ifstream inf =
-          std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
-      if (!inf.is_open()) {
-        continue;
-      }
+    } else {
+      // Option 2: user wants the buffer filled.
+      std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());
 
       uint32_t buffer_idx = 0;
       // Read and process input file stream where metrics data is saved
@@ -1150,92 +1172,67 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
                  PtiMetricsProfiler::GetMaxMetricBufferSize());
         size_t raw_size = inf.gcount();
         if (raw_size > 0) {
-          // create an array of expected results types
-          std::vector<zet_metric_handle_t> metrics(metric_count);
-          status = zetMetricGet(it->second->metrics_group_, &metric_count, metrics.data());
+          // get report size
+          uint32_t report_size = 0;
+          status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
+                                                                nullptr);
+          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          std::cout << "Calculate Report size: " << report_size << "\n";
+
+          // get report format
+          std::vector<zet_metric_handle_t> metrics_in_report(report_size);
+          status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
+                                                                metrics_in_report.data());
           PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-          external::L0::zex_metric_calculate_exp_desc_t calculate_desc{
-              external::L0::ZET_STRUCTURE_TYPE_METRIC_CALCULATE_DESC_EXP,
-              nullptr,         // pNext
-              0,               // metricGroucount
-              nullptr,         // pmetrics_group_handles
-              metric_count,    // metric_count
-              metrics.data(),  // metric_handle
-              0,               // timeWindowsCount
-              nullptr,         // pCalculateTimeWindows
-              10000,           // timeAggregationWindow
-              external::L0::ZET_ENUM_EXP_METRIC_CALCULATE_OPERATION_FLAG_AVERAGE  // operation
-          };
-
-          uint32_t report_size = metric_count + 2;  // include two timestamps
-          std::vector<zet_value_type_t> metrics_result_types(report_size);
-          std::vector<std::string> metrics_names(report_size);
-
-          metrics_result_types[0] = ZET_VALUE_TYPE_UINT64;
-          metrics_names[0] = "StartTimestamp";
-          metrics_result_types[1] = ZET_VALUE_TYPE_UINT64;
-          metrics_names[1] = "EndTimestamp";
-
-          for (uint32_t j = 0; j < report_size - 2; ++j) {
-            const zet_metric_handle_t metric = metrics[j];
-            zet_metric_properties_t metric_properties = {};
-            status = zetMetricGetProperties(metric, &metric_properties);
-            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-            metrics_result_types[j + 2] = metric_properties.resultType;
-            metrics_names[j + 2] = metric_properties.name;
-          }
-
+          // Get total number of sets and reports
+          uint32_t total_report_count = 0;
           uint32_t set_count = 0;
-          uint32_t total_metric_results_count = 0;
-
-          status = tf.zexMetricDecodeCalculateMultipleValuesExp(
-              metric_decoder_, &raw_size, raw_metrics.data(), &calculate_desc, &set_count, nullptr,
-              &total_metric_results_count, nullptr);
+          status = tf.zetIntelMetricDecodeCalculateMultipleValuesExp(
+              metric_decoder_, &raw_size, raw_metrics.data(), calculate_op_handle, &set_count,
+              nullptr, &total_report_count, nullptr);
           PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-          std::vector<uint32_t> metric_results_count_per_set(set_count);
-          std::vector<external::L0::zex_metric_result_exp_t> metric_results(
-              total_metric_results_count);
-
-          status = tf.zexMetricDecodeCalculateMultipleValuesExp(
-              metric_decoder_, &raw_size, raw_metrics.data(), &calculate_desc, &set_count,
-              metric_results_count_per_set.data(), &total_metric_results_count,
-              metric_results.data());
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
+          // Decode and calculate metrics
+          std::vector<uint32_t> report_count_per_set(set_count);
+          std::vector<external::L0::zet_intel_metric_result_exp_t> metric_results(
+              total_report_count * report_size);
           std::cout << "Calculate number of sets: " << set_count
-                    << ". Total number of results: " << total_metric_results_count
-                    << ". Report Size: " << report_size << ". Rawdata used: " << raw_size
-                    << std::endl;
+                    << ". Total number of results: " << total_report_count
+                    << ". Rawdata used: " << raw_size << std::endl;
+
+          status = tf.zetIntelMetricDecodeCalculateMultipleValuesExp(
+              metric_decoder_, &raw_size, raw_metrics.data(), calculate_op_handle, &set_count,
+              report_count_per_set.data(), &total_report_count, metric_results.data());
+          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
           uint32_t output_index = 0;
           std::string valid_value;
+          // walk through the sets
           for (uint32_t set_index = 0; set_index < set_count; set_index++) {
-            if (metric_results_count_per_set[set_index] % report_size) {
-              SPDLOG_ERROR("Invalid report size or number of results for trace metric group");
-              return;
-            }
-            uint32_t set_report_count = metric_results_count_per_set[set_index] / report_size;
+            std::cout << "Set : " << set_index
+                      << " Reports in set: " << report_count_per_set[set_index] << std::endl;
+            // For each set, walk through the reports
+            for (uint32_t report_index = 0; report_index < report_count_per_set[set_index];
+                 report_index++) {
+              std::cout << " Report : " << report_index
+                        << " Metrics in result: " << metrics_in_report[report_index] << std::endl;
 
-            std::cout << "\t Set : " << set_index
-                      << " Results in Set: " << metric_results_count_per_set[set_index]
-                      << " Reports in set: " << set_report_count << std::endl;
-
-            // TODO: Adjust timestamp if there is a clock overflow
-            for (uint32_t report_index = 0; report_index < set_report_count; report_index++) {
-              std::cout << "\t Report : " << report_index << std::endl;
-
+              // For each report, walk through the results
               for (uint32_t result_index = 0; result_index < report_size; result_index++) {
-                std::cout << "\t Index: " << output_index
-                          << "\t Metric name: " << metrics_names[result_index] << " | ";
+                zet_metric_properties_t metric_properties = {};
+                status =
+                    zetMetricGetProperties(metrics_in_report[result_index], &metric_properties);
+                PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+                std::cout << "   Index: " << output_index
+                          << " Component: " << metric_properties.component
+                          << "\t Metric name: " << metric_properties.name << " | ";
 
                 valid_value.assign((metric_results[output_index].resultStatus ==
-                                    external::L0::ZET_ENUM_EXP_METRIC_CALCULATE_RESULT_VALID)
-                                       ? "\tValid"
-                                       : "\tInvalid");
-                switch (metrics_result_types[result_index]) {
+                                    external::L0::ZET_INTEL_METRIC_CALCULATE_EXP_RESULT_VALID)
+                                       ? " Valid"
+                                       : "Invalid");
+                switch (metric_properties.resultType) {
                   case ZET_VALUE_TYPE_UINT32:
                   case ZET_VALUE_TYPE_UINT8:
                   case ZET_VALUE_TYPE_UINT16:
@@ -1274,8 +1271,10 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
           }
         }
       }
-      inf.close();
     }
+    inf.close();
+    status = tf.zetIntelMetricCalculateOperationDestroyExp(calculate_op_handle);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     status = tf.zetMetricDecoderDestroyExp(metric_decoder_);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -1475,6 +1474,14 @@ class PtiMetricsCollectorHandler {
     }
     metrics_enabled_ = (l0_initialized && metrics_enabled);
 
+#ifdef _WIN32
+    std::string loader_lib_name = "libze_loader.dll";  // TODO check???
+#else
+    std::string loader_lib_name = "libze_loader.so.1";
+#endif
+    // get loader handle to verify trace metric API exists in the loader
+    loader_lib_ = utils::LoadLibrary(loader_lib_name.c_str());
+
     // TraceMetricsProfiler relies on L0 Trace Metrics API extensions
     // First hook the API symbols successfully before enabling the collection
     trace_api_enabled_ = (HookTraceMetricsAPI() == PTI_SUCCESS) ? true : false;
@@ -1485,6 +1492,17 @@ class PtiMetricsCollectorHandler {
     stream_metrics_profilers_.clear();
     // query_metrics_profilers_.clear();
     trace_metrics_profilers_.clear();
+    utils::UnloadLibrary(loader_lib_);
+  }
+
+  inline pti_result ptiDriverGetExtensionFunctionAddress(HMODULE lib, const char *symbol_name,
+                                                         void **function_address) {
+    if (function_address == nullptr) {
+      return PTI_ERROR_DRIVER;
+    }
+    *function_address = utils::GetFunctionPtr(lib, symbol_name);
+
+    return PTI_SUCCESS;
   }
 
   inline pti_result HookTraceMetricsAPI() {
@@ -1494,90 +1512,128 @@ class PtiMetricsCollectorHandler {
 
     // TODO: Do full discovery instead of using the first GPU driver instance.
     ze_driver_handle_t driver = utils::ze::GetGpuDriver(0);
-    if (driver == nullptr) {
+    if (loader_lib_ == nullptr || driver == nullptr) {
       SPDLOG_INFO("Could not enable trace metrics");
       return PTI_ERROR_DRIVER;
     }
 
-    if ((ZE_RESULT_SUCCESS != zeDriverGetExtensionFunctionAddress(
-                                  driver, "zetMetricTracerCreateExp",
-                                  reinterpret_cast<void **>(&tf.zetMetricTracerCreateExp))) ||
-        (tf.zetMetricTracerCreateExp == nullptr)) {
+    // These symbols are available only with the latest version of the loader
+    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
+                            loader_lib_, "zetMetricTracerCreateExp",
+                            reinterpret_cast<void **>(&tf.zetMetricTracerCreateExp))) ||
+        tf.zetMetricTracerCreateExp == nullptr) {
       SPDLOG_INFO("the zetMetricTracerCreateExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
-    if ((ZE_RESULT_SUCCESS != zeDriverGetExtensionFunctionAddress(
-                                  driver, "zetMetricTracerDestroyExp",
-                                  reinterpret_cast<void **>(&tf.zetMetricTracerDestroyExp))) ||
+    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
+                            loader_lib_, "zetMetricTracerDestroyExp",
+                            reinterpret_cast<void **>(&tf.zetMetricTracerDestroyExp))) ||
         (tf.zetMetricTracerDestroyExp == nullptr)) {
       SPDLOG_INFO("the zetMetricTracerDestroyExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
-    if ((ZE_RESULT_SUCCESS != zeDriverGetExtensionFunctionAddress(
-                                  driver, "zetMetricTracerEnableExp",
-                                  reinterpret_cast<void **>(&tf.zetMetricTracerEnableExp))) ||
+    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
+                            loader_lib_, "zetMetricTracerEnableExp",
+                            reinterpret_cast<void **>(&tf.zetMetricTracerEnableExp))) ||
         (tf.zetMetricTracerEnableExp == nullptr)) {
       SPDLOG_INFO("the zetMetricTracerEnableExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
-    if ((ZE_RESULT_SUCCESS != zeDriverGetExtensionFunctionAddress(
-                                  driver, "zetMetricTracerDisableExp",
-                                  reinterpret_cast<void **>(&tf.zetMetricTracerDisableExp))) ||
+    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
+                            loader_lib_, "zetMetricTracerDisableExp",
+                            reinterpret_cast<void **>(&tf.zetMetricTracerDisableExp))) ||
         (tf.zetMetricTracerDisableExp == nullptr)) {
       SPDLOG_INFO("the zetMetricTracerDisableExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
-    if ((ZE_RESULT_SUCCESS != zeDriverGetExtensionFunctionAddress(
-                                  driver, "zetMetricTracerReadDataExp",
-                                  reinterpret_cast<void **>(&tf.zetMetricTracerReadDataExp))) ||
+    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
+                            loader_lib_, "zetMetricTracerReadDataExp",
+                            reinterpret_cast<void **>(&tf.zetMetricTracerReadDataExp))) ||
         (tf.zetMetricTracerReadDataExp == nullptr)) {
       SPDLOG_INFO("the zetMetricTracerReadDataExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
-    if ((ZE_RESULT_SUCCESS != zeDriverGetExtensionFunctionAddress(
-                                  driver, "zetMetricDecoderCreateExp",
-                                  reinterpret_cast<void **>(&tf.zetMetricDecoderCreateExp))) ||
+    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
+                            loader_lib_, "zetMetricDecoderCreateExp",
+                            reinterpret_cast<void **>(&tf.zetMetricDecoderCreateExp))) ||
         (tf.zetMetricDecoderCreateExp == nullptr)) {
       SPDLOG_INFO("the zetMetricDecoderCreateExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
-    if ((ZE_RESULT_SUCCESS != zeDriverGetExtensionFunctionAddress(
-                                  driver, "zetMetricDecoderDestroyExp",
-                                  reinterpret_cast<void **>(&tf.zetMetricDecoderDestroyExp))) ||
+    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
+                            loader_lib_, "zetMetricDecoderDestroyExp",
+                            reinterpret_cast<void **>(&tf.zetMetricDecoderDestroyExp))) ||
         (tf.zetMetricDecoderDestroyExp == nullptr)) {
       SPDLOG_INFO("the zetMetricDecoderDestroyExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
-    if ((ZE_RESULT_SUCCESS != zeDriverGetExtensionFunctionAddress(
-                                  driver, "zetMetricDecoderDecodeExp",
-                                  reinterpret_cast<void **>(&tf.zetMetricDecoderDecodeExp))) ||
-        (tf.zetMetricDecoderDecodeExp == nullptr)) {
-      SPDLOG_INFO("the zetMetricDecoderDecodeExp symbol could not be loaded");
+    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
+                            loader_lib_, "zetMetricTracerDecodeExp",
+                            reinterpret_cast<void **>(&tf.zetMetricTracerDecodeExp))) ||
+        (tf.zetMetricTracerDecodeExp == nullptr)) {
+      SPDLOG_INFO("the zetMetricTracerDecodeExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
-    if ((ZE_RESULT_SUCCESS !=
-         zeDriverGetExtensionFunctionAddress(
-             driver, "zetMetricDecoderGetDecodableMetricsExp",
+    if ((PTI_SUCCESS !=
+         ptiDriverGetExtensionFunctionAddress(
+             loader_lib_, "zetMetricDecoderGetDecodableMetricsExp",
              reinterpret_cast<void **>(&tf.zetMetricDecoderGetDecodableMetricsExp))) ||
         (tf.zetMetricDecoderGetDecodableMetricsExp == nullptr)) {
       SPDLOG_INFO("the zetMetricDecoderGetDecodableMetricsExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
+    // These symbols are internal only as of 12/24
     if ((ZE_RESULT_SUCCESS !=
          zeDriverGetExtensionFunctionAddress(
-             driver, "zexMetricDecodeCalculateMultipleValuesExp",
-             reinterpret_cast<void **>(&tf.zexMetricDecodeCalculateMultipleValuesExp))) ||
-        (tf.zexMetricDecodeCalculateMultipleValuesExp == nullptr)) {
-      SPDLOG_INFO("the zexMetricDecodeCalculateMultipleValuesExp symbol could not be loaded");
+             driver, "zetIntelMetricCalculateOperationCreateExp",
+             reinterpret_cast<void **>(&tf.zetIntelMetricCalculateOperationCreateExp))) ||
+        (tf.zetIntelMetricCalculateOperationCreateExp == nullptr)) {
+      SPDLOG_INFO("the zetIntelMetricCalculateOperationCreateExp symbol could not be loaded");
+      return PTI_ERROR_DRIVER;
+    }
+
+    if ((ZE_RESULT_SUCCESS !=
+         zeDriverGetExtensionFunctionAddress(
+             driver, "zetIntelMetricCalculateOperationDestroyExp",
+             reinterpret_cast<void **>(&tf.zetIntelMetricCalculateOperationDestroyExp))) ||
+        (tf.zetIntelMetricCalculateOperationDestroyExp == nullptr)) {
+      SPDLOG_INFO("the zetIntelMetricCalculateOperationDestroyExp symbol could not be loaded");
+      return PTI_ERROR_DRIVER;
+    }
+
+    if ((ZE_RESULT_SUCCESS !=
+         zeDriverGetExtensionFunctionAddress(
+             driver, "zetIntelMetricCalculateGetReportFormatExp",
+             reinterpret_cast<void **>(&tf.zetIntelMetricCalculateGetReportFormatExp))) ||
+        (tf.zetIntelMetricCalculateGetReportFormatExp == nullptr)) {
+      SPDLOG_INFO("the zetIntelMetricCalculateGetReportFormatExp symbol could not be loaded");
+      return PTI_ERROR_DRIVER;
+    }
+
+    if ((ZE_RESULT_SUCCESS !=
+         zeDriverGetExtensionFunctionAddress(
+             driver, "zetIntelMetricDecodeCalculateMultipleValuesExp",
+             reinterpret_cast<void **>(&tf.zetIntelMetricDecodeCalculateMultipleValuesExp))) ||
+        (tf.zetIntelMetricDecodeCalculateMultipleValuesExp == nullptr)) {
+      SPDLOG_INFO("the zetIntelMetricDecodeCalculateMultipleValuesExp symbol could not be loaded");
+      return PTI_ERROR_DRIVER;
+    }
+
+    if ((ZE_RESULT_SUCCESS !=
+         zeDriverGetExtensionFunctionAddress(
+             driver, "zetIntelMetricDecodeToBinaryBufferExp",
+             reinterpret_cast<void **>(&tf.zetIntelMetricDecodeToBinaryBufferExp))) ||
+        (tf.zetIntelMetricDecodeToBinaryBufferExp == nullptr)) {
+      SPDLOG_INFO("the zetIntelMetricDecodeToBinaryBufferExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -1827,7 +1883,7 @@ class PtiMetricsCollectorHandler {
               break;
          }
       */
-      case external::L0::ZET_METRIC_SAMPLING_TYPE_EXP_FLAG_TRACER_BASED: {
+      case external::L0::ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EXP_TRACER_BASED: {
         // TraceMetricsProfiler relies on L0 Trace Metrics API extensions
         if (trace_api_enabled_) {
           uint32_t time_aggr_window = metric_config_params->_time_aggr_window;
@@ -2067,6 +2123,7 @@ class PtiMetricsCollectorHandler {
       trace_metrics_profilers_;
   bool metrics_enabled_;
   bool trace_api_enabled_;
+  HMODULE loader_lib_;
 };
 
 // Required to access from ze_collector callbacks
