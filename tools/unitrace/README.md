@@ -254,7 +254,7 @@ The **--chrome-itt-logging** traces activities in applications instrumented usin
 The **--ccl-summary-report  [-r]** option outputs CCL call timing summary:
 ![CCL Call Timing!](/tools/unitrace/doc/images/ccl_summary_report.png)
 
-If the application is a PyTorch workload, presence of **--chrome-mpi-logging** or **--chrome-ccl-logging** or **--chrome-dnn-logging** also enables PyTorch profiling(see **Profile PyTorch** section for more information).
+If the application is a PyTorch workload, one or more options from **--chrome-mpi-logging**, **--chrome-ccl-logging** and **--chrome-dnn-logging** also enables PyTorch profiling(see **Profile PyTorch** section for more information).
 
 ## Location of Trace Data
 
@@ -363,10 +363,24 @@ with torch.autograd.profiler.emit_itt(record_shapes=False):
         optimizer.step()
 ```
 
-To profile PyTorch, option **--chrome-mpi-logging** or **--chrome-ccl-logging** or **--chrome-dnn-logging** must be present. For example:
+You also need to use one or more options from **--chrome-mpi-logging**,  **--chrome-ccl-logging** and **--chrome-dnn-logging** to enable PyTorch prifling, for example:
 
 ```sh
-unitrace --chrome-kernel-logging --chrome-dnn-logging --chrome-ccl-logging python ./rn50.py
+unitrace --chrome-ccl-logging python ./rn50.py
+```
+or
+```sh
+unitrace --chrome-dnn-logging python ./rn50.py
+```
+or
+```sh
+unitrace --chrome-mpi-logging --chrome-ccl-logging --chrome-dnn-logging python ./rn50.py
+```
+
+Other options can be used together with one or more of these options, for example:
+
+```sh
+unitrace --chrome-kernel-logging --chrome-mpi-logging --chrome-ccl-logging --chrome-dnn-logging python ./rn50.py
 ```
 
 ![PyTorch Profiling!](/tools/unitrace/doc/images/pytorch.png)
