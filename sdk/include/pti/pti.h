@@ -44,6 +44,7 @@ typedef enum {
   PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED = 103, //!< metrics collection already paused
   PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED = 104, //!< metrics collection already running
   PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION = 105, //!< bad metrics collection configuration
+  PTI_ERROR_METRICS_NO_DATA_COLLECTED = 106, //!< Calculate called on empty collection
 
   PTI_ERROR_INTERNAL = 200  //!< internal error
 } pti_result;

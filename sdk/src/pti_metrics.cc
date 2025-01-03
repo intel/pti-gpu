@@ -371,19 +371,26 @@ pti_result ptiMetricGetCalculatedData(pti_device_handle_t device_handle,
         *metrics_values_count = values_count;
         if (values_count == 0) {
           SPDLOG_WARN("No samples found");
+          result = PTI_ERROR_METRICS_NO_DATA_COLLECTED;
         }
       } else {
         SPDLOG_WARN("Failed to determine required buffer size");
       }
     } else {
       /* Step 2: populate buffer */
-      values_count = *metrics_values_count;
-      result = MetricsCollectorInstance().GetCalculatedData(device_handle, metrics_group_handle,
-                                                            metrics_values_buffer, &values_count);
-      if (result != PTI_SUCCESS) {
-        SPDLOG_WARN("Failed to save values in buffer");
+      if (*metrics_values_count == 0) {
+        SPDLOG_ERROR("Invalid buffer size used for getting calculated data");
+        result = PTI_ERROR_BAD_ARGUMENT;
+      } else {
+        result = MetricsCollectorInstance().GetCalculatedData(
+            device_handle, metrics_group_handle, metrics_values_buffer, metrics_values_count);
+
+        if (result != PTI_SUCCESS) {
+          SPDLOG_WARN("Failed to save values in buffer");
+        }
       }
     }
+
     return result;
   } catch (const std::exception& e) {
     LogException(e);

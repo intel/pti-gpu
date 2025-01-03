@@ -69,6 +69,26 @@ if(HAVE_SYCL)
   target_link_libraries(vecsqadd_suite PUBLIC spdlog::spdlog Pti::pti_view
     GTest::gtest_main LevelZero::headers)
 
+  add_executable(vecsqadd_metrics_suite metrics_vecsqadd_fixture.cc)
+  target_include_directories(
+    vecsqadd_metrics_suite
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
+            "${PROJECT_SOURCE_DIR}/samples/samples_utilities")
+
+  target_compile_options(
+    vecsqadd_metrics_suite
+    PUBLIC -fsycl -gline-tables-only)
+
+  target_link_options(vecsqadd_metrics_suite PUBLIC -fsycl -gline-tables-only)
+
+  target_compile_definitions(vecsqadd_metrics_suite PUBLIC PTI_LEVEL_ZERO=1)
+
+  target_link_libraries(vecsqadd_metrics_suite PUBLIC spdlog::spdlog Pti::pti_metrics
+    GTest::gtest_main LevelZero::headers)
+
+
   add_executable(no_kernel_overlap no_kernel_overlap.cc)
   target_include_directories(
     no_kernel_overlap
@@ -190,7 +210,7 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/utils")
 
- target_include_directories(
+  target_include_directories(
     dpc_gemm_threaded_overhead
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
@@ -254,6 +274,14 @@ if(HAVE_SYCL)
     vecsqadd_suite
     DISCOVERY_TIMEOUT 60
     PROPERTIES LABELS "functional")
+
+  gtest_discover_tests(
+    vecsqadd_metrics_suite
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES
+       ENVIRONMENT ZET_ENABLE_METRICS=1
+       LABELS "functional"
+       LABELS "hw-metrics")
 
   gtest_discover_tests(
     sycl_queue_id

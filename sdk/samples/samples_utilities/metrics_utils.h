@@ -190,6 +190,8 @@ inline bool CompareFiles(const std::string &filename1, const std::string &filena
     // files not available for comparison
     return true;
   }
+  file1.seekg(0, std::ifstream::end);
+  file2.seekg(0, std::ifstream::end);
   if (file1.tellg() != file2.tellg()) {
     match = false;  // sizes don't match
   } else {
@@ -352,6 +354,7 @@ class MetricsProfiler {
       }
     }
     logger->info(out.str());
+    logger->flush();
     return true;
   }
 
@@ -483,21 +486,21 @@ class MetricsProfiler {
       std::cerr << "Failed to start collection" << std::endl;
       return false;
     }
-    uint32_t metrics_values_count = 0;
+    uint32_t total_values_count = 0;
     pti_result result = ptiMetricGetCalculatedData(
-        configured_device_handle_, configured_group_handle_, nullptr, &metrics_values_count);
-    if (result != PTI_SUCCESS || metrics_values_count == 0) {
+        configured_device_handle_, configured_group_handle_, nullptr, &total_values_count);
+    if (result != PTI_SUCCESS || total_values_count == 0) {
       std::cerr << "Failed to get required buffer size to dump collected data on specified device"
                 << std::endl;
       return false;
     }
 
-    std::vector<pti_value_t> metrics_values_buffer(metrics_values_count);
+    std::vector<pti_value_t> metrics_values_buffer(total_values_count);
 
     result = ptiMetricGetCalculatedData(configured_device_handle_, configured_group_handle_,
-                                        metrics_values_buffer.data(), &metrics_values_count);
+                                        metrics_values_buffer.data(), &total_values_count);
 
-    if (result != PTI_SUCCESS || metrics_values_count == 0 || metrics_values_buffer.empty()) {
+    if (result != PTI_SUCCESS || total_values_count == 0 || metrics_values_buffer.empty()) {
       std::cerr << "Failed to capture collected data" << std::endl;
       return false;
     }
@@ -519,11 +522,15 @@ class MetricsProfiler {
     std::string group_name = collected_group._name;
     std::string str = "";
     uint32_t buffer_idx = 0;
-    uint32_t buffer_idx_max = metrics_values_count - 1;
     uint64_t ts = 0;
-    uint32_t metric_count = collected_group._metric_count;
+    uint32_t per_sample_values_count = collected_group._metric_count;
     if (collected_group._type == PTI_METRIC_GROUP_TYPE_TRACE_BASED) {
-      metric_count += 2;  // We have two added for start and end timestamps
+      per_sample_values_count += 2;  // We have two added for start and end timestamps
+    }
+    uint32_t sample_count = total_values_count / per_sample_values_count;
+
+    if (log_data && !filename.empty()) {
+      std::cout << "logging to Filename: " << filename << std::endl;
     }
 
     std::shared_ptr<spdlog::logger> logger = utils::GetLogStream(log_data, filename);
@@ -533,41 +540,45 @@ class MetricsProfiler {
     float occupancyPercent = 0.0;
     bool busy = false;
     logger->info("{\n\t\"displayTimeUnit\": \"us\",\n\t\"traceEvents\": [");
-    while ((buffer_idx + metric_count) <= buffer_idx_max) {
-      if (buffer_idx != 0) str += ",";
+    for (uint32_t i = 0; i < sample_count; i++) {
+      if (buffer_idx != 0) {
+        str += ",";
+      }
       str += " {\n\t\t\"args\": {\n";
       activePercent = 0.0;
       stallPercent = 0.0;
       occupancyPercent = 0.0;
       busy = false;
-      for (uint32_t i = 0; i < metric_count; i++) {
+      for (uint32_t j = 0; j < per_sample_values_count; j++) {
         std::string metric_name;
         std::string units;
         pti_metric_value_type type;
         if (collected_group._type == PTI_METRIC_GROUP_TYPE_TRACE_BASED) {
           // for traced metric groups, first two values in the buffer are the
           // start and end timestamps
-          if (i == 0) {
+          if (j == 0) {
             metric_name = "StartTimestamp";
             units = "us";
             type = PTI_METRIC_VALUE_TYPE_UINT64;
-          } else if (i == 1) {
+          } else if (j == 1) {
             metric_name = "StopTimestamp";
             units = "us";
             type = PTI_METRIC_VALUE_TYPE_UINT64;
           } else {
             // Metric descriptions in the metrics properties buffer don't include
             // the start and end timestamps
-            metric_name = collected_group._metric_properties[i - 2]._name;
-            units = collected_group._metric_properties[i - 2]._units;
-            type = collected_group._metric_properties[i - 2]._value_type;
+            metric_name = collected_group._metric_properties[j - 2]._name;
+            units = collected_group._metric_properties[j - 2]._units;
+            type = collected_group._metric_properties[j - 2]._value_type;
           }
         } else {
-          metric_name = collected_group._metric_properties[i]._name;
-          units = collected_group._metric_properties[i]._units;
-          type = collected_group._metric_properties[i]._value_type;
+          metric_name = collected_group._metric_properties[j]._name;
+          units = collected_group._metric_properties[j]._units;
+          type = collected_group._metric_properties[j]._value_type;
         }
-        if (units == "percent") units = "%";
+        if (units == "percent") {
+          units = "%";
+        }
         if (!units.empty() && units != "(null)") {
           metric_name += "[" + units + "]";
         }
@@ -575,26 +586,27 @@ class MetricsProfiler {
         if (metric_name.find("QueryBeginTime") != std::string::npos ||
             metric_name.find("StartTimestamp") != std::string::npos) {  // Added for trace groups
           ts = value.ui64;
-          continue;
-        }
-        if (metric_name.find("StopTimestamp") != std::string::npos) {
-          value.ui64 = value.ui64 / 1000;  // convert to us
-        }
-        if (i != 0) str += ",\n";
-        str += "\t\t\t\"" + metric_name + "\": " + PrintTypedValue(value, type);
+        } else {
+          if (metric_name.find("StopTimestamp") != std::string::npos) {
+            value.ui64 = value.ui64 / 1000;  // convert to us
+          }
+          if (j != 0) {
+            str += ",\n";
+          }
+          str += "\t\t\t\"" + metric_name + "\": " + PrintTypedValue(value, type);
 
-        // data validation
-        if (metric_name.find("XVE_STALL") != std::string::npos) {
-          stallPercent = static_cast<float>(value.fp32);
-        } else if (metric_name.find("XVE_ACTIVE") != std::string::npos) {
-          activePercent = static_cast<float>(value.fp32);
-        } else if (metric_name.find("OCCUPANCY_ALL") != std::string::npos) {
-          occupancyPercent = static_cast<float>(value.fp32);
-        } else if (metric_name.find("XVE_BUSY") != std::string::npos) {
-          busy = static_cast<bool>(value.ui64);
+          // data validation
+          if (metric_name.find("XVE_STALL") != std::string::npos) {
+            stallPercent = static_cast<float>(value.fp32);
+          } else if (metric_name.find("XVE_ACTIVE") != std::string::npos) {
+            activePercent = static_cast<float>(value.fp32);
+          } else if (metric_name.find("OCCUPANCY_ALL") != std::string::npos) {
+            occupancyPercent = static_cast<float>(value.fp32);
+          } else if (metric_name.find("XVE_BUSY") != std::string::npos) {
+            busy = static_cast<bool>(value.ui64);
+          }
         }
       }
-
       // check that STALL % + ACTIVE % ~= OCCUPENCY % when OCCUPENCY %~= 100%+/-0.5%
       if (busy) {
         data_checked_ = true;
@@ -623,6 +635,7 @@ class MetricsProfiler {
 
     logger->info(str);
     logger->info("\n\t]\n}\n");
+    logger->flush();
     return true;
   }
 
@@ -662,6 +675,16 @@ class MetricsProfiler {
               << "--------------------------------------" << std::endl;
     return true;
   }
+
+  std::unordered_map<pti_device_handle_t, pti_device_properties_t> GetDevices() { return devices_; }
+
+  std::unordered_map<pti_metrics_group_handle_t, pti_metrics_group_properties_t> GetMetricGroups() {
+    return groups_;
+  }
+
+  pti_metrics_group_handle_t GetConfiguredMetricGroupHandle() { return configured_group_handle_; }
+
+  pti_device_handle_t GetConfiguredDeviceHandle() { return configured_device_handle_; }
 
  private:
   std::unordered_map<pti_device_handle_t, pti_device_properties_t> devices_;
