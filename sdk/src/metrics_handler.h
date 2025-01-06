@@ -98,7 +98,7 @@ class PtiMetricsProfiler {
     bool enable_logging = (utils::GetEnv("PTI_LogToFile") == "1");
     std::string log_filename = enable_logging ? utils::GetEnv("PTI_LogFileName") : "";
 
-    user_logger_ = utils::GetLogStream(enable_logging, log_filename);
+    user_logger_ = utils::GetLogStream(enable_logging, std::move(log_filename));
 
     EnumerateDevices(device_handle, metrics_group_handle);
   }
@@ -790,7 +790,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
 
-    SaveRawData(desc, storage, data_size, immediate_save_to_disc);
+    SaveRawData(std::move(desc), storage, data_size, immediate_save_to_disc);
   }
 
   void EventBasedCaptureRawMetrics(zet_metric_streamer_handle_t streamer, uint8_t *storage,
@@ -812,7 +812,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       return;
     }
     bool immediate_save_to_disc = false;
-    CaptureRawMetrics(streamer, storage, ssize, desc, immediate_save_to_disc);
+    CaptureRawMetrics(streamer, storage, ssize, std::move(desc), immediate_save_to_disc);
   }
 
   void PerDeviceStreamMetricsProfilingThread(std::shared_ptr<pti_metrics_device_descriptor_t> desc,
@@ -912,7 +912,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
 
-    result = CollectionFinalize(desc);
+    result = CollectionFinalize(std::move(desc));
     PTI_ASSERT(result == PTI_SUCCESS);
   }
 };
@@ -1338,7 +1338,7 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
 
-    SaveRawData(desc, storage, data_size, immediate_save_to_disc);
+    SaveRawData(std::move(desc), storage, data_size, immediate_save_to_disc);
   }
 
   void EventBasedCaptureRawMetrics(external::L0::zet_metric_tracer_exp_handle_t tracer,
@@ -1356,7 +1356,7 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
       return;
     }
     bool immediate_save_to_disc = false;
-    CaptureRawMetrics(tracer, storage, ssize, desc, immediate_save_to_disc);
+    CaptureRawMetrics(tracer, storage, ssize, std::move(desc), immediate_save_to_disc);
   }
 
   void PerDeviceTraceMetricsProfilingThread(
@@ -1463,7 +1463,7 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     status = tf.zetMetricTracerDestroyExp(tracer);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    result = CollectionFinalize(desc);
+    result = CollectionFinalize(std::move(desc));
     PTI_ASSERT(result == PTI_SUCCESS);
   }
 };

@@ -157,20 +157,21 @@ class VecsqaddMetricsFixtureTest : public ::testing::Test {
       std::cout << "Failed to get devices" << std::endl;
     }
 
-    for (size_t i = 0; i < devices.size(); i++) {
+    if (devices.size() > 0) {
+      // just get groups for the first device
       uint32_t group_count = 0;
-      result = ptiMetricsGetMetricGroups(devices[i]._handle, nullptr, &group_count);
+      uint32_t device_idx = 0;
+      result = ptiMetricsGetMetricGroups(devices[device_idx]._handle, nullptr, &group_count);
       if (result != PTI_SUCCESS) {
         std::cout << "Failed to get metric group count" << std::endl;
       }
 
       metric_groups.resize(group_count);
-      result = ptiMetricsGetMetricGroups(devices[i]._handle, metric_groups.data(), &group_count);
+      result = ptiMetricsGetMetricGroups(devices[device_idx]._handle, metric_groups.data(),
+                                         &group_count);
       if (result != PTI_SUCCESS) {
         std::cout << "Failed to get metric groups" << std::endl;
       }
-
-      break;  // just get groups for the first device
     }
 
     // Initialize metrics utils instance
@@ -186,7 +187,7 @@ class VecsqaddMetricsFixtureTest : public ::testing::Test {
 
     // test configure metric groups
     if (!metrics_utils::MetricsProfiler::MetricsProfilerInstance().ConfigureMetricGroups(
-            group_name, group_type, log_data, filename)) {
+            group_name, group_type, log_data, std::move(filename))) {
       std::cout << "Failed to configure metrics collection" << std::endl;
     }
   }
@@ -275,23 +276,23 @@ TEST_F(VecsqaddMetricsFixtureTest, GetMetricsNullMetricGroupHandle) {
 }
 
 TEST_F(VecsqaddMetricsFixtureTest, GetMetricsInvalidMetricGroupHandle) {
-  for (size_t i = 0; i < devices.size(); i++) {
-    for (size_t j = 0; j < metric_groups.size(); j++) {
-      uint32_t metric_count = metric_groups[j]._metric_count;
+  // test the first device and the first metric group in that device
+  uint32_t device_idx = 0;
+  uint32_t metric_group_idx = 0;
+  if (devices.size() > 0) {
+    if (metric_groups.size() > 0) {
+      uint32_t metric_count = metric_groups[metric_group_idx]._metric_count;
       EXPECT_NE(metric_count, static_cast<uint32_t>(0));
 
       std::vector<pti_metric_properties_t> metric_properties(metric_count);
-      metric_groups[j]._metric_properties = metric_properties.data();
+      metric_groups[metric_group_idx]._metric_properties = metric_properties.data();
 
       // user device handle instead of metric group handle
-      EXPECT_EQ(
-          ptiMetricsGetMetricsProperties(devices[i]._handle, metric_groups[j]._metric_properties),
-          PTI_ERROR_BAD_ARGUMENT);
-      EXPECT_NE(metric_groups[j]._metric_properties, nullptr);
-
-      break;
+      EXPECT_EQ(ptiMetricsGetMetricsProperties(devices[device_idx]._handle,
+                                               metric_groups[metric_group_idx]._metric_properties),
+                PTI_ERROR_BAD_ARGUMENT);
+      EXPECT_NE(metric_groups[metric_group_idx]._metric_properties, nullptr);
     }
-    break;
   }
 }
 
@@ -403,7 +404,7 @@ TEST_F(VecsqaddMetricsFixtureTest, ConfigureGoodMetricGroup) {
 
   // test multiple configure metric groups calls
   EXPECT_EQ(metrics_utils::MetricsProfiler::MetricsProfilerInstance().ConfigureMetricGroups(
-                group_name, group_type, log_data, filename),
+                group_name, group_type, log_data, std::move(filename)),
             true);
 }
 
@@ -415,7 +416,7 @@ TEST_F(VecsqaddMetricsFixtureTest, ConfigureAlreadyConfiguredMetricGroup) {
 
   // test multiple configure metric groups calls
   EXPECT_EQ(metrics_utils::MetricsProfiler::MetricsProfilerInstance().ConfigureMetricGroups(
-                group_name, group_type, log_data, filename),
+                group_name, group_type, log_data, std::move(filename)),
             true);
 }
 
@@ -636,7 +637,7 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateWith0BufferSize) {
 
   // test calculate with 0 buffer size
   uint32_t metrics_values_count = 0;
-  pti_value_t dummy;
+  pti_value_t dummy = pti_value_t();
   std::vector<pti_value_t> metrics_values_buffer = {dummy};
 
   EXPECT_EQ(ptiMetricGetCalculatedData(device, group, metrics_values_buffer.data(),
@@ -766,7 +767,7 @@ TEST_F(VecsqaddMetricsFixtureTest, StartCollectionPausedAndResumeAndStopAndCalcu
 
   // test configure metric groups
   EXPECT_EQ(metrics_utils::MetricsProfiler::MetricsProfilerInstance().ConfigureMetricGroups(
-                group_name, group_type, log_data, filename),
+                group_name, group_type, log_data, std::move(filename)),
             true);
 
   pti_device_handle_t device =
@@ -786,7 +787,7 @@ TEST_F(VecsqaddMetricsFixtureTest, StartCollectionPausedAndResumeAndStopAndCalcu
 
   std::string sample_filename = group_name + "MetricsFixtureTest_TEST.json";
   EXPECT_EQ(metrics_utils::MetricsProfiler::MetricsProfilerInstance().GetCalculatedData(
-                log_data, sample_filename),
+                log_data, std::move(sample_filename)),
             true);
 
   // Add small sleep to wait for the output files to be written

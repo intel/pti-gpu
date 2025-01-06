@@ -261,7 +261,7 @@ class MetricsProfiler {
       return false;
     }
 
-    std::shared_ptr<spdlog::logger> logger = utils::GetLogStream(log_metrics, filename);
+    std::shared_ptr<spdlog::logger> logger = utils::GetLogStream(log_metrics, std::move(filename));
 
     std::vector<pti_device_properties_t> device_buffer(device_count);
 
@@ -533,7 +533,7 @@ class MetricsProfiler {
       std::cout << "logging to Filename: " << filename << std::endl;
     }
 
-    std::shared_ptr<spdlog::logger> logger = utils::GetLogStream(log_data, filename);
+    std::shared_ptr<spdlog::logger> logger = utils::GetLogStream(log_data, std::move(filename));
 
     float activePercent = 0.0;
     float stallPercent = 0.0;
