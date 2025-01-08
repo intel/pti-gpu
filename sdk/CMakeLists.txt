@@ -222,8 +222,7 @@ target_compile_definitions(
 target_link_libraries(
   pti_view
   PUBLIC
-  PRIVATE LevelZero::headers
-          spdlog::spdlog
+  PRIVATE spdlog::spdlog
           ${CMAKE_DL_LIBS}
           ${FS_LIB})
 

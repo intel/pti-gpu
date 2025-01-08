@@ -5,11 +5,13 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 #include <gtest/gtest.h>
-#include <level_zero/ze_api.h>
 
+#include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdlib>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <sycl/sycl.hpp>
 #include <thread>

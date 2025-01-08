@@ -4,17 +4,14 @@
 // Copyright © Intel Corporation
 // SPDX-License-Identifier: MIT
 // =============================================================
-
-#include <level_zero/ze_api.h>
-
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <set>
 #include <string>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
-#include <variant>
 #include <vector>
 
 #include "pti/pti_view.h"
@@ -223,10 +220,10 @@ int main() {
                 std::cout << "Found Sycl Runtime Record" << '\n';
                 pti_view_record_sycl_runtime *rec =
                     reinterpret_cast<pti_view_record_sycl_runtime *>(ptr);
-                if (strstr(rec->_name, "EnqueueKernel") != nullptr) {
+                if (std::strstr(rec->_name, "EnqueueKernel") != nullptr) {
                   runtime_enq_2_gpu_kernel_name_map[rec->_correlation_id] = "unknown_at_this_point";
                 }
-                if (strstr(rec->_name, "EnqueueMem") != nullptr) {
+                if (std::strstr(rec->_name, "EnqueueMem") != nullptr) {
                   runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = "unknown_at_this_point";
                 }
                 samples_utils::dump_record(rec);

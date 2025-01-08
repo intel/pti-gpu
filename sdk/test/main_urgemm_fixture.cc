@@ -5,7 +5,6 @@
 // =============================================================
 
 #include <gtest/gtest.h>
-#include <level_zero/ze_api.h>
 #include <math.h>
 #include <string.h>
 

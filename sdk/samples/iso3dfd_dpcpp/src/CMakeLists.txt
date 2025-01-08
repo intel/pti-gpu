@@ -19,7 +19,7 @@ target_include_directories(
   iso3dfd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../samples_utilities
                       ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 
-target_link_libraries(iso3dfd PUBLIC Pti::pti_view LevelZero::headers DevUtilities::utils)
+target_link_libraries(iso3dfd PUBLIC Pti::pti_view DevUtilities::utils)
 
 if(SHARED_KERNEL)
   target_compile_definitions(iso3dfd PUBLIC USED_SHARED)

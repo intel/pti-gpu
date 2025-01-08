@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <level_zero/ze_api.h>
 
 #include <cstring>
 #include <sycl/sycl.hpp>

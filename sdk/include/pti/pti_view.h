@@ -6,7 +6,6 @@
 #ifndef INCLUDE_PTI_VIEW_H_
 #define INCLUDE_PTI_VIEW_H_
 
-#include <level_zero/layers/zel_tracing_api.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -102,6 +101,10 @@ typedef enum _pti_view_overhead_kind {
   PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to L0 api processing time
 } pti_view_overhead_kind;
 
+typedef void* pti_backend_queue_t; //!< Backend queue handle
+
+typedef void* pti_backend_ctx_t; //!< Backend context handle
+
 /**
  * @brief Base View record type
  */
@@ -114,8 +117,8 @@ typedef struct pti_view_record_base {
  */
 typedef struct pti_view_record_kernel {
   pti_view_record_base _view_kind;                  //!< Base record
-  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
-  ze_context_handle_t _context_handle;              //!< Context handle
+  pti_backend_queue_t _queue_handle;                //!< Device back-end queue handle
+  pti_backend_ctx_t _context_handle;                //!< Context handle
   const char* _name;                                //!< Kernel name
   const char* _source_file_name;                    //!< Kernel source file,
                                                     //!< null if no information
@@ -163,8 +166,8 @@ typedef struct pti_view_record_memory_copy {
   pti_view_memcpy_type _memcpy_type;                //!< Memory copy type
   pti_view_memory_type _mem_src;                    //!< Memory type
   pti_view_memory_type _mem_dst;                    //!< Memory type
-  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
-  ze_context_handle_t _context_handle;              //!< Context handle
+  pti_backend_queue_t _queue_handle;                //!< Device back-end queue handle
+  pti_backend_ctx_t _context_handle;                //!< Context handle
   const char* _name;                                //!< Back-end API name making a memory copy
   char _pci_address[PTI_MAX_PCI_ADDRESS_SIZE];      //!< Source or Destination Device pci_address
                                                     //!< Only a single device is represented by
@@ -193,8 +196,8 @@ typedef struct pti_view_record_memory_copy_p2p {
   pti_view_memcpy_type _memcpy_type;                //!< Memory copy type
   pti_view_memory_type _mem_src;                    //!< Memory type
   pti_view_memory_type _mem_dst;                    //!< Memory type
-  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
-  ze_context_handle_t _context_handle;              //!< Context handle
+  pti_backend_queue_t _queue_handle;                //!< Device back-end queue handle
+  pti_backend_ctx_t _context_handle;                //!< Context handle
   const char* _name;                                //!< Back-end API name making a memory copy
   char _src_pci_address[PTI_MAX_PCI_ADDRESS_SIZE];  //!< Source Device pci_address
   char _dst_pci_address[PTI_MAX_PCI_ADDRESS_SIZE];  //!< Destination Device pci_address
@@ -221,8 +224,8 @@ typedef struct pti_view_record_memory_copy_p2p {
 typedef struct pti_view_record_memory_fill {
   pti_view_record_base _view_kind;                  //!< Base record
   pti_view_memory_type _mem_type;                   //!< Type of memory filled
-  ze_command_queue_handle_t _queue_handle;          //!< Device back-end queue handle
-  ze_context_handle_t _context_handle;              //!< Context handle
+  pti_backend_queue_t _queue_handle;                //!< Device back-end queue handle
+  pti_backend_ctx_t _context_handle;                //!< Context handle
   const char* _name;                                //!< Back-end API name making a memory fill
   char _pci_address[PTI_MAX_PCI_ADDRESS_SIZE];      //!< Device pci_address
   uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Device uuid
@@ -284,7 +287,7 @@ typedef struct pti_view_record_zecalls {
   uint32_t _thread_id;             //!< Thread ID of where the zecall observed
   uint32_t _callback_id;           //!< Callback id of this zecall
   uint32_t _correlation_id;        //!< Correlation id tracking memfill, memcpy and kernel gpu activity
-  ze_result_t _result;             //!< Result status of zecall
+  uint32_t _result;                //!< Result status of zecall
 } pti_view_record_zecalls;
 
 
