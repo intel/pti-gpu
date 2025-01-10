@@ -2690,6 +2690,17 @@ class ZeCollector {
     auto it = command_lists_.find(command_list);
     if (it != command_lists_.end()) {
       if (!it->second->immediate_) {
+        if (it->second->timestamp_event_to_signal_) {
+          if (zeEventQueryStatus(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
+            auto status = zeEventHostSynchronize(it->second->timestamp_event_to_signal_, UINT64_MAX);
+            if (status != ZE_RESULT_SUCCESS) {
+              std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
+              command_lists_mutex_.unlock();
+              return;
+            }
+          }
+          ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted already are processed
+        }
         for (auto& command : it->second->commands_) {
           if (command->event_) {
             event_cache_.ReleaseEvent(command->event_);
@@ -2750,7 +2761,7 @@ class ZeCollector {
               return;
             }
           }
-          ProcessCommandsSubmitted(nullptr);	// make sure commands submitted already are processed
+          ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted already are processed
         }
         for (auto& command : it->second->commands_) {
           if (command->event_) {
@@ -2808,7 +2819,7 @@ class ZeCollector {
                 return;
               }
             }
-            ProcessCommandsSubmitted(nullptr);	// make sure commands submitted last time are processed
+            ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted last time are processed
             if (zeEventHostReset(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {    // reset event 
               std::cerr << "[ERROR] Failed to reset timestamp event" << std::endl;
               command_lists_mutex_.unlock_shared();
