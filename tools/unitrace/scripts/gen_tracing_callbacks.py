@@ -180,6 +180,7 @@ def get_param_struct_name(func_name):
   func_name = 'Z' + func_name[1:]
   func_name = func_name.replace("CL", "Cl")
   func_name = func_name.replace("IPC", "Ipc")
+  func_name = func_name.replace("RTAS", "Rtas")
   items = re.findall('[A-Z][^A-Z]*', func_name)
   assert len(items) > 1
   struct_name = ""
@@ -216,10 +217,7 @@ def get_callback_group_map(f):
 
   return group_map
 
-def get_param_map(f):
-  param_map = {}
-  func_list = get_func_list(f)
-
+def add_param_map(f, func_list, param_map):
   for func in func_list:
     assert not (func in param_map)
     param_map[func] = get_params(f, func)
@@ -240,12 +238,7 @@ def get_enum_map(include_path):
 
 # Generate Callbacks ##########################################################
 
-def gen_api(f, func_list, kfunc_list, group_map):
-  f.write("void EnableTracing(zel_tracer_handle_t tracer) {\n")
-  f.write("  zet_core_callbacks_t prologue = {};\n")
-  f.write("  zet_core_callbacks_t epilogue = {};\n")
-  f.write("\n")
-  f.write("  if (options_.api_tracing) {\n")
+def gen_set_prologues(f, func_list, group_map):
   for func in func_list:
     if not func in group_map:
       continue
@@ -262,24 +255,24 @@ def gen_api(f, func_list, kfunc_list, group_map):
     f.write("    epilogue." + group_name + "." + callback_name + " = " + func + "OnExit;\n")
     if callback_cond:
       f.write("#endif //" + callback_cond + "\n")
+
+def gen_exp_register(f, exp_func_list):
+  for func in exp_func_list:
+    f.write("    status = zelTracer" + func[2:] + "RegisterCallback(tracer, ZEL_REGISTER_PROLOGUE, " + func + "OnEnter);\n")
+    f.write("    PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
+    f.write("    status = zelTracer" + func[2:] + "RegisterCallback(tracer, ZEL_REGISTER_EPILOGUE, " + func + "OnExit);\n")
+    f.write("    PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
+
+def gen_api(f, func_list, kfunc_list, group_map, exp_func_list, kexp_func_list):
+  f.write("void EnableTracing(zel_tracer_handle_t tracer) {\n")
+  f.write("  zet_core_callbacks_t prologue = {};\n")
+  f.write("  zet_core_callbacks_t epilogue = {};\n")
+  f.write("\n")
+  f.write("  if (options_.api_tracing) {\n")
+  gen_set_prologues(f, func_list, group_map)
   f.write("  }\n")
   f.write("  else if (options_.kernel_tracing) {\n")
-  for func in kfunc_list:
-    if not func in group_map:
-      continue
-
-    group, callback = group_map[func]
-    group_name = group[0]
-    group_cond = group[1]
-    assert not group_cond
-    callback_name = callback[0]
-    callback_cond = callback[1]
-    if callback_cond:
-      f.write("#if " + callback_cond + "\n")
-    f.write("    prologue." + group_name + "." + callback_name + " = " + func + "OnEnter;\n")
-    f.write("    epilogue." + group_name + "." + callback_name + " = " + func + "OnExit;\n")
-    if callback_cond:
-      f.write("#endif //" + callback_cond + "\n")
+  gen_set_prologues(f, kfunc_list, group_map)
   f.write("  }\n")
   f.write("\n")
   f.write("  ze_result_t status = ZE_RESULT_SUCCESS;\n")
@@ -287,6 +280,13 @@ def gen_api(f, func_list, kfunc_list, group_map):
   f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
   f.write("  status = zelTracerSetEpilogues(tracer, &epilogue);\n")
   f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
+  f.write("  if (options_.api_tracing) {\n")
+  gen_exp_register(f, exp_func_list)
+  f.write("  }\n")
+  f.write("  else if (options_.kernel_tracing) {\n")
+  gen_exp_register(f, kexp_func_list)
+  f.write("  }\n")
+  f.write("\n")
   f.write("  status = zelTracerSetEnabled(tracer, true);\n")
   f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
   f.write("}\n")
@@ -852,6 +852,26 @@ def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list,
       f.write("#endif //" + callback_cond + "\n")
     f.write("\n")
 
+def gen_exp_callbacks(f, exp_func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, group_map, param_map, enum_map):
+  for func in exp_func_list:
+    assert func in param_map
+    f.write("static void " + func + "OnEnter(\n")
+    f.write("    " + get_param_struct_name(func) + "* params,\n")
+    f.write("    ze_result_t result,\n")
+    f.write("    void* global_user_data,\n")
+    f.write("    void** instance_user_data) {\n")
+    gen_enter_callback(f, func, command_list_func_list, command_queue_func_list, synchronize_func_list_on_enter, param_map[func], enum_map)
+    f.write("}\n")
+    f.write("\n")
+    f.write("static void " + func + "OnExit(\n")
+    f.write("    " + get_param_struct_name(func) + "* params,\n")
+    f.write("    ze_result_t result,\n")
+    f.write("    void* global_user_data,\n")
+    f.write("    void** instance_user_data) {\n")
+    gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map[func], enum_map)
+    f.write("}\n")
+    f.write("\n")
+
 def main():
   if len(sys.argv) < 3:
     print("Usage: python gen_tracing_header.py <output_include_path> <l0_include_path>")
@@ -872,6 +892,11 @@ def main():
 
   l0_file = open(l0_file_path, "rt")
   func_list = get_func_list(l0_file)
+
+  l0_exp_path = os.path.join(l0_path, "layers", "zel_tracing_register_cb.h")
+  l0_exp_file = open(l0_exp_path, "rt")
+  exp_func_list = get_func_list(l0_exp_file)
+ 
   kfunc_list = [
       "zeEventDestroy",
       "zeEventHostReset",
@@ -910,6 +935,8 @@ def main():
       "zeEventQueryStatus",
       "zeFenceHostSynchronize",
       "zeContextDestroy"]
+  kexp_func_list = [
+      "zeCommandListImmediateAppendCommandListsExp"]
   command_list_func_list = [
       "zeCommandListAppendEventReset",
       "zeCommandListAppendLaunchKernel",
@@ -924,7 +951,8 @@ def main():
       "zeCommandListAppendImageCopy",
       "zeCommandListAppendImageCopyRegion",
       "zeCommandListAppendImageCopyToMemory",
-      "zeCommandListAppendImageCopyFromMemory"]
+      "zeCommandListAppendImageCopyFromMemory",
+      "zeCommandListImmediateAppendCommandListsExp"]
 
   command_queue_func_list = [
       "zeCommandQueueExecuteCommandLists"]
@@ -946,14 +974,18 @@ def main():
       "zeCommandQueueSynchronize"]
 
   group_map = get_callback_group_map(l0_file)
-  param_map = get_param_map(l0_file)
+  param_map = {}
+  add_param_map(l0_file, func_list, param_map)
+  add_param_map(l0_exp_file, exp_func_list, param_map)
   enum_map = get_enum_map(l0_path)
 
   gen_result_converter(dst_file, enum_map)
   gen_structure_type_converter(dst_file, enum_map)
   gen_callbacks(dst_file, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, group_map, param_map, enum_map)
-  gen_api(dst_file, func_list, kfunc_list, group_map)
+  gen_exp_callbacks(dst_file, exp_func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, group_map, param_map, enum_map)
+  gen_api(dst_file, func_list, kfunc_list, group_map, exp_func_list, kexp_func_list)
 
+  l0_exp_file.close()
   l0_file.close()
   dst_file.close()
 

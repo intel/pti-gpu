@@ -10,11 +10,8 @@ import re
 
 # Function scans ze_api.h file from given path (l0_path) and 
 # generates list of l0 API of interest
-def get_l0_api_list(l0_path):
-  l0_file_path = os.path.join(l0_path, "ze_api.h")
-  l0_file = open(l0_file_path, "rt")
-  func_list = []
-  for line in l0_file.readlines():
+def add_func_list(f, func_list):
+  for line in f.readlines():
     if line.find("ZE_APICALL") != -1 and line.find("ze_pfn") != -1:
       items = line.split("ze_pfn")
       assert len(items) == 2
@@ -22,7 +19,18 @@ def get_l0_api_list(l0_path):
       items = items[1].split("Cb_t")
       assert len(items) == 2
       func_list.append(items[0].strip())
+
+def get_l0_api_list(l0_path):
+  l0_file_path = os.path.join(l0_path, "ze_api.h")
+  l0_file = open(l0_file_path, "rt")
+  func_list = []
+  add_func_list(l0_file, func_list)
   l0_file.close()
+
+  l0_exp_path = os.path.join(l0_path, "layers", "zel_tracing_register_cb.h")
+  l0_exp_file = open(l0_exp_path, "rt")
+  add_func_list(l0_exp_file, func_list)
+  l0_exp_file.close()
   return func_list
 
 def get_ocl_api_list(ocl_path):

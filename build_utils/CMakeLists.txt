@@ -618,11 +618,13 @@ macro(GetLevelZeroHeaders TARGET)
                     DEPENDS ${L0_INC_PATH}/level_zero/ze_api.h
                             ${L0_INC_PATH}/level_zero/zes_api.h
                             ${L0_INC_PATH}/level_zero/zet_api.h
-                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h)
+                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
+                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_register_cb.h)
   add_custom_command(OUTPUT ${L0_INC_PATH}/level_zero/ze_api.h
                             ${L0_INC_PATH}/level_zero/zes_api.h
                             ${L0_INC_PATH}/level_zero/zet_api.h
                             ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
+                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_register_cb.h
                     COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_ze_headers.py" ${L0_INC_PATH} ${CMAKE_BINARY_DIR})
   target_include_directories(${TARGET}
     PUBLIC "${L0_INC_PATH}")
@@ -712,7 +714,8 @@ macro(FindL0Headers TARGET)
   check_include_file_cxx(level_zero/zet_api.h LO_TOOLS_INC_FOUND)
   check_include_file_cxx(level_zero/zes_api.h LO_SYSMAN_INC_FOUND)
   check_include_file_cxx(level_zero/layers/zel_tracing_api.h LO_LAYERS_INC_FOUND)
-  if ((NOT LO_CORE_INC_FOUND) OR (NOT LO_TOOLS_INC_FOUND) OR (NOT LO_LAYERS_INC_FOUND) OR (NOT LO_SYSMAN_INC_FOUND))
+  check_include_file_cxx(level_zero/layers/zel_tracing_register_cb.h LO_LAYERS_TRC_REG_INC_FOUND)
+  if ((NOT LO_CORE_INC_FOUND) OR (NOT LO_TOOLS_INC_FOUND) OR (NOT LO_LAYERS_INC_FOUND) OR (NOT LO_SYSMAN_INC_FOUND) OR (NOT LO_LAYERS_TRC_REG_INC_FOUND))
     message(STATUS "Level Zero headers are not found, will be downloaded automatically")
     GetLevelZeroHeaders(${TARGET})
   endif()

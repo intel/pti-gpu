@@ -27,6 +27,7 @@
 
 #include <level_zero/ze_api.h>
 #include <level_zero/layers/zel_tracing_api.h>
+#include <level_zero/layers/zel_tracing_register_cb.h>
 
 #include "utils.h"
 #include "ze_event_cache.h"
@@ -2419,6 +2420,7 @@ class ZeCollector {
 
     uint64_t kernel_start = 0, kernel_end = 0;
     GetHostTime(command, timestamp, kernel_start, kernel_end);
+
     PTI_ASSERT(kernel_start <= kernel_end);
 
     if (options_.device_timing || options_.kernel_submission) {
@@ -2797,91 +2799,93 @@ class ZeCollector {
     auto qit = command_queues_.find(queue);
     if (qit != command_queues_.end()) {
       command_lists_mutex_.lock_shared();
-
-      for (uint32_t i = 0; i < count; i++) {
-        ze_command_list_handle_t cmdlist = cmdlists[i];
-      
-        auto it = command_lists_.find(cmdlist);
-      
-        if (it == command_lists_.end()) {
-          std::cerr << "[ERROR] Command list (" << cmdlist << ") is not found to execute." << std::endl;
-          continue;
-        }
-
-        if (!it->second->immediate_) {
-          if (it->second->timestamp_event_to_signal_) {
-            if (zeEventQueryStatus(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
-              auto status = zeEventHostSynchronize(it->second->timestamp_event_to_signal_, UINT64_MAX);
-              if (status != ZE_RESULT_SUCCESS) {
-                std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
-                command_lists_mutex_.unlock_shared();
-                command_queues_mutex_.unlock_shared();
-                return;
-              }
-            }
-            ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted last time are processed
-            if (zeEventHostReset(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {    // reset event 
-              std::cerr << "[ERROR] Failed to reset timestamp event" << std::endl;
-              command_lists_mutex_.unlock_shared();
-              command_queues_mutex_.unlock_shared();
-              return;
-            }
-          }
-        }
-      }
-
-      uint64_t host_timestamp;
-      uint64_t device_timestamp;
-      ze_result_t status;
-
-      status = zeDeviceGetGlobalTimestamps(qit->second.device_, &host_timestamp, &device_timestamp);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-      for (uint32_t i = 0; i < count; i++) {
-        ze_command_list_handle_t cmdlist = cmdlists[i];
-      
-        auto it = command_lists_.find(cmdlist);
-      
-        if (it == command_lists_.end()) {
-          std::cerr << "[ERROR] Command list (" << cmdlist << ") is not found to execute." << std::endl;
-          continue;
-        }
-
-        if (!it->second->immediate_) {
-          for (auto command : it->second->commands_) {
-            ZeCommand *cmd = nullptr;
-            ZeCommandMetricQuery *cmd_query = nullptr;
-          
-            cmd = local_device_submissions_.GetKernelCommand();
-
-            if (command->command_metric_query_ != nullptr) {
-              cmd_query = local_device_submissions_.GetCommandMetricQuery();
-            }
-            *cmd = *command;
-
-            cmd->engine_ordinal_ = qit->second.engine_ordinal_;
-            cmd->engine_index_ = qit->second.engine_index_;
-            cmd->submit_time_ = host_timestamp;		//in ns
-            cmd->submit_time_device_ = device_timestamp;	//in ticks
-            cmd->tid_ = utils::GetTid();;
-            cmd->fence_ = fence;
-            // Exit callback will reset cmd->event_ and backfill cmd->instance_id_
-            local_device_submissions_.StageKernelCommand(cmd);
-
-            if (cmd_query) {
-              *cmd_query = *(command->command_metric_query_);
-              // Exit callback will reset cmd_query->metric_query_event_ and backfill cmd_query->instance_id_
-              local_device_submissions_.StageCommandMetricQuery(cmd_query);
-            }
-            else {
-              local_device_submissions_.StageCommandMetricQuery(nullptr);
-            }
-          }
-        }
-      }
+      PrepareToExecuteCommandListsLocked(cmdlists, count, qit->second.device_, qit->second.engine_ordinal_, qit->second.engine_index_, fence);
       command_lists_mutex_.unlock_shared();
     }
     command_queues_mutex_.unlock_shared();
+  }
+
+  void PrepareToExecuteCommandListsLocked(
+    ze_command_list_handle_t *cmdlists, uint32_t count, ze_device_handle_t device,
+    uint32_t engine_ordinal, uint32_t engine_index, ze_fence_handle_t fence) {
+
+    for (uint32_t i = 0; i < count; i++) {
+      ze_command_list_handle_t cmdlist = cmdlists[i];
+    
+      auto it = command_lists_.find(cmdlist);
+    
+      if (it == command_lists_.end()) {
+        std::cerr << "[ERROR] Command list (" << cmdlist << ") is not found to execute." << std::endl;
+        continue;
+      }
+
+      if (!it->second->immediate_) {
+        if (it->second->timestamp_event_to_signal_) {
+          if (zeEventQueryStatus(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
+            auto status = zeEventHostSynchronize(it->second->timestamp_event_to_signal_, UINT64_MAX);
+            if (status != ZE_RESULT_SUCCESS) {
+              std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
+              return;
+            }
+          }
+          ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted last time are processed
+          if (zeEventHostReset(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {    // reset event 
+            std::cerr << "[ERROR] Failed to reset timestamp event" << std::endl;
+            return;
+          }
+        }
+      }
+    }
+
+    uint64_t host_timestamp;
+    uint64_t device_timestamp;
+    ze_result_t status;
+
+    status = zeDeviceGetGlobalTimestamps(device, &host_timestamp, &device_timestamp);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    for (uint32_t i = 0; i < count; i++) {
+      ze_command_list_handle_t cmdlist = cmdlists[i];
+    
+      auto it = command_lists_.find(cmdlist);
+    
+      if (it == command_lists_.end()) {
+        std::cerr << "[ERROR] Command list (" << cmdlist << ") is not found to execute." << std::endl;
+        continue;
+      }
+
+      if (!it->second->immediate_) {
+        for (auto command : it->second->commands_) {
+          ZeCommand *cmd = nullptr;
+          ZeCommandMetricQuery *cmd_query = nullptr;
+        
+          cmd = local_device_submissions_.GetKernelCommand();
+
+          if (command->command_metric_query_ != nullptr) {
+            cmd_query = local_device_submissions_.GetCommandMetricQuery();
+          }
+          *cmd = *command;
+
+          cmd->engine_ordinal_ = engine_ordinal;
+          cmd->engine_index_ =engine_index;
+          cmd->submit_time_ = host_timestamp;		//in ns
+          cmd->submit_time_device_ = device_timestamp;	//in ticks
+          cmd->tid_ = utils::GetTid();;
+          cmd->fence_ = fence;
+          // Exit callback will reset cmd->event_ and backfill cmd->instance_id_
+          local_device_submissions_.StageKernelCommand(cmd);
+
+          if (cmd_query) {
+            *cmd_query = *(command->command_metric_query_);
+            // Exit callback will reset cmd_query->metric_query_event_ and backfill cmd_query->instance_id_
+            local_device_submissions_.StageCommandMetricQuery(cmd_query);
+          }
+          else {
+            local_device_submissions_.StageCommandMetricQuery(nullptr);
+          }
+        }
+      }
+    }
   }
 
   void CreateImage(ze_image_handle_t image, size_t size) {
@@ -4066,6 +4070,7 @@ class ZeCollector {
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
     zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
       collector->AppendCommand(Barrier, *(params->phSignalEvent), query,
           *(params->phCommandList), kids);
@@ -4618,6 +4623,26 @@ class ZeCollector {
     modules_on_devices_mutex_.lock();
     modules_on_devices_.erase(mod);
     modules_on_devices_mutex_.unlock();
+  }
+
+  static void OnExitCommandListImmediateAppendCommandListsExp(
+    ze_command_list_immediate_append_command_lists_exp_params_t* params,
+    ze_result_t result,
+    void* global_data,
+    void** instance_data, std::vector<uint64_t> *kids) {
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+      collector->command_lists_mutex_.lock_shared();
+
+      auto it = collector->command_lists_.find(*(params->phCommandListImmediate));
+      if (it != collector->command_lists_.end()) {
+        collector->PrepareToExecuteCommandListsLocked(*(params->pphCommandLists), *(params->pnumCommandLists),
+                                                it->second->device_, it->second->engine_ordinal_, it->second->engine_index_, nullptr);
+        local_device_submissions_.SubmitStagedKernelCommandAndMetricQueries(collector->event_cache_, kids);
+      }
+      collector->command_lists_mutex_.unlock_shared();
+    }
   }
 
 #if !defined(ZEX_STRUCTURE_KERNEL_REGISTER_FILE_SIZE_EXP)

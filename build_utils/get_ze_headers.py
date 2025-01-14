@@ -30,7 +30,7 @@ def main():
     os.mkdir(os.path.join(dst_path, "layers"))
   src_path = os.path.join(clone_path, "include", "layers")
   build_utils.copy(src_path, os.path.join(dst_path, "layers"),\
-    ["zel_tracing_api.h"])
+    ["zel_tracing_api.h", "zel_tracing_register_cb.h"])
 
 if __name__ == "__main__":
   main()
