@@ -1500,7 +1500,8 @@ class ZeCollector {
             ze_instance_data.timestamp_device;  // append time and submit time are the same
         command->queue = reinterpret_cast<ze_command_queue_handle_t>(command->command_list);
         kernel_command_list_.push_back(std::move(p_command));
-        SPDLOG_TRACE("\tcommand: {} pushed to kernel_command_list_", (void*)command);
+        SPDLOG_TRACE("\tImmediate CmdList, command: {} pushed to kernel_command_list_, queue: {}",
+                     static_cast<void*>(command), static_cast<void*>(command->queue));
         kids->push_back(command->kernel_id);
       } else {
         command_list_info.kernel_commands.push_back(std::move(p_command));

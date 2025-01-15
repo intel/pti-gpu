@@ -11,6 +11,7 @@
 #include "utils.h"
 #include "utils/sycl_config_info.h"
 #include "utils/test_helpers.h"
+#include "utils/ze_utils.h"
 
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
@@ -56,6 +57,10 @@ uint64_t num_of_overhead_counts = 0;
 bool buffer_size_atleast_largest_record = false;
 uint64_t last_kernel_timestamp = 0;
 uint64_t user_real_timestamp = 0;
+
+uint8_t device_uuid_test[PTI_MAX_DEVICE_UUID_SIZE] = {};
+pti_backend_ctx_t context_test = nullptr;
+pti_backend_queue_t queue_test = nullptr;
 
 // TODO - make the enable type param more generic (maybe a bitmap of somesort) so that we can enable
 // a mishmash of types
@@ -157,6 +162,14 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
       if (pti::test::utils::IsIntegratedGraphics(dev_)) {
         expected_mem_transfers_per_mult_ = 1;
       }
+      auto device_l0_test = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(dev_);
+      if (device_l0_test) {
+        ASSERT_TRUE(utils::ze::GetDeviceUUID(device_l0_test, device_uuid_test));
+        samples_utils::print_uuid(device_uuid_test, "Test Device UUID: ");
+      } else {
+        FAIL() << "PTI doesn't support this backend yet. Backend is not Level Zero";
+      }
+
     } catch (const sycl::exception& e) {
       FAIL() << "Unable to select valid device to run tests on. Check your hardware, driver "
                 "install, or system configuration.";
@@ -197,6 +210,8 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     last_kernel_timestamp = 0;
     user_real_timestamp = 0;
     sycl_has_all_records = false;
+    context_test = nullptr;
+    queue_test = nullptr;
   }
 
   void TearDown() override {
@@ -361,9 +376,16 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
             kernel_has_enqk_begin0_record = true;
           }
           last_kernel_timestamp = rec->_end_timestamp;
+          ASSERT_EQ(rec->_context_handle, context_test);
+          ASSERT_EQ(rec->_queue_handle, queue_test);
+          std::cout << " == Queue reported by PTI: " << rec->_queue_handle << std::endl;
+
           if (samples_utils::stringify_uuid(rec->_device_uuid, "") !=
               "00000000-0000-0000-0000-000000000000") {
             kernel_uuid_zero = false;
+            samples_utils::print_uuid(rec->_device_uuid, "Kernel Device UUID: ");
+            ASSERT_EQ(std::memcmp(rec->_device_uuid, device_uuid_test, PTI_MAX_DEVICE_UUID_SIZE),
+                      0);
           }
           break;
         }
@@ -376,14 +398,14 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     ::operator delete(buf);
   }
 
-  void RunGemm() {
+  void RunGemm(bool do_immediate = true) {
     StartTracing();
-    RunGemmNoTrace();
+    RunGemmNoTrace(do_immediate);
     StopTracing();
     ptiFlushAllViews();
   }
 
-  void RunGemmNoTrace() {
+  void RunGemmNoTrace(bool do_immediate = true) {
     ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid_);
     ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0,
                                      eid_ + 10);
@@ -396,14 +418,37 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     ptiViewPushExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_2,
                                      eid_ + 40);
 
-    sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
+    sycl::property_list prop_list;
+
+    if (do_immediate) {
+      sycl::property_list prop{sycl::property::queue::in_order(),
+                               sycl::property::queue::enable_profiling(),
+                               sycl::ext::intel::property::queue::immediate_command_list()};
+      prop_list = prop;
+    } else {
+      sycl::property_list prop{sycl::property::queue::in_order(),
+                               sycl::property::queue::enable_profiling(),
+                               sycl::ext::intel::property::queue::no_immediate_command_list()};
+      prop_list = prop;
+    }
+
     sycl::queue queue(dev_, sycl::async_handler{}, prop_list);
+
+    auto sycl_context = queue.get_context();
+    context_test = static_cast<pti_backend_ctx_t>(
+        sycl::get_native<sycl::backend::ext_oneapi_level_zero>(sycl_context));
 
     std::cout << "DPC++ Matrix Multiplication (matrix size: " << size_ << " x " << size_
               << ", repeats " << repeat_count_ << " times)" << std::endl;
     std::cout << "Target device: "
               << queue.get_info<sycl::info::queue::device>().get_info<sycl::info::device::name>()
               << std::endl;
+
+    queue_test = samples_utils::GetLevelZeroBackendQueue(queue);
+    if (queue_test == nullptr) {
+      FAIL() << "Underlying level zero queue handle could not be obtained.";
+    }
+    std::cout << " == Native Queue reported by Sycl: " << queue_test << std::endl;
 
     std::vector<float> a(size_ * size_, A_VALUE);
     std::vector<float> b(size_ * size_, B_VALUE);
@@ -655,14 +700,13 @@ TEST_F(MainFixtureTest, ZeroDiffICLonOroff) {
   uint64_t kernel_view_record_count_off = 0;
 
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", "1");
-  RunGemm();
+  RunGemm(true);
   kernel_view_record_count_on = kernel_view_record_count;
   memory_view_record_count_on = memory_view_record_count;
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", "0");
   kernel_view_record_count = 0;
   memory_view_record_count = 0;
-  RunGemm();
+  queue_test = nullptr;
+  RunGemm(false);
   kernel_view_record_count_off = kernel_view_record_count;
   memory_view_record_count_off = memory_view_record_count;
   ASSERT_EQ(kernel_view_record_count_on - kernel_view_record_count_off, 0ULL);

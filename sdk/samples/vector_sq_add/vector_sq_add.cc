@@ -226,7 +226,7 @@ int main() {
                 if (std::strstr(rec->_name, "EnqueueMem") != nullptr) {
                   runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = "unknown_at_this_point";
                 }
-                samples_utils::dump_record(rec);
+                samples_utils::DumpRecord(rec);
                 break;
               }
               case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
@@ -237,7 +237,7 @@ int main() {
                     reinterpret_cast<pti_view_record_memory_copy *>(ptr);
                 runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
                 std::cout << "Found Memory Record" << '\n';
-                samples_utils::dump_record(rec);
+                samples_utils::DumpRecord(rec);
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
@@ -251,7 +251,7 @@ int main() {
                     reinterpret_cast<pti_view_record_memory_fill *>(ptr);
                 runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
                 std::cout << "Found Memory Record" << '\n';
-                samples_utils::dump_record(rec);
+                samples_utils::DumpRecord(rec);
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
@@ -264,7 +264,7 @@ int main() {
                 pti_view_record_kernel *rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
                 runtime_enq_2_gpu_kernel_name_map[rec->_correlation_id] = rec->_name;
                 std::cout << "Found Kernel Record" << '\n';
-                samples_utils::dump_record(rec);
+                samples_utils::DumpRecord(rec);
 
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
@@ -299,7 +299,7 @@ int main() {
 
                 external_corr_map[std::pair{rec->_external_kind, rec->_external_id}].push_back(
                     rec->_correlation_id);
-                samples_utils::dump_record(rec);
+                samples_utils::DumpRecord(rec);
                 break;
               }
               default: {

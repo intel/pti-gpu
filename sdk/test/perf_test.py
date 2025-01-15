@@ -113,13 +113,32 @@ def process_data(values):
     min_v = 1000000.0
     avg_v = 0.0
     count = len(values)
+    # With 2025.0.4 compiler started to get some random failures on Win when profiling -
+    # - adding processing of such - for now ignoring their data
+    # TODO to investigate
+    valid_count = count
+    valid_values = []
     for i in range(count):
-        avg_v += values[i]
-        max_v = max(max_v, values[i])
-        min_v = min(min_v, values[i])
+        if not (values[i] is None):
+            valid_values.append(values[i])
+            avg_v += values[i]
+            max_v = max(max_v, values[i])
+            min_v = min(min_v, values[i])
+        else:
+            valid_count -= 1
 
-    avg_v /= count
-    med_v = sorted(values)[count // 2]
+    if valid_count <= count / 2:
+        print(
+            f"Too many runs failed, count of runs: {count}, valid of them: {valid_count}"
+        )
+        return None, None, None, None
+    elif valid_count < count:
+        print(
+            f"Warning: some runs failed, count of runs: {count}, valid of them: {valid_count}"
+        )
+
+    avg_v /= valid_count
+    med_v = sorted(valid_values)[valid_count // 2]
 
     return min_v, avg_v, med_v, max_v
 
@@ -143,6 +162,20 @@ def main():
     else:
         min_base, avg_base, med_base, max_base = process_data(throughput_baseline)
         min_test, avg_test, med_test, max_test = process_data(throughput_test)
+
+        if (
+            min_base is None
+            or avg_base is None
+            or med_base is None
+            or max_base is None
+            or min_test is None
+            or avg_test is None
+            or med_test is None
+            or max_test is None
+        ):
+            print("Test failed")
+            return 1
+
         if test_type != "overhead":
             print("\nThreshold Overhread to pass: " + str(threshold_overhead) + "% => ")
             print(

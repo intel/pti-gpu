@@ -168,7 +168,7 @@ int main()
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
-              samples_utils::dump_record(
+              samples_utils::DumpRecord(
                   reinterpret_cast<pti_view_record_overhead *>(ptr));
               break;
             }
@@ -176,7 +176,7 @@ int main()
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
-              samples_utils::dump_record(
+              samples_utils::DumpRecord(
                   reinterpret_cast<pti_view_record_external_correlation *>(
                       ptr));
               break;
@@ -186,7 +186,7 @@ int main()
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Sycl Runtime Record" << '\n';
-              samples_utils::dump_record(
+              samples_utils::DumpRecord(
                   reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
               break;
             }
@@ -195,7 +195,7 @@ int main()
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Memory Record" << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_copy *>(ptr));
+              samples_utils::DumpRecord(reinterpret_cast<pti_view_record_memory_copy *>(ptr));
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
@@ -206,7 +206,7 @@ int main()
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Memory Record" << '\n';
-              samples_utils::dump_record(reinterpret_cast<pti_view_record_memory_fill *>(ptr));
+              samples_utils::DumpRecord(reinterpret_cast<pti_view_record_memory_fill *>(ptr));
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
@@ -218,7 +218,7 @@ int main()
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Kernel Record" << '\n';
-              samples_utils::dump_record(rec);
+              samples_utils::DumpRecord(rec);
               if (samples_utils::isMonotonic(
                                   {
                                     rec->_sycl_task_begin_timestamp ,

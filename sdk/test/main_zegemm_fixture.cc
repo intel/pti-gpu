@@ -54,6 +54,10 @@ uint64_t corrid_in_special_record = 0;
 uint64_t external_corrid_in_ext_rec = 0;
 std::vector<pti_view_record_memory_copy> copy_records;
 std::vector<pti_view_record_kernel> kernel_records;
+ze_device_uuid_t device_uuid = {};
+ze_context_handle_t context_test = nullptr;
+ze_command_queue_handle_t queue_test_kernel = nullptr;
+ze_command_queue_handle_t queue_test_mem_copy = nullptr;
 
 // TODO - make the enable type param more generic (maybe a bitmap of somesort) so that we can enable
 // a mishmash of types
@@ -181,8 +185,13 @@ float RunWithPollingAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t devic
   ze_command_list_handle_t cmd_list_kernel = nullptr;
   status = zeCommandListCreateImmediate(context, device, &cmd_queue_desc_copy, &cmd_list_copy);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  queue_test_mem_copy = reinterpret_cast<ze_command_queue_handle_t>(cmd_list_copy);
+
   status = zeCommandListCreateImmediate(context, device, &cmd_queue_desc_kernel, &cmd_list_kernel);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  queue_test_kernel = reinterpret_cast<ze_command_queue_handle_t>(cmd_list_kernel);
 
   void* dev_a = nullptr;
   ze_device_mem_alloc_desc_t alloc_desc = {ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC, nullptr, 0, 0};
@@ -393,6 +402,9 @@ float RunAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device, ze_conte
   status = zeCommandQueueCreate(context, device, &cmd_queue_desc, &cmd_queue);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS && cmd_queue != nullptr);
 
+  queue_test_mem_copy = static_cast<ze_command_queue_handle_t>(cmd_queue);
+  queue_test_kernel = static_cast<ze_command_queue_handle_t>(cmd_queue);
+
   status = zeCommandQueueExecuteCommandLists(cmd_queue, 1, &cmd_list, nullptr);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
@@ -475,6 +487,7 @@ void Compute(ze_device_handle_t device, ze_driver_handle_t driver, const std::ve
   ze_context_handle_t context = utils::ze::GetContext(driver);
   PTI_ASSERT(context != nullptr);
 
+  context_test = context;
   ze_module_desc_t module_desc = {ZE_STRUCTURE_TYPE_MODULE_DESC,
                                   nullptr,
                                   ZE_MODULE_FORMAT_IL_SPIRV,
@@ -535,6 +548,10 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     external_corrid_in_ext_rec = 0;
     copy_records.clear();
     kernel_records.clear();
+    device_uuid = {};
+    context_test = nullptr;
+    queue_test_kernel = nullptr;
+    queue_test_mem_copy = nullptr;
   }
 
   void TearDown() override {
@@ -583,6 +600,10 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
             std::cout << "  End: " << rec->_end_timestamp << '\n';
             std::cout << "  Duration: " << duration << '\n';
             std::cout << "  Memcpy Type: " << rec->_memcpy_type << '\n';
+            ASSERT_EQ(std::memcmp(&rec->_device_uuid, &device_uuid, sizeof(ze_device_uuid_t)), 0);
+            ASSERT_EQ(context_test, reinterpret_cast<ze_context_handle_t>(rec->_context_handle));
+            ASSERT_EQ(queue_test_mem_copy,
+                      reinterpret_cast<ze_command_queue_handle_t>(rec->_queue_handle));
             copy_records.push_back(*rec);
           }
           break;
@@ -631,6 +652,10 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
             std::cout << "  Start: " << rec->_start_timestamp << '\n';
             std::cout << "  End: " << rec->_end_timestamp << '\n';
             std::cout << "  Duration: " << duration << '\n';
+            ASSERT_EQ(std::memcmp(&rec->_device_uuid, &device_uuid, sizeof(ze_device_uuid_t)), 0);
+            ASSERT_EQ(context_test, reinterpret_cast<ze_context_handle_t>(rec->_context_handle));
+            ASSERT_EQ(queue_test_kernel,
+                      reinterpret_cast<ze_command_queue_handle_t>(rec->_queue_handle));
             kernel_records.push_back(*rec);
           }
           break;
@@ -689,6 +714,11 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
       return 0;
     }
 
+    if (!utils::ze::GetDeviceUUID(device, device_uuid.id)) {
+      std::cout << "Unable to get device UUID" << std::endl;
+      return 1;
+    }
+
     StartTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels);
 
     std::cout << "Level Zero Matrix Multiplication (matrix size: " << size << " x " << size
@@ -744,7 +774,7 @@ TEST_F(MainZeFixtureTest, ProfilingSuccededWhenEventPolling) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   capture_records = true;
   repeat_count = 1;
-  RunGemm(true);
+  EXPECT_EQ(RunGemm(), 0);
   EXPECT_EQ(copy_records.size(), static_cast<std::size_t>(3));
   auto m2d_1 = static_cast<std::size_t>(-1);
   auto m2d_2 = static_cast<std::size_t>(-1);
@@ -785,7 +815,7 @@ TEST_F(MainZeFixtureTest, ProfilingSuccededWhenEventPolling) {
 
 TEST_F(MainZeFixtureTest, ZeInitializationSucceeded) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   EXPECT_EQ(ze_initialization_succeeded, true);
 }
 
@@ -794,70 +824,69 @@ TEST_F(MainZeFixtureTest, NegTestBufferSizeAtleastLargestRecord) {
   // or existing callbacks.
   EXPECT_EQ(ptiViewSetCallbacks(InadequateBufferRequested, BufferCompleted),
             pti_result::PTI_ERROR_BAD_ARGUMENT);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   ASSERT_EQ(rejected_buffer_calls, 1 * repeat_count);
 }
 
 TEST_F(MainZeFixtureTest, BufferSizeAtleastLargestRecord) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   ASSERT_EQ(buffer_size_atleast_largest_record, true);
 }
 
 TEST_F(MainZeFixtureTest, BufferCallBacksRegistered) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   EXPECT_EQ(buffer_cb_registered, true);
 }
 
 TEST_F(MainZeFixtureTest, SecondCallbackCalled) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   EXPECT_GT(completed_buffer_used_bytes, static_cast<size_t>(0));
 }
 
 TEST_F(MainZeFixtureTest, MemoryViewRecordCreated) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   EXPECT_EQ(memory_view_record_created, true);
 }
 
 TEST_F(MainZeFixtureTest, KernelViewRecordCreated) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   EXPECT_EQ(kernel_view_record_created, true);
 }
 
 TEST_F(MainZeFixtureTest, NumberOfExpectedMemoryRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   EXPECT_EQ(memory_view_record_count, 3 * repeat_count);
 }
 
 TEST_F(MainZeFixtureTest, NumberOfExpectedKernelRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   EXPECT_EQ(kernel_view_record_count, 1 * repeat_count);
 }
 
 TEST_F(MainZeFixtureTest, RequestedAndCompletedBuffers) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   EXPECT_EQ(requested_buffer_calls, completed_buffer_calls);
 }
 
 TEST_F(MainZeFixtureTest, NegTestNullBufferSize) {
   ASSERT_EQ(ptiViewSetCallbacks(NullBufferRequested, BufferCompleted),
             pti_result::PTI_ERROR_BAD_ARGUMENT);
-  RunGemm();
+  EXPECT_EQ(RunGemm(), 0);
   ASSERT_EQ(rejected_buffer_calls, 1 * repeat_count);
 }
 
 TEST_F(MainZeFixtureTest, SyclBasedAndZeBasedKernelLaunchesPresent) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm(
-      false, true, false, true,
-      true);  // enable sycl and kernel view kinds only. Additionally run Sycl based launch kernel.
+  // Enable sycl and kernel view kinds only. Additionally run Sycl based launch kernel.
+  EXPECT_EQ(RunGemm(false, true, false, true, true), 0);
   EXPECT_EQ(special_record_seen, true);
   EXPECT_EQ(num_special_records, repeat_count);
   EXPECT_EQ(sycl_runtime_launch_seen, true);
@@ -871,7 +900,8 @@ TEST_P(MainZeFixtureTest, SpecialRecordPresent) {
   //     whether we enable the viewkinds for --- sycl, zecalls, kernel.
   auto [sycl, zecall, kernel] = GetParam();
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunGemm(false, sycl, zecall, kernel);  // polling, sycl, zecalls --- enabled/disabled
+  // Polling, sycl, zecalls --- enabled/disabled
+  EXPECT_EQ(RunGemm(false, sycl, zecall, kernel), 0);
   if (sycl == true && zecall == false && kernel == true) {
     EXPECT_EQ(special_record_seen, true);
     EXPECT_EQ(zecall_record_seen, false);

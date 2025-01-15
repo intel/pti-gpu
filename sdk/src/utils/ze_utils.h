@@ -454,6 +454,27 @@ inline bool GetDeviceTimerFrequency_TimestampMask_UUID(ze_device_handle_t device
   return true;
 }
 
+inline bool GetDeviceUUID(ze_device_handle_t device, uint8_t* uuid, bool measure_overhead = false) {
+  PTI_ASSERT(device != nullptr);
+
+  ze_device_properties_t props;
+  std::memset(&props, 0, sizeof(props));
+  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
+  props.pNext = nullptr;
+  if (measure_overhead) {
+    overhead::Init();
+  }
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  if (measure_overhead) {
+    overhead_fini(zeDeviceGetProperties_id);
+  }
+  if (status != ZE_RESULT_SUCCESS) {
+    return false;
+  }
+  std::copy_n(props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE, uuid);
+  return true;
+}
+
 inline ze_api_version_t GetVersion() {
   auto driver_list = GetDriverList();
   if (driver_list.empty()) {

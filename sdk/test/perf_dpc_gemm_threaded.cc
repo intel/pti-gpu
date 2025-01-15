@@ -185,14 +185,14 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
                      "-----------------------------"
                   << '\n';
         std::cout << "Found Sycl Runtime Record" << '\n';
-        samples_utils::dump_record(reinterpret_cast<pti_view_record_sycl_runtime*>(ptr));
+        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_sycl_runtime*>(ptr));
         break;
       }
       case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
-        samples_utils::dump_record(reinterpret_cast<pti_view_record_external_correlation*>(ptr));
+        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_external_correlation*>(ptr));
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
@@ -203,7 +203,7 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
 
         pti_view_record_memory_copy* p_memory_rec =
             reinterpret_cast<pti_view_record_memory_copy*>(ptr);
-        samples_utils::dump_record(p_memory_rec);
+        samples_utils::DumpRecord(p_memory_rec);
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
@@ -224,7 +224,7 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
 
         pti_view_record_memory_fill* p_memory_rec =
             reinterpret_cast<pti_view_record_memory_fill*>(ptr);
-        samples_utils::dump_record(p_memory_rec);
+        samples_utils::DumpRecord(p_memory_rec);
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
@@ -244,7 +244,7 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         std::cout << "Found Kernel Record" << '\n';
 
         pti_view_record_kernel* p_kernel_rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
-        samples_utils::dump_record(p_kernel_rec);
+        samples_utils::DumpRecord(p_kernel_rec);
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';

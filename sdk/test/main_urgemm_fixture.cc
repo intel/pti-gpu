@@ -304,7 +304,7 @@ class MainUrFixtureTest : public ::testing::Test {
           memory_view_record_count += 1;
           pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
           std::cout << " --- Found Memory Copy Record" << '\n';
-          samples_utils::dump_record(rec);
+          samples_utils::DumpRecord(rec);
 
           if (memcmp(rec->_device_uuid, zero_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
             EXPECT_TRUE(false) << "Device UUID is zero, which is not expected";
@@ -319,7 +319,7 @@ class MainUrFixtureTest : public ::testing::Test {
           memory_view_record_created = true;
           std::cout << " --- Found Memory Fill Record" << '\n';
           pti_view_record_memory_fill* rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
-          samples_utils::dump_record(rec);
+          samples_utils::DumpRecord(rec);
 
           if (memcmp(rec->_device_uuid, zero_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
             EXPECT_TRUE(false) << "Device UUID is zero, which is not expected";
