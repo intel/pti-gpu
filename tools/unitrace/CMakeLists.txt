@@ -246,6 +246,11 @@ configure_file(${PROJECT_SOURCE_DIR}/scripts/tracemerge/mergetrace.py ${CMAKE_BI
 configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/analyzeperfmetrics.py ${CMAKE_BINARY_DIR}/scripts/metrics/analyzeperfmetrics.py COPYONLY)
 configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/addrasm.py ${CMAKE_BINARY_DIR}/scripts/metrics/addrasm.py COPYONLY)
 configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/ComputeBasic.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/pvc/ComputeBasic.txt COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/GpuOffload.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/pvc/GpuOffload.txt COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/MemProfile.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/pvc/MemProfile.txt COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/L1ProfileReads.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/pvc/L1ProfileReads.txt COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/L1ProfileWrites.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/pvc/L1ProfileWrites.txt COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/L1ProfileSlmBankConflicts.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/pvc/L1ProfileSlmBankConflicts.txt COPYONLY)
 
 # Installation
 install(TARGETS unitrace)
