@@ -564,14 +564,22 @@ class ZeCollector {
   }
 
   const ZeCommandListInfo& GetCommandListInfoConst(ze_command_list_handle_t clist_handle) {
+    if (!CommandListInfoExists(clist_handle)) {
+      auto result = ReBuildCommandListInfo(clist_handle);
+      PTI_ASSERT(result == ZE_RESULT_SUCCESS);  // Can't happen - unsupported mode (non-local).
+    }
+
     std::shared_lock lock(command_list_map_mutex_);
-    PTI_ASSERT(command_list_map_.count(clist_handle) == 1);
     return command_list_map_[clist_handle];
   }
 
   ZeCommandListInfo& GetCommandListInfo(ze_command_list_handle_t clist_handle) {
+    if (!CommandListInfoExists(clist_handle)) {
+      auto result = ReBuildCommandListInfo(clist_handle);
+      PTI_ASSERT(result == ZE_RESULT_SUCCESS);  // Can't happen - unsupported mode (non-local).
+    }
+
     std::shared_lock lock(command_list_map_mutex_);
-    PTI_ASSERT(command_list_map_.count(clist_handle) == 1);
     return command_list_map_[clist_handle];
   }
 
@@ -997,7 +1005,6 @@ class ZeCollector {
   void PrepareToExecuteCommandLists(ze_command_list_handle_t* command_lists,
                                     uint32_t command_list_count, ze_command_queue_handle_t queue,
                                     ze_fence_handle_t fence) {
-    const std::lock_guard<std::mutex> lock(lock_);
     uint32_t q_index;
     uint32_t q_ordinal;
     uint64_t host_time_sync = 0;
@@ -1029,6 +1036,7 @@ class ZeCollector {
       overhead_fini(zeDeviceGetGlobalTimestamps_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
+      const std::lock_guard<std::mutex> lock(lock_);
       if (queue_ordinal_index_map_.count(queue) == 0) {
         ze_result_t res = l0_wrapper_.w_zeCommandQueueGetIndex(queue, &q_index);
         ze_result_t res2 = l0_wrapper_.w_zeCommandQueueGetOrdinal(queue, &q_ordinal);
@@ -1058,20 +1066,24 @@ class ZeCollector {
 
   void PostSubmitKernelCommands(ze_command_list_handle_t* command_lists,
                                 uint32_t command_list_count, std::vector<uint64_t>* kids) {
-    const std::lock_guard<std::mutex> lock(lock_);
-
     for (uint32_t i = 0; i < command_list_count; ++i) {
       ze_command_list_handle_t clist = command_lists[i];
       PTI_ASSERT(clist != nullptr);
       ZeCommandListInfo& info = GetCommandListInfo(clist);
+      // info is a reference to an element in this map, which we're modifying here.
+      const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
       // as all command lists submitted to the execution into queue - they are not immediate
+      // TODO: does this effect zeCommandListImmediateAppendCommandListsExp ?
       PTI_ASSERT(!info.immediate);
       for (auto it = info.kernel_commands.begin(); it != info.kernel_commands.end(); it++) {
         ZeKernelCommand* command = (*it).get();
         if (kids) {
           kids->push_back(command->kernel_id);
         }
-        kernel_command_list_.push_back(std::move(*it));
+        {
+          const std::lock_guard<std::mutex> lock(lock_);
+          kernel_command_list_.push_back(std::move(*it));
+        }
       }
       info.kernel_commands.clear();
     }
