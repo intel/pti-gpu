@@ -10,12 +10,15 @@
 #include <math.h>
 #include <string.h>
 
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <vector>
 
+#include "pti/pti.h"
 #include "pti/pti_view.h"
 #include "utils.h"
 #include "utils/test_helpers.h"
@@ -49,7 +52,7 @@ float Check(const std::vector<float>& a, float value) {
   float eps = 0.0f;
   for (size_t i = 0; i < a.size(); ++i) {
     if (i < 10) std::cout << i << ": " << a[i] << "\n";
-    eps += fabs((a[i] - value) / value);
+    eps += std::fabs((a[i] - value) / value);
   }
 
   std::cout << "Check: " << eps << ":" << a.size() << " : " << value << "\n";
@@ -333,7 +336,7 @@ float RunAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device, ze_conte
   ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, 0, ZE_EVENT_SCOPE_FLAG_HOST,
                                 ZE_EVENT_SCOPE_FLAG_HOST};
   ze_event_handle_t event = nullptr;
-  zeEventCreate(event_pool, &event_desc, &event);
+  status = zeEventCreate(event_pool, &event_desc, &event);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   ze_group_count_t dim = {size / group_size[0], size / group_size[1], 1};
@@ -764,6 +767,407 @@ TEST_F(MainZeFixtureTest, NegTestNullBufferSize) {
   ASSERT_EQ(rejected_buffer_calls, 1 * repeat_count);
 }
 
+
+class LocalModeZeGemmTest : public testing::Test {
+ protected:
+  LocalModeZeGemmTest()
+      : spv_binary_(utils::LoadBinaryFile(utils::GetExecutablePath() + kKernelFile)) {
+    a_vector_ = std::vector<float>(size_ * size_, A_VALUE);
+    b_vector_ = std::vector<float>(size_ * size_, B_VALUE);
+    result_vector_ = std::vector<float>(size_ * size_, 0);
+  }
+
+  void EnableView(pti_view_kind view) {
+    EXPECT_EQ(ptiViewEnable(view), PTI_SUCCESS);
+    enabled_views_.push_back(view);
+  }
+
+  void DisableAndFlushAllViews() {
+    for (auto view : enabled_views_) {
+      EXPECT_EQ(ptiViewDisable(view), PTI_SUCCESS);
+    }
+    enabled_views_.clear();
+    EXPECT_EQ(ptiFlushAllViews(), PTI_SUCCESS);
+  }
+
+  void InitializeDrivers() {
+    auto status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+    drv_ = utils::ze::GetGpuDriver(kPtiDeviceId);
+    dev_ = utils::ze::GetGpuDevice(kPtiDeviceId);
+    ASSERT_NE(drv_, nullptr);
+    ctx_ = utils::ze::GetContext(drv_);
+  }
+
+  void InitializeEvent() {
+    ze_event_pool_desc_t event_pool_desc = {
+        ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
+        ZE_EVENT_POOL_FLAG_HOST_VISIBLE,  // all events in pool are visible to Host
+        num_events_                       // count
+    };
+
+    if (event_timestamps_enabled_) {
+      event_pool_desc.flags |= ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP;
+    }
+
+    ASSERT_NE(ctx_, nullptr);
+    ASSERT_NE(dev_, nullptr);
+    auto status = zeEventPoolCreate(ctx_, &event_pool_desc, 1, &dev_, &evt_pl_);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+
+    const ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, 0,
+                                        ZE_EVENT_SCOPE_FLAG_HOST, ZE_EVENT_SCOPE_FLAG_HOST};
+
+    ASSERT_NE(evt_pl_, nullptr);
+    status = zeEventCreate(evt_pl_, &event_desc, &evt_);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  void InitializeQueue() {
+    ze_command_queue_desc_t cmd_queue_desc = {
+        ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC, nullptr, 0, 0, 0, ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS,
+        ZE_COMMAND_QUEUE_PRIORITY_NORMAL};
+
+    auto status = zeCommandQueueCreate(ctx_, dev_, &cmd_queue_desc, &cmd_q_);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+
+    ze_command_list_desc_t cmd_list_desc = {ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC, nullptr, 0, 0};
+
+    if (kInorderQueue) {
+      cmd_list_desc.flags |= ZE_COMMAND_LIST_FLAG_IN_ORDER;
+    }
+
+    status = zeCommandListCreate(ctx_, dev_, &cmd_list_desc, &cmd_list_);
+
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  void SetKernelGroupSize() {
+    ASSERT_NE(knl_, nullptr);
+    auto status = zeKernelSuggestGroupSize(knl_, size_, size_, 1, std::data(group_size_),
+                                           std::data(group_size_) + 1, std::data(group_size_) + 2);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+
+    if ((size_ % group_size_[0]) != 0 || (size_ % group_size_[1]) != 0) {
+      FAIL() << "Non-uniform group size";
+    }
+    status = zeKernelSetGroupSize(knl_, group_size_[0], group_size_[1], group_size_[2]);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  void* AllocateDeviceBuffer(size_t size, size_t alignment) {
+    void* storage = nullptr;
+    const ze_device_mem_alloc_desc_t alloc_desc = {ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC, nullptr,
+                                                   0, 0};
+    if (!ctx_) {
+      return nullptr;
+    }
+    if (!dev_) {
+      return nullptr;
+    }
+
+    auto status = zeMemAllocDevice(ctx_, &alloc_desc, size, alignment, dev_, &storage);
+
+    if (status != ZE_RESULT_SUCCESS) {
+      return nullptr;
+    }
+
+    return storage;
+  }
+
+  template <typename T>
+  void AppendCopyToDevice(void* dev, const T& host_container) {
+    ASSERT_NE(cmd_list_, nullptr);
+    ASSERT_NE(dev, nullptr);
+    auto status = zeCommandListAppendMemoryCopy(
+        cmd_list_, dev, std::data(host_container),
+        std::size(host_container) * sizeof(typename T::value_type), nullptr, 0, nullptr);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  template <typename T>
+  void AppendCopyFromDevice(T& host_container, const void* dev) {
+    ASSERT_NE(cmd_list_, nullptr);
+    ASSERT_NE(dev, nullptr);
+    auto status = zeCommandListAppendMemoryCopy(
+        cmd_list_, std::data(host_container), dev,
+        std::size(host_container) * sizeof(typename T::value_type), nullptr, 0, nullptr);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  void AppendBarrier() {
+    ASSERT_NE(cmd_list_, nullptr);
+    auto status = zeCommandListAppendBarrier(cmd_list_, nullptr, 0, nullptr);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  void AppendGemmKernel() {
+    ASSERT_NE(group_size_[0], 0);
+    ASSERT_NE(group_size_[1], 0);
+    const ze_group_count_t dim = {size_ / group_size_[0], size_ / group_size_[1], 1};
+    ASSERT_NE(cmd_list_, nullptr);
+    auto status = zeCommandListAppendLaunchKernel(cmd_list_, knl_, &dim, evt_, 0, nullptr);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  void ValidateGemmKernel() {
+    float expected_result = A_VALUE * B_VALUE * static_cast<float>(size_);
+    auto eps = Check(result_vector_, expected_result);
+    ASSERT_LE(eps, MAX_EPS);
+  }
+
+  void PrepareCommandList() {
+    AppendCopyToDevice(a_buf_, a_vector_);
+    AppendCopyToDevice(b_buf_, b_vector_);
+    AppendBarrier();
+    AppendGemmKernel();
+    AppendBarrier();
+    AppendCopyFromDevice(result_vector_, result_buf_);
+    AppendBarrier();
+    ASSERT_NE(cmd_list_, nullptr);
+    auto status = zeCommandListClose(cmd_list_);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  void SetKernelArguments() {
+    a_buf_ = AllocateDeviceBuffer(size_ * size_ * sizeof(typename decltype(a_vector_)::value_type),
+                                  ALIGN);
+    ASSERT_NE(a_buf_, nullptr);
+
+    b_buf_ = AllocateDeviceBuffer(size_ * size_ * sizeof(typename decltype(b_vector_)::value_type),
+                                  ALIGN);
+    ASSERT_NE(b_buf_, nullptr);
+
+    result_buf_ = AllocateDeviceBuffer(
+        size_ * size_ * sizeof(typename decltype(result_vector_)::value_type), ALIGN);
+    ASSERT_NE(result_buf_, nullptr);
+
+    ASSERT_NE(knl_, nullptr);
+    auto status = zeKernelSetArgumentValue(knl_, 0, sizeof(a_buf_), &a_buf_);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+    status = zeKernelSetArgumentValue(knl_, 1, sizeof(b_buf_), &b_buf_);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+    status = zeKernelSetArgumentValue(knl_, 2, sizeof(result_buf_), &result_buf_);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+    status = zeKernelSetArgumentValue(knl_, 3, sizeof(size_), &size_);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  void CreateKernel() {
+    const ze_module_desc_t module_desc = {ZE_STRUCTURE_TYPE_MODULE_DESC,
+                                          nullptr,
+                                          ZE_MODULE_FORMAT_IL_SPIRV,
+                                          std::size(spv_binary_),
+                                          std::data(spv_binary_),
+                                          nullptr,
+                                          nullptr};
+
+    auto status = zeModuleCreate(ctx_, dev_, &module_desc, &mdl_, nullptr);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+
+    ASSERT_NE(mdl_, nullptr);
+    const ze_kernel_desc_t kernel_desc = {ZE_STRUCTURE_TYPE_KERNEL_DESC, nullptr, 0, kKernelName};
+    status = zeKernelCreate(mdl_, &kernel_desc, &knl_);
+    ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  }
+
+  void SetUp() override {
+    if (ptiViewGPULocalAvailable() != pti_result::PTI_SUCCESS) {
+      GTEST_SKIP() << "GPULocal is not available. Skipping Test Suite";
+    }
+    ASSERT_NE(std::size(spv_binary_), 0ULL);
+
+    ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer), pti_result::PTI_SUCCESS);
+
+    LocalModeZeGemmTestData::Instance().Reset();
+  }
+
+  void TearDown() override {
+    DisableAndFlushAllViews();
+
+    // TODO: RAII-ify this
+    if (result_buf_) {
+      EXPECT_EQ(zeMemFree(ctx_, result_buf_), ZE_RESULT_SUCCESS);
+    }
+
+    if (b_buf_) {
+      EXPECT_EQ(zeMemFree(ctx_, b_buf_), ZE_RESULT_SUCCESS);
+    }
+
+    if (a_buf_) {
+      EXPECT_EQ(zeMemFree(ctx_, a_buf_), ZE_RESULT_SUCCESS);
+    }
+
+    if (cmd_list_) {
+      EXPECT_EQ(zeCommandListDestroy(cmd_list_), ZE_RESULT_SUCCESS);
+    }
+
+    if (cmd_q_) {
+      EXPECT_EQ(zeCommandQueueDestroy(cmd_q_), ZE_RESULT_SUCCESS);
+    }
+
+    if (evt_) {
+      EXPECT_EQ(zeEventDestroy(evt_), ZE_RESULT_SUCCESS);
+    }
+
+    if (evt_pl_) {
+      EXPECT_EQ(zeEventPoolDestroy(evt_pl_), ZE_RESULT_SUCCESS);
+    }
+
+    if (knl_) {
+      EXPECT_EQ(zeKernelDestroy(knl_), ZE_RESULT_SUCCESS);
+    }
+
+    if (mdl_) {
+      EXPECT_EQ(zeModuleDestroy(mdl_), ZE_RESULT_SUCCESS);
+    }
+
+    if (ctx_) {
+      EXPECT_EQ(zeContextDestroy(ctx_), ZE_RESULT_SUCCESS);
+    }
+  }
+
+  static void ProvideBuffer(unsigned char** buf, size_t* buf_size) {
+    *buf = samples_utils::AlignedAlloc<unsigned char>(kRequestedBufferSize);
+    if (!*buf) {
+      FAIL() << "Unable to allocate buffer for PTI tracing";
+    }
+    *buf_size = kRequestedBufferSize;
+  }
+
+  static void ParseBuffer(unsigned char* buf, size_t buf_size, size_t used_bytes) {
+    if (!buf || !used_bytes || !buf_size) {
+      std::cerr << "Received empty buffer" << '\n';
+      if (used_bytes) {
+        samples_utils::AlignedDealloc(buf);
+      }
+      return;
+    }
+    pti_view_record_base* ptr = nullptr;
+    while (true) {
+      auto buf_status = ptiViewGetNextRecord(buf, used_bytes, &ptr);
+      if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
+        break;
+      }
+      if (buf_status != pti_result::PTI_SUCCESS) {
+        FAIL() << "Found Error Parsing Records from PTI";
+        break;
+      }
+      switch (ptr->_view_kind) {
+        case pti_view_kind::PTI_VIEW_INVALID: {
+          FAIL() << "Found Invalid PTI View Record";
+          break;
+        }
+        case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
+          LocalModeZeGemmTestData::Instance().num_ze_records++;
+          break;
+        }
+        case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
+          LocalModeZeGemmTestData::Instance().num_kernels++;
+          auto* kernel_record = reinterpret_cast<pti_view_record_kernel*>(ptr);
+          EXPECT_THAT(kernel_record->_name, ::testing::StrEq(kKernelName));
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    }
+    samples_utils::AlignedDealloc(buf);
+  }
+  static constexpr auto kRequestedBufferSize = 1'000;
+  static constexpr auto kInorderQueue = true;
+  static constexpr const char* const kKernelName = "GEMM";
+  static constexpr const char* const kKernelFile = "gemm.spv";
+
+  struct LocalModeZeGemmTestData {
+    static LocalModeZeGemmTestData& Instance() {
+      static LocalModeZeGemmTestData test_data{};
+      return test_data;
+    }
+
+    void Reset() {
+      num_ze_records = 0;
+      num_kernels = 0;
+    }
+
+    size_t num_ze_records = 0;
+    size_t num_kernels = 0;
+  };
+
+  std::vector<pti_view_kind> enabled_views_;
+  bool event_timestamps_enabled_ = false;
+  uint32_t num_events_ = 1;
+  std::vector<uint8_t> spv_binary_;
+  unsigned int size_ = 1024;
+  std::vector<float> a_vector_;
+  std::vector<float> b_vector_;
+  std::vector<float> result_vector_;
+  ze_driver_handle_t drv_ = nullptr;
+  ze_device_handle_t dev_ = nullptr;
+  ze_context_handle_t ctx_ = nullptr;
+  ze_module_handle_t mdl_ = nullptr;
+  std::array<uint32_t, 3> group_size_ = {0};
+  ze_kernel_handle_t knl_ = nullptr;
+  ze_event_pool_handle_t evt_pl_ = nullptr;
+  ze_event_handle_t evt_ = nullptr;
+  ze_command_queue_handle_t cmd_q_ = nullptr;
+  ze_command_list_handle_t cmd_list_ = nullptr;
+  void* a_buf_ = nullptr;
+  void* b_buf_ = nullptr;
+  void* result_buf_ = nullptr;
+};
+
+TEST_F(LocalModeZeGemmTest, TestStartTracingExecuteCommandQueue) {
+  // Leaving out of Constructor / SetUp for now to allow extending to more test
+  // cases.
+  InitializeDrivers();
+  InitializeEvent();
+  InitializeQueue();
+  CreateKernel();
+  SetKernelGroupSize();
+  SetKernelArguments();
+  PrepareCommandList();
+
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  EnableView(PTI_VIEW_LEVEL_ZERO_CALLS);
+
+  auto status = zeCommandQueueExecuteCommandLists(cmd_q_, 1, &cmd_list_, nullptr);
+  ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  status = zeCommandQueueSynchronize(cmd_q_, UINT64_MAX);
+  ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+
+  DisableAndFlushAllViews();
+
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_ze_records, 2);
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, 0);
+
+  ValidateGemmKernel();
+}
+
+TEST_F(LocalModeZeGemmTest, TestStartTracingPrepareCommandList) {
+  // Leaving out of Constructor / SetUp for now to allow extending to more test
+  // cases.
+  InitializeDrivers();
+  InitializeEvent();
+  InitializeQueue();
+  CreateKernel();
+  SetKernelGroupSize();
+  SetKernelArguments();
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  PrepareCommandList();
+
+  auto status = zeCommandQueueExecuteCommandLists(cmd_q_, 1, &cmd_list_, nullptr);
+  ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  status = zeCommandQueueSynchronize(cmd_q_, UINT64_MAX);
+  ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+
+  DisableAndFlushAllViews();
+
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, 1);
+
+  ValidateGemmKernel();
+}
 using pti::test::utils::CreateFullBuffer;
 using pti::test::utils::RecordInserts;
 
