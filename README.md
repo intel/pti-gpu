@@ -102,9 +102,14 @@ You may obtain a copy of the License at https://opensource.org/license/MIT
 - [Intel(R) Graphics Compute Runtime for oneAPI Level Zero and OpenCL(TM) Driver](https://github.com/intel/compute-runtime)
 - [Intel(R) Metrics Discovery Application Programming Interface](https://github.com/intel/metrics-discovery)
     - one may need to install `libdrm-dev` package to build the library from sources
-    - one may need to allow metrics collection for non-root users:
+    - one may need to allow metrics collection for non-root users
+        - if using the i915 kernel module (e.g. PVC):
         ```sh
         sudo echo 0 > /proc/sys/dev/i915/perf_stream_paranoid
+        ```
+        - if using the xe kernel module (e.g. BMG):
+        ```sh
+        sudo echo 0 > /proc/sys/dev/xe/observation_paranoid
         ```
 - [Metrics Library for Metrics Discovery API (Metrics Library for MD API)](https://github.com/intel/metrics-library)
 - [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html)
