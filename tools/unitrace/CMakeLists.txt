@@ -251,6 +251,8 @@ configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/MemProfile.txt $
 configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/L1ProfileReads.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/pvc/L1ProfileReads.txt COPYONLY)
 configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/L1ProfileWrites.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/pvc/L1ProfileWrites.txt COPYONLY)
 configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/pvc/L1ProfileSlmBankConflicts.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/pvc/L1ProfileSlmBankConflicts.txt COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/bmg/ComputeBasic.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/bmg/ComputeBasic.txt COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/bmg/MemoryProfile.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/bmg/MemoryProfile.txt COPYONLY)
 
 # Installation
 install(TARGETS unitrace)
