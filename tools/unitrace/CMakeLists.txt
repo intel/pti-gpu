@@ -261,6 +261,7 @@ install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/tracemerge/mergetrace.py DESTINAT
 install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/metrics/analyzeperfmetrics.py DESTINATION bin)
 install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/metrics/addrasm.py DESTINATION bin)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/scripts/metrics/config DESTINATION etc/unitrace/metrics)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/scripts/summary DESTINATION bin)
 
 if (BUILD_WITH_MPI)
   install(TARGETS unitrace_mpi RUNTIME)

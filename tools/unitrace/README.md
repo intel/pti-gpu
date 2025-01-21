@@ -256,6 +256,12 @@ The **--ccl-summary-report  [-r]** option outputs CCL call timing summary:
 
 If the application is a PyTorch workload, one or more options from **--chrome-mpi-logging**, **--chrome-ccl-logging** and **--chrome-dnn-logging** also enables PyTorch profiling(see **Profile PyTorch** section for more information).
 
+
+## Categorizing GPU Kernels
+
+In case of a large application, for example, LLaMA, there may be a lot of small kernels with long 
+kernel names in the profiled data. To analyze the data at a high level, you may find the kernel categorizing tool is helpful. Please refer to [Categorizing GPU Kernels](scripts/summary/README.md) for further details.
+
 ## Location of Trace Data
 
 By default, all output data are written in the current working directory. However, one can specify a different directory for output:
