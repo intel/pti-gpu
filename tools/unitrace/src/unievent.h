@@ -32,6 +32,8 @@ typedef struct MpiArgs_ {
   int dst_tag;
   size_t src_size;
   size_t dst_size;
+  int64_t mpi_counter;
+  bool is_tagged;
 } MpiArgs;
 
 typedef struct IttArgs_ {

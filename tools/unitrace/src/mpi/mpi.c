@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-
 #include <ittnotify.h>
 #include <mpi.h>
+#include <stdlib.h>
 
 enum {
     MPI_TASK_SEND,
@@ -91,6 +91,7 @@ enum {
     MPI_TASK_TYPE_COMMIT,
     MPI_TASK_TYPE_CONTIGUOUS,
     MPI_TASK_TYPE_FREE,
+    MPI_TASK_INTERNAL,
     MPI_TASK_NUM
 };
 
@@ -176,15 +177,28 @@ const char *mpi_task_names[MPI_TASK_NUM] = {
     "MPI_Reduce_scatter_block",
     "MPI_Type_commit",
     "MPI_Type_contiguous",
-    "MPI_Type_free"
+    "MPI_Type_free",
+    "MPI_Internal_operation"
 };
 
 __itt_domain *mpi_domain = NULL;
 __itt_string_handle *mpi_task_handles[MPI_TASK_NUM] = { 0 };
 
+#define INTERNAL_SIZE_INITIAL 16
+struct _MPI_Internal_operation {
+    int size;
+    int current;
+    __itt_string_handle **handle;
+};
+
+struct _MPI_Internal_operation internal_operations = { 0, 0, NULL };
+
 extern void __itt_task_end_internal_ex_info(const __itt_domain *domain,
                                      size_t src_size, int src_location, int src_tag,
                                      size_t dst_size, int dst_location, int dst_tag);
+
+extern void __itt_task_end_internal_callback_info(const __itt_domain *domain,
+                                     int64_t mpi_counter,  size_t src_size, size_t dst_size);
 
 #define ITT_BEGIN(_MPI_ID) { \
 	__itt_task_begin(mpi_domain, __itt_null, __itt_null, mpi_task_handles[_MPI_ID]); \
@@ -197,6 +211,48 @@ extern void __itt_task_end_internal_ex_info(const __itt_domain *domain,
 #define ITT_END_MPI_EX_INFO(_MPI_ID, data_size1, location1 , tag1, data_size2, location2 , tag2){\
     __itt_task_end_internal_ex_info(mpi_domain, data_size1, location1 , tag1, data_size2, location2 , tag2); \
 }
+
+
+#define ITT_BEGIN_MPI_INTERNAL(_MPI_ID_INTERNAL) { \
+    __itt_string_handle *h =  mpi_task_handles[MPI_TASK_INTERNAL]; \
+    if ((_MPI_ID_INTERNAL < internal_operations.current) && (_MPI_ID_INTERNAL >= 0)) { \
+        h = internal_operations.handle[_MPI_ID_INTERNAL]; \
+    } \
+    __itt_task_begin(mpi_domain, __itt_null, __itt_null, h); \
+}
+
+#define ITT_END_MPI_INTERNAL(operation, mpi_counter, src_size, dst_size){ \
+    __itt_task_end_internal_callback_info(mpi_domain, mpi_counter, src_size, dst_size); \
+}
+
+int  _MPI_Internal_register_operation_name(const char*name) __attribute__((visibility ("default")));
+void _MPI_Internal_task_start_hook(int operation) __attribute__((visibility ("default")));
+void _MPI_Internal_task_stop_hook(int operation, int64_t mpi_counter, size_t src_size, size_t dst_szie) __attribute__((visibility ("default")));
+
+void _MPI_Internal_task_start_hook(int operation)
+{
+    ITT_BEGIN_MPI_INTERNAL(operation);
+}
+
+void _MPI_Internal_task_stop_hook(int operation, int64_t mpi_counter, size_t src_size, size_t dst_szie)
+{
+    ITT_END_MPI_INTERNAL(operation, mpi_counter, src_size, dst_szie);
+}
+
+int _MPI_Internal_register_operation_name(const char *name)
+{
+    if (internal_operations.size == 0) {
+        internal_operations.size = INTERNAL_SIZE_INITIAL;
+        internal_operations.handle = ( __itt_string_handle **)malloc(internal_operations.size * sizeof(__itt_string_handle *));
+    } else if (internal_operations.current == internal_operations.size) {
+        internal_operations.size *= 2;
+        internal_operations.handle = ( __itt_string_handle **)realloc(internal_operations.handle, internal_operations.size * sizeof(__itt_string_handle *));
+    }
+    internal_operations.handle[internal_operations.current] = __itt_string_handle_create(name);
+    internal_operations.current++;
+    return internal_operations.current - 1;
+}
+
 
 int MPI_Send(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {

@@ -327,6 +327,19 @@ You can also do selective rank profiling by launching the tool only on the ranks
 
 The result .json file has the rank id embedded as **<application>.<pid>.<rank>.json**.
 
+### Extended Support for Intel® MPI
+
+With Intel® MPI version 2021.15 and above, extra information can be profiled that may be critical to performance optimization, for example, the idle time caused by communication or application imbalance:
+
+![MPI Application Imbalance!](/tools/unitrace/doc/images/mpi-imbalance.png)
+
+and the device-initiated communications that are executued on host:
+
+![MPI Device-initiated Communications!](/tools/unitrace/doc/images/mpi-device-initiated.png)
+
+The argument `mpi_counter` in the device-initiated communication event is a non-negative integer. It represents operation sequence number for identifying particular call triggered by a GPU kernel.
+
+![mpi_counter Argument!](/tools/unitrace/doc/images/mpi-counter-parameter.png)
 
 ### View Event Timelines of Multiple MPI Ranks
 

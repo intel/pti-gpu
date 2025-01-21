@@ -22,6 +22,7 @@ typedef void (*OnIttLoggingCallback)(const char *name, uint64_t start_ts, uint64
 typedef void (*OnCclLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, uint64_t buff_size);
 typedef void (*OnMpiLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, size_t src_size, int src_location, int src_tag,
                                      size_t dst_size, int dst_location, int dst_tag);
+typedef void (*OnMpiInternalLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, int64_t mpi_counter, size_t src_size, size_t dst_size);
 
 struct ittFunction {
   uint64_t total_time;
@@ -106,6 +107,12 @@ class IttCollector {
     }
   }
 
+  void Log(const char *name, uint64_t start_ts, uint64_t end_ts, int64_t mpi_counter, size_t src_size, size_t dst_size) {
+    if (mpi_internal_callback_) {
+      mpi_internal_callback_(name, start_ts, end_ts, mpi_counter, src_size, dst_size);
+    }
+  }
+
   void Log(const char *name, uint64_t start_ts, uint64_t end_ts, uint64_t buff_size) {
     if (ccl_callback_ == nullptr) {
       std::cerr<<"[ERROR] CCL logging is enabled but callback is not set.\n";
@@ -116,6 +123,11 @@ class IttCollector {
 
   void SetMpiCallback(OnMpiLoggingCallback callback) {
     mpi_callback_ = callback;
+
+  }
+
+  void SetMpiInternalCallback(OnMpiInternalLoggingCallback callback) {
+    mpi_internal_callback_ = callback;
   }
 
   void SetCclCallback(OnCclLoggingCallback callback) {
@@ -192,6 +204,7 @@ class IttCollector {
   OnIttLoggingCallback callback_ = nullptr;
   OnCclLoggingCallback ccl_callback_ = nullptr;
   OnMpiLoggingCallback mpi_callback_ = nullptr;
+  OnMpiInternalLoggingCallback mpi_internal_callback_ = nullptr;
   bool is_itt_ccl_summary_ = false;
   bool is_itt_chrome_logging_on_ = false;
 };
@@ -382,6 +395,29 @@ ITT_EXTERN_C void ITTAPI __itt_task_end_internal_ex_info(const __itt_domain *dom
   if (itt_collector->IsEnableChromeLoggingOn()) {
     itt_collector->Log(display.c_str(), start, end, src_size, src_location, src_tag,
                                      dst_size, dst_location, dst_tag);
+  }
+  task_desc.pop();
+}
+
+ITT_EXTERN_C void ITTAPI __itt_task_end_internal_callback_info(const __itt_domain *domain,
+                                     int64_t mpi_counter,  size_t src_size, size_t dst_size)
+{
+  if (!UniController::IsCollectionEnabled() || !itt_collector->IsEnableChromeLoggingOn()) {
+    return;
+  }
+
+  if (task_desc.empty() || strcmp(task_desc.top().domain, domain->nameA)) {
+    return;
+  }
+
+  std::string display(task_desc.top().domain);
+  display += "::";
+  display += task_desc.top().name;
+  auto start = task_desc.top().start_time;
+  auto end = UniTimer::GetHostTimestamp();
+
+  if (itt_collector->IsEnableChromeLoggingOn()) {
+    itt_collector->Log(display.c_str(), start, end, mpi_counter, src_size, dst_size);
   }
   task_desc.pop();
 }

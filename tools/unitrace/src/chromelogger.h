@@ -521,16 +521,24 @@ class TraceBuffer {
         bool isFirst = true;  // First argument can be zero and second non zero
         if (args.src_size != 0) {
           str_args += "\"ssize\": " + std::to_string(args.src_size);
-          str_args += ", \"src\": " + std::to_string(args.src_location);
-          str_args += ", \"stag\": " + std::to_string(args.src_tag);
+          if (args.is_tagged) {
+            str_args += ", \"src\": " + std::to_string(args.src_location);
+            str_args += ", \"stag\": " + std::to_string(args.src_tag);
+          }
           isFirst = false;
         }
 
         if (args.dst_size != 0) {
           str_args += (isFirst ? "" : ", ");
-          str_args += "\"dsize\": " +std::to_string(args.dst_size);
-          str_args += ", \"dst\": " +std::to_string(args.dst_location);
-          str_args += ", \"dtag\": " +std::to_string(args.dst_tag);
+          str_args += "\"dsize\": " + std::to_string(args.dst_size);
+          if (args.is_tagged) {
+            str_args += ", \"dst\": " + std::to_string(args.dst_location);
+            str_args += ", \"dtag\": " + std::to_string(args.dst_tag);
+          }
+        }
+
+        if (args.mpi_counter >= 0) {
+          str_args += ", \"mpi_counter\": " + std::to_string(args.mpi_counter);
         }
       } else if (rec.api_type_ == CCL) {
         const CclArgs& args = rec.ccl_args_;
@@ -937,17 +945,26 @@ class ClTraceBuffer {
 
         if (args.src_size != 0) {
           str_args += "\"ssize\": " + std::to_string(args.src_size);
-          str_args += ", \"src\": " + std::to_string(args.src_location);
-          str_args += ", \"stag\": " + std::to_string(args.src_tag);
+          if (args.is_tagged) {
+            str_args += ", \"src\": " + std::to_string(args.src_location);
+            str_args += ", \"stag\": " + std::to_string(args.src_tag);
+          }
           isFirst = false;
         }
 
         if (args.dst_size != 0) {
           str_args += (isFirst ? "" : ", ");
-          str_args += "\"dsize\": " +std::to_string(args.dst_size);
-          str_args += ", \"dst\": " +std::to_string(args.dst_location);
-          str_args += ", \"dtag\": " +std::to_string(args.dst_tag);
+          str_args += "\"dsize\": " + std::to_string(args.dst_size);
+          if (args.is_tagged) {
+            str_args += ", \"dst\": " + std::to_string(args.dst_location);
+            str_args += ", \"dtag\": " + std::to_string(args.dst_tag);
+          }
         }
+
+        if (args.mpi_counter >= 0) {
+          str_args += ", \"mpi_counter\": " + std::to_string(args.mpi_counter);
+        }
+
       } else if (rec.api_type_ == CCL) {
         const CclArgs& args = rec.ccl_args_;
         str_args += "\"ssize\": " + std::to_string(args.buff_size);
@@ -1344,6 +1361,33 @@ class ChromeLogger {
         rec->mpi_args_.dst_size = dst_size;
         rec->mpi_args_.dst_location = dst_location;
         rec->mpi_args_.dst_tag = dst_tag;
+        rec->mpi_args_.mpi_counter = -1;
+        rec->mpi_args_.is_tagged = true;
+
+        thread_local_buffer_.BufferHostEvent();
+      }
+    }
+
+    static void MpiInternalLoggingCallback(const char *name, uint64_t start_ts, uint64_t end_ts, int64_t mpi_counter, size_t src_size, size_t dst_size) {
+      if (!thread_local_buffer_.IsFinalized()) {
+        HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
+        rec->type_ = EVENT_COMPLETE;
+
+        if (name != nullptr) {
+          rec->name_ = strdup(name);
+        } else {
+          rec->name_ = nullptr;
+        }
+
+        rec->api_id_ = IttTracingId;
+        rec->start_time_ = start_ts;
+        rec->end_time_ = end_ts;
+        rec->id_ = 0;
+        rec->api_type_ = MPI;
+        rec->mpi_args_.mpi_counter = mpi_counter;
+        rec->mpi_args_.src_size = src_size;
+        rec->mpi_args_.dst_size = dst_size;
+        rec->mpi_args_.is_tagged = false;
 
         thread_local_buffer_.BufferHostEvent();
       }
