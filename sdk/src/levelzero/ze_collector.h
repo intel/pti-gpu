@@ -1057,6 +1057,10 @@ class ZeCollector {
       ze_command_list_handle_t clist = command_lists[i];
       PTI_ASSERT(clist != nullptr);
       ZeCommandListInfo& info = GetCommandListInfo(clist);
+
+      // Needs to go after GetCommandListInfo and before cl_list_lock to avoid deadlocks.
+      const std::lock_guard<std::mutex> lock(lock_);
+
       // info is a reference to an element in this map, which we're modifying here.
       const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
       // as all command lists submitted to the execution into queue - they are not immediate
@@ -1067,10 +1071,7 @@ class ZeCollector {
         if (kids) {
           kids->push_back(command->kernel_id);
         }
-        {
-          const std::lock_guard<std::mutex> lock(lock_);
-          kernel_command_list_.push_back(std::move(*it));
-        }
+        kernel_command_list_.push_back(std::move(*it));
       }
       info.kernel_commands.clear();
     }
