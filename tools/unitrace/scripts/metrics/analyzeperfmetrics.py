@@ -1482,10 +1482,10 @@ def main(args):
                     if (devicefound == True):	# done with the device of interest
                         break
             if (counting == True):
-                if (("OtherStall[Events]," in row) or (row.startswith("Kernel,"))):      # found header
+                if (("OtherStall[Events]" in row) or (row.startswith("Kernel,"))):      # found header
                     header = linenum
                     counting = False
-                    if ("OtherStall[Events]," in row):
+                    if ("OtherStall[Events]" in row):
                         eustall = True
             linenum += 1
 
