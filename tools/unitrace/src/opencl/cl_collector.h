@@ -1911,7 +1911,7 @@ class ClCollector {
 
 
   constexpr static int max_trace_nesting_level_ = 2;
-  inline static int trace_nesting_level_ = -1; // in case an extension is called within an OCL call
+  inline static thread_local int trace_nesting_level_ = -1; // in case an extension is called within an OCL call
   inline static thread_local uint64_t trace_start_time_[max_trace_nesting_level_] = {0}; // start time of traced API 
   inline static thread_local bool trace_now_ = false; // prevent recursive tracing
 
