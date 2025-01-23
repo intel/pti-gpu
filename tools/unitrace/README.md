@@ -833,6 +833,69 @@ Please refer to https://perfetto.dev/docs/ for more information,
 
 ![Query Trace Events!](/tools/unitrace/doc/images/event_query.png)
 
+## GPU Roofline
+
+It is often desirable to estimate the peak performance of a GPU kernel on a specific device using the roofline model.  This can be done by running the **roofline.py** tool. 
+
+```sh
+$ python roofline.py -h
+options:
+  -h, --help            show this help message and exit
+  --compute COMPUTE     compute metrics collected by unitrace
+  --memory MEMORY       memory metrics collected by unitrace
+  --app APP             application to profile
+  --device DEVICE       device configuration file
+  --output OUTPUT       output file in HTML format
+  --unitrace UNITRACE   path to unitrace executable if not in PATH
+
+```
+You can get the roofline in 2 ways:
+
+1. run unitrace and roofline model at the same time 
+
+```sh
+
+python roofline.py --app <application> --device <device-config> --output <output-file>
+
+```
+
+If the path of **unitrace** is not set in your PATH environment, you need to explicitly specify it using **--unitrace** option:
+
+```sh
+
+python roofline.py --app <application> --device <device-config> --output <output-file> --unitrace <path-to-unitrace>
+
+```
+
+2. run unitrace to profile the application, then run roofline model
+
+This is useful if you want to profile your workload once and later run the roofline model multiple times, or if you profile your workload on one machine, but need to run the roofline model on a different machine.
+
+```sh
+
+python roofline.py  --compute <compute-profile> --memory <memory-profile> --device <device-config> --output <output-file>
+
+```
+The `<compute-profile>` is created by running:
+
+```sh
+
+unitrace --g ComputeBasic -q --chrome-kernel-logging -o <compute-profile> <application>
+
+```
+The `<memory-profile>` is created by running: 
+
+```sh
+
+unitrace --g VectorEngine138 -q --chrome-kernel-logging -o <memory-profile> <application>
+
+```
+The `<device-config>` is required in both usage cases. This file is device specific and can be found in the **device_configs** folder.
+
+The `<output-file>` is in HTML format. It can be loaded and viewd in a browser:
+
+![GPU Roofline and Kernel Summary!](/tools/unitrace/doc/images/Roofline.png)
+
 ## Recommended Usage
 
 How to make the best use of the tool and to get the most out of it really depends on what you want to do and what part of your code you want to focus on.
@@ -845,6 +908,6 @@ Typically, you need options to enable profiling both host activities and device 
 
 It is also recommended to start with device timing (**-d**) and/or host timing (**-h**) summaries. From the summaries, you can quickly spot the hot spots or the expensive kernels on device or calls on host. From the device summary, you will also learn if each kernel has occupancy and/or register spilling issues. Next, from the detailed timelines you will determine if these expensive device kernels or host calls are indeed performance bottlenecks to the overall performance.
 
-Once a kernel is determined to be a performance bottleneck, it is time to figure out why its performance is not optimal. There can be multiple reasons why the kernel is not performant: cache misses, low occupancy, low ALU utilizations, execution unit stalls, etc. You can get answers from metric profiles using **-q** option. In case of execution unit stall analysis, the **--stall-sampling** will give you instruction addresses and reasons of stalls.
+Once a kernel is determined to be a performance bottleneck, it is time to figure out why its performance is not optimal. There can be multiple reasons why the kernel is not performant: cache misses, low occupancy, low ALU utilizations, execution unit stalls, etc. You can get answers from metric profiles using **-k"", **-q** or **--stall-sampling** option. In case of execution unit stall analysis, the **--stall-sampling** will give you instruction addresses and reasons of stalls.
 
 In an interactive, for example Python, session, the **-t** option can be very useful with the kernel queuing, submission and execution data are output immediately after each kernel completes while your session is active.

@@ -1,0 +1,39 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):           5579618203
+    Total Device Time for L0 backend (ns):             22017040
+
+== L0 Backend ==
+
+                                                 Kernel,       Calls,           Time (ns), Time (%),        Average (ns),            Min (ns),            Max (ns)
+          zeCommandListAppendMemoryCopy(M2D)[128000000],           3,             9874480,    44.85,             3291493,             3238480,             3367280
+hgemm_nocopy_nn_64x40_4x8[SIMD16 {56; 1; 1} {64; 8; 1}],           1,             4731360,    21.49,             4731360,             4731360,             4731360
+hgemm_nocopy_nn_64x40_4x8[SIMD16 {56; 1; 1} {64; 8; 1}],           1,             4503360,    20.45,             4503360,             4503360,             4503360
+          zeCommandListAppendMemoryCopy(D2M)[128000000],           1,             2885120,    13.10,             2885120,             2885120,             2885120
+              zeCommandListAppendMemoryFill(D)[7340032],           1,                9120,     0.04,                9120,                9120,                9120
+                binary_test[SIMD16 {1; 1; 1} {4; 2; 1}],           1,                7360,     0.03,                7360,                7360,                7360
+                  zeCommandListAppendMemoryCopy(M2D)[4],           1,                4400,     0.02,                4400,                4400,                4400
+                  zeCommandListAppendMemoryCopy(D2M)[4],           1,                1840,     0.01,                1840,                1840,                1840
+
+
+=== Kernel Properties ===
+
+                                                 Kernel, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread
+hgemm_nocopy_nn_64x40_4x8[SIMD16 {56; 1; 1} {64; 8; 1}],                  27                  8                         0                       0
+hgemm_nocopy_nn_64x40_4x8[SIMD16 {56; 1; 1} {64; 8; 1}],                  27                  8                         0                       0
+                binary_test[SIMD16 {1; 1; 1} {4; 2; 1}],                   8                  0                         0                       0
+
+
+
+== Kernel Metrics ==
+
+
+Kernel,Device,SubDeviceId,GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuSliceClocksCount[events],AvgGpuSliceFrequencyMHz[MHz],L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes],GPU_MEMORY_BYTE_READ[bytes],GPU_MEMORY_BYTE_WRITE[bytes],XVE_ACTIVE[%],XVE_STALL[%],XVE_BUSY[events],XVE_THREADS_OCCUPANCY_ALL[%],XVE_COMPUTE_THREAD_COUNT[threads],XVE_ATOMIC_ACCESS_COUNT[messages],XVE_BARRIER_MESSAGE_COUNT[messages],XVE_INST_EXECUTED_ALU0_ALL[events],XVE_INST_EXECUTED_ALU1_ALL[events],XVE_INST_EXECUTED_XMX_ALL[events],XVE_INST_EXECUTED_SEND_ALL[events],XVE_INST_EXECUTED_CONTROL_ALL[events],XVE_PIPE_ALU0_AND_ALU1_ACTIVE[%],XVE_PIPE_ALU0_AND_XMX_ACTIVE[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%],QueryBeginTime[ns],CoreFrequencyMHz[MHz],CoreFrequencyChanged,QuerySplitOccurred,ReportId,ReportsCount,OverrunOccured,MidQueryTimer,MidQueryProgramming,MidQueryMarker,MidQueryCtxSwitch,MidQueryC6,MidQueryFreqChange,MidQueryMmioTrigger,ReportError,ReportLost,ReportInconsistent,ReportCtxSwitchLost,ReportWithoutWorkload,ReportContextMismatch,
+binary_test[SIMD16 {1; 1; 1} {4; 2; 1}],0,0,563720,817391,1449,873775,1550,9728,132800,5248,512,6.89741e-06,0.00162064,1,0.00020258,1,0,0,0,19,0,8,0,0,0,0,4.85373e-06,2.04368e-06,0,0,1004293760,1450,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,8,0,0,
+
+Kernel,Device,SubDeviceId,GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuSliceClocksCount[events],AvgGpuSliceFrequencyMHz[MHz],L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes],GPU_MEMORY_BYTE_READ[bytes],GPU_MEMORY_BYTE_WRITE[bytes],XVE_ACTIVE[%],XVE_STALL[%],XVE_BUSY[events],XVE_THREADS_OCCUPANCY_ALL[%],XVE_COMPUTE_THREAD_COUNT[threads],XVE_ATOMIC_ACCESS_COUNT[messages],XVE_BARRIER_MESSAGE_COUNT[messages],XVE_INST_EXECUTED_ALU0_ALL[events],XVE_INST_EXECUTED_ALU1_ALL[events],XVE_INST_EXECUTED_XMX_ALL[events],XVE_INST_EXECUTED_SEND_ALL[events],XVE_INST_EXECUTED_CONTROL_ALL[events],XVE_PIPE_ALU0_AND_ALU1_ACTIVE[%],XVE_PIPE_ALU0_AND_XMX_ACTIVE[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%],QueryBeginTime[ns],CoreFrequencyMHz[MHz],CoreFrequencyChanged,QuerySplitOccurred,ReportId,ReportsCount,OverrunOccured,MidQueryTimer,MidQueryProgramming,MidQueryMarker,MidQueryCtxSwitch,MidQueryC6,MidQueryFreqChange,MidQueryMmioTrigger,ReportError,ReportLost,ReportInconsistent,ReportCtxSwitchLost,ReportWithoutWorkload,ReportContextMismatch,
+hgemm_nocopy_nn_64x40_4x8[SIMD16 {56; 1; 1} {64; 8; 1}],0,0,4733040,4730250,999,5121829,1082,6586575872,98013760,848934528,125991296,90.354,3.26538,1,46.8018,1792,0,3200000,12102400,84142328,2048000000,63305376,6765824,0.0231121,0.00370355,0.527434,3.667,2.75891,0.294861,89.2538,1060957720,1050,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,8,0,0,
+
+Kernel,Device,SubDeviceId,GpuTime[ns],GpuCoreClocks[cycles],AvgGpuCoreFrequencyMHz[MHz],GpuSliceClocksCount[events],AvgGpuSliceFrequencyMHz[MHz],L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes],GPU_MEMORY_BYTE_READ[bytes],GPU_MEMORY_BYTE_WRITE[bytes],XVE_ACTIVE[%],XVE_STALL[%],XVE_BUSY[events],XVE_THREADS_OCCUPANCY_ALL[%],XVE_COMPUTE_THREAD_COUNT[threads],XVE_ATOMIC_ACCESS_COUNT[messages],XVE_BARRIER_MESSAGE_COUNT[messages],XVE_INST_EXECUTED_ALU0_ALL[events],XVE_INST_EXECUTED_ALU1_ALL[events],XVE_INST_EXECUTED_XMX_ALL[events],XVE_INST_EXECUTED_SEND_ALL[events],XVE_INST_EXECUTED_CONTROL_ALL[events],XVE_PIPE_ALU0_AND_ALU1_ACTIVE[%],XVE_PIPE_ALU0_AND_XMX_ACTIVE[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%],QueryBeginTime[ns],CoreFrequencyMHz[MHz],CoreFrequencyChanged,QuerySplitOccurred,ReportId,ReportsCount,OverrunOccured,MidQueryTimer,MidQueryProgramming,MidQueryMarker,MidQueryCtxSwitch,MidQueryC6,MidQueryFreqChange,MidQueryMmioTrigger,ReportError,ReportLost,ReportInconsistent,ReportCtxSwitchLost,ReportWithoutWorkload,ReportContextMismatch,
+hgemm_nocopy_nn_64x40_4x8[SIMD16 {56; 1; 1} {64; 8; 1}],0,0,4504960,4662076,1034,5106076,1133,6584752640,98013760,874946432,128000256,90.63,3.1351,1,46.8745,1792,0,3200000,12102400,84142328,2048000000,63305376,6765824,0.0236497,0.00405985,0.529062,3.67832,2.76742,0.295771,89.5292,1066080280,1050,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,8,0,0,
