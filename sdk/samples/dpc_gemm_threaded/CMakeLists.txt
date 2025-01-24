@@ -1,13 +1,10 @@
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
-                      "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/Modules/")
-include(macros)
-
-SetRequiredCMakeVersion()
-cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
+cmake_minimum_required(VERSION 3.14)
 
 project(PTI_Samples_DPC_GEMM_THREADED CXX)
-setcompilerflags()
-setbuildtype()
+
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release")
+endif()
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fsycl" has_sycl)

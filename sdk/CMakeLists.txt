@@ -2,10 +2,10 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
                       "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 
 include(macros)
-SetRequiredCMakeVersion()
-cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
+cmake_minimum_required(VERSION 3.14)
 
-SetCompilerFlags()
+SetPtiVersion()
+
 project(
   pti
   VERSION ${PTI_VERSION}
@@ -349,7 +349,7 @@ if(PTI_INSTALL)
     DESTINATION "${PTI_INSTALL_CMAKE_DIR}"
     COMPONENT Pti_Development)
 
-  if (EXISTS "../LICENSE")
+  if (EXISTS "${PROJECT_SOURCE_DIR}/../LICENSE")
     install(
       FILES "../LICENSE"
       DESTINATION "${PTI_INSTALL_LIC_DIR}"
@@ -372,10 +372,15 @@ if(PTI_INSTALL)
       file(REMOVE ${BOMFILE_DEV}  ${BOMFILE_RUN}) "
       COMPONENT Pti_Bom)
 
-    install(
-      FILES "../third-party-programs.txt"
-      DESTINATION "${PTI_INSTALL_LIC_DIR}"
-      COMPONENT Pti_oneAPI)
+    if (EXISTS "${PROJECT_SOURCE_DIR}/../third-party-programs.txt")
+      install(
+        FILES "../third-party-programs.txt"
+        DESTINATION "${PTI_INSTALL_LIC_DIR}"
+        COMPONENT Pti_oneAPI)
+    else()
+      message(FATAL_ERROR "The PTI library must be built within the top-level "
+        "repository to ensure a valid installation.")
+    endif()
 
     if (UNIX)
       install(FILES "env/vars.sh" DESTINATION "env/" COMPONENT Pti_oneAPI)

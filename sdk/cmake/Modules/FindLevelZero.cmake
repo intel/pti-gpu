@@ -52,6 +52,7 @@ find_path(
   NAMES level_zero/ze_api.h
   HINTS ENV CPATH
         ${PC_ze_loader_INCLUDE_DIRS}
+        ${PC_ze_loader_INCLUDEDIR}
   PATHS ${CMAKE_INCLUDE_PATH}
   PATH_SUFFIXES include
 )
@@ -61,6 +62,7 @@ find_library(
   NAMES ze_loader
   HINTS ENV LIBRARY_PATH
         ${PC_ze_loader_LIBRARY_DIRS}
+        ${PC_ze_loader_LIBDIR}
   PATHS ${CMAKE_LIBRARY_PATH}
         ENV LD_LIBRARY_PATH
   PATH_SUFFIXES lib
@@ -103,7 +105,7 @@ if(LevelZero_FOUND AND NOT TARGET LevelZero::level-zero)
   set_target_properties(
     LevelZero::level-zero
     PROPERTIES IMPORTED_LOCATION "${LevelZero_LIBRARY}"
-               INTERFACE_COMPILE_OPTIONS "${PC_level_zero_CFLAGS_OTHER}"
+               INTERFACE_COMPILE_OPTIONS "${PC_ze_loader_CFLAGS_OTHER}"
                INTERFACE_INCLUDE_DIRECTORIES "${LevelZero_INCLUDE_DIR}")
 endif()
 

@@ -2,13 +2,9 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
                       "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/Modules/")
 include(macros)
 
-setrequiredcmakeversion()
-cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
+cmake_minimum_required(VERSION 3.14)
 
 project (METRICSISO3DFD)
-
-setcompilerflags()
-setbuildtype()
 
 if (NOT CMAKE_BUILD_TYPE)
     message (STATUS "Default CMAKE_BUILD_TYPE not set using Release with Debug Info")

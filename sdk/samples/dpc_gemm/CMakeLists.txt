@@ -1,9 +1,10 @@
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
-                      "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/Modules/")
-
 cmake_minimum_required(VERSION 3.14)
 
 project(PTI_Samples_DPC_GEMM CXX)
+
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release")
+endif()
 
 # TODO: find_package(IntelSYCL)?
 include(CheckCXXCompilerFlag)
