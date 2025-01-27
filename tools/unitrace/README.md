@@ -260,7 +260,62 @@ If the application is a PyTorch workload, one or more options from **--chrome-mp
 ## Categorizing GPU Kernels
 
 In case of a large application, for example, LLaMA, there may be a lot of small kernels with long 
-kernel names in the profiled data. To analyze the data at a high level, you may find the kernel categorizing tool is helpful. Please refer to [Categorizing GPU Kernels](scripts/summary/README.md) for further details.
+kernel names in the profiled data. To analyze the data at a high level, you may find the kernel categorizing script are helpful.
+
+The summarizing and categorizing script analyzes unitrace reports and aggregates kernels by categories. The summary is stored in `JSON` format (see example below) for further analysis or as input to other tools.
+
+```json
+{
+  "allreduce_time": 660801949838.875,
+  "allreduce_calls": 6937803.0,
+  "matmul_time": 163155211000.0,
+  "matmul_calls": 11520000.0,
+  "attn_time": 53528349820.0,
+  "attn_calls": 3276800.0,
+  "norm_time": 26989135820.0,
+  "norm_calls": 3379201.0,
+  "mem_op_time": 4660369802.857142,
+  "mem_op_calls": 873879.0,
+}
+```
+
+Before runing the script, all summary outputs from all processes should be packed into a single `tarball`. 
+
+```sh
+unitrace -h -d -r mpirun -np 4 python ...
+tar cfz unitrace_4_mpi_100iter.tgz output.*
+```
+
+The summary script takes the `tarball` and a schema file as inputs and aggregates kernels from all processes before categorizing them.
+
+```sh
+python summary.py --input unitrace_4_mpi_100iter.tgz --schema schemas/LLaMA.json --output summary_4_mpi_100iter.json
+```
+
+The schema defines classes of kernels and how the kerenls should be categorized in INI format:
+
+```ini
+[matmul if equals to]
+gemm_kernel
+
+[matmul if starts with]
+xpu::xetla::hgemm_caller
+xpu::xetla::HgemmQKVKernel
+
+[allreduce if ends with]
+ALLREDUCE_SMALL
+ALLREDUCE_MEDIUM
+ALLREDUCE_LARGE
+```
+
+Each section starts with a category name (matmul, allreduce etc.) and a condition followed by a list of kernel names.
+There are 3 kinds of conditions: equals to, starts with and ends with.
+
+Before it can be used with `summary.py`, a schema needs to be converted to JSON format:
+
+```sh
+python categorize.py --input LLaMA.ini --output LLaMA.json
+```
 
 ## Location of Trace Data
 
