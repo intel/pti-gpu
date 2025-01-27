@@ -1138,10 +1138,10 @@ def List(args):
                         if (devicefound == True):	# done with the device of interest
                             break
                 if (counting == True):
-                    if (("OtherStall[Events]," in row) or (row.startswith("Kernel,"))):      # found header
+                    if (("OtherStall[Events]" in row) or (row.startswith("Kernel,"))):      # found header
                         header = linenum
                         counting = False
-                        if ("OtherStall[Events]," in row):
+                        if ("OtherStall[Events]" in row):
                             eustall = True
                 linenum += 1
 
@@ -1314,9 +1314,9 @@ def PerfMetricsHTTPServer(args):
             devicefound = False
             eustall = False
             for row in f:
-                if (("OtherStall[Events]," in row) or (row.startswith("Kernel,"))):      # found header
+                if (("OtherStall[Events]" in row) or (row.startswith("Kernel,"))):      # found header
                     header = linenum
-                    if ("OtherStall[Events]," in row):
+                    if ("OtherStall[Events]" in row):
                         eustall = True
                 if (("=== Device" in row) and ("Metrics ===" in row)):
                     if (devicefound == False):		# found device
