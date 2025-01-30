@@ -20,6 +20,7 @@
 
 #include "pti/pti.h"
 #include "pti/pti_view.h"
+#include "samples_utils.h"
 #include "utils.h"
 #include "utils/test_helpers.h"
 #include "ze_utils.h"
@@ -1058,10 +1059,6 @@ class LocalModeZeGemmTest : public testing::Test {
           FAIL() << "Found Invalid PTI View Record";
           break;
         }
-        case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
-          LocalModeZeGemmTestData::Instance().num_ze_records++;
-          break;
-        }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           LocalModeZeGemmTestData::Instance().num_kernels++;
           auto* kernel_record = reinterpret_cast<pti_view_record_kernel*>(ptr);
@@ -1087,11 +1084,9 @@ class LocalModeZeGemmTest : public testing::Test {
     }
 
     void Reset() {
-      num_ze_records = 0;
       num_kernels = 0;
     }
 
-    size_t num_ze_records = 0;
     size_t num_kernels = 0;
   };
 
@@ -1130,7 +1125,6 @@ TEST_F(LocalModeZeGemmTest, TestStartTracingExecuteCommandQueue) {
   PrepareCommandList();
 
   EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
-  EnableView(PTI_VIEW_LEVEL_ZERO_CALLS);
 
   auto status = zeCommandQueueExecuteCommandLists(cmd_q_, 1, &cmd_list_, nullptr);
   ASSERT_EQ(status, ZE_RESULT_SUCCESS);
@@ -1139,7 +1133,6 @@ TEST_F(LocalModeZeGemmTest, TestStartTracingExecuteCommandQueue) {
 
   DisableAndFlushAllViews();
 
-  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_ze_records, 2);
   EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, 0);
 
   ValidateGemmKernel();

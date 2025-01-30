@@ -259,6 +259,7 @@ target_include_directories(
   zegemm_suite
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
 add_custom_command(
