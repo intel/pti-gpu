@@ -49,50 +49,122 @@ def gen_func_param_dict(api_files):
 
 # Generates EnableTracing function and populates with registrable signatures for all apis: partitioned by all or just kfunc.
 def gen_api(
-    f, func_list, kfunc_list, exclude_from_epilogue_list, exclude_from_prologue_list
+    f,
+    func_list,
+    kfunc_list,
+    exclude_from_epilogue_list,
+    exclude_from_prologue_list,
+    dst_api_dlsym_public_file,
+    dst_api_dlsym_private_file,
 ):
     f.write("void EnableTracer(zel_tracer_handle_t tracer) {\n")
     f.write("\n")
     f.write("  if (options_.api_tracing) {\n")
     for func in func_list:
-        f.write(
-            "    zelTracer"
+        # f.write(
+        #    "    zelTracer"
+        #    + func[2:]
+        #    + "RegisterCallback("
+        #    + "tracer, ZEL_REGISTER_PROLOGUE, "
+        #    + func
+        #    + "OnEnter);\n"
+        # )
+        # f.write(
+        #    "    zelTracer"
+        #    + func[2:]
+        #    + "RegisterCallback("
+        #    + "tracer, ZEL_REGISTER_EPILOGUE, "
+        #    + func
+        #    + "OnExit);\n"
+        # )
+        dst_api_dlsym_private_file.write(
+            "LEVEL_ZERO_LOADER_GET_SYMBOL(zelTracer" + func[2:] + "RegisterCallback);\n"
+        )
+        dst_api_dlsym_public_file.write(
+            "decltype(&zelTracer"
             + func[2:]
-            + "RegisterCallback("
+            + "RegisterCallback) zelTracer"
+            + func[2:]
+            + "RegisterCallback_ = nullptr;  // NOLINT\n"
+        )
+        f.write(
+            "    if (pti::PtiLzTracerLoader::Instance().zelTracer"
+            + func[2:]
+            + "RegisterCallback_) {\n"
+        )
+        f.write(
+            "        pti::PtiLzTracerLoader::Instance().zelTracer"
+            + func[2:]
+            + "RegisterCallback_("
             + "tracer, ZEL_REGISTER_PROLOGUE, "
             + func
             + "OnEnter);\n"
         )
         f.write(
-            "    zelTracer"
+            "        pti::PtiLzTracerLoader::Instance().zelTracer"
             + func[2:]
-            + "RegisterCallback("
+            + "RegisterCallback_("
             + "tracer, ZEL_REGISTER_EPILOGUE, "
             + func
             + "OnExit);\n"
         )
+        f.write("    }\n")
     f.write("  }\n")
 
     f.write("  else if (options_.kernel_tracing) {\n")
     for func in kfunc_list:
+        # if func not in exclude_from_prologue_list:
+        #    f.write(
+        #        "    zelTracer"
+        #        + func[2:]
+        #        + "RegisterCallback("
+        #        + "tracer, ZEL_REGISTER_PROLOGUE, "
+        #        + func
+        #        + "OnEnter);\n"
+        #    )
+        # if func not in exclude_from_epilogue_list:
+        #    f.write(
+        #        "    zelTracer"
+        #        + func[2:]
+        #        + "RegisterCallback("
+        #        + "tracer, ZEL_REGISTER_EPILOGUE, "
+        #        + func
+        #        + "OnExit);\n"
+        #    )
+        # dst_api_dlsym_private_file.write(
+        #    "LEVEL_ZERO_LOADER_GET_SYMBOL(zelTracer" + func[2:] + "RegisterCallback);\n"
+        # )
+        # dst_api_dlsym_public_file.write(
+        #    "decltype(&zelTracer"
+        #    + func[2:]
+        #    + "RegisterCallback) zelTracer"
+        #    + func[2:]
+        #    + "RegisterCallback_ = nullptr;\n"
+        # )
+        f.write(
+            "    if (pti::PtiLzTracerLoader::Instance().zelTracer"
+            + func[2:]
+            + "RegisterCallback_) {\n"
+        )
         if func not in exclude_from_prologue_list:
             f.write(
-                "    zelTracer"
+                "        pti::PtiLzTracerLoader::Instance().zelTracer"
                 + func[2:]
-                + "RegisterCallback("
+                + "RegisterCallback_("
                 + "tracer, ZEL_REGISTER_PROLOGUE, "
                 + func
                 + "OnEnter);\n"
             )
         if func not in exclude_from_epilogue_list:
             f.write(
-                "    zelTracer"
+                "        pti::PtiLzTracerLoader::Instance().zelTracer"
                 + func[2:]
-                + "RegisterCallback("
+                + "RegisterCallback_("
                 + "tracer, ZEL_REGISTER_EPILOGUE, "
                 + func
                 + "OnExit);\n"
             )
+        f.write("    }\n")
     f.write("  }\n")
 
     f.write("\n")
@@ -308,6 +380,22 @@ def main():
 
     dst_file = open(dst_file_path, "wt", opener=default_file_opener)
 
+    dst_api_dlsym_private_file_path = os.path.join(
+        dst_path, "tracing_api_dlsym_private.gen"
+    )
+    dst_api_dlsym_public_file_path = os.path.join(
+        dst_path, "tracing_api_dlsym_public.gen"
+    )
+    if os.path.isfile(dst_api_dlsym_private_file_path):
+        os.remove(dst_api_dlsym_private_file_path)
+        os.remove(dst_api_dlsym_public_file_path)
+    dst_api_dlsym_private_file = open(
+        dst_api_dlsym_private_file_path, "wt", opener=default_file_opener
+    )
+    dst_api_dlsym_public_file = open(
+        dst_api_dlsym_public_file_path, "wt", opener=default_file_opener
+    )
+
     l0_path = sys.argv[2]
 
     # Extract registratable apis from 2 headers (ze_api.h, layers/zel_tracing_register_cb.h)
@@ -404,9 +492,13 @@ def main():
         kfunc_list,
         exclude_from_epilogue_list,
         exclude_from_prologue_list,
+        dst_api_dlsym_public_file,
+        dst_api_dlsym_private_file,
     )
 
     dst_file.close()
+    dst_api_dlsym_private_file.close()
+    dst_api_dlsym_public_file.close()
 
 
 if __name__ == "__main__":
