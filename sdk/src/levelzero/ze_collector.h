@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "collector_options.h"
+#include "lz_api_tracing_api_loader.h"
 #include "overhead_kinds.h"
 #include "pti/pti_view.h"
 #include "unikernel.h"
