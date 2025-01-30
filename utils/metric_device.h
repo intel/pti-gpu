@@ -96,13 +96,13 @@ class MetricDevice {
     if (respect_device_pci_order) {
       // needed to order adapters by PCI address
       std::map<md::SAdapterParams_1_9,
-               md::IAdapter_1_11*,
+               md::IAdapter_1_13*,
                utils::ComparatorPciAddress<md::SAdapterParams_1_9> > adapters_map;
       for (uint32_t i = 0; i < adapter_count; i++){
-        md::IAdapter_1_11* ad = adapter_group->GetAdapter(i);
+        md::IAdapter_1_13* ad = adapter_group->GetAdapter(i);
         PTI_ASSERT(ad != nullptr);
         const md::SAdapterParams_1_9* params = ad->GetParams();
-        adapters_map.insert(std::pair<md::SAdapterParams_1_9,md::IAdapter_1_11*>{*params, ad});
+        adapters_map.insert(std::pair<md::SAdapterParams_1_9,md::IAdapter_1_13*>{*params, ad});
       }
       uint32_t id = 0;
       for (const auto& entry : adapters_map ) {

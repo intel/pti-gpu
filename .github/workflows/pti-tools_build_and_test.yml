@@ -31,7 +31,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
+          - container: ${{ vars.PTI_DOCKER_IMAGE_ONPUSH_2025_0_1 }}
 
     container: 
       image: ${{ matrix.container }}
