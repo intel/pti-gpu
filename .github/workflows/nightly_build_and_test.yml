@@ -167,8 +167,8 @@ jobs:
       matrix:
         include:
           - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
-          - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_0 }}
           - container: ${{ vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 }}
+          - container: ${{ vars.PTI_DOCKER_IMAGE_UBUNTU_22_04_ONEAPI_2025_0_1 }}
 
     container: 
       image: ${{ matrix.container }}
@@ -209,6 +209,7 @@ jobs:
           python3 ./tests/run.py -s sysmon
 
       - name: Build-and-test-cl_gpu_metrics
+        if: vars.PTI_DOCKER_IMAGE_ONPUSH_2025_0_1 == matrix.container
         run: |
           source /opt/intel/oneapi/setvars.sh
           python3 ./tests/run.py -s cl_gpu_metrics
@@ -223,7 +224,7 @@ jobs:
       # A problem with GLIBCXX_3.4.26 as noted in VASP-30704
       # 
       - name: Build-and-test-instcount
-        if: vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 != matrix.container
+        if: vars.PTI_DOCKER_IMAGE_ONPUSH_2025_0_1 == matrix.container
         run: |
           source /opt/intel/oneapi/setvars.sh
           python3 ./tests/run.py -s instcount
