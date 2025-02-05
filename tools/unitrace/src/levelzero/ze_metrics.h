@@ -44,7 +44,7 @@ inline void PrintDeviceList() {
   if (status != ZE_RESULT_SUCCESS) {
     std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
 #ifndef _WIN32
-    std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid are set to 0." << std::endl;
+    std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid is set to 0." << std::endl;
 #endif /* _WIN32 */
     return;
   }
@@ -92,7 +92,7 @@ inline void PrintMetricList(uint32_t device_id) {
   if (status != ZE_RESULT_SUCCESS) {
     std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
 #ifndef _WIN32
-    std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid are set to 0." << std::endl;
+    std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid is set to 0." << std::endl;
 #endif /* _WIN32 */
     return;
   }
@@ -109,7 +109,7 @@ inline void PrintMetricList(uint32_t device_id) {
   uint32_t group_count = 0;
   status = zetMetricGroupGet(device, &group_count, nullptr);
   if (status != ZE_RESULT_SUCCESS || group_count == 0) {
-    std::cerr << "[WARNING] No metrics found(" << status << ") group_count = " << group_count << std::endl;
+    std::cerr << "[WARNING] No metrics found (status = 0x" << std::hex << status << std::dec << ") group_count = " << group_count << std::endl;
     return;
   }
 
@@ -620,7 +620,7 @@ class ZeMetricProfiler {
               raw_size, raw_metrics, &num_samples, &num_metrics,
               nullptr, nullptr);
             if ((status != ZE_RESULT_SUCCESS) || (num_samples == 0) || (num_metrics == 0)) {
-              std::cerr << "[WARNING] Unable to calculate metrics(" << status << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
+              std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
               continue;
             }
 
@@ -633,7 +633,7 @@ class ZeMetricProfiler {
               samples.data(), metrics.data());
 
             if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
-              std::cerr << "[WARNING] Unable to calculate metrics(" << status << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
+              std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
               continue;
             }
 
@@ -847,7 +847,7 @@ class ZeMetricProfiler {
               raw_size, raw_metrics, &num_samples, &num_metrics,
               nullptr, nullptr);
             if ((status != ZE_RESULT_SUCCESS) || (num_samples == 0) || (num_metrics == 0)) {
-              std::cerr << "[WARNING] Unable to calculate metrics(" << status << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
+              std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
               continue;
             }
 
@@ -859,7 +859,7 @@ class ZeMetricProfiler {
               raw_size, raw_metrics, &num_samples, &num_metrics,
               samples.data(), metrics.data());
             if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
-              std::cerr << "[WARNING] Unable to calculate metrics" << status << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
+              std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
               continue;
             }
 
@@ -1085,7 +1085,7 @@ class ZeMetricProfiler {
     zet_metric_streamer_desc_t streamer_desc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr, max_metric_samples, interval};
     status = zetMetricStreamerOpen(context, device, group, &streamer_desc, event, &streamer);
     if (status != ZE_RESULT_SUCCESS) {
-      std::cerr << "[WARNING] Unable to open metric streamer for sampling (" << status << "). The sampling interval might be too small or another sampling instance is active." << std::endl;
+      std::cerr << "[WARNING] Unable to open metric streamer for sampling (status = 0x" << std::hex << status << std::dec << "). The sampling interval might be too small or another sampling instance is active." << std::endl;
 #ifndef _WIN32
       std::cerr << "[INFO] Please also make sure /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid is set to 0." << std::endl;
 #endif /* _WIN32 */

@@ -83,7 +83,7 @@ struct ZeMetricQueryPools {
     for (auto it = query_pool_map_.begin(); it != query_pool_map_.end(); it++) {
       status = zetMetricQueryDestroy(it->first);
       if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[WARNING] Failed to destroy metric query (" << status << ")" << std::endl;
+        std::cerr << "[WARNING] Failed to destroy metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
       }
     }
     query_pool_map_.clear();
@@ -91,7 +91,7 @@ struct ZeMetricQueryPools {
     for (auto it = pools_.begin(); it != pools_.end(); it++) {
       status = zetMetricQueryPoolDestroy(*it);
       if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[WARNING] Failed to destroy metric query pool (" << status << ")" << std::endl;
+        std::cerr << "[WARNING] Failed to destroy metric query pool (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
       }
     }
     
@@ -115,7 +115,7 @@ struct ZeMetricQueryPools {
 
       status = zetMetricQueryPoolCreate(context, device, group, &desc, &pool);
       if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[ERROR] Failed to create metric query pool (" << status << ")" << std::endl;
+        std::cerr << "[ERROR] Failed to create metric query pool (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         _Exit(-1);	// immediately exit
       }
       pools_.push_back(pool);
@@ -124,7 +124,7 @@ struct ZeMetricQueryPools {
       for (int i = 0; i < pool_size_ - 1; i++) {
         status = zetMetricQueryCreate(pool, i, &query);
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[ERROR] Failed to create metric query (" << status << ")" << std::endl;
+          std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           _Exit(-1);	// exit immediately
         }
         queries.push_back(query);
@@ -132,7 +132,7 @@ struct ZeMetricQueryPools {
       }
       status = zetMetricQueryCreate(pool, pool_size_ - 1, &query);
       if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[ERROR] Failed to create metric query (" << status << ")" << std::endl;
+        std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         _Exit(-1);	// exit immediately
       }
       query_pool_map_.insert({query, {context, device, group}});
@@ -148,7 +148,7 @@ struct ZeMetricQueryPools {
 
         status = zetMetricQueryPoolCreate(context, device, group, &desc, &pool);
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[ERROR] Failed to create metric query pool (" << status << ")" << std::endl;
+          std::cerr << "[ERROR] Failed to create metric query pool (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           _Exit(-1);	// immediately exit
         }
         pools_.push_back(pool);
@@ -156,7 +156,7 @@ struct ZeMetricQueryPools {
         for (int i = 0; i < pool_size_ - 1; i++) {
           status = zetMetricQueryCreate(pool, i, &query);
           if (status != ZE_RESULT_SUCCESS) {
-            std::cerr << "[ERROR] Failed to create metric query (" << status << ")" << std::endl;
+            std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             _Exit(-1);	// exit immediately
           }
           it->second.push_back(query);
@@ -164,7 +164,7 @@ struct ZeMetricQueryPools {
         }
         status = zetMetricQueryCreate(pool, pool_size_ - 1, &query);
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[ERROR] Failed to create metric query (" << status << ")" << std::endl;
+          std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           _Exit(-1);	// exit immediately
         }
         query_pool_map_.insert({query, {context, device, group}});
@@ -202,7 +202,7 @@ struct ZeMetricQueryPools {
     }
     ze_result_t status = zetMetricQueryReset(query);
     if (status != ZE_RESULT_SUCCESS) {
-      std::cerr << "[ERROR] Failed to reset metric query (" << status << ")" << std::endl;
+      std::cerr << "[ERROR] Failed to reset metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
       _Exit(-1);	// exit immediately
     }
   }
@@ -1201,7 +1201,7 @@ class ZeCollector {
     if (tracer_ != nullptr) {
       ze_result_t status = zelTracerDestroy(tracer_);
       if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[WARNING] Failed to destroy tracer (" << status << ")" << std::endl;
+        std::cerr << "[WARNING] Failed to destroy tracer (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
       }
     }
 #endif /* _WIN32 */
@@ -1219,14 +1219,14 @@ class ZeCollector {
       for (auto it = metric_activations_.begin(); it != metric_activations_.end(); it++) {
         auto status = zetContextActivateMetricGroups(it->first, it->second, 0, nullptr);
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[WARNING] Failed to deactivate metric groups (" << status << ")" << std::endl;
+          std::cerr << "[WARNING] Failed to deactivate metric groups (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
       }
       metric_activations_.clear();
       for (auto& context : metric_contexts_) {
         auto status = zeContextDestroy(context);
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[WARNING] Failed to destroy context for metrics query (" << status << ")" << std::endl;
+          std::cerr << "[WARNING] Failed to destroy context for metrics query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
       }
       metric_contexts_.clear();
@@ -1928,7 +1928,7 @@ class ZeCollector {
     group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
     ze_result_t status = zetMetricGroupGetProperties(group, &group_props);
     if (status != ZE_RESULT_SUCCESS) {
-      std::cerr << "[ERROR] Failed to get metric group properties (" << status << ")." << std::endl;
+      std::cerr << "[ERROR] Failed to get metric group properties (status = 0x" << std::hex << status << std::dec << ")." << std::endl;
       exit(-1);
     }
 
@@ -2715,7 +2715,7 @@ class ZeCollector {
           if (ts != nullptr) {
             status = zeMemFree(it->second->context_, ts);
             if (status != ZE_RESULT_SUCCESS) {
-              std::cerr << "[WARNING] Failed to free event timestamp memory (" << status << ")" << std::endl;
+              std::cerr << "[WARNING] Failed to free event timestamp memory (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             }
           }
 	}
@@ -2724,7 +2724,7 @@ class ZeCollector {
           if (ts != nullptr) {
             status = zeMemFree(it->second->context_, ts);
             if (status != ZE_RESULT_SUCCESS) {
-              std::cerr << "[WARNING] Failed to free global timestamp memory (" << status << ")" << std::endl;
+              std::cerr << "[WARNING] Failed to free global timestamp memory (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             }
           }
 	}
@@ -2732,7 +2732,7 @@ class ZeCollector {
         if (it->second->timestamps_on_commands_completion_ != nullptr) {
           status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
           if (status != ZE_RESULT_SUCCESS) {
-            std::cerr << "[WARNING] Failed to free command timestamp memory (" << status << ")" << std::endl;
+            std::cerr << "[WARNING] Failed to free command timestamp memory (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           }
           it->second->timestamps_on_commands_completion_ = nullptr;
         }
@@ -2780,7 +2780,7 @@ class ZeCollector {
           ze_result_t status;
           status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
           if (status != ZE_RESULT_SUCCESS) {
-            std::cerr << "[WARNING] Failed to free command timestamp memory (" << status << ")" << std::endl;
+            std::cerr << "[WARNING] Failed to free command timestamp memory (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           }
           it->second->timestamps_on_commands_completion_ = nullptr;
         }
@@ -4324,7 +4324,7 @@ class ZeCollector {
           auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
           UniMemory::ExitIfOutOfMemory((void *)(ts));
           if (status != ZE_RESULT_SUCCESS) {
-            std::cerr << "[ERROR] Failed to allocate host memory for timestamps (" << status << ")" << std::endl;
+            std::cerr << "[ERROR] Failed to allocate host memory for timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             exit(-1);
           }
           it->second->timestamps_on_event_reset_.push_back(ts);
@@ -4335,7 +4335,7 @@ class ZeCollector {
 	      int idx = slot % number_timestamps_per_slice_;
         auto status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), 1, (ze_event_handle_t *)(params->phEvent), (void *)&(ts[idx]), nullptr, nullptr, 1, (ze_event_handle_t *)(params->phEvent));
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[ERROR] Failed to get kernel timestamps (" << status << ")" << std::endl;
+          std::cerr << "[ERROR] Failed to get kernel timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           exit(-1);
         }
         it->second->event_to_timestamp_seq_.erase(it2);
@@ -4350,7 +4350,7 @@ class ZeCollector {
           auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(uint64_t) * 2, cache_line_size_, (void **)&dts);
           UniMemory::ExitIfOutOfMemory((void *)(dts));
           if (status != ZE_RESULT_SUCCESS) {
-            std::cerr << "[ERROR] Failed to allocate host memory for timestamps (" << status << ")" << std::endl;
+            std::cerr << "[ERROR] Failed to allocate host memory for timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             exit(-1);
           }
           it->second->device_global_timestamps_.push_back(dts);
@@ -4361,7 +4361,7 @@ class ZeCollector {
 	      int idx = it->second->num_device_global_timestamps_ % (2 * number_timestamps_per_slice_);
         auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)&(dts[idx]), nullptr, 0, nullptr);
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[ERROR] Failed to get device global timestamps (" << status << ")" << std::endl;
+          std::cerr << "[ERROR] Failed to get device global timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           exit(-1);
         }
         
@@ -4392,7 +4392,7 @@ class ZeCollector {
         if (dts != nullptr) {
           auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)(dts), nullptr, 0, nullptr);
           if (status != ZE_RESULT_SUCCESS) {
-            std::cerr << "[ERROR] Failed to get device global timestamps (" << status << ")" << std::endl;
+            std::cerr << "[ERROR] Failed to get device global timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             exit(-1);
           }
           collector->AppendCommand(EventReset, it->second, kids, dts); 
@@ -4472,20 +4472,20 @@ class ZeCollector {
         auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, i * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
         UniMemory::ExitIfOutOfMemory((void *)(ts));
         if (status != ZE_RESULT_SUCCESS) {
-          std::cerr << "[ERROR] Failed to allocate host memory for timestamps (" << status << ")" << std::endl;
+          std::cerr << "[ERROR] Failed to allocate host memory for timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
         it->second->timestamps_on_commands_completion_ = ts;
 
         status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events.data(), (void *)it->second->timestamps_on_commands_completion_, nullptr, it->second->timestamp_event_to_signal_, num_events, events.data());
         if (status != ZE_RESULT_SUCCESS){
-          std::cerr << "[ERROR] Failed to get kernel timestamps (" << status << ")" << std::endl;
+          std::cerr << "[ERROR] Failed to get kernel timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
       }
       else {
         // signal event if events were reset earlier
         auto status = zeCommandListAppendSignalEvent(*(params->phCommandList), it->second->timestamp_event_to_signal_);
         if (status != ZE_RESULT_SUCCESS){
-          std::cerr << "[ERROR] Failed to signal command list timstamps event (" << status << ")" << std::endl;
+          std::cerr << "[ERROR] Failed to signal command list timstamps event (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
       }
 
