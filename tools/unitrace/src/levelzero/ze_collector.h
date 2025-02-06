@@ -1054,6 +1054,7 @@ struct ZeCommandList {
   uint32_t engine_index_;	// valid if immediate command list
   bool immediate_;
   bool implicit_scaling_;
+  bool in_order_;
   std::vector<ZeCommand *> commands_;	// if non-immediate command list
   std::vector<ZeCommandMetricQuery *> metric_queries_;	// if non-immediate command list
   std::vector<ze_kernel_timestamp_result_t *> timestamps_on_event_reset_; // timestamps queried on event reset
@@ -2619,7 +2620,8 @@ class ZeCollector {
     ze_device_handle_t device,
     uint32_t ordinal,
     uint32_t index,
-    bool immediate) {
+    bool immediate,
+    bool in_order) {
 
     
     ZeCommandList *desc;
@@ -2651,6 +2653,7 @@ class ZeCollector {
     desc->context_ = context;
     desc->device_ = device;
     desc->immediate_ = immediate;
+    desc->in_order_ = in_order;
     desc->engine_ordinal_ = ordinal;	// valid if immediate command list
     desc->engine_index_ = index;;	// valid if immediate command list
 
@@ -4409,7 +4412,8 @@ class ZeCollector {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
       // dummy engine ordinal and index
-      collector->CreateCommandList( **(params->pphCommandList), *(params->phContext), *(params->phDevice), -1, -1, false);
+      bool in_order = ((*(params->pdesc))->flags & ZE_COMMAND_LIST_FLAG_IN_ORDER) != 0;
+      collector->CreateCommandList( **(params->pphCommandList), *(params->phContext), *(params->phDevice), -1, -1, false, in_order);
     }
   }
 
@@ -4434,7 +4438,8 @@ class ZeCollector {
         return;
       }
 
-      collector->CreateCommandList(**(params->pphCommandList), *(params->phContext), *(params->phDevice), clq_desc->ordinal, clq_desc->index, true);
+      bool in_order = ((*(params->paltdesc))->flags & ZE_COMMAND_QUEUE_FLAG_IN_ORDER) != 0;
+      collector->CreateCommandList(**(params->pphCommandList), *(params->phContext), *(params->phDevice), clq_desc->ordinal, clq_desc->index, true, in_order);
     }
   }
   
@@ -4476,7 +4481,16 @@ class ZeCollector {
         }
         it->second->timestamps_on_commands_completion_ = ts;
 
-        status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events.data(), (void *)it->second->timestamps_on_commands_completion_, nullptr, it->second->timestamp_event_to_signal_, num_events, events.data());
+        if (it->second->in_order_) {
+          // WA for driver bug. If command list is in order avoid signaling event
+          // in zeCommandListAppendQueryKernelTimestamps.
+          status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events.data(), (void *)it->second->timestamps_on_commands_completion_, nullptr, nullptr, num_events, events.data());
+          if (status == ZE_RESULT_SUCCESS)
+            status = zeCommandListAppendSignalEvent(*(params->phCommandList), it->second->timestamp_event_to_signal_);
+        } else {
+          status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events.data(), (void *)it->second->timestamps_on_commands_completion_, nullptr, it->second->timestamp_event_to_signal_, num_events, events.data());
+        }
+
         if (status != ZE_RESULT_SUCCESS){
           std::cerr << "[ERROR] Failed to get kernel timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
