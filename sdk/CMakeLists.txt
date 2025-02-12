@@ -309,30 +309,35 @@ if(PTI_INSTALL)
     if (UNIX)
       install(FILES "env/vars.sh" DESTINATION "env/" COMPONENT Pti_oneAPI)
       install(FILES "env/oneapi-vars.sh" DESTINATION "${CMAKE_INSTALL_SYSCONFDIR}/pti" RENAME vars.sh COMPONENT Pti_oneAPI)
+      install(FILES "cmake/pkg/def_tags.txt" DESTINATION "pkg/" COMPONENT Pti_oneAPI)
     elseif (WIN32)
       install(FILES "env/vars.bat" DESTINATION "env/" COMPONENT Pti_oneAPI)
       install(FILES "env/oneapi-vars.bat" DESTINATION "${CMAKE_INSTALL_SYSCONFDIR}/pti" RENAME vars.bat COMPONENT Pti_oneAPI)
+      install(FILES "cmake/pkg/win_pip_tags.txt" DESTINATION "pkg/" COMPONENT Pti_oneAPI)
     endif()
 
-    bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
+    set(BOMFILE_DIRNULL "NULL")
+    set(BOMFILE_DIRPREFIX "-LIB")
+
+    bomline(${BOMFILE_DIR} ${BOMFILE_DEV} ${BOMFILE_DIRNULL}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_INCLUDE_DIR}/pti*.h\"]])
-    bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
+    bomline(${BOMFILE_DIR} ${BOMFILE_DEV} ${BOMFILE_DIRNULL}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/cmake/pti/Pti*.cmake\"]])
-    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN} ${BOMFILE_DIRNULL}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIC_DIR}/*\"]])
-    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN} ${BOMFILE_DIRNULL}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/libpti*so.[0-9]*\"]])
-    bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
+    bomline(${BOMFILE_DIR} ${BOMFILE_DEV} ${BOMFILE_DIRNULL}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/libpti*so\"]])
-    bomline(${BOMFILE_DIR} ${BOMFILE_DEV}
+    bomline(${BOMFILE_DIR} ${BOMFILE_DEV} ${BOMFILE_DIRNULL}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/*.lib\"]])
-    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN} ${BOMFILE_DIRPREFIX}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_LIB_DIR}/*.dll\"]])
-    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN} ${BOMFILE_DIRPREFIX}
       [[\"\${CMAKE_INSTALL_PREFIX}/${PTI_INSTALL_BIN_DIR}/*.dll\"]])
-    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN} ${BOMFILE_DIRNULL}
       [[\"\${CMAKE_INSTALL_PREFIX}/env/*\"]])
-    bomline(${BOMFILE_DIR} ${BOMFILE_RUN}
+    bomline(${BOMFILE_DIR} ${BOMFILE_RUN} ${BOMFILE_DIRNULL}
       [[\"\${CMAKE_INSTALL_PREFIX}/etc/*\"]])
 
  endif()

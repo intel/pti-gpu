@@ -1,12 +1,16 @@
 #!/bin/bash
 BOM_DIR=$1
-#echo BOM_DIR $BOM_DIR
-TGT_FILE=$4
-#echo TGT_FILE $TGT_FILE
+echo BOM_DIR $BOM_DIR
 TGT_BOM=$2
-#echo TGT_BOM $TGT_BOM
-BRK_TOKEN=$3
-#echo BRK_TOKEN $BRK_TOKEN
+echo TGT_BOM $TGT_BOM
+INST_DIR=$3
+echo INST_DIR $INST_DIR
+BRK_TOKEN=$4
+echo BRK_TOKEN $BRK_TOKEN
+TGT_FILE=$5
+echo TGT_FILE $TGT_FILE
+
+[ "$INST_DIR" = "NULL" ] && INST_DIR=""
 
 
 [[ -d ${BOM_DIR} ]] || mkdir ${BOM_DIR}
@@ -17,7 +21,7 @@ STRIPPED_NAME=${STG1#$BRK_TOKEN/}
 echo STG1= ${STG1} STRIPPED_NAME ${STRIPPED_NAME}
 
 if [[ -L "$4" ]]; then
-  echo "<N/A>"$':'"INS"/${STRIPPED_NAME}$':'CKSUM$':'ONE$'::'INT$':'755$':'$(readlink $TGT_FILE) >> ${TGT_BOM}
+  echo "<N/A>"$':'"INS"${INST_DIR}/${STRIPPED_NAME}$':'CKSUM$':'ONE$'::'INT$':'755$':'$(readlink $TGT_FILE) >> ${TGT_BOM}
 else
-  echo "DEL"/${STRIPPED_NAME}$':'"INS"/${STRIPPED_NAME}$':'CKSUM$':'ONE$':'$':'INT$':'$(stat -c '%a' ${TGT_FILE}) >> ${TGT_BOM}
+  echo "DEL"/${STRIPPED_NAME}$':'"INS"${INST_DIR}/${STRIPPED_NAME}$':'CKSUM$':'ONE$':'$':'INT$':'$(stat -c '%a' ${TGT_FILE}) >> ${TGT_BOM}
 fi
