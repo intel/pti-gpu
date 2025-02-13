@@ -105,7 +105,7 @@ void StartTracing() {
   ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL);
   ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
   ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
-  ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS);
+  ptiViewEnable(PTI_VIEW_RUNTIME_API);
   ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION);
   ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD);
 }
@@ -114,7 +114,7 @@ void StopTracing() {
   ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
   ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY);
   ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL);
-  ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS);
+  ptiViewDisable(PTI_VIEW_RUNTIME_API);
   ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION);
   ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD);
 }
@@ -181,13 +181,13 @@ int main()
                       ptr));
               break;
             }
-            case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+            case pti_view_kind::PTI_VIEW_RUNTIME_API: {
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Sycl Runtime Record" << '\n';
               samples_utils::DumpRecord(
-                  reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
+                  reinterpret_cast<pti_view_record_api *>(ptr));
               break;
             }
             case pti_view_kind:: PTI_VIEW_DEVICE_GPU_MEM_COPY: {

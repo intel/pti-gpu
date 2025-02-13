@@ -22,6 +22,7 @@
 
 #include "consumer_thread.h"
 #include "default_buffer_callbacks.h"
+#include "include/pti/pti_api_ids_state_maps.h"
 #include "pti/pti_view.h"
 
 #if defined(PTI_TRACE_SYCL)
@@ -48,7 +49,7 @@ inline void MemFillEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void KernelEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
-inline void ZecallEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+inline void ZeDriverEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void SyclRuntimeEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
@@ -81,7 +82,7 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
             ViewData{"KernelEvent", KernelEvent}
           }
         },
-        {PTI_VIEW_SYCL_RUNTIME_CALLS,
+        {PTI_VIEW_RUNTIME_API,
           {
             ViewData{"SyclRuntimeEvent", SyclRuntimeEvent}
           }
@@ -106,9 +107,9 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
             ViewData{"zeCommandListAppendMemoryCopyP2P", MemCopyP2PEvent},
           }
         },
-        {PTI_VIEW_LEVEL_ZERO_CALLS,
+        {PTI_VIEW_DRIVER_API,
           {
-            ViewData{"ZecallEvent", ZecallEvent},
+            ViewData{"ZecallEvent", ZeDriverEvent},
           }
         },
       };
@@ -310,14 +311,13 @@ struct PtiViewRecordHandler {
     bool l0_collection_type = ((type == pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
-                               (type == pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS) ||
+                               (type == pti_view_kind::PTI_VIEW_DRIVER_API) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
 
     //
     // TBD --- implement and remove the checks for below pti_view_kinds
     //
-    if ((type == pti_view_kind::PTI_VIEW_DEVICE_CPU_KERNEL) ||
-        (type == pti_view_kind::PTI_VIEW_OPENCL_CALLS)) {
+    if (type == pti_view_kind::PTI_VIEW_DEVICE_CPU_KERNEL) {
       return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
     }
 
@@ -329,7 +329,7 @@ struct PtiViewRecordHandler {
       external_collection_enabled = true;
     }
 
-    if (type == pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS) {
+    if (type == pti_view_kind::PTI_VIEW_RUNTIME_API) {
 #if defined(PTI_TRACE_SYCL)
       if (!view_event_map_.TryFindElement("SyclRuntimeEvent")) {
         SyclCollector::Instance().SetCallback(SyclRuntimeViewCallback);
@@ -366,6 +366,13 @@ struct PtiViewRecordHandler {
         for (const auto& view_types : GetViewNameAndCallback(type)) {
           view_event_map_.Add(view_types.fn_name, view_types.callback);
         }
+        if (type == pti_view_kind::PTI_VIEW_DRIVER_API) {
+          for (auto [k, v] : pti_api_id_driver_levelzero_state) {
+            pti_api_id_driver_levelzero_state[k] = 1;  // enable all to fire.
+          }
+          map_granularity_set[pti_api_group_id::PTI_API_GROUP_LEVELZERO] = false;
+          map_granularity_set[pti_api_group_id::PTI_API_GROUP_OPENCL] = false;
+        }
       }
     } catch (const std::out_of_range&) {
       result = pti_result::PTI_ERROR_BAD_ARGUMENT;
@@ -378,7 +385,7 @@ struct PtiViewRecordHandler {
     bool l0_collection_type = ((type == pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
-                               (type == pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS) ||
+                               (type == pti_view_kind::PTI_VIEW_DRIVER_API) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
 
     if (type == pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD) {
@@ -387,7 +394,8 @@ struct PtiViewRecordHandler {
     if (type == pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION) {
       external_collection_enabled = false;
     }
-    if (type == pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS) {
+
+    if (type == pti_view_kind::PTI_VIEW_RUNTIME_API) {
 #if defined(PTI_TRACE_SYCL)
       SyclCollector::Instance().DisableTracing();
 #endif
@@ -477,8 +485,80 @@ struct PtiViewRecordHandler {
     return kernel_name_str;
   }
 
+  inline pti_result ResetTracingStateToAllDisabled(pti_api_group_id type) {
+    const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
+    try {
+      switch (type) {
+        case pti_api_group_id::PTI_API_GROUP_SYCL: {
+          for (auto [k, v] : pti_api_id_runtime_sycl_state) {
+            pti_api_id_runtime_sycl_state[k] = 0;  // disable all
+          }
+        }; break;
+        case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
+          for (auto [k, v] : pti_api_id_driver_levelzero_state) {
+            pti_api_id_driver_levelzero_state[k] = 0;  // disable all
+          }
+        }; break;
+        case pti_api_group_id::PTI_API_GROUP_OPENCL: {
+          return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+        }; break;
+        case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
+        case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
+        case pti_api_group_id::PTI_API_GROUP_RESERVED: {
+          return pti_result::PTI_ERROR_BAD_ARGUMENT;
+        }; break;
+      }
+    } catch (const std::out_of_range&) {
+      return pti_result::PTI_ERROR_BAD_ARGUMENT;
+    }
+    return PTI_SUCCESS;
+  }
+
+  inline pti_result SetApiTracingState(pti_api_group_id type, uint32_t api_id, bool enable) {
+    const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
+    uint32_t new_value = (enable ? 1 : 0);
+    try {
+      switch (type) {
+        case pti_api_group_id::PTI_API_GROUP_SYCL: {
+          if (pti_api_id_runtime_sycl_state.find(api_id) != pti_api_id_runtime_sycl_state.end()) {
+            pti_api_id_runtime_sycl_state.at(api_id) = new_value;
+          } else {
+            return pti_result::PTI_ERROR_BAD_API_ID;
+          }
+        }; break;
+        case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
+          if (pti_api_id_driver_levelzero_state.find(api_id) !=
+              pti_api_id_driver_levelzero_state.end()) {
+            pti_api_id_driver_levelzero_state.at(api_id) = new_value;
+          } else {
+            return pti_result::PTI_ERROR_BAD_API_ID;
+          }
+        }; break;
+        case pti_api_group_id::PTI_API_GROUP_OPENCL: {
+          return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+        }; break;
+        case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
+        case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
+        case pti_api_group_id::PTI_API_GROUP_RESERVED: {
+          return pti_result::PTI_ERROR_BAD_ARGUMENT;
+        }; break;
+      }
+    } catch (const std::out_of_range&) {
+      return pti_result::PTI_ERROR_BAD_ARGUMENT;
+    } catch (const std::exception& e) {
+      std::cout << e.what() << std::endl;
+    }
+    return PTI_SUCCESS;
+  }
+
   inline pti_result GetState() { return state_; }
   inline void SetState(pti_result new_state) { state_ = new_state; }
+
+  inline bool GetGranularityState(pti_api_group_id type) { return map_granularity_set[type]; }
+  inline void SetGranularityState(pti_api_group_id type, bool state) {
+    const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
+    map_granularity_set[type] = state;
+  }
 
   inline SpecialCallsData& GetSpecialCallsData(const uint32_t& corrId) {
     const std::lock_guard<std::mutex> lock(set_special_calls_map_mtx_);
@@ -559,6 +639,7 @@ struct PtiViewRecordHandler {
   mutable std::mutex insert_record_mtx_;  // protecting writing to buffers, as different threads
                                           // might be writing to the same buffer
   mutable std::mutex set_special_calls_map_mtx_;
+  mutable std::mutex set_granularity_map_mtx_;
 
   ViewEventTable view_event_map_;
   KernelNameStorageQueue kernel_name_storage_;
@@ -575,6 +656,8 @@ struct PtiViewRecordHandler {
   std::atomic<bool> deinit_ = false;
 
   std::map<uint32_t, SpecialCallsData> map_spcalls_suppression;
+  std::map<pti_api_group_id, bool>
+      map_granularity_set;  // Are we in granular (individual api) mode for this api_group?
 };
 
 // Required to access buffer from ze_collector callbacks
@@ -658,14 +741,14 @@ inline uint64_t ApplyTimeShift(uint64_t timestamp, int64_t time_shift) {
   try {
     if (time_shift < 0) {
       if (timestamp < static_cast<uint64_t>(-time_shift)) {  // underflow?
-        SPDLOG_WARN("Timestamp underflow detected when shifting domains: TS: {}, time_shift: {}",
+        SPDLOG_WARN("Timestamp underflow detected when shifting api_groups: TS: {}, time_shift: {}",
                     timestamp, time_shift);
         throw std::out_of_range("Timestamp underflow detected");
       }
       out_ts = timestamp - static_cast<uint64_t>(-time_shift);
     } else {
       if ((UINT64_MAX - timestamp) < static_cast<uint64_t>(time_shift)) {  // overflow?
-        SPDLOG_WARN("Timestamp overflow detected when shifting domains: TS: {}, time_shift: {}",
+        SPDLOG_WARN("Timestamp overflow detected when shifting api_groups: TS: {}, time_shift: {}",
                     timestamp, time_shift);
         throw std::out_of_range("Timestamp overflow detected");
       };
@@ -790,8 +873,9 @@ inline void OverheadCollectionEvent(void* data, const ZeKernelCommandExecutionRe
 }
 
 inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
-  pti_view_record_sycl_runtime record;
-  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS;
+  pti_view_record_api record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_RUNTIME_API;
+  record._api_group = pti_api_group_id::PTI_API_GROUP_SYCL;
 
   int64_t ts_shift = Instance().GetTimeShift();
 
@@ -804,14 +888,20 @@ inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecor
   record._thread_id = rec.tid_;
   record._process_id = rec.pid_;
   record._correlation_id = rec.cid_;
-  record._name = rec.sycl_func_name_;
-  SPDLOG_TRACE("In {}, name: {}, corr_id: {}", __FUNCTION__, record._name, record._correlation_id);
+  record._api_id = rec.callback_id_;
+  // record._name = rec.sycl_func_name_;
+  SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, record._correlation_id);
   Instance().InsertRecord(record, record._thread_id);
-  std::string a_string = record._name;
-  if (a_string.find("EnqueueKernelLaunch") != std::string::npos) {
-    SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
-    special_rec_data.sycl_rec_present = 1;
-    Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
+  const char* pName = nullptr;
+  if (ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, record._api_id, &pName) ==
+      pti_result::PTI_SUCCESS) {
+    std::string a_string(pName);
+    // std::string a_string = record._name;
+    if (a_string.find("EnqueueKernelLaunch") != std::string::npos) {
+      SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
+      special_rec_data.sycl_rec_present = 1;
+      Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
+    }
   }
 }
 
@@ -860,14 +950,17 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
       SyclCollector::Instance().Enabled()) {  // generate special record only if no sycl rec
                                               // (sycl_rec_present is 0) and sycl enabled and
                                               // zecalls disabled enabled and kernel is enabled.
-    pti_view_record_sycl_runtime special_rec;
-    special_rec._view_kind._view_kind = pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS;
-    special_rec._name = "zeCommandListAppendLaunchKernel";
+    pti_view_record_api special_rec;
+    special_rec._view_kind._view_kind = pti_view_kind::PTI_VIEW_RUNTIME_API;
+    // special_rec._name = "zeCommandListAppendLaunchKernel";
     special_rec._start_timestamp = ApplyTimeShift(rec.api_start_time_, ts_shift);
     special_rec._end_timestamp = ApplyTimeShift(rec.api_end_time_, ts_shift);
     special_rec._thread_id = rec.tid_;
     special_rec._process_id = rec.pid_;
     special_rec._correlation_id = rec.cid_;
+    // special_rec._api_id = pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id;
+    special_rec._api_id = pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernel_id;
+    special_rec._api_group = pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO;
     if (external_collection_enabled) {
       GenerateExternalCorrelationRecords(rec);  // use rec since only corrid is needed from it.
     }
@@ -878,18 +971,19 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   Instance().InsertRecord(record, record._thread_id);
 }
 
-inline void ZecallEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
-  pti_view_record_zecalls record;
-  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS;
+inline void ZeDriverEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  pti_view_record_api record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DRIVER_API;
 
   int64_t ts_shift = Instance().GetTimeShift();
 
+  record._api_group = pti_api_group_id::PTI_API_GROUP_LEVELZERO;
   record._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
   record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
   record._thread_id = rec.tid_;
   record._process_id = rec.pid_;
-  record._callback_id = rec.callback_id_;
-  record._result = rec.result_;
+  record._api_id = rec.callback_id_;
+  record._return_code = rec.result_;
   record._correlation_id = rec.cid_;
   Instance().InsertRecord(record, record._thread_id);
 }

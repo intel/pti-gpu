@@ -83,8 +83,8 @@ inline pti_view_record_overhead CreateRecord() {
 }
 
 template <>
-inline pti_view_record_sycl_runtime CreateRecord() {
-  return CreateRecord<pti_view_record_sycl_runtime, pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS>();
+inline pti_view_record_api CreateRecord() {
+  return CreateRecord<pti_view_record_api, pti_view_kind::PTI_VIEW_RUNTIME_API>();
 }
 
 template <>

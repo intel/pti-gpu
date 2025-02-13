@@ -22,24 +22,31 @@
 constexpr auto kRequestedRecordCount = 5'000'000ULL;
 constexpr auto kRequestedBufferSize = kRequestedRecordCount * sizeof(pti_view_record_kernel);
 
+void EnableIndividualDriverApis() {
+  PTI_CHECK_SUCCESS(
+      ptiViewEnableDriverApi(1, pti_api_group_id::PTI_API_GROUP_LEVELZERO,
+                             pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernel_id));
+}
+
 void StartTracing() {
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
-  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_RUNTIME_API));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
-  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DRIVER_API));
+  EnableIndividualDriverApis();
 }
 
 void StopTracing() {
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
-  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_RUNTIME_API));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
-  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DRIVER_API));
 }
 
 void ProvideBuffer(unsigned char **buf, std::size_t *buf_size) {
@@ -89,20 +96,20 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
         samples_utils::DumpRecord(reinterpret_cast<pti_view_record_external_correlation *>(ptr));
         break;
       }
-      case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+      case pti_view_kind::PTI_VIEW_RUNTIME_API: {
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
         std::cout << "Found Sycl Runtime Record" << '\n';
-        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
+        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_api *>(ptr));
         break;
       }
-      case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
+      case pti_view_kind::PTI_VIEW_DRIVER_API: {
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
-        std::cout << "Found Zecalls Record" << '\n';
-        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_zecalls *>(ptr));
+        std::cout << "Found Driver Api Record" << '\n';
+        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_api *>(ptr));
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';

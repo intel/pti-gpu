@@ -18,7 +18,7 @@
 #include <level_zero/layers/zel_tracing_register_cb.h>
 #include <level_zero/loader/ze_loader.h>
 #include <level_zero/ze_api.h>
-#include <pti/pti_cbids_runtime.h>
+#include <pti/pti_driver_levelzero_api_ids.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -381,6 +381,8 @@ class ZeCollector {
       MarkIntrospection();
     }
   }
+
+  int32_t trace_all_env_value = utils::IsSetEnv("PTI_VIEW_DRIVER_API");
 
   ze_result_t DetectIntrospectionApis(const ze_driver_handle_t& driver) {
     SPDLOG_TRACE("In {}", __FUNCTION__);

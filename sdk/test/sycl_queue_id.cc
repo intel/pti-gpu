@@ -34,7 +34,7 @@ void StartTracing() {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
 }
 
 void StopTracing() {
@@ -42,7 +42,7 @@ void StopTracing() {
   EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P), pti_result::PTI_SUCCESS);
   EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-  EXPECT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  EXPECT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
 }
 
 static void BufferRequested(unsigned char **buf, size_t *buf_size) {
@@ -101,9 +101,7 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t used_byt
         if (rec->_sycl_queue_id != kMaxQueueId) queue_id_memfill_records = true;
         break;
       }
-      case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
-        [[maybe_unused]] std::string function_name =
-            reinterpret_cast<pti_view_record_sycl_runtime *>(ptr)->_name;
+      case pti_view_kind::PTI_VIEW_RUNTIME_API: {
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {

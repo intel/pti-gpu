@@ -154,10 +154,10 @@ struct PidTidInfo {
 inline thread_local PidTidInfo thread_local_pid_tid_info = {utils::GetPid(), utils::GetTid()};
 
 // clang-format off
-// Below table highlights when we will emit special record.
-// PTI_VIEW_SYCL_RUNTIME_CALLS	PTI_VIEW_DEVICE_GPU_KERNEL	PTI_VIEW_LEVEL_ZERO_CALLS	Generate Special Sycl Rec.
+// Below table highlights when we will emit special record.  Special records are in api records with hybrid api_groups
+// PTI_VIEW_RUNTIME_API		PTI_VIEW_DEVICE_GPU_KERNEL	PTI_VIEW_DRIVER_API	Generate Special Hybrid Rec.
 //------------------------------------------------------------------------------------------------------------------------
-// on                                   on                              off                      if no sycl rec present off
+// on                                   on                              off                      if no sycl rec present:yes
 // off                                  on                              on                       no
 // on                                   on                              on                       no
 // on                                   off                             on                       no

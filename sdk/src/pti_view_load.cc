@@ -228,17 +228,48 @@ pti_result ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequ
   }
 }
 
-pti_result ptiViewGetCallbackIdName(uint32_t id, const char** name) {
+pti_result ptiViewGetApiIdName(pti_api_group_id type, uint32_t unique_id, const char** name) {
   try {
     if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
       return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
     }
 
-    if (!pti::PtiLibHandler::Instance().ptiViewGetCallbackIdName_) {
+    if (!pti::PtiLibHandler::Instance().ptiViewGetApiIdName_) {
       return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
     }
 
-    return pti::PtiLibHandler::Instance().ptiViewGetCallbackIdName_(id, name);
+    return pti::PtiLibHandler::Instance().ptiViewGetApiIdName_(type, unique_id, name);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id type, uint32_t api_id) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiViewEnableDriverApi_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiViewEnableDriverApi_(enable, type, api_id);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+pti_result ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id type, uint32_t api_id) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiViewEnableRuntimeApi_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiViewEnableRuntimeApi_(enable, type, api_id);
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
   }

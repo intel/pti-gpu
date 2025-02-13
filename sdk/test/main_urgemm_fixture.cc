@@ -317,7 +317,6 @@ class MainUrFixtureTest : public ::testing::Test {
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
           memory_view_record_created = true;
-          std::cout << " --- Found Memory Fill Record" << '\n';
           pti_view_record_memory_fill* rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
           samples_utils::DumpRecord(rec);
 
@@ -329,14 +328,16 @@ class MainUrFixtureTest : public ::testing::Test {
           memory_view_record_count += 1;
           break;
         }
-        case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+        case pti_view_kind::PTI_VIEW_RUNTIME_API: {
           sycl_runtime_record_created = true;
           sycl_runtime_record_count += 1;
           if (capture_records) {
-            pti_view_record_sycl_runtime* rec =
-                reinterpret_cast<pti_view_record_sycl_runtime*>(ptr);
-            std::string function_name = rec->_name;
-            std::cout << "Runtime_recs: " << function_name << "\n";
+            pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
+            const char* pName = nullptr;
+            pti_result status =
+                ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id, &pName);
+            PTI_ASSERT(status == PTI_SUCCESS);
+            std::string function_name(pName);
             if ((function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
               sycl_spv_kernel_seen = true;
             } else if ((function_name.find("EnqueueMemBufferFill") != std::string::npos)) {
@@ -425,10 +426,7 @@ class MainUrFixtureTest : public ::testing::Test {
   }
 
   int RunGemm(bool use_ur = false) {
-    // sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
-    // sycl::queue queue;
-
-    PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+    PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_RUNTIME_API));
     PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
     PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
     PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
@@ -450,7 +448,7 @@ class MainUrFixtureTest : public ::testing::Test {
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
 
-    PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+    PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_RUNTIME_API));
     PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
     PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
     PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));

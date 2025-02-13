@@ -243,27 +243,17 @@ inline void DumpRecord(pti_view_record_memory_fill* record) {
   std::cout << "Memory Fill Type: " << std::dec << record->_mem_type << '\n';
 }
 
-inline void DumpRecord(pti_view_record_zecalls* record) {
+inline void DumpRecord(pti_view_record_api* record) {
   if (NULL == record) return;
-  const char* pName = nullptr;
-  PTI_THROW(ptiViewGetCallbackIdName(record->_callback_id, &pName));
-  std::cout << "ZeCall Function Name: " << pName << '\n';
-  std::cout << "ZeCall Function CBID: " << record->_callback_id << '\n';
-  std::cout << "ZeCall Start Time: " << record->_start_timestamp << '\n';
-  std::cout << "  ZeCall End Time: " << record->_end_timestamp << '\n';
-  std::cout << "ZeCall Process Id: " << record->_process_id << '\n';
-  std::cout << "ZeCall Thread Id: " << record->_thread_id << '\n';
-  std::cout << "ZeCall Correlation Id: " << record->_correlation_id << '\n';
-}
-
-inline void DumpRecord(pti_view_record_sycl_runtime* record) {
-  if (NULL == record) return;
-  std::cout << "Sycl Function Name: " << record->_name << '\n';
-  std::cout << "Sycl Start Time: " << record->_start_timestamp << '\n';
-  std::cout << "Sycl End Time: " << record->_end_timestamp << '\n';
-  std::cout << "Sycl Process Id: " << record->_process_id << '\n';
-  std::cout << "Sycl Thread Id: " << record->_thread_id << '\n';
-  std::cout << "Sycl Correlation Id: " << record->_correlation_id << '\n';
+  const char* api_name = nullptr;
+  PTI_THROW(ptiViewGetApiIdName(record->_api_group, record->_api_id, &api_name));
+  std::cout << "Api Function Name: " << api_name << '\n';
+  std::cout << "Api Function CBID: " << record->_api_id << '\n';
+  std::cout << "Api Start Time: " << record->_start_timestamp << '\n';
+  std::cout << "  Api End Time: " << record->_end_timestamp << '\n';
+  std::cout << "Api Process Id: " << record->_process_id << '\n';
+  std::cout << "Api Thread Id: " << record->_thread_id << '\n';
+  std::cout << "Api Correlation Id: " << record->_correlation_id << '\n';
 }
 
 inline void DumpRecord(pti_view_record_overhead* record) {

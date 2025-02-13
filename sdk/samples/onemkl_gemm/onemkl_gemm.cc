@@ -16,14 +16,14 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
-  PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_RUNTIME_API));
 }
 
 void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
-  PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_RUNTIME_API));
 }
 
 template <typename T>
@@ -187,12 +187,12 @@ int main() {
                 std::cout << "Found Invalid Record" << '\n';
                 break;
               }
-              case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+              case pti_view_kind::PTI_VIEW_RUNTIME_API: {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
                 std::cout << "Found Sycl Runtime Record" << '\n';
-                samples_utils::DumpRecord(reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
+                samples_utils::DumpRecord(reinterpret_cast<pti_view_record_api *>(ptr));
                 break;
               }
               case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {

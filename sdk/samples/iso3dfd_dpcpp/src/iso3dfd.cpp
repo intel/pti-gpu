@@ -48,14 +48,14 @@ void StartTracing() {
   assert(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL) == pti_result::PTI_SUCCESS);
   assert(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY) == pti_result::PTI_SUCCESS);
   assert(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL) == pti_result::PTI_SUCCESS);
-  assert(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS) == pti_result::PTI_SUCCESS);
+  assert(ptiViewEnable(PTI_VIEW_RUNTIME_API) == pti_result::PTI_SUCCESS);
 }
 
 void StopTracing() {
   assert(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL) == pti_result::PTI_SUCCESS);
   assert(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY) == pti_result::PTI_SUCCESS);
   assert(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL) == pti_result::PTI_SUCCESS);
-  assert(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS) == pti_result::PTI_SUCCESS);
+  assert(ptiViewDisable(PTI_VIEW_RUNTIME_API) == pti_result::PTI_SUCCESS);
 }
 
 /*
@@ -232,12 +232,12 @@ int main(int argc, char* argv[]) {
               std::cout << "Found Invalid Record" << '\n';
               break;
             }
-            case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+            case pti_view_kind::PTI_VIEW_RUNTIME_API: {
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
               std::cout << "Found Sycl Runtime Record" << '\n';
-              samples_utils::DumpRecord(reinterpret_cast<pti_view_record_sycl_runtime *>(ptr));
+              samples_utils::DumpRecord(reinterpret_cast<pti_view_record_api *>(ptr));
               break;
             }
             case pti_view_kind:: PTI_VIEW_DEVICE_GPU_MEM_COPY: {

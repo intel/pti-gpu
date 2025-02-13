@@ -122,7 +122,7 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
 #if !defined(CAPTURE_OVERHEAD)
-  PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_RUNTIME_API));
 #endif /* ! CAPTURE_OVERHEAD */
   PTI_THROW(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
 }
@@ -132,7 +132,7 @@ void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
 #if !defined(CAPTURE_OVERHEAD)
-  PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_RUNTIME_API));
 #endif /* ! CAPTURE_OVERHEAD */
   PTI_THROW(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
 }
@@ -180,12 +180,12 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         std::cout << "Found Invalid Record" << '\n';
         break;
       }
-      case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+      case pti_view_kind::PTI_VIEW_RUNTIME_API: {
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
         std::cout << "Found Sycl Runtime Record" << '\n';
-        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_sycl_runtime*>(ptr));
+        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_api*>(ptr));
         break;
       }
       case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {

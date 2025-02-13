@@ -6,7 +6,6 @@
 
 #include "pti/pti_view.h"
 
-#include <pti/pti_cbids_runtime.h>
 #include <spdlog/spdlog.h>
 
 #include <array>
@@ -319,10 +318,66 @@ pti_result ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequ
   }
 }
 
-// Get callback id function name.
-pti_result ptiViewGetCallbackIdName(uint32_t id, const char** name) {
+// Get api function name by api kind (LEVEL_ZERO_CALLS(default), OPENCL_CALLS, etc).
+pti_result ptiViewGetApiIdName(pti_api_group_id type, uint32_t unique_id, const char** name) {
   try {
-    *name = pti_callback_api_id_runtime_cb_name.at(id);
+    switch (type) {
+      case pti_api_group_id::PTI_API_GROUP_SYCL: {
+        *name = pti_api_id_runtime_sycl_func_name.at(unique_id);
+      }; break;
+      case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
+        *name = pti_api_id_driver_levelzero_func_name.at(unique_id);
+      }; break;
+      case pti_api_group_id::PTI_API_GROUP_OPENCL: {
+        return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+      }; break;
+      case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
+      case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
+      case pti_api_group_id::PTI_API_GROUP_RESERVED: {
+        return pti_result::PTI_ERROR_BAD_ARGUMENT;
+      }; break;
+    }
+  } catch (const std::out_of_range&) {
+    return pti_result::PTI_ERROR_BAD_ARGUMENT;
+  };
+  return PTI_SUCCESS;
+}
+
+// Enable/Disable driver specific API specified by api_id within the api_group_id.
+pti_result ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id api_group_id, uint32_t api_id) {
+  try {
+    if (api_group_id == pti_api_group_id::PTI_API_GROUP_OPENCL) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+    if (api_group_id != pti_api_group_id::PTI_API_GROUP_LEVELZERO) {
+      return pti_result::PTI_ERROR_BAD_ARGUMENT;
+    }
+    if (!Instance().GetGranularityState(
+            api_group_id)) {  // check if we are already in granular/individual mode.
+      Instance().ResetTracingStateToAllDisabled(
+          api_group_id);  // if first time -- change all api state to off
+      Instance().SetGranularityState(api_group_id,
+                                     true);  // and set granular mode on for this api_group type.
+    }
+    return Instance().SetApiTracingState(api_group_id, api_id, enable);
+  } catch (const std::out_of_range&) {
+    return pti_result::PTI_ERROR_BAD_ARGUMENT;
+  };
+  return PTI_SUCCESS;
+}
+
+// Enable/Disable runtime specific API specified by api_id within the api_group_id.
+pti_result ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id api_group_id,
+                                   uint32_t api_id) {
+  try {
+    if (api_group_id != pti_api_group_id::PTI_API_GROUP_SYCL) {
+      return pti_result::PTI_ERROR_BAD_ARGUMENT;
+    }
+    if (!Instance().GetGranularityState(api_group_id)) {
+      Instance().ResetTracingStateToAllDisabled(api_group_id);
+      Instance().SetGranularityState(api_group_id, true);
+    }
+    return Instance().SetApiTracingState(api_group_id, api_id, enable);
   } catch (const std::out_of_range&) {
     return pti_result::PTI_ERROR_BAD_ARGUMENT;
   };

@@ -111,18 +111,18 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
-  PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_RUNTIME_API));
   PTI_THROW(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
-  PTI_THROW(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_DRIVER_API));
 }
 
 void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
-  PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_RUNTIME_API));
   PTI_THROW(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
-  PTI_THROW(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_DRIVER_API));
 }
 
 void ProvideBuffer(unsigned char** buf, std::size_t* buf_size) {
@@ -156,20 +156,20 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         std::cout << "Found Invalid Record" << '\n';
         break;
       }
-      case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+      case pti_view_kind::PTI_VIEW_RUNTIME_API: {
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
         std::cout << "Found Sycl Runtime Record" << '\n';
-        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_sycl_runtime*>(ptr));
+        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_api*>(ptr));
         break;
       }
-      case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
+      case pti_view_kind::PTI_VIEW_DRIVER_API: {
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
         std::cout << "Found Zecalls Record" << '\n';
-        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_zecalls*>(ptr));
+        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_api*>(ptr));
         break;
       }
       case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {

@@ -47,10 +47,15 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET
   endif()
 
   set(L0_GEN_INC_PATH "${CMAKE_BINARY_DIR}")
+  if (NOT TARGET unified-runtime::loader)
+    find_package(unified-runtime)
+  endif()
+
+  get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
   add_custom_target(${custom_target} ALL
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME})
   add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
-                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${PROJECT_BINARY_DIR}/include/pti" )
+                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${PROJECT_BINARY_DIR}/include/pti" "${CMAKE_SOURCE_DIR}/include/pti" ${UR_HEADER_PATH} ${PTI_API_ID_REGENERATE} ${PTI_L0_LOADER_COMMIT_HASH})
   target_include_directories(${TARGET}
     PUBLIC "$<BUILD_INTERFACE:${L0_GEN_INC_PATH}>")
   add_dependencies(${TARGET}
@@ -220,9 +225,11 @@ endmacro()
 macro(GetLevelZero)
   if (NOT TARGET LevelZero::level-zero)
     # Need zelEnableTracingLayer
-    set(LZ_VER_MAJOR "1")
-    set(LZ_VER_MINOR "17")
-    set(LZ_VER_PATCH "25")
+    message("-- Fetching L0: ${PTI_L0_LOADER}")
+    string(REPLACE "." ";" LZ_TMP_LIST ${PTI_L0_LOADER})
+    list(GET LZ_TMP_LIST 0 LZ_VER_MAJOR)
+    list(GET LZ_TMP_LIST 1 LZ_VER_MINOR)
+    list(GET LZ_TMP_LIST 2 LZ_VER_PATCH)
     set(LZ_VER "${LZ_VER_MAJOR}.${LZ_VER_MINOR}.${LZ_VER_PATCH}")
     set(LZ_BASE_DIR ${CMAKE_CURRENT_BINARY_DIR}/_deps)
 
@@ -233,10 +240,9 @@ macro(GetLevelZero)
     include(FetchContent)
     FetchContent_Declare(
         LevelZero
-        URL
-        https://github.com/oneapi-src/level-zero/archive/refs/tags/v${LZ_VER}.tar.gz
-        URL_HASH
-        SHA256=3cfa1eb001d5974efed3002b6a5e6e687c7413141b3ae26e8bdac8085acddb9e
+        GIT_REPOSITORY
+        https://github.com/oneapi-src/level-zero.git
+        GIT_TAG ${PTI_L0_LOADER_COMMIT_HASH}
     )
     # Prevent content from automatically being installed with PTI
     FetchContent_GetProperties(LevelZero)
@@ -253,7 +259,7 @@ macro(GetLevelZero)
     add_library(pti_ze_loader INTERFACE IMPORTED)
     add_dependencies(pti_ze_loader ze_tracing_layer)
 
-    set(PTI_LZ_COMPILE_OPTIONS $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-parameter -Wno-cast-function-type-mismatch>
+    set(PTI_LZ_COMPILE_OPTIONS $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-parameter -Wno-cast-function-type-mismatch -Wno-extra-semi>
                                $<$<CXX_COMPILER_ID:MSVC>:/wd6285
                                 $<$<CONFIG:Release>:/wd4702 /wd6385 /wd6386>>)
 
@@ -263,7 +269,7 @@ macro(GetLevelZero)
     target_compile_options(ze_tracing_layer PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
     target_compile_options(ze_null PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
     target_compile_options(ze_validation_layer PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
-    target_compile_options(utils PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
+    #target_compile_options(utils PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
 
     # Pull Headers out of source tree and add them to level_zero/
     # This allows us to keep the normal way to include level zero
@@ -296,11 +302,6 @@ macro(GetLevelZero)
 
     target_link_libraries(pti_ze_loader INTERFACE
                             $<BUILD_INTERFACE:ze_loader>)
-    message(WARNING "Linking different version of Level Zero Loader, please set"
-                    " $LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}/path/to/l0/:$LD_LIBRARY_PATH "
-                    "Or Install Level Zero Loader Version >= ${LZ_VER} on your"
-                    "system")
-    # Add Alias target to treat it as if we found it via find_packge
     add_library(LevelZero::level-zero ALIAS pti_ze_loader)
     add_library(LevelZero::headers INTERFACE IMPORTED)
     set_target_properties(
@@ -329,6 +330,42 @@ macro(ProjectIsTopLevel)
       set(PROJECT_IS_TOP_LEVEL TRUE)
     endif()
   endif()
+endmacro()
+
+macro(AddApiGenTarget L0_GEN_SCRIPT GEN_FILE_NAME L0_TARGET)
+  RequirePythonInterp()
+
+  # Use the target that links level zero to find the level zero library
+  if(TARGET LevelZero::level-zero)
+    get_target_property(L0_TARGET_PATH ${L0_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+    message("L0_Target_Path: ${L0_TARGET_PATH}")
+    message("L0 Version: ${PTI_L0_LOADER}")
+    message("L0 Hash: ${PTI_L0_LOADER_COMMIT_HASH}")
+  endif()
+
+  # HINTS before PATHS
+  find_path(L0_INC_PATH
+    NAMES level_zero
+    HINTS ${L0_TARGET_PATH}
+    PATHS ENV CPATH)
+  if (NOT L0_INC_PATH)
+    message(FATAL_ERROR
+      "Level Zero headers path is not found.\n"
+      "You may need to install oneAPI Level Zero Driver to fix this issue.")
+  else()
+    message(STATUS "Level Zero headers are found at ${L0_INC_PATH}")
+  endif()
+
+  set(L0_GEN_INC_PATH "${CMAKE_BINARY_DIR}")
+  if (NOT TARGET unified-runtime::loader)
+    find_package(unified-runtime)
+  endif()
+
+  get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
+  string(CONCAT L0_LOADER_INFO "commit: " ${PTI_L0_LOADER_COMMIT_HASH} " - v" ${PTI_L0_LOADER})
+  add_custom_target(generate-ids
+                    DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
+                    COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${PROJECT_BINARY_DIR}/include/pti" "${CMAKE_SOURCE_DIR}/include/pti" ${UR_HEADER_PATH} "ON" ${L0_LOADER_INFO})
 endmacro()
 
 macro(AddFormatTarget)

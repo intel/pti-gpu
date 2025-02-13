@@ -13,7 +13,8 @@
  * overhead captured is trickled into the buffer stream via buffer callback -
  * ocallback.
  */
-#include <pti/pti_cbids_runtime.h>
+#include <pti/pti_driver_levelzero_api_ids.h>
+//#include <pti/pti_driver_opencl_api_ids.h>
 
 #include "unikernel.h"
 #include "utils.h"
@@ -97,7 +98,7 @@ inline void ResetRecord() {
 }
 
 inline void FiniLevel0(OverheadRuntimeType runtime_type,
-                       [[maybe_unused]] pti_callback_api_id_runtime api_id) {
+                       [[maybe_unused]] pti_api_id_driver_levelzero api_id) {
   if (!overhead_collection_enabled) {
     return;
   }
@@ -169,7 +170,7 @@ inline void FiniSycl(OverheadRuntimeType runtime_type) {
 
 }  // namespace overhead
 
-static inline void overhead_fini(pti_callback_api_id_runtime api_id) {
+static inline void overhead_fini(pti_api_id_driver_levelzero api_id) {
   // std::string o_api_string = l0_api;
   overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0, api_id);
 }

@@ -21,7 +21,7 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
-  PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_RUNTIME_API));
   PTI_THROW(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION));
 }
 
@@ -29,7 +29,7 @@ void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
-  PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_RUNTIME_API));
   PTI_THROW(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION));
 }
 
@@ -213,17 +213,18 @@ int main() {
                 std::cout << "Found Invalid Record" << '\n';
                 break;
               }
-              case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+              case pti_view_kind::PTI_VIEW_RUNTIME_API: {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
                 std::cout << "Found Sycl Runtime Record" << '\n';
-                pti_view_record_sycl_runtime *rec =
-                    reinterpret_cast<pti_view_record_sycl_runtime *>(ptr);
-                if (std::strstr(rec->_name, "EnqueueKernel") != nullptr) {
+                pti_view_record_api *rec = reinterpret_cast<pti_view_record_api *>(ptr);
+                const char *api_name = nullptr;
+                PTI_THROW(ptiViewGetApiIdName(rec->_api_group, rec->_api_id, &api_name));
+                if (strstr(api_name, "EnqueueKernel") != nullptr) {
                   runtime_enq_2_gpu_kernel_name_map[rec->_correlation_id] = "unknown_at_this_point";
                 }
-                if (std::strstr(rec->_name, "EnqueueMem") != nullptr) {
+                if (strstr(api_name, "EnqueueMem") != nullptr) {
                   runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = "unknown_at_this_point";
                 }
                 samples_utils::DumpRecord(rec);

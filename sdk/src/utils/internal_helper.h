@@ -34,8 +34,8 @@ bool IsPtiViewKindEnum(int v) {
   return IsValid<int, pti_view_kind, pti_view_kind, pti_view_kind, pti_view_kind, pti_view_kind,
                  pti_view_kind, pti_view_kind, pti_view_kind, pti_view_kind, pti_view_kind>(
       v, pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL, pti_view_kind::PTI_VIEW_DEVICE_CPU_KERNEL,
-      pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS, pti_view_kind::PTI_VIEW_OPENCL_CALLS,
-      pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD, pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS,
+      pti_view_kind::PTI_VIEW_DRIVER_API, pti_view_kind::PTI_VIEW_RESERVED,
+      pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD, pti_view_kind::PTI_VIEW_RUNTIME_API,
       pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION, pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY,
       pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL, pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P);
 }

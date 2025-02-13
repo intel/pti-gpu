@@ -54,6 +54,7 @@ option(PTI_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_INSTALL "Install library when invoking --install" ON)
 option(PTI_ENABLE_LOGGING "Enable logging for Pti" OFF)
 option(PTI_FUZZ "Enable Fuzz Pti" OFF)
+option(PTI_API_ID_REGENERATE "Regenerate Apiid files" OFF)
 
 include(GNUInstallDirs)
 set(PTI_INSTALL_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/pti")
@@ -63,6 +64,9 @@ set(PTI_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
 set(PTI_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
 set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
+set(PTI_L0_LOADER 1.20.1)
+set(PTI_L0_LOADER_COMMIT_HASH 3969f34c16a843b943b948f8fe7081ef87deb369)
+
 CheckSOVersion(${PTI_API_SOVERSION})
 CheckExperimentalFilesystem()
 
@@ -71,25 +75,10 @@ GetSpdlog()
 
 find_package(Xpti)
 
-# Why version 1.14.0?
-# It is an IPEX requirement for PTI to link against the LTS version of the
-# Level Zero Loader.
-# However, for best results, we recommend installing, Level Zero Loader >=
-# 1.17.25.
-# Notice about loader versions:
-#  * 1.15.8 supports dynamic tracing i.e. ze[Enable/Disable]TracingLayer.
-#  * 1.16.1 supports Level-Zero core Introspection API introduced in Spec 1.9.
-#   *  Notice: this supports the new API, but not the new feature (local
-#      collection). One needs to install a compatible Level Zero driver to
-#      use the feature. Currently supported in the Intel GPU rolling release
-#      drivers.
-#  * 1.16.15 fixes a critical bug in ze[Enable/Disable]TracingLayer.
-#  * 1.17.25 fixes a bug in ze[Enable/Disable]TracingLayer.
-#   * Fixes compatiblity with zet*/zes* APIs.
 if(NOT PROJECT_IS_TOP_LEVEL)
-  find_package(LevelZero 1.14.0 REQUIRED)
+  find_package(LevelZero ${PTI_L0_LOADER} REQUIRED)  
 else()
-  find_package(LevelZero 1.14.0)
+  find_package(LevelZero ${PTI_L0_LOADER} )
 endif()
 
 if(NOT TARGET LevelZero::level-zero)
@@ -97,6 +86,11 @@ if(NOT TARGET LevelZero::level-zero)
 endif()
 
 find_package(Threads REQUIRED)
+
+if(PROJECT_IS_TOP_LEVEL)
+  AddApiGenTarget(
+    "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py" "tracing.gen" LevelZero::level-zero)
+endif()
 
 # Build PTI libraries.
 configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
@@ -175,7 +169,7 @@ target_link_libraries(
           ${FS_LIB})
 
 FindHeadersPath(
-  pti "${PROJECT_SOURCE_DIR}/src/levelzero/gen_tracing_callbacks.py"
+  pti "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py"
   "tracing.gen" gen_tracing_header LevelZero::level-zero)
 
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/xpti_adapter.cc"

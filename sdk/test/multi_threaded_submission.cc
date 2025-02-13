@@ -95,14 +95,49 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
-  PTI_THROW(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_RUNTIME_API));
 }
 
 void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
-  PTI_THROW(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_RUNTIME_API));
+}
+
+void EnableIndividualRuntimeApis() {
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueUSMFill_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueUSMFill2D_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueUSMMemcpy_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueUSMMemcpy2D_id));
+
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueMemBufferRead_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueMemBufferWrite_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueMemBufferCopy_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urUSMHostAlloc_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urUSMSharedAlloc_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urUSMDeviceAlloc_id));
+
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id));
+  PTI_CHECK_SUCCESS(
+      ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                              pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id));
+  PTI_CHECK_SUCCESS(
+      ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                              pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id));
 }
 
 void ProvideBuffer(unsigned char** buf, std::size_t* buf_size) {
@@ -150,13 +185,12 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         std::cout << "Found Invalid Record" << '\n';
         break;
       }
-      case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+      case pti_view_kind::PTI_VIEW_RUNTIME_API: {
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
         std::cout << "Found Sycl Runtime Record" << '\n';
-        pti_view_record_sycl_runtime* p_runtime_rec =
-            reinterpret_cast<pti_view_record_sycl_runtime*>(ptr);
+        pti_view_record_api* p_runtime_rec = reinterpret_cast<pti_view_record_api*>(ptr);
         samples_utils::DumpRecord(p_runtime_rec);
 
         ASSERT_TRUE(corr_id_map.find(p_runtime_rec->_correlation_id) == corr_id_map.end())
@@ -363,7 +397,7 @@ int SymmetricMultithreadedWithMain() {
 
 }  // namespace
 
-class MulthiThreadedSubmissionFixtureTest : public ::testing::Test {
+class MultiThreadedSubmissionFixtureTest : public ::testing::Test {
  protected:
   void SetUp() override { std::fill(records_per_thread.begin(), records_per_thread.end(), 0); }
 
@@ -375,9 +409,10 @@ class MulthiThreadedSubmissionFixtureTest : public ::testing::Test {
 // Test verifies that GPU ops reported in the thread buffers where ops were submitted
 // in this test all working threads did the same work - so the number of records should be the same
 // in all buffers, except for the empty buffer of the main thread
-TEST_F(MulthiThreadedSubmissionFixtureTest, MulthiThreadedSubmissionTest) {
+TEST_F(MultiThreadedSubmissionFixtureTest, MultiThreadedSubmissionTest) {
   ASSERT_TRUE(thread_count > 1);
   EXPECT_EQ(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer), pti_result::PTI_SUCCESS);
+  EnableIndividualRuntimeApis();
   EXPECT_EQ(SymmetricMultithreadedWithMain(), EXIT_SUCCESS);
   auto non_zero_record_count =
       records_per_thread[0] != 0 ? records_per_thread[0] : records_per_thread[1];

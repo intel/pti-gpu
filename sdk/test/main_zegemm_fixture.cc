@@ -36,11 +36,13 @@ namespace {
 constexpr size_t kPtiDeviceId = 0;  // run on first device
 
 uint64_t eid_ = 11;
+const uint64_t kCommandListAppendLaunchKernelId = 55;  // apiid of zeCommandListAppendLaunchKernel
 size_t requested_buffer_calls = 0;
 size_t rejected_buffer_calls = 0;  // Buffer requests that are called and rejected by the API
 size_t completed_buffer_calls = 0;
 size_t completed_buffer_used_bytes = 0;
 bool memory_view_record_created = false;
+uint64_t kernel_launch_id = 0;
 bool kernel_view_record_created = false;
 uint64_t memory_view_record_count = 0;
 uint64_t kernel_view_record_count = 0;
@@ -71,9 +73,8 @@ void StartTracing(bool include_sycl_runtime = false, bool include_zecalls = fals
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
   if (include_gpu_kernels)
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
-  if (include_sycl_runtime)
-    ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
-  if (include_zecalls) ASSERT_EQ(ptiViewEnable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+  if (include_sycl_runtime) ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+  if (include_zecalls) ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
 }
 
 void StopTracing(bool include_sycl_runtime = false, bool include_zecalls = false,
@@ -84,9 +85,8 @@ void StopTracing(bool include_sycl_runtime = false, bool include_zecalls = false
   if (include_gpu_kernels)
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   if (include_sycl_runtime)
-    ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
-  if (include_zecalls)
-    ASSERT_EQ(ptiViewDisable(PTI_VIEW_LEVEL_ZERO_CALLS), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+  if (include_zecalls) ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
 }
 
 float Check(const std::vector<float>& a, float value) {
@@ -537,6 +537,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     completed_buffer_calls = 0;
     completed_buffer_used_bytes = 0;
     memory_view_record_created = false;
+    kernel_launch_id = 0;
     kernel_view_record_created = false;
     memory_view_record_count = 0;
     kernel_view_record_count = 0;
@@ -623,24 +624,37 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
           external_corrid_in_ext_rec = aExtRec->_correlation_id;
           break;
         }
-        case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
-          pti_view_record_sycl_runtime* rec = reinterpret_cast<pti_view_record_sycl_runtime*>(ptr);
-          std::string function_name = reinterpret_cast<pti_view_record_sycl_runtime*>(ptr)->_name;
-          std::cout << "--- Record Special Sycl: " << rec->_correlation_id << ": " << rec->_name
-                    << '\n';
-          if (strcmp(rec->_name, "zeCommandListAppendLaunchKernel") == 0) {
-            special_record_seen = true;
-            num_special_records++;
-            corrid_in_special_record = rec->_correlation_id;
-          } else if ((function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
-            sycl_runtime_launch_seen = true;
-            num_sycl_runtime_launch_records++;
+        case pti_view_kind::PTI_VIEW_RUNTIME_API: {
+          pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
+          std::cout << "--- Sycl: " << rec->_api_id << "\n";
+          const char* api_name = nullptr;
+          if (rec->_api_group == pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO) {
+            pti_result status = ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO,
+                                                    rec->_api_id, &api_name);
+            PTI_ASSERT(status == PTI_SUCCESS);
+            std::string function_name(api_name);
+            std::cout << "--- Record Special Sycl: " << rec->_correlation_id << ": "
+                      << function_name << '\n';
+            if (strcmp(api_name, "zeCommandListAppendLaunchKernel") == 0) {
+              special_record_seen = true;
+              kernel_launch_id = rec->_api_id;
+              num_special_records++;
+              corrid_in_special_record = rec->_correlation_id;
+            }
+          } else {
+            pti_result status =
+                ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id, &api_name);
+            PTI_ASSERT(status == PTI_SUCCESS);
+            std::string function_name(api_name);
+            if ((function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
+              sycl_runtime_launch_seen = true;
+              num_sycl_runtime_launch_records++;
+            }
           }
           break;
         }
-        case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
-          [[maybe_unused]] pti_view_record_zecalls* rec =
-              reinterpret_cast<pti_view_record_zecalls*>(ptr);
+        case pti_view_kind::PTI_VIEW_DRIVER_API: {
+          [[maybe_unused]] pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
           zecall_record_seen = true;
           break;
         }
@@ -894,6 +908,7 @@ TEST_F(MainZeFixtureTest, SyclBasedAndZeBasedKernelLaunchesPresent) {
   // Enable sycl and kernel view kinds only. Additionally run Sycl based launch kernel.
   EXPECT_EQ(RunGemm(false, true, false, true, true), 0);
   EXPECT_EQ(special_record_seen, true);
+  EXPECT_EQ(kernel_launch_id, kCommandListAppendLaunchKernelId);  // zeCommandListAppendLaunchKernel
   EXPECT_EQ(num_special_records, repeat_count);
   EXPECT_EQ(sycl_runtime_launch_seen, true);
   EXPECT_EQ(num_sycl_runtime_launch_records, repeat_count);
@@ -910,6 +925,8 @@ TEST_P(MainZeFixtureTest, SpecialRecordPresent) {
   EXPECT_EQ(RunGemm(false, sycl, zecall, kernel), 0);
   if (sycl == true && zecall == false && kernel == true) {
     EXPECT_EQ(special_record_seen, true);
+    EXPECT_EQ(kernel_launch_id,
+              kCommandListAppendLaunchKernelId);  // zeCommandListAppendLaunchKernel
     EXPECT_EQ(zecall_record_seen, false);
     EXPECT_EQ(external_corrid_special_record_seen, true);
     EXPECT_EQ(corrid_in_special_record, external_corrid_in_ext_rec);
@@ -1228,7 +1245,7 @@ class LocalModeZeGemmTest : public testing::Test {
           FAIL() << "Found Invalid PTI View Record";
           break;
         }
-        case pti_view_kind::PTI_VIEW_LEVEL_ZERO_CALLS: {
+        case pti_view_kind::PTI_VIEW_DRIVER_API: {
           LocalModeZeGemmTestData::Instance().num_ze_records++;
           break;
         }
@@ -1300,7 +1317,7 @@ TEST_F(LocalModeZeGemmTest, TestStartTracingExecuteCommandQueue) {
   PrepareCommandList();
 
   EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
-  EnableView(PTI_VIEW_LEVEL_ZERO_CALLS);
+  EnableView(PTI_VIEW_DRIVER_API);
 
   auto status = zeCommandQueueExecuteCommandLists(cmd_q_, 1, &cmd_list_, nullptr);
   ASSERT_EQ(status, ZE_RESULT_SUCCESS);

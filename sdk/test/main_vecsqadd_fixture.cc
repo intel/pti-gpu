@@ -121,7 +121,7 @@ void StartTracing() {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
 }
 
@@ -129,7 +129,7 @@ void StopTracing() {
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
 }
 
@@ -188,21 +188,23 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
         runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
         break;
       }
-      case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
-        pti_view_record_sycl_runtime *a_sycl_rec =
-            reinterpret_cast<pti_view_record_sycl_runtime *>(ptr);
-        std::string function_name = a_sycl_rec->_name;
-        // To be ready for Universal Runtime - remove "pi"
+      case pti_view_kind::PTI_VIEW_RUNTIME_API: {
+        pti_view_record_api *rec = reinterpret_cast<pti_view_record_api *>(ptr);
+        const char *pName = nullptr;
+        pti_result status =
+            ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id, &pName);
+        PTI_ASSERT(status == PTI_SUCCESS);
+        std::string function_name(pName);
         if ((sycl_idx < 2) && (function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
-          sycl_kernel_corr_id[sycl_idx] = a_sycl_rec->_correlation_id;
-          sycl_kernel_start_time[sycl_idx] = a_sycl_rec->_start_timestamp;
+          sycl_kernel_corr_id[sycl_idx] = rec->_correlation_id;
+          sycl_kernel_start_time[sycl_idx] = rec->_start_timestamp;
           sycl_idx++;
         };
         if (function_name.find("EnqueueKernel") != std::string::npos) {
-          runtime_enq_2_gpu_kernel_name_map[a_sycl_rec->_correlation_id] = "unknown_at_this_point";
+          runtime_enq_2_gpu_kernel_name_map[rec->_correlation_id] = "unknown_at_this_point";
         }
         if (function_name.find("EnqueueMem") != std::string::npos) {
-          runtime_enq_2_gpu_mem_op_name_map[a_sycl_rec->_correlation_id] = "unknown_at_this_point";
+          runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = "unknown_at_this_point";
         }
         break;
       }
@@ -363,9 +365,16 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSq) {
   }
 }
 
+void EnableIndividualRuntimeApis() {
+  ASSERT_EQ(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                    pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id),
+            pti_result::PTI_SUCCESS);
+}
+
 TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSqReducedOps) {
-  utils::SetEnv("PTI_TRACE_ALL_RUNTIME_OPS", "0");
+  utils::SetEnv("PTI_VIEW_RUNTIME_API", "1");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  EnableIndividualRuntimeApis();
   RunVecsqadd(TestType::kExternalCorrId);
   uint64_t correlation_id = kernel_corr_id[0];
   // Check that the correlation id of runtime and kernel matches
@@ -394,8 +403,9 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAdd) {
 }
 
 TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAddReducedOps) {
-  utils::SetEnv("PTI_TRACE_ALL_RUNTIME_OPS", "0");
+  utils::SetEnv("PTI_VIEW_RUNTIME_API", "1");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  EnableIndividualRuntimeApis();
   RunVecsqadd(TestType::kExternalCorrId);
   // Check that the correlation id of runtime and kernel matches
   EXPECT_EQ(sycl_kernel_corr_id[1], kernel_corr_id[1]);

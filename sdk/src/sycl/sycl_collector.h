@@ -243,17 +243,25 @@ class SyclCollector {
           SyclCollector::Instance().sycl_runtime_rec_.tid_ = tid;
           SyclCollector::Instance().sycl_runtime_rec_.start_time_ = Time;
           SyclCollector::Instance().sycl_runtime_rec_.sycl_func_name_ = function_name;
+          SyclCollector::Instance().sycl_runtime_rec_.callback_id_ = args->function_id;
         }
         break;
       case xpti::trace_point_type_t::function_with_args_end:
         // case xpti::trace_point_type_t::function_end:
         if (UserData) {
+          [[maybe_unused]] const char* api_name = nullptr;
           const auto* args = static_cast<const xpti::function_with_args_t*>(UserData);
           // const auto* function_name = static_cast<const char*>(UserData);
           const auto* function_name = args->function_name;
           SPDLOG_TRACE("\tSYCL.UR Function End: {}, corr_id: {}", function_name,
                        sycl_data_kview.cid_);
           PTI_ASSERT(std::strcmp(current_func_task_info.func_name.data(), function_name) == 0);
+          // Following asserts check that the function_id arg matches the one in ur_api.h.
+          //  These asserts only appear in debug builds and are filtered out for release builds.
+          //  So no overhead in release builds.
+          assert(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, args->function_id,
+                                     &api_name) == pti_result::PTI_SUCCESS);
+          assert(std::strcmp(api_name, function_name) == 0);
           PTI_ASSERT(current_func_task_info.func_pid == pid);
           PTI_ASSERT(current_func_task_info.func_tid == tid);
           SPDLOG_TRACE("\tVerified: func: {} - Pid: {} - Tid: {}",
@@ -272,9 +280,10 @@ class SyclCollector {
           }
           SyclCollector::Instance().sycl_runtime_rec_.end_time_ = Time;
           if (SyclCollector::Instance().acallback_ != nullptr) {
-            // Trace all only if explicitly requested.
-            const bool trace_all = (SyclCollector::Instance().trace_all_env_value == 1);
-            if (trace_all || kCoreApis.find(function_name) != kCoreApis.end()) {
+            uint32_t id_enabled = pti_api_id_runtime_sycl_state[args->function_id];
+
+            int32_t trace_all = SyclCollector::Instance().trace_all_env_value;
+            if ((trace_all > 0) || ((trace_all < 0) && id_enabled)) {
               if (SyclCollector::Instance().enabled_ && !framework_finalized) {
                 (SyclCollector::Instance().acallback_.load())(
                     nullptr, SyclCollector::Instance().sycl_runtime_rec_);
@@ -350,7 +359,7 @@ class SyclCollector {
   explicit SyclCollector(OnSyclRuntimeViewCallback buffer_callback)
       : acallback_(buffer_callback), xptiGetStashedKV(GetStashedFuncPtrFromSharedObject()) {}
 
-  int32_t trace_all_env_value = utils::IsSetEnv("PTI_TRACE_ALL_RUNTIME_OPS");
+  int32_t trace_all_env_value = utils::IsSetEnv("PTI_VIEW_RUNTIME_API");
   inline static thread_local ZeKernelCommandExecutionRecord sycl_runtime_rec_;
   std::atomic<OnSyclRuntimeViewCallback> acallback_ = nullptr;
   std::atomic<bool> enabled_ = false;

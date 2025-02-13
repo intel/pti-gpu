@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "pti/pti_view.h"
+#include "utils.h"
 
 using namespace sycl;
 
@@ -44,7 +45,7 @@ void StartTracing() {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
 }
 
 void StopTracing() {
@@ -52,7 +53,7 @@ void StopTracing() {
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
 }
 
 static void BufferRequested(unsigned char** buf, size_t* buf_size) {
@@ -161,9 +162,13 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
                                       (tmp_str.find("M2D") != std::string::npos));
         break;
       }
-      case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
-        [[maybe_unused]] std::string function_name =
-            reinterpret_cast<pti_view_record_sycl_runtime*>(ptr)->_name;
+      case pti_view_kind::PTI_VIEW_RUNTIME_API: {
+        pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
+        const char* pName = nullptr;
+        pti_result status =
+            ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id, &pName);
+        PTI_ASSERT(status == PTI_SUCCESS);
+        std::string function_name(pName);
         if ((function_name.find("EnqueueUSMFill") != std::string::npos) ||
             (function_name.find("USMEnqueueMemset") != std::string::npos)) {
           sycl_memfill_seen = true;
@@ -218,7 +223,7 @@ void p2pTest() {
           static_cast<float*>(malloc_shared(num_root_devices * sizeof(float), gpu_queues[i])));
       host_ptrs.push_back(
           static_cast<float*>(malloc_host(num_root_devices * sizeof(float), gpu_queues[i])));
-      std::cout << "memset for root device#: " << i << std::endl;
+      // std::cout << "memset for root device#: " << i << std::endl;
       gpu_queues[i].memset(gpu_device_ptrs[i], 0, num_root_devices * sizeof(float)).wait();
       gpu_queues[i].memset(gpu_shared_ptrs[i], 0, num_root_devices * sizeof(float)).wait();
     }

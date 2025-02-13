@@ -115,13 +115,13 @@ template <typename T>
 [[maybe_unused]] void StartTracingNonL0() {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
 }
 
 [[maybe_unused]] void StopTracingNonL0() {
   ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION);  // TODO: check return
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_SYCL_RUNTIME_CALLS), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
 }
 
 [[maybe_unused]] void StartTracingMTL0([[maybe_unused]] TestType type) {
@@ -199,14 +199,17 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
         break;
       }
-      case pti_view_kind::PTI_VIEW_SYCL_RUNTIME_CALLS: {
+      case pti_view_kind::PTI_VIEW_RUNTIME_API: {
         number_of_sycl_recs++;
-        pti_view_record_sycl_runtime *a_sycl_rec =
-            reinterpret_cast<pti_view_record_sycl_runtime *>(ptr);
-        std::string function_name = a_sycl_rec->_name;
+        pti_view_record_api *rec = reinterpret_cast<pti_view_record_api *>(ptr);
+        const char *pName = nullptr;
+        pti_result status =
+            ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id, &pName);
+        PTI_ASSERT(status == PTI_SUCCESS);
+        std::string function_name(pName);
         if ((sycl_idx < 2) && (function_name.find("EnqueueKernelLaunch") != std::string::npos)) {
-          sycl_kernel_corr_id[sycl_idx] = a_sycl_rec->_correlation_id;
-          sycl_kernel_start_time[sycl_idx] = a_sycl_rec->_start_timestamp;
+          sycl_kernel_corr_id[sycl_idx] = rec->_correlation_id;
+          sycl_kernel_start_time[sycl_idx] = rec->_start_timestamp;
           sycl_idx++;
         };
         break;

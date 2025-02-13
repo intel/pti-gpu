@@ -11,6 +11,8 @@
 
 #include "pti/pti.h"
 #include "pti/pti_export.h"
+#include "pti/pti_driver_levelzero_api_ids.h"
+#include "pti/pti_runtime_sycl_api_ids.h"
 
 /* clang-format off */
 #if defined(__cplusplus)
@@ -31,10 +33,10 @@ typedef enum _pti_view_kind {
   PTI_VIEW_INVALID = 0,                   //!< Invalid
   PTI_VIEW_DEVICE_GPU_KERNEL = 1,         //!< Device kernels
   PTI_VIEW_DEVICE_CPU_KERNEL = 2,         //!< Host (CPU) kernels
-  PTI_VIEW_LEVEL_ZERO_CALLS = 3,          //!< Level-Zero APIs tracing
-  PTI_VIEW_OPENCL_CALLS = 4,              //!< OpenCL APIs tracing
+  PTI_VIEW_DRIVER_API = 3,                //!< Driver (aka back-end) API tracing
+  PTI_VIEW_RESERVED = 4,                  //!< For future use
   PTI_VIEW_COLLECTION_OVERHEAD = 5,       //!< Collection overhead
-  PTI_VIEW_SYCL_RUNTIME_CALLS = 6,        //!< SYCL runtime API tracing
+  PTI_VIEW_RUNTIME_API = 6,               //!< Runtime(Sycl, other) API tracing
   PTI_VIEW_EXTERNAL_CORRELATION = 7,      //!< Correlation of external operations
   PTI_VIEW_DEVICE_GPU_MEM_COPY = 8,       //!< Memory copies between Host and Device
   PTI_VIEW_DEVICE_GPU_MEM_FILL = 9,       //!< Device memory fills
@@ -101,6 +103,18 @@ typedef enum _pti_view_overhead_kind {
   PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to L0 api processing time
 } pti_view_overhead_kind;
 
+/**
+ * @brief api_group types
+ */
+typedef enum _pti_api_group_id {
+  PTI_API_GROUP_RESERVED              = 0,
+  PTI_API_GROUP_LEVELZERO             = 1,
+  PTI_API_GROUP_OPENCL                = 2,
+  PTI_API_GROUP_SYCL                  = 3,
+  PTI_API_GROUP_HYBRID_SYCL_LEVELZERO = 4,   // Sycl api_group, L0 api_id
+  PTI_API_GROUP_HYBRID_SYCL_OPENCL    = 5,   // Sycl api_group, OCL api_id
+} pti_api_group_id;
+
 typedef void* pti_backend_queue_t; //!< Backend queue handle
 
 typedef void* pti_backend_ctx_t; //!< Backend context handle
@@ -146,20 +160,7 @@ typedef struct pti_view_record_kernel {
 } pti_view_record_kernel;
 
 /**
- * @brief SYCL runtime API View record type
- */
-typedef struct pti_view_record_sycl_runtime{
-  pti_view_record_base _view_kind;  //!< Base record
-  const char* _name;                //!< SYCL runtime function name
-  uint64_t _start_timestamp;        //!< Function enter timestamp, ns
-  uint64_t _end_timestamp;          //!< Function exit timestamp, ns
-  uint32_t _process_id;             //!< Process ID of function call
-  uint32_t _thread_id;              //!< Thread ID of function call
-  uint32_t _correlation_id;         //!< ID that correlates this record with records of other Views
-} pti_view_record_sycl_runtime;
-
-/**
- * @brief Host to Device or Device to Host Memory Copy Operation View record type
+ * @brief Memory Copy Operation View record type
  */
 typedef struct pti_view_record_memory_copy {
   pti_view_record_base _view_kind;                  //!< Base record
@@ -275,20 +276,20 @@ typedef struct pti_view_record_overhead {
   pti_view_overhead_kind  _overhead_kind;   //!< Type of overhead
 } pti_view_record_overhead;
 
-
 /**
- * @brief L0apicalls View record type
+ * @brief apicalls View record type
  */
-typedef struct pti_view_record_zecalls {
+typedef struct pti_view_record_api {
   pti_view_record_base _view_kind; //!< Base record
-  uint64_t _start_timestamp;       //!< L0 api call start timestamp, ns
-  uint64_t _end_timestamp;         //!< L0 api call end timestamp, ns
-  uint32_t _process_id;            //!< Process ID of where the zecall observed
-  uint32_t _thread_id;             //!< Thread ID of where the zecall observed
-  uint32_t _callback_id;           //!< Callback id of this zecall
-  uint32_t _correlation_id;        //!< Correlation id tracking memfill, memcpy and kernel gpu activity
-  uint32_t _result;                //!< Result status of zecall
-} pti_view_record_zecalls;
+  uint64_t _start_timestamp;       //!< function call start timestamp, ns
+  uint64_t _end_timestamp;         //!< function call end timestamp, ns
+  pti_api_group_id _api_group;     //!< Defines api api_group this record was collected in (L0,Sycl,OCL, etc).
+  uint32_t _api_id;                //!< Id of this api call
+  uint32_t _process_id;            //!< Process ID of where the api call observed
+  uint32_t _thread_id;             //!< Thread ID of where the api call observed
+  uint32_t _correlation_id;        //!< Id correlating this call with other views, eg: memfill, memcpy and kernel gpu activity
+  uint32_t _return_code;           //!< Applicable only for PTI_VIEW_DRIVER_CALL, type cast to specific driver code type
+} pti_view_record_api;
 
 
 /**
@@ -416,7 +417,7 @@ PTI_EXPORT const char*
 ptiViewMemcpyTypeToString( pti_view_memcpy_type type );
 
 /**
- * @brief Returns current pti host timestamp in nanoseconds. The timestamp is in the same domain as view records timestamps.
+ * @brief Returns current pti host timestamp in nanoseconds. The timestamp is in the same api_group as view records timestamps.
  *
  * @return uint64_t
  */
@@ -434,7 +435,7 @@ typedef uint64_t (*pti_fptr_get_timestamp)( void );
 /**
  * @brief Sets callback to user provided timestamping function.  This will replace the default pti host timestamper.
  *        Multiple callbacks that set differing timestamp function, through the session; will result in differing
- *        timestamp domains in the view record buffer.
+ *        timestamp api_groups in the view record buffer.
  *
  * @return pti_result
  */
@@ -442,14 +443,30 @@ pti_result PTI_EXPORT
 ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequested);
 
 /**
- * @brief Gets callback id name for zeCalls api callback id to user -- the api callbackid is embedded in the pti_view_record_zecalls.
+ * @brief Gets api name for api id to user -- the api is embedded in the pti_view_record_api.
  * Sample usage -  const char* pName = nullptr;
- *              -  pti_result status = ptiViewGetCallbackIdName(rec._callback_id, &pName);
+ *              -  pti_result status = ptiViewGetApiIdName(pti_cb_api_function_type::PTI_CB_DRIVER, rec._api_id, &pName);
  *
  * @return pti_result
  */
 pti_result PTI_EXPORT
-ptiViewGetCallbackIdName(uint32_t id, const char** name);
+ptiViewGetApiIdName(pti_api_group_id type, uint32_t unique_id, const char** name);
+
+/**
+ * @brief Enable/Disable driver specific API specified by api_id within the api_group_id.
+ *
+ * @return pti_result
+ */
+pti_result PTI_EXPORT
+ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id api_group_id, uint32_t api_id);
+
+/**
+ * @brief Enable/Disable runtime specific API specified by api_id within the api_group_id.
+ *
+ * @return pti_result
+ */
+pti_result PTI_EXPORT
+ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id api_group_id, uint32_t api_id);
 
 #if defined(__cplusplus)
 }

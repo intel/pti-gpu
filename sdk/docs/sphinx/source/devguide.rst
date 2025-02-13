@@ -28,7 +28,7 @@ PTI Library C API version |release| Reference
 * Structures
 
   * :ref:`pti_view_record_base  <pti_view_record_base>`
-  * :ref:`pti_view_record_sycl_runtime  <pti_view_record_sycl_runtime>`
+  * :ref:`pti_view_record_api  <pti_view_record_api>`
   * :ref:`pti_view_record_kernel  <pti_view_record_kernel>`
   * :ref:`pti_view_record_memory_copy  <pti_view_record_memory_copy>`
   * :ref:`pti_view_record_memory_copy_p2p  <pti_view_record_memory_copy_p2p>`
@@ -102,8 +102,8 @@ Structures
 .. doxygenstruct::   pti_view_record_base
    :members:
       
-.. _pti_view_record_sycl_runtime:
-.. doxygenstruct::   pti_view_record_sycl_runtime
+.. _pti_view_record_api:
+.. doxygenstruct::   pti_view_record_api
    :members:
 
 .. _pti_view_record_kernel:
