@@ -320,6 +320,20 @@ ITT_EXTERN_C void ITTAPI __itt_task_begin(const __itt_domain *domain, __itt_id t
   }
 
   ThreadTaskDescriptor desc;
+#ifdef _WIN32
+  if (domain && domain->nameA) {
+    strncpy_s(desc.domain, sizeof(desc.domain), domain->nameA, sizeof(desc.domain) - 2);
+  }
+  else {
+    desc.domain[0] = 0;
+  }
+  if (name && name->strA) {
+    strncpy_s(desc.domain, sizeof(desc.domain), domain->nameA, sizeof(desc.domain) - 2);
+  }
+  else {
+    desc.name[0] = 0;
+  }
+#else /* _WIN32 */
   if (domain && domain->nameA) {
     strncpy(desc.domain, domain->nameA, sizeof(desc.domain) - 2);
   }
@@ -332,6 +346,7 @@ ITT_EXTERN_C void ITTAPI __itt_task_begin(const __itt_domain *domain, __itt_id t
   else {
     desc.name[0] = 0;
   }
+#endif /* _WIN32 */
 
   desc.start_time = UniTimer::GetHostTimestamp();
   desc.buff_size = 0;

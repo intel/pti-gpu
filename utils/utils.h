@@ -208,8 +208,8 @@ inline uint32_t GetTid() {
 
 inline uint64_t GetSystemTime() {
 #if defined(_WIN32)
-  LARGE_INTEGER ticks{0};
-  LARGE_INTEGER frequency{0};
+  LARGE_INTEGER ticks{{0}};
+  LARGE_INTEGER frequency{{0}};
   BOOL status = QueryPerformanceFrequency(&frequency);
   PTI_ASSERT(status != 0);
   status = QueryPerformanceCounter(&ticks);

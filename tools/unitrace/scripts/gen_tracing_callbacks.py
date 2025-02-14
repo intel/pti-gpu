@@ -439,7 +439,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
               f.write("      auto phWaitEvents = *(params->p"+ name + ");\n")
               f.write("      auto numWaitEvents = *(params->p" + prev_name + ");\n")
               f.write("      while(numWaitEvents > 0) {\n")
-              f.write("        str += std::to_string((long int)*phWaitEvents);\n")
+              f.write("        str += std::to_string(reinterpret_cast<uintptr_t>(*phWaitEvents));\n")
               f.write("        numWaitEvents--;\n")
               f.write("        if (numWaitEvents > 0)\n")
               f.write("          str +=\", \";\n")

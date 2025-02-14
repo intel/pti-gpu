@@ -30,12 +30,18 @@ static inline std::string GetHostName(void) {
 #ifdef _WIN32
   DWORD size = sizeof(hname);
   GetComputerNameA(hname, &size);
-#else
+#else  /* _WIN32 */
   gethostname(hname, sizeof(hname));
-#endif
+#endif /* _WIN32 */
   hname[255] = 0;
   return hname;
 }
+
+#ifdef _WIN32
+#define strdup _strdup
+#else /* _WIN32 */
+#define strdup strdup
+#endif /* _WIN32 */
 
 static std::string EncodeURI(const std::string &input) {
   std::ostringstream encoded;

@@ -31,6 +31,7 @@
 #include "utils.h"
 #include "ze_utils.h"
 #include "pti_assert.h"
+#include <inttypes.h>
 
 
 constexpr static uint64_t min_dummy_instance_id = 1024 * 1024;	// min dummy instance id if idle sampling is enabled
@@ -709,7 +710,7 @@ class ZeMetricProfiler {
               std::string line;
 
               char offset[128];
-              snprintf(offset, sizeof(offset), "0x%08lx", (it->first - rit->first));
+              snprintf(offset, sizeof(offset), "%" PRIx64, (it->first - rit->first));
               line = std::string(std::max(int(field_sizes[0] - rit->second.first.length()), 0), ' ') +
                      rit->second.first + ", ";
               logger_->Log(line);
@@ -971,6 +972,7 @@ class ZeMetricProfiler {
         PTI_ASSERT(0);
         break;
     }
+    return "";  // in case of error returns empty string.
   }
 
   inline static std::string GetMetricUnits(const char* units) {

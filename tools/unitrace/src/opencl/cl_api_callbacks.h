@@ -149,7 +149,7 @@ static void clCompileProgramOnEnter(
   stream << " numInputHeaders = " << *(params->numInputHeaders);
   stream << " inputHeaders = " << *(params->inputHeaders);
   stream << " headerIncludeNames = " << *(params->headerIncludeNames);
-  stream << " funcNotify = " << *(params->funcNotify);
+  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
   stream << " userData = " << *(params->userData);
   stream << std::endl;
 
@@ -202,7 +202,7 @@ static void clSetEventCallbackOnEnter(
   stream << " event = " << *(params->event);
   stream << " commandExecCallbackType = " <<
     *(params->commandExecCallbackType);
-  stream << " funcNotify = " << *(params->funcNotify);
+  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
   stream << " userData = " << *(params->userData);
   stream << std::endl;
 
@@ -649,7 +649,7 @@ static void clEnqueueSVMFreeOnEnter(
   stream << " commandQueue = " << *(params->commandQueue);
   stream << " numSvmPointers = " << *(params->numSvmPointers);
   stream << " svmPointers = " << *(params->svmPointers);
-  stream << " pfnFreeFunc = " << *(params->pfnFreeFunc);
+  stream << " pfnFreeFunc = " << *reinterpret_cast<decltype(params->pfnFreeFunc)*>(params->pfnFreeFunc);
   stream << " userData = " << *(params->userData);
   stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
   stream << " eventWaitList = " << *(params->eventWaitList);
@@ -1642,7 +1642,7 @@ static void clCreateContextOnEnter(
   stream << " properties = " << *(params->properties);
   stream << " numDevices = " << *(params->numDevices);
   stream << " devices = " << *(params->devices);
-  stream << " funcNotify = " << *(params->funcNotify);
+  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
   stream << " userData = " << *(params->userData);
   stream << " errcodeRet = " << *(params->errcodeRet);
   stream << std::endl;
@@ -1986,7 +1986,7 @@ static void clCreateContextFromTypeOnEnter(
 
   stream << " properties = " << *(params->properties);
   stream << " deviceType = " << *(params->deviceType);
-  stream << " funcNotify = " << *(params->funcNotify);
+  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
   stream << " userData = " << *(params->userData);
   stream << " errcodeRet = " << *(params->errcodeRet);
   stream << std::endl;
@@ -2228,7 +2228,7 @@ static void clLinkProgramOnEnter(
   }
   stream << " numInputPrograms = " << *(params->numInputPrograms);
   stream << " inputPrograms = " << *(params->inputPrograms);
-  stream << " funcNotify = " << *(params->funcNotify);
+  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
   stream << " userData = " << *(params->userData);
   stream << " errcodeRet = " << *(params->errcodeRet);
   stream << std::endl;
@@ -3363,7 +3363,7 @@ static void clEnqueueNativeKernelOnEnter(
   stream << data->functionName << ":";
 
   stream << " commandQueue = " << *(params->commandQueue);
-  stream << " userFunc = " << *(params->userFunc);
+  stream << " userFunc = " << *reinterpret_cast<decltype(params->userFunc)*>(params->userFunc);
   stream << " args = " << *(params->args);
   stream << " cbArgs = " << *(params->cbArgs);
   stream << " numMemObjects = " << *(params->numMemObjects);
@@ -4058,7 +4058,7 @@ static void clSetMemObjectDestructorCallbackOnEnter(
   stream << data->functionName << ":";
 
   stream << " memobj = " << *(params->memobj);
-  stream << " funcNotify = " << *(params->funcNotify);
+  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
   stream << " userData = " << *(params->userData);
   stream << std::endl;
 
@@ -5435,7 +5435,7 @@ static void clBuildProgramOnEnter(
   } else {
     stream << " options = \"" << *(params->options) << "\"";
   }
-  stream << " funcNotify = " << *(params->funcNotify);
+  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
   stream << " userData = " << *(params->userData);
   stream << std::endl;
 

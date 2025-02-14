@@ -1080,7 +1080,8 @@ inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& g
   kernel_command_properties_mutex_.lock_shared();
   auto it = kernel_command_properties_->find(id);
   if (it != kernel_command_properties_->end()) {
-    str = "\"" + std::move(utils::Demangle(it->second.name_.c_str()));	// quote kernel name which may contain ","
+    str = "\"";
+    str += std::move(utils::Demangle(it->second.name_.c_str()));  // quote kernel name which may contain ","
     if (detailed) {
       if (it->second.type_ == KERNEL_COMMAND_TYPE_COMPUTE) {
         if (it->second.simd_width_ > 0) {
@@ -1504,7 +1505,6 @@ class ZeCollector {
     if (local_device_submissions_.IsFinalized()) {
       return;
     }
-    ze_result_t status = ZE_RESULT_SUCCESS;
 
     global_device_submissions_mutex_.lock_shared();
     auto it = local_device_submissions_.commands_submitted_.begin();
@@ -1549,7 +1549,6 @@ class ZeCollector {
     if (local_device_submissions_.IsFinalized()) {
       return;
     }
-    ze_result_t status = ZE_RESULT_SUCCESS;
 
     global_device_submissions_mutex_.lock();
     if (global_device_submissions_) {
@@ -1596,7 +1595,6 @@ class ZeCollector {
   }
 
   void FinalizeDeviceSubmissions(std::vector<uint64_t> *kids) {
-    ze_result_t status = ZE_RESULT_SUCCESS;
 
     // Do not acquire any locks!
     auto it = local_device_submissions_.commands_submitted_.begin();
@@ -1649,7 +1647,6 @@ class ZeCollector {
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
-        callback_data_(callback_data),
         event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP) {
     data_dir_name_ = data_dir_name;
     EnumerateAndSetupDevices();
@@ -1907,6 +1904,7 @@ class ZeCollector {
         PTI_ASSERT(0);
         break;
     }
+    return "";   //in case of error returns empty string.
   }
 
   inline static std::string GetMetricUnits(const char* units) {
@@ -2408,7 +2406,7 @@ class ZeCollector {
 
   void PrintCommandCompleted(const ZeCommand *command, uint64_t kernel_start, uint64_t kernel_end) {
     std::string str("Thread ");
-    str += std::to_string(command->tid_)  + " Device " + std::to_string((unsigned long)(command->device_)) +
+    str += std::to_string(command->tid_) + " Device " + std::to_string(reinterpret_cast<uintptr_t>(command->device_)) +
       " : " + GetZeKernelCommandName(command->kernel_command_id_, command->group_count_, command->mem_size_) + " [ns] " +
       std::to_string(command->append_time_) + " (append) " +
       std::to_string(command->submit_time_) + " (submit) " +
@@ -3768,7 +3766,6 @@ class ZeCollector {
       desc->metric_timer_frequency_ = cl->metric_timer_frequency_;
       desc->metric_timer_mask_ = cl->metric_timer_mask_;
       desc->device_ = cl->device_;
-      ze_context_handle_t context = cl->context_;
 
       desc->group_count_ = {0, 0, 0};
       desc->mem_size_ = 0;
@@ -4135,7 +4132,6 @@ class ZeCollector {
       const ze_copy_region_t* region = *(params->psrcRegion);
 
       if (region != nullptr) {
-        size_t bytes_transferred = region->width * region->height * (*(params->psrcPitch));
         if (region->depth != 0) {
           bytes_transferred *= region->depth;
         }
@@ -4171,7 +4167,6 @@ class ZeCollector {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
       ze_context_handle_t src_context = *(params->phContextSrc);
-      ze_context_handle_t dst_context = nullptr;
       collector->AppendMemoryCommandContext(MemoryCopyFromContext, *(params->psize),
         src_context, *(params->psrcptr), nullptr, *(params->pdstptr), *(params->phSignalEvent), query,
         *(params->phCommandList), kids);
@@ -4611,7 +4606,6 @@ class ZeCollector {
 
   static void OnExitModuleCreate(ze_module_create_params_t* params, ze_result_t result, void* global_data, void** instance_user_data) {
     if (result == ZE_RESULT_SUCCESS) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       ze_module_handle_t mod = **(params->pphModule);
       ze_device_handle_t device = *(params->phDevice);
       size_t binary_size;
@@ -4632,7 +4626,6 @@ class ZeCollector {
   }
 
   static void OnEnterModuleDestroy(ze_module_destroy_params_t* params, void* global_data, void** instance_user_data) {
-    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     ze_module_handle_t mod = *(params->phModule);
     modules_on_devices_mutex_.lock();
     modules_on_devices_.erase(mod);
@@ -4780,7 +4773,6 @@ typedef struct _zex_kernel_register_file_size_exp_t {
     void* global_data, void** instance_data) {
     if (result == ZE_RESULT_SUCCESS) {
       if (UniController::IsCollectionEnabled()) {
-        ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
         ZeKernelGroupSize group_size{*(params->pgroupSizeX), *(params->pgroupSizeY), *(params->pgroupSizeZ)};
         kernel_command_properties_mutex_.lock();
 
@@ -4816,7 +4808,6 @@ typedef struct _zex_kernel_register_file_size_exp_t {
 
   static void OnExitKernelDestroy(ze_kernel_destroy_params_t* params, ze_result_t result, void* global_data, void** instance_data) {
     if (result == ZE_RESULT_SUCCESS) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       kernel_command_properties_mutex_.lock();
       active_kernel_properties_->erase(*(params->phKernel));
       kernel_command_properties_mutex_.unlock();
@@ -4886,7 +4877,6 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   Logger *logger_ = nullptr;
   OnZeKernelFinishCallback kcallback_ = nullptr;
   OnZeFunctionFinishCallback fcallback_ = nullptr;
-  void* callback_data_ = nullptr;
 
   mutable std::shared_mutex images_mutex_;
   std::map<ze_image_handle_t, size_t> images_;

@@ -685,7 +685,6 @@ class ClCollector {
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
-        callback_data_(callback_data),
         data_dir_name_(data_dir_name) {
     PTI_ASSERT(device_ != nullptr);
     PTI_ASSERT(logger_ != nullptr);
@@ -857,7 +856,6 @@ class ClCollector {
     const std::lock_guard<std::mutex> lock(lock_);
 
     cl_event event = instance->event;
-    cl_int event_status = utils::cl::GetEventStatus(event);
     cl_command_queue queue = utils::cl::GetCommandQueue(event);
     PTI_ASSERT(queue != nullptr);
     cl_device_id device = utils::cl::GetDevice(queue);
@@ -945,7 +943,6 @@ class ClCollector {
 
   inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
     cl_device_pci_bus_info_khr pciInfo;
-    cl_uint vendorId =  0 ;
     cl_int status = clGetDeviceInfo(device, CL_DEVICE_PCI_BUS_INFO_KHR, sizeof(cl_device_pci_bus_info_khr), &pciInfo, nullptr);
     PTI_ASSERT(status == CL_SUCCESS);
     return pciInfo;
@@ -1314,7 +1311,6 @@ class ClCollector {
       collector->CalculateKernelLocalSize(params, &instance->props);
 
       uint64_t base_addr = 0;
-      uint32_t addrbits = 0;
       uint64_t size = 0;
 
       status = clGetKernelInfo(kernel, CL_KERNEL_BINARY_GPU_ADDRESS_INTEL, 0, nullptr, &size);
@@ -1924,7 +1920,6 @@ class ClCollector {
 
   OnClKernelFinishCallback kcallback_ = nullptr;
   OnClFunctionFinishCallback fcallback_ = nullptr;
-  void* callback_data_ = nullptr;
 
   std::mutex lock_;
   ClKernelInfoMap kernel_info_map_;
@@ -1944,7 +1939,6 @@ class ClCollector {
 
   cl_device_type device_type_ = CL_DEVICE_TYPE_ALL;
 
-  OnClFunctionFinishCallback callback_ = nullptr;
 
   ClFunctionInfoMap function_info_map_;
 
@@ -2274,7 +2268,7 @@ cl_int clGetMemAllocInfoINTEL(cl_context context, const void *ptr, cl_mem_info_i
   
         str += " context = " + std::to_string(uint64_t(context));
         str += " ptr = " + std::to_string(uint64_t(ptr));
-        str += " param_name = " + param_name;
+        str += " param_name = " + std::to_string(param_name);
         str += " param_value_size = " + std::to_string(param_value_size);
         str += " param_value = " + std::to_string(uint64_t(param_value));
         str += " param_value_size_ret = " + std::to_string(uint64_t(param_value_size_ret));

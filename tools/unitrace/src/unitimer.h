@@ -73,7 +73,7 @@ public:
 private:
     inline static uint64_t epoch_start_time_ = 0;
 #if defined(_WIN32)
-    inline static LARGE_INTEGER frequency_{0};
+    inline static LARGE_INTEGER frequency_{{0}};
 #endif /* _WIN32 */
 };
     

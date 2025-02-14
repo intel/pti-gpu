@@ -563,7 +563,6 @@ void DisableProfiling() {
   }
 }
 
-static char pattern[] = "/tmp/tmpdir.XXXXXX";
 static char *data_dir = nullptr;
 
 void CleanUp(int sig) {
@@ -602,11 +601,13 @@ int main(int argc, char *argv[]) {
 
   bool use_ld_lib_path = false;
   std::string lib_path = executable_path + LIB_UNITRACE_TOOL_NAME;
-  FILE *fp = fopen(lib_path.c_str(), "rb");
-  if (fp == nullptr) {
+  FILE *fp;
+#ifdef _WIN32
+  errno_t err = fopen_s(&fp, lib_path.c_str(), "rb");
+  if (err != 0 || fp == nullptr) {
     lib_path = executable_path + "/../lib/" + LIB_UNITRACE_TOOL_NAME;
-    fp = fopen(lib_path.c_str(), "rb");
-    if (fp == nullptr) {
+    err = fopen_s(&fp, lib_path.c_str(), "rb");
+    if (err != 0 || fp == nullptr) {
       use_ld_lib_path = true;
       lib_path = LIB_UNITRACE_TOOL_NAME;
     } else {
@@ -615,6 +616,21 @@ int main(int argc, char *argv[]) {
   } else {
     fclose(fp);
   }
+#else /* _WIN32 */
+  fp = fopen(lib_path.c_str(), "rb");
+  if (fp == nullptr) {
+      lib_path = executable_path + "/../lib/" + LIB_UNITRACE_TOOL_NAME;
+      fp = fopen(lib_path.c_str(), "rb");
+      if (fp == nullptr) {
+        use_ld_lib_path = true;
+        lib_path = LIB_UNITRACE_TOOL_NAME;
+      } else {
+          fclose(fp);
+      }
+  } else {
+      fclose(fp);
+  }
+#endif /* _WIN32 */
 
 #if BUILD_WITH_MPI
   std::string mpi_interceptor_path = executable_path + LIB_UNITRACE_MPI_NAME;
@@ -712,6 +728,7 @@ int main(int argc, char *argv[]) {
 
     // UNITRACE_MetricQuery is not set
     SetProfilingEnvironment();
+    char pattern[] = "/tmp/tmpdir.XXXXXX";
 
     data_dir = mkdtemp(pattern);
     if (data_dir == nullptr) {
@@ -799,9 +816,9 @@ int main(int argc, char *argv[]) {
     }
 
     // set data_dir for cleaning up
-    data_dir = (char *)malloc(strlen(tpath) + sizeof("\.data.") + 32);	// enough for the data_dir
+    data_dir = (char *)malloc(strlen(tpath) + sizeof("\\.data.") + 32);	// enough for the data_dir
     UniMemory::ExitIfOutOfMemory(data_dir);
-    sprintf(data_dir, "%s\.data.%d", tpath, utils::GetPid());
+    sprintf(data_dir, "%s\\.data.%d", tpath, utils::GetPid());
     auto status = CreateDirectoryA(LPCSTR(data_dir), nullptr);
     if (status == false) {
       std::cerr << "[ERROR] Failed to create temporary data folder." << std::endl;
