@@ -99,10 +99,6 @@ class UniTracer {
     if (tracer->CheckOption(TRACE_CHROME_ITT_LOGGING) || tracer->CheckOption(TRACE_CCL_SUMMARY_REPORT)) {
         itt_collector = IttCollector::Create(ChromeLogger::IttLoggingCallback);
         if (itt_collector) {
-            auto value = utils::GetEnv("UNITRACE_ChromeCclLogging");
-            if (!value.empty() && value == "1") {
-              itt_collector->SetCclCallback(ChromeLogger::CclLoggingCallback);
-            }
             if (tracer->CheckOption(TRACE_CCL_SUMMARY_REPORT)) {
                 itt_collector->EnableCclSummary();
             }

@@ -18,8 +18,7 @@
 #include <tuple>
 
 static std::string rank_mpi = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-typedef void (*OnIttLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts);
-typedef void (*OnCclLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, uint64_t buff_size);
+typedef void (*OnIttLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, IttArgs* metadata_args);
 typedef void (*OnMpiLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, size_t src_size, int src_location, int src_tag,
                                      size_t dst_size, int dst_location, int dst_tag);
 typedef void (*OnMpiInternalLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, int64_t mpi_counter, size_t src_size, size_t dst_size);
@@ -48,6 +47,18 @@ using ittFunctionInfoMap = std::map<std::string, ittFunction>;
 
 ittFunctionInfoMap ccl_function_info_map;
 std::mutex lock_func_info;
+
+const size_t metadata_type_sizes[] = {
+    1,                  // __itt_metadata_unknown
+    sizeof(uint64_t),   // __itt_metadata_u64
+    sizeof(int64_t),    // __itt_metadata_s64
+    sizeof(uint32_t),   // __itt_metadata_u32
+    sizeof(int32_t),    // __itt_metadata_s32
+    sizeof(uint16_t),   // __itt_metadata_u16
+    sizeof(int16_t),    // __itt_metadata_s16
+    sizeof(float),      // __itt_metadata_float
+    sizeof(double)      // __itt_metadata_double
+};
 
 void AddFunctionTime(const std::string& name, uint64_t time) {
   if (name.rfind("oneCCL::", 0) == 0) {
@@ -93,9 +104,9 @@ class IttCollector {
   IttCollector(const IttCollector& copy) = delete;
   IttCollector& operator=(const IttCollector& copy) = delete;
 
-  void Log(const char *name, uint64_t start_ts, uint64_t end_ts) {
+  void Log(const char *name, uint64_t start_ts, uint64_t end_ts, IttArgs* metadata_args) {
     if (callback_) {
-      callback_(name, start_ts, end_ts);
+      callback_(name, start_ts, end_ts, metadata_args);
     }
   }
 
@@ -113,25 +124,12 @@ class IttCollector {
     }
   }
 
-  void Log(const char *name, uint64_t start_ts, uint64_t end_ts, uint64_t buff_size) {
-    if (ccl_callback_ == nullptr) {
-      std::cerr<<"[ERROR] CCL logging is enabled but callback is not set.\n";
-      return;
-    }
-    ccl_callback_(name, start_ts, end_ts, buff_size);
-  }
-
   void SetMpiCallback(OnMpiLoggingCallback callback) {
     mpi_callback_ = callback;
-
   }
 
   void SetMpiInternalCallback(OnMpiInternalLoggingCallback callback) {
     mpi_internal_callback_ = callback;
-  }
-
-  void SetCclCallback(OnCclLoggingCallback callback) {
-    ccl_callback_ = callback;
   }
 
   std::string CclSummaryReport() const {
@@ -202,7 +200,6 @@ class IttCollector {
 
  private: // Data
   OnIttLoggingCallback callback_ = nullptr;
-  OnCclLoggingCallback ccl_callback_ = nullptr;
   OnMpiLoggingCallback mpi_callback_ = nullptr;
   OnMpiInternalLoggingCallback mpi_internal_callback_ = nullptr;
   bool is_itt_ccl_summary_ = false;
@@ -220,7 +217,7 @@ struct ThreadTaskDescriptor {
   char domain[512];
   char name[512];
   uint64_t start_time;
-  uint64_t buff_size;
+  IttArgs metadata_args;
 };
 
 thread_local std::stack<ThreadTaskDescriptor> task_desc;
@@ -349,7 +346,6 @@ ITT_EXTERN_C void ITTAPI __itt_task_begin(const __itt_domain *domain, __itt_id t
 #endif /* _WIN32 */
 
   desc.start_time = UniTimer::GetHostTimestamp();
-  desc.buff_size = 0;
   task_desc.push(desc);
 }
 
@@ -378,12 +374,7 @@ ITT_EXTERN_C void ITTAPI __itt_task_end(const __itt_domain *domain)
       AddFunctionTime(name, end-start);
     }
     if (itt_collector->IsEnableChromeLoggingOn()) {
-      if (task_desc.top().buff_size > 0) {
-        auto buffSize = task_desc.top().buff_size;
-        itt_collector->Log(task, start, end, buffSize);
-      } else {
-        itt_collector->Log(task, start, end);
-      }
+      itt_collector->Log(task, start, end, &task_desc.top().metadata_args);
     }
     task_desc.pop();
   }
@@ -495,7 +486,7 @@ ITT_EXTERN_C int ITTAPI __itt_event_end(__itt_event event) {
       AddFunctionTime(itt_events[event], end-start);
     }
     if (itt_collector->IsEnableChromeLoggingOn()) {
-      itt_collector->Log(itt_events[event].c_str(), start, end);
+      itt_collector->Log(itt_events[event].c_str(), start, end, nullptr);
     }
     //__itt_mutex_unlock(&(itt_global->mutex));
     return __itt_error_success;
@@ -555,7 +546,7 @@ ITT_EXTERN_C void ITTAPI __itt_marker(const __itt_domain *domain, __itt_id id, _
   }
     
   uint64_t ts = UniTimer::GetHostTimestamp();
-  itt_collector->Log(marker, ts, ts);
+  itt_collector->Log(marker, ts, ts, nullptr);
 }
 
 // Need these empty stubs to make sure symbols are resolved in case any of these symbols are present in target application
@@ -843,20 +834,64 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add(const __itt_domain *domain, __itt_id
   if (!UniController::IsCollectionEnabled()) {
     return;
   }
-
   if (!itt_collector->IsCclSummaryOn() && !itt_collector->IsEnableChromeLoggingOn()) {
     return;
   }
-
-  uint64_t size = *((uint64_t*)data);
-
-  if (!task_desc.empty() && !strcmp(task_desc.top().domain, domain->nameA)) {
-    task_desc.top().buff_size = size;
+  if (count && data && !task_desc.empty() && type > __itt_metadata_unknown && type < __itt_metadata_double) {
+    ThreadTaskDescriptor &task = task_desc.top();
+    IttArgs* newArgs = &task.metadata_args, *next = newArgs->next;
+    void* dataDest = task.metadata_args.data;
+    size_t metadataSize = count * metadata_type_sizes[type];
+    if (newArgs->count) {
+      newArgs->next = (IttArgs*)malloc(std::max(metadataSize, sizeof(void*)) + sizeof(IttArgs) - sizeof(void*));
+      UniMemory::ExitIfOutOfMemory(newArgs->next);
+      newArgs = newArgs->next;
+      dataDest = newArgs->data;
+    }
+    else if (metadataSize > sizeof(void*)) {
+      dataDest = malloc(metadataSize);
+      UniMemory::ExitIfOutOfMemory(dataDest);
+      newArgs->isIndirectData = true;
+      newArgs->data[0] = dataDest;
+    }
+    memcpy(dataDest, data, metadataSize);
+    newArgs->key = key->strA;
+    newArgs->count = count;
+    newArgs->type = type;
+    newArgs->next = next;
   }
 }
 
-ITT_EXTERN_C void ITTAPI __itt_metadata_str_add(const __itt_domain *domain, __itt_id id, __itt_string_handle *key, const char *data, size_t length)
-{
+ITT_EXTERN_C void ITTAPI __itt_metadata_str_add(const __itt_domain *domain, __itt_id id, __itt_string_handle *key, const char *data, size_t length) {
+  if (!UniController::IsCollectionEnabled()) {
+    return;
+  }
+  if (!itt_collector->IsCclSummaryOn() && !itt_collector->IsEnableChromeLoggingOn()) {
+    return;
+  }
+  if (length && data && !task_desc.empty()) {
+    ThreadTaskDescriptor &task = task_desc.top();
+    IttArgs* newArgs = &task.metadata_args, *next = newArgs->next;
+    void* dataDest = task.metadata_args.data;
+    size_t metadataSize = length * metadata_type_sizes[0];
+    if (newArgs->count) {
+      newArgs->next = (IttArgs*)malloc(std::max(metadataSize, sizeof(void*)) + sizeof(IttArgs) - sizeof(void*));
+      UniMemory::ExitIfOutOfMemory(newArgs->next);
+      newArgs = newArgs->next;
+      dataDest = newArgs->data;
+    }
+    else if (metadataSize > sizeof(void*)) {
+      dataDest = malloc(metadataSize);
+      UniMemory::ExitIfOutOfMemory(dataDest);
+      newArgs->isIndirectData = true;
+      newArgs->data[0] = dataDest;
+    }
+    memcpy(dataDest, data, metadataSize);
+    newArgs->key = key->strA;
+    newArgs->count = length;
+    newArgs->type = 0;  // itt_metadata_unknown is considered a string for us
+    newArgs->next = next;
+  }
 }
 
 ITT_EXTERN_C void ITTAPI __itt_metadata_add_with_scope(const __itt_domain *domain, __itt_scope scope, __itt_string_handle *key, __itt_metadata_type type, size_t count, void *data)

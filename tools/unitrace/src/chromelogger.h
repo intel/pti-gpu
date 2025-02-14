@@ -259,6 +259,103 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
   return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
 }
 
+static std::string convertDataToString(IttArgs* args) {
+  std::string strData = "";
+  void* dataPtr = args->isIndirectData ? args->data[0] : args->data;
+  if (args->count) {
+    switch (args->type) {
+      case __itt_metadata_u64: {
+        const uint64_t* uint64Ptr = reinterpret_cast<const uint64_t*>(dataPtr);
+        for (int i=0; i < args->count; i++) {
+          if (i) {
+            strData += ",";
+          }
+          strData += std::to_string(*(uint64Ptr + i));
+        }
+        break;
+      }
+      case __itt_metadata_s64: {
+        const int64_t* int64Ptr = reinterpret_cast<const int64_t*>(dataPtr);
+        for (int i=0; i < args->count; i++) {
+          if (i) {
+            strData += ",";
+          }
+          strData += std::to_string(*(int64Ptr + i));
+        }
+        break;
+      }
+      case __itt_metadata_u32: {
+        const uint32_t* uint32Ptr = reinterpret_cast<const uint32_t*>(dataPtr);
+        for (int i=0; i < args->count; i++) {
+          if (i) {
+            strData += ",";
+          }
+          strData += std::to_string(*(uint32Ptr + i));
+        }
+        break;
+      }
+      case __itt_metadata_s32: {
+        const int32_t* int32Ptr = reinterpret_cast<const int32_t*>(dataPtr);
+        for (int i=0; i < args->count; i++) {
+          if (i) {
+            strData += ",";
+          }
+          strData += std::to_string(*(int32Ptr + i));
+        }
+        break;
+      }
+      case __itt_metadata_u16: {
+        const uint16_t* uint16Ptr = reinterpret_cast<const uint16_t*>(dataPtr);
+        for (int i=0; i < args->count; i++) {
+          if (i) {
+            strData += ",";
+          }
+          strData += std::to_string(*(uint16Ptr + i));
+        }
+        break;
+      }
+      case __itt_metadata_s16: {
+        const int16_t* uint16Ptr = reinterpret_cast<const int16_t*>(dataPtr);
+        for (int i=0; i < args->count; i++) {
+          if (i) {
+            strData += ",";
+          }
+          strData += std::to_string(*(uint16Ptr + i));
+        }
+        break;
+      }
+      case __itt_metadata_float: {
+        const float* floatPtr = reinterpret_cast<const float*>(dataPtr);
+        for (int i=0; i < args->count; i++) {
+          if (i) {
+            strData += ",";
+          }
+          strData += std::to_string(*(floatPtr + i));
+        }
+        break;
+      }
+      case __itt_metadata_double: {
+        const double* doublePtr = reinterpret_cast<const double*>(dataPtr);
+        for (int i=0; i < args->count; i++) {
+          if (i) {
+            strData += ",";
+          }
+          strData += std::to_string(*(doublePtr + i));
+        }
+        break;
+      }
+      default: {  // default is string
+        const char* stringPtr = reinterpret_cast<const char*>(dataPtr);
+        strData += "\"";
+        strData += std::string(stringPtr, args->count);
+        strData += "\"";
+        break;
+      }
+    }
+  }
+  return strData;
+}
+
 class TraceBuffer;
 std::set<TraceBuffer *> *trace_buffers_ = nullptr;
 
@@ -546,10 +643,24 @@ class TraceBuffer {
         if (args.mpi_counter >= 0) {
           str_args += ", \"mpi_counter\": " + std::to_string(args.mpi_counter);
         }
-      } else if (rec.api_type_ == CCL) {
-        const CclArgs& args = rec.ccl_args_;
-        str_args += "\"ssize\": " + std::to_string(args.buff_size);
-      }
+      } else if (rec.api_type_ == ITT) {
+          str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
+          str_args += convertDataToString(&rec.itt_args_);
+          str_args += "]";
+          if (rec.itt_args_.isIndirectData) {
+            free(rec.itt_args_.data[0]);
+          }
+          IttArgs* args = rec.itt_args_.next;
+          while (args != nullptr) {
+            str_args += ",";
+            str_args = str_args + "\"" + args->key + "\":[";
+            str_args += convertDataToString(args);
+            str_args += "]";
+            IttArgs* toFree = args;
+            args = args->next;
+            free(toFree);
+          }
+        }
 
       if (!str_args.empty()) {
         str += ", \"args\": {" + str_args + "}";
@@ -971,10 +1082,24 @@ class ClTraceBuffer {
           str_args += ", \"mpi_counter\": " + std::to_string(args.mpi_counter);
         }
 
-      } else if (rec.api_type_ == CCL) {
-        const CclArgs& args = rec.ccl_args_;
-        str_args += "\"ssize\": " + std::to_string(args.buff_size);
-      }
+      } else if (rec.api_type_ == ITT) {
+          str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
+          str_args += convertDataToString(&rec.itt_args_);
+          str_args += "]";
+          if (rec.itt_args_.isIndirectData) {
+            free(rec.itt_args_.data[0]);
+          }
+          IttArgs* args = rec.itt_args_.next;
+          while (args != nullptr) {
+            str_args += ",";
+            str_args = str_args + "\"" + args->key + "\":[";
+            str_args += convertDataToString(args);
+            str_args += "]";
+            IttArgs* toFree = args;
+            args = args->next;
+            free(toFree);
+          }
+        }
 
       if (!str_args.empty()) {
         str += ", \"args\": {" + str_args + "}";
@@ -1303,7 +1428,7 @@ class ChromeLogger {
       }
     }
 
-    static void IttLoggingCallback(const char *name, uint64_t start_ts, uint64_t end_ts) {
+    static void IttLoggingCallback(const char *name, uint64_t start_ts, uint64_t end_ts, IttArgs* metadata_args) {
       if (!thread_local_buffer_.IsFinalized()) {
         HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
 
@@ -1319,27 +1444,10 @@ class ChromeLogger {
         rec->start_time_ = start_ts;
         rec->end_time_ = end_ts;
         rec->id_ = 0;
-        thread_local_buffer_.BufferHostEvent();
-      }
-    }
-
-    static void CclLoggingCallback(const char *name, uint64_t start_ts, uint64_t end_ts, uint64_t buff_size) {
-      if (!thread_local_buffer_.IsFinalized()) {
-        HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
-
-        if (name != nullptr) {
-          rec->name_ = strdup(name);
-        } else {
-          rec->name_ = nullptr;
+        if (metadata_args != nullptr && metadata_args->count != 0) {
+          rec->api_type_ = ITT;
+          rec->itt_args_ = *metadata_args;
         }
-
-        rec->type_ = EVENT_COMPLETE;
-        rec->api_id_ = IttTracingId;
-        rec->start_time_ = start_ts;
-        rec->end_time_ = end_ts;
-        rec->id_ = 0;
-        rec->api_type_ = CCL;
-        rec->ccl_args_.buff_size = buff_size;
         thread_local_buffer_.BufferHostEvent();
       }
     }

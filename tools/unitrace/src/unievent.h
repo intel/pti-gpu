@@ -37,12 +37,13 @@ typedef struct MpiArgs_ {
 } MpiArgs;
 
 typedef struct IttArgs_ {
-  /*Add arguments here*/
+  size_t count = 0;
+  bool isIndirectData = false;
+  int type;
+  const char* key;
+  struct IttArgs_* next = nullptr;
+  void* data[1];
 } IttArgs;
-
-typedef struct CclArgs_ {
-  uint64_t buff_size;
-} CclArgs;
 
 typedef struct HostEventRecord_ {
   uint64_t id_;
@@ -55,7 +56,6 @@ typedef struct HostEventRecord_ {
   API_TYPE api_type_ = API_TYPE::NONE;
   union{
     MpiArgs mpi_args_;
-    CclArgs ccl_args_;
     IttArgs itt_args_;
   };
 } HostEventRecord;
