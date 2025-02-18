@@ -320,27 +320,34 @@ pti_result ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequ
 
 // Get api function name by api kind (LEVEL_ZERO_CALLS(default), OPENCL_CALLS, etc).
 pti_result ptiViewGetApiIdName(pti_api_group_id type, uint32_t unique_id, const char** name) {
-  try {
-    switch (type) {
-      case pti_api_group_id::PTI_API_GROUP_SYCL: {
-        *name = pti_api_id_runtime_sycl_func_name.at(unique_id);
-      }; break;
-      case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
-        *name = pti_api_id_driver_levelzero_func_name.at(unique_id);
-      }; break;
-      case pti_api_group_id::PTI_API_GROUP_OPENCL: {
-        return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
-      }; break;
-      case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
-      case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
-      case pti_api_group_id::PTI_API_GROUP_RESERVED: {
-        return pti_result::PTI_ERROR_BAD_ARGUMENT;
-      }; break;
+  pti_result result = pti_result::PTI_SUCCESS;
+  if (name != nullptr) {
+    try {
+      switch (type) {
+        case pti_api_group_id::PTI_API_GROUP_SYCL:
+          *name = pti_api_id_runtime_sycl_func_name.at(unique_id);
+          break;
+        case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
+        case pti_api_group_id::PTI_API_GROUP_LEVELZERO:
+          *name = pti_api_id_driver_levelzero_func_name.at(unique_id);
+          break;
+        case pti_api_group_id::PTI_API_GROUP_OPENCL:
+          result = pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+          break;
+        case pti_api_group_id::PTI_API_GROUP_RESERVED:
+          result = pti_result::PTI_ERROR_BAD_ARGUMENT;
+          break;
+        default:
+          result = pti_result::PTI_ERROR_BAD_ARGUMENT;
+          break;
+      }
+    } catch (const std::out_of_range&) {
+      result = pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
-  } catch (const std::out_of_range&) {
-    return pti_result::PTI_ERROR_BAD_ARGUMENT;
-  };
-  return PTI_SUCCESS;
+  } else {
+    result = pti_result::PTI_ERROR_BAD_ARGUMENT;
+  }
+  return result;
 }
 
 // Enable/Disable driver specific API specified by api_id within the api_group_id.

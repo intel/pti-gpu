@@ -629,8 +629,8 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
           std::cout << "--- Sycl: " << rec->_api_id << "\n";
           const char* api_name = nullptr;
           if (rec->_api_group == pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO) {
-            pti_result status = ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO,
-                                                    rec->_api_id, &api_name);
+            pti_result status = ptiViewGetApiIdName(
+                pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO, rec->_api_id, &api_name);
             PTI_ASSERT(status == PTI_SUCCESS);
             std::string function_name(api_name);
             std::cout << "--- Record Special Sycl: " << rec->_correlation_id << ": "
