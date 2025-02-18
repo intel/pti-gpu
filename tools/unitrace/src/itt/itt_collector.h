@@ -325,7 +325,7 @@ ITT_EXTERN_C void ITTAPI __itt_task_begin(const __itt_domain *domain, __itt_id t
     desc.domain[0] = 0;
   }
   if (name && name->strA) {
-    strncpy_s(desc.domain, sizeof(desc.domain), domain->nameA, sizeof(desc.domain) - 2);
+    strncpy_s(desc.name, sizeof(desc.name), name->strA, sizeof(desc.name) - 2);
   }
   else {
     desc.name[0] = 0;
