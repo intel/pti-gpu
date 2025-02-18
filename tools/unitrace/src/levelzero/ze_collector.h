@@ -1386,7 +1386,7 @@ class ZeCollector {
       if (kname.size() > max_name_size) {
         max_name_size = kname.size();
       }
-      knames.push_back(kname);
+      knames.push_back(std::move(kname));
     }
 
     if (total_device_time != 0) {
