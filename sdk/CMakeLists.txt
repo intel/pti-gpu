@@ -14,12 +14,14 @@ project(
   LANGUAGES C CXX
 )
 
-# Global Settings
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin CACHE STRING "")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE STRING "")
-
 ProjectIsTopLevel()
 SetBuildType()
+
+# Global Settings
+if(PROJECT_IS_TOP_LEVEL)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin CACHE STRING "")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE STRING "")
+endif()
 
 # For developer use with tools like clangd (can be used by vscode and vim
 # plugins).
@@ -78,11 +80,11 @@ find_package(Xpti)
 if(NOT PROJECT_IS_TOP_LEVEL)
   find_package(LevelZero ${PTI_L0_LOADER} REQUIRED)  
 else()
-  find_package(LevelZero ${PTI_L0_LOADER} )
+  find_package(LevelZero ${PTI_L0_LOADER})
 endif()
 
 if(NOT TARGET LevelZero::level-zero)
-  GetLevelZero()
+  GetLevelZero(${PTI_L0_LOADER} ${PTI_L0_LOADER_COMMIT_HASH})
 endif()
 
 find_package(Threads REQUIRED)

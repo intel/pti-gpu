@@ -222,7 +222,7 @@ macro(CheckSOVersion PROJ_SOVERSION)
   endif()
 endmacro()
 
-macro(GetLevelZero)
+macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
   if (NOT TARGET LevelZero::level-zero)
     # Need zelEnableTracingLayer
     message("-- Fetching L0: ${PTI_L0_LOADER}")
@@ -253,23 +253,43 @@ macro(GetLevelZero)
         add_subdirectory(${levelzero_SOURCE_DIR} ${levelzero_BINARY_DIR} EXCLUDE_FROM_ALL)
     endif()
 
+    get_target_property(PTI_ZE_LOADER_RUNTIME_DIR ze_loader RUNTIME_OUTPUT_DIRECTORY)
+
     # Create new target to treat level zero loader as an external dependency.
     # This prevents it from being added to the export set.
     # (Basically treat as if including via find_package)
     add_library(pti_ze_loader INTERFACE IMPORTED)
-    add_dependencies(pti_ze_loader ze_tracing_layer)
+    add_dependencies(pti_ze_loader ze_tracing_layer ze_validation_layer)
 
-    set(PTI_LZ_COMPILE_OPTIONS $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-parameter -Wno-cast-function-type-mismatch -Wno-extra-semi>
-                               $<$<CXX_COMPILER_ID:MSVC>:/wd6285
-                                $<$<CONFIG:Release>:/wd4702 /wd6385 /wd6386>>)
+    set(PTI_LZ_COMPILE_OPTIONS
+        $<$<CXX_COMPILER_ID:IntelLLVM>:
+            -Wno-error
+            -Wno-unused-parameter
+            -Wno-cast-function-type-mismatch
+            -Wno-extra-semi
+        >
+        $<$<CXX_COMPILER_ID:MSVC>:
+            /wd6285
+            $<$<CONFIG:Release>:/wd4702 /wd6385 /wd6386>
+        >
+        $<$<CXX_COMPILER_ID:GNU>:
+            -Wno-error
+            -Wno-unused-parameter
+            $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,8.0.0>:-Wno-extra-semi>
+        >
+        $<$<CXX_COMPILER_ID:Clang>:
+            -Wno-error
+            -Wno-unused-parameter
+            $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,3.0.0>:-Wno-extra-semi>
+        >
+    )
 
     # Silence Warnings from Level Zero Loader. Allows us to better detect PTI
     # warnings and errors.
-    target_compile_options(ze_loader PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
-    target_compile_options(ze_tracing_layer PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
-    target_compile_options(ze_null PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
-    target_compile_options(ze_validation_layer PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
-    #target_compile_options(utils PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
+    set_target_properties(ze_loader ze_tracing_layer ze_null ze_validation_layer
+      PROPERTIES
+        COMPILE_OPTIONS "${PTI_LZ_COMPILE_OPTIONS}"
+        RUNTIME_OUTPUT_DIRECTORY "${PTI_ZE_LOADER_RUNTIME_DIR}/loader")
 
     # Pull Headers out of source tree and add them to level_zero/
     # This allows us to keep the normal way to include level zero
@@ -338,9 +358,8 @@ macro(AddApiGenTarget L0_GEN_SCRIPT GEN_FILE_NAME L0_TARGET)
   # Use the target that links level zero to find the level zero library
   if(TARGET LevelZero::level-zero)
     get_target_property(L0_TARGET_PATH ${L0_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
-    message("L0_Target_Path: ${L0_TARGET_PATH}")
-    message("L0 Version: ${PTI_L0_LOADER}")
-    message("L0 Hash: ${PTI_L0_LOADER_COMMIT_HASH}")
+    include(CMakePrintHelpers)
+    cmake_print_variables(PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH L0_TARGET_PATH)
   endif()
 
   # HINTS before PATHS

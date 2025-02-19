@@ -38,6 +38,23 @@ if(PTI_IS_MULTI_CONFIG)
 endif()
 
 if(HAVE_SYCL)
+  set(PTI_TEST_SPV_SRC ${PROJECT_SOURCE_DIR}/test/gemm.spv)
+  set(PTI_TEST_SPV_TEST ${PTI_TEST_BIN_DIR}/gemm.spv)
+
+  if(TARGET LevelZero::level-zero OR TARGET unified-runtime::loader)
+    add_custom_command(
+      OUTPUT ${PTI_TEST_SPV_TEST}
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              ${PTI_TEST_SPV_SRC} ${PTI_TEST_SPV_TEST}
+      DEPENDS ${PTI_TEST_SPV_SRC})
+
+    add_custom_target(
+      copy_test_spv
+      DEPENDS ${PTI_TEST_SPV_TEST}
+    )
+  endif()
+
   add_executable(dpcgemm_suite main_dpcgemm_fixture.cc)
   target_include_directories(
     dpcgemm_suite
@@ -163,17 +180,6 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
-
-  add_custom_command(
-    TARGET zegemm_suite
-    PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          ${PROJECT_SOURCE_DIR}/test/gemm.spv ${PTI_TEST_BIN_DIR}/gemm.spv)
-  add_custom_command(
-    TARGET zegemm_suite
-    PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          ${PROJECT_SOURCE_DIR}/test/gemm.cl ${PTI_TEST_BIN_DIR}/gemm.cl)
 
   target_compile_options(zegemm_suite  PUBLIC -fsycl -gline-tables-only)
   target_link_options(zegemm_suite PUBLIC -fsycl -gline-tables-only)
@@ -308,6 +314,8 @@ if(HAVE_SYCL)
     TEST_LIST ZEGEMM_SUITE_TEST_LIST
     PROPERTIES LABELS "unit")
 
+  add_dependencies(zegemm_suite copy_test_spv)
+
   gtest_discover_tests(
     multi_threaded_submission
     DISCOVERY_TIMEOUT 60
@@ -369,17 +377,6 @@ if (HAVE_SYCL AND TARGET unified-runtime::loader)
            "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
-  add_custom_command(
-    TARGET urgemm_suite
-    PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${PROJECT_SOURCE_DIR}/test/gemm.spv ${PTI_TEST_BIN_DIR}/gemm.spv)
-  add_custom_command(
-    TARGET urgemm_suite
-    PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${PROJECT_SOURCE_DIR}/test/gemm.cl ${PTI_TEST_BIN_DIR}/gemm.cl)
-
   target_compile_options(urgemm_suite  PUBLIC -fsycl -gline-tables-only)
   target_link_options(urgemm_suite PUBLIC -fsycl -gline-tables-only)
   target_link_libraries(urgemm_suite PUBLIC spdlog::spdlog
@@ -394,6 +391,8 @@ if (HAVE_SYCL AND TARGET unified-runtime::loader)
     DISCOVERY_TIMEOUT 60
     TEST_LIST URGEMM_SUITE_TEST_LIST
     PROPERTIES LABELS "unit" "sycl" "unified-runtime")
+
+  add_dependencies(urgemm_suite copy_test_spv)
 endif()
 
 add_executable(view_record_test view_buffer_test.cc)
