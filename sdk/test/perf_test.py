@@ -13,10 +13,8 @@ test_baseline = [["dpc_gemm_threaded_baseline", "-t", "5", "-r", "50", "-s", "32
 # The test checks if the accumulated Overhead View time is at least
 # the threshold ratio (test parameter) multiplied by the difference between
 # the elapsed times of the baseline and the test under profiling.
-test_overhead = [["dpc_gemm_threaded_overhead", "-t", "1", "-r", "100", "-s", "128"]]
-test_baseline_t_1 = [
-    ["dpc_gemm_threaded_baseline", "-t", "1", "-r", "100", "-s", "128"]
-]
+test_overhead = [["dpc_gemm_threaded_overhead", "-t", "1", "-r", "200", "-s", "32"]]
+test_baseline_t_1 = [["dpc_gemm_threaded_baseline", "-t", "1", "-r", "200", "-s", "32"]]
 
 
 def get_value(name, text):

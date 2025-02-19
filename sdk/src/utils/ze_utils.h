@@ -361,15 +361,15 @@ inline std::string GetKernelName(ze_kernel_handle_t kernel, bool demangle = fals
   return std::string(name.begin(), name.end() - 1);
 }
 
-inline void GetDeviceTimestamps(ze_device_handle_t device, uint64_t* host_timestamp,
-                                uint64_t* device_timestamp) {
+inline ze_result_t GetDeviceTimestamps(ze_device_handle_t device, uint64_t* host_timestamp,
+                                       uint64_t* device_timestamp) {
   PTI_ASSERT(device != nullptr);
   PTI_ASSERT(host_timestamp != nullptr);
   PTI_ASSERT(device_timestamp != nullptr);
   overhead::Init();
   ze_result_t status = zeDeviceGetGlobalTimestamps(device, host_timestamp, device_timestamp);
   overhead_fini(zeDeviceGetGlobalTimestamps_id);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  return status;
 }
 
 inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {

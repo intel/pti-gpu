@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "pti/pti_view.h"
+#include "utils.h"
 #include "utils/test_helpers.h"
 
 namespace {
@@ -47,6 +48,15 @@ void TestCore(bool do_immediate) {
     constexpr size_t kRepetitions = 10;
     std::cout << "Adding vectors size: " << kVectorSize << ", Repetitions: " << kRepetitions
               << std::endl;
+    std::cout << "Evaluating latency of timing call..." << std::endl;
+    auto first_stamp = utils::GetTime();
+    auto second_stamp = utils::GetTime();
+    auto third_stamp = utils::GetTime();
+    auto forth_stamp = utils::GetTime();
+    std::cout << "Time stamp (ns):" << first_stamp << std::endl;
+    std::cout << "Time stamp (ns):" << second_stamp << std::endl;
+    std::cout << "Time stamp (ns):" << third_stamp << std::endl;
+    std::cout << "Time stamp (ns):" << forth_stamp << std::endl;
 
     auto dev = sycl::device(sycl::gpu_selector_v);
     // Important that queue is in order
@@ -151,9 +161,9 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
                 << std::endl;
       */
       if (timestamps[item].first <= timestamps[item - 1].second) {
-        std::cerr << "--->  ERROR: Device timestamps overlaps t(i) < t(i-1), at i: " << item
-                  << ", t(i): " << timestamps[item].first
-                  << ", t(i-1): " << timestamps[item - 1].second << std::endl;
+        std::cerr << "--->  ERROR: Device kernel timestamps overlap start_of_i < end_of_i-1, at i: "
+                  << item << ", start_of_i: " << timestamps[item].first
+                  << ", end_of_i-1: " << timestamps[item - 1].second << std::endl;
         return false;
       }
     }

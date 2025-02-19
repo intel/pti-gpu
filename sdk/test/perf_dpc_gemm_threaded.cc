@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
+#include <iomanip>
 #include <memory>
 #include <sycl/sycl.hpp>
 #include <thread>
@@ -171,8 +172,10 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
       case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
         pti_view_record_overhead* record = reinterpret_cast<pti_view_record_overhead*>(ptr);
         overhead_time_ns += record->_overhead_duration_ns;
-        // std::cout << " ======== Overhead Time: " << record->_overhead_duration_ns << " ns"
-        //         << "\t\t API Id: " << record->_api_id << '\n';
+        // Keep commented lines around for the purpose of reviewing latency of L0 calls
+        // std::cout << " ======== Overhead Time: " << std::setw(7) << std::right
+        //           << record->_overhead_duration_ns << " ns"
+        //           << "\t API Id: " << record->_api_id << '\n';
         break;
       }
 #if defined(RECORD_PARSE_AND_PRINT)
@@ -372,18 +375,24 @@ int main(int argc, char* argv[]) {
               << std::endl
               << std::flush;
 
-    std::vector<std::thread> the_threads;
     auto start = std::chrono::steady_clock::now();
-    for (unsigned i = 0; i < thread_count; i++) {
-      std::thread t = std::thread(threadFunction, size, repeat_count, expected_result);
-      the_threads.push_back(std::move(t));
+
+    if (thread_count > 1) {
+      std::vector<std::thread> the_threads;
+      for (unsigned i = 0; i < thread_count; i++) {
+        std::thread t = std::thread(threadFunction, size, repeat_count, expected_result);
+        the_threads.push_back(std::move(t));
+      }
+
+      for (auto& th : the_threads) {
+        if (th.joinable()) {
+          th.join();
+        }
+      }
+    } else {
+      threadFunction(size, repeat_count, expected_result);
     }
 
-    for (auto& th : the_threads) {
-      if (th.joinable()) {
-        th.join();
-      }
-    }
 #if defined(NO_PTI)
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;

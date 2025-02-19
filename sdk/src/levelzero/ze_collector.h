@@ -42,6 +42,7 @@
 #include "utils.h"
 #include "ze_event_cache.h"
 #include "ze_local_collection_helpers.h"
+#include "ze_timer_helper.h"
 #include "ze_utils.h"
 #include "ze_wrappers.h"
 
@@ -63,6 +64,10 @@ struct ZeInstanceData {
 };
 
 inline thread_local ZeInstanceData ze_instance_data;
+
+// Used for CPU/GPU sync points. See description to ZeCollector::GetDeviceTimestamps function
+inline thread_local std::map<ze_device_handle_t, std::unique_ptr<CPUGPUTimeInterpolationHelper>>
+    timer_helpers_;
 
 struct ZeKernelGroupSize {
   uint32_t x;
@@ -140,6 +145,7 @@ struct ZeDeviceDescriptor {
   uint64_t device_time_origin = 0;
   uint64_t device_timer_frequency = 0;
   uint64_t device_timer_mask = 0;
+  uint64_t device_sync_delta = 50'000'000ULL;  // 50ms
   ze_driver_handle_t driver = nullptr;
   ze_context_handle_t context = nullptr;
   ze_pci_ext_properties_t pci_properties{};
@@ -246,6 +252,74 @@ class ZeCollector {
   }
   enum class ZeCollectionMode { Full = 0, Hybrid = 1, Local = 2 };
   enum class ZeCollectionState { Normal = 0, Abnormal = 1 };
+
+  /**
+   * \internal
+   * \brief Returns the current device timestamps, CPU in nanoceconds and GPU in ticks
+   *
+   * \param [in] device - the device to get the timestamps from
+   * \param [out] host_time - the CPU time in nanoseconds
+   * \param [out] device_time - the GPU time in ticks
+   * \return ZE_RESULT_SUCCESS on success, ZE_RESULT_ERROR on failure
+   *
+   * Previously, zeDeviceGetGlobalTimestamps was called every time CPU and GPU timestamps
+   * needed to be synced (via utils::ze::GetDeviceTimestamps(device, host_time, device_time);)
+   * GPU cycles were then converted to CPU (aka host) timescale.
+   * However, zeDeviceGetGlobalTimestamps has a high latency,
+   * so it is not sutable for frequent calls (e.g. each dozen of micro-secs), especially in profiler
+   *
+   * The current implementation calls zeDeviceGetGlobalTimestamp less often:
+   * once in ~ dozens (or hundreds) of milliseconds
+   * (see CPUGPUTimeInterpolationHelper.delta) - for sync CPU/GPU point
+   * per thread per device. (per thread - to avoid any synchronization between threads)
+   * The delta between sycn points is selected  empirically, but it is important keep in mind that
+   * on systems with 32 GPU time counter - this counter would wrap around every few seconds.
+   * The delta should be less than this wrap around time.
+   *
+   * Another change - the GPU timer frequency is not interpolated anymore but rather
+   * taken from the device descriptor. This assumes that it is constant.
+   *
+   * The function is called synchroniously in a profiled thread, once per device.
+   *
+   * InterpolationHelper keeps the sync point from some recent past.
+   * If CPU time, from the recent sych point, exceeded delta - makes a new sych point.
+   * The sync point data are returned to a caller. The caller ueses the sync point data
+   * to convert GPU cycles to CPU time or do other ops with them.
+   *
+   */
+  ze_result_t GetDeviceTimestamps(ze_device_handle_t device, uint64_t* host_time,
+                                  uint64_t* device_time) {
+    PTI_ASSERT(device != nullptr);
+    PTI_ASSERT(host_time != nullptr);
+    PTI_ASSERT(device_time != nullptr);
+    if (timer_helpers_.find(device) == timer_helpers_.end()) {
+      timer_helpers_[device] = std::make_unique<CPUGPUTimeInterpolationHelper>(
+          device, device_descriptors_[device].device_timer_frequency,
+          device_descriptors_[device].device_timer_mask,
+          device_descriptors_[device].device_sync_delta);
+    }
+    uint64_t anchor_host_time = 0;
+    uint64_t anchor_device_time = 0;
+    auto helper = timer_helpers_[device].get();
+    uint64_t current_host_time = utils::GetTime();
+    if (current_host_time - helper->cpu_timestamp_ > helper->delta_) {
+      ze_result_t res =
+          utils::ze::GetDeviceTimestamps(device, &anchor_host_time, &anchor_device_time);
+      PTI_ASSERT(res == ZE_RESULT_SUCCESS);
+      helper->cpu_timestamp_ = anchor_host_time;
+      helper->gpu_timestamp_ = anchor_device_time;
+    } else {
+      anchor_host_time = helper->cpu_timestamp_;
+      anchor_device_time = helper->gpu_timestamp_;
+    }
+    current_host_time = utils::GetTime();
+    uint64_t current_device_time = anchor_device_time + ((current_host_time - anchor_host_time) /
+                                                         timer_helpers_[device]->coeff_);
+
+    *host_time = current_host_time;
+    *device_time = current_device_time;
+    return ZE_RESULT_SUCCESS;
+  }
 
   static ZeCollectionMode SelectZeCollectionMode(bool introspection_capable, bool& disabled_mode,
                                                  bool& hybrid_mode) {
@@ -375,6 +449,7 @@ class ZeCollector {
         swap_event_pool_(512),
         startstop_mode_changer(this) {
     CreateDeviceMap();
+    UpdateDeviceSyncDelta();
     ze_result_t res = l0_wrapper_.InitDynamicTracingWrappers();
     if (ZE_RESULT_SUCCESS == res) {
       loader_dynamic_tracing_capable_ = true;
@@ -450,6 +525,27 @@ class ZeCollector {
     }
   }
 
+  void UpdateDeviceSyncDelta() {
+    // in future we can try make it per device
+    SPDLOG_DEBUG("In {}", __FUNCTION__);
+    uint64_t delta = 0;
+    auto env_string = utils::GetEnv("PTI_DEVICE_SYNC_DELTA");
+    SPDLOG_INFO("Checking DeviceSyncDelta by PTI_DEVICE_SYNC_DELTA environment variable");
+    if (!env_string.empty()) {
+      try {
+        delta = std::stoll(env_string);
+        SPDLOG_INFO("\tPTI_DEVICE_SYNC_DELTA is {} ns, will use it in device tracing", delta);
+      } catch (std::invalid_argument const& /*ex*/) {
+        delta = CPUGPUTimeInterpolationHelper::kSycnDeltaDefault;  // fallback to default
+      } catch (std::out_of_range const& /*ex*/) {
+        delta = CPUGPUTimeInterpolationHelper::kSycnDeltaDefault;  // fallback to default
+      }
+    }
+    for (auto& [device, descriptor] : device_descriptors_) {
+      descriptor.device_sync_delta = delta;
+    }
+  }
+
   void MarkIntrospection() {
     const auto drivers = utils::ze::GetDriverList();
     for (auto const driver : drivers) {
@@ -502,21 +598,6 @@ class ZeCollector {
     }
 
     desc.pci_properties = pci_device_properties;
-    uint64_t host_time = 0;
-    uint64_t ticks = 0;
-    uint64_t device_time = 0;
-
-    overhead::Init();
-    status = zeDeviceGetGlobalTimestamps(device, &host_time, &ticks);
-    overhead_fini(zeDeviceGetGlobalTimestamps_id);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    device_time = ticks & desc.device_timer_mask;
-    if (desc.device_timer_frequency) {
-      device_time = device_time * NSEC_IN_SEC / desc.device_timer_frequency;
-    }
-    desc.host_time_origin = host_time;
-    desc.device_time_origin = device_time;
     return desc;
   }
 
@@ -1033,10 +1114,7 @@ class ZeCollector {
       // as all command lists submitted to the execution into queue - they are not immediate
       PTI_ASSERT(!info.immediate);
       PTI_ASSERT(info.device != nullptr);
-      overhead::Init();
-      ze_result_t status =
-          zeDeviceGetGlobalTimestamps(info.device, &host_time_sync, &device_time_sync);
-      overhead_fini(zeDeviceGetGlobalTimestamps_id);
+      ze_result_t status = GetDeviceTimestamps(info.device, &host_time_sync, &device_time_sync);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       const std::lock_guard<std::mutex> lock(lock_);
@@ -1434,9 +1512,7 @@ class ZeCollector {
     uint64_t host_timestamp = 0;
     uint64_t device_timestamp = 0;  // in ticks
 
-    overhead::Init();
-    ze_result_t status = zeDeviceGetGlobalTimestamps(device, &host_timestamp, &device_timestamp);
-    overhead_fini(zeDeviceGetGlobalTimestamps_id);
+    ze_result_t status = collector->GetDeviceTimestamps(device, &host_timestamp, &device_timestamp);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_instance_data.timestamp_host = host_timestamp;
@@ -1539,13 +1615,12 @@ class ZeCollector {
       } else if (command->props.type == KernelCommandType::kMemory) {
         SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
                      (void*)command->props.src_device, (void*)command->props.dst_device);
-        bool is_two_devices =
-            (command->props.src_device != nullptr && command->props.dst_device != nullptr) ? true
-                                                                                           : false;
-        append_res = A2AppendBridgeMemoryCopyOrFill(
-            command->command_list, command->event_self, command->event_swap, command->props.dst,
-            command->props.src, command->props.bytes_transferred, command->props.value_size,
-            is_two_devices);
+
+        auto buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
+        PTI_ASSERT(buffer != nullptr);
+        append_res = A2AppendBridgeMemoryCopyOrFillEx(command->command_list, command->event_self,
+                                                      command->event_swap, buffer,
+                                                      device_buffer_pool_.buffer_size_);
       } else if (command->props.type == KernelCommandType::kCommand) {
         append_res =
             A2AppendBridgeBarrier(command->command_list, command->event_self, command->event_swap);
@@ -2397,6 +2472,7 @@ class ZeCollector {
   std::map<ze_command_queue_handle_t, ZeCommandQueue> command_queues_;
 
   A2BridgeKernelPool bridge_kernel_pool_;
+  A2DeviceBufferPool device_buffer_pool_;
   A2EventPool swap_event_pool_;
 
   Level0Wrapper l0_wrapper_;

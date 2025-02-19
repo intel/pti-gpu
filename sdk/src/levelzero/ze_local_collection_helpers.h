@@ -85,13 +85,42 @@ bool A2AppendBridgeMemoryCopyOrFill(ze_command_list_handle_t command_list,
   return result == ZE_RESULT_SUCCESS;
 }
 
+/**
+ * \internal
+ * ze..MemoryFill still has smaller latency than ze..MemoryCopy. So we use it to lower the overhead
+ */
+bool A2AppendBridgeMemoryCopyOrFillEx(ze_command_list_handle_t command_list,
+                                      ze_event_handle_t signal_event, ze_event_handle_t wait_event,
+                                      void* dst, size_t size) {
+  PTI_ASSERT(command_list != nullptr);
+  PTI_ASSERT(wait_event != nullptr);
+
+  SPDLOG_TRACE(
+      " --- In: {}, CmdList: {}, Signal event: {}, Wait event: {}, dst: {}, \
+                size: {}",
+      __FUNCTION__, static_cast<void*>(command_list), static_cast<void*>(signal_event),
+      static_cast<void*>(wait_event), dst, size);
+
+  uint32_t count = 1;
+  ze_result_t result = ZE_RESULT_SUCCESS;
+  SPDLOG_TRACE("\tAppending Bridge MemoryFill dst: {}, size: {}", dst, size);
+  uint32_t pattern = 0;
+  overhead::Init();
+  result = zeCommandListAppendMemoryFill(command_list, dst, &pattern, sizeof(pattern), size,
+                                         signal_event, count, &wait_event);
+  overhead_fini(zeCommandListAppendMemoryFill_id);
+  SPDLOG_DEBUG("\t\tBridge MemOp Append MemoryFill result: {}", (uint32_t)result);
+  return result == ZE_RESULT_SUCCESS;
+}
+
 bool A2AppendBridgeBarrier(ze_command_list_handle_t command_list, ze_event_handle_t signal_event,
                            ze_event_handle_t wait_event) {
   PTI_ASSERT(command_list != nullptr);
   PTI_ASSERT(wait_event != nullptr);
 
   SPDLOG_DEBUG(" --- In: {}, CmdList: {}, Signal event: {}, Wait event: {}", __FUNCTION__,
-               (void*)command_list, (void*)signal_event, (void*)wait_event);
+               static_cast<void*>(command_list), static_cast<void*>(signal_event),
+               static_cast<void*>(wait_event));
 
   uint32_t count = 1;
   overhead::Init();
@@ -425,4 +454,35 @@ std::vector<uint16_t> A2BridgeKernelPool::kernel_binary_{
     0x7274, 0x0079, 0x0000, 0x0013, 0x0002, 0x0002, 0x0000, 0x0021, 0x0003, 0x0003, 0x0000,
     0x0002, 0x0000, 0x0036, 0x0005, 0x0002, 0x0000, 0x0004, 0x0000, 0x0000, 0x0000, 0x0003,
     0x0000, 0x00f8, 0x0002, 0x0005, 0x0000, 0x00fd, 0x0001, 0x0038, 0x0001};
+
+class A2DeviceBufferPool {
+ public:
+  A2DeviceBufferPool() {}
+
+  void* GetBuffers(ze_context_handle_t context, ze_device_handle_t device) {
+    PTI_ASSERT(context != nullptr);
+    PTI_ASSERT(device != nullptr);
+    std::unique_lock lock(mutex_);
+    if (buffer_map_.find(std::pair(context, device)) == buffer_map_.end()) {
+      void* buff = nullptr;
+      ze_device_mem_alloc_desc_t alloc_desc = {ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC, nullptr, 0,
+                                               0};
+      overhead::Init();
+      ze_result_t status = zeMemAllocDevice(context, &alloc_desc, buffer_size_, 64, device, &buff);
+      overhead_fini(zeMemAllocDevice_id);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      buffer_map_[std::pair(context, device)] = buff;
+      SPDLOG_TRACE("Device buffers created in {} for context: {}, device: {}, buff {}, size: {} ",
+                   __FUNCTION__, static_cast<void*>(context), static_cast<void*>(device),
+                   static_cast<void*>(buff), buffer_size_);
+    }
+    return buffer_map_[std::pair(context, device)];
+  }
+  const size_t buffer_size_ = 64;
+
+ private:
+  std::mutex mutex_;
+  std::map<std::pair<ze_context_handle_t, ze_device_handle_t>, void*> buffer_map_;
+};
+
 #endif  // PTI_TOOLS_ZE_LOCAL_COLLECTION_HELPERS_H_

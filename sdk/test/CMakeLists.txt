@@ -316,22 +316,34 @@ if(HAVE_SYCL)
     PROPERTIES LABELS "functional")
 
   RequirePythonInterp()
+
+  set(L0_OVERHEAD_THRESHOLD 17)
+  set(LINK_OVERHEAD_THRESHOLD 3)
+  if (WIN32)
+    # Timer we use on Windows (as of implementation 02.14.25) has 100 ns resolution,
+    # due to that some functions latency measured as zero, so accumulated overhead is less than on Linux
+    set(L0_OVERHEAD_THRESHOLD 11)
+    # For some reason, on Windows, the link overhead is bigger than on Linux
+    # Need to investigate it - look into UR and XPTI
+    set(LINK_OVERHEAD_THRESHOLD 5)
+  endif()
+
   add_test(
     NAME perf-profiling-overhead
     COMMAND
-      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 66 profiled
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 60 profiled
   )
 
   add_test(
     NAME perf-link-overhead
     COMMAND
-      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 8 linkonly
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" ${LINK_OVERHEAD_THRESHOLD} linkonly
   )
 
   add_test(
     NAME perf-overhead-view
     COMMAND
-      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 50 overhead
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" ${L0_OVERHEAD_THRESHOLD} overhead
   )
 
 
