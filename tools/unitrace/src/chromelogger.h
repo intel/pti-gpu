@@ -1206,13 +1206,14 @@ class ChromeLogger {
           std::string dir = utils::GetEnv("UNITRACE_TraceOutputDir");
           chrome_trace_file_name_ = (dir + '/' + chrome_trace_file_name_);
       }
-      std::string tmpString;
+      
       if (this->CheckOption(TRACE_KERNEL_NAME_FILTER)) {
         if (this->CheckOption(TRACE_K_NAME_FILTER_IN)) {
           filter_in_ = true;
         }
+        std::string tmpString;
         tmpString = utils::GetEnv("UNITRACE_TraceKernelString");
-        filter_strings_set_.insert(tmpString);
+        filter_strings_set_.insert(std::move(tmpString));
       } else if (this->CheckOption(TRACE_K_NAME_FILTER_FILE)) {
         if (this->CheckOption(TRACE_K_NAME_FILTER_IN)) {
           filter_in_ = true;
@@ -1221,8 +1222,9 @@ class ChromeLogger {
         std::ifstream kfile(kernel_file, std::ios::in);
         PTI_ASSERT(kfile.fail() != 1 && kfile.eof() != 1);
         while (!kfile.eof()) {
+          std::string tmpString;
           kfile >> tmpString;
-          filter_strings_set_.insert(tmpString);
+          filter_strings_set_.insert(std::move(tmpString));
         }
       } else {
         filtering_on_ = false;

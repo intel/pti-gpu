@@ -1022,7 +1022,7 @@ class ZeMetricProfiler {
       if (!units.empty()) {
         name += "[" + units + "]";
       }
-      name_list.push_back(name);
+      name_list.push_back(std::move(name));
     }
 
     return name_list;
