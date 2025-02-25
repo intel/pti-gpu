@@ -20,7 +20,7 @@ STG1=${TGT_FILE##*/${BRK_TOKEN}/}
 STRIPPED_NAME=${STG1#$BRK_TOKEN/}
 echo STG1= ${STG1} STRIPPED_NAME ${STRIPPED_NAME}
 
-if [[ -L "$4" ]]; then
+if [[ -L "$TGT_FILE" ]]; then
   echo "<N/A>"$':'"INS"${INST_DIR}/${STRIPPED_NAME}$':'CKSUM$':'ONE$'::'INT$':'755$':'$(readlink $TGT_FILE) >> ${TGT_BOM}
 else
   echo "DEL"/${STRIPPED_NAME}$':'"INS"${INST_DIR}/${STRIPPED_NAME}$':'CKSUM$':'ONE$':'$':'INT$':'$(stat -c '%a' ${TGT_FILE}) >> ${TGT_BOM}
