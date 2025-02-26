@@ -22,8 +22,8 @@
 
 #include "consumer_thread.h"
 #include "default_buffer_callbacks.h"
-#include "include/pti/pti_api_ids_state_maps.h"
 #include "pti/pti_view.h"
+#include "pti_api_ids_state_maps.h"
 
 #if defined(PTI_TRACE_SYCL)
 #include "sycl_collector.h"
