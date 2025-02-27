@@ -64,10 +64,7 @@ set(PTI_INSTALL_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}")
 set(PTI_INSTALL_LIB_DIR "${CMAKE_INSTALL_LIBDIR}")
 set(PTI_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
 set(PTI_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
-set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
-
-set(PTI_L0_LOADER 1.20.1)
-set(PTI_L0_LOADER_COMMIT_HASH 3969f34c16a843b943b948f8fe7081ef87deb369)
+set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}")
 
 CheckSOVersion(${PTI_API_SOVERSION})
 CheckExperimentalFilesystem()
@@ -77,8 +74,11 @@ GetSpdlog()
 
 find_package(Xpti)
 
+set(PTI_L0_LOADER 1.20.1)
+set(PTI_L0_LOADER_COMMIT_HASH 3969f34c16a843b943b948f8fe7081ef87deb369)
+
 if(NOT PROJECT_IS_TOP_LEVEL)
-  find_package(LevelZero ${PTI_L0_LOADER} REQUIRED)  
+  find_package(LevelZero ${PTI_L0_LOADER} REQUIRED)
 else()
   find_package(LevelZero ${PTI_L0_LOADER})
 endif()
@@ -141,15 +141,9 @@ set_target_properties(
 if (WIN32)
   set_target_properties(
     pti
-    PROPERTIES OUTPUT_NAME "pti-${PROJECT_VERSION_MAJOR}-${PROJECT_VERSION_MINOR}"
-               DEBUG_POSTFIX "d"
+    PROPERTIES DEBUG_POSTFIX "d"
   )
   AddProjectVersionInfo(pti)
-else()
-  set_target_properties(
-    pti
-    PROPERTIES SUFFIX ".so.${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
-  )
 endif()
 
 target_compile_definitions(
@@ -201,9 +195,12 @@ set_target_properties(
 if (WIN32)
   set_target_properties(
     pti_view
-    PROPERTIES OUTPUT_NAME "pti_view-${PROJECT_VERSION_MAJOR}-${PROJECT_VERSION_MINOR}"
+    PROPERTIES OUTPUT_NAME "pti_view-${PROJECT_VERSION_MAJOR}"
                DEBUG_POSTFIX "d"
   )
+
+  AddVersionlessLinkFile(pti_view)
+
   AddProjectVersionInfo(pti_view)
 endif()
 
@@ -251,9 +248,10 @@ set_target_properties(
 if (WIN32)
   set_target_properties(
     pti_metrics
-    PROPERTIES OUTPUT_NAME "pti_metrics-${PROJECT_VERSION_MAJOR}-${PROJECT_VERSION_MINOR}"
+    PROPERTIES OUTPUT_NAME "pti_metrics-${PROJECT_VERSION_MAJOR}"
                DEBUG_POSTFIX "d"
   )
+  AddVersionlessLinkFile(pti_metrics)
   AddProjectVersionInfo(pti_metrics)
 endif()
 
@@ -344,6 +342,14 @@ if(PTI_INSTALL)
     NAMESPACE Pti::
     DESTINATION "${PTI_INSTALL_CMAKE_DIR}"
     COMPONENT Pti_Development)
+
+  if(WIN32)
+    install(
+      FILES $<TARGET_LINKER_FILE_DIR:pti_view>/pti_view$<$<CONFIG:Debug>:d>${CMAKE_LINK_LIBRARY_SUFFIX}
+            $<TARGET_LINKER_FILE_DIR:pti_metrics>/pti_metrics$<$<CONFIG:Debug>:d>${CMAKE_LINK_LIBRARY_SUFFIX}
+      COMPONENT Pti_Development
+      DESTINATION "${PTI_INSTALL_LIB_DIR}")
+  endif()
 
   if (EXISTS "${PROJECT_SOURCE_DIR}/../LICENSE")
     install(

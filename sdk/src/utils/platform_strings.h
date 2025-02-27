@@ -20,13 +20,9 @@
 
 #if !defined(PTI_VIEW_CORE_LIB_NAME)
 #if defined(_WIN32)
-#define PTI_VIEW_CORE_LIB_NAME_STRING \
-  "pti"                               \
-  "-" TOSTRING(PTI_VERSION_MAJOR) "-" TOSTRING(PTI_VERSION_MINOR) ".dll"
+#define PTI_VIEW_CORE_LIB_NAME_STRING "pti.dll"
 #else
-#define PTI_VIEW_CORE_LIB_NAME_STRING \
-  "libpti.so"                         \
-  "." TOSTRING(PTI_VERSION_MAJOR) "." TOSTRING(PTI_VERSION_MINOR)
+#define PTI_VIEW_CORE_LIB_NAME_STRING "libpti.so"
 #endif
 #else
 #define PTI_VIEW_CORE_LIB_NAME_STRING TOSTRING(PTI_VIEW_CORE_LIB_NAME)

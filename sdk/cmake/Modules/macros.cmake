@@ -214,13 +214,6 @@ macro(CheckSOVersion PROJ_SOVERSION)
                     "${PROJ_SOVERSION}. After the first major release, ${PROJECT_NAME}"
                     " should have the SOVERSION: ${PROJECT_VERSION_MAJOR}.")
     endif()
-  else()
-    if("${PROJ_SOVERSION}" STREQUAL "${PROJECT_VERSION_MAJOR}")
-      message(AUTHOR_WARNING "${PROJECT_NAME} currently has the SOVERSION: "
-                    "${PROJ_SOVERSION}. During development, ${PROJECT_NAME}"
-                    " should have the SOVERSION:"
-                    " ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.")
-    endif()
   endif()
 endmacro()
 
@@ -552,4 +545,11 @@ macro(CheckExperimentalFilesystem)
       unset(PTI_EXPERIMENTAL_FILESYSTEM)
     endif()
   endif()
+endmacro()
+
+macro(AddVersionlessLinkFile MY_TARGET)
+  add_custom_command(TARGET ${MY_TARGET} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_LINKER_FILE:${MY_TARGET}>
+    $<TARGET_LINKER_FILE_DIR:${MY_TARGET}>/${CMAKE_SHARED_LIBRARY_PREFIX}${MY_TARGET}$<$<PLATFORM_ID:Windows>:$<$<CONFIG:Debug>:d>>${CMAKE_LINK_LIBRARY_SUFFIX}
+  )
 endmacro()
