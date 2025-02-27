@@ -1089,8 +1089,8 @@ class LocalModeZeGemmTest : public testing::Test {
   }
 
   void AppendGemmKernel() {
-    ASSERT_NE(group_size_[0], 0);
-    ASSERT_NE(group_size_[1], 0);
+    ASSERT_NE(group_size_[0], 0U);
+    ASSERT_NE(group_size_[1], 0U);
     const ze_group_count_t dim = {size_ / group_size_[0], size_ / group_size_[1], 1};
     ASSERT_NE(cmd_list_, nullptr);
     auto status = zeCommandListAppendLaunchKernel(cmd_list_, knl_, &dim, evt_, 0, nullptr);
@@ -1326,8 +1326,8 @@ TEST_F(LocalModeZeGemmTest, TestStartTracingExecuteCommandQueue) {
 
   DisableAndFlushAllViews();
 
-  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_ze_records, 2);
-  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, 0);
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_ze_records, static_cast<size_t>(2));
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(0));
 
   ValidateGemmKernel();
 }
@@ -1351,7 +1351,7 @@ TEST_F(LocalModeZeGemmTest, TestStartTracingPrepareCommandList) {
 
   DisableAndFlushAllViews();
 
-  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, 1);
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
 
   ValidateGemmKernel();
 }

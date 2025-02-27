@@ -906,14 +906,14 @@ TEST_P(MainFixtureTest, ApiCallsGenerationDriver) {
       std::cout << "Env set 1 case: " << zecall_count << "\n";
       // If env var is explicitly 1 -- then L0 call count should be more than 1
       //                            -- since the granular apis have no effect
-      EXPECT_GE(zecall_count, 2);
+      EXPECT_GE(zecall_count, 2ULL);
     } else {
       std::cout << "Env Unset case-Granular(" << granular_on << "): " << zecall_count << "\n";
       // If env is unset
-      if (granular_on) {             // and granular api is individually on.
-        EXPECT_EQ(zecall_count, 1);  // call count should be exactly 1
+      if (granular_on) {                // and granular api is individually on.
+        EXPECT_EQ(zecall_count, 1ULL);  // call count should be exactly 1
       } else {
-        EXPECT_GE(zecall_count, 2);  // no granular hence call count should be all calls (> 1)
+        EXPECT_GE(zecall_count, 2ULL);  // no granular hence call count should be all calls (> 1)
       }
     }
   } else {
@@ -1749,14 +1749,14 @@ TEST_P(MainFixtureTest, ApiCallsGenerationRuntime) {
       std::cout << "Env set 1 case: " << urcall_count << "\n";
       // If env var is explicitly 1 -- then ur call count should be more than 1
       //                            -- since the granular apis have no effect
-      EXPECT_GE(urcall_count, 2);
+      EXPECT_GE(urcall_count, 2ULL);
     } else {
       // If env is unset
       std::cout << "Env Unset case-Granular(" << granular_on << "): " << urcall_count << "\n";
-      if (granular_on) {             // and granular api is individually on.
-        EXPECT_EQ(urcall_count, 1);  // call count should be exactly 1
+      if (granular_on) {                // and granular api is individually on.
+        EXPECT_EQ(urcall_count, 1ULL);  // call count should be exactly 1
       } else {
-        EXPECT_GE(urcall_count, 2);  // no granular hence call count should be all calls (> 1)
+        EXPECT_GE(urcall_count, 2ULL);  // no granular hence call count should be all calls (> 1)
       }
     }
   } else {
