@@ -135,7 +135,7 @@ jobs:
     name: Test pti-lib on Windows
     runs-on: [self-hosted, Windows, pti]
     env:
-      LEVEL_ZERO_LOADER_VERSION: 1.14.0
+      LEVEL_ZERO_LOADER_VERSION: 1.20.2
     defaults:
       run:
         shell: cmd
@@ -174,9 +174,9 @@ jobs:
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
           rmdir /S /Q level-zero-sdk
           del /s level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip
-          echo https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip
-          curl.exe -L -O https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip
-          unzip.exe -q level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip -d level-zero-sdk
+          echo https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
+          curl.exe -L -O https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
+          unzip.exe -q level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip -d level-zero-sdk
           echo "Successfully Downloaded Level Zero Loader Version %LEVEL_ZERO_LOADER_VERSION%"
 
       - name: Build

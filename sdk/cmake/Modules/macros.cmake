@@ -54,10 +54,11 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET
   get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
   add_custom_target(${custom_target} ALL
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME})
+  string(CONCAT PTI_L0_LOADER_COMMIT_INFO "commit: " ${PTI_L0_LOADER_COMMIT_HASH} " - v" ${PTI_L0_LOADER})
   add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
                      COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT}
                      ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero"
-                     "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include/pti" ${UR_HEADER_PATH} ${PTI_API_ID_REGENERATE} ${PTI_L0_LOADER_COMMIT_HASH})
+                     "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include/pti" ${UR_HEADER_PATH} ${PTI_API_ID_REGENERATE} ${PTI_L0_LOADER_COMMIT_INFO})
   target_include_directories(${TARGET}
     PUBLIC "$<BUILD_INTERFACE:${L0_GEN_INC_PATH}>")
   add_dependencies(${TARGET}
