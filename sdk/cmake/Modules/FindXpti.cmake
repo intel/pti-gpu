@@ -161,7 +161,9 @@ if(Xpti_FOUND AND NOT TARGET Xpti::xpti)
         TARGET Xpti::xpti
         APPEND
         PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
-      set_target_properties(Xpti::xpti PROPERTIES IMPORTED_IMPLIB_RELEASE
+      set_target_properties(Xpti::xpti PROPERTIES IMPORTED_IMPLIB
+                                                  "${Xpti_Shared_LIBRARY}"
+                                                  IMPORTED_IMPLIB_RELEASE
                                                   "${Xpti_Shared_LIBRARY}")
       if(Xpti_Shared_Runtime_LIBRARY)
         set_target_properties(
@@ -203,7 +205,8 @@ if(Xpti_FOUND AND NOT TARGET Xpti::xpti_static)
         PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
       set_target_properties(
         Xpti::xpti_static
-        PROPERTIES IMPORTED_IMPLIB_RELEASE "${Xpti_Static_LIBRARY}"
+        PROPERTIES IMPORTED_IMPLIB "${Xpti_Static_LIBRARY}"
+                   IMPORTED_IMPLIB_RELEASE "${Xpti_Static_LIBRARY}"
                    IMPORTED_LOCATION "${Xpti_Static_LIBRARY}"
                    IMPORTED_LOCATION_RELEASE "${Xpti_Static_LIBRARY}")
     endif()

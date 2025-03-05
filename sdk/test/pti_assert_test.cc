@@ -1,5 +1,6 @@
 #include "pti_assert.h"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 TEST(PtiAssertTest, CheckCorrectAssertion) {
@@ -13,6 +14,8 @@ TEST(PtiAssertTest, CheckIncorrectAssertion) {
   const int value_1 = 0;
   const int value_2 = 1;
   EXPECT_NE(value_1, value_2);
-  EXPECT_DEATH_IF_SUPPORTED(PTI_ASSERT(value_1 == value_2), __FILE__ ":");
+  // clang-format off
+  EXPECT_DEATH_IF_SUPPORTED(PTI_ASSERT(value_1 == value_2), ::testing::HasSubstr(__FILE__ ":"));
+  // clang-format on
   PTI_ASSERT(value_1 != value_2);
 }

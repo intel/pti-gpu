@@ -434,7 +434,11 @@ add_executable(pti_assert_test pti_assert_test.cc)
 target_include_directories(pti_assert_test PUBLIC
   "${PROJECT_SOURCE_DIR}/src/utils")
 
-target_link_libraries(pti_assert_test PUBLIC GTest::gtest_main)
+target_link_libraries(pti_assert_test PUBLIC GTest::gtest_main GTest::gmock)
+
+gtest_discover_tests(
+  pti_assert_test
+  PROPERTIES LABELS "unit")
 
 gtest_discover_tests(
   view_record_test
