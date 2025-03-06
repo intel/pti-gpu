@@ -28,7 +28,7 @@ jobs:
     continue-on-error: true
 
     strategy:
-      max-parallel: 1
+      max-parallel: 2
       matrix:
         include:
           - container: ${{ vars.PTI_DOCKER_RHEL_9_ONEAPI_24_2_1 }}
