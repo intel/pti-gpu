@@ -31,7 +31,6 @@
         "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack"
       }
     },
-
     {
       "name": "linux-icpx-debug",
       "displayName": "Linux Debug x64 IntelLLVM Ninja Config",
@@ -43,6 +42,22 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
         "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Wformat-security -fno-omit-frame-pointer -fno-optimize-sibling-calls",
         "CMAKE_C_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Wformat-security -fno-omit-frame-pointer -fno-optimize-sibling-calls",
+        "PTI_ENABLE_LOGGING": "ON"
+      }
+    },
+    {
+      "name": "linux-cov",
+      "displayName": "Linux Code Coverage",
+      "description": "Linux Source-based Code Coverage Config",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Coverage",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
+        "CMAKE_CXX_FLAGS_COVERAGE": "-g3 -O0 -Xarch_host -fprofile-instr-generate -Xarch_host -fcoverage-mapping -Xarch_host -mllvm=-runtime-counter-relocation=true",
+        "CMAKE_C_FLAGS_COVERAGE": "-g3 -O0 -Xarch_host -fprofile-instr-generate -Xarch_host -fcoverage-mapping -Xarch_host -mllvm=-runtime-counter-relocation=true",
+        "CMAKE_SHARED_LINKER_FLAGS_COVERAGE": "-Xarch_host -fprofile-instr-generate",
+        "CMAKE_EXE_LINKER_FLAGS_COVERAGE": "-Xarch_host -fprofile-instr-generate",
         "PTI_ENABLE_LOGGING": "ON"
       }
     },
@@ -181,6 +196,21 @@
       }
     },
     {
+      "name": "windows-cov",
+      "displayName": "Windows Code Coverage",
+      "description": "Windows Source-based Code Coverage Config",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Coverage",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
+        "CMAKE_CXX_FLAGS_COVERAGE": "/MD /EHcs /fp:precise -Qstd:c++17 /Zi -fprofile-instr-generate -fcoverage-mapping",
+        "CMAKE_SHARED_LINKER_FLAGS_COVERAGE": "-fprofile-instr-generate",
+        "CMAKE_EXE_LINKER_FLAGS_COVERAGE": "-fprofile-instr-generate",
+        "PTI_ENABLE_LOGGING": "ON"
+      }
+    },
+    {
       "name": "windows-ci-release",
       "displayName": "Windows CI Release Config",
       "description": "Windows CI Release Config. Uses icx and Ninja.",
@@ -262,6 +292,11 @@
     "displayName": "Linux Debug x64 IntelLLVM Ninja Build"
   },
   {
+    "name": "linux-cov",
+    "configurePreset": "linux-cov",
+    "displayName": "Linux Source-Based Code Coverage Build"
+  },
+  {
     "name": "linux-icpx-make-release",
     "configurePreset": "linux-icpx-make-release",
     "displayName": "Linux Release x64 IntelLLVM Make Build"
@@ -317,6 +352,11 @@
     "configurePreset": "windows-icx-release"
   },
   {
+    "name": "windows-cov",
+    "configurePreset": "windows-cov",
+    "displayName": "Windows Source-Based Code Coverage Build"
+  },
+  {
     "name": "windows-ci-release",
     "displayName": "Windows CI Release Build",
     "configurePreset": "windows-ci-release"
@@ -355,6 +395,15 @@
     "displayName": "Linux Debug x64 IntelLLVM Tests",
     "environment": {
       "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
+    }
+  },
+  {
+    "name": "linux-cov",
+    "configurePreset": "linux-cov",
+    "displayName": "Linux Test With Code Coverage",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}",
+      "LLVM_PROFILE_FILE": "${sourceDir}/build-${presetName}/coverage/raw/pti-cov.%p.profraw"
     }
   },
   {
@@ -422,6 +471,15 @@
     "name": "windows-icx-release",
     "displayName": "Windows Release x64 IntelLLVM Test",
     "configurePreset": "windows-icx-release"
+  },
+  {
+    "name": "windows-cov",
+    "configurePreset": "windows-cov",
+    "displayName": "Windows Test With Code Coverage",
+    "environment": {
+      "PATH": "${sourceDir}/build-${presetName}/bin;$penv{PATH}",
+      "LLVM_PROFILE_FILE": "${sourceDir}/build-${presetName}/coverage/raw/pti-cov.%p.profraw"
+    }
   },
   {
     "name": "windows-oneAPI-release",

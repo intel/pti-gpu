@@ -293,6 +293,10 @@ if(BUILD_TESTING AND PTI_FUZZ)
   add_subdirectory(fuzz)
 endif()
 
+if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
+  include(cmake/coverage.cmake)
+endif()
+
 # Targets / Install phase
 export(
   TARGETS pti_all pti pti_view pti_metrics
