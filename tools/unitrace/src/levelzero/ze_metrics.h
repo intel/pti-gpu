@@ -33,12 +33,10 @@
 #include "pti_assert.h"
 #include <inttypes.h>
 
-
 constexpr static uint64_t min_dummy_instance_id = 1024 * 1024;	// min dummy instance id if idle sampling is enabled
-constexpr static uint32_t max_metric_size = 512;
-static uint32_t max_metric_samples = 32768;
+constexpr static uint32_t max_metric_samples = 32768;
 
-#define MAX_METRIC_BUFFER  (max_metric_samples * max_metric_size* 2)
+#define MAX_METRIC_BUFFER  (8ULL * 1024ULL * 1024ULL)
 
 inline void PrintDeviceList() {
   ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
@@ -203,7 +201,6 @@ struct ZeDeviceDescriptor {
   std::atomic<ZeProfilerState> profiling_state_;
   std::string metric_file_name_;
   std::ofstream metric_file_stream_;
-  std::vector<uint8_t> metric_data_;
   bool stall_sampling_;
 };
 
@@ -526,7 +523,7 @@ class ZeMetricProfiler {
   }
 
   void ComputeMetrics() {
-    uint8_t *raw_metrics = (uint8_t *)malloc(sizeof(uint8_t) * (MAX_METRIC_BUFFER + 512));
+    auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
   
     for (auto it = device_descriptors_.begin(); it != device_descriptors_.end(); ++it) {
@@ -611,8 +608,27 @@ class ZeMetricProfiler {
         }
 
         while (!inf.eof()) {
-          inf.read(reinterpret_cast<char *>(raw_metrics), MAX_METRIC_BUFFER + 512);
+          // Read metric data in two stages, first actual size (in bytes), followed by actual metrics
+          uint64_t data_size;
+          inf.read(reinterpret_cast<char *>(&data_size), sizeof(data_size));
+          if (inf.eof()) {
+            // If we reached EOF, we can stop processing
+            break;
+          }
+          if (inf.gcount() != sizeof(data_size)) {
+            std::cerr << "[WARNING] Intermediate metrics file is invalid. Cannot find the size of the next data segment. Output likely to be incomplete." << std::endl;
+            break;
+          }
+          if (data_size > MAX_METRIC_BUFFER) {
+            std::cerr << "[WARNING] Intermediate metrics file is invalid. Next chunk cannot be larger than the allocated buffer. Output likely to be incomplete." << std::endl;
+            break;
+          }
+          inf.read(reinterpret_cast<char *>(raw_metrics), data_size);
           int raw_size = inf.gcount();
+          if (raw_size < data_size) {
+            std::cerr << "[WARNING] Intermediate metrics file is incomplete. Expecting " << data_size << " bytes but only " << raw_size << " bytes were found. Output likely to be incomplete." << std::endl;
+            break;
+          }
           if (raw_size > 0) {
             uint32_t num_samples = 0;
             uint32_t num_metrics = 0;
@@ -838,8 +854,27 @@ class ZeMetricProfiler {
         uint64_t cur_sampling_ts = 0;
         auto kit = kinfo.begin();
         while (!inf.eof()) {
-          inf.read(reinterpret_cast<char *>(raw_metrics), MAX_METRIC_BUFFER + 512);
+          // Read metric data in two stages, first actual size (in bytes), followed by actual metrics
+          uint64_t data_size;
+          inf.read(reinterpret_cast<char *>(&data_size), sizeof(data_size));
+          if (inf.eof()) {
+            // If we reached EOF, we can stop processing
+            break;
+          }
+          if (inf.gcount() != sizeof(data_size)) {
+            std::cerr << "[WARNING] Intermediate metrics file is invalid. Cannot find the size of the next data segment. Output likely to be incomplete." << std::endl;
+            break;
+          }
+          if (data_size > MAX_METRIC_BUFFER) {
+            std::cerr << "[WARNING] Intermediate metrics file is invalid. Next chunk cannot be larger than the allocated buffer. Output likely to be incomplete." << std::endl;
+            break;
+          }
+          inf.read(reinterpret_cast<char *>(raw_metrics), data_size);
           int raw_size = inf.gcount();
+          if (raw_size < data_size) {
+            std::cerr << "[WARNING] Intermediate metrics file is incomplete. Expecting " << data_size << " bytes but only " << raw_size << " bytes were found. Output likely to be incomplete." << std::endl;
+            break;
+          }
           if (raw_size > 0) {
             uint32_t num_samples = 0;
             uint32_t num_metrics = 0;
@@ -951,7 +986,7 @@ class ZeMetricProfiler {
         inf.close();
       }
     }
-    free(raw_metrics);
+    free (raw_metrics);
   }
 
  private:
@@ -1054,6 +1089,7 @@ class ZeMetricProfiler {
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
     else {
+      // if (status == ZE_RESULT_NOT_READY)
       return 0;
     }
 
@@ -1075,12 +1111,12 @@ class ZeMetricProfiler {
     ze_event_pool_desc_t event_pool_desc = {ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr, ZE_EVENT_POOL_FLAG_HOST_VISIBLE, 1};
     status = zeEventPoolCreate(context, &event_pool_desc, 1, &device, &event_pool);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  
+
     ze_event_handle_t event = nullptr;
     ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, 0, ZE_EVENT_SCOPE_FLAG_HOST, ZE_EVENT_SCOPE_FLAG_HOST};
     status = zeEventCreate(event_pool, &event_desc, &event);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  
+
     zet_metric_streamer_handle_t streamer = nullptr;
     uint32_t interval = std::stoi(utils::GetEnv("UNITRACE_SamplingInterval")) * 1000;	// convert us to ns
 
@@ -1102,37 +1138,36 @@ class ZeMetricProfiler {
       desc->profiling_state_.store(PROFILER_ENABLED, std::memory_order_release);
       return;
     }
-  
-    if (streamer_desc.notifyEveryNReports > max_metric_samples) {
-      max_metric_samples = streamer_desc.notifyEveryNReports;
-    }
-  
+
     std::vector<std::string> metrics_list;
     metrics_list = GetMetricList(group);
     PTI_ASSERT(!metrics_list.empty());
 
-    uint8_t *raw_metrics = (uint8_t *)malloc(sizeof(uint8_t) * (MAX_METRIC_BUFFER + 512));
+    auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
+
+    auto dump_metrics = [](uint8_t *buffer, uint64_t size, std::ofstream *f) {
+      // Write metric data in two stages, first actual size (in bytes), followed by actual metrics
+      f->write(reinterpret_cast<char*>(&size), sizeof(size));
+      f->write(reinterpret_cast<char*>(buffer), size);
+    };
 
     desc->profiling_state_.store(PROFILER_ENABLED, std::memory_order_release);
     while (desc->profiling_state_.load(std::memory_order_acquire) != PROFILER_DISABLED) {
-      uint64_t size = EventBasedReadMetrics(event, streamer, raw_metrics, (MAX_METRIC_BUFFER + 512));
-      if (size == 0) {
-        if (!desc->metric_data_.empty()) {
-          desc->metric_file_stream_.write(reinterpret_cast<char*>(desc->metric_data_.data()), desc->metric_data_.size());
-          desc->metric_data_.clear();
-        }
-        continue;
+      auto size = EventBasedReadMetrics(event, streamer, raw_metrics, MAX_METRIC_BUFFER);
+      if (size > 0) {
+        // If we have data, dump it to the intermediate file
+        dump_metrics (raw_metrics, size, &desc->metric_file_stream_);
       }
-      desc->metric_data_.insert(desc->metric_data_.end(), raw_metrics, raw_metrics + size);
     }
-    auto size = ReadMetrics(streamer, raw_metrics, (MAX_METRIC_BUFFER + 512));
-    desc->metric_data_.insert(desc->metric_data_.end(), raw_metrics, raw_metrics + size);
-    if (!desc->metric_data_.empty()) {
-      desc->metric_file_stream_.write(reinterpret_cast<char*>(desc->metric_data_.data()), desc->metric_data_.size());
-      desc->metric_data_.clear();
+
+    // Flush the remaining metrics after the profiler has stopped
+    auto size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
+    while (size > 0) {
+      dump_metrics (raw_metrics, size, &desc->metric_file_stream_);
+      size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
     }
-    free(raw_metrics);
+    free (raw_metrics);
 
     status = zetMetricStreamerClose(streamer);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
