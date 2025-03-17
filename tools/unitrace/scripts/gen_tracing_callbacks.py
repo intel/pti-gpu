@@ -189,9 +189,8 @@ def get_param_struct_name(func_name):
   struct_name += "params_t"
   return struct_name
 
-def get_func_list(f):
+def get_func_list(f, func_list):
   f.seek(0)
-  func_list = []
   for line in f.readlines():
     if line.find("ZE_APICALL") != -1 and line.find("ze_pfn") != -1:
       items = line.split("ze_pfn")
@@ -200,22 +199,6 @@ def get_func_list(f):
       items = items[1].split("Cb_t")
       assert len(items) == 2
       func_list.append("ze" + items[0].strip())
-  return func_list
-
-def get_callback_group_map(f):
-  group_map = {}
-
-  base_map = get_callback_struct_map(f, "ze_callbacks_t")
-  assert len(base_map) > 0
-
-  for key, value in base_map.items():
-    func_map = get_callback_struct_map(f, key)
-    for fkey, fvalue in func_map.items():
-      func_name = get_func_name(fkey)
-      assert not (func_name in group_map)
-      group_map[func_name] = (value, fvalue)
-
-  return group_map
 
 def add_param_map(f, func_list, param_map):
   for func in func_list:
@@ -238,53 +221,24 @@ def get_enum_map(include_path):
 
 # Generate Callbacks ##########################################################
 
-def gen_set_prologues(f, func_list, group_map):
+def gen_register(f, func_list):
   for func in func_list:
-    if not func in group_map:
-      continue
+    reg_fname = "ZeLoader::get().zelTracer" + func[2:] + "RegisterCallback_"
+    f.write("    if (" + reg_fname + " != nullptr) {\n");
+    f.write("      status = " + reg_fname + "(tracer, ZEL_REGISTER_PROLOGUE, " + func + "OnEnter);\n")
+    f.write("      PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
+    f.write("      status = " + reg_fname + "(tracer, ZEL_REGISTER_EPILOGUE, " + func + "OnExit);\n")
+    f.write("      PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
+    f.write("    }\n")
 
-    group, callback = group_map[func]
-    group_name = group[0]
-    group_cond = group[1]
-    assert not group_cond
-    callback_name = callback[0]
-    callback_cond = callback[1]
-    if callback_cond:
-      f.write("#if " + callback_cond + "\n")
-    f.write("    prologue." + group_name + "." + callback_name + " = " + func + "OnEnter;\n")
-    f.write("    epilogue." + group_name + "." + callback_name + " = " + func + "OnExit;\n")
-    if callback_cond:
-      f.write("#endif //" + callback_cond + "\n")
-
-def gen_exp_register(f, exp_func_list):
-  for func in exp_func_list:
-    f.write("    status = zelTracer" + func[2:] + "RegisterCallback(tracer, ZEL_REGISTER_PROLOGUE, " + func + "OnEnter);\n")
-    f.write("    PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
-    f.write("    status = zelTracer" + func[2:] + "RegisterCallback(tracer, ZEL_REGISTER_EPILOGUE, " + func + "OnExit);\n")
-    f.write("    PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
-
-def gen_api(f, func_list, kfunc_list, group_map, exp_func_list, kexp_func_list):
+def gen_api(f, func_list, kfunc_list):
   f.write("void EnableTracing(zel_tracer_handle_t tracer) {\n")
-  f.write("  zet_core_callbacks_t prologue = {};\n")
-  f.write("  zet_core_callbacks_t epilogue = {};\n")
-  f.write("\n")
-  f.write("  if (options_.api_tracing) {\n")
-  gen_set_prologues(f, func_list, group_map)
-  f.write("  }\n")
-  f.write("  else if (options_.kernel_tracing) {\n")
-  gen_set_prologues(f, kfunc_list, group_map)
-  f.write("  }\n")
-  f.write("\n")
   f.write("  ze_result_t status = ZE_RESULT_SUCCESS;\n")
-  f.write("  status = zelTracerSetPrologues(tracer, &prologue);\n")
-  f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
-  f.write("  status = zelTracerSetEpilogues(tracer, &epilogue);\n")
-  f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
   f.write("  if (options_.api_tracing) {\n")
-  gen_exp_register(f, exp_func_list)
+  gen_register(f, func_list)
   f.write("  }\n")
   f.write("  else if (options_.kernel_tracing) {\n")
-  gen_exp_register(f, kexp_func_list)
+  gen_register(f, kfunc_list)
   f.write("  }\n")
   f.write("\n")
   f.write("  status = zelTracerSetEnabled(tracer, true);\n")
@@ -822,38 +776,8 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
     f.write("          start_time_host, end_time_host);\n")
   f.write("  }\n")
 
-def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, group_map, param_map, enum_map):
+def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map, enum_map):
   for func in func_list:
-    if not func in group_map:
-      continue
-
-    assert func in param_map
-    group, callback = group_map[func]
-    callback_name = callback[0]
-    callback_cond = callback[1]
-    if callback_cond:
-      f.write("#if " + callback_cond + "\n")
-    f.write("static void " + func + "OnEnter(\n")
-    f.write("    " + get_param_struct_name(func) + "* params,\n")
-    f.write("    ze_result_t result,\n")
-    f.write("    void* global_user_data,\n")
-    f.write("    void** instance_user_data) {\n")
-    gen_enter_callback(f, func, command_list_func_list, command_queue_func_list, synchronize_func_list_on_enter, param_map[func], enum_map)
-    f.write("}\n")
-    f.write("\n")
-    f.write("static void " + func + "OnExit(\n")
-    f.write("    " + get_param_struct_name(func) + "* params,\n")
-    f.write("    ze_result_t result,\n")
-    f.write("    void* global_user_data,\n")
-    f.write("    void** instance_user_data) {\n")
-    gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map[func], enum_map)
-    f.write("}\n")
-    if callback_cond:
-      f.write("#endif //" + callback_cond + "\n")
-    f.write("\n")
-
-def gen_exp_callbacks(f, exp_func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, group_map, param_map, enum_map):
-  for func in exp_func_list:
     assert func in param_map
     f.write("static void " + func + "OnEnter(\n")
     f.write("    " + get_param_struct_name(func) + "* params,\n")
@@ -890,13 +814,21 @@ def main():
   l0_path = sys.argv[2]
   l0_file_path = os.path.join(l0_path, "ze_api.h")
 
+  func_list = []
+  param_map = {}
+
   l0_file = open(l0_file_path, "rt")
-  func_list = get_func_list(l0_file)
+  get_func_list(l0_file, func_list)
+  add_param_map(l0_file, func_list, param_map)
 
   l0_exp_path = os.path.join(l0_path, "layers", "zel_tracing_register_cb.h")
   l0_exp_file = open(l0_exp_path, "rt")
-  exp_func_list = get_func_list(l0_exp_file)
- 
+  exp_func_list = []
+  get_func_list(l0_exp_file, exp_func_list)
+  add_param_map(l0_exp_file, exp_func_list, param_map)
+
+  func_list += exp_func_list
+
   kfunc_list = [
       "zeEventDestroy",
       "zeEventHostReset",
@@ -934,9 +866,9 @@ def main():
       "zeEventHostSynchronize",
       "zeEventQueryStatus",
       "zeFenceHostSynchronize",
-      "zeContextDestroy"]
-  kexp_func_list = [
+      "zeContextDestroy",
       "zeCommandListImmediateAppendCommandListsExp"]
+
   command_list_func_list = [
       "zeCommandListAppendEventReset",
       "zeCommandListAppendLaunchKernel",
@@ -973,17 +905,12 @@ def main():
       "zeFenceHostSynchronize",
       "zeCommandQueueSynchronize"]
 
-  group_map = get_callback_group_map(l0_file)
-  param_map = {}
-  add_param_map(l0_file, func_list, param_map)
-  add_param_map(l0_exp_file, exp_func_list, param_map)
   enum_map = get_enum_map(l0_path)
 
   gen_result_converter(dst_file, enum_map)
   gen_structure_type_converter(dst_file, enum_map)
-  gen_callbacks(dst_file, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, group_map, param_map, enum_map)
-  gen_exp_callbacks(dst_file, exp_func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, group_map, param_map, enum_map)
-  gen_api(dst_file, func_list, kfunc_list, group_map, exp_func_list, kexp_func_list)
+  gen_callbacks(dst_file, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map, enum_map)
+  gen_api(dst_file, func_list, kfunc_list)
 
   l0_exp_file.close()
   l0_file.close()

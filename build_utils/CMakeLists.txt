@@ -614,18 +614,21 @@ macro(GetLevelZeroHeaders TARGET)
   set(L0_INC_PATH "${CMAKE_BINARY_DIR}")
   RequirePythonInterp()
 
-  add_custom_target(level_zero_headers ALL
-                    DEPENDS ${L0_INC_PATH}/level_zero/ze_api.h
-                            ${L0_INC_PATH}/level_zero/zes_api.h
-                            ${L0_INC_PATH}/level_zero/zet_api.h
-                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
-                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_register_cb.h)
-  add_custom_command(OUTPUT ${L0_INC_PATH}/level_zero/ze_api.h
-                            ${L0_INC_PATH}/level_zero/zes_api.h
-                            ${L0_INC_PATH}/level_zero/zet_api.h
-                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
-                            ${L0_INC_PATH}/level_zero/layers/zel_tracing_register_cb.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_ze_headers.py" ${L0_INC_PATH} ${CMAKE_BINARY_DIR})
+  if (NOT TARGET level_zero_headers)
+    add_custom_target(level_zero_headers ALL
+                      DEPENDS ${L0_INC_PATH}/level_zero/ze_api.h
+                              ${L0_INC_PATH}/level_zero/zes_api.h
+                              ${L0_INC_PATH}/level_zero/zet_api.h
+                              ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
+                              ${L0_INC_PATH}/level_zero/layers/zel_tracing_register_cb.h)
+    add_custom_command(OUTPUT ${L0_INC_PATH}/level_zero/ze_api.h
+                              ${L0_INC_PATH}/level_zero/zes_api.h
+                              ${L0_INC_PATH}/level_zero/zet_api.h
+                              ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
+                              ${L0_INC_PATH}/level_zero/layers/zel_tracing_register_cb.h
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_ze_headers.py" ${L0_INC_PATH} ${CMAKE_BINARY_DIR})
+  endif()
+
   target_include_directories(${TARGET}
     PUBLIC "${L0_INC_PATH}")
   add_dependencies(${TARGET}

@@ -38,6 +38,7 @@
 #include "unicontrol.h"
 #include "unimemory.h"
 
+#include "ze_loader.h"
 #include "common_header.gen"
 
 struct ZeMetricQueryPoolKey {

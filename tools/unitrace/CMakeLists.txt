@@ -50,6 +50,7 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target)
     PUBLIC "${L0_GEN_INC_PATH}")
   add_dependencies(${TARGET}
     ${custom_target})
+  add_dependencies(${custom_target} level_zero_headers) # level_zero_headers target added in GetLevelZeroHeaders macro
 endmacro()
 
 # Get Git Commit Hash
@@ -131,10 +132,11 @@ FindOpenCLHeaders(unitrace_tool)
 GetOpenCLTracingHeaders(unitrace_tool)
 
 FindL0Library(unitrace_tool)
-FindL0Headers(unitrace_tool)
+GetLevelZeroHeaders(unitrace_tool)
 
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_common_header.py" "common_header.gen" gen_common_header)
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_callbacks.py" "tracing.gen" gen_tracing_header)
+FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_l0_loader.py" "l0_loader.gen" gen_l0_loader_header)
 
 add_dependencies(gen_common_header
     cl_tracing_headers)
@@ -215,7 +217,7 @@ if(UNIX)
 endif()
 
 FindL0Library(unitrace)
-FindL0Headers(unitrace)
+GetLevelZeroHeaders(unitrace)
 GetGitCommitHash(unitrace "${PROJECT_SOURCE_DIR}/scripts/get_commit_hash.py" "unitrace_commit_hash.h" get_git_commit_hash_unitrace)
 GetGitCommitHash(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/get_commit_hash.py" "unitrace_tool_commit_hash.h" get_git_commit_hash_unitrace_tool)
 if(WIN32)
