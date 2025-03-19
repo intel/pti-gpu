@@ -31,16 +31,16 @@ typedef struct pti_version {
 } pti_version;
 
 /**
- * @brief Returns the compiled version of PTI
+ * @brief Returns the compiled version of Intel(R) PTI
  *
- * @return c-string with compiled version of PTI
+ * @return c-string with compiled version of Intel(R) PTI
  */
 PTI_EXPORT const char* ptiVersionString();
 
 /**
- * @brief Returns the compiled version of PTI
+ * @brief Returns the compiled version of Intel(R) PTI
  *
- * @return pti_version struct with compiled version of PTI
+ * @return pti_version struct with compiled version of Intel(R) PTI
  */
 pti_version PTI_EXPORT ptiVersion();
 

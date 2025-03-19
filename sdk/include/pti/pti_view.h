@@ -417,7 +417,7 @@ PTI_EXPORT const char*
 ptiViewMemcpyTypeToString( pti_view_memcpy_type type );
 
 /**
- * @brief Returns current pti host timestamp in nanoseconds. The timestamp is in the same api_group as view records timestamps.
+ * @brief Returns current Intel(R) PTI host timestamp in nanoseconds. The timestamp is in the same api_group as view records timestamps.
  *
  * @return uint64_t
  */
@@ -433,7 +433,7 @@ ptiViewGetTimestamp();
 typedef uint64_t (*pti_fptr_get_timestamp)( void );
 
 /**
- * @brief Sets callback to user provided timestamping function.  This will replace the default pti host timestamper.
+ * @brief Sets callback to user provided timestamping function.  This will replace the default Intel(R) PTI host timestamper.
  *        Multiple callbacks that set differing timestamp function, through the session; will result in differing
  *        timestamp api_groups in the view record buffer.
  *
