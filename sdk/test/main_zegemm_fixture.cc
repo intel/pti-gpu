@@ -33,6 +33,7 @@
 #define MAX_EPS 1.0e-4f
 
 namespace {
+
 constexpr size_t kPtiDeviceId = 0;  // run on first device
 
 uint64_t eid_ = 11;
@@ -50,6 +51,33 @@ bool buffer_size_atleast_largest_record = false;
 bool ze_initialization_succeeded = false;
 bool capture_records = false;
 bool special_record_seen = false;
+bool synchronization_record_seen = false;
+bool synchronization_record_barrier_exec_seen = false;
+bool synchronization_record_barrier_mem_seen = false;
+bool synchronization_record_fence_exec_seen = false;
+bool synchronization_record_event_seen = false;
+bool synchronization_record_clist_seen = false;
+bool synchronization_record_cqueue_seen = false;
+uint32_t synchronization_barrier_event_number = 0;
+uint32_t synch_clist_record_api_group = 0;
+void* synch_clist_record_context = nullptr;
+void* synch_cqueue_record_queue = nullptr;
+void* synch_event_record_context = nullptr;
+void* synch_event_record_event = nullptr;
+void* synch_fence_record_context = nullptr;
+void* synch_fence_record_queue = nullptr;
+void* synch_fence_record_event = nullptr;
+void* synch_barrier_record_context = nullptr;
+void* synch_barrier_record_event = nullptr;
+void* synch_barrier_record_queue = nullptr;
+void* synch_input_event = nullptr;
+void* synch_input_context = nullptr;
+void* synch_input_queue = nullptr;
+const char* barrier_exec_api_name = nullptr;
+const char* barrier_mem_ranges_api_name = nullptr;
+const char* fence_api_name = nullptr;
+uint32_t synch_input_event_number = 0;
+uint32_t synchronization_record_number = 0;
 bool sycl_runtime_launch_seen = false;
 bool zecall_record_seen = false;
 bool external_corrid_special_record_seen = false;
@@ -67,23 +95,29 @@ ze_command_queue_handle_t queue_test_mem_copy = nullptr;
 // TODO - make the enable type param more generic (maybe a bitmap of somesort) so that we can enable
 // a mishmash of types
 void StartTracing(bool include_sycl_runtime = false, bool include_zecalls = false,
-                  bool include_gpu_kernels = true) {
+                  bool include_gpu_kernels = true, bool include_synch = false) {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
-  if (include_gpu_kernels)
+  if (include_gpu_kernels) {
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  }
   if (include_sycl_runtime) ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
   if (include_zecalls) ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  if (include_synch)
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_SYNCHRONIZATION), pti_result::PTI_SUCCESS);
 }
 
 void StopTracing(bool include_sycl_runtime = false, bool include_zecalls = false,
-                 bool include_gpu_kernels = true) {
+                 bool include_gpu_kernels = true, bool include_synch = false) {
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
-  if (include_gpu_kernels)
+  if (include_gpu_kernels) {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  }
+  if (include_synch)
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_SYNCHRONIZATION), pti_result::PTI_SUCCESS);
   if (include_sycl_runtime)
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
   if (include_zecalls) ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
@@ -193,6 +227,7 @@ float RunWithPollingAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t devic
 
   status = zeCommandListCreateImmediate(context, device, &cmd_queue_desc_kernel, &cmd_list_kernel);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  synch_input_context = context;
 
   queue_test_kernel = reinterpret_cast<ze_command_queue_handle_t>(cmd_list_kernel);
 
@@ -313,12 +348,15 @@ float RunAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device, ze_conte
   PTI_ASSERT(device != nullptr);
   PTI_ASSERT(context != nullptr);
 
+  ze_result_t status = ZE_RESULT_SUCCESS;
+  // TODO -- uncomment this test call after confirming support in L0 driver.
+  //      -- current status (loader 1.20.0) returns ZE_RESULT_ERROR_UNSUPPORTED_FEATURE
+  // status = zeContextSystemBarrier(context, device);
+  // PTI_ASSERT(status == ZE_RESULT_SUCCESS);
   PTI_ASSERT(size > 0);
   PTI_ASSERT(a.size() == size * size);
   PTI_ASSERT(b.size() == size * size);
   PTI_ASSERT(c.size() == size * size);
-
-  ze_result_t status = ZE_RESULT_SUCCESS;
 
   uint32_t group_size[3] = {0};
   status = zeKernelSuggestGroupSize(kernel, size, size, 1, &(group_size[0]), &(group_size[1]),
@@ -364,6 +402,15 @@ float RunAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device, ze_conte
   status = zeCommandListAppendMemoryCopy(cmd_list, dev_a, a.data(), size * size * sizeof(float),
                                          nullptr, 0, nullptr);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  // std::vector<const void *> ranges{dev_a, a};
+  std::vector<const void*> ranges{dev_a};
+  std::vector<size_t> range_sizes{a.size()};
+  // memory_ranges_barrier for memory coherency after copy to device memory
+  status = zeCommandListAppendMemoryRangesBarrier(cmd_list, ranges.size(), range_sizes.data(),
+                                                  ranges.data(), nullptr, 0, nullptr);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
   status = zeCommandListAppendMemoryCopy(cmd_list, dev_b, b.data(), size * size * sizeof(float),
                                          nullptr, 0, nullptr);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -388,8 +435,9 @@ float RunAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device, ze_conte
   status = zeCommandListAppendLaunchKernel(cmd_list, kernel, &dim, event, 0, nullptr);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-  status = zeCommandListAppendBarrier(cmd_list, nullptr, 0, nullptr);
+  status = zeCommandListAppendBarrier(cmd_list, nullptr, 1, &event);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  synch_input_event_number = 1;
 
   status = zeCommandListAppendMemoryCopy(cmd_list, c.data(), dev_c, size * size * sizeof(float),
                                          nullptr, 0, nullptr);
@@ -404,13 +452,25 @@ float RunAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device, ze_conte
   ze_command_queue_handle_t cmd_queue = nullptr;
   status = zeCommandQueueCreate(context, device, &cmd_queue_desc, &cmd_queue);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS && cmd_queue != nullptr);
+  synch_input_queue = cmd_queue;
+
+  ze_fence_desc_t fence_desc = {ZE_STRUCTURE_TYPE_FENCE_DESC, nullptr, 0};
+  ze_fence_handle_t fence_handle;
+  status = zeFenceCreate(cmd_queue, &fence_desc, &fence_handle);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   queue_test_mem_copy = static_cast<ze_command_queue_handle_t>(cmd_queue);
   queue_test_kernel = static_cast<ze_command_queue_handle_t>(cmd_queue);
 
-  status = zeCommandQueueExecuteCommandLists(cmd_queue, 1, &cmd_list, nullptr);
+  status = zeCommandQueueExecuteCommandLists(cmd_queue, 1, &cmd_list, fence_handle);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
+  status = zeFenceHostSynchronize(fence_handle, UINT32_MAX);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  status = zeEventHostSynchronize(event, UINT32_MAX);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  synch_input_event = event;
+  synch_input_context = context;
   status = zeCommandQueueSynchronize(cmd_queue, UINT32_MAX);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
@@ -543,7 +603,33 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     kernel_view_record_count = 0;
     capture_records = false;
     special_record_seen = false;
+    synchronization_record_seen = false;
+    synchronization_record_barrier_exec_seen = false;
+    synchronization_record_barrier_mem_seen = false;
+    synchronization_record_fence_exec_seen = false;
+    synchronization_record_event_seen = false;
+    synchronization_record_clist_seen = false;
+    synchronization_record_cqueue_seen = false;
+    synchronization_barrier_event_number = 0;
+    synchronization_record_number = 0;
+    synch_clist_record_api_group = 0;
+    synch_clist_record_context = nullptr;
+    synch_cqueue_record_queue = nullptr;
+    synch_event_record_context = nullptr;
+    synch_event_record_event = nullptr;
+    synch_fence_record_context = nullptr;
+    synch_fence_record_queue = nullptr;
+    synch_fence_record_event = nullptr;
+    synch_barrier_record_context = nullptr;
+    synch_barrier_record_event = nullptr;
+    synch_barrier_record_queue = nullptr;
+    synch_input_context = nullptr;
+    synch_input_event = nullptr;
+    synch_input_event_number = 0;
     sycl_runtime_launch_seen = false;
+    barrier_exec_api_name = nullptr;
+    barrier_mem_ranges_api_name = nullptr;
+    fence_api_name = nullptr;
     zecall_record_seen = false;
     external_corrid_special_record_seen = false;
     num_special_records = 0;
@@ -599,6 +685,8 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
           if (capture_records) {
             std::cout << "--- Record Memory Copy" << '\n';
             pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+            // std::cout << "---------------------------------------------------" << '\n';
+            // samples_utils::DumpRecord(rec);
             uint64_t duration = rec->_end_timestamp - rec->_start_timestamp;
             std::cout << "  Start: " << rec->_start_timestamp << '\n';
             std::cout << "  End: " << rec->_end_timestamp << '\n';
@@ -617,16 +705,69 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
           memory_view_record_count += 1;
           break;
         }
+        case pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION: {
+          pti_view_record_synchronization* rec =
+              reinterpret_cast<pti_view_record_synchronization*>(ptr);
+          // std::cout << "---------------------------------------------------" << '\n';
+          // samples_utils::DumpRecord(rec);
+          synchronization_record_seen = true;
+          switch (rec->_synch_type) {
+            case pti_view_synchronization_type::
+                PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_EXECUTION: {
+              synchronization_record_barrier_exec_seen = true;
+              synch_barrier_record_context = rec->_context_handle;
+              synch_barrier_record_queue = rec->_queue_handle;
+              synch_barrier_record_event = rec->_event_handle;
+              synchronization_barrier_event_number = rec->_number_wait_events;
+              PTI_THROW(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, rec->_api_id,
+                                            &barrier_exec_api_name));
+            }; break;
+            case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_MEMORY: {
+              synch_barrier_record_context = rec->_context_handle;
+              synch_barrier_record_event = rec->_event_handle;
+              synchronization_record_barrier_mem_seen = true;
+              PTI_THROW(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, rec->_api_id,
+                                            &barrier_mem_ranges_api_name));
+            }; break;
+            case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_FENCE: {
+              synchronization_record_fence_exec_seen = true;
+              synch_fence_record_context = rec->_context_handle;
+              synch_fence_record_event = rec->_event_handle;
+              synch_fence_record_queue = rec->_queue_handle;
+              PTI_THROW(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, rec->_api_id,
+                                            &fence_api_name));
+            }; break;
+            case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_EVENT: {
+              synchronization_record_event_seen = true;
+              synch_event_record_context = rec->_context_handle;
+              synch_event_record_event = rec->_event_handle;
+            }; break;
+            case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_LIST: {
+              synchronization_record_clist_seen = true;
+              synch_clist_record_api_group = rec->_api_group;
+              if (!synch_clist_record_context)
+                synch_clist_record_context = rec->_context_handle;  // capture the 1st one for test
+            }; break;
+            case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_QUEUE: {
+              synchronization_record_cqueue_seen = true;
+              synch_cqueue_record_queue = rec->_queue_handle;
+              // synch_cqueue_record_context = rec->_context_handle;
+            }; break;
+            default:
+              break;
+          }
+          synchronization_record_number++;
+          break;
+        }
         case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
           pti_view_record_external_correlation* aExtRec =
               reinterpret_cast<pti_view_record_external_correlation*>(ptr);
           external_corrid_special_record_seen = true;
-          external_corrid_in_ext_rec = aExtRec->_correlation_id;
+          if (!special_record_seen) external_corrid_in_ext_rec = aExtRec->_correlation_id;
           break;
         }
         case pti_view_kind::PTI_VIEW_RUNTIME_API: {
           pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
-          std::cout << "--- Sycl: " << rec->_api_id << "\n";
           const char* api_name = nullptr;
           if (rec->_api_group == pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO) {
             pti_result status = ptiViewGetApiIdName(
@@ -656,12 +797,16 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
         case pti_view_kind::PTI_VIEW_DRIVER_API: {
           [[maybe_unused]] pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
           zecall_record_seen = true;
+          // std::cout << "---------------------------------------------------" << '\n';
+          // samples_utils::DumpRecord(rec);
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
           pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
+          // std::cout << "---------------------------------------------------" << '\n';
+          // samples_utils::DumpRecord(rec);
           if (capture_records) {
             std::cout << "--- Record Kernel: " << rec->_name << '\n';
             std::cout << "  Cid: " << rec->_correlation_id << '\n';
@@ -719,8 +864,8 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
   }
 
   int RunGemm(bool with_polling = false, bool include_sycl_runtime = false,
-              bool include_zecalls = false, bool include_gpu_kernels = true,
-              bool add_sycl = false) {
+              bool include_zecalls = false, bool include_gpu_kernels = true, bool add_sycl = false,
+              bool include_synch = false) {
     ze_result_t status = ZE_RESULT_SUCCESS;
     status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     ze_initialization_succeeded = (status == ZE_RESULT_SUCCESS);
@@ -737,7 +882,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
       return 1;
     }
 
-    StartTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels);
+    StartTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels, include_synch);
 
     std::cout << "Level Zero Matrix Multiplication (matrix size: " << size << " x " << size
               << ", repeats " << repeat_count << " times)" << std::endl;
@@ -746,12 +891,12 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     std::vector<float> a(size * size, A_VALUE);
     std::vector<float> b(size * size, B_VALUE);
     std::vector<float> c(size * size, 0.0f);
-    StopTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels);
+    StopTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels, include_synch);
 
     auto start = std::chrono::steady_clock::now();
     float expected_result = A_VALUE * B_VALUE * static_cast<float>(size);
 
-    StartTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels);
+    StartTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels, include_synch);
     PTI_CHECK_SUCCESS(ptiViewPushExternalCorrelationId(
         pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid_));
 
@@ -764,7 +909,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
 
     PTI_CHECK_SUCCESS(ptiViewPopExternalCorrelationId(
         pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid_));
-    StopTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels);
+    StopTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels, include_synch);
 
     std::cout << "Total execution time: " << time.count() << " sec" << std::endl;
     auto flush_results = ptiFlushAllViews();
@@ -901,6 +1046,60 @@ TEST_F(MainZeFixtureTest, NegTestNullBufferSize) {
             pti_result::PTI_ERROR_BAD_ARGUMENT);
   EXPECT_EQ(RunGemm(), 0);
   ASSERT_EQ(rejected_buffer_calls, 1 * repeat_count);
+}
+
+TEST_F(MainZeFixtureTest, TestCLImmediateSynch) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  EXPECT_EQ(RunGemm(), 0);
+  EXPECT_EQ(RunGemm(true, true, true, true, false, true),
+            0);  // with_polling, sycl, zecalls, kernel and sych enabled
+
+  // CommandListSynchronization
+  EXPECT_EQ(synchronization_record_clist_seen, true);
+  EXPECT_EQ(synch_clist_record_context, synch_input_context);
+  EXPECT_EQ(synch_clist_record_api_group, 1);
+}
+
+TEST_F(MainZeFixtureTest, AllSynchronizationRelated) {
+  // capture_records = true;
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  EXPECT_EQ(RunGemm(), 0);
+  EXPECT_EQ(RunGemm(false, true, true, true, false, true),
+            0);  // sycl, zecalls, kernel and sych enabled
+
+  // FenceSynchronization
+  EXPECT_EQ(synchronization_record_fence_exec_seen, true);
+  EXPECT_EQ(synch_fence_record_event, nullptr);
+  EXPECT_EQ(synch_fence_record_context, synch_input_context);
+  EXPECT_EQ(synch_fence_record_queue, synch_input_queue);
+
+  // CommandQueueSynchronization
+  EXPECT_EQ(synch_cqueue_record_queue, synch_input_queue);
+
+  // EventHostSynchronization
+  EXPECT_EQ(synchronization_record_event_seen, true);
+  EXPECT_EQ(synch_event_record_event, synch_input_event);
+  EXPECT_EQ(synch_event_record_context, synch_input_context);
+
+  // BarrierExecSynchronization
+  EXPECT_EQ(synch_barrier_record_context, synch_input_context);
+  EXPECT_EQ(synch_barrier_record_queue, synch_input_queue);
+  EXPECT_EQ(synch_barrier_record_event, nullptr);
+  EXPECT_EQ(synchronization_barrier_event_number, synch_input_event_number);
+
+  // SampleSynchApiNamesSeen
+  EXPECT_EQ((std::strcmp(fence_api_name, "zeFenceHostSynchronize") == 0), true);
+  EXPECT_EQ(
+      (std::strcmp(barrier_mem_ranges_api_name, "zeCommandListAppendMemoryRangesBarrier") == 0),
+      true);
+  EXPECT_EQ((std::strcmp(barrier_exec_api_name, "zeCommandListAppendBarrier") == 0), true);
+
+  // AllSynchronizationRecordTypesSeen
+  EXPECT_EQ(synchronization_record_barrier_exec_seen, true);
+  EXPECT_EQ(synchronization_record_barrier_mem_seen, true);
+  EXPECT_EQ(synchronization_record_fence_exec_seen, true);
+  EXPECT_EQ(synchronization_record_event_seen, true);
+  EXPECT_EQ(synchronization_record_cqueue_seen, true);
 }
 
 TEST_F(MainZeFixtureTest, SyclBasedAndZeBasedKernelLaunchesPresent) {

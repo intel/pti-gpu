@@ -256,6 +256,48 @@ inline void DumpRecord(pti_view_record_api* record) {
   std::cout << "Api Correlation Id: " << record->_correlation_id << '\n';
 }
 
+inline void DumpRecord(pti_view_record_synchronization* record) {
+  if (NULL == record) return;
+  switch (record->_synch_type) {
+    case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_EXECUTION: {
+      std::cout << "Barrier Synch Type: Execution Barrier\n";
+    }; break;
+    case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_MEMORY: {
+      std::cout << "Barrier Synch Type: Memory Coherency Barrier\n";
+    }; break;
+    case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_FENCE: {
+      std::cout << "Fence Synch Type: Execution\n";
+    }; break;
+    case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_EVENT: {
+      std::cout << "Event Synch Type: Host\n";
+    }; break;
+    case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_LIST: {
+      std::cout << "CommandList Synch Type: Host\n";
+    }; break;
+    case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_QUEUE: {
+      std::cout << "CommandQueue Synch Type: Host\n";
+    }; break;
+    default:
+      break;
+  }
+  std::cout << "Synch Start Time: " << record->_start_timestamp << '\n';
+  std::cout << "  Synch End Time: " << record->_end_timestamp << '\n';
+  std::cout << "  Synch Duration: " << record->_end_timestamp - record->_start_timestamp << "ns \n";
+  std::cout << "Synch Thread Id: " << record->_thread_id << '\n';
+  std::cout << "Synch Correlation Id: " << record->_correlation_id << '\n';
+  std::cout << "Synch BE Queue Handle: " << record->_queue_handle << '\n';
+  std::cout << "Synch BE Context Handle: " << record->_context_handle << '\n';
+  std::cout << "Synch BE Event Handle: " << record->_event_handle << '\n';
+  std::cout << "Synch BE Number Wait Events: " << record->_number_wait_events << '\n';
+  std::cout << "Synch Api Function CBID: " << record->_api_id << '\n';
+  std::cout << "Synch Api Group ID: " << record->_api_group << '\n';
+  std::cout << "Synch Api Return Code: " << record->_return_code << '\n';
+  const char* api_name = nullptr;
+  PTI_THROW(
+      ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, record->_api_id, &api_name));
+  std::cout << "Synch Api Function Name: " << api_name << '\n';
+}
+
 inline void DumpRecord(pti_view_record_overhead* record) {
   if (NULL == record) return;
   std::cout << "Overhead Kind : " << ptiViewOverheadKindToString(record->_overhead_kind) << '\n';

@@ -12,7 +12,7 @@
 #include "pti/pti_view.h"
 
 inline constexpr auto kReserved = 0;
-inline constexpr auto kLastViewRecordEnumValue = PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
+inline constexpr auto kLastViewRecordEnumValue = PTI_VIEW_DEVICE_SYNCHRONIZATION;
 inline constexpr auto kSizeOfViewRecordTable = kLastViewRecordEnumValue + 1;
 
 // kViewSizeLookUpTable
@@ -34,6 +34,7 @@ inline constexpr std::array<std::size_t, kSizeOfViewRecordTable> kViewSizeLookup
     sizeof(pti_view_record_memory_copy),              // PTI_VIEW_DEVICE_GPU_MEM_COPY
     sizeof(pti_view_record_memory_fill),              // PTI_VIEW_DEVICE_GPU_MEM_FILL
     sizeof(pti_view_record_memory_copy_p2p),          // PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P
+    sizeof(pti_view_record_synchronization),          // PTI_VIEW_DEVICE_SYNCHRONIZATION
 };
 // clang-format on
 

@@ -37,6 +37,7 @@ bool IsPtiViewKindEnum(int v) {
       pti_view_kind::PTI_VIEW_DRIVER_API, pti_view_kind::PTI_VIEW_RESERVED,
       pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD, pti_view_kind::PTI_VIEW_RUNTIME_API,
       pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION, pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY,
-      pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL, pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P);
+      pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL, pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P,
+      pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION);
 }
 #endif  // INTERNAL_HELPER_H_

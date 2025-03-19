@@ -120,9 +120,10 @@ struct ZeKernelCommandExecutionRecord {
   uint32_t engine_ordinal_;
   uint32_t engine_index_;
 
-  ze_command_queue_handle_t queue_;
-  ze_device_handle_t device_;    // in case of memcpy -- represents source
-  ze_context_handle_t context_;  // in case of memcpy -- represents source
+  ze_command_queue_handle_t queue_ = nullptr;
+  ze_device_handle_t device_ = nullptr;    // in case of memcpy -- represents source
+  ze_context_handle_t context_ = nullptr;  // in case of memcpy -- represents source
+  ze_event_handle_t event_ = nullptr;      // event used for host synchronization.
 
   ZeMemoryCommandRoute route_;
   ze_device_handle_t dst_device_;  // in case of memcpy -- represents destination (nullptr else)
@@ -140,6 +141,7 @@ struct ZeKernelCommandExecutionRecord {
   uint32_t callback_id_;
   uint64_t api_start_time_;
   uint64_t api_end_time_;
+  uint64_t num_wait_events_ = 0;  // tracks wait event count for synchronization activity commands
   ze_result_t result_;
 };
 

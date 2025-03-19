@@ -47,6 +47,18 @@ inline void MemCopyP2PEvent(void* data, const ZeKernelCommandExecutionRecord& re
 
 inline void MemFillEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
+inline void BarrierExecEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
+inline void BarrierMemEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
+inline void FenceSynchEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
+inline void EventSynchEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
+inline void CommandListSynchEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
+inline void CommandQueueSynchEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
 inline void KernelEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void ZeDriverEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
@@ -105,6 +117,16 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
         {PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P,
           {
             ViewData{"zeCommandListAppendMemoryCopyP2P", MemCopyP2PEvent},
+          }
+        },
+        {PTI_VIEW_DEVICE_SYNCHRONIZATION,
+          {
+            ViewData{"zeCommandListAppendBarrier", BarrierExecEvent},
+            ViewData{"zeCommandListAppendMemoryRangesBarrier", BarrierMemEvent},
+            ViewData{"zeFenceHostSynchronize", FenceSynchEvent},
+            ViewData{"zeEventHostSynchronize", EventSynchEvent},
+            ViewData{"zeCommandListHostSynchronize", CommandListSynchEvent},
+            ViewData{"zeCommandQueueSynchronize", CommandQueueSynchEvent}
           }
         },
         {PTI_VIEW_DRIVER_API,
@@ -312,6 +334,7 @@ struct PtiViewRecordHandler {
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
                                (type == pti_view_kind::PTI_VIEW_DRIVER_API) ||
+                               (type == pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
 
     //
@@ -386,6 +409,7 @@ struct PtiViewRecordHandler {
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY) ||
                                (type == pti_view_kind::PTI_VIEW_DRIVER_API) ||
+                               (type == pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION) ||
                                (type == pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P));
 
     if (type == pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD) {
@@ -905,6 +929,80 @@ inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecor
   }
 }
 
+inline void CommonSynchEvent(pti_view_record_synchronization& record,
+                             const ZeKernelCommandExecutionRecord& rec) {
+  int64_t ts_shift = Instance().GetTimeShift();
+
+  if (external_collection_enabled) {
+    GenerateExternalCorrelationRecords(rec);
+  }
+
+  record._api_group = pti_api_group_id::PTI_API_GROUP_LEVELZERO;
+  record._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
+  record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
+  record._thread_id = rec.tid_;
+  record._correlation_id = rec.cid_;
+  record._queue_handle = rec.queue_;
+  record._context_handle = rec.context_;
+  record._api_id = rec.callback_id_;
+  record._event_handle = rec.event_;
+  record._number_wait_events = rec.num_wait_events_;
+  record._return_code = rec.result_;
+  Instance().InsertRecord(record, record._thread_id);
+}
+
+inline void EventSynchEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, rec.cid_);
+  pti_view_record_synchronization record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION;
+  record._synch_type = pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_EVENT;
+  CommonSynchEvent(record, rec);
+}
+
+inline void FenceSynchEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, rec.cid_);
+  pti_view_record_synchronization record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION;
+  record._synch_type = pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_FENCE;
+  CommonSynchEvent(record, rec);
+}
+
+inline void CommandListSynchEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, rec.cid_);
+  pti_view_record_synchronization record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION;
+  record._synch_type =
+      pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_LIST;
+  CommonSynchEvent(record, rec);
+}
+
+inline void CommandQueueSynchEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, rec.cid_);
+  pti_view_record_synchronization record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION;
+  record._synch_type =
+      pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_QUEUE;
+  CommonSynchEvent(record, rec);
+}
+
+inline void BarrierExecEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, rec.cid_);
+  pti_view_record_synchronization record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION;
+  record._synch_type =
+      pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_EXECUTION;
+  CommonSynchEvent(record, rec);
+}
+
+inline void BarrierMemEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, rec.cid_);
+  pti_view_record_synchronization record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION;
+  record._synch_type =
+      pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_MEMORY;
+  CommonSynchEvent(record, rec);
+}
+
 inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
   pti_view_record_kernel record;
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL;
@@ -949,7 +1047,7 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   if (special_rec_data.sycl_rec_present == 0 && special_rec_data.zecall_disabled &&
       SyclCollector::Instance().Enabled()) {  // generate special record only if no sycl rec
                                               // (sycl_rec_present is 0) and sycl enabled and
-                                              // zecalls disabled enabled and kernel is enabled.
+                                              // zecalls disabled and kernel is enabled.
     pti_view_record_api special_rec;
     special_rec._view_kind._view_kind = pti_view_kind::PTI_VIEW_RUNTIME_API;
     // special_rec._name = "zeCommandListAppendLaunchKernel";
@@ -1007,7 +1105,19 @@ inline void ZeChromeKernelStagesCallback(void* data,
     } else if (rec.name_.find("zeCommandListAppendMemoryFill") != std::string::npos) {
       Instance()("zeCommandListAppendMemoryFill", data, rec);
     } else if (rec.name_.find("zeCommandListAppendBarrier") != std::string::npos) {
-      // no-op for now
+      Instance()("zeCommandListAppendBarrier", data, rec);
+    } else if (rec.name_.find("zeCommandListAppendMemoryRangesBarrier") != std::string::npos) {
+      Instance()("zeCommandListAppendMemoryRangesBarrier", data, rec);
+    } else if (rec.name_.find("zeFenceHostSynchronize") != std::string::npos) {
+      Instance()("zeFenceHostSynchronize", data, rec);
+    } else if (rec.name_.find("zeEventHostSynchronize") != std::string::npos) {
+      Instance()("zeEventHostSynchronize", data, rec);
+    } else if (rec.name_.find("zeCommandListHostSynchronize") != std::string::npos) {
+      Instance()("zeCommandListHostSynchronize", data, rec);
+    } else if (rec.name_.find("zeCommandQueueSynchronize") != std::string::npos) {
+      Instance()("zeCommandQueueSynchronize", data, rec);
+    } else if (rec.name_.find("zeContextSystemBarrier") != std::string::npos) {
+      // No-op for now -- driver support not there in L0 yet (returns unsupported_feature).
     } else {
       Instance()("KernelEvent", data, rec);
     }

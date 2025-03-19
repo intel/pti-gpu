@@ -30,18 +30,34 @@ extern "C" {
  * passed to ptiViewEnable/ptiViewDisable
  */
 typedef enum _pti_view_kind {
-  PTI_VIEW_INVALID = 0,                   //!< Invalid
-  PTI_VIEW_DEVICE_GPU_KERNEL = 1,         //!< Device kernels
-  PTI_VIEW_DEVICE_CPU_KERNEL = 2,         //!< Host (CPU) kernels
-  PTI_VIEW_DRIVER_API = 3,                //!< Driver (aka back-end) API tracing
-  PTI_VIEW_RESERVED = 4,                  //!< For future use
-  PTI_VIEW_COLLECTION_OVERHEAD = 5,       //!< Collection overhead
-  PTI_VIEW_RUNTIME_API = 6,               //!< Runtime(Sycl, other) API tracing
-  PTI_VIEW_EXTERNAL_CORRELATION = 7,      //!< Correlation of external operations
-  PTI_VIEW_DEVICE_GPU_MEM_COPY = 8,       //!< Memory copies between Host and Device
-  PTI_VIEW_DEVICE_GPU_MEM_FILL = 9,       //!< Device memory fills
-  PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P = 10,  //!< Peer to Peer Memory copies between Devices.
+  PTI_VIEW_INVALID = 0,                      //!< Invalid
+  PTI_VIEW_DEVICE_GPU_KERNEL = 1,            //!< Device kernels
+  PTI_VIEW_DEVICE_CPU_KERNEL = 2,            //!< Host (CPU) kernels
+  PTI_VIEW_DRIVER_API = 3,                   //!< Driver (aka back-end) API tracing
+  PTI_VIEW_RESERVED = 4,                     //!< For future use
+  PTI_VIEW_COLLECTION_OVERHEAD = 5,          //!< Collection overhead
+  PTI_VIEW_RUNTIME_API = 6,                  //!< Runtime(Sycl, other) API tracing
+  PTI_VIEW_EXTERNAL_CORRELATION = 7,         //!< Correlation of external operations
+  PTI_VIEW_DEVICE_GPU_MEM_COPY = 8,          //!< Memory copies between Host and Device
+  PTI_VIEW_DEVICE_GPU_MEM_FILL = 9,          //!< Device memory fills
+  PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P = 10,     //!< Peer to Peer Memory copies between Devices.
+  PTI_VIEW_DEVICE_SYNCHRONIZATION = 11,      //!< synchronization operations on host and GPU.
 } pti_view_kind;
+
+/**
+ * @brief Synchronization types:  
+ *                             Type marked as *_GPU_* note the synchronization start/complete on device (e.g Barriers).
+ *                             Type marked as *_HOST_* note the synchronization start/end on host (e.g. Fence).
+ */
+typedef enum _pti_view_synchronization_type {
+  PTI_VIEW_SYNCHRONIZATION_TYPE_UNKNOWN = 0,                  //!< Unknown synchronization type
+  PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_EXECUTION = 1,    //!< Barrier execution and global memory synchronization type
+  PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_MEMORY = 2,       //!< Barrier memory range coherency synchronization type
+  PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_FENCE= 3,                //!< Fence coarse grain execution synchronization type
+  PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_EVENT = 4,               //!< Event host synchronization type
+  PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_LIST = 5,        //!< Commandlist host synchronization type
+  PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_QUEUE = 6,       //!< CommandQueue host synchronization type
+} pti_view_synchronization_type;
 
 /**
  * @brief Memory types
@@ -119,6 +135,8 @@ typedef void* pti_backend_queue_t; //!< Backend queue handle
 
 typedef void* pti_backend_ctx_t; //!< Backend context handle
 
+typedef void* pti_backend_evt_t; //!< Backend event handle
+
 /**
  * @brief Base View record type
  */
@@ -158,6 +176,27 @@ typedef struct pti_view_record_kernel {
   uint64_t _sycl_queue_id;                          //!< Device front-end queue id
   uint32_t _sycl_invocation_id;                     //!< SYCL Invocation ID
 } pti_view_record_kernel;
+
+/**
+ * @brief Synchronization View record type
+ */
+typedef struct pti_view_record_synchronization{
+  pti_view_record_base _view_kind;                  //!< Base record
+  pti_view_synchronization_type _synch_type;        //!< Synchronization type
+  pti_backend_ctx_t _context_handle;                //!< Context handle
+  pti_backend_ctx_t _queue_handle;                  //!< Queue handle
+  pti_backend_evt_t _event_handle;                  //!< Event handle synchronization api is called with.
+  uint64_t _start_timestamp;                        //!< For host synchronization types: function enter timestamp
+                                                    //!< For gpu synchronization types: synch start timestamp on device
+  uint64_t _end_timestamp;                          //!< For host synchronization types: function exit timestamp
+                                                    //!< For gpu synchronization types: synch complete timestamp on device
+  uint32_t _thread_id;                              //!< Thread ID of function call
+  uint32_t _correlation_id;                         //!< ID that correlates this record with records of other Views
+  uint32_t _number_wait_events;                     //!< For relevent event synch types (eg. Barriers)
+  uint32_t _return_code;                            //!< L0/OCL synch api onexit return type - cast to specific driver code type
+  uint32_t _api_id;                                 //!< Id of this synch api call
+  pti_api_group_id _api_group;                      //!< Defines api api_group this record was collected in (L0,Sycl,OCL, etc).
+} pti_view_record_synchronization;
 
 /**
  * @brief Memory Copy Operation View record type

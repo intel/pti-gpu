@@ -35,6 +35,12 @@ inline static constexpr const char* const kLevelZeroDriverName = "libze_intel_gp
 typedef ze_result_t (*fptr_zeEventPoolGetFlags_t)(ze_event_pool_handle_t hEventPool,
                                                   ze_event_pool_flags_t* pFlags);
 
+typedef ze_result_t (*fptr_zeEventGetEventPool_t)(ze_event_handle_t hEvent,
+                                                  ze_event_pool_handle_t* phEventPool);
+
+typedef ze_result_t (*fptr_zeEventPoolGetContextHandle_t)(ze_event_pool_handle_t hEventPool,
+                                                          ze_context_handle_t* phContext);
+
 typedef ze_result_t (*fptr_zeCommandListGetDeviceHandle_t)(ze_command_list_handle_t command_list,
                                                            ze_device_handle_t* device);
 
@@ -77,6 +83,8 @@ class Level0Wrapper {
 
       l0_driver_ = LibraryLoader{kLevelZeroDriverName};
       DRIVER_LOAD_AND_DEBUG_PRINT(zeEventPoolGetFlags);
+      DRIVER_LOAD_AND_DEBUG_PRINT(zeEventGetEventPool);
+      DRIVER_LOAD_AND_DEBUG_PRINT(zeEventPoolGetContextHandle);
       DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandListGetDeviceHandle);
       DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandListGetContextHandle);
       DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandListGetOrdinal);
@@ -93,6 +101,21 @@ class Level0Wrapper {
                                     ze_event_pool_flags_t* pFlags) const {
     if (nullptr != fptr_zeEventPoolGetFlags_) {
       return fptr_zeEventPoolGetFlags_(hEventPool, pFlags);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeEventGetEventPool(ze_event_handle_t hEvent, ze_event_pool_handle_t* phEventPool) {
+    if (nullptr != fptr_zeEventGetEventPool_) {
+      return fptr_zeEventGetEventPool_(hEvent, phEventPool);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeEventPoolGetContextHandle(ze_event_pool_handle_t hEventPool,
+                                            ze_context_handle_t* phContext) {
+    if (nullptr != fptr_zeEventPoolGetContextHandle_) {
+      return fptr_zeEventPoolGetContextHandle_(hEventPool, phContext);
     }
     return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
   }
@@ -171,6 +194,7 @@ class Level0Wrapper {
     SPDLOG_DEBUG("In {}", __FUNCTION__);
 
     if (nullptr == fptr_zeEventPoolGetFlags_ || nullptr == fptr_zeCommandListGetDeviceHandle_ ||
+        nullptr == fptr_zeEventGetEventPool_ || nullptr == fptr_zeEventPoolGetContextHandle_ ||
         nullptr == fptr_zeCommandListGetContextHandle_ ||
         nullptr == fptr_zeCommandListIsImmediate_ ||
         nullptr == fptr_zeCommandListImmediateGetIndex_ ||
@@ -194,6 +218,8 @@ class Level0Wrapper {
   LibraryLoader l0_driver_;
   LibraryLoader l0_loader_;
   fptr_zeEventPoolGetFlags_t fptr_zeEventPoolGetFlags_ = nullptr;
+  fptr_zeEventGetEventPool_t fptr_zeEventGetEventPool_ = nullptr;
+  fptr_zeEventPoolGetContextHandle_t fptr_zeEventPoolGetContextHandle_ = nullptr;
   fptr_zeCommandListGetDeviceHandle_t fptr_zeCommandListGetDeviceHandle_ = nullptr;
   fptr_zeCommandListGetContextHandle_t fptr_zeCommandListGetContextHandle_ = nullptr;
   fptr_zeCommandListIsImmediate_t fptr_zeCommandListIsImmediate_ = nullptr;

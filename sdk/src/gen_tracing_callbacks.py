@@ -633,6 +633,7 @@ def gen_exit_callback(
     ze_gen_func_list,
     existing_apiid_dict,
     regen_api_files,
+    synchronization_viewkind_api_list,
 ):
     cat_key = ("driver", "levelzero")
     existing_apiids = existing_apiid_dict.get(cat_key, {})
@@ -643,6 +644,7 @@ def gen_exit_callback(
 
     f.write("  [[maybe_unused]] uint64_t end_time_host = 0;\n")
     f.write("  end_time_host = utils::GetTime();\n")
+    f.write("  ze_instance_data.end_time_host = end_time_host;\n")
 
     cb = get_kernel_tracing_callback("OnExit" + func[2:])
 
@@ -660,18 +662,37 @@ def gen_exit_callback(
         f.write("      kids.push_back(ze_instance_data.kid);\n")
         f.write("  }\n")
 
+    if func in synchronization_viewkind_api_list:
+        f.write("  uint64_t synch_corrid = UniCorrId::GetUniCorrId();\n")
+
     if cb != "":
         f.write("  if (collector->options_.kernel_tracing) { \n")
         if (func in submission_func_list) or (func in synchronize_func_list_on_exit):
-            f.write(
-                "    "
-                + cb
-                + "(params, result, global_data, instance_user_data, &kids); \n"
-            )
+            if func in synchronization_viewkind_api_list:
+                f.write(
+                    "    "
+                    + cb
+                    + "(params, result, global_data, instance_user_data, &kids, synch_corrid); \n"
+                )
+            else:
+                f.write(
+                    "    "
+                    + cb
+                    + "(params, result, global_data, instance_user_data, &kids); \n"
+                )
         else:
-            f.write(
-                "    " + cb + "(params, result, global_data, instance_user_data); \n"
-            )
+            if func in synchronization_viewkind_api_list:
+                f.write(
+                    "    "
+                    + cb
+                    + "(params, result, global_data, instance_user_data, synch_corrid); \n"
+                )
+            else:
+                f.write(
+                    "    "
+                    + cb
+                    + "(params, result, global_data, instance_user_data); \n"
+                )
         f.write("  }\n")
 
         f.write("\n")
@@ -723,7 +744,10 @@ def gen_exit_callback(
             f.write("         rec.cid_ = UniCorrId::GetUniCorrId();\n")
             f.write("       }\n")
         else:
-            f.write("       rec.cid_ = UniCorrId::GetUniCorrId();\n")
+            if func in synchronization_viewkind_api_list:
+                f.write("       rec.cid_ = synch_corrid;\n")
+            else:
+                f.write("       rec.cid_ = UniCorrId::GetUniCorrId();\n")
         if func in km_rt_func_list:
             f.write("       sycl_data_kview.cid_ = 0;\n")
             f.write("       sycl_data_mview.cid_ = 0;\n")
@@ -750,6 +774,7 @@ def gen_callbacks(
     ze_gen_func_list,
     existing_apiid_dict,
     regen_api_files,
+    synchronization_viewkind_api_list,
 ):
     for func in func_param_dict.keys():
         # print ("+++ Function : ", func)
@@ -779,6 +804,7 @@ def gen_callbacks(
             ze_gen_func_list,
             existing_apiid_dict,
             regen_api_files,
+            synchronization_viewkind_api_list,
         )
         f.write("}\n")
         f.write("\n")
@@ -926,6 +952,7 @@ def main():
         "zeCommandListAppendMemoryFill",
         "zeCommandListAppendBarrier",
         "zeCommandListAppendMemoryRangesBarrier",
+        # "zeContextSystemBarrier",
         "zeCommandListAppendMemoryCopyRegion",
         "zeCommandListAppendMemoryCopyFromContext",
         "zeCommandListAppendImageCopy",
@@ -945,6 +972,7 @@ def main():
         "zeKernelSetGroupSize",
         "zeKernelDestroy",
         "zeEventHostSynchronize",
+        "zeFenceCreate",
         "zeFenceHostSynchronize",
         "zeEventQueryStatus",
         "zeCommandListHostSynchronize",
@@ -996,6 +1024,16 @@ def main():
         "zeEventQueryStatus",
         "zeFenceHostSynchronize",
         "zeCommandQueueSynchronize",
+    ]
+
+    synchronization_viewkind_api_list = [
+        "zeFenceHostSynchronize",
+        "zeCommandListAppendBarrier",
+        "zeCommandListAppendMemoryRangesBarrier",
+        # "zeContextSystemBarrier",
+        "zeEventHostSynchronize",
+        "zeCommandQueueSynchronize",
+        "zeCommandListHostSynchronize",
     ]
 
     exclude_from_epilogue_list = []
@@ -1053,6 +1091,7 @@ def main():
         ze_gen_func_list,
         existing_apiid_dict,
         regen_api_files,
+        synchronization_viewkind_api_list,
     )
     gen_api(
         dst_file,
