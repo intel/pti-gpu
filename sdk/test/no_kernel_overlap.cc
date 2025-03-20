@@ -111,13 +111,16 @@ void TestCore(bool do_immediate) {
     std::cerr << "Error: Unknown exception caught." << '\n';
   }
 }
-}  // namespace
 
 bool ComparePair(std::pair<uint64_t, uint64_t> a_stamps, std::pair<uint64_t, uint64_t> b_stamps) {
   return a_stamps.first < b_stamps.first;
 }
+enum CollectionMode { kModeFull = 0, kModeHybrid = 1, kModeLocal = 2 };
 
-class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<bool> {
+}  // namespace
+
+class NoKernelOverlapParametrizedTestFixture
+    : public ::testing::TestWithParam<std::tuple<bool, CollectionMode>> {
  protected:
   NoKernelOverlapParametrizedTestFixture() {
     // Setup work for each test
@@ -130,20 +133,28 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
   static uint32_t times_buffer_completed;
   static std::vector<uint64_t> kernel_device_timestamps;
   static std::vector<uint64_t> kernel_host_timestamps;
-
-  static std::vector<std::pair<uint64_t, uint64_t> > kernel_device_timestamps_pairs;
+  static std::vector<std::pair<uint64_t, uint64_t>> kernel_device_timestamps_pairs;
+  static bool do_immediate;
 
   void SetUp() override {  // Called right after constructor before each test
     kernel_device_timestamps_pairs.clear();
     kernel_host_timestamps.clear();
     times_buffer_completed = 0;
+
+    auto [immediate, collection_mode] = GetParam();
+    do_immediate = immediate;
+    // while passed ModeLocal local it is expected it will be selected automatically of course
+    // in case introspection API is available
+    if (collection_mode != CollectionMode::kModeLocal) {
+      utils::SetEnv("PTI_COLLECTION_MODE", std::to_string(collection_mode).c_str());
+    }
   }
 
   void TearDown() override {
     // Called right before destructor after each test
   }
 
-  bool TestForDeviceKernelsOverlap(std::vector<std::pair<uint64_t, uint64_t> >& timestamps) {
+  bool TestForDeviceKernelsOverlap(std::vector<std::pair<uint64_t, uint64_t>>& timestamps) {
     if (timestamps.size() == 0) {
       std::cerr << "--->  ERROR: Empty kernel timestamps array - Not expected " << std::endl;
       return false;
@@ -161,16 +172,16 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
                 << std::endl;
       */
       if (timestamps[item].first <= timestamps[item - 1].second) {
-        std::cerr << "--->  ERROR: Device kernel timestamps overlap start_of_i < end_of_i-1, at i: "
-                  << item << ", start_of_i: " << timestamps[item].first
-                  << ", end_of_i-1: " << timestamps[item - 1].second << std::endl;
+        std::cerr << "--->  ERROR: Device kernel timestamps overlap end_of_i < start_of_i-1, at i: "
+                  << item << ", end_of_i: " << timestamps[item].first
+                  << ", start_of_i-1: " << timestamps[item - 1].second << std::endl;
         return false;
       }
     }
     return true;
   }
 
-  bool TestForDeviceKernelDurationNonZero(std::vector<std::pair<uint64_t, uint64_t> >& timestamps) {
+  bool TestForDeviceKernelDurationNonZero(std::vector<std::pair<uint64_t, uint64_t>>& timestamps) {
     if (timestamps.size() == 0) {
       std::cerr << "--->  ERROR: Empty kernel timestamps array - Not expected " << std::endl;
       return false;
@@ -301,11 +312,11 @@ class NoKernelOverlapParametrizedTestFixture : public ::testing::TestWithParam<b
 // static members initialization
 uint32_t NoKernelOverlapParametrizedTestFixture::times_buffer_completed = 0;
 std::vector<uint64_t> NoKernelOverlapParametrizedTestFixture::kernel_host_timestamps{};
-std::vector<std::pair<uint64_t, uint64_t> >
+std::vector<std::pair<uint64_t, uint64_t>>
     NoKernelOverlapParametrizedTestFixture::kernel_device_timestamps_pairs{};
+bool NoKernelOverlapParametrizedTestFixture::do_immediate = true;
 
 TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
-  bool do_immediate = GetParam();
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
 
   RunTest(do_immediate);
@@ -323,4 +334,9 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
 }
 
 INSTANTIATE_TEST_SUITE_P(NoKernelOverlapTests, NoKernelOverlapParametrizedTestFixture,
-                         ::testing::Values(true, false));
+                         ::testing::Values(std::make_tuple(true, CollectionMode::kModeFull),
+                                           std::make_tuple(false, CollectionMode::kModeFull),
+                                           std::make_tuple(true, CollectionMode::kModeHybrid),
+                                           std::make_tuple(false, CollectionMode::kModeHybrid),
+                                           std::make_tuple(true, CollectionMode::kModeLocal),
+                                           std::make_tuple(false, CollectionMode::kModeLocal)));

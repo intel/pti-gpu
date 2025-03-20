@@ -328,9 +328,11 @@ void RunVecsqadd(TestType a_test_type) {
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
 }
 
+enum CollectionMode { kModeFull = 0, kModeHybrid = 1, kModeLocal = 2 };
+
 }  // namespace
 
-class VecsqaddFixtureTest : public ::testing::Test {
+class VecsqaddFixtureTest : public ::testing::TestWithParam<CollectionMode> {
  protected:
   void SetUp() override {
     timestamps_monotonic = true;
@@ -338,6 +340,12 @@ class VecsqaddFixtureTest : public ::testing::Test {
     external_corr_map.clear();
     runtime_enq_2_gpu_kernel_name_map.clear();
     runtime_enq_2_gpu_mem_op_name_map.clear();
+    CollectionMode _collection_mode = GetParam();
+    // while passed ModeLocal local it is expected it will be selected automatically of course
+    // in case introspection API is available
+    if (_collection_mode != CollectionMode::kModeLocal) {
+      utils::SetEnv("PTI_COLLECTION_MODE", std::to_string(_collection_mode).c_str());
+    }
   }
 
   void TearDown() override {
@@ -345,7 +353,7 @@ class VecsqaddFixtureTest : public ::testing::Test {
   }
 };
 
-TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSq) {
+TEST_P(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSq) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kExternalCorrId);
   uint64_t correlation_id = kernel_corr_id[0];
@@ -371,7 +379,7 @@ void EnableIndividualRuntimeApis() {
             pti_result::PTI_SUCCESS);
 }
 
-TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSqReducedOps) {
+TEST_P(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSqReducedOps) {
   utils::SetEnv("PTI_VIEW_RUNTIME_API", "1");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   EnableIndividualRuntimeApis();
@@ -393,7 +401,7 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSqReduce
   }
 }
 
-TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAdd) {
+TEST_P(VecsqaddFixtureTest, CorrelationIdsMatchForAdd) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kExternalCorrId);
   // Check that the correlation id of runtime and kernel matches
@@ -402,7 +410,7 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAdd) {
   EXPECT_LE(sycl_kernel_start_time[1], kernel_append_time[1]);
 }
 
-TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAddReducedOps) {
+TEST_P(VecsqaddFixtureTest, CorrelationIdsMatchForAddReducedOps) {
   utils::SetEnv("PTI_VIEW_RUNTIME_API", "1");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   EnableIndividualRuntimeApis();
@@ -413,7 +421,7 @@ TEST_F(VecsqaddFixtureTest, CorrelationIdsMatchForAddReducedOps) {
   EXPECT_LE(sycl_kernel_start_time[1], kernel_append_time[1]);
 }
 
-TEST_F(VecsqaddFixtureTest, TimestampWrapAroundOnOverflow) {
+TEST_P(VecsqaddFixtureTest, TimestampWrapAroundOnOverflow) {
   // TODO: Move this to the fixture if we get more stress tests. However, for now this is our only
   // one so we will soft disable it until it is enabled in CI.
   const auto result = utils::GetEnv("PTI_ENABLE_STRESS_TESTS");
@@ -427,3 +435,7 @@ TEST_F(VecsqaddFixtureTest, TimestampWrapAroundOnOverflow) {
   RunVecsqadd(TestType::kOverflowStress);
   EXPECT_EQ(timestamps_monotonic, true);
 }
+
+INSTANTIATE_TEST_SUITE_P(VecSqAddSuite, VecsqaddFixtureTest,
+                         ::testing::Values(CollectionMode::kModeFull, CollectionMode::kModeLocal,
+                                           CollectionMode::kModeHybrid));
