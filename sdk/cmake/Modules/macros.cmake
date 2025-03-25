@@ -35,7 +35,7 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET
 
   # HINTS before PATHS
   find_path(L0_INC_PATH
-    NAMES level_zero
+    NAMES level_zero/ze_api.h
     HINTS ${L0_TARGET_PATH}
     PATHS ENV CPATH)
   if (NOT L0_INC_PATH)
@@ -360,7 +360,7 @@ macro(AddApiGenTarget L0_GEN_SCRIPT GEN_FILE_NAME L0_TARGET)
 
   # HINTS before PATHS
   find_path(L0_INC_PATH
-    NAMES level_zero
+    NAMES level_zero/ze_api.h
     HINTS ${L0_TARGET_PATH}
     PATHS ENV CPATH)
   if (NOT L0_INC_PATH)

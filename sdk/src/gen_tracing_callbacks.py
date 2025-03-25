@@ -18,6 +18,7 @@ STATE_NORMAL = 0
 STATE_CONDITION = 1
 STATE_SKIP = 2
 FILE_OPEN_PERMISSIONS = 0o600
+DEFAULT_UNIFIED_RUNTIME_PUBLIC_HEADERS = ["ur_api.h", "sycl/ur_api.h"]
 
 
 # https://docs.python.org/3/library/functions.html#open
@@ -45,6 +46,38 @@ def get_ocl_api_list(ocl_path):
         elif line.find("ClFunctionId") != -1:
             cl_function_id_found = True
     return func_list
+
+
+def get_ur_api_file_path(include_file_path, include_file=None):
+    """
+    Given include file path (typically passed to the compiler and found by the
+    build system), find where the unified runtime public API header file is.
+    """
+
+    # Invalid directory.
+    if os.path.exists(include_file_path) == False:
+        raise Exception("Passed non-existent file path for UR headers")
+
+    ur_file_path = include_file_path
+
+    # Assume passed the full path to file.
+    if os.path.isfile(ur_file_path) == True:
+        return ur_file_path
+
+    if include_file != None:
+        ur_file_path = os.path.join(ur_file_path, include_file)
+
+        if os.path.exists(ur_file_path) == False:
+            raise Exception("Passed non-existent file path for UR headers")
+
+        return ur_file_path
+
+    for header in DEFAULT_UNIFIED_RUNTIME_PUBLIC_HEADERS:
+        if os.path.isfile(os.path.join(ur_file_path, header)):
+            ur_file_path = os.path.join(ur_file_path, header)
+            break
+
+    return ur_file_path
 
 
 #
@@ -924,9 +957,13 @@ def main():
 
     pti_inc_path = sys.argv[4]
     ur_path = sys.argv[5]
-    ur_file_path = os.path.join(ur_path, "sycl/ur_api.h")
+    ur_file_path = get_ur_api_file_path(ur_path)
 
-    print("Found UR Path: ", ur_path)
+    if os.path.isfile(ur_file_path) == True:
+        print("Found UR Path: ", ur_file_path)
+    else:
+        sys.exit("UR file not found: " + ur_file_path)
+
     regen_api_files = False  # Should we regenerate and update api_id_files as well?
     if sys.argv[6] == "ON":
         print("Regeneration of api files requested!")
