@@ -406,7 +406,8 @@ target_include_directories(
 target_link_libraries(view_record_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
                                               spdlog::spdlog)
 
-add_executable(assert_exception_test assert_exception_test.cc)
+add_executable(assert_exception_test assert_exception_test.cc
+   "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc")
 
 target_include_directories(
   assert_exception_test

@@ -4,7 +4,11 @@ import sys
 import subprocess
 import traceback
 
-
+# Strings that could be dumped to stderr due to different Level-Zero driver versions behavior
+expected_stderr_strings = [
+    "ZE_LOADER_DEBUG_TRACE:zeInitDrivers called first, "
+    "but not supported by driver, returning uninitialized."
+]
 test_profiled = [["dpc_gemm_threaded_profiled", "-t", "5", "-r", "50", "-s", "32"]]
 test_linkonly = [["dpc_gemm_threaded_linkonly", "-t", "5", "-r", "50", "-s", "32"]]
 test_baseline = [["dpc_gemm_threaded_baseline", "-t", "5", "-r", "50", "-s", "32"]]
@@ -15,6 +19,16 @@ test_baseline = [["dpc_gemm_threaded_baseline", "-t", "5", "-r", "50", "-s", "32
 # the elapsed times of the baseline and the test under profiling.
 test_overhead = [["dpc_gemm_threaded_overhead", "-t", "1", "-r", "200", "-s", "32"]]
 test_baseline_t_1 = [["dpc_gemm_threaded_baseline", "-t", "1", "-r", "200", "-s", "32"]]
+
+
+def check_expected_content(text):
+    """
+    Check if the text contains expected strings
+    """
+    for line in text.splitlines():
+        if not (line in expected_stderr_strings):
+            return False
+    return True
 
 
 def get_value(name, text):
@@ -63,7 +77,7 @@ def run_test(path, test_type="profiled", repetitions=11):
         repetitions = 1
     else:
         print("Invalid test type")
-        return False, None, None, None, None
+        return False, None, None, None, None, None
 
     print("Test baseline command:    ", command_baseline)
     print("Test type " + test_type + " command: ", command_test)
@@ -81,7 +95,11 @@ def run_test(path, test_type="profiled", repetitions=11):
         if stderr_t or stderr_b:
             print(stderr_t)
             print(stderr_b)
-            return False, None, None, None, None
+            # If something not expected detected in stderr - fail the test
+            # if some new bening stderr detected - add it to the expected list
+            if not (check_expected_content(stderr_t)):
+                print("Test failed due to unexpected stderr content (see above)")
+                return False, None, None, None, None, None
 
         print(stdout_t)
         print(stdout_b)
