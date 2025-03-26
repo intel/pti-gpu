@@ -5,6 +5,7 @@
 // =============================================================
 
 #include "pti/pti_view.h"
+#include "pti/pti_callback.h"
 
 #include <spdlog/spdlog.h>
 
