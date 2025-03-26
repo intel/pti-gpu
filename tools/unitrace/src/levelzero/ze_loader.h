@@ -10,6 +10,11 @@
 #include <memory>
 
 #include "utils/library_loader.h"
+#include <level_zero/layers/zel_tracing_register_cb.h>
+#include <level_zero/ze_api.h>
+#include <level_zero/zes_api.h>
+#include <level_zero/zet_api.h>
+#include <level_zero/layers/zel_tracing_api.h>
 
 class ZeLoader {
  public:
@@ -49,5 +54,8 @@ class ZeLoader {
   #include <l0_loader.gen>               // Auto-generated callbacks
   #undef LEVEL_ZERO_LOADER_GET_SYMBOL
 };
+
+#define ZE_FUNC(X) ZeLoader::get().X##_
+#define ZE_HAVE_FUNC(X) (ZeLoader::get().X##_ != nullptr)
 
 #endif  // PTI_TOOLS_UNITRACE_LEVEL_ZERO_LEADER_H_

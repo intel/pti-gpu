@@ -241,7 +241,7 @@ def gen_api(f, func_list, kfunc_list):
   gen_register(f, kfunc_list)
   f.write("  }\n")
   f.write("\n")
-  f.write("  status = zelTracerSetEnabled(tracer, true);\n")
+  f.write("  status = ZE_FUNC(zelTracerSetEnabled)(tracer, true);\n")
   f.write("  PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
   f.write("}\n")
   
@@ -721,7 +721,7 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
   if func == "zeModuleCreate": 
     f.write("    bool aot = (*(params->pdesc))->format; \n");
     f.write("    unsigned int kcount = 0; \n")
-    f.write("    if (zeModuleGetKernelNames(**(params->pphModule), &kcount, NULL) == ZE_RESULT_SUCCESS) {\n")
+    f.write("    if (ZE_FUNC(zeModuleGetKernelNames)(**(params->pphModule), &kcount, NULL) == ZE_RESULT_SUCCESS) {\n")
     f.write("      if (aot) { \n")
     f.write("        str += \"AOT (AOT_BINARY) \"; \n")
     f.write("      }\n")
@@ -739,7 +739,7 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
     f.write("      q += 1024;\n")
     f.write("    }\n")
 
-    f.write("    if (zeModuleGetKernelNames(**(params->pphModule), &kcount, knames) == ZE_RESULT_SUCCESS) {\n")
+    f.write("    if (ZE_FUNC(zeModuleGetKernelNames)(**(params->pphModule), &kcount, knames) == ZE_RESULT_SUCCESS) {\n")
     f.write("      for (int i = 0; i < kcount; i++) {\n")
     f.write("        str += \"Kernel #\" + std::to_string(i) + \": \" + knames[i] + \"\\n\";\n")
     f.write("      }\n")

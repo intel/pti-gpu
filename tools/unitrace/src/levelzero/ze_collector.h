@@ -82,7 +82,7 @@ struct ZeMetricQueryPools {
 
     const std::lock_guard<std::mutex> lock(query_pool_mutex_);
     for (auto it = query_pool_map_.begin(); it != query_pool_map_.end(); it++) {
-      status = zetMetricQueryDestroy(it->first);
+      status = ZE_FUNC(zetMetricQueryDestroy)(it->first);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[WARNING] Failed to destroy metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
       }
@@ -90,7 +90,7 @@ struct ZeMetricQueryPools {
     query_pool_map_.clear();
 
     for (auto it = pools_.begin(); it != pools_.end(); it++) {
-      status = zetMetricQueryPoolDestroy(*it);
+      status = ZE_FUNC(zetMetricQueryPoolDestroy)(*it);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[WARNING] Failed to destroy metric query pool (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
       }
@@ -114,7 +114,7 @@ struct ZeMetricQueryPools {
       zet_metric_query_pool_desc_t desc = {ZET_STRUCTURE_TYPE_METRIC_QUERY_POOL_DESC, nullptr, ZET_METRIC_QUERY_POOL_TYPE_PERFORMANCE, pool_size_};
       zet_metric_query_pool_handle_t pool;
 
-      status = zetMetricQueryPoolCreate(context, device, group, &desc, &pool);
+      status = ZE_FUNC(zetMetricQueryPoolCreate)(context, device, group, &desc, &pool);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[ERROR] Failed to create metric query pool (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         _Exit(-1);	// immediately exit
@@ -123,7 +123,7 @@ struct ZeMetricQueryPools {
 
       std::vector<zet_metric_query_handle_t> queries;
       for (int i = 0; i < pool_size_ - 1; i++) {
-        status = zetMetricQueryCreate(pool, i, &query);
+        status = ZE_FUNC(zetMetricQueryCreate)(pool, i, &query);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           _Exit(-1);	// exit immediately
@@ -131,7 +131,7 @@ struct ZeMetricQueryPools {
         queries.push_back(query);
         query_pool_map_.insert({query, {context, device, group}});
       }
-      status = zetMetricQueryCreate(pool, pool_size_ - 1, &query);
+      status = ZE_FUNC(zetMetricQueryCreate)(pool, pool_size_ - 1, &query);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         _Exit(-1);	// exit immediately
@@ -147,7 +147,7 @@ struct ZeMetricQueryPools {
         zet_metric_query_pool_desc_t desc = {ZET_STRUCTURE_TYPE_METRIC_QUERY_POOL_DESC, nullptr, ZET_METRIC_QUERY_POOL_TYPE_PERFORMANCE, pool_size_};
         zet_metric_query_pool_handle_t pool;
 
-        status = zetMetricQueryPoolCreate(context, device, group, &desc, &pool);
+        status = ZE_FUNC(zetMetricQueryPoolCreate)(context, device, group, &desc, &pool);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to create metric query pool (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           _Exit(-1);	// immediately exit
@@ -155,7 +155,7 @@ struct ZeMetricQueryPools {
         pools_.push_back(pool);
 
         for (int i = 0; i < pool_size_ - 1; i++) {
-          status = zetMetricQueryCreate(pool, i, &query);
+          status = ZE_FUNC(zetMetricQueryCreate)(pool, i, &query);
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             _Exit(-1);	// exit immediately
@@ -163,7 +163,7 @@ struct ZeMetricQueryPools {
           it->second.push_back(query);
           query_pool_map_.insert({query, {context, device, group}});
         }
-        status = zetMetricQueryCreate(pool, pool_size_ - 1, &query);
+        status = ZE_FUNC(zetMetricQueryCreate)(pool, pool_size_ - 1, &query);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           _Exit(-1);	// exit immediately
@@ -201,7 +201,7 @@ struct ZeMetricQueryPools {
     if (query_pool_map_.find(query) == query_pool_map_.end()) {
       return;
     }
-    ze_result_t status = zetMetricQueryReset(query);
+    ze_result_t status = ZE_FUNC(zetMetricQueryReset)(query);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Failed to reset metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
       _Exit(-1);	// exit immediately
@@ -1170,7 +1170,7 @@ class ZeCollector {
     zel_tracer_desc_t tracer_desc = {
         ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector};
     zel_tracer_handle_t tracer = nullptr;
-    status = zelTracerCreate(&tracer_desc, &tracer);
+    status = ZE_FUNC(zelTracerCreate)(&tracer_desc, &tracer);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[WARNING] Unable to create Level Zero tracer" << std::endl;
       delete collector;
@@ -1183,8 +1183,8 @@ class ZeCollector {
     
     ze_driver_handle_t driver;
     uint32_t count = 1;
-    if (zeDriverGet(&count, &driver) == ZE_RESULT_SUCCESS) {
-      if (zeDriverGetExtensionFunctionAddress(driver, "zexKernelGetBaseAddress", (void **)&zexKernelGetBaseAddress) != ZE_RESULT_SUCCESS) {
+    if (ZE_FUNC(zeDriverGet)(&count, &driver) == ZE_RESULT_SUCCESS) {
+      if (ZE_FUNC(zeDriverGetExtensionFunctionAddress)(driver, "zexKernelGetBaseAddress", (void **)&zexKernelGetBaseAddress) != ZE_RESULT_SUCCESS) {
         zexKernelGetBaseAddress = nullptr;
       }
     }
@@ -1202,7 +1202,7 @@ class ZeCollector {
     // Win_Todo: For windows zelTracerDestroy is returning ZE_RESULT_ERROR_UNINITIALIZED error
 #ifndef _WIN32
     if (tracer_ != nullptr) {
-      ze_result_t status = zelTracerDestroy(tracer_);
+      ze_result_t status = ZE_FUNC(zelTracerDestroy)(tracer_);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[WARNING] Failed to destroy tracer (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
       }
@@ -1220,14 +1220,14 @@ class ZeCollector {
 
     if (options_.metric_query) {
       for (auto it = metric_activations_.begin(); it != metric_activations_.end(); it++) {
-        auto status = zetContextActivateMetricGroups(it->first, it->second, 0, nullptr);
+        auto status = ZE_FUNC(zetContextActivateMetricGroups)(it->first, it->second, 0, nullptr);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[WARNING] Failed to deactivate metric groups (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
       }
       metric_activations_.clear();
       for (auto& context : metric_contexts_) {
-        auto status = zeContextDestroy(context);
+        auto status = ZE_FUNC(zeContextDestroy)(context);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[WARNING] Failed to destroy context for metrics query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
@@ -1437,7 +1437,7 @@ class ZeCollector {
   void DisableTracing() {
     // Win_Todo: For windows zelTracerSetEnabled() returns ZE_RESULT_ERROR_UNINITIALIZED error
 #ifndef _WIN32
-    ze_result_t status = zelTracerSetEnabled(tracer_, false);
+    ze_result_t status = ZE_FUNC(zelTracerSetEnabled)(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 #endif /* _WIN32 */
   }
@@ -1514,13 +1514,13 @@ class ZeCollector {
 
       bool processed = false;
       if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_!= nullptr)) {
-        if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
+        if (ZE_FUNC(zeEventQueryStatus)(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
           ProcessCommandSubmitted(local_device_submissions_, command, kids, false);
           processed = true;
         }
       }
       else {
-        if (zeEventQueryStatus(command->event_) == ZE_RESULT_SUCCESS) {
+        if (ZE_FUNC(zeEventQueryStatus)(command->event_) == ZE_RESULT_SUCCESS) {
           ProcessCommandSubmitted(local_device_submissions_, command, kids, true);
           processed = true;
         }
@@ -1561,13 +1561,13 @@ class ZeCollector {
     
           bool processed = false;
           if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
-            if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
+            if (ZE_FUNC(zeEventQueryStatus)(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
               ProcessCommandSubmitted(local_submissions, command, kids, false);
               processed = true;
             }
           }
           else {
-            if (zeEventQueryStatus(command->event_) == ZE_RESULT_SUCCESS) {
+            if (ZE_FUNC(zeEventQueryStatus)(command->event_) == ZE_RESULT_SUCCESS) {
               ProcessCommandSubmitted(local_submissions, command, kids, true);
               processed = true;
             }
@@ -1604,13 +1604,13 @@ class ZeCollector {
 
       bool processed = false;
       if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
-        if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
+        if (ZE_FUNC(zeEventQueryStatus)(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
           ProcessCommandSubmitted(local_device_submissions_, command, kids, false);
           processed = true;
         }
       }
       else {
-        if (zeEventQueryStatus(command->event_) == ZE_RESULT_SUCCESS) {
+        if (ZE_FUNC(zeEventQueryStatus)(command->event_) == ZE_RESULT_SUCCESS) {
           ProcessCommandSubmitted(local_device_submissions_, command, kids, true);
           processed = true;
         }
@@ -1698,7 +1698,7 @@ class ZeCollector {
 
     ze_result_t status = ZE_RESULT_SUCCESS;
     uint32_t num_drivers = 0;
-    status = zeDriverGet(&num_drivers, nullptr);
+    status = ZE_FUNC(zeDriverGet)(&num_drivers, nullptr);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Unable to get driver" << std::endl;
       exit(-1);
@@ -1708,7 +1708,7 @@ class ZeCollector {
       int32_t did = 0;
       std::vector<ze_driver_handle_t> drivers(num_drivers);
       std::vector<ze_context_handle_t> contexts;
-      status = zeDriverGet(&num_drivers, drivers.data());
+      status = ZE_FUNC(zeDriverGet)(&num_drivers, drivers.data());
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[ERROR] Unable to get driver" << std::endl;
         exit(-1);
@@ -1719,7 +1719,7 @@ class ZeCollector {
         if (options_.metric_query) {
           ze_context_desc_t cdesc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC, nullptr, 0};
 
-          status = zeContextCreate(driver, &cdesc, &context);
+          status = ZE_FUNC(zeContextCreate)(driver, &cdesc, &context);
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[ERROR] Unable to create context for metrics" << std::endl;
             exit(-1);
@@ -1728,14 +1728,14 @@ class ZeCollector {
         }
 
         uint32_t num_devices = 0;
-        status = zeDeviceGet(driver, &num_devices, nullptr);
+        status = ZE_FUNC(zeDeviceGet)(driver, &num_devices, nullptr);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[WARNING] Unable to get device" << std::endl;
           num_devices = 0;
         }
         if (num_devices) {
           std::vector<ze_device_handle_t> devices(num_devices);
-          status = zeDeviceGet(driver, &num_devices, devices.data());
+          status = ZE_FUNC(zeDeviceGet)(driver, &num_devices, devices.data());
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[WARNING] Unable to get device" << std::endl;
             devices.clear();
@@ -1754,7 +1754,7 @@ class ZeCollector {
             desc.metric_timer_mask_ = utils::ze::GetMetricTimestampMask(device);
 
             ze_pci_ext_properties_t pci_device_properties;
-            ze_result_t status = zeDevicePciGetPropertiesExt(device, &pci_device_properties);
+            ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device, &pci_device_properties);
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[WARNING] Unable to get device PCI properties" << std::endl;
               memset(&pci_device_properties, 0, sizeof(pci_device_properties));  // dummy device properties
@@ -1765,7 +1765,7 @@ class ZeCollector {
             desc.context_ = context;
 
             uint32_t num_sub_devices = 0;
-            status = zeDeviceGetSubDevices(device, &num_sub_devices, nullptr);
+            status = ZE_FUNC(zeDeviceGetSubDevices)(device, &num_sub_devices, nullptr);
 
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[WARNING] Unable to get sub-devices" << std::endl;
@@ -1778,14 +1778,14 @@ class ZeCollector {
             if (options_.metric_query) {
               uint32_t num_groups = 0;
               zet_metric_group_handle_t group = nullptr;
-              status = zetMetricGroupGet(device, &num_groups, nullptr);
+              status = ZE_FUNC(zetMetricGroupGet)(device, &num_groups, nullptr);
               if (status != ZE_RESULT_SUCCESS) {
                 std::cerr << "[ERROR] Unable to get metric group" << std::endl;
                 exit(-1);
               }
               if (num_groups > 0) {
                 std::vector<zet_metric_group_handle_t> groups(num_groups, nullptr);
-                status = zetMetricGroupGet(device, &num_groups, groups.data());
+                status = ZE_FUNC(zetMetricGroupGet)(device, &num_groups, groups.data());
                 if (status != ZE_RESULT_SUCCESS) {
                   std::cerr << "[ERROR] Unable to get metric group" << std::endl;
                   exit(-1);
@@ -1794,7 +1794,7 @@ class ZeCollector {
                 for (uint32_t k = 0; k < num_groups; ++k) {
                   zet_metric_group_properties_t group_props{};
                   group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
-                  status = zetMetricGroupGetProperties(groups[k], &group_props);
+                  status = ZE_FUNC(zetMetricGroupGetProperties)(groups[k], &group_props);
                   if (status != ZE_RESULT_SUCCESS) {
                     std::cerr << "[ERROR] Unable to get metric group properties" << std::endl;
                     exit(-1);
@@ -1807,7 +1807,7 @@ class ZeCollector {
                 }
               }
 
-              status = zetContextActivateMetricGroups(context, device, 1, &group);
+              status = ZE_FUNC(zetContextActivateMetricGroups)(context, device, 1, &group);
               if (status != ZE_RESULT_SUCCESS) {
                 std::cerr << "[ERROR] Unable to activate metric groups" << std::endl;
                 exit(-1);
@@ -1823,7 +1823,7 @@ class ZeCollector {
             uint64_t host_time;
             uint64_t ticks;
 
-            status = zeDeviceGetGlobalTimestamps(device, &host_time, &ticks);
+            status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(device, &host_time, &ticks);
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[ERROR] Unable to get global timestamps" << std::endl;
               exit(-1);
@@ -1836,7 +1836,7 @@ class ZeCollector {
             if (num_sub_devices > 0) {
               std::vector<ze_device_handle_t> sub_devices(num_sub_devices);
 
-              status = zeDeviceGetSubDevices(device, &num_sub_devices, sub_devices.data());
+              status = ZE_FUNC(zeDeviceGetSubDevices)(device, &num_sub_devices, sub_devices.data());
               if (status != ZE_RESULT_SUCCESS) {
                 std::cerr << "[WARNING] Unable to get sub-devices" << std::endl;
                 num_sub_devices = 0;
@@ -1857,7 +1857,7 @@ class ZeCollector {
                 sub_desc.metric_timer_mask_ = utils::ze::GetMetricTimestampMask(sub_devices[j]);
   
                 ze_pci_ext_properties_t pci_device_properties;
-                ze_result_t status = zeDevicePciGetPropertiesExt(sub_devices[j], &pci_device_properties);
+                ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(sub_devices[j], &pci_device_properties);
                 if (status != ZE_RESULT_SUCCESS) {
                   std::cerr << "[WARNING] Unable to get device PCI properties" << std::endl;
                   memset(&pci_device_properties, 0, sizeof(pci_device_properties)); // dummy device properties
@@ -1866,7 +1866,7 @@ class ZeCollector {
   
                 uint64_t ticks;
                 uint64_t host_time;
-                status = zeDeviceGetGlobalTimestamps(sub_devices[j], &host_time, &ticks);
+                status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(sub_devices[j], &host_time, &ticks);
                 if (status != ZE_RESULT_SUCCESS) {
                   std::cerr << "[ERROR] Unable to get global timestamps" << std::endl;
                   exit(-1);
@@ -1926,7 +1926,7 @@ class ZeCollector {
 
     zet_metric_group_properties_t group_props{};
     group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
-    ze_result_t status = zetMetricGroupGetProperties(group, &group_props);
+    ze_result_t status = ZE_FUNC(zetMetricGroupGetProperties)(group, &group_props);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Failed to get metric group properties (status = 0x" << std::hex << status << std::dec << ")." << std::endl;
       exit(-1);
@@ -1942,7 +1942,7 @@ class ZeCollector {
     PTI_ASSERT(metric_count > 0);
 
     std::vector<zet_metric_handle_t> metrics(metric_count);
-    ze_result_t status = zetMetricGet(group, &metric_count, metrics.data());
+    ze_result_t status = ZE_FUNC(zetMetricGet)(group, &metric_count, metrics.data());
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     PTI_ASSERT(metric_count == metrics.size());
 
@@ -1950,7 +1950,7 @@ class ZeCollector {
     for (auto metric : metrics) {
       zet_metric_properties_t metric_props{
           ZET_STRUCTURE_TYPE_METRIC_PROPERTIES, };
-      status = zetMetricGetProperties(metric, &metric_props);
+      status = ZE_FUNC(zetMetricGetProperties)(metric, &metric_props);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       std::string units = GetMetricUnits(metric_props.resultUnits);
@@ -1967,18 +1967,18 @@ class ZeCollector {
   bool QueryKernelCommandMetrics(ZeDeviceSubmissions& submissions, ZeCommandMetricQuery *command_metric_query) {
 
     ze_result_t status;
-    if ((status = zeEventQueryStatus(command_metric_query->metric_query_event_)) == ZE_RESULT_SUCCESS) {
+    if ((status = ZE_FUNC(zeEventQueryStatus)(command_metric_query->metric_query_event_)) == ZE_RESULT_SUCCESS) {
 
       auto it = submissions.kernel_profiles_.find(command_metric_query->instance_id_);
       if (it != submissions.kernel_profiles_.end()) {
         size_t size = 0;
-        status = zetMetricQueryGetData(command_metric_query->metric_query_, &size, nullptr);
+        status = ZE_FUNC(zetMetricQueryGetData)(command_metric_query->metric_query_, &size, nullptr);
         if ((status == ZE_RESULT_SUCCESS) && (size > 0)) {
 
           std::vector<uint8_t> *kmetrics = new std::vector<uint8_t>(size);
           UniMemory::ExitIfOutOfMemory((void *)(kmetrics));
           size_t size2 = size;
-          status = zetMetricQueryGetData(command_metric_query->metric_query_, &size2, kmetrics->data());
+          status = ZE_FUNC(zetMetricQueryGetData)(command_metric_query->metric_query_, &size2, kmetrics->data());
           if (size2 == size) {
             it->second.metrics_ = kmetrics;
           }
@@ -2202,7 +2202,7 @@ class ZeCollector {
         std::string kname = GetZeKernelCommandName(it->second.kernel_command_id_, it->second.group_count_, it->second.mem_size_);
         uint32_t num_samples = 0;
         uint32_t num_metrics = 0;
-        ze_result_t status = zetMetricGroupCalculateMultipleMetricValuesExp(
+        ze_result_t status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
           group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
           it->second.metrics_->size(), it->second.metrics_->data(), &num_samples, &num_metrics,
           nullptr, nullptr);
@@ -2211,7 +2211,7 @@ class ZeCollector {
           std::vector<uint32_t> samples(num_samples);
           std::vector<zet_typed_value_t> metrics(num_metrics);
   
-          status = zetMetricGroupCalculateMultipleMetricValuesExp(
+          status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
             group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
             it->second.metrics_->size(), it->second.metrics_->data(), &num_samples, &num_metrics,
             samples.data(), metrics.data());
@@ -2277,13 +2277,13 @@ class ZeCollector {
       else {
         bool processed = false;
         if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
-          if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
+          if (ZE_FUNC(zeEventQueryStatus)(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
             ProcessCommandSubmitted(local_device_submissions_, command, nullptr, false);
             processed = true;
           }
         }
         else {
-          if (zeEventQueryStatus(command->event_) == ZE_RESULT_SUCCESS) {
+          if (ZE_FUNC(zeEventQueryStatus)(command->event_) == ZE_RESULT_SUCCESS) {
             ProcessCommandSubmitted(local_device_submissions_, command, nullptr, true);
             processed = true;
           }
@@ -2337,13 +2337,13 @@ class ZeCollector {
       else {
         bool processed = false;
         if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
-          if (zeEventQueryStatus(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
+          if (ZE_FUNC(zeEventQueryStatus)(command->timestamp_event_) == ZE_RESULT_SUCCESS) {
             ProcessCommandSubmitted(local_device_submissions_, command, nullptr, false);
             processed = true;
           }
         }
         else {
-          if (zeEventQueryStatus(command->event_) == ZE_RESULT_SUCCESS) {
+          if (ZE_FUNC(zeEventQueryStatus)(command->event_) == ZE_RESULT_SUCCESS) {
             ProcessCommandSubmitted(local_device_submissions_, command, nullptr, true);
             processed = true;
           }
@@ -2472,10 +2472,10 @@ class ZeCollector {
         std::cerr << "[WARNING] Kernel starting timestamp and ending timestamp on the device are the same (" << timestamp.global.kernelStart << ")" << std::endl;
         if (command->event_ != nullptr) {
           ze_result_t status;
-          status = zeEventQueryStatus(command->event_);
+          status = ZE_FUNC(zeEventQueryStatus)(command->event_);
           if (status == ZE_RESULT_SUCCESS) {
             std::cerr << "[WARNING] Trying to query event for timestamps" << std::endl;
-            status = zeEventQueryKernelTimestamp(command->event_, &timestamp);
+            status = ZE_FUNC(zeEventQueryKernelTimestamp)(command->event_, &timestamp);
             if (status != ZE_RESULT_SUCCESS) {
               // do not panic
               std::cerr << "[WARNING] Unable to query event for timestamps" << std::endl;
@@ -2485,7 +2485,7 @@ class ZeCollector {
       }
     }
     else {
-      ze_result_t status = zeEventQueryKernelTimestamp(command->event_, &timestamp);
+      ze_result_t status = ZE_FUNC(zeEventQueryKernelTimestamp)(command->event_, &timestamp);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[ERROR] Unable to query event for timestamps" << std::endl;
         return;
@@ -2512,12 +2512,12 @@ class ZeCollector {
     if (options_.kernels_per_tile && (command->type_ == KERNEL_COMMAND_TYPE_COMPUTE)) {
       if (command->implicit_scaling_) { // Implicit Scaling
         uint32_t count = 0;
-        ze_result_t status = zeEventQueryTimestampsExp(command->event_, command->device_, &count, nullptr);
+        ze_result_t status = ZE_FUNC(zeEventQueryTimestampsExp)(command->event_, command->device_, &count, nullptr);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         PTI_ASSERT(count > 0);
 
         std::vector<ze_kernel_timestamp_result_t> timestamps(count);
-        status = zeEventQueryTimestampsExp(command->event_, command->device_, &count, timestamps.data());
+        status = ZE_FUNC(zeEventQueryTimestampsExp)(command->event_, command->device_, &count, timestamps.data());
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
         if (options_.metric_query || options_.metric_stream) {
@@ -2658,8 +2658,8 @@ class ZeCollector {
 
     if (immediate == false) {
       desc->timestamp_event_to_signal_ = event_cache_.GetEvent(context);
-      // set to signal state to unblock first zeCommandQueueExecuteCommandLists() call
-      auto status = zeEventHostSignal(desc->timestamp_event_to_signal_);
+      // set to signal state to unblock first ZE_FUNC(zeCommandQueueExecuteCommandLists)() call
+      auto status = ZE_FUNC(zeEventHostSignal)(desc->timestamp_event_to_signal_);
       if (status != ZE_RESULT_SUCCESS) {
         std::cerr << "[ERROR] Failed to signal timestamp event in command list" << std::endl;
         exit(-1);
@@ -2695,8 +2695,8 @@ class ZeCollector {
     if (it != command_lists_.end()) {
       if (!it->second->immediate_) {
         if (it->second->timestamp_event_to_signal_) {
-          if (zeEventQueryStatus(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
-            auto status = zeEventHostSynchronize(it->second->timestamp_event_to_signal_, UINT64_MAX);
+          if (ZE_FUNC(zeEventQueryStatus)(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
+            auto status = ZE_FUNC(zeEventHostSynchronize)(it->second->timestamp_event_to_signal_, UINT64_MAX);
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
               command_lists_mutex_.unlock();
@@ -2715,7 +2715,7 @@ class ZeCollector {
         ze_result_t status;
  	for (auto ts : it->second->timestamps_on_event_reset_) {
           if (ts != nullptr) {
-            status = zeMemFree(it->second->context_, ts);
+            status = ZE_FUNC(zeMemFree)(it->second->context_, ts);
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[WARNING] Failed to free event timestamp memory (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             }
@@ -2724,7 +2724,7 @@ class ZeCollector {
         it->second->timestamps_on_event_reset_.clear();
 	for (auto ts : it->second->device_global_timestamps_) {
           if (ts != nullptr) {
-            status = zeMemFree(it->second->context_, ts);
+            status = ZE_FUNC(zeMemFree)(it->second->context_, ts);
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[WARNING] Failed to free global timestamp memory (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             }
@@ -2732,7 +2732,7 @@ class ZeCollector {
 	}
         it->second->device_global_timestamps_.clear();
         if (it->second->timestamps_on_commands_completion_ != nullptr) {
-          status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
+          status = ZE_FUNC(zeMemFree)(it->second->context_, it->second->timestamps_on_commands_completion_);
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[WARNING] Failed to free command timestamp memory (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           }
@@ -2757,8 +2757,8 @@ class ZeCollector {
     if (it != command_lists_.end()) {
       if (!it->second->immediate_) {
         if (it->second->timestamp_event_to_signal_) {
-          if (zeEventQueryStatus(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
-            auto status = zeEventHostSynchronize(it->second->timestamp_event_to_signal_, UINT64_MAX);
+          if (ZE_FUNC(zeEventQueryStatus)(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
+            auto status = ZE_FUNC(zeEventHostSynchronize)(it->second->timestamp_event_to_signal_, UINT64_MAX);
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
               command_lists_mutex_.unlock();
@@ -2780,7 +2780,7 @@ class ZeCollector {
 	it->second->index_timestamps_on_event_reset_.clear();
         if (it->second->timestamps_on_commands_completion_ != nullptr) {
           ze_result_t status;
-          status = zeMemFree(it->second->context_, it->second->timestamps_on_commands_completion_);
+          status = ZE_FUNC(zeMemFree)(it->second->context_, it->second->timestamps_on_commands_completion_);
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[WARNING] Failed to free command timestamp memory (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           }
@@ -2823,15 +2823,15 @@ class ZeCollector {
 
       if (!it->second->immediate_) {
         if (it->second->timestamp_event_to_signal_) {
-          if (zeEventQueryStatus(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
-            auto status = zeEventHostSynchronize(it->second->timestamp_event_to_signal_, UINT64_MAX);
+          if (ZE_FUNC(zeEventQueryStatus)(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
+            auto status = ZE_FUNC(zeEventHostSynchronize)(it->second->timestamp_event_to_signal_, UINT64_MAX);
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
               return;
             }
           }
           ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted last time are processed
-          if (zeEventHostReset(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {    // reset event 
+          if (ZE_FUNC(zeEventHostReset)(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {    // reset event 
             std::cerr << "[ERROR] Failed to reset timestamp event" << std::endl;
             return;
           }
@@ -2843,7 +2843,7 @@ class ZeCollector {
     uint64_t device_timestamp;
     ze_result_t status;
 
-    status = zeDeviceGetGlobalTimestamps(device, &host_timestamp, &device_timestamp);
+    status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(device, &host_timestamp, &device_timestamp);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     for (uint32_t i = 0; i < count; i++) {
@@ -2962,7 +2962,7 @@ class ZeCollector {
 
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      if (zeEventQueryStatus(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
+      if (ZE_FUNC(zeEventQueryStatus)(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
         collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
       }
     }
@@ -2973,7 +2973,7 @@ class ZeCollector {
       void *global_data, void **instance_data, std::vector<uint64_t> *kids) {
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      if (zeEventQueryStatus(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
+      if (ZE_FUNC(zeEventQueryStatus)(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
         collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
       }
     }
@@ -2994,7 +2994,7 @@ class ZeCollector {
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*(params->phEvent) != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      if (zeEventQueryStatus(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
+      if (ZE_FUNC(zeEventQueryStatus)(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
         collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
       }
     }
@@ -3100,14 +3100,14 @@ class ZeCollector {
 
       devices_mutex_.unlock_shared();
 
-      status = zetCommandListAppendMetricQueryBegin(command_list, query);
+      status = ZE_FUNC(zetCommandListAppendMetricQueryBegin)(command_list, query);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
 
     uint64_t host_timestamp;
     uint64_t device_timestamp;	// in ticks
 
-    status = zeDeviceGetGlobalTimestamps(device, &host_timestamp, &device_timestamp);
+    status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(device, &host_timestamp, &device_timestamp);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_instance_data.timestamp_host = host_timestamp;
@@ -3121,7 +3121,7 @@ class ZeCollector {
     uint64_t host_timestamp;
     uint64_t device_timestamp;	// in ticks
 
-    status = zeDeviceGetGlobalTimestamps(cl->device_, &host_timestamp, &device_timestamp);
+    status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(cl->device_, &host_timestamp, &device_timestamp);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_instance_data.timestamp_host = host_timestamp;
@@ -3197,7 +3197,7 @@ class ZeCollector {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
-        ze_result_t status = zetCommandListAppendMetricQueryEnd(command_list, query, metric_query_event, 0, nullptr);
+        ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         desc_query->metric_query_event_ = metric_query_event;
         desc_query->metric_query_ = query;
@@ -3336,7 +3336,7 @@ class ZeCollector {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
-        ze_result_t status = zetCommandListAppendMetricQueryEnd(command_list, query, metric_query_event, 0, nullptr);
+        ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         desc_query->metric_query_event_ = metric_query_event;
         desc_query->metric_query_ = query;
@@ -3456,7 +3456,7 @@ class ZeCollector {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
-        ze_result_t status = zetCommandListAppendMetricQueryEnd(command_list, query, metric_query_event, 0, nullptr);
+        ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         desc_query->metric_query_ = query;
         desc_query->metric_query_event_ = metric_query_event;
@@ -3578,7 +3578,7 @@ class ZeCollector {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
-        ze_result_t status = zetCommandListAppendMetricQueryEnd(command_list, query, metric_query_event, 0, nullptr);
+        ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         desc_query->metric_query_ = query;
         desc_query->metric_query_event_ = metric_query_event;
@@ -3687,7 +3687,7 @@ class ZeCollector {
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
         desc_query->metric_query_ = query;
-        ze_result_t status = zetCommandListAppendMetricQueryEnd(command_list, query, metric_query_event, 0, nullptr);
+        ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       }
 
@@ -3913,7 +3913,7 @@ class ZeCollector {
 
     if (src_context != nullptr && src != nullptr) {
       ze_memory_allocation_properties_t props{ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES,};
-      ze_result_t status = zeMemGetAllocProperties(src_context, src, &props, nullptr);
+      ze_result_t status = ZE_FUNC(zeMemGetAllocProperties)(src_context, src, &props, nullptr);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       switch (props.type) {
@@ -3943,7 +3943,7 @@ class ZeCollector {
 
     if (src_context != nullptr && src != nullptr) {
       ze_memory_allocation_properties_t props{ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES,};
-      ze_result_t status = zeMemGetAllocProperties(src_context, src, &props, nullptr);
+      ze_result_t status = ZE_FUNC(zeMemGetAllocProperties)(src_context, src, &props, nullptr);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       switch (props.type) {
@@ -3966,7 +3966,7 @@ class ZeCollector {
 
     if (dst_context != nullptr && dst != nullptr) {
       ze_memory_allocation_properties_t props{ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES,};
-      ze_result_t status = zeMemGetAllocProperties(dst_context, dst, &props, nullptr);
+      ze_result_t status = ZE_FUNC(zeMemGetAllocProperties)(dst_context, dst, &props, nullptr);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       switch (props.type) {
@@ -4320,7 +4320,7 @@ class ZeCollector {
 	      int slice = slot / number_timestamps_per_slice_;
         if (it->second->timestamps_on_event_reset_.size() <= slice) {
           ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
-          auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
+          auto status = ZE_FUNC(zeMemAllocHost)(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
           UniMemory::ExitIfOutOfMemory((void *)(ts));
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[ERROR] Failed to allocate host memory for timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
@@ -4332,7 +4332,7 @@ class ZeCollector {
           ts = it->second->timestamps_on_event_reset_[slice];
         }
 	      int idx = slot % number_timestamps_per_slice_;
-        auto status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), 1, (ze_event_handle_t *)(params->phEvent), (void *)&(ts[idx]), nullptr, nullptr, 1, (ze_event_handle_t *)(params->phEvent));
+        auto status = ZE_FUNC(zeCommandListAppendQueryKernelTimestamps)(*(params->phCommandList), 1, (ze_event_handle_t *)(params->phEvent), (void *)&(ts[idx]), nullptr, nullptr, 1, (ze_event_handle_t *)(params->phEvent));
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to get kernel timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           exit(-1);
@@ -4346,7 +4346,7 @@ class ZeCollector {
 	      int slice = it->second->num_device_global_timestamps_ / (2 * number_timestamps_per_slice_);
 	      if (it->second->device_global_timestamps_.size() <= slice) {
           ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
-          auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(uint64_t) * 2, cache_line_size_, (void **)&dts);
+          auto status = ZE_FUNC(zeMemAllocHost)(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(uint64_t) * 2, cache_line_size_, (void **)&dts);
           UniMemory::ExitIfOutOfMemory((void *)(dts));
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[ERROR] Failed to allocate host memory for timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
@@ -4358,7 +4358,7 @@ class ZeCollector {
           dts = it->second->device_global_timestamps_.at(slice);
         }
 	      int idx = it->second->num_device_global_timestamps_ % (2 * number_timestamps_per_slice_);
-        auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)&(dts[idx]), nullptr, 0, nullptr);
+        auto status = ZE_FUNC(zeCommandListAppendWriteGlobalTimestamp)(*(params->phCommandList), (uint64_t *)&(dts[idx]), nullptr, 0, nullptr);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to get device global timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
           exit(-1);
@@ -4389,7 +4389,7 @@ class ZeCollector {
         // TODO: handle immediate command list?
         uint64_t *dts = (*((uint64_t **)instance_data));
         if (dts != nullptr) {
-          auto status = zeCommandListAppendWriteGlobalTimestamp(*(params->phCommandList), (uint64_t *)(dts), nullptr, 0, nullptr);
+          auto status = ZE_FUNC(zeCommandListAppendWriteGlobalTimestamp)(*(params->phCommandList), (uint64_t *)(dts), nullptr, 0, nullptr);
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[ERROR] Failed to get device global timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
             exit(-1);
@@ -4470,7 +4470,7 @@ class ZeCollector {
         ze_kernel_timestamp_result_t *ts = nullptr;
 
         ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
-        auto status = zeMemAllocHost(it->second->context_, &host_alloc_desc, i * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
+        auto status = ZE_FUNC(zeMemAllocHost)(it->second->context_, &host_alloc_desc, i * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
         UniMemory::ExitIfOutOfMemory((void *)(ts));
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to allocate host memory for timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
@@ -4480,11 +4480,11 @@ class ZeCollector {
         if (it->second->in_order_) {
           // WA for driver bug. If command list is in order avoid signaling event
           // in zeCommandListAppendQueryKernelTimestamps.
-          status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events.data(), (void *)it->second->timestamps_on_commands_completion_, nullptr, nullptr, num_events, events.data());
+          status = ZE_FUNC(zeCommandListAppendQueryKernelTimestamps)(*(params->phCommandList), num_events, events.data(), (void *)it->second->timestamps_on_commands_completion_, nullptr, nullptr, num_events, events.data());
           if (status == ZE_RESULT_SUCCESS)
-            status = zeCommandListAppendSignalEvent(*(params->phCommandList), it->second->timestamp_event_to_signal_);
+            status = ZE_FUNC(zeCommandListAppendSignalEvent)(*(params->phCommandList), it->second->timestamp_event_to_signal_);
         } else {
-          status = zeCommandListAppendQueryKernelTimestamps(*(params->phCommandList), num_events, events.data(), (void *)it->second->timestamps_on_commands_completion_, nullptr, it->second->timestamp_event_to_signal_, num_events, events.data());
+          status = ZE_FUNC(zeCommandListAppendQueryKernelTimestamps)(*(params->phCommandList), num_events, events.data(), (void *)it->second->timestamps_on_commands_completion_, nullptr, it->second->timestamp_event_to_signal_, num_events, events.data());
         }
 
         if (status != ZE_RESULT_SUCCESS){
@@ -4493,7 +4493,7 @@ class ZeCollector {
       }
       else {
         // signal event if events were reset earlier
-        auto status = zeCommandListAppendSignalEvent(*(params->phCommandList), it->second->timestamp_event_to_signal_);
+        auto status = ZE_FUNC(zeCommandListAppendSignalEvent)(*(params->phCommandList), it->second->timestamp_event_to_signal_);
         if (status != ZE_RESULT_SUCCESS){
           std::cerr << "[ERROR] Failed to signal command list timstamps event (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
@@ -4610,7 +4610,7 @@ class ZeCollector {
       ze_module_handle_t mod = **(params->pphModule);
       ze_device_handle_t device = *(params->phDevice);
       size_t binary_size;
-      if (zeModuleGetNativeBinary(mod, &binary_size, nullptr) != ZE_RESULT_SUCCESS) {
+      if (ZE_FUNC(zeModuleGetNativeBinary)(mod, &binary_size, nullptr) != ZE_RESULT_SUCCESS) {
         binary_size = (size_t)(-1);
       }
 
@@ -4713,11 +4713,11 @@ typedef struct _zex_kernel_register_file_size_exp_t {
       else {
         // try one more time
         size_t kname_size = 0;
-        status = zeKernelGetName(kernel, &kname_size, nullptr);
+        status = ZE_FUNC(zeKernelGetName)(kernel, &kname_size, nullptr);
         if ((status == ZE_RESULT_SUCCESS) && (kname_size > 0)) {
           char* kname = (char*) malloc(kname_size);
           if (kname != nullptr) {
-            status = zeKernelGetName(kernel, &kname_size, kname);
+            status = ZE_FUNC(zeKernelGetName)(kernel, &kname_size, kname);
             PTI_ASSERT(status == ZE_RESULT_SUCCESS);
             desc.name_ = std::string(kname);
             free(kname);
@@ -4739,7 +4739,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
       zex_kernel_register_file_size_exp_t regsize{};
       kprops.pNext = (void *)&regsize;
 
-      status = zeKernelGetProperties(kernel, &kprops);
+      status = ZE_FUNC(zeKernelGetProperties)(kernel, &kprops);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       desc.simd_width_ = kprops.maxSubgroupSize;
       desc.nargs_ = kprops.numKernelArgs;

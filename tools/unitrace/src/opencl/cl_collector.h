@@ -28,7 +28,6 @@
 #include "unicontrol.h"
 
 #include <level_zero/zes_api.h>
-#include "ze_utils.h"
 
 #include "common_header.gen"
 
@@ -178,7 +177,7 @@ inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
 
   for (auto device : utils::ze::GetDeviceList()) {
     zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
-    ze_result_t status = zesDevicePciGetProperties(device, &pci_props);
+    ze_result_t status = ZE_FUNC(zesDevicePciGetProperties)(device, &pci_props);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     if (pci_info.pci_domain == pci_props.address.domain &&
         pci_info.pci_bus == pci_props.address.bus &&
@@ -1025,7 +1024,7 @@ class ClCollector {
         mask = utils::ze::GetMetricTimestampMask(ze_device);
         freq = utils::ze::GetMetricTimerFrequency(ze_device);
 
-        zeDeviceGetGlobalTimestamps(ze_device, &ze_host_timestamp, &ze_device_timestamp);
+        ZE_FUNC(zeDeviceGetGlobalTimestamps)(ze_device, &ze_host_timestamp, &ze_device_timestamp);
         ze_device_timestamp = ze_device_timestamp & mask;
 
         cl_ulong elapsed;

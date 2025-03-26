@@ -626,7 +626,7 @@ macro(GetLevelZeroHeaders TARGET)
                               ${L0_INC_PATH}/level_zero/zet_api.h
                               ${L0_INC_PATH}/level_zero/layers/zel_tracing_api.h
                               ${L0_INC_PATH}/level_zero/layers/zel_tracing_register_cb.h
-                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_ze_headers.py" ${L0_INC_PATH} ${CMAKE_BINARY_DIR})
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_ze_headers.py" ${L0_INC_PATH} ${CMAKE_BINARY_DIR} ${LEVEL_ZERO_COMMIT_ID})
   endif()
 
   target_include_directories(${TARGET}

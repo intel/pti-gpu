@@ -11,7 +11,8 @@
 #include <mutex>
 #include <vector>
 
-#include "ze_utils.h"
+#include "unitrace_ze_utils.h"
+#include "ze_loader.h"
 
 #define EVENT_POOL_SIZE	1024
 
@@ -35,7 +36,7 @@ class ZeEventCache {
     for (auto& value : event_map_) {
       for (auto event : value.second) {
         ze_result_t status = ZE_RESULT_SUCCESS;
-        status = zeEventDestroy(event);
+        status = ZE_FUNC(zeEventDestroy)(event);
         if (status != ZE_RESULT_SUCCESS) {
           destroyed = false;
         }
@@ -47,7 +48,7 @@ class ZeEventCache {
     destroyed = true;
     for (auto& value : event_pools_) {
       for (auto pool : value.second) {
-        ze_result_t status = zeEventPoolDestroy(pool);
+        ze_result_t status = ZE_FUNC(zeEventPoolDestroy)(pool);
         if (status != ZE_RESULT_SUCCESS) {
 	  destroyed = false;
         }
@@ -97,7 +98,7 @@ class ZeEventCache {
           ZE_STRUCTURE_TYPE_EVENT_POOL_DESC,
           nullptr, flags, EVENT_POOL_SIZE};
       ze_event_pool_handle_t pool = nullptr;
-      status = zeEventPoolCreate(context, &pool_desc, 0, nullptr, &pool);
+      status = ZE_FUNC(zeEventPoolCreate)(context, &pool_desc, 0, nullptr, &pool);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       auto pool_iter = event_pools_.find(context);
@@ -113,7 +114,7 @@ class ZeEventCache {
             i,
             ZE_EVENT_SCOPE_FLAG_HOST,
             ZE_EVENT_SCOPE_FLAG_HOST};
-        status = zeEventCreate(pool, &event_desc, &event);
+        status = ZE_FUNC(zeEventCreate)(pool, &event_desc, &event);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
         PTI_ASSERT(event_info_map_.count(event) == 0);
@@ -124,7 +125,7 @@ class ZeEventCache {
 
     event = result->second.back();
     result->second.pop_back();
-    PTI_ASSERT(zeEventQueryStatus(event) == ZE_RESULT_NOT_READY);
+    PTI_ASSERT(ZE_FUNC(zeEventQueryStatus)(event) == ZE_RESULT_NOT_READY);
 
     return event;
   }
@@ -138,7 +139,7 @@ class ZeEventCache {
 
     auto info = event_info_map_.find(event);
     if (info != event_info_map_.end()) {
-      ze_result_t status = zeEventHostReset(event);
+      ze_result_t status = ZE_FUNC(zeEventHostReset)(event);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
   }
@@ -158,7 +159,7 @@ class ZeEventCache {
     auto result = event_map_.find(info->second);
     PTI_ASSERT(result != event_map_.end());
     if (result != event_map_.end()) {
-      ze_result_t status = zeEventHostReset(event);
+      ze_result_t status = ZE_FUNC(zeEventHostReset)(event);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       result->second.push_back(event);
     }
@@ -179,7 +180,7 @@ class ZeEventCache {
         if (result->second.size() == (EVENT_POOL_SIZE * iter->second.size())) {
           for (auto event : result->second) {
             ze_result_t status = ZE_RESULT_SUCCESS;
-            status = zeEventDestroy(event);
+            status = ZE_FUNC(zeEventDestroy)(event);
             PTI_ASSERT(status == ZE_RESULT_SUCCESS);
             event_info_map_.erase(event);
           }
@@ -188,7 +189,7 @@ class ZeEventCache {
 
           for (auto pool: iter->second) {
             ze_result_t status = ZE_RESULT_SUCCESS;
-            status = zeEventPoolDestroy(pool);
+            status = ZE_FUNC(zeEventPoolDestroy)(pool);
             PTI_ASSERT(status == ZE_RESULT_SUCCESS);
           }
           event_pools_.erase(iter);

@@ -4,11 +4,11 @@ import os
 import build_utils
 
 url = "https://github.com/oneapi-src/level-zero.git"
-commit = "a4afcb39ee265e595d3f0aa57b25b5e845fb494c"
+default_commit = "a4afcb39ee265e595d3f0aa57b25b5e845fb494c"
 
 def main():
   if len(sys.argv) < 3:
-    print("Usage: python get_ze_headers.py <include_path> <build_path>")
+    print("Usage: python get_ze_headers.py <include_path> <build_path> [<commit-sha>]")
     return
 
   dst_path = sys.argv[1]
@@ -20,6 +20,12 @@ def main():
 
   clone_path = sys.argv[2]
   clone_path = os.path.join(clone_path, "level-zero")
+
+  if len(sys.argv) > 3:
+    commit = sys.argv[3]
+  else:
+    commit = default_commit
+
   build_utils.clone(url, commit, clone_path)
 
   src_path = os.path.join(clone_path, "include")

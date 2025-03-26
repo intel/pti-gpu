@@ -25,6 +25,7 @@
 #include "itt_collector.h"
 #include "chromelogger.h"
 #include "unimemory.h"
+#include "ze_loader.h"
 
 static std::string GetChromeTraceFileName(void) {
 #ifdef _WIN32
@@ -59,7 +60,7 @@ class UniTracer {
  public:
   static UniTracer* Create(const TraceOptions& options) {
     ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+    status = ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY);
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
 #ifndef _WIN32
@@ -67,9 +68,6 @@ class UniTracer {
 #endif /* _WIN32 */
       exit(-1);
     }
-
-    cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
-    cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
 
     UniTracer* tracer = new UniTracer(options);
     UniMemory::ExitIfOutOfMemory((void *)tracer);
@@ -173,6 +171,9 @@ class UniTracer {
 
     if (collector_options.kernel_tracing || collector_options.api_tracing) {
       if (tracer->CheckOption(TRACE_OPENCL)) {
+        cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
+        cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
+
         if (cl_cpu_device != nullptr) {
           cl_cpu_collector = ClCollector::Create(cl_cpu_device, &tracer->logger_, collector_options, cl_kcallback, cl_fcallback, tracer);
           if (cl_cpu_collector == nullptr) {
