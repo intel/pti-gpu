@@ -51,7 +51,7 @@ void CheckLegacyDriverVersion(const std::vector<ze_driver_handle_t>& drivers) {
   SPDLOG_INFO("Driver version major: {}, minor: {}", ZE_MAJOR_VERSION(version),
               ZE_MINOR_VERSION(version));
   PTI_ASSERT(ZE_MAJOR_VERSION(version) > 1 ||
-             ZE_MAJOR_VERSION(version) == 1 && ZE_MINOR_VERSION(version) >= 3);
+             (ZE_MAJOR_VERSION(version) == 1 && ZE_MINOR_VERSION(version) >= 3));
 }
 
 bool InitLegacyDrivers() {
