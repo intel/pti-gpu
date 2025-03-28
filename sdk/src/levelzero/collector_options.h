@@ -16,6 +16,7 @@ struct CollectorOptions {
 
   bool kernel_tracing = false;
   bool api_tracing = false;
+
   bool demangle = true;
 };
 
