@@ -759,7 +759,7 @@ def gen_exit_callback(
             + "_id];\n"
         )
         f.write(
-            "  if (collector->cb_enabled_.fcallback && map_view_kind_enabled[pti_view_kind::PTI_VIEW_DRIVER_API] && collector->fcallback_ != nullptr) {\n"
+            "  if (collector->cb_enabled_.fcallback && collector->fcallback_ != nullptr) {\n"
         )
         f.write(
             "    if ((collector->trace_all_env_value > 0) || ((collector->trace_all_env_value < 0) && id_enabled )) {\n"
