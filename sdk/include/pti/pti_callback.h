@@ -10,9 +10,9 @@
 #include <stdint.h>
 
 #include "pti/pti.h"
+#include "pti/pti_driver_levelzero_api_ids.h"
 #include "pti/pti_export.h"
 #include "pti/pti_view.h"
-#include "pti/pti_driver_levelzero_api_ids.h"
 
 /**
  *  This file contains the draft definitions of the callback API.
@@ -25,7 +25,7 @@
  *
  *    const char* ptiResultTypeToString(pti_result result_value);
  *    pti_result  ptiViewGetApiIdName(pti_api_group_id type, uint32_t unique_id, const char** name);
-*     pti_result  ptiCallbackGetExternalCorrelationIds(...)
+ *     pti_result  ptiCallbackGetExternalCorrelationIds(...)
  *    < other to be indicated there >
  *
  *  must not be called from the callbacks.
@@ -36,14 +36,32 @@
 extern "C" {
 #endif
 
+/**
+ * Callback domains (that are not INTERNAL) inform user about important events about
+ * GPU context creating, GPU operation launch, GPU host synchronization.
+ * These events delivered through the callbacks of a number of driver APIs.
+ *
+ * Each domain corresponds to a group of APIs and will be extended if new APIs are added
+ * to the driver. This way - it will be transparent for a user and
+ * do not require to setup callback to individual APIs.
+ *
+ * However, if there is a need, a user can subscribe to individual APIs if needed,
+ * via ptiCallbackEnableDriverAPI function.
+ *
+ * The subscriptions via Domain API and via individual API are treated as different subscriptions and
+ * so a user might have two callbacks for the same API - one for the domain and one for the individual API.
+ * The callback will be called for the domain and for the individual API.
+ */
 typedef enum _pti_callback_domain {
   PTI_DOMAIN_INVALID                         = 0,
   PTI_DOMAIN_DRIVER_CONTEXT_CREATE           = 1,
   PTI_DOMAIN_DRIVER_GPU_OPERATION_LAUNCH     = 2,
   PTI_DOMAIN_DRIVER_HOST_SYNCHRONIZATION     = 3,
   // below domains to inform user about PTI internal events
-  PTI_DOMAIN_INTERNAL_THREADS                = 100,
-  PTI_DOMAIN_INTERNAL_CRITICAL               = 101,
+  PTI_DOMAIN_INTERNAL_THREADS                = 20,
+  PTI_DOMAIN_INTERNAL_CRITICAL               = 21,
+
+  PTI_DOMAIN_SIZE                            = 22
 } pti_callback_domain;
 
 typedef enum _pti_callback_site {
@@ -53,18 +71,20 @@ typedef enum _pti_callback_site {
   PTI_INTERNAL_THREAD_START   = 3,
   PTI_INTERNAL_THREAD_END     = 4,
   PTI_INTERNAL_CRITICAL_EVENT = 5,
+  PTI_SITE_SIZE               = 6
 } pti_callback_site;
 
 /**
  * Most of PTI work happens in the application threads in the callbacks to runtime and driver functions.
  * In some cases PTI creates its own threads to do some work:
- * as of today - to deliver data to the user and to collect GPU data hadware metrcis.
+ * as of today - to deliver data to the user and to collect GPU data hadware metrics.
  */
 typedef enum _pti_thread_purpose {
-  PTI_THREAD_INVALID = 0,
-  PTI_THREAD_SERVICE = 1,
-  PTI_THREAD_DATA_DELIVERY = 2,
+  PTI_THREAD_INVALID         = 0,
+  PTI_THREAD_SERVICE         = 1,
+  PTI_THREAD_DATA_DELIVERY   = 2,
   PTI_THREAD_DATA_COLLECTION = 3,      // for example, thread that collects GPU HW metrics
+  PTI_THREAD_PURPOSE_SIZE    = 4
 } pti_thread_purpose;
 
 typedef struct _pti_apicall_callback_data {
@@ -109,6 +129,10 @@ ptiCallbackSubscribe(pti_callback_subscriber* subscriber,
                      pti_callback_function    callback,
                      void* user_data);
 
+/**
+ * @brief Unsubscribe Callback subscriber, this will disable all callbacks and
+ *        destroy subscriber handle
+ */
 pti_result PTI_EXPORT
 ptiCallbackUnsubscribe(pti_callback_subscriber subscriber);
 
@@ -168,19 +192,20 @@ ptiCallbackDisableDriverAPI(pti_callback_subscriber subscriber,
 /**
  * @brief Returns external correlation IDs that are on top of the stack at the Callback point
  *
- * Usage: 1 - pass external_kind and external_id as nullptr to get number of IDs availible
+ * Usage: 1 - pass external_kind and external_id as nullptr to get number of IDs available
  *            on the top of stack at the Callback point
  *        2 - call this API again where number is number of IDs to return,
  *            external_kind and external_id should have enough memory allocated to hold number of IDs
  *            that will be copied to that memory
  *
- * @param[in,out] number    - number of the external correlation IDs
- * @param[in] external_kind - kind of the external correlation ID
- * @param[in] external_id   - external correlation ID
+ * @param[in,out] number    - pointer to retrieve the number of external correlation IDs on the stack
+ *                            or to ask for the number of IDs to return
+ * @param[in] external_kind - pointer to store kinds of the external correlation IDs
+ * @param[in] external_id   - pointer to store external correlation IDs
  * @return pti_result
  */
 pti_result PTI_EXPORT
-ptiCallbackGetExternalCorrelationIds(uint32_t number,
+ptiCallbackGetExternalCorrelationIds(uint32_t* number,
                                     pti_view_external_kind* external_kind,
                                     uint64_t* external_id);
 #if defined(__cplusplus)
