@@ -12,6 +12,7 @@
 #include <map>
 
 #include "internal_helper.h"
+#include "pti/pti_callback.h"
 #include "tracing_cb_api.gen"
 #include "view_handler.h"
 
