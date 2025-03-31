@@ -29,6 +29,9 @@
  *    < other to be indicated there >
  *
  *  must not be called from the callbacks.
+ *
+ *  All data passed into Callback functions are valid only during the callback.
+ *  No assumptions should be made if there data would be valid after the callback.
  */
 
 /* clang-format off */
@@ -53,68 +56,115 @@ extern "C" {
  * The callback will be called for the domain and for the individual API.
  */
 typedef enum _pti_callback_domain {
-  PTI_DOMAIN_INVALID                         = 0,
+  PTI_DOMAIN_UNNAMED                         = 0, // Callback created for specific API ID
   PTI_DOMAIN_DRIVER_CONTEXT_CREATE           = 1,
   PTI_DOMAIN_DRIVER_GPU_OPERATION_LAUNCH     = 2,
   PTI_DOMAIN_DRIVER_HOST_SYNCHRONIZATION     = 3,
   // below domains to inform user about PTI internal events
   PTI_DOMAIN_INTERNAL_THREADS                = 20,
-  PTI_DOMAIN_INTERNAL_CRITICAL               = 21,
+  PTI_DOMAIN_INTERNAL_EVENT                  = 21,
 
-  PTI_DOMAIN_SIZE                            = 22
+  PTI_DOMAIN_MAX                             = 0x7fffffff
 } pti_callback_domain;
 
 typedef enum _pti_callback_site {
-  PTI_SITE_INVALID            = 0,
-  PTI_DRIVER_API_ENTER        = 1,
-  PTI_DRIVER_API_EXIT         = 2,
-  PTI_INTERNAL_THREAD_START   = 3,
-  PTI_INTERNAL_THREAD_END     = 4,
-  PTI_INTERNAL_CRITICAL_EVENT = 5,
-  PTI_SITE_SIZE               = 6
+  PTI_SITE_INVALID                 = 0,
+  PTI_SITE_DRIVER_API_ENTER        = 1,
+  PTI_SITE_DRIVER_API_EXIT         = 2,
+  PTI_SITE_INTERNAL_THREAD_START   = 3,
+  PTI_SITE_INTERNAL_THREAD_END     = 4,
+  PTI_SITE_INTERNAL_EVENT          = 5,
+
+  PTI_SITE_MAX                     = 0x7fffffff
 } pti_callback_site;
 
+typedef enum _pti_backend_submit_type {
+  PTI_BACKEND_SUBMIT_TYPE_INVALID   = 0,
+  PTI_BACKEND_SUBMIT_TYPE_IMMEDIATE = 1,
+  PTI_BACKEND_SUBMIT_TYPE_QUEUE     = 2,
+
+  PTI_BACKEND_SUBMIT_TYPE_MAX       = 0x7fffffff
+} pti_backend_submit_type;
+
 /**
+ * INTERNAL DOMAINs Callback inform user about PTI internal operations and could be used to
+ * characterize internal overhead of the collection or data processing, or some non-standard situations.
+ *
  * Most of PTI work happens in the application threads in the callbacks to runtime and driver functions.
- * In some cases PTI creates its own threads to do some work:
+ * But in some cases PTI creates its own threads to do some work:
  * as of today - to deliver data to the user and to collect GPU data hadware metrics.
  */
 typedef enum _pti_thread_purpose {
-  PTI_THREAD_INVALID         = 0,
-  PTI_THREAD_SERVICE         = 1,
-  PTI_THREAD_DATA_DELIVERY   = 2,
-  PTI_THREAD_DATA_COLLECTION = 3,      // for example, thread that collects GPU HW metrics
-  PTI_THREAD_PURPOSE_SIZE    = 4
+  PTI_THREAD_PURPOSE_INVALID         = 0,
+  PTI_THREAD_PURPOSE_SERVICE         = 1,
+  PTI_THREAD_PURPOSE_DATA_DELIVERY   = 2,
+  PTI_THREAD_PURPOSE_DATA_COLLECTION = 3, // for example, thread that collects GPU HW metrics
+
+  PTI_THREAD_PURPOSE_MAX             = 0x7fffffff
 } pti_thread_purpose;
 
+/**
+ * A user can subscribe to notifications about non-standard situation from PTI
+ * when it collects or processes the data
+ */
+typedef enum _pti_internal_event_type {
+  PTI_INTERNAL_EVENT_TYPE_INFO       = 0,
+  PTI_INTERNAL_EVENT_TYPE_WARNING    = 1, // one or few records data inconsistences, or other
+                                          // collection is safe to continue
+  PTI_INTERNAL_EVENT_TYPE_CRITICAL   = 2, // critical error after which further collected data are invalid
+
+  PTI_INTERNAL_EVENT_TYPE_MAX        = 0x7fffffff
+} pti_internal_event_type;
+
+typedef enum _pti_operation_kind {
+  PTI_OPERATION_KIND_INVALID         = 0,
+  PTI_OPERATION_KIND_KERNEL          = 1,
+  PTI_OPERATION_KIND_MEMCPY          = 2,
+  PTI_OPERATION_KIND_MEM_FILL        = 3,
+
+  PTI_OPERATION_KIND_MAX             = 0x7fffffff
+} pti_operation_kind;
+
+typedef struct _pti_gpu_op_launch_detail {
+  pti_operation_kind                 _operation_kind; // kind of the operation: kernel, mem op
+  uint32_t                           _correlation_id; // correlation IDs of operation append
+  const char*                        _kernel_name;    // type of the memcpy operation
+} pti_gpu_op_launch_detail;
+
 typedef struct _pti_apicall_callback_data {
-  pti_callback_domain  _domain;        // domain of the callback
-  pti_callback_site    _site;          // ENTER or EXIT
-  uint32_t             _thread_id;     // thread ID
-  uint32_t             _driver_api_id;
-  pti_backend_ctx_t    _backend_context_handle; // Driver (L0) level context handle
-  const char*          _kernel_name;   // valid only for DRIVER APIs related to GPU kernel submission
-  uint32_t             _return_code;   // will be valid only for L0 API EXIT, for others will be nullptr
-  uint32_t             _correlation_id; // ID that corresponds to the same call reported by View API records
-  uint64_t*            _local_data;    // user data passed between ENTER and EXIT
+  pti_callback_domain       _domain;            // domain of the callback
+  pti_backend_submit_type   _submit_type;       // Immediate command list, Command Queue execute,..
+  pti_callback_site         _site;              // ENTER or EXIT
+  uint32_t                  _return_code;       // will be valid only for L0 API EXIT, for others will be nullptr
+  uint32_t                  _correlation_id;    // ID that corresponds to the same call reported by View API records
+  uint32_t                  _operation_count;   // number of operations submitted to the GPU,
+                                                // non-zero only for DOMAIN_DRIVER_GPU_OPERATION_LAUNCH,
+                                                // or API related to GPU operation submission
+  pti_gpu_op_launch_detail* _operation_details; // not Null only for DOMAIN_DRIVER_GPU_OPERATION_LAUNCH,
+                                                // or API related to GPU operation submission.
 } pti_apicall_callback_data;
 
 typedef struct _pti_internal_callback_data {
   pti_callback_domain  _domain;        // domain of the callback
-  pti_callback_site    _site;          // THREAD START/END or CRITICAL EVENT
-  uint32_t             _purpose;       // depending on the domain should be casted and interpreted
-                                       // as a purpose of the internal PTI thread or
-                                       // pti_result for the critical event
-  uint32_t             _thread_id;     // thread ID
+  pti_callback_site    _site;          // THREAD START/END or INTERNAL EVENT
+  uint32_t             _detail;       // depending on the domain should be casted/interpreted
+                                       // as a purpose of an internal PTI thread or
+                                       // pti_internal_event_type
+  const char*          _message;       // explains details
 } pti_internal_callback_data;
 
 typedef void (*pti_callback_function)(
   pti_callback_domain  domain,
+  pti_api_group_id     driver_api_group_id, // driver API group ID, keep it to distinguish between L0 and OpenCL
+                                            // although the current implementation is only for L0
+  uint32_t             driver_api_id,
+  pti_backend_ctx_t    backend_context,     // Driver (L0) level context handle
   void*                cb_data, // depending on the domain it should be type-casted to the pointer
                                // to either pti_apicall_callback_data or pti_internal_callback_data
   void*                user_data);
 
-typedef void* pti_callback_subscriber;   //!< Subscriber handle
+typedef void* pti_callback_subscriber; // Subscriber handle, current implementation supports only one subscriber
+                                       // per process, but it is not a limitation of the API
 
 /**
  * @brief Initiate Callback subscriber
