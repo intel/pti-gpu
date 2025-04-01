@@ -375,6 +375,9 @@ struct PtiViewRecordHandler {
           map_view_kind_enabled[type] = true;
           collector_->EnableTracing();
         }
+        if (type == pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)
+          collector_->SetCollectorOptionSynchronization();
+        if (type == pti_view_kind::PTI_VIEW_DRIVER_API) collector_->SetCollectorOptionApiCalls();
       }
     }
 
@@ -390,6 +393,7 @@ struct PtiViewRecordHandler {
           view_event_map_.Add(view_types.fn_name, view_types.callback);
         }
         if (type == pti_view_kind::PTI_VIEW_DRIVER_API) {
+          const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
           for (auto [k, v] : pti_api_id_driver_levelzero_state) {
             pti_api_id_driver_levelzero_state[k] = 1;  // enable all to fire.
           }
@@ -434,6 +438,9 @@ struct PtiViewRecordHandler {
           map_view_kind_enabled[type] = false;
           collector_->DisableTracing();
         }
+        if (type == pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)
+          collector_->UnSetCollectorOptionSynchronization();
+        if (type == pti_view_kind::PTI_VIEW_DRIVER_API) collector_->UnSetCollectorOptionApiCalls();
       }
     }
 
@@ -1038,8 +1045,8 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
 
 #if defined(PTI_TRACE_SYCL)
   SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
-  // We generate special sycl record corresponding to L0 api call -- zeCommandListAppendLaunchKernel
-  // *only* when
+  // We generate special sycl record corresponding to L0 api call --
+  // zeCommandListAppendLaunchKernel *only* when
   //     ZECALL is disabled, SYCL is enabled, GPU_KERNEL is enabled
   //     and
   //     no corresponding sycl record is present for the kernel launch captured here.

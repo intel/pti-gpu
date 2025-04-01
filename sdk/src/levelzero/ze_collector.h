@@ -432,6 +432,12 @@ class ZeCollector {
 #endif
   }
 
+  void SetCollectorOptionSynchronization() { options_.lz_enabled_views.synch_enabled = true; }
+  void SetCollectorOptionApiCalls() { options_.lz_enabled_views.api_calls_enabled = true; }
+
+  void UnSetCollectorOptionSynchronization() { options_.lz_enabled_views.synch_enabled = false; }
+  void UnSetCollectorOptionApiCalls() { options_.lz_enabled_views.api_calls_enabled = false; }
+
  private:  // Implementation
   ZeCollector(CollectorOptions options, OnZeKernelFinishCallback acallback,
               OnZeApiCallsFinishCallback fcallback, void* callback_data,
@@ -1336,7 +1342,8 @@ class ZeCollector {
       }
     }
     // Process generation of synch record even if result is not successful.
-    if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+    if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
+        collector->acallback_ != nullptr) {
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
       ZeKernelCommandExecutionRecord rec = {};
       ze_event_handle_t event_h = *params->phEvent;
@@ -1384,7 +1391,8 @@ class ZeCollector {
       }
     }
     // Process generation of synch record even if result is not successful.
-    if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+    if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
+        collector->acallback_ != nullptr) {
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
       ze_result_t status;
       ZeKernelCommandExecutionRecord rec = {};
@@ -1454,7 +1462,8 @@ class ZeCollector {
       }
     }
     // Process generation of synch record even if result is not successful.
-    if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+    if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
+        collector->acallback_ != nullptr) {
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
       ZeKernelCommandExecutionRecord rec = {};
       ze_fence_handle_t fence_h = *params->phFence;
@@ -2498,7 +2507,8 @@ class ZeCollector {
     }
 
     // Process generation of synch record even if result is not successful.
-    if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+    if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
+        collector->acallback_ != nullptr) {
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
       ZeKernelCommandExecutionRecord rec = {};
       auto it = collector->command_queues_.find(*params->phCommandQueue);

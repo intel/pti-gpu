@@ -759,7 +759,7 @@ def gen_exit_callback(
             + "_id];\n"
         )
         f.write(
-            "  if (collector->cb_enabled_.fcallback && collector->fcallback_ != nullptr) {\n"
+            "  if (collector->cb_enabled_.fcallback && collector->options_.lz_enabled_views.api_calls_enabled && collector->fcallback_ != nullptr) {\n"
         )
         f.write(
             "    if ((collector->trace_all_env_value > 0) || ((collector->trace_all_env_value < 0) && id_enabled )) {\n"
