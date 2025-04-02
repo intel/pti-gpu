@@ -25,6 +25,7 @@
 #include "samples_utils.h"
 #include "utils.h"
 #include "utils/test_helpers.h"
+#include "utils/ze_config_info.h"
 #include "ze_utils.h"
 
 #define ALIGN 64
@@ -89,6 +90,7 @@ std::vector<pti_view_record_memory_copy> copy_records;
 std::vector<pti_view_record_kernel> kernel_records;
 ze_device_uuid_t device_uuid = {};
 ze_context_handle_t context_test = nullptr;
+ze_device_handle_t device_test = nullptr;
 ze_command_queue_handle_t queue_test_kernel = nullptr;
 ze_command_queue_handle_t queue_test_mem_copy = nullptr;
 
@@ -133,40 +135,6 @@ float Check(const std::vector<float>& a, float value) {
   return eps / a.size();
 }
 
-int GetGroupOrdinals(ze_device_handle_t device, uint32_t& computeOrdinal, uint32_t& copyOrdinal) {
-  // Discover all command queue groups
-  uint32_t cmdqueue_group_count = 0;
-  ze_result_t status =
-      zeDeviceGetCommandQueueGroupProperties(device, &cmdqueue_group_count, nullptr);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-  std::vector<ze_command_queue_group_properties_t> cmdqueue_group_props(cmdqueue_group_count);
-  for (auto& prop : cmdqueue_group_props) {
-    prop.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_GROUP_PROPERTIES;
-    prop.pNext = nullptr;
-  }
-  status = zeDeviceGetCommandQueueGroupProperties(device, &cmdqueue_group_count,
-                                                  cmdqueue_group_props.data());
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-  // Find command queues that support compute and copy
-  computeOrdinal = cmdqueue_group_count;
-  copyOrdinal = cmdqueue_group_count;
-  for (uint32_t i = 0; i < cmdqueue_group_count; ++i) {
-    if (cmdqueue_group_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE) {
-      computeOrdinal = i;
-    }
-    if (cmdqueue_group_props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) {
-      copyOrdinal = i;
-    }
-  }
-  if (computeOrdinal == cmdqueue_group_count || copyOrdinal == cmdqueue_group_count) {
-    std::cout << "No compute or copy command queue group found" << std::endl;
-    return 1;
-  }
-  return 0;
-}
-
 float RunWithPollingAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t device,
                              ze_context_handle_t context, const std::vector<float>& a,
                              const std::vector<float>& b, std::vector<float>& c, unsigned size,
@@ -196,7 +164,8 @@ float RunWithPollingAndCheck(ze_kernel_handle_t kernel, ze_device_handle_t devic
             << group_size[1] << " : " << group_size[2] << "\n";
   uint32_t compute_queue_ordinal = 0;
   uint32_t copy_queue_ordinal = 0;
-  if (0 != GetGroupOrdinals(device, compute_queue_ordinal, copy_queue_ordinal)) {
+  if (0 != pti::test::utils::level_zero::GetGroupOrdinals(device, compute_queue_ordinal,
+                                                          copy_queue_ordinal)) {
     // no compute or copy queue group found
     return 0.0f;
   }
@@ -533,10 +502,10 @@ void ComputeUsingSycl(std::vector<float>& a, unsigned repeat_count) {
 }
 
 void Compute(ze_device_handle_t device, ze_driver_handle_t driver, const std::vector<float>& a,
-             const std::vector<float>& b, std::vector<float>& c, unsigned size,
-             unsigned repeat_count, float expected_result, bool with_polling = false) {
+             const std::vector<float>& b, std::vector<float>& c, unsigned size, unsigned iterations,
+             float expected_result, bool with_polling = false) {
   PTI_ASSERT(device != nullptr && driver != nullptr);
-  PTI_ASSERT(size > 0 && repeat_count > 0);
+  PTI_ASSERT(size > 0 && iterations > 0);
 
   std::string module_name = "gemm.spv";
   std::cout << utils::GetExecutablePath() + module_name << std::endl;
@@ -567,7 +536,7 @@ void Compute(ze_device_handle_t device, ze_driver_handle_t driver, const std::ve
   status = zeKernelCreate(module, &kernel_desc, &kernel);
   PTI_ASSERT(status == ZE_RESULT_SUCCESS && kernel != nullptr);
 
-  for (unsigned i = 0; i < repeat_count; ++i) {
+  for (unsigned i = 0; i < iterations; ++i) {
     float eps =
         (with_polling)
             ? RunWithPollingAndCheck(kernel, device, context, a, b, c, size, expected_result)
@@ -640,6 +609,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     kernel_records.clear();
     device_uuid = {};
     context_test = nullptr;
+    device_test = nullptr;
     queue_test_kernel = nullptr;
     queue_test_mem_copy = nullptr;
   }
@@ -871,6 +841,8 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     ze_initialization_succeeded = (status == ZE_RESULT_SUCCESS);
 
     ze_device_handle_t device = utils::ze::GetGpuDevice(kPtiDeviceId);
+    device_test = device;
+
     ze_driver_handle_t driver = utils::ze::GetGpuDriver(kPtiDeviceId);
     if (device == nullptr || driver == nullptr) {
       std::cout << "Unable to find GPU device" << std::endl;
@@ -880,6 +852,10 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     if (!utils::ze::GetDeviceUUID(device, device_uuid.id)) {
       std::cout << "Unable to get device UUID" << std::endl;
       return 1;
+    }
+
+    if (with_polling) {
+      std::cout << "Running with Polling" << std::endl;
     }
 
     StartTracing(include_sycl_runtime, include_zecalls, include_gpu_kernels, include_synch);
@@ -925,21 +901,21 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
  *
  * This test is to be skipped if Local Profiling is not available,
  * Because this test specifics are
- * 1) not having "usual" synchronization but rather realy on events polling,
+ * 1) not having "usual" synchronization but rather rely on events polling,
  * 2) destroying events as soon as they are signaled
  * and such case is not handled by Full API Profiling mode implementation so far -
  * as Full API Profiling mode doesn't create any special events but rather relies on
  * intercepting EventPool creation and so makeing all events with Timestamp property
  *
  */
-TEST_F(MainZeFixtureTest, ProfilingSuccededWhenEventPolling) {
+TEST_F(MainZeFixtureTest, ProfilingSucceededWhenEventPolling) {
   if (pti_result::PTI_SUCCESS != ptiViewGPULocalAvailable()) {
     GTEST_SKIP();
   }
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   capture_records = true;
   repeat_count = 1;
-  EXPECT_EQ(RunGemm(), 0);
+  EXPECT_EQ(RunGemm(true), 0);
   EXPECT_EQ(copy_records.size(), static_cast<std::size_t>(3));
   auto m2d_1 = static_cast<std::size_t>(-1);
   auto m2d_2 = static_cast<std::size_t>(-1);
@@ -957,14 +933,14 @@ TEST_F(MainZeFixtureTest, ProfilingSuccededWhenEventPolling) {
   EXPECT_EQ(m2d_2 != static_cast<std::size_t>(-1), true);
   EXPECT_NE(m2d_1, m2d_2);
   // Check if the duration diff between the two similar H2D transfers is less than several percents
-  // E.g. 20% or 70% is just some common sense number to check if the durations are close enough
-#ifdef _WIN32
-  // On Windows (on integrated GPU) the difference is expected to be higher
-  // as the first transer seems warming up the hardware and the second one is faster
-  float expected_diff = 0.70f;
-#else
-  float expected_diff = 0.20f;
-#endif
+  // E.g. 50% or 70% is just some common sense number to check if the durations are close enough
+
+  // On integrated GPU the difference is higher -
+  // the first transfer seems warming up the hardware (bigger impact vs discrete one)
+  // and the second transfer is faster
+  float expected_diff =
+      pti::test::utils::level_zero::CheckIntegratedGraphics(device_test) ? 0.70f : 0.50f;
+
   std::cout << "Expected max difference between two similar M2D transfers: " << expected_diff
             << std::endl;
   uint64_t dur1 = copy_records[m2d_1]._end_timestamp - copy_records[m2d_1]._start_timestamp;
