@@ -280,7 +280,11 @@ class SyclCollector {
           }
           SyclCollector::Instance().sycl_runtime_rec_.end_time_ = Time;
           if (SyclCollector::Instance().acallback_ != nullptr) {
-            uint32_t id_enabled = pti_api_id_runtime_sycl_state[args->function_id];
+            uint32_t id_enabled = 1;  // by default state maps are 1
+            {
+              const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx_);
+              id_enabled = pti_api_id_runtime_sycl_state[args->function_id];
+            }
 
             int32_t trace_all = SyclCollector::Instance().trace_all_env_value;
             if ((trace_all > 0) || ((trace_all < 0) && id_enabled)) {

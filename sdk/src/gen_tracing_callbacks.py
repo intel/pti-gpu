@@ -334,6 +334,7 @@ def generate_cb_api_file_info(cb_api_file, callbacks, category, api_group, regen
 def generate_state_file_info(
     api_state_file, callbacks, category, api_group, regen=True
 ):
+    api_state_file.write("std::mutex " + api_group + "_set_granularity_map_mtx_;\n")
     api_state_file.write(
         "inline static std::map<uint32_t, uint32_t> pti_api_id_"
         + category
@@ -753,11 +754,13 @@ def gen_exit_callback(
             + "_id, &api_name) == pti_result::PTI_SUCCESS);\n"
         )
         f.write("  assert(std::strcmp(api_name, " + '"' + func + '") == 0);\n')
+        f.write("  uint32_t id_enabled=1;\n")
+        f.write("  {\n")
         f.write(
-            "  uint32_t id_enabled=pti_api_id_driver_levelzero_state["
-            + func
-            + "_id];\n"
+            "    const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx_);\n"
         )
+        f.write("    id_enabled=pti_api_id_driver_levelzero_state[" + func + "_id];\n")
+        f.write("  }\n")
         f.write(
             "  if (collector->cb_enabled_.fcallback && collector->options_.lz_enabled_views.api_calls_enabled && collector->fcallback_ != nullptr) {\n"
         )

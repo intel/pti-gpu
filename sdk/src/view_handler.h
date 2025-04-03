@@ -393,7 +393,7 @@ struct PtiViewRecordHandler {
           view_event_map_.Add(view_types.fn_name, view_types.callback);
         }
         if (type == pti_view_kind::PTI_VIEW_DRIVER_API) {
-          const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
+          const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx_);
           for (auto [k, v] : pti_api_id_driver_levelzero_state) {
             pti_api_id_driver_levelzero_state[k] = 1;  // enable all to fire.
           }
@@ -517,15 +517,16 @@ struct PtiViewRecordHandler {
   }
 
   inline pti_result ResetTracingStateToAllDisabled(pti_api_group_id type) {
-    const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
     try {
       switch (type) {
         case pti_api_group_id::PTI_API_GROUP_SYCL: {
+          const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx_);
           for (auto [k, v] : pti_api_id_runtime_sycl_state) {
             pti_api_id_runtime_sycl_state[k] = 0;  // disable all
           }
         }; break;
         case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
+          const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx_);
           for (auto [k, v] : pti_api_id_driver_levelzero_state) {
             pti_api_id_driver_levelzero_state[k] = 0;  // disable all
           }
@@ -546,11 +547,11 @@ struct PtiViewRecordHandler {
   }
 
   inline pti_result SetApiTracingState(pti_api_group_id type, uint32_t api_id, bool enable) {
-    const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
     uint32_t new_value = (enable ? 1 : 0);
     try {
       switch (type) {
         case pti_api_group_id::PTI_API_GROUP_SYCL: {
+          const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx_);
           if (pti_api_id_runtime_sycl_state.find(api_id) != pti_api_id_runtime_sycl_state.end()) {
             pti_api_id_runtime_sycl_state.at(api_id) = new_value;
           } else {
@@ -558,6 +559,7 @@ struct PtiViewRecordHandler {
           }
         }; break;
         case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
+          const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx_);
           if (pti_api_id_driver_levelzero_state.find(api_id) !=
               pti_api_id_driver_levelzero_state.end()) {
             pti_api_id_driver_levelzero_state.at(api_id) = new_value;
