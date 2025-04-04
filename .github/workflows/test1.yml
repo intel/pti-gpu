@@ -1,4 +1,4 @@
-name: sdk-build-and-test
+name: test-extern-build
 
 on:
   push:
@@ -36,24 +36,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Fixup container
+        run:
+          apt update
+          apt install -y ninja-build
+
       - name: Build
         working-directory: sdk
         run: |
-          source /opt/intel/oneapi/setvars.sh
           cmake --preset ${{ matrix.preset }}
           cmake --build --preset ${{ matrix.preset }} -j $(($(nproc)/2))
 
       - name: Build AddressSanitizer
         working-directory: sdk
         run: |
-          source /opt/intel/oneapi/setvars.sh
           cmake --preset linux-asan
           cmake --build --preset linux-asan --parallel $(($(nproc)/2))
 
       - name: Build ThreadSanitizer
         working-directory: sdk
         run: |
-          source /opt/intel/oneapi/setvars.sh
           cmake --preset linux-tsan
           cmake --build --preset linux-tsan --parallel $(($(nproc)/2))
 
@@ -62,7 +64,6 @@ jobs:
         run: |
           # To ensure it still builds, run build for fuzz targets until we have
           # proper fuzz testing infrastructure in place.
-          source /opt/intel/oneapi/setvars.sh
           cmake --preset linux-fuzz
           cmake --build --preset linux-fuzz --parallel $(($(nproc)/2))
 
