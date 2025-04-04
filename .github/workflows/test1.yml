@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Fixup container
-        run:
+        run: |
           apt update
           apt install -y ninja-build
 
