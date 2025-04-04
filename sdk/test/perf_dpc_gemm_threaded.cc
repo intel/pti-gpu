@@ -118,12 +118,49 @@ std::atomic<uint64_t> g_record_count{0};
 std::atomic<uint64_t> overhead_time_ns{0};
 #endif
 
+void EnableIndividualRuntimeApis() {
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueUSMFill_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueUSMFill2D_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueUSMMemcpy_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueUSMMemcpy2D_id));
+
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueMemBufferRead_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueMemBufferWrite_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueMemBufferCopy_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urUSMHostAlloc_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urUSMSharedAlloc_id));
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urUSMDeviceAlloc_id));
+
+  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                            pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id));
+  PTI_CHECK_SUCCESS(
+      ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                              pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id));
+  PTI_CHECK_SUCCESS(
+      ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                              pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id));
+}
+
 void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
 #if !defined(CAPTURE_OVERHEAD)
   PTI_THROW(ptiViewEnable(PTI_VIEW_RUNTIME_API));
+  // This is what we are doing in PyTorch/Kineto  - so lets' measure overhead on this typical flow
+  EnableIndividualRuntimeApis();
 #endif /* ! CAPTURE_OVERHEAD */
   PTI_THROW(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
 }
