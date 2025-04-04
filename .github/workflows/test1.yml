@@ -1,0 +1,125 @@
+name: sdk-build-and-test
+
+on:
+  push:
+    paths:
+      - .github/workflows/test1.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-outside:
+    name: Build on public runners with public oneAPI.
+
+    runs-on: intel-ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    strategy:
+      matrix:
+        include:
+          - container: intel/oneapi-basekit:2025.1.0-0-devel-ubuntu24.04
+            uploadname: "ubuntu-24.04.2025.1.0"
+            preset: linux-icpx-release
+
+
+    container:
+      image: ${{ matrix.container }}
+      #options: --device=/dev/dri --cap-add CAP_PERFMON
+
+    steps:
+      - name: Clean-up
+        run:  rm -rf *
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset ${{ matrix.preset }}
+          cmake --build --preset ${{ matrix.preset }} -j $(($(nproc)/2))
+
+      - name: Build AddressSanitizer
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset linux-asan
+          cmake --build --preset linux-asan --parallel $(($(nproc)/2))
+
+      - name: Build ThreadSanitizer
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset linux-tsan
+          cmake --build --preset linux-tsan --parallel $(($(nproc)/2))
+
+      - name: Build libFuzzer
+        working-directory: sdk
+        run: |
+          # To ensure it still builds, run build for fuzz targets until we have
+          # proper fuzz testing infrastructure in place.
+          source /opt/intel/oneapi/setvars.sh
+          cmake --preset linux-fuzz
+          cmake --build --preset linux-fuzz --parallel $(($(nproc)/2))
+
+
+  win-lib-build-and-test:
+    name: Test pti-lib on Windows
+    runs-on: windows-latest
+    env:
+      LEVEL_ZERO_LOADER_VERSION: 1.20.2
+    defaults:
+      run:
+        shell: cmd
+        working-directory: sdk
+
+    strategy:
+      matrix:
+        include:
+          - preset: windows-ci-release
+            build-dir: wbr
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Level Zero Loader Version
+        id: loader-ver
+        run: |
+          @echo off
+          REM Make sure there is no whitespace between ...>>...
+          echo ze_loader_ver=%LEVEL_ZERO_LOADER_VERSION%>>%GITHUB_OUTPUT%
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: sdk/level-zero-sdk
+          key: ${{ runner.os }}-Ze-Loader-${{ steps.loader-ver.outputs.ze_loader_ver }}
+
+      - name: Download Dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          rmdir /S /Q level-zero-sdk
+          del /s level-zero-sdk_%LEVEL_ZERO_LOADER_VERSION%.zip
+          echo https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
+          curl.exe -L -O https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
+          unzip.exe -q level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip -d level-zero-sdk
+          echo "Successfully Downloaded Level Zero Loader Version %LEVEL_ZERO_LOADER_VERSION%"
+
+      - name: Build
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          set /A JOBS=%NUMBER_OF_PROCESSORS%/2
+          rmdir /S /Q ${{ matrix.build-dir }}
+          cmake --preset ${{ matrix.preset }}
+          cmake --build --preset ${{ matrix.preset }} --parallel %JOBS%
+
