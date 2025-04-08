@@ -31,7 +31,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_IMAGE_UBUNTU_22_04_ONEAPI_2025_0_1 }}
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
 
     container: 
       image: ${{ matrix.container }}
@@ -62,13 +62,6 @@ jobs:
       - name: Build-and-test-oneprof
         run: |
           source /opt/intel/oneapi/setvars.sh
-          #
-          # Must with more than one GPU because of
-          # an random failures as documented in PTI-75
-          #
-          if [ $(sycl-ls|grep 'ext_oneapi_level_zero:gpu:' -c) -gt 1 ]; then
-            exit 0
-          fi
           python ./tests/run.py -s oneprof
 
       - name: Build-and-test-sysmon

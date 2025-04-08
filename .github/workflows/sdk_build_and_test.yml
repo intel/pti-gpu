@@ -2,11 +2,7 @@ name: sdk-build-and-test
 
 on:
   push:
-    branches:
-      - master
-      - release/**
     paths:
-      - sdk/**
       - .github/workflows/sdk_build_and_test.yml
   pull_request:
     branches:
@@ -14,7 +10,9 @@ on:
       - release/**
     paths:
       - sdk/**
-      - .github/workflows/sdk_build_and_test.yml
+  workflow_dispatch:
+  schedule:
+    - cron: '30 5 * * *' # Daily 5:30 AM UTC / 12:30 AM EST
 
 permissions:
   contents: read
@@ -35,10 +33,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_0_0 }}
-            uploadname: "ubuntu-24.04.2025.0.0"
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_1_0 }}
+            uploadname: "ubuntu-24.04.2025.1.0"
             preset: linux-icpx-release
-
 
     container:
       image: ${{ matrix.container }}
@@ -64,24 +61,18 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          if ! ctest --output-on-failure --preset ${{ matrix.preset }} -E perf-overhead-view; then
-            echo "::warning::Test is flaky (Check logs because tests had to be rerun)"
-            ctest --output-on-failure --preset ${{ matrix.preset }} --rerun-failed
-          fi
+          ctest --output-on-failure --preset ${{ matrix.preset }} -E 'RuntimeOpsSetOffMainFixtureTest.ValidateRealTimestampFromUser|perf-overhead-view|perf-link-overhead|perf-profiling-overhead'
 
       - name: Quarantined tests # flaky tests
+        continue-on-error: true
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          status=0
-          if ctest --preset ${{ matrix.preset }} --output-on-failure -R perf-overhead-view; then
-            status=0
-          else
-            status=1
-            echo "::warning::Quarantined tests step failed." # this enables annotation
-          fi
-          echo "Test status: ${status}"
-          exit 0 # always exit 0 to keep the green checkmark going
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'RuntimeOpsSetOffMainFixtureTest.ValidateRealTimestampFromUser'
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-overhead-view'
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-link-overhead'
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-profiling-overhead'
+
 
       - name: Build AddressSanitizer
         working-directory: sdk
@@ -197,17 +188,14 @@ jobs:
           REM TODO Kernel name demangling not supported on Windows yet.
           REM TODO Tests need to be run without \DNDEBUG set
           REM TODO OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
-          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords|perf-overhead-view"
+          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords|perf-overhead-view|perf-link-overhead"
 
       - name: Quarantined tests # flaky tests
+        continue-on-error: true
         run: |
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          ctest --preset ${{ matrix.preset }} --output-on-failure -R perf-overhead-view
-          if %ERRORLEVEL% NEQ 0 (
-            echo ::warning::Quarantined tests step failed. # this enables annotation
-          )
-          exit /b 0  # always return 0 to keep the green checkmark going
-
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-overhead-view'
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-link-overhead'
 

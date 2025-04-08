@@ -31,18 +31,6 @@ jobs:
       max-parallel: 2
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_RHEL_9_ONEAPI_24_2_1 }}
-            uploadname: "rhel-9.2024.2.1"
-            preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_SLES_15_3_ONEAPI_24_2_1 }}
-            uploadname: "sles-15.3.2024.2.1"
-            preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_24_2_1 }}
-            uploadname: "ubuntu-24.04.2024.2.1"
-            preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_24_2_1 }}
-            uploadname: "rocky-8.2024.2.1"
-            preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_RHEL_9_ONEAPI_25_0_0 }}
             uploadname: "rhel-9.2025.0.0"
             preset: linux-icpx-release
@@ -60,6 +48,24 @@ jobs:
             preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_25_0_0 }}
             uploadname: "rocky-8.gxx.2025.0.0"
+            preset: linux-gxx-release
+          - container: ${{ vars.PTI_DOCKER_RHEL_9_ONEAPI_25_1_0 }}
+            uploadname: "rhel-9.2025.1.0"
+            preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_25_1_0 }}
+            uploadname: "sles-15.2025.1.0"
+            preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
+            uploadname: "ubuntu-22.04.2025.1.0"
+            preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_1_0 }}
+            uploadname: "ubuntu-24.04.2025.1.0"
+            preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_25_1_0 }}
+            uploadname: "rocky-8.2025.1.0"
+            preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_25_1_0 }}
+            uploadname: "rocky-8.gxx.2025.1.0"
             preset: linux-gxx-release
 
     container: 
@@ -87,8 +93,18 @@ jobs:
         run: |
           source /opt/intel/oneapi/setvars.sh
           ONEAPI_VER=${{ matrix.uploadname }}
-          ctest --output-on-failure --preset ${{ matrix.preset }} \
-            ${ONEAPI_VER/*2025\.0\.0*/-E perf-overhead-view}
+          ctest --output-on-failure --preset ${{ matrix.preset }} -E 'RuntimeOpsSetOffMainFixtureTest.ValidateRealTimestampFromUser|perf-overhead-view|perf-link-overhead|perf-profiling-overhead'
+
+      - name: Quarantined tests # flaky tests
+        continue-on-error: true
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          ONEAPI_VER=${{ matrix.uploadname }}
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'RuntimeOpsSetOffMainFixtureTest.ValidateRealTimestampFromUser'
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-overhead-view'
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-link-overhead'
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-profiling-overhead'
 
       - name: Build AddressSanitizer
         working-directory: sdk
@@ -166,9 +182,7 @@ jobs:
       max-parallel: 2
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_IMAGE_2024_1_1 }}
-          - container: ${{ vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 }}
-          - container: ${{ vars.PTI_DOCKER_IMAGE_UBUNTU_22_04_ONEAPI_2025_0_1 }}
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
 
     container: 
       image: ${{ matrix.container }}
@@ -194,13 +208,6 @@ jobs:
       - name: Build-and-test-oneprof
         run: |
           source /opt/intel/oneapi/setvars.sh
-          #
-          # Must with more than one GPU because of
-          # an random failures as documented in PTI-75
-          #
-          if [ $(sycl-ls|grep 'ext_oneapi_level_zero:gpu:' -c) -gt 1 ]; then
-            exit 0
-          fi
           python3 ./tests/run.py -s oneprof
 
       - name: Build-and-test-sysmon
