@@ -363,7 +363,7 @@ std::set<TraceBuffer *> *trace_buffers_ = nullptr;
 
 class TraceBuffer {
   public:
-    TraceBuffer() {
+    TraceBuffer() : flush_immediately_(false) {
       std::string szstr = utils::GetEnv("UNITRACE_ChromeEventBufferSize");
       if (szstr.empty() || (szstr == "-1")) {
         buffer_capacity_ = -1;
@@ -371,6 +371,10 @@ class TraceBuffer {
       }
       else {
         buffer_capacity_ = std::stoi(szstr);
+	if (buffer_capacity_ == 0) {
+          buffer_capacity_ = 1;	// at least one event slot
+          flush_immediately_ = true;
+        }
         slice_capacity_ = buffer_capacity_;
       }
       ZeKernelCommandExecutionRecord *der = (ZeKernelCommandExecutionRecord *)(malloc(sizeof(ZeKernelCommandExecutionRecord) * slice_capacity_));
@@ -484,13 +488,27 @@ class TraceBuffer {
     }
 
     void BufferHostEvent(void) {
-      next_host_event_index_++;
-      host_event_buffer_flushed_ = false;
+      if (flush_immediately_) {
+        FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][next_host_event_index_]);
+        // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
+        host_event_buffer_flushed_ = true;
+      }
+      else {
+        next_host_event_index_++;
+        host_event_buffer_flushed_ = false;
+      }
     }
 
     void BufferDeviceEvent(void) {
-      next_device_event_index_++;
-      device_event_buffer_flushed_ = false;
+      if (flush_immediately_) {
+        FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][next_device_event_index_]);
+        // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
+        host_event_buffer_flushed_ = true;
+      }
+      else {
+        next_device_event_index_++;
+        device_event_buffer_flushed_ = false;
+      }
     }
 
     uint32_t GetTid() { return tid_; }
@@ -764,6 +782,7 @@ class TraceBuffer {
     uint32_t pid_;
     std::vector<ZeKernelCommandExecutionRecord *> device_event_buffer_;
     std::vector<HostEventRecord *> host_event_buffer_;
+    bool flush_immediately_;
     bool host_event_buffer_flushed_;
     bool device_event_buffer_flushed_;
     std::atomic<bool> finalized_;
@@ -776,13 +795,17 @@ class ClTraceBuffer;
 std::set<ClTraceBuffer *> *cl_trace_buffers_ = nullptr;
 class ClTraceBuffer {
   public:
-    ClTraceBuffer() {
+    ClTraceBuffer() : flush_immediately_(false) {
       std::string szstr = utils::GetEnv("UNITRACE_ChromeEventBufferSize");
       if (szstr.empty() || (szstr == "-1")) {
         buffer_capacity_ = -1;
         slice_capacity_ = BUFFER_SLICE_SIZE_DEFAULT;
       } else {
         buffer_capacity_ = std::stoi(szstr);
+	if (buffer_capacity_ == 0){
+          buffer_capacity_ = 1;	// at least one event slot
+	  flush_immediately_ = true;
+        }
         slice_capacity_ = buffer_capacity_;
       }
       ClKernelCommandExecutionRecord *der = (ClKernelCommandExecutionRecord *)(malloc(sizeof(ClKernelCommandExecutionRecord) * slice_capacity_));
@@ -896,13 +919,27 @@ class ClTraceBuffer {
     }
 
     void BufferHostEvent(void) {
-      next_host_event_index_++;
-      host_event_buffer_flushed_ = false;
+      if (flush_immediately_) {
+        FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][next_host_event_index_]);
+        // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
+        host_event_buffer_flushed_ = true;
+      }
+      else {
+        next_host_event_index_++;
+        host_event_buffer_flushed_ = false;
+      }
     }
 
     void BufferDeviceEvent(void) {
-      next_device_event_index_++;
-      device_event_buffer_flushed_ = false;
+      if (flush_immediately_) {
+        FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][next_device_event_index_]);
+        // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
+        host_event_buffer_flushed_ = true;
+      }
+      else {
+        next_device_event_index_++;
+        device_event_buffer_flushed_ = false;
+      }
     }
 
     uint32_t GetTid() { return tid_; }
@@ -1179,6 +1216,7 @@ class ClTraceBuffer {
     uint32_t pid_;
     std::vector<ClKernelCommandExecutionRecord *> device_event_buffer_;
     std::vector<HostEventRecord *> host_event_buffer_;
+    bool flush_immediately_;
     bool host_event_buffer_flushed_;
     bool device_event_buffer_flushed_;
     std::atomic<bool> finalized_;
