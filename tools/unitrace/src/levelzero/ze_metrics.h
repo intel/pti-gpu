@@ -1147,10 +1147,15 @@ class ZeMetricProfiler {
     auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
 
-    auto dump_metrics = [](uint8_t *buffer, uint64_t size, std::ofstream *f) {
+    auto dump_metrics = [](uint8_t *buffer, uint64_t size, std::ofstream *f) -> bool {
       // Write metric data in two stages, first actual size (in bytes), followed by actual metrics
-      f->write(reinterpret_cast<char*>(&size), sizeof(size));
-      f->write(reinterpret_cast<char*>(buffer), size);
+      if (f->good()) {
+        f->write(reinterpret_cast<char*>(&size), sizeof(size));
+      }
+      if (f->good()) {
+        f->write(reinterpret_cast<char*>(buffer), size);
+      }
+      return f->good();
     };
 
     desc->profiling_state_.store(PROFILER_ENABLED, std::memory_order_release);
@@ -1158,14 +1163,20 @@ class ZeMetricProfiler {
       auto size = EventBasedReadMetrics(event, streamer, raw_metrics, MAX_METRIC_BUFFER);
       if (size > 0) {
         // If we have data, dump it to the intermediate file
-        dump_metrics (raw_metrics, size, &desc->metric_file_stream_);
+        if (!dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
+          std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
+          break;
+        }
       }
     }
 
     // Flush the remaining metrics after the profiler has stopped
     auto size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
     while (size > 0) {
-      dump_metrics (raw_metrics, size, &desc->metric_file_stream_);
+      if (!dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
+        std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
+        break;
+      }
       size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
     }
     free (raw_metrics);
