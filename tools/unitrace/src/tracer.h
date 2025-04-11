@@ -34,7 +34,7 @@ static std::string GetChromeTraceFileName(void) {
     std::string name(str);
     auto pos = name.find_last_of('\\');
     if (pos == std::string::npos) {
-      return std::move(name);
+      return name;	// std::move(name) here prevents copy elision on Windows
     }
     else {
       return name.substr(pos + 1);

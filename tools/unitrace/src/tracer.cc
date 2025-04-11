@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
+#include <csignal>
 #include <iostream>
 
 #include "tracer.h"
@@ -166,6 +167,64 @@ std::string get_version() {
   return std::string(UNITRACE_VERSION) + " ("+ std::string(COMMIT_HASH) + ")";
 }
 
+void Teardown(void) {
+  std::string value = utils::GetEnv("PTI_ENABLE");
+  if (value != "1") {
+    return;
+  }
+
+  if (tracer != nullptr) {
+    delete tracer;
+    tracer = nullptr;
+  }
+}
+
+typedef void (*SignalHandler)(int);
+static SignalHandler sigint_handler = nullptr;
+static SignalHandler sigabrt_handler = nullptr;
+static SignalHandler sigfpe_handler = nullptr;
+static SignalHandler sigill_handler = nullptr;
+static SignalHandler sigsegv_handler = nullptr;
+static SignalHandler sigterm_handler = nullptr;
+
+void HandleAbnormalTermination(int sig) {
+  Teardown();
+  switch (sig) {
+    case SIGINT: 
+      if (sigint_handler) {
+        sigint_handler(sig);
+      }
+      break;
+    case SIGABRT:
+      if (sigabrt_handler) {
+        sigabrt_handler(sig);
+      }
+      break;
+    case SIGFPE:
+      if (sigfpe_handler) {
+        sigfpe_handler(sig);
+      }
+      break;
+    case SIGILL:
+      if (sigill_handler) {
+        sigill_handler(sig);
+      }
+      break;
+    case SIGSEGV:
+      if (sigsegv_handler) {
+        sigsegv_handler(sig);
+      }
+      break;
+    case SIGTERM:
+      if (sigterm_handler) {
+        sigterm_handler(sig);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
 void CONSTRUCTOR Init(void) {
   std::string value = utils::GetEnv("PTI_ENABLE");
   if (value != "1") {
@@ -180,6 +239,32 @@ void CONSTRUCTOR Init(void) {
     }
   }
 
+  // save previous handlers and install new handlers
+  auto handler = std::signal(SIGINT, HandleAbnormalTermination);
+  if (handler != SIG_ERR) {
+    sigint_handler = handler;
+  }
+  handler = std::signal(SIGABRT, HandleAbnormalTermination);
+  if (handler != SIG_ERR) {
+    sigabrt_handler = handler;
+  }
+  handler = std::signal(SIGFPE, HandleAbnormalTermination);
+  if (handler != SIG_ERR) {
+    sigfpe_handler = handler;
+  }
+  handler = std::signal(SIGILL, HandleAbnormalTermination);
+  if (handler != SIG_ERR) {
+    sigill_handler = handler;
+  }
+  handler = std::signal(SIGSEGV, HandleAbnormalTermination);
+  if (handler != SIG_ERR) {
+    sigsegv_handler = handler;
+  }
+  handler = std::signal(SIGTERM, HandleAbnormalTermination);
+  if (handler != SIG_ERR) {
+    sigterm_handler = handler;
+  }
+
   if (!tracer) {
     UniTimer::StartUniTimer();
     tracer = UniTracer::Create(ReadArgs());
@@ -188,15 +273,7 @@ void CONSTRUCTOR Init(void) {
 
 
 void DESTRUCTOR Fini(void) {
-  std::string value = utils::GetEnv("PTI_ENABLE");
-  if (value != "1") {
-    return;
-  }
-
-  if (tracer != nullptr) {
-    delete tracer;
-    tracer = nullptr;
-  }
+  Teardown();
 }
 
 #ifdef _WIN32
