@@ -69,7 +69,7 @@ inline thread_local ZeInstanceData ze_instance_data;
 
 // Used for CPU/GPU sync points. See description to ZeCollector::GetDeviceTimestamps function
 inline thread_local std::map<ze_device_handle_t, std::unique_ptr<CPUGPUTimeInterpolationHelper>>
-    timer_helpers_;
+    timer_helpers;
 
 struct ZeKernelGroupSize {
   uint32_t x;
@@ -287,15 +287,15 @@ class ZeCollector {
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(host_time != nullptr);
     PTI_ASSERT(device_time != nullptr);
-    if (timer_helpers_.find(device) == timer_helpers_.end()) {
-      timer_helpers_[device] = std::make_unique<CPUGPUTimeInterpolationHelper>(
+    if (timer_helpers.find(device) == timer_helpers.end()) {
+      timer_helpers[device] = std::make_unique<CPUGPUTimeInterpolationHelper>(
           device, device_descriptors_[device].device_timer_frequency,
           device_descriptors_[device].device_timer_mask,
           device_descriptors_[device].device_sync_delta);
     }
     uint64_t anchor_host_time = 0;
     uint64_t anchor_device_time = 0;
-    auto helper = timer_helpers_[device].get();
+    auto helper = timer_helpers[device].get();
     uint64_t current_host_time = utils::GetTime();
     if (current_host_time - helper->cpu_timestamp_ > helper->delta_) {
       ze_result_t res =
@@ -309,7 +309,7 @@ class ZeCollector {
     }
     current_host_time = utils::GetTime();
     uint64_t current_device_time = anchor_device_time + ((current_host_time - anchor_host_time) /
-                                                         timer_helpers_[device]->coeff_);
+                                                         timer_helpers[device]->coeff_);
 
     *host_time = current_host_time;
     *device_time = current_device_time;
@@ -1005,7 +1005,7 @@ class ZeCollector {
         rec.source_line_number_ = command->source_line_number_;
       }
 
-      kcexecrec->push_back(rec);
+      kcexecrec->push_back(std::move(rec));
     }
   }
 
@@ -1381,8 +1381,8 @@ class ZeCollector {
             SPDLOG_WARN(
                 "\tLevel-Zero Introspection API: zeEventPoolGetContextHandle return unsuccessful "
                 "-- inserting null context handle in synch. record..");
-          };
-        };
+          }
+        }
       }
       rec.name_ = "zeEventHostSynchronize";
       rec.tid_ = thread_local_pid_tid_info.tid;
@@ -1392,7 +1392,7 @@ class ZeCollector {
       rec.cid_ = synch_corrid;
       rec.result_ = result;
       rec.callback_id_ = zeEventHostSynchronize_id;
-      kcexec.push_back(rec);
+      kcexec.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec);
     }
   }
@@ -1429,7 +1429,7 @@ class ZeCollector {
               "\tLevel-Zero Introspection API: zeCommandListGetContextHandle return unsuccessful "
               "-- "
               "inserting null context handle in synch. record..");
-        };
+        }
       }
       rec.name_ = "zeCommandListHostSynchronize";
       rec.tid_ = thread_local_pid_tid_info.tid;
@@ -1439,7 +1439,7 @@ class ZeCollector {
       rec.cid_ = synch_corrid;
       rec.result_ = result;
       rec.callback_id_ = zeCommandListHostSynchronize_id;
-      kcexec.push_back(rec);
+      kcexec.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec);
     }
   }
@@ -1506,7 +1506,7 @@ class ZeCollector {
       rec.cid_ = synch_corrid;
       rec.result_ = result;
       rec.callback_id_ = zeFenceHostSynchronize_id;
-      kcexec.push_back(rec);
+      kcexec.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec);
     }
   }
@@ -1578,7 +1578,6 @@ class ZeCollector {
         return;
       }
     }
-    const std::lock_guard<std::mutex> lock(collector->lock_);
     ze_context_handle_t context = collector->GetCommandListContext(command_list);
     ze_device_handle_t device = collector->GetCommandListDevice(command_list);
 
@@ -2536,7 +2535,7 @@ class ZeCollector {
       rec.context_ = nullptr;
       if (it != collector->command_queues_.end()) {
         rec.context_ = it->second.context_;
-      };
+      }
       rec.name_ = "zeCommandQueueSynchronize";
       rec.tid_ = thread_local_pid_tid_info.tid;
       rec.start_time_ = ze_instance_data.start_time_host;
@@ -2547,7 +2546,7 @@ class ZeCollector {
       rec.cid_ = synch_corrid;
       rec.callback_id_ = zeCommandQueueSynchronize_id;
       rec.result_ = result;
-      kcexec.push_back(rec);
+      kcexec.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec);
     }
   }
@@ -2691,25 +2690,9 @@ class ZeCollector {
   std::atomic<pti_result>* parent_state_ = nullptr;
 
   class ZeStartStopModeChanger {
-   private:
-    // Track enable/disable tracing layer calls on a global basis - in order to swap apis.
-    // zelEnableTracingLayer and zelDisableTracingLayer are not thread specific -- and act globally.
-    //      We use ref_count to track how many L0 view_kinds are enabled/disabled on a global basis.
-
-    std::atomic<uint64_t> ref_count = 0;
-    ZeCollector* parent_collector_;
-    std::mutex ss_lock_;
-
    public:
-    ZeStartStopModeChanger(const ZeStartStopModeChanger&) = delete;
-    ZeStartStopModeChanger& operator=(const ZeStartStopModeChanger&) = delete;
-    ZeStartStopModeChanger(ZeStartStopModeChanger&&) = delete;
-    ZeStartStopModeChanger& operator=(ZeStartStopModeChanger&&) = delete;
-    ZeStartStopModeChanger() = delete;
-    ZeStartStopModeChanger(ZeCollector* collector) {
-      parent_collector_ = collector;
-      ref_count = 0;
-    }
+    explicit ZeStartStopModeChanger(ZeCollector* collector)
+        : ref_count(0), parent_collector_(collector) {}
 
     // switches to fully start tracing mode - only if we are not already in start mode.  Else
     // records another view_kind active in region.
@@ -2764,6 +2747,15 @@ class ZeCollector {
         parent_collector_->options_.hybrid_mode = true;
       return ref_count;
     }
+
+   private:
+    // Track enable/disable tracing layer calls on a global basis - in order to swap apis.
+    // zelEnableTracingLayer and zelDisableTracingLayer are not thread specific -- and act globally.
+    //      We use ref_count to track how many L0 view_kinds are enabled/disabled on a global basis.
+
+    std::atomic<uint64_t> ref_count = 0;
+    ZeCollector* parent_collector_;
+    std::mutex ss_lock_;
   };
   ZeStartStopModeChanger startstop_mode_changer;
 };
