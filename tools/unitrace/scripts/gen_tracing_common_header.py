@@ -111,16 +111,19 @@ def gen_api_name_list(out_file, l0_func_list, ocl_func_list):
 
 
 def gen_symbol_func(file_handle):
+  file_handle.write("\n#include \"cl_intel_ext.h\"\n")
   file_handle.write("\n\nstatic std::string get_symbol(API_TRACING_ID id){\n")
   file_handle.write("    if (id == UnknownTracingId) {\n")
   file_handle.write("      return \"UnknownAPIName\";\n")
-  file_handle.write("    } else if (id > L0StartTracingId && id < L0EndTracingId) {\n")
+  file_handle.write("    } else if ((id > L0StartTracingId) && (id < L0EndTracingId)) {\n")
   file_handle.write("      auto index = id - L0StartTracingId;\n")
   file_handle.write("      return tracing_api_name[index-1];\n")
-  file_handle.write("    } else if (id >= OCLStartTracingId && id < OCLEndTracingId) {\n")
+  file_handle.write("    } else if ((id >= OCLStartTracingId) && (id < OCLEndTracingId)) {\n")
   file_handle.write("      auto index = (id - OCLStartTracingId) + (L0EndTracingId - L0StartTracingId);\n")
   file_handle.write("      return tracing_api_name[index-1];\n")
-  file_handle.write("    }  else {\n")
+  file_handle.write("    } else if (((cl_ext_api_id)id >= ClExtApiStart) && ((cl_ext_api_id)id < ClExtApiEnd)) {\n")
+  file_handle.write("      return cl_ext_api[id - ClExtApiStart];\n")
+  file_handle.write("    } else {\n")
   file_handle.write("      // Error: never come here\n")
   file_handle.write("      return \"UnknownAPIName\";\n")
   file_handle.write("    }\n")
