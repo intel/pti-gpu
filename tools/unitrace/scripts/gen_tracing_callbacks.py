@@ -349,7 +349,8 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
   f.write("    str += \"" + func + ":\";\n")
   for name, type in params:
     if type == "ze_ipc_mem_handle_t" or type == "ze_ipc_event_pool_handle_t":
-      f.write("    str += \" " + name + " = \" + std::to_string((long long unsigned int)(params->p" + name + ")->data);\n")
+      f.write("    str += \" " + name + " = \" ;\n")
+      f.write("    TO_HEX_STRING(str, (params->p" + name + ")->data);\n")
     else:
       if type.find("char*") >= 0 and type.find("char*") == len(type) - len("char*"):
         if func == "zeModuleGetFunctionPointer" or func == "zeModuleGetGlobalPointer":
@@ -365,10 +366,11 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
           f.write("      str += \" " + name + " = 0\";\n")
           f.write("    } else {\n")
           f.write("      str += \" " + name + " = \";\n")
-          f.write("      str += std::to_string((long long unsigned int)*(params->p" + name + "));\n")
+          f.write("      TO_HEX_STRING(str, *(params->p" + name + "));\n")
           f.write("    }\n")
       else:
-        f.write("    str += \" " + name + " = \" + std::to_string((long long unsigned int)*(params->p" + name + "));\n")
+        f.write("    str += \" " + name + " = \" ;\n")
+        f.write("    TO_HEX_STRING(str, *(params->p" + name + "));\n")
         if name.find("Kernel") >= 0 and func == "zeCommandListAppendLaunchKernel":
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
           f.write("      bool demangle = collector->options_.demangle;\n")
@@ -381,7 +383,8 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
         if name.find("ph") == 0 or name.find("pptr") == 0 or name.find("pCount") == 0:
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
           if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
-            f.write("      str += \" (" + name[1:] + " = \" + std::to_string((long long unsigned int)(*(params->p" + name + "))->data);\n")
+            f.write("      str += \" (" + name[1:] + " = \" ;\n")
+            f.write("      TO_HEX_STRING(str, (*(params->p" + name + "))->data);\n")
           elif type == "ze_event_handle_t*" and func != "zeEventCreate":
             prev_name = ''
             for n,t in params:
@@ -393,7 +396,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
               f.write("      auto phWaitEvents = *(params->p"+ name + ");\n")
               f.write("      auto numWaitEvents = *(params->p" + prev_name + ");\n")
               f.write("      while(numWaitEvents > 0) {\n")
-              f.write("        str += std::to_string(reinterpret_cast<uintptr_t>(*phWaitEvents));\n")
+              f.write("        TO_HEX_STRING(str, (*phWaitEvents));\n")
               f.write("        numWaitEvents--;\n")
               f.write("        if (numWaitEvents > 0)\n")
               f.write("          str +=\", \";\n")
@@ -401,7 +404,8 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
               f.write("      }\n")
               f.write("      str += \"])\";\n")
           else:
-            f.write("      str += \" (" + name[1:] + " = \" + std::to_string((long long unsigned int)**(params->p" + name + ")) + \")\";\n")
+            f.write("      str += \" (" + name[1:] + " = \" ;\n")
+            f.write("      TO_HEX_STRING(str, **(params->p" + name + ")) + \")\";\n")
           f.write("    }\n")
         elif type.find("ze_group_count_t*") >= 0:
           f.write("    if (*(params->p" + name +") != nullptr) {\n")
@@ -686,21 +690,23 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
 
         else:
           f.write("        str += \" " + name[1:] + " = \";\n")
-          f.write("        str += std::to_string((long long unsigned int)**(params->p" + name + "));\n")
+          f.write("        TO_HEX_STRING(str, **(params->p" + name + "));\n")
 
         f.write("      }\n")
     elif name.find("pptr") == 0 or name == "pCount" or name == "pSize":
       f.write("      if (*(params->p" + name + ") != nullptr) {\n")
       if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
         f.write("        str += \" " + name[1:] + " = \";\n")
-        f.write("        str += std::to_string((*(params->p" + name + "))->data);\n")
+        f.write("        TO_HEX_STRING(str, (*(params->p" + name + "))->data);\n")
 
       else:
-        f.write("        str += \" " + name[1:] + " = \" + std::to_string((long long unsigned int)**(params->p" + name + "));\n")
+        f.write("        str += \" " + name[1:] + " = \" ;\n")
+        f.write("        TO_HEX_STRING(str, **(params->p" + name + "));\n")
       f.write("      }\n")
     elif name.find("groupSize") == 0 and type.find("uint32_t*") == 0:
       f.write("      if (*(params->p" + name + ") != nullptr) {\n")
-      f.write("        str += \" " + name + " = \" + std::to_string((long long unsigned int)**(params->p" + name + "));\n")
+      f.write("        str += \" " + name + " = \" ;\n")
+      f.write("        TO_HEX_STRING(str, **(params->p" + name + "));\n")
       f.write("      }\n")
     elif name == "pName":
       f.write("      if (*(params->p" + name + ") != nullptr) {\n")
@@ -708,7 +714,7 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
       f.write("          str += \" " + name[1:] + " = \\\"\\\"\";\n")
       f.write("        } else {\n")
       f.write("          str += \" " + name[1:] + " = \\\"\";\n")
-      f.write("          str += std::to_string((long long unsigned int)*(params->p" + name + "));\n")
+      f.write("          TO_HEX_STRING(str, *(params->p" + name + "));\n")
       f.write("          str += \"\\\"\";\n")
       f.write("        }\n")
       f.write("      }\n")
@@ -796,6 +802,16 @@ def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list,
     f.write("}\n")
     f.write("\n")
 
+def gen_to_hex_string_functions(f):
+    f.write("#include <string>\n")
+    f.write("#include <cstdio>\n")
+    f.write("#include <cstdint>\n")
+    f.write("#define TO_HEX_STRING(str, val) \\\n")
+    f.write("    {char buffer[20]; \\\n")
+    f.write("    std::sprintf(buffer, \"%lx\", (uintptr_t)(val)); \\\n")
+    f.write("    str += std::string(buffer); \\\n")
+    f.write("    }\n")
+    f.write("\n")
 def main():
   if len(sys.argv) < 3:
     print("Usage: python gen_tracing_header.py <output_include_path> <l0_include_path>")
@@ -810,6 +826,7 @@ def main():
     os.remove(dst_file_path)
 
   dst_file = open(dst_file_path, "wt")
+  gen_to_hex_string_functions(dst_file)
 
   l0_path = sys.argv[2]
   l0_file_path = os.path.join(l0_path, "ze_api.h")
