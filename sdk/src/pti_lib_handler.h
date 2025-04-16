@@ -79,7 +79,9 @@ class PtiLibHandler {
   decltype(&ptiViewSetTimestampCallback) ptiViewSetTimestampCallback_ = nullptr;          // NOLINT
   decltype(&ptiViewGetApiIdName) ptiViewGetApiIdName_ = nullptr;                          // NOLINT
   decltype(&ptiViewEnableDriverApi) ptiViewEnableDriverApi_ = nullptr;                    // NOLINT
+  decltype(&ptiViewEnableDriverApiClass) ptiViewEnableDriverApiClass_ = nullptr;          // NOLINT
   decltype(&ptiViewEnableRuntimeApi) ptiViewEnableRuntimeApi_ = nullptr;                  // NOLINT
+  decltype(&ptiViewEnableRuntimeApiClass) ptiViewEnableRuntimeApiClass_ = nullptr;        // NOLINT
 
  private:
   PtiLibHandler() {
@@ -120,7 +122,9 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiViewSetTimestampCallback);
     PTI_VIEW_GET_SYMBOL(ptiViewGetApiIdName);
     PTI_VIEW_GET_SYMBOL(ptiViewEnableDriverApi);
+    PTI_VIEW_GET_SYMBOL(ptiViewEnableDriverApiClass);
     PTI_VIEW_GET_SYMBOL(ptiViewEnableRuntimeApi);
+    PTI_VIEW_GET_SYMBOL(ptiViewEnableRuntimeApiClass);
 #undef PTI_VIEW_GET_SYMBOL
   }
   std::unique_ptr<LibraryLoader> pti_view_lib_ = nullptr;

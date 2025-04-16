@@ -96,6 +96,7 @@ void StartTracing() {
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewEnable(PTI_VIEW_RUNTIME_API));
+  PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_SYNCHRONIZATION));
 }
 
 void StopTracing() {
@@ -103,41 +104,64 @@ void StopTracing() {
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
   PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_THROW(ptiViewDisable(PTI_VIEW_RUNTIME_API));
+  PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_SYNCHRONIZATION));
 }
 
-void EnableIndividualRuntimeApis() {
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urEnqueueUSMFill_id));
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urEnqueueUSMFill2D_id));
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urEnqueueUSMMemcpy_id));
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urEnqueueUSMMemcpy2D_id));
+[[maybe_unused]] void DisableSyclOpsSetApis(bool useAllGroups = true) {
+  if (useAllGroups) {
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApiClass(
+        0, pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE, pti_api_group_id::PTI_API_GROUP_ALL));
+  } else {
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApiClass(
+        0, pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE, pti_api_group_id::PTI_API_GROUP_SYCL));
+  }
+}
 
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id));
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urEnqueueMemBufferRead_id));
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urEnqueueMemBufferWrite_id));
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urEnqueueMemBufferCopy_id));
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urUSMHostAlloc_id));
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urUSMSharedAlloc_id));
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urUSMDeviceAlloc_id));
+void EnableIndividualRuntimeApis(bool useClassApi = false, bool useAllGroups = false) {
+  if (useClassApi) {
+    std::cout << "Using class apis:\n";
+    pti_api_class this_class = pti_api_class::PTI_API_CLASS_ALL;
+    if (useAllGroups) {
+      std::cout << "Using all groups: setting both runtime/driver: all_classes: " << this_class
+                << "\n";
+      PTI_CHECK_SUCCESS(
+          ptiViewEnableRuntimeApiClass(1, this_class, pti_api_group_id::PTI_API_GROUP_ALL));
+    }
+  } else {
+    std::cout << "NOT Using class apis: -- all granular -- runtime only.\n";
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urEnqueueUSMFill_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urEnqueueUSMFill2D_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urEnqueueUSMMemcpy_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urEnqueueUSMMemcpy2D_id));
 
-  PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                            pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id));
-  PTI_CHECK_SUCCESS(
-      ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                              pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id));
-  PTI_CHECK_SUCCESS(
-      ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                              pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urEnqueueMemBufferRead_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urEnqueueMemBufferWrite_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urEnqueueMemBufferCopy_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urUSMHostAlloc_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urUSMSharedAlloc_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urUSMDeviceAlloc_id));
+
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                              pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id));
+    PTI_CHECK_SUCCESS(
+        ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id));
+    PTI_CHECK_SUCCESS(
+        ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id));
+  }
 }
 
 void ProvideBuffer(unsigned char** buf, std::size_t* buf_size) {
@@ -198,6 +222,15 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         corr_id_map[p_runtime_rec->_correlation_id]++;
         break;
       }
+      case pti_view_kind::PTI_VIEW_DRIVER_API: {
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------"
+                  << '\n';
+        std::cout << "Found Lz Api Record" << '\n';
+        pti_view_record_api* p_driver_rec = reinterpret_cast<pti_view_record_api*>(ptr);
+        samples_utils::DumpRecord(p_driver_rec);
+        break;
+      }
       case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
@@ -222,7 +255,7 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         samples_utils::DumpRecord(p_memory_rec);
 
         ASSERT_TRUE(corr_id_map.find(p_memory_rec->_correlation_id) != corr_id_map.end())
-            << "ERROR: Found emply correlation id: " << p_memory_rec->_correlation_id;
+            << "ERROR: Found empty correlation id: " << p_memory_rec->_correlation_id;
 
         if (corr_id_map.find(p_memory_rec->_correlation_id) != corr_id_map.end()) {
           ASSERT_TRUE(corr_id_map[p_memory_rec->_correlation_id] == 1)
@@ -315,11 +348,12 @@ std::mutex mutex;
 std::condition_variable cv;  // no barrier in c++17 - so using condition variable
 bool ready = false;
 
-int SymmetricMultithreadedWithMain() {
+int SymmetricMultithreadedWithMain(bool useClassApis = false, bool useAllGroup = false) {
   int exit_code = EXIT_SUCCESS;
 
   try {
     StartTracing();
+    EnableIndividualRuntimeApis(useClassApis, useAllGroup);
     sycl::device dev;
     dev = sycl::device(sycl::gpu_selector_v);
     sycl::property_list prop_list{sycl::property::queue::in_order(),
@@ -409,10 +443,9 @@ class MultiThreadedSubmissionFixtureTest : public ::testing::Test {
 // Test verifies that GPU ops reported in the thread buffers where ops were submitted
 // in this test all working threads did the same work - so the number of records should be the same
 // in all buffers, except for the empty buffer of the main thread
-TEST_F(MultiThreadedSubmissionFixtureTest, MultiThreadedSubmissionTest) {
+TEST_F(MultiThreadedSubmissionFixtureTest, MultiThreadedSubmissionTestUsingGranularApis) {
   ASSERT_TRUE(thread_count > 1);
   EXPECT_EQ(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer), pti_result::PTI_SUCCESS);
-  EnableIndividualRuntimeApis();
   EXPECT_EQ(SymmetricMultithreadedWithMain(), EXIT_SUCCESS);
   auto non_zero_record_count =
       records_per_thread[0] != 0 ? records_per_thread[0] : records_per_thread[1];
@@ -421,4 +454,31 @@ TEST_F(MultiThreadedSubmissionFixtureTest, MultiThreadedSubmissionTest) {
       EXPECT_EQ(records_per_thread[i], non_zero_record_count);
     }
   }
+}
+
+// Test verifies that GPU ops reported in the thread buffers where ops were submitted
+// in this test all working threads did the same work - so the number of records should be the same
+// in all buffers, except for the empty buffer of the main thread
+TEST_F(MultiThreadedSubmissionFixtureTest,
+       MultiThreadedSubmissionTestUsingSyclOpsAllClassAllGroups) {
+  ASSERT_TRUE(thread_count > 1);
+  EXPECT_EQ(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer), pti_result::PTI_SUCCESS);
+  EXPECT_EQ(SymmetricMultithreadedWithMain(true, true), EXIT_SUCCESS);
+  auto non_zero_record_count =
+      records_per_thread[0] != 0 ? records_per_thread[0] : records_per_thread[1];
+  for (unsigned i = 0; i < thread_count_with_main; i++) {
+    if (records_per_thread[i] != 0) {
+      EXPECT_EQ(records_per_thread[i], non_zero_record_count);
+    }
+  }
+}
+
+// Test verifies an api call request for an unsupported class type for the driver api returns
+// appropriate bad error code
+TEST_F(MultiThreadedSubmissionFixtureTest, ValidateDriverApiClassReturnsAppropriateCode) {
+  ASSERT_TRUE(thread_count > 1);
+  EXPECT_EQ(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer), pti_result::PTI_SUCCESS);
+  pti_result status = ptiViewEnableDriverApiClass(
+      1, pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE, pti_api_group_id::PTI_API_GROUP_ALL);
+  EXPECT_EQ(status, pti_result::PTI_ERROR_BAD_ARGUMENT);
 }

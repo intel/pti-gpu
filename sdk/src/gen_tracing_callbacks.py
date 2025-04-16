@@ -334,7 +334,7 @@ def generate_cb_api_file_info(cb_api_file, callbacks, category, api_group, regen
 def generate_state_file_info(
     api_state_file, callbacks, category, api_group, regen=True
 ):
-    api_state_file.write("std::mutex " + api_group + "_set_granularity_map_mtx_;\n")
+    api_state_file.write("std::mutex " + api_group + "_set_granularity_map_mtx;\n")
     api_state_file.write(
         "inline static std::map<uint32_t, uint32_t> pti_api_id_"
         + category
@@ -757,7 +757,7 @@ def gen_exit_callback(
         f.write("  uint32_t id_enabled=1;\n")
         f.write("  {\n")
         f.write(
-            "    const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx_);\n"
+            "    const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);\n"
         )
         f.write("    id_enabled=pti_api_id_driver_levelzero_state[" + func + "_id];\n")
         f.write("  }\n")
@@ -883,12 +883,12 @@ def append_undefined_functions(func_list, func_dictionary):
 def main():
     if len(sys.argv) < 6:
         print(
-            "Usage: python gen_tracing_header.py <output_include_path> <l0_include_path> <proj_bin_path> <pti_include_path> <ur_path> <regen_info> <regen_commit_hash>"
+            "Usage: python gen_tracing_callbacks.py <output_include_path> <l0_include_path> <proj_bin_path> <pti_include_path> <ur_path> <regen_info> <regen_commit_hash>"
         )
         return
 
     print(
-        "Using: python gen_tracing_header.py",
+        "Using: python gen_tracing_callbacks.py",
         sys.argv[1],
         sys.argv[2],
         sys.argv[3],

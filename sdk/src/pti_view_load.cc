@@ -274,3 +274,36 @@ pti_result ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id type, uint3
     return pti_result::PTI_ERROR_INTERNAL;
   }
 }
+
+pti_result ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class api_class,
+                                       pti_api_group_id group) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiViewEnableDriverApiClass_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiViewEnableDriverApiClass_(enable, api_class, group);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+pti_result ptiViewEnableRuntimeApiClass(uint32_t enable, pti_api_class api_class,
+                                        pti_api_group_id group) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiViewEnableRuntimeApiClass_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiViewEnableRuntimeApiClass_(enable, api_class, group);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}

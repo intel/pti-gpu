@@ -37,6 +37,7 @@ struct CollectorOptions {
 
   bool kernel_tracing = false;
   bool api_tracing = false;
+
   bool demangle = true;
 
   ViewsBufferable lz_enabled_views;

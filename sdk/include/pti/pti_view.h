@@ -124,12 +124,30 @@ typedef enum _pti_view_overhead_kind {
  */
 typedef enum _pti_api_group_id {
   PTI_API_GROUP_RESERVED              = 0,
-  PTI_API_GROUP_LEVELZERO             = 1,
-  PTI_API_GROUP_OPENCL                = 2,
-  PTI_API_GROUP_SYCL                  = 3,
-  PTI_API_GROUP_HYBRID_SYCL_LEVELZERO = 4,   // Sycl api_group, L0 api_id
-  PTI_API_GROUP_HYBRID_SYCL_OPENCL    = 5,   // Sycl api_group, OCL api_id
+  PTI_API_GROUP_LEVELZERO             = 1,   // Belongs to Driver super-group
+  PTI_API_GROUP_OPENCL                = 2,   // Belongs to Driver super-group
+  PTI_API_GROUP_SYCL                  = 3,   // Belongs to Runtime super-group
+  PTI_API_GROUP_HYBRID_SYCL_LEVELZERO = 4,   // Sycl api_group, L0 api_id, only for output
+  PTI_API_GROUP_HYBRID_SYCL_OPENCL    = 5,   // Sycl api_group, OCL api_id, only for output
+  PTI_API_GROUP_ALL                   = 0x7fffffff // all groups, used as input only
+                                                   // Be careful using GROUP_ALL in api calls 
+                                                   // -- you will get all *groups* now and in the *future*!
 } pti_api_group_id;
+
+/**
+ * @brief API Classes across API groups, used for coarse-grain filtering of traced APIs,
+ *                   serve only as input to PTI functions    
+ */
+ typedef enum _pti_api_class {
+  PTI_API_CLASS_RESERVED = 0,
+  PTI_API_CLASS_GPU_OPERATION_CORE = 1,                    //!< any memory or kernel APIs submitting some work to GPU
+                                                           //!< -- only Sycl Runtime mem/kernel apis covered for now.
+  PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION = 2,        //!< Host synchronization APIs (no barriers)
+                                                           //!< -- only LZ synch apis covered for now.
+  PTI_API_CLASS_ALL = 0x7fffffff,                          //!< all APIs, makes all valid values positive numbers 
+                                                           //!< Be careful using CLASS_ALL in api calls 
+                                                           //!< -- you will get all classes *now* and in the *future*!
+ } pti_api_class;
 
 typedef void* pti_backend_queue_t; //!< Backend queue handle
 
@@ -506,6 +524,24 @@ ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id api_group_id, uint32_t 
  */
 pti_result PTI_EXPORT
 ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id api_group_id, uint32_t api_id);
+
+/**
+ * @brief Enable/Disable driver APIs tracing specified by api_class across specified api group(s).
+ *        Use for the coarse-grain control of the Driver APIs tracing.
+ *
+ * @return pti_result
+ */
+pti_result  PTI_EXPORT 
+ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class api_class, pti_api_group_id group);
+
+/**
+ * @brief Enable/Disable runtime APIs tracing specified by api_class across specified api group(s).
+ *        Use for the coarse-grain control of the Runtime APIs tracing.
+ *
+ * @return pti_result
+ */
+pti_result  PTI_EXPORT 
+ptiViewEnableRuntimeApiClass(uint32_t enable, pti_api_class api_class, pti_api_group_id group);
 
 #if defined(__cplusplus)
 }

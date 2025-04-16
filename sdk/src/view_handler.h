@@ -80,6 +80,30 @@ enum class internal_result {
   kStatusViewNotEnabled = 1,  //!< status due to a pti_view_kind not enabled
 };
 
+const std::array pti_class_sycl_gpu_ops_core_apis{
+    pti_api_id_runtime_sycl::urEnqueueUSMFill_id,
+    pti_api_id_runtime_sycl::urEnqueueUSMFill2D_id,
+    pti_api_id_runtime_sycl::urEnqueueUSMMemcpy_id,
+    pti_api_id_runtime_sycl::urEnqueueUSMMemcpy2D_id,
+    pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id,
+    pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id,
+    pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id,
+    pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id,
+    pti_api_id_runtime_sycl::urEnqueueMemBufferRead_id,
+    pti_api_id_runtime_sycl::urEnqueueMemBufferWrite_id,
+    pti_api_id_runtime_sycl::urEnqueueMemBufferCopy_id,
+    pti_api_id_runtime_sycl::urUSMHostAlloc_id,
+    pti_api_id_runtime_sycl::urUSMSharedAlloc_id,
+    pti_api_id_runtime_sycl::urUSMDeviceAlloc_id,
+};
+
+const std::array pti_class_lz_host_synch_op_apis{
+    pti_api_id_driver_levelzero::zeFenceHostSynchronize_id,
+    pti_api_id_driver_levelzero::zeEventHostSynchronize_id,
+    pti_api_id_driver_levelzero::zeCommandQueueSynchronize_id,
+    pti_api_id_driver_levelzero::zeCommandListHostSynchronize_id,
+};
+
 struct ViewData {
   const char* fn_name = "";
   ViewInsert callback;
@@ -356,6 +380,13 @@ struct PtiViewRecordHandler {
 #if defined(PTI_TRACE_SYCL)
       if (!view_event_map_.TryFindElement("SyclRuntimeEvent")) {
         SyclCollector::Instance().SetCallback(SyclRuntimeViewCallback);
+        {
+          const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
+          for (auto [k, v] : pti_api_id_runtime_sycl_state) {
+            pti_api_id_runtime_sycl_state[k] = 1;  // enable all to fire.
+          }
+          SetGranularityState(pti_api_group_id::PTI_API_GROUP_SYCL, false);
+        }
         SyclCollector::Instance().EnableTracing();
         collection_enabled = true;
       }
@@ -371,6 +402,19 @@ struct PtiViewRecordHandler {
       collection_enabled = true;
       if (l0_collection_type) {
         auto it = map_view_kind_enabled.find(type);
+        // We need to ensure we have enabled all to fire since we will be EnableTracing() for
+        // collector in this scope
+        if ((type == pti_view_kind::PTI_VIEW_DRIVER_API) &&
+            (it == map_view_kind_enabled.cend() || map_view_kind_enabled[type] == false)) {
+          {
+            const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
+            for (auto [k, v] : pti_api_id_driver_levelzero_state) {
+              pti_api_id_driver_levelzero_state[k] = 1;  // enable all to fire.
+            }
+            SetGranularityState(pti_api_group_id::PTI_API_GROUP_LEVELZERO, false);
+            SetGranularityState(pti_api_group_id::PTI_API_GROUP_OPENCL, false);
+          }
+        }
         if (it == map_view_kind_enabled.cend() || map_view_kind_enabled[type] == false) {
           map_view_kind_enabled[type] = true;
           collector_->EnableTracing();
@@ -392,13 +436,20 @@ struct PtiViewRecordHandler {
         for (const auto& view_types : GetViewNameAndCallback(type)) {
           view_event_map_.Add(view_types.fn_name, view_types.callback);
         }
+        // Note: at this point EnableTracing on collector may be on and we maybe in granular mode.
+        // We hit the below reset of granular enables in case we have in Multithread scenario where
+        // the overall flow is:
+        //    --- start off with enable pti_view_driver_api --- setup granularity to override all
+        //    --- some thread later resets to all via enable driver_api
         if (type == pti_view_kind::PTI_VIEW_DRIVER_API) {
-          const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx_);
-          for (auto [k, v] : pti_api_id_driver_levelzero_state) {
-            pti_api_id_driver_levelzero_state[k] = 1;  // enable all to fire.
+          {
+            const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
+            for (auto [k, v] : pti_api_id_driver_levelzero_state) {
+              pti_api_id_driver_levelzero_state[k] = 1;  // enable all to fire.
+            }
+            SetGranularityState(pti_api_group_id::PTI_API_GROUP_LEVELZERO, false);
+            SetGranularityState(pti_api_group_id::PTI_API_GROUP_OPENCL, false);
           }
-          map_granularity_set[pti_api_group_id::PTI_API_GROUP_LEVELZERO] = false;
-          map_granularity_set[pti_api_group_id::PTI_API_GROUP_OPENCL] = false;
         }
       }
     } catch (const std::out_of_range&) {
@@ -517,16 +568,17 @@ struct PtiViewRecordHandler {
   }
 
   inline pti_result ResetTracingStateToAllDisabled(pti_api_group_id type) {
+    // to avoid duplicate lock issues, lock is held by caller
     try {
       switch (type) {
         case pti_api_group_id::PTI_API_GROUP_SYCL: {
-          const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx_);
+          // const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
           for (auto [k, v] : pti_api_id_runtime_sycl_state) {
             pti_api_id_runtime_sycl_state[k] = 0;  // disable all
           }
         }; break;
         case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
-          const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx_);
+          // const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
           for (auto [k, v] : pti_api_id_driver_levelzero_state) {
             pti_api_id_driver_levelzero_state[k] = 0;  // disable all
           }
@@ -534,6 +586,8 @@ struct PtiViewRecordHandler {
         case pti_api_group_id::PTI_API_GROUP_OPENCL: {
           return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
         }; break;
+        case pti_api_group_id::PTI_API_GROUP_ALL:  // for now no internal call for clearing all
+                                                   // groups is needed.
         case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
         case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
         case pti_api_group_id::PTI_API_GROUP_RESERVED: {
@@ -546,12 +600,105 @@ struct PtiViewRecordHandler {
     return PTI_SUCCESS;
   }
 
+  // Given enable or disable new value; the array of apis in class - class_ops; and the state_map.
+  //   -- set the state of the api to the new_value for all apis in the class_ops array.
+  template <typename T, size_t N>
+  inline pti_result SetGranularApis(uint32_t new_value, const std::array<T, N>& class_ops,
+                                    std::map<uint32_t, uint32_t>& state_map) {
+    for (const auto& sycl_ops_id : class_ops) {
+      if (state_map.find(sycl_ops_id) != state_map.end()) {
+        state_map.at(sycl_ops_id) = new_value;
+      } else {
+        return pti_result::PTI_ERROR_BAD_API_ID;
+      }
+    }
+    return PTI_SUCCESS;
+  }
+
+  // TODO - Assumes only Sycl runtime frontend -- extend this as we add more runtimes.
+  // enables/disables (per new_value) class specific apis as defined by pti_class for tracing.
+  inline pti_result SetRuntimeClassSpecificGranularIds(uint32_t new_value,
+                                                       pti_api_class pti_class) {
+    SPDLOG_TRACE("In {}, class: {}", __FUNCTION__, static_cast<uint32_t>(pti_class));
+    switch (pti_class) {
+      case pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE: {
+        const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
+        std::map<uint32_t, uint32_t>& state_map = pti_api_id_runtime_sycl_state;
+        const std::array<pti_api_id_runtime_sycl, std::size(pti_class_sycl_gpu_ops_core_apis)>&
+            class_ops = pti_class_sycl_gpu_ops_core_apis;
+        SetGranularApis(new_value, class_ops, state_map);
+      }; break;
+      case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION:  // Does not apply to
+                                                                         // runtime
+      case pti_api_class::PTI_API_CLASS_ALL:
+      default:
+        break;
+    }
+    return PTI_SUCCESS;
+  }
+
+  // TODO - Assumes only Lz backend -- extend this as we add more backends.
+  // enables/disables (per new_value) class specific apis as defined by pti_class for tracing.
+  inline pti_result SetDriverClassSpecificGranularIds(uint32_t new_value, pti_api_class pti_class) {
+    SPDLOG_TRACE("In {}, class: {}", __FUNCTION__, static_cast<uint32_t>(pti_class));
+    switch (pti_class) {
+      case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION: {
+        const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
+        std::map<uint32_t, uint32_t>& state_map = pti_api_id_driver_levelzero_state;
+        const std::array<pti_api_id_driver_levelzero, std::size(pti_class_lz_host_synch_op_apis)>&
+            class_ops = pti_class_lz_host_synch_op_apis;
+        SetGranularApis(new_value, class_ops, state_map);
+      }; break;
+      case pti_api_class::PTI_API_CLASS_ALL:
+      default:
+        break;
+    }
+    return PTI_SUCCESS;
+  }
+
+  inline void CheckAndSetGranularity(pti_api_group_id pti_group) {
+    if (!GetGranularityState(pti_group)) {  // check if we are already in granular/individual mode.
+      const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
+      ResetTracingStateToAllDisabled(pti_group);  // if first time -- change all api state to off
+      SetGranularityState(pti_group, true);  // and set granular mode on for this api_group type.
+    }
+  }
+
+  //  Resets the granularity if not set, then sets state for this group.
+  inline pti_result CheckGranularityAndSetState(pti_api_group_id pti_group, uint32_t api_id,
+                                                uint32_t enable) {
+    CheckAndSetGranularity(pti_group);
+    return SetApiTracingState(pti_group, api_id, enable);
+  }
+
+  //  Resets the granularity if not set, then sets state for this group per class apis input.
+  inline pti_result ProcessGroupForDriverPerClass(pti_api_group_id& pti_group, uint32_t new_value,
+                                                  pti_api_class& pti_class) {
+    SPDLOG_DEBUG("In {}, pti_group:  {}, pti_class: {}", __FUNCTION__,
+                 static_cast<uint32_t>(pti_group), static_cast<uint32_t>(pti_class));
+    CheckAndSetGranularity(pti_group);
+    return SetDriverClassSpecificGranularIds(new_value, pti_class);
+  }
+
+  //  Resets the granularity if not set, then sets state for this group per class apis input.
+  inline pti_result ProcessGroupForRuntimePerClass(pti_api_group_id& pti_group, uint32_t new_value,
+                                                   pti_api_class& pti_class) {
+    SPDLOG_DEBUG("In {}, pti_group:  {}, pti_class: {}", __FUNCTION__,
+                 static_cast<uint32_t>(pti_group), static_cast<uint32_t>(pti_class));
+    CheckAndSetGranularity(pti_group);
+    return SetRuntimeClassSpecificGranularIds(new_value, pti_class);
+  }
+
+  // Non-class specific: Enable/Disable specific API specified by api_id within the api_group_id.
+  // Only specific types reach here -- group_all has already been accounted for in the caller.
   inline pti_result SetApiTracingState(pti_api_group_id type, uint32_t api_id, bool enable) {
     uint32_t new_value = (enable ? 1 : 0);
     try {
       switch (type) {
         case pti_api_group_id::PTI_API_GROUP_SYCL: {
-          const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx_);
+          SPDLOG_DEBUG("In Sycl {}, pti_group:  {}, api_id: {}, enable?: {}", __FUNCTION__,
+                       static_cast<uint32_t>(type), static_cast<uint32_t>(api_id), new_value);
+          const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
           if (pti_api_id_runtime_sycl_state.find(api_id) != pti_api_id_runtime_sycl_state.end()) {
             pti_api_id_runtime_sycl_state.at(api_id) = new_value;
           } else {
@@ -559,7 +706,9 @@ struct PtiViewRecordHandler {
           }
         }; break;
         case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
-          const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx_);
+          SPDLOG_DEBUG("In Lz {}, pti_group:  {}, api_id: {}, enable?: {}", __FUNCTION__,
+                       static_cast<uint32_t>(type), static_cast<uint32_t>(api_id), new_value);
+          const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
           if (pti_api_id_driver_levelzero_state.find(api_id) !=
               pti_api_id_driver_levelzero_state.end()) {
             pti_api_id_driver_levelzero_state.at(api_id) = new_value;
@@ -570,6 +719,8 @@ struct PtiViewRecordHandler {
         case pti_api_group_id::PTI_API_GROUP_OPENCL: {
           return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
         }; break;
+        case pti_api_group_id::PTI_API_GROUP_ALL:  // keep compiler happy -- if this cause of error
+                                                   // check caller.
         case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
         case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
         case pti_api_group_id::PTI_API_GROUP_RESERVED: {
@@ -587,9 +738,13 @@ struct PtiViewRecordHandler {
   inline pti_result GetState() { return state_; }
   inline void SetState(pti_result new_state) { state_ = new_state; }
 
-  inline bool GetGranularityState(pti_api_group_id type) { return map_granularity_set[type]; }
-  inline void SetGranularityState(pti_api_group_id type, bool state) {
+  inline bool GetGranularityState(pti_api_group_id type) {
     const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
+    return map_granularity_set[type];
+  }
+
+  inline void SetGranularityState(pti_api_group_id type, bool state) {
+    // to avoid duplicate lock issues, lock is held by caller
     map_granularity_set[type] = state;
   }
 
@@ -689,7 +844,7 @@ struct PtiViewRecordHandler {
   std::atomic<bool> deinit_ = false;
 
   std::map<uint32_t, SpecialCallsData> map_spcalls_suppression;
-  std::map<pti_api_group_id, bool>
+  std::map<pti_api_group_id, std::atomic<bool>>
       map_granularity_set;  // Are we in granular (individual api) mode for this api_group?
 };
 

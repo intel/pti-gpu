@@ -351,22 +351,21 @@ pti_result ptiViewGetApiIdName(pti_api_group_id type, uint32_t unique_id, const 
 }
 
 // Enable/Disable driver specific API specified by api_id within the api_group_id.
+// TODO--when groups have more than 1 driver Apis (say OCL) update this to call Reset appropriately
 pti_result ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id api_group_id, uint32_t api_id) {
   try {
+    // Only valid groups for driver class are all or levelzero for now.
     if (api_group_id == pti_api_group_id::PTI_API_GROUP_OPENCL) {
       return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
     }
-    if (api_group_id != pti_api_group_id::PTI_API_GROUP_LEVELZERO) {
+    if ((api_group_id != pti_api_group_id::PTI_API_GROUP_LEVELZERO) &&
+        (api_group_id != pti_api_group_id::PTI_API_GROUP_ALL)) {
       return pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
-    if (!Instance().GetGranularityState(
-            api_group_id)) {  // check if we are already in granular/individual mode.
-      Instance().ResetTracingStateToAllDisabled(
-          api_group_id);  // if first time -- change all api state to off
-      Instance().SetGranularityState(api_group_id,
-                                     true);  // and set granular mode on for this api_group type.
-    }
-    return Instance().SetApiTracingState(api_group_id, api_id, enable);
+
+    // Set the group to be specific here.  All calls require it.
+    pti_api_group_id pti_group = pti_api_group_id::PTI_API_GROUP_LEVELZERO;
+    return Instance().CheckGranularityAndSetState(pti_group, api_id, enable);
   } catch (const std::out_of_range&) {
     return pti_result::PTI_ERROR_BAD_ARGUMENT;
   };
@@ -374,19 +373,116 @@ pti_result ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id api_group_id
 }
 
 // Enable/Disable runtime specific API specified by api_id within the api_group_id.
+// TODO--when groups have more than 1 runtime Apis (say OV) update this to call Reset appropriately
 pti_result ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id api_group_id,
                                    uint32_t api_id) {
   try {
-    if (api_group_id != pti_api_group_id::PTI_API_GROUP_SYCL) {
+    // Only valid groups for runtime class are all or sycl for now.
+    if ((api_group_id != pti_api_group_id::PTI_API_GROUP_SYCL) &&
+        (api_group_id != pti_api_group_id::PTI_API_GROUP_ALL)) {
       return pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
-    if (!Instance().GetGranularityState(api_group_id)) {
-      Instance().ResetTracingStateToAllDisabled(api_group_id);
-      Instance().SetGranularityState(api_group_id, true);
-    }
-    return Instance().SetApiTracingState(api_group_id, api_id, enable);
+
+    // Set the group to be specific here.  All calls require it.
+    // TODO -- Relook at this when api_group_id can be a valid group other than SYCL.
+    pti_api_group_id pti_group = pti_api_group_id::PTI_API_GROUP_SYCL;
+    return Instance().CheckGranularityAndSetState(pti_group, api_id, enable);
   } catch (const std::out_of_range&) {
     return pti_result::PTI_ERROR_BAD_ARGUMENT;
   };
   return PTI_SUCCESS;
+}
+
+// Enable/Disable runtime APIs tracing specified by pti_class across specified api group(s).
+pti_result ptiViewEnableRuntimeApiClass(uint32_t enable, pti_api_class pti_class,
+                                        pti_api_group_id pti_group) {
+  pti_result status = pti_result::PTI_SUCCESS;
+  // Only valid groups for runtime class are all or sycl for now.
+  if ((pti_group != pti_api_group_id::PTI_API_GROUP_SYCL) &&
+      (pti_group != pti_api_group_id::PTI_API_GROUP_ALL)) {
+    return pti_result::PTI_ERROR_BAD_ARGUMENT;
+  }
+  uint32_t new_value = (enable ? 1 : 0);
+  try {
+    switch (pti_class) {
+      case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION:  // No runtime synch yet.
+      case pti_api_class::PTI_API_CLASS_RESERVED: {
+        status = pti_result::PTI_ERROR_BAD_ARGUMENT;
+        break;
+      }
+      //*
+      //* Note conditional break for cases is needed to cover CLASS_ALL cases - ensure they are
+      // added below:
+      //*
+      //* Additionally: the GROUP_ALL check -- is needed for all cases to capture the all category
+      // and set granularities appropriately.
+      //*
+      case pti_api_class::PTI_API_CLASS_ALL:
+      case pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE: {
+        if ((pti_group == pti_api_group_id::PTI_API_GROUP_ALL ||
+             pti_group == pti_api_group_id::PTI_API_GROUP_SYCL)) {
+          // Set the class and group to be specific here.  All calls require it.
+          pti_api_class api_pti_class = pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE;
+          pti_api_group_id api_group_id = pti_api_group_id::PTI_API_GROUP_SYCL;
+          status =
+              Instance().ProcessGroupForRuntimePerClass(api_group_id, new_value, api_pti_class);
+        }
+        if (pti_class != pti_api_class::PTI_API_CLASS_ALL)
+          break;
+        else
+          [[fallthrough]];
+      }
+      default:
+        break;  // last valid case -- unconditional break;
+    }
+  } catch (const std::out_of_range&) {
+    return pti_result::PTI_ERROR_BAD_ARGUMENT;
+  }
+  return status;
+}
+
+// Enable/Disable driver APIs tracing specified by pti_class across specified api group(s).
+pti_result ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class pti_class,
+                                       pti_api_group_id pti_group) {
+  pti_result status = pti_result::PTI_SUCCESS;
+  // Only valid groups for driver class are all or levelzero for now.
+  if ((pti_group != pti_api_group_id::PTI_API_GROUP_LEVELZERO) &&
+      (pti_group != pti_api_group_id::PTI_API_GROUP_ALL)) {
+    return pti_result::PTI_ERROR_BAD_ARGUMENT;
+  }
+  uint32_t new_value = (enable ? 1 : 0);
+  try {
+    switch (pti_class) {
+      case pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE:
+      case pti_api_class::PTI_API_CLASS_RESERVED: {
+        status = pti_result::PTI_ERROR_BAD_ARGUMENT;
+        break;
+      }
+      //*
+      //* Note conditional break for cases is needed to cover CLASS_ALL cases - ensure they are
+      // added below:
+      //*
+      //* Additionally: the GROUP_ALL check -- is needed for all cases to capture the all category
+      // and set granularities appropriately.
+      case pti_api_class::PTI_API_CLASS_ALL:
+      case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION: {
+        if ((pti_group == pti_api_group_id::PTI_API_GROUP_ALL ||
+             pti_group == pti_api_group_id::PTI_API_GROUP_LEVELZERO)) {
+          // Set the class and group to be specific here.  All calls require it.
+          pti_api_class api_pti_class = pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION;
+          pti_api_group_id api_group_id = pti_api_group_id::PTI_API_GROUP_LEVELZERO;
+          status = Instance().ProcessGroupForDriverPerClass(api_group_id, new_value, api_pti_class);
+        }
+        if (pti_class != pti_api_class::PTI_API_CLASS_ALL)
+          break;
+        else
+          [[fallthrough]];
+      }
+      default:
+        break;  // last valid case -- unconditional break;
+    }
+  } catch (const std::out_of_range&) {
+    status = pti_result::PTI_ERROR_BAD_ARGUMENT;
+  }
+  return status;
 }

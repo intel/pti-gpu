@@ -68,6 +68,20 @@ if(HAVE_SYCL)
   target_compile_definitions(dpcgemm_suite PUBLIC PTI_LEVEL_ZERO=1)
   target_link_libraries(dpcgemm_suite PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main LevelZero::level-zero)
 
+  add_executable(classapi_suite main_classapi_fixture.cc)
+  target_include_directories(
+    classapi_suite
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+           "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+
+
+  target_compile_options( classapi_suite PUBLIC -fsycl -gline-tables-only)
+  target_link_options(classapi_suite PUBLIC -fsycl -gline-tables-only)
+  target_compile_definitions(classapi_suite PUBLIC PTI_LEVEL_ZERO=1)
+  target_link_libraries(classapi_suite PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main LevelZero::level-zero)
+
   add_executable(vecsqadd_suite main_vecsqadd_fixture.cc)
   target_include_directories(
     vecsqadd_suite
@@ -277,6 +291,11 @@ if(HAVE_SYCL)
     TEST_LIST MEM_OPS_TEST_LIST
     PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
     PROPERTIES LABELS "unit" )
+
+  gtest_discover_tests(
+    classapi_suite
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS "functional")
 
   gtest_discover_tests(
     vecsqadd_suite
