@@ -34,6 +34,9 @@ def get_l0_api_list(l0_path):
   return func_list
 
 def get_ocl_api_list(ocl_path):
+  if (not os.path.exists(ocl_path)):
+    return []
+
   ocl_file_path = os.path.join(ocl_path, "tracing_types.h")
   ocl_file = open(ocl_file_path, "rt")
   func_list = []

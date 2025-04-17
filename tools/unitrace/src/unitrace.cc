@@ -44,6 +44,13 @@ void Usage(char * progname) {
   std::cout <<
     "Usage: " << progname << " [options] <application> <args>" <<
     std::endl;
+  std::cout << "Built with Level Zero support enabled and settings" << std::endl; // At present Level-zero is always ON hence no check is needed
+  std::cout << "[ ";
+  std::cout << "BUILD_WITH_OPENCL = " << BUILD_WITH_OPENCL << ", ";
+  std::cout << "BUILD_WITH_ITT = " << BUILD_WITH_ITT << ", ";
+  std::cout << "BUILD_WITH_XPTI = " << BUILD_WITH_XPTI << ", ";
+  std::cout << "BUILD_WITH_MPI = " << BUILD_WITH_MPI;
+  std::cout << " ]" << std::endl;
   std::cout << "Options:" << std::endl;
   std::cout <<
     "--call-logging [-c]            " <<
@@ -57,10 +64,12 @@ void Usage(char * progname) {
     "--device-timing [-d]           " <<
     "Report kernels execution time" <<
     std::endl;
+#if BUILD_WITH_ITT
   std::cout <<
     "--ccl-summary-report [-r]      " <<
     "Report CCL execution time summary" <<
     std::endl;
+#endif /* BUILD_WITH_ITT */
   std::cout <<
     "--kernel-submission [-s]       " <<
     "Report append (queued), submit and execute intervals for kernels" <<
@@ -69,20 +78,25 @@ void Usage(char * progname) {
     "--device-timeline [-t]         " <<
     "Report device timeline" <<
     std::endl;
+#if BUILD_WITH_OPENCL
   std::cout <<
     "--opencl                       " <<
     "Trace OpenCL" <<
     std::endl;
+#endif /* BUILD_WITH_OPENCL */
 #if BUILD_WITH_MPI
   std::cout <<
     "--chrome-mpi-logging           " <<
     "Trace MPI" <<
     std::endl;
 #endif /* BUILD_WITH_MPI */
+#if BUILD_WITH_XPTI
   std::cout <<
     "--chrome-sycl-logging          " <<
     "Trace SYCL runtime and plugin" <<
     std::endl;
+#endif /* BUILD_WITH_XPTI */
+#if BUILD_WITH_ITT
   std::cout <<
     "--chrome-ccl-logging           " <<
     "Trace oneCCL" <<
@@ -91,6 +105,7 @@ void Usage(char * progname) {
     "--chrome-dnn-logging           " <<
     "Trace oneDNN" <<
     std::endl;
+#endif /* BUILD_WITH_ITT */
   std::cout <<
     "--chrome-call-logging          " <<
     "Trace Level Zero and/or OpenCL host calls" <<
@@ -241,23 +256,28 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--device-timing") == 0 || strcmp(argv[i], "-d") == 0) {
       utils::SetEnv("UNITRACE_DeviceTiming", "1");
       ++app_index;
+#if BUILD_WITH_ITT
     } else if (strcmp(argv[i], "--ccl-summary-report") == 0 || strcmp(argv[i], "-r") == 0) {
       utils::SetEnv("UNITRACE_CclSummaryReport", "1");
       utils::SetEnv("CCL_ITT_LEVEL", "1");
       ++app_index;
+#endif /* BUILD_WITH_ITT */
     } else if (strcmp(argv[i], "--kernel-submission") == 0 || strcmp(argv[i], "-s") == 0) {
       utils::SetEnv("UNITRACE_KernelSubmission", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timeline") == 0 || strcmp(argv[i], "-t") == 0) {
       utils::SetEnv("UNITRACE_DeviceTimeline", "1");
       ++app_index;
+#if BUILD_WITH_OPENCL
     } else if (strcmp(argv[i], "--opencl") == 0) {
       utils::SetEnv("UNITRACE_OpenCLTracing", "1");
       ++app_index;
+#endif /* BUILD_WITH_OPENCL */
     } else if (strcmp(argv[i], "--chrome-mpi-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeMpiLogging", "1");
       utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
       ++app_index;
+#if BUILD_WITH_XPTI
     } else if (strcmp(argv[i], "--chrome-sycl-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeSyclLogging", "1");
       utils::SetEnv("XPTI_TRACE_ENABLE", "1");
@@ -265,11 +285,13 @@ int ParseArgs(int argc, char* argv[]) {
 #ifdef _WIN32
       utils::SetEnv("XPTI_SUBSCRIBERS", "unitrace_tool.dll");
       utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "xptifw.dll");
-#else
+#else /*_WIN32*/
       utils::SetEnv("XPTI_SUBSCRIBERS", "libunitrace_tool.so");
       utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "libxptifw.so");
-#endif
+#endif /*_WIN32*/
       ++app_index;
+#endif /* BUILD_WITH_XPTI */
+#if BUILD_WITH_ITT
     } else if (strcmp(argv[i], "--chrome-ccl-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeCclLogging", "1");
       utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
@@ -279,6 +301,7 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
       // what should be set here?
       ++app_index;
+#endif /* BUILD_WITH_ITT */
     } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeCallLogging", "1");
       ++app_index;
@@ -410,6 +433,11 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--system-time") == 0) {
       utils::SetEnv("UNITRACE_SystemTime", "1");
       ++app_index;
+#if BUILD_WITH_ITT
+    } else if (strcmp(argv[i], "--chrome-itt-logging") == 0 ) {
+      utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
+      ++app_index;
+#endif /* BUILD_WITH_ITT */
     } else if (strcmp(argv[i], "--sampling-interval") == 0 || strcmp(argv[i], "-i") == 0) {
       ++i;
       if (i >= argc) {
@@ -431,9 +459,6 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--help") == 0) {
       Usage(argv[0]);
       return 0;
-    } else if (strcmp(argv[i], "--chrome-itt-logging") == 0 ) {
-      utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
-      ++app_index;
     } else {
       break;
     }

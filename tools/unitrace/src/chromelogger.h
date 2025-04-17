@@ -182,6 +182,8 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
   return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
 }
 
+#if BUILD_WITH_OPENCL
+
 struct ClDevicePidKey {
   cl_device_pci_bus_info_khr pci_addr_;
   cl_device_id device_;
@@ -258,7 +260,9 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
 
   return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
 }
+#endif /* BUILD_WITH_OPENCL */
 
+#if BUILD_WITH_ITT
 static std::string convertDataToString(IttArgs* args) {
   std::string strData = "";
   void* dataPtr = args->isIndirectData ? args->data[0] : args->data;
@@ -355,6 +359,11 @@ static std::string convertDataToString(IttArgs* args) {
   }
   return strData;
 }
+#else /* BUILD_WITH_ITT */
+static std::string convertDataToString(IttArgs* args) {
+  return "";
+}
+#endif /* BUILD_WITH_ITT */
 
 class TraceBuffer;
 std::set<TraceBuffer *> *trace_buffers_ = nullptr;
@@ -946,6 +955,7 @@ class ClTraceBuffer {
     uint32_t GetPid() { return pid_; }
 
     std::string StringifyDeviceEvent(ClKernelCommandExecutionRecord& rec) {
+#if BUILD_WITH_OPENCL
       auto [pid, tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_);
       std::string kname = GetClKernelCommandName(rec.kernel_command_id_);
 
@@ -1008,6 +1018,9 @@ class ClTraceBuffer {
       }
 
       return str;
+#else /* BUILD_WITH_OPENCL */
+      return ""; // Unitrace build does not support OpenCL
+#endif /* BUILD_WITH_OPENCL */
     }
 
     void FlushDeviceEvent(ClKernelCommandExecutionRecord& rec) {
@@ -1366,6 +1379,7 @@ class ChromeLogger {
           }
         }
 
+#if BUILD_WITH_OPENCL
         for (auto it = cl_device_pid_map_.cbegin(); it != cl_device_pid_map_.cend(); it++) {
           uint32_t device_pid = std::get<0>(it->second);
           str += ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
@@ -1418,6 +1432,7 @@ class ChromeLogger {
             }
           }
         }
+#endif /* BUILD_WITH_OPENCL */
 
         if (logger_->GetLogFilePosition() == data_start_pos_) {
           // no data has been logged
@@ -1568,6 +1583,7 @@ class ChromeLogger {
       thread_local_buffer_.BufferDeviceEvent();
     }
 
+#if BUILD_WITH_OPENCL
     // OnenCL tracer callbacks.
     static void ClChromeKernelLoggingCallback(
       cl_device_pci_bus_info_khr& pci,
@@ -1599,6 +1615,7 @@ class ChromeLogger {
       rec->kernel_command_id_ = id;
       cl_thread_local_buffer_.BufferDeviceEvent();
     }
+#endif /* BUILD_WITH_OPENCL */
 
     static void ChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
       uint64_t started, uint64_t ended) {

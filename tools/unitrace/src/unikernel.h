@@ -8,9 +8,10 @@
 #define PTI_TOOLS_UNITRACE_UNIKERNEL_H
 
 #include <iostream>
-
-#include <CL/cl.h>
-#include <CL/cl_ext_private.h>
+#if BUILD_WITH_OPENCL
+  #include <CL/cl.h>
+  #include <CL/cl_ext_private.h>
+#endif /* BUILD_WITH_OPENCL */
 #include <level_zero/layers/zel_tracing_api.h>
 
 #define KERNEL_ID_INVALID		0
@@ -64,10 +65,11 @@ struct ClKernelCommandExecutionRecord {
   uint64_t kernel_command_id_;
   uint64_t start_time_;
   uint64_t end_time_;
+#if BUILD_WITH_OPENCL
   cl_device_id device_;
   cl_device_pci_bus_info_khr pci_;
   cl_command_queue queue_;
-
+#endif /* BUILD_WITH_OPENCL */
   // size_t mem_size_;
   // uint32_t engine_ordinal_;
   // uint32_t engine_index_;

@@ -3,6 +3,7 @@ SetRequiredCMakeVersion()
 cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
 project(PTI_Tools_UniTrace C CXX)
+
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 SetCompilerFlags()
 SetBuildType()
@@ -18,6 +19,20 @@ else()
     "Build with support for MPI tracing"
     ON
   )
+endif()
+
+if (NOT BUILD_WITH_L0)
+  # ITT and XPTI are needed when tool is getting build for all supported APIs.
+  add_compile_definitions(BUILD_WITH_ITT=1)
+  add_compile_definitions(BUILD_WITH_XPTI=1)
+  set(BUILD_WITH_ITT 1)
+  set(BUILD_WITH_XPTI 1)
+else()
+  # Dependent component such as ITT is not getting build hence disabling MPI support as well
+  set(BUILD_WITH_MPI OFF)
+  add_compile_definitions(BUILD_WITH_ITT=0)
+  add_compile_definitions(BUILD_WITH_XPTI=0)
+  add_compile_definitions(BUILD_WITH_L0=1)
 endif()
 
 if(WIN32)
@@ -65,9 +80,12 @@ endmacro()
 
 find_package(PythonInterp 3.9 REQUIRED)
 
-# Download itt source from github repo
-set(ITT_HASH 47467459a7984988ab838b5108c03ab1cf0a3f73)
-execute_process(COMMAND "${PYTHON_EXECUTABLE}" ${PROJECT_SOURCE_DIR}/scripts/get_itt.py ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR} ${ITT_HASH})
+if (${BUILD_WITH_ITT})
+  # Download itt source from github repo
+  set(ITT_HASH 47467459a7984988ab838b5108c03ab1cf0a3f73)
+  RequirePythonInterp()
+  execute_process(COMMAND "${PYTHON_EXECUTABLE}" ${PROJECT_SOURCE_DIR}/scripts/get_itt.py ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR} ${ITT_HASH})
+endif()
 
 if (BUILD_WITH_MPI)
   find_package(MPI REQUIRED)
@@ -94,17 +112,21 @@ if (BUILD_WITH_MPI)
   endif()
 endif()
 
+
 add_library(unitrace_tool SHARED
   "${PROJECT_SOURCE_DIR}/src/tracer.cc")
 link_directories(${ONEAPI_COMPILER_HOME}/lib)
-find_package(Xptifw REQUIRED)
 
-if (Xptifw_FOUND)
-  target_include_directories(unitrace_tool PRIVATE "${Xptifw_INCLUDE_DIR}")
-  if(WIN32)
-    target_link_libraries(unitrace_tool PRIVATE ${Xptifw_LIBRARY})
-  else()
-    target_link_libraries(unitrace_tool PRIVATE xptifw)
+if (BUILD_WITH_XPTI)
+  find_package(Xptifw REQUIRED)
+  if (Xptifw_FOUND)
+    message(STATUS "XPTI found")
+    target_include_directories(unitrace_tool PRIVATE "${Xptifw_INCLUDE_DIR}")
+    if(WIN32)
+      target_link_libraries(unitrace_tool PRIVATE ${Xptifw_LIBRARY})
+    else()
+      target_link_libraries(unitrace_tool PRIVATE xptifw)
+    endif()
   endif()
 endif()
 
@@ -114,11 +136,19 @@ target_include_directories(unitrace_tool
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/xpti"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src/itt"
-  PRIVATE "${CMAKE_BINARY_DIR}/ittheaders"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/opencl"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/levelzero")
+
+if (BUILD_WITH_XPTI)
+  target_include_directories(unitrace_tool
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/xpti")
+endif()
+
+if (BUILD_WITH_ITT)
+  target_include_directories(unitrace_tool
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/itt"
+    PRIVATE "${CMAKE_BINARY_DIR}/ittheaders")
+endif()
 
 target_compile_definitions(unitrace_tool PUBLIC PTI_LEVEL_ZERO=1)
 if(CMAKE_INCLUDE_PATH)
@@ -126,10 +156,17 @@ if(CMAKE_INCLUDE_PATH)
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
 
-FindOpenCLLibrary(unitrace_tool)
-FindOpenCLHeaders(unitrace_tool)
+find_package(OpenCL 2.1)
+if (EXISTS ${OpenCL_LIBRARY})
+  message(STATUS "OpenCL installed on the machine")
+  add_compile_definitions(BUILD_WITH_OPENCL=1)
+  FindOpenCLLibrary(unitrace_tool)
+  FindOpenCLHeaders(unitrace_tool)
 
-GetOpenCLTracingHeaders(unitrace_tool)
+  GetOpenCLTracingHeaders(unitrace_tool)
+else()
+    add_compile_definitions(BUILD_WITH_OPENCL=0)
+endif()
 
 set (LEVEL_ZERO_COMMIT_ID "v1.21.6")
 GetLevelZeroHeaders(unitrace_tool)
@@ -138,10 +175,12 @@ FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_common_
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_callbacks.py" "tracing.gen" gen_tracing_header)
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_l0_loader.py" "l0_loader.gen" gen_l0_loader_header)
 
-add_dependencies(gen_common_header
-    cl_tracing_headers)
-add_dependencies(gen_tracing_header
-    cl_tracing_headers)
+if (TARGET cl_tracing_headers)
+  add_dependencies(gen_common_header
+      cl_tracing_headers)
+  add_dependencies(gen_tracing_header
+      cl_tracing_headers)
+endif()
 
 if(WIN32)
   add_dependencies(gen_common_header
