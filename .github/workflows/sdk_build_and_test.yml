@@ -2,8 +2,12 @@ name: sdk-build-and-test
 
 on:
   push:
+    branches:
+      - master
+      - release/**
     paths:
       - .github/workflows/sdk_build_and_test.yml
+      - sdk/**
   pull_request:
     branches:
       - master
@@ -201,7 +205,6 @@ jobs:
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
           ctest --output-on-failure --preset ${{ matrix.preset }} -R "perf-overhead-view|perf-link-overhead"
-          # let's keep this to see in Annotations when these tests failed
           if %ERRORLEVEL% NEQ 0 (
             echo ::warning::Quarantined tests step failed.
           )
