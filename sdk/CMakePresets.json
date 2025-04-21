@@ -126,7 +126,7 @@
       "description": "Linux build configuration for testing PTI with ThreadSanitizer.",
       "environment": {
         "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
-        "TSAN_OPTIONS": "suppressions=${sourceDir}/test/suppressions/TSan.supp external_symbolizer_path=$penv{CMPLR_ROOT}/bin/compiler/llvm-symbolizer exitcode=0"
+        "TSAN_OPTIONS": "suppressions=${sourceDir}/test/suppressions/TSan.supp external_symbolizer_path=$penv{CMPLR_ROOT}/bin/compiler/llvm-symbolizer halt_on_error=1 force_seq_cst_atomics=1"
       },
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_tsan_toolchain.cmake"

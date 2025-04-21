@@ -21,6 +21,7 @@
 
 #include "library_loader.h"
 #include "platform_strings.h"
+#include "pti_api_ids_state_maps.h"
 #include "unikernel.h"
 #include "utils.h"
 

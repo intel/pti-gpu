@@ -955,7 +955,8 @@ def main():
     api_state_file = open(api_state_file_with_path, "wt", opener=default_file_opener)
 
     gen_apiid_header(api_state_file, "STATE_MAPS", ())
-    api_state_file.write("#include <map>")
+    api_state_file.write("#include <map>\n")
+    api_state_file.write("#include <mutex>")
     api_state_file.write("\n\n")
 
     pti_inc_path = sys.argv[4]

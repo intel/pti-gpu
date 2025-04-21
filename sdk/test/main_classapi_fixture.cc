@@ -7,21 +7,19 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <iostream>
-#include <map>
 #include <string>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
-#include <thread>
 #include <vector>
 
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
-#include "utils/sycl_config_info.h"
-#include "utils/test_helpers.h"
 #include "utils/ze_utils.h"
 
 #define A_VALUE 0.128f
@@ -30,51 +28,40 @@
 
 namespace {
 
-size_t requested_buffer_calls = 0;
-size_t rejected_buffer_calls = 0;  // Buffer requests that are called and rejected by the API
-size_t completed_buffer_calls = 0;
-size_t completed_buffer_used_bytes = 0;
-bool buffer_size_atleast_largest_record = false;
-bool event_host_synch_rec_present = false;
-bool ze_kernel_rec_present = false;
-bool ur_event_wait_rec_present = false;
-bool ur_mem_write_rec_present = false;
-bool ur_mem_read_rec_present = false;
-bool ur_kernel_rec_present = false;
-bool zecall_present = false;
-uint64_t zecall_count = 0;
-bool urcall_present = false;
-uint64_t urcall_count = 0;
-uint8_t device_uuid_test[PTI_MAX_DEVICE_UUID_SIZE] = {};
-pti_backend_queue_t queue_test = nullptr;
+struct ClassTestData {
+  bool event_host_synch_rec_present = false;
+  bool ze_kernel_rec_present = false;
+  bool ur_event_wait_rec_present = false;
+  bool ur_mem_write_rec_present = false;
+  bool ur_mem_read_rec_present = false;
+  bool ur_kernel_rec_present = false;
+  bool zecall_present = false;
+  uint64_t zecall_count = 0;
+  bool urcall_present = false;
+  uint64_t urcall_count = 0;
+  std::array<uint8_t, PTI_MAX_DEVICE_UUID_SIZE> device_uuid_test = {};
+  pti_backend_queue_t queue_test = nullptr;
 
-// TODO - make the enable type param more generic (maybe a bitmap of somesort) so that we can enable
-// a mishmash of types
-void StartTracing(bool enable_only_zecalls = false) {
-  if (!enable_only_zecalls) {
-    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_SYNCHRONIZATION), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
-  } else {
-    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  static ClassTestData& Get() {
+    static ClassTestData instance{};
+    return instance;
   }
-}
 
-void StopTracing(bool enable_only_zecalls = false) {
-  if (!enable_only_zecalls) {
-    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_SYNCHRONIZATION), pti_result::PTI_SUCCESS);
-    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
-  } else {
-    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  void Reset() {
+    event_host_synch_rec_present = false;
+    ze_kernel_rec_present = false;
+    ur_event_wait_rec_present = false;
+    ur_mem_write_rec_present = false;
+    ur_mem_read_rec_present = false;
+    ur_kernel_rec_present = false;
+    zecall_present = false;
+    zecall_count = 0;
+    urcall_present = false;
+    urcall_count = 0;
+    std::fill_n(device_uuid_test.begin(), device_uuid_test.size(), 0);
+    queue_test = nullptr;
   }
-}
+};
 
 float Check(const std::vector<float>& a, float value) {
   PTI_ASSERT(value > MAX_EPS);
@@ -140,15 +127,15 @@ void Compute(sycl::queue queue, const std::vector<float>& a, const std::vector<f
 class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, bool>> {
  protected:
   void SetUp() override {  // Called right after constructor before each test
+    ClassTestData().Reset();
     try {
       dev_ = sycl::device(sycl::gpu_selector_v);
-      if (pti::test::utils::IsIntegratedGraphics(dev_)) {
-        expected_mem_transfers_per_mult_ = 1;
-      }
-      auto device_l0_test = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(dev_);
+      auto* device_l0_test = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(dev_);
       if (device_l0_test) {
-        ASSERT_TRUE(utils::ze::GetDeviceUUID(device_l0_test, device_uuid_test));
-        samples_utils::print_uuid(device_uuid_test, "Test Device UUID: ");
+        ASSERT_TRUE(
+            utils::ze::GetDeviceUUID(device_l0_test, ClassTestData::Get().device_uuid_test.data()));
+        samples_utils::print_uuid(ClassTestData::Get().device_uuid_test.data(),
+                                  "Test Device UUID: ");
       } else {
         FAIL() << "PTI doesn't support this backend yet. Backend is not Level Zero";
       }
@@ -157,22 +144,6 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
       FAIL() << "Unable to select valid device to run tests on. Check your hardware, driver "
                 "install, or system configuration.";
     }
-    buffer_cb_registered_ = true;
-    requested_buffer_calls = 0;
-    rejected_buffer_calls = 0;
-    completed_buffer_calls = 0;
-    completed_buffer_used_bytes = 0;
-    zecall_present = false;
-    zecall_count = 0;
-    urcall_present = false;
-    urcall_count = 0;
-    event_host_synch_rec_present = false;
-    ze_kernel_rec_present = false;
-    ur_event_wait_rec_present = false;
-    ur_mem_write_rec_present = false;
-    ur_mem_read_rec_present = false;
-    ur_kernel_rec_present = false;
-    queue_test = nullptr;
   }
 
   void TearDown() override {
@@ -182,13 +153,11 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
   static void BufferRequested(unsigned char** buf, size_t* buf_size) {
     *buf_size = sizeof(pti_view_record_kernel);
     void* ptr = ::operator new(*buf_size);
-    requested_buffer_calls += 1;
     ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
     *buf = static_cast<unsigned char*>(ptr);
     if (!*buf) {
       std::abort();
     }
-    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_kernel);
   }
 
   static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_bytes) {
@@ -198,8 +167,6 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
       return;
     }
 
-    completed_buffer_calls += 1;
-    completed_buffer_used_bytes = used_bytes;
     pti_view_record_base* ptr = nullptr;
     while (true) {
       auto buf_status = ptiViewGetNextRecord(buf, used_bytes, &ptr);
@@ -230,46 +197,45 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
         case pti_view_kind::PTI_VIEW_DRIVER_API: {
           pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
           if (rec->_api_group == pti_api_group_id::PTI_API_GROUP_LEVELZERO) {
-            zecall_present = true;
-            zecall_count++;
+            ClassTestData::Get().zecall_present = true;
+            ClassTestData::Get().zecall_count++;
           }
           const char* api_name = nullptr;
           pti_result status = ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO,
                                                   rec->_api_id, &api_name);
           PTI_ASSERT(status == PTI_SUCCESS);
-          // std::cout << "ZECALL: " << api_name << "\n";
           status = ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, -1, &api_name);
           std::string function_name(api_name);
           if ((function_name.find("zeEventHostSynchronize") != std::string::npos)) {
-            event_host_synch_rec_present = true;
+            ClassTestData::Get().event_host_synch_rec_present = true;
           }
           break;
         }
         case pti_view_kind::PTI_VIEW_RUNTIME_API: {
           pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
-          urcall_present = true;
-          urcall_count++;
+          ClassTestData::Get().urcall_present = true;
+          ClassTestData::Get().urcall_count++;
           const char* api_name = nullptr;
           pti_result status =
               ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id, &api_name);
           PTI_ASSERT(status == PTI_SUCCESS);
           std::string function_name(api_name);
           if ((function_name.find("urEventWait") != std::string::npos)) {
-            ur_event_wait_rec_present = true;
+            ClassTestData::Get().ur_event_wait_rec_present = true;
           }
           if ((function_name.find("urEnqueueMemBufferWrite") != std::string::npos)) {
-            ur_mem_write_rec_present = true;
+            ClassTestData::Get().ur_mem_write_rec_present = true;
           }
           if ((function_name.find("urEnqueueKernelLaunch") != std::string::npos)) {
-            ur_kernel_rec_present = true;
+            ClassTestData::Get().ur_kernel_rec_present = true;
           }
           if ((function_name.find("urEnqueueMemBufferRead") != std::string::npos)) {
-            ur_mem_read_rec_present = true;
+            ClassTestData::Get().ur_mem_read_rec_present = true;
           }
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-          ze_kernel_rec_present = true;
+          ClassTestData::Get().ze_kernel_rec_present = true;
           break;
         }
         default: {
@@ -281,29 +247,12 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
     ::operator delete(buf);
   }
 
-  void RunGemm(bool do_immediate = true) {
-    StartTracing();
-    RunGemmNoTrace(do_immediate);
-    StopTracing();
-    ptiFlushAllViews();
-  }
+  void RunGemmNoTrace() {
+    sycl::property_list prop{sycl::property::queue::in_order(),
+                             sycl::property::queue::enable_profiling(),
+                             sycl::ext::intel::property::queue::immediate_command_list()};
 
-  void RunGemmNoTrace(bool do_immediate = true) {
-    sycl::property_list prop_list;
-
-    if (do_immediate) {
-      sycl::property_list prop{sycl::property::queue::in_order(),
-                               sycl::property::queue::enable_profiling(),
-                               sycl::ext::intel::property::queue::immediate_command_list()};
-      prop_list = prop;
-    } else {
-      sycl::property_list prop{sycl::property::queue::in_order(),
-                               sycl::property::queue::enable_profiling(),
-                               sycl::ext::intel::property::queue::no_immediate_command_list()};
-      prop_list = prop;
-    }
-
-    sycl::queue queue(dev_, sycl::async_handler{}, prop_list);
+    sycl::queue queue(dev_, sycl::async_handler{}, prop);
 
     auto sycl_context = queue.get_context();
 
@@ -313,11 +262,12 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
               << queue.get_info<sycl::info::queue::device>().get_info<sycl::info::device::name>()
               << std::endl;
 
-    queue_test = samples_utils::GetLevelZeroBackendQueue(queue);
-    if (queue_test == nullptr) {
+    ClassTestData::Get().queue_test = samples_utils::GetLevelZeroBackendQueue(queue);
+    if (ClassTestData::Get().queue_test == nullptr) {
       FAIL() << "Underlying level zero queue handle could not be obtained.";
     }
-    std::cout << " == Native Queue reported by Sycl: " << queue_test << std::endl;
+    std::cout << " == Native Queue reported by Sycl: " << ClassTestData::Get().queue_test
+              << std::endl;
 
     std::vector<float> a(size_ * size_, A_VALUE);
     std::vector<float> b(size_ * size_, B_VALUE);
@@ -334,10 +284,8 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
 
   // Class members commonly used by all tests in the test suite for ClassApiFixtureTest
   sycl::device dev_;
-  int expected_mem_transfers_per_mult_ = 4;
   unsigned size_ = 1024;
   unsigned repeat_count_ = 1;
-  bool buffer_cb_registered_ = false;
 };
 
 void EnableIndividualApis(bool is_for_driver, pti_api_group_id pti_group) {
@@ -374,7 +322,9 @@ TEST_F(ClassApiFixtureTest, EnableRuntimeApisViaClassSpecificGroup) {
   EnableClassApis(false, pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE,
                   pti_api_group_id::PTI_API_GROUP_SYCL);
   RunGemmNoTrace();
-  EXPECT_EQ(urcall_present, true);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  EXPECT_EQ(ClassTestData::Get().urcall_present, true);
 }
 
 TEST_F(ClassApiFixtureTest, EnableThenDisableRuntimeApisViaClass) {
@@ -384,7 +334,9 @@ TEST_F(ClassApiFixtureTest, EnableThenDisableRuntimeApisViaClass) {
                   pti_api_group_id::PTI_API_GROUP_SYCL);
   DisableSyclOpsClassApis();
   RunGemmNoTrace();
-  EXPECT_EQ(urcall_present, false);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  EXPECT_EQ(ClassTestData::Get().urcall_present, false);
 }
 
 // GetParam() - Tuple values correspond to (from left to right) whether we enable the
@@ -400,8 +352,11 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
       ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
       EnableIndividualApis(true, pti_api_group_id::PTI_API_GROUP_ALL);
       RunGemmNoTrace();
-      EXPECT_EQ(zecall_present, true);
-      EXPECT_EQ(urcall_present, true);
+      ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+      ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+      ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+      EXPECT_EQ(ClassTestData::Get().zecall_present, true);
+      EXPECT_EQ(ClassTestData::Get().urcall_present, true);
     } else {
       // Test individual granular case -- no class and specific group.
       EnableIndividualApis(false, pti_api_group_id::PTI_API_GROUP_SYCL);
@@ -409,60 +364,71 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
       ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
       EnableIndividualApis(true, pti_api_group_id::PTI_API_GROUP_LEVELZERO);
       RunGemmNoTrace();
-      EXPECT_EQ(zecall_present, true);
-      EXPECT_EQ(zecall_count, 1);
-      EXPECT_EQ(urcall_present, true);
-      EXPECT_GT(urcall_count, 2);
+      ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+      ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+      ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+      EXPECT_EQ(ClassTestData::Get().zecall_present, true);
+      EXPECT_EQ(ClassTestData::Get().zecall_count, 1);
+      EXPECT_EQ(ClassTestData::Get().urcall_present, true);
+      EXPECT_GT(ClassTestData::Get().urcall_count, 2);
     }
   } else if (use_all_classes && use_all_groups) {
     // Test with use_all_classes and use_all_groups --- class level apis
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
     EnableClassApis(true, pti_api_class::PTI_API_CLASS_ALL, pti_api_group_id::PTI_API_GROUP_ALL);
     RunGemmNoTrace();
-    EXPECT_EQ(zecall_present, true);
-    EXPECT_EQ(urcall_present, false);
-    EXPECT_GT(zecall_count, 1);
-    EXPECT_EQ(urcall_count, 0);
-    EXPECT_EQ(event_host_synch_rec_present, true);
-    EXPECT_EQ(ze_kernel_rec_present, false);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+    EXPECT_EQ(ClassTestData::Get().zecall_present, true);
+    EXPECT_EQ(ClassTestData::Get().urcall_present, false);
+    EXPECT_GT(ClassTestData::Get().zecall_count, 1);
+    EXPECT_EQ(ClassTestData::Get().urcall_count, 0);
+    EXPECT_EQ(ClassTestData::Get().event_host_synch_rec_present, true);
+    EXPECT_EQ(ClassTestData::Get().ze_kernel_rec_present, false);
   } else if (!use_all_classes && use_all_groups) {  // any valid class and use_all_groups
     // Test with specific class but use_all_groups --- class level apis
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
     EnableClassApis(false, pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE,
                     pti_api_group_id::PTI_API_GROUP_ALL);
     RunGemmNoTrace();
-    EXPECT_EQ(urcall_present, true);
-    EXPECT_GT(urcall_count, 2);
-    EXPECT_EQ(ur_event_wait_rec_present, false);
-    EXPECT_EQ(ur_mem_write_rec_present, true);
-    EXPECT_EQ(ur_mem_read_rec_present, true);
-    EXPECT_EQ(ur_kernel_rec_present, true);
-    EXPECT_EQ(event_host_synch_rec_present, false);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+    EXPECT_EQ(ClassTestData::Get().urcall_present, true);
+    EXPECT_GT(ClassTestData::Get().urcall_count, 2);
+    EXPECT_EQ(ClassTestData::Get().ur_event_wait_rec_present, false);
+    EXPECT_EQ(ClassTestData::Get().ur_mem_write_rec_present, true);
+    EXPECT_EQ(ClassTestData::Get().ur_mem_read_rec_present, true);
+    EXPECT_EQ(ClassTestData::Get().ur_kernel_rec_present, true);
+    EXPECT_EQ(ClassTestData::Get().event_host_synch_rec_present, false);
   } else if (use_all_classes && !use_all_groups) {  // use_all_classes and any valid group
     // Test with all classes but use specific groups --- class level apis
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
     EnableClassApis(true, pti_api_class::PTI_API_CLASS_ALL,
                     pti_api_group_id::PTI_API_GROUP_LEVELZERO);
     RunGemmNoTrace();
-    EXPECT_EQ(zecall_present, true);
-    EXPECT_GT(zecall_count, 1);
-    EXPECT_EQ(event_host_synch_rec_present, true);
-    EXPECT_EQ(ze_kernel_rec_present, false);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+    EXPECT_EQ(ClassTestData::Get().zecall_present, true);
+    EXPECT_GT(ClassTestData::Get().zecall_count, 1);
+    EXPECT_EQ(ClassTestData::Get().event_host_synch_rec_present, true);
+    EXPECT_EQ(ClassTestData::Get().ze_kernel_rec_present, false);
   } else {
     // any specific class with any specific group
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
     EnableClassApis(false, pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE,
                     pti_api_group_id::PTI_API_GROUP_SYCL);
     RunGemmNoTrace();
-    EXPECT_EQ(urcall_present, true);
-    EXPECT_EQ(zecall_present, false);
-    EXPECT_GT(urcall_count, 2);
-    EXPECT_EQ(zecall_count, 0);
-    EXPECT_EQ(ur_event_wait_rec_present, false);
-    EXPECT_EQ(ur_mem_write_rec_present, true);
-    EXPECT_EQ(ur_mem_read_rec_present, true);
-    EXPECT_EQ(ur_kernel_rec_present, true);
-    EXPECT_EQ(event_host_synch_rec_present, false);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+    EXPECT_EQ(ClassTestData::Get().urcall_present, true);
+    EXPECT_EQ(ClassTestData::Get().zecall_present, false);
+    EXPECT_GT(ClassTestData::Get().urcall_count, 2);
+    EXPECT_EQ(ClassTestData::Get().zecall_count, 0);
+    EXPECT_EQ(ClassTestData::Get().ur_event_wait_rec_present, false);
+    EXPECT_EQ(ClassTestData::Get().ur_mem_write_rec_present, true);
+    EXPECT_EQ(ClassTestData::Get().ur_mem_read_rec_present, true);
+    EXPECT_EQ(ClassTestData::Get().ur_kernel_rec_present, true);
+    EXPECT_EQ(ClassTestData::Get().event_host_synch_rec_present, false);
   }
 }
 
@@ -1262,14 +1228,15 @@ TEST_F(ClassApiFixtureTest, ValidateApiIdsNotChanged) {
 
 // Force failure of granular api with incorrect api_ids and ensure error code returned.
 TEST_F(ClassApiFixtureTest, ValidateSetApiTracingFailure) {
+  constexpr auto kInvalidApiId = 3'000;
   pti_result status = ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
-                                              static_cast<pti_api_id_runtime_sycl>(3000));
+                                              static_cast<pti_api_id_runtime_sycl>(kInvalidApiId));
   EXPECT_EQ(status, pti_result::PTI_ERROR_BAD_API_ID);
   status = ptiViewEnableDriverApi(1, pti_api_group_id::PTI_API_GROUP_LEVELZERO,
-                                  static_cast<pti_api_id_driver_levelzero>(3000));
+                                  static_cast<pti_api_id_driver_levelzero>(kInvalidApiId));
   EXPECT_EQ(status, pti_result::PTI_ERROR_BAD_API_ID);
   status = ptiViewEnableDriverApi(1, pti_api_group_id::PTI_API_GROUP_OPENCL,
-                                  static_cast<pti_api_id_driver_levelzero>(3000));
+                                  static_cast<pti_api_id_driver_levelzero>(kInvalidApiId));
   EXPECT_EQ(status, pti_result::PTI_ERROR_NOT_IMPLEMENTED);
 }
 

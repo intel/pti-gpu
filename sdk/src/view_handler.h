@@ -18,7 +18,6 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
-#include <thread>
 
 #include "consumer_thread.h"
 #include "default_buffer_callbacks.h"
@@ -75,12 +74,12 @@ inline void ZeApiCallsCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 inline void SyclRuntimeViewCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 inline void OverheadCollectionCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 
-enum class internal_result {
+enum class InternalResult {
   kStatusSuccess = 0,
   kStatusViewNotEnabled = 1,  //!< status due to a pti_view_kind not enabled
 };
 
-const std::array pti_class_sycl_gpu_ops_core_apis{
+inline static constexpr std::array kPtiClassSyclGpuOpsCoreApis{
     pti_api_id_runtime_sycl::urEnqueueUSMFill_id,
     pti_api_id_runtime_sycl::urEnqueueUSMFill2D_id,
     pti_api_id_runtime_sycl::urEnqueueUSMMemcpy_id,
@@ -97,7 +96,7 @@ const std::array pti_class_sycl_gpu_ops_core_apis{
     pti_api_id_runtime_sycl::urUSMDeviceAlloc_id,
 };
 
-const std::array pti_class_lz_host_synch_op_apis{
+inline static constexpr std::array kPtiClassLzHostSynchOpApis{
     pti_api_id_driver_levelzero::zeFenceHostSynchronize_id,
     pti_api_id_driver_levelzero::zeEventHostSynchronize_id,
     pti_api_id_driver_levelzero::zeCommandQueueSynchronize_id,
@@ -167,6 +166,92 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
   return result->second;
 }
 
+template <typename T, typename M>
+inline void EnableAllIndividualApis(M& mtx, T& map) {
+  const std::lock_guard<std::mutex> lock(mtx);
+  for (auto& [k, v] : map) {
+    v = 1;
+  }
+}
+
+template <typename T, typename M>
+inline void DisableAllIndividualApis(M& mtx, T& map) {
+  const std::lock_guard<std::mutex> lock(mtx);
+  for (auto& [k, v] : map) {
+    v = 0;
+  }
+}
+
+inline void ResetTracingStateToAllDisabled(pti_api_group_id type) {
+  switch (type) {
+    case pti_api_group_id::PTI_API_GROUP_SYCL: {
+      DisableAllIndividualApis(sycl_set_granularity_map_mtx, pti_api_id_runtime_sycl_state);
+      break;
+    }
+    case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
+      DisableAllIndividualApis(levelzero_set_granularity_map_mtx,
+                               pti_api_id_driver_levelzero_state);
+      break;
+    }
+    case pti_api_group_id::PTI_API_GROUP_OPENCL:
+    case pti_api_group_id::PTI_API_GROUP_ALL:  // for now no internal call for clearing all
+                                               // groups is needed.
+    case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
+    case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
+    case pti_api_group_id::PTI_API_GROUP_RESERVED:
+    default: {
+      break;
+    }
+  }
+}
+
+// Non-class specific: Enable/Disable specific API specified by api_id within the api_group_id.
+// Only specific types reach here -- group_all has already been accounted for in the caller.
+inline pti_result SetApiTracingState(pti_api_group_id type, uint32_t api_id, uint32_t enable) {
+  uint32_t new_value = (enable ? 1 : 0);
+  try {
+    switch (type) {
+      case pti_api_group_id::PTI_API_GROUP_SYCL: {
+        SPDLOG_DEBUG("In Sycl {}, pti_group:  {}, api_id: {}, enable?: {}", __FUNCTION__,
+                     static_cast<uint32_t>(type), static_cast<uint32_t>(api_id), new_value);
+        const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
+        if (pti_api_id_runtime_sycl_state.find(api_id) != pti_api_id_runtime_sycl_state.end()) {
+          pti_api_id_runtime_sycl_state[api_id] = new_value;
+        } else {
+          return pti_result::PTI_ERROR_BAD_API_ID;
+        }
+      }; break;
+      case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
+        SPDLOG_DEBUG("In Lz {}, pti_group:  {}, api_id: {}, enable?: {}", __FUNCTION__,
+                     static_cast<uint32_t>(type), static_cast<uint32_t>(api_id), new_value);
+        const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
+        if (pti_api_id_driver_levelzero_state.find(api_id) !=
+            pti_api_id_driver_levelzero_state.end()) {
+          pti_api_id_driver_levelzero_state[api_id] = new_value;
+        } else {
+          return pti_result::PTI_ERROR_BAD_API_ID;
+        }
+      }; break;
+      case pti_api_group_id::PTI_API_GROUP_OPENCL: {
+        return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+      }; break;
+      case pti_api_group_id::PTI_API_GROUP_ALL:  // keep compiler happy -- if this cause of error
+                                                 // check caller.
+      case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
+      case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
+      case pti_api_group_id::PTI_API_GROUP_RESERVED: {
+        return pti_result::PTI_ERROR_BAD_ARGUMENT;
+      }; break;
+    }
+  } catch (const std::out_of_range&) {
+    return pti_result::PTI_ERROR_BAD_ARGUMENT;
+  } catch (const std::exception& e) {
+    SPDLOG_ERROR("Unknown exception caught in {}: {}", __FUNCTION__, e.what());
+    return pti_result::PTI_ERROR_BAD_ARGUMENT;
+  }
+  return PTI_SUCCESS;
+}
+
 inline static std::atomic<bool> external_collection_enabled = false;
 
 struct PtiViewRecordHandler {
@@ -211,17 +296,18 @@ struct PtiViewRecordHandler {
         try {
           int64_t env_value = std::stoi(env_string);
           if (env_value >= NSEC_IN_USEC &&
-              env_value <= NSEC_IN_SEC)     // are we within 1micro to 1sec bounds?
-            sync_clocks_every = env_value;  // reset it.
+              env_value <= NSEC_IN_SEC) {    // are we within 1micro to 1sec bounds?
+            sync_clocks_every_ = env_value;  // reset it.
+          }
 
         } catch (std::invalid_argument const& /*ex*/) {
-          sync_clocks_every = kDefaultSyncTime;  // default conversion sync time -- 1 ms.
+          sync_clocks_every_ = kDefaultSyncTime;  // default conversion sync time -- 1 ms.
         } catch (std::out_of_range const& /*ex*/) {
-          sync_clocks_every = kDefaultSyncTime;  // default conversion sync time -- 1 ms.
+          sync_clocks_every_ = kDefaultSyncTime;  // default conversion sync time -- 1 ms.
         }
       }
       timestamp_of_last_ts_shift_ = utils::GetTime();  // CLOCK_MONOTONIC_RAW or equivalent
-      SPDLOG_INFO("\tClock Sync time (ns) set at: {}", sync_clocks_every);
+      SPDLOG_INFO("\tClock Sync time (ns) set at: {}", sync_clocks_every_);
       ts_shift_ = utils::ConversionFactorMonotonicRawToUnknownClock(user_provided_ts_func_ptr_);
     }
   }
@@ -348,6 +434,19 @@ struct PtiViewRecordHandler {
     return result;
   }
 
+  void EnableAllRuntimeApisWithoutGranularity() {
+    const std::lock_guard<std::mutex> lock(map_granularity_set_mtx_);
+    EnableAllIndividualApis(sycl_set_granularity_map_mtx, pti_api_id_runtime_sycl_state);
+    map_granularity_set_[pti_api_group_id::PTI_API_GROUP_SYCL] = false;
+  }
+
+  void EnableAllDriverApisWithoutGranularity() {
+    const std::lock_guard<std::mutex> lock(map_granularity_set_mtx_);
+    EnableAllIndividualApis(levelzero_set_granularity_map_mtx, pti_api_id_driver_levelzero_state);
+    map_granularity_set_[pti_api_group_id::PTI_API_GROUP_LEVELZERO] = false;
+    map_granularity_set_[pti_api_group_id::PTI_API_GROUP_OPENCL] = false;
+  }
+
   inline pti_result Enable(pti_view_kind type) {
     if (!callbacks_set_) {
       return pti_result::PTI_ERROR_NO_CALLBACKS_SET;
@@ -380,13 +479,7 @@ struct PtiViewRecordHandler {
 #if defined(PTI_TRACE_SYCL)
       if (!view_event_map_.TryFindElement("SyclRuntimeEvent")) {
         SyclCollector::Instance().SetCallback(SyclRuntimeViewCallback);
-        {
-          const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
-          for (auto [k, v] : pti_api_id_runtime_sycl_state) {
-            pti_api_id_runtime_sycl_state[k] = 1;  // enable all to fire.
-          }
-          SetGranularityState(pti_api_group_id::PTI_API_GROUP_SYCL, false);
-        }
+        EnableAllRuntimeApisWithoutGranularity();
         SyclCollector::Instance().EnableTracing();
         collection_enabled = true;
       }
@@ -405,23 +498,19 @@ struct PtiViewRecordHandler {
         // We need to ensure we have enabled all to fire since we will be EnableTracing() for
         // collector in this scope
         if ((type == pti_view_kind::PTI_VIEW_DRIVER_API) &&
-            (it == map_view_kind_enabled.cend() || map_view_kind_enabled[type] == false)) {
-          {
-            const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
-            for (auto [k, v] : pti_api_id_driver_levelzero_state) {
-              pti_api_id_driver_levelzero_state[k] = 1;  // enable all to fire.
-            }
-            SetGranularityState(pti_api_group_id::PTI_API_GROUP_LEVELZERO, false);
-            SetGranularityState(pti_api_group_id::PTI_API_GROUP_OPENCL, false);
-          }
+            (it == map_view_kind_enabled.cend() || !map_view_kind_enabled[type])) {
+          EnableAllDriverApisWithoutGranularity();
         }
-        if (it == map_view_kind_enabled.cend() || map_view_kind_enabled[type] == false) {
+        if (it == map_view_kind_enabled.cend() || !map_view_kind_enabled[type]) {
           map_view_kind_enabled[type] = true;
           collector_->EnableTracing();
         }
-        if (type == pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)
+        if (type == pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION) {
           collector_->SetCollectorOptionSynchronization();
-        if (type == pti_view_kind::PTI_VIEW_DRIVER_API) collector_->SetCollectorOptionApiCalls();
+        }
+        if (type == pti_view_kind::PTI_VIEW_DRIVER_API) {
+          collector_->SetCollectorOptionApiCalls();
+        }
       }
     }
 
@@ -442,14 +531,7 @@ struct PtiViewRecordHandler {
         //    --- start off with enable pti_view_driver_api --- setup granularity to override all
         //    --- some thread later resets to all via enable driver_api
         if (type == pti_view_kind::PTI_VIEW_DRIVER_API) {
-          {
-            const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
-            for (auto [k, v] : pti_api_id_driver_levelzero_state) {
-              pti_api_id_driver_levelzero_state[k] = 1;  // enable all to fire.
-            }
-            SetGranularityState(pti_api_group_id::PTI_API_GROUP_LEVELZERO, false);
-            SetGranularityState(pti_api_group_id::PTI_API_GROUP_OPENCL, false);
-          }
+          EnableAllDriverApisWithoutGranularity();
         }
       }
     } catch (const std::out_of_range&) {
@@ -485,13 +567,16 @@ struct PtiViewRecordHandler {
     if (collector_) {
       if (l0_collection_type) {
         auto it = map_view_kind_enabled.find(type);
-        if (it != map_view_kind_enabled.cend() && map_view_kind_enabled[type] == true) {
+        if (it != map_view_kind_enabled.cend() && map_view_kind_enabled[type]) {
           map_view_kind_enabled[type] = false;
           collector_->DisableTracing();
         }
-        if (type == pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)
+        if (type == pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION) {
           collector_->UnSetCollectorOptionSynchronization();
-        if (type == pti_view_kind::PTI_VIEW_DRIVER_API) collector_->UnSetCollectorOptionApiCalls();
+        }
+        if (type == pti_view_kind::PTI_VIEW_DRIVER_API) {
+          collector_->UnSetCollectorOptionApiCalls();
+        }
       }
     }
 
@@ -550,14 +635,14 @@ struct PtiViewRecordHandler {
     return result;
   }
 
-  inline internal_result operator()(const std::string& key, void* data,
-                                    const ZeKernelCommandExecutionRecord& rec) {
+  inline InternalResult operator()(const std::string& key, void* data,
+                                   const ZeKernelCommandExecutionRecord& rec) {
     auto view_event_callback = view_event_map_.TryFindElement(key);
     if (view_event_callback) {
       (*view_event_callback)(data, rec);
-      return internal_result::kStatusSuccess;
+      return InternalResult::kStatusSuccess;
     }
-    return internal_result::kStatusViewNotEnabled;
+    return InternalResult::kStatusViewNotEnabled;
   }
 
   inline const char* InsertKernel(const std::string& name) {
@@ -565,39 +650,6 @@ struct PtiViewRecordHandler {
     const auto* kernel_name_str = kernel_name->c_str();
     kernel_name_storage_.Push(std::move(kernel_name));
     return kernel_name_str;
-  }
-
-  inline pti_result ResetTracingStateToAllDisabled(pti_api_group_id type) {
-    // to avoid duplicate lock issues, lock is held by caller
-    try {
-      switch (type) {
-        case pti_api_group_id::PTI_API_GROUP_SYCL: {
-          // const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
-          for (auto [k, v] : pti_api_id_runtime_sycl_state) {
-            pti_api_id_runtime_sycl_state[k] = 0;  // disable all
-          }
-        }; break;
-        case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
-          // const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
-          for (auto [k, v] : pti_api_id_driver_levelzero_state) {
-            pti_api_id_driver_levelzero_state[k] = 0;  // disable all
-          }
-        }; break;
-        case pti_api_group_id::PTI_API_GROUP_OPENCL: {
-          return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
-        }; break;
-        case pti_api_group_id::PTI_API_GROUP_ALL:  // for now no internal call for clearing all
-                                                   // groups is needed.
-        case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
-        case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
-        case pti_api_group_id::PTI_API_GROUP_RESERVED: {
-          return pti_result::PTI_ERROR_BAD_ARGUMENT;
-        }; break;
-      }
-    } catch (const std::out_of_range&) {
-      return pti_result::PTI_ERROR_BAD_ARGUMENT;
-    }
-    return PTI_SUCCESS;
   }
 
   // Given enable or disable new value; the array of apis in class - class_ops; and the state_map.
@@ -622,12 +674,10 @@ struct PtiViewRecordHandler {
     SPDLOG_TRACE("In {}, class: {}", __FUNCTION__, static_cast<uint32_t>(pti_class));
     switch (pti_class) {
       case pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE: {
-        const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
-        std::map<uint32_t, uint32_t>& state_map = pti_api_id_runtime_sycl_state;
-        const std::array<pti_api_id_runtime_sycl, std::size(pti_class_sycl_gpu_ops_core_apis)>&
-            class_ops = pti_class_sycl_gpu_ops_core_apis;
-        SetGranularApis(new_value, class_ops, state_map);
-      }; break;
+        const std::lock_guard<std::mutex> lock{sycl_set_granularity_map_mtx};
+        SetGranularApis(new_value, kPtiClassSyclGpuOpsCoreApis, pti_api_id_runtime_sycl_state);
+        break;
+      }
       case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION:  // Does not apply to
                                                                          // runtime
       case pti_api_class::PTI_API_CLASS_ALL:
@@ -643,12 +693,10 @@ struct PtiViewRecordHandler {
     SPDLOG_TRACE("In {}, class: {}", __FUNCTION__, static_cast<uint32_t>(pti_class));
     switch (pti_class) {
       case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION: {
-        const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
-        std::map<uint32_t, uint32_t>& state_map = pti_api_id_driver_levelzero_state;
-        const std::array<pti_api_id_driver_levelzero, std::size(pti_class_lz_host_synch_op_apis)>&
-            class_ops = pti_class_lz_host_synch_op_apis;
-        SetGranularApis(new_value, class_ops, state_map);
-      }; break;
+        const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
+        SetGranularApis(new_value, kPtiClassLzHostSynchOpApis, pti_api_id_driver_levelzero_state);
+        break;
+      }
       case pti_api_class::PTI_API_CLASS_ALL:
       default:
         break;
@@ -657,14 +705,17 @@ struct PtiViewRecordHandler {
   }
 
   inline void CheckAndSetGranularity(pti_api_group_id pti_group) {
-    if (!GetGranularityState(pti_group)) {  // check if we are already in granular/individual mode.
-      const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
-      ResetTracingStateToAllDisabled(pti_group);  // if first time -- change all api state to off
-      SetGranularityState(pti_group, true);  // and set granular mode on for this api_group type.
+    // TODO: potentially long scope of lock, could cause errors.
+    const std::lock_guard<std::mutex> lock(map_granularity_set_mtx_);
+
+    auto granularity_set_it = map_granularity_set_.find(pti_group);
+
+    if (granularity_set_it == map_granularity_set_.end() || !granularity_set_it->second) {
+      ResetTracingStateToAllDisabled(pti_group);
+      map_granularity_set_[pti_group] = true;
     }
   }
 
-  //  Resets the granularity if not set, then sets state for this group.
   inline pti_result CheckGranularityAndSetState(pti_api_group_id pti_group, uint32_t api_id,
                                                 uint32_t enable) {
     CheckAndSetGranularity(pti_group);
@@ -689,83 +740,26 @@ struct PtiViewRecordHandler {
     return SetRuntimeClassSpecificGranularIds(new_value, pti_class);
   }
 
-  // Non-class specific: Enable/Disable specific API specified by api_id within the api_group_id.
-  // Only specific types reach here -- group_all has already been accounted for in the caller.
-  inline pti_result SetApiTracingState(pti_api_group_id type, uint32_t api_id, bool enable) {
-    uint32_t new_value = (enable ? 1 : 0);
-    try {
-      switch (type) {
-        case pti_api_group_id::PTI_API_GROUP_SYCL: {
-          SPDLOG_DEBUG("In Sycl {}, pti_group:  {}, api_id: {}, enable?: {}", __FUNCTION__,
-                       static_cast<uint32_t>(type), static_cast<uint32_t>(api_id), new_value);
-          const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
-          if (pti_api_id_runtime_sycl_state.find(api_id) != pti_api_id_runtime_sycl_state.end()) {
-            pti_api_id_runtime_sycl_state.at(api_id) = new_value;
-          } else {
-            return pti_result::PTI_ERROR_BAD_API_ID;
-          }
-        }; break;
-        case pti_api_group_id::PTI_API_GROUP_LEVELZERO: {
-          SPDLOG_DEBUG("In Lz {}, pti_group:  {}, api_id: {}, enable?: {}", __FUNCTION__,
-                       static_cast<uint32_t>(type), static_cast<uint32_t>(api_id), new_value);
-          const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
-          if (pti_api_id_driver_levelzero_state.find(api_id) !=
-              pti_api_id_driver_levelzero_state.end()) {
-            pti_api_id_driver_levelzero_state.at(api_id) = new_value;
-          } else {
-            return pti_result::PTI_ERROR_BAD_API_ID;
-          }
-        }; break;
-        case pti_api_group_id::PTI_API_GROUP_OPENCL: {
-          return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
-        }; break;
-        case pti_api_group_id::PTI_API_GROUP_ALL:  // keep compiler happy -- if this cause of error
-                                                   // check caller.
-        case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO:
-        case pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_OPENCL:
-        case pti_api_group_id::PTI_API_GROUP_RESERVED: {
-          return pti_result::PTI_ERROR_BAD_ARGUMENT;
-        }; break;
-      }
-    } catch (const std::out_of_range&) {
-      return pti_result::PTI_ERROR_BAD_ARGUMENT;
-    } catch (const std::exception& e) {
-      std::cout << e.what() << std::endl;
-    }
-    return PTI_SUCCESS;
-  }
-
   inline pti_result GetState() { return state_; }
   inline void SetState(pti_result new_state) { state_ = new_state; }
 
-  inline bool GetGranularityState(pti_api_group_id type) {
-    const std::lock_guard<std::mutex> lock(set_granularity_map_mtx_);
-    return map_granularity_set[type];
-  }
-
-  inline void SetGranularityState(pti_api_group_id type, bool state) {
-    // to avoid duplicate lock issues, lock is held by caller
-    map_granularity_set[type] = state;
-  }
-
   inline SpecialCallsData& GetSpecialCallsData(const uint32_t& corrId) {
     const std::lock_guard<std::mutex> lock(set_special_calls_map_mtx_);
-    return map_spcalls_suppression[corrId];
+    return map_spcalls_suppression_[corrId];
   }
 
   inline void SetSpecialCallsData(const uint32_t& corrId,
                                   const SpecialCallsData& special_rec_data) {
     const std::lock_guard<std::mutex> lock(set_special_calls_map_mtx_);
-    map_spcalls_suppression[corrId] = special_rec_data;
+    map_spcalls_suppression_[corrId] = special_rec_data;
   }
 
   inline pti_result GPULocalAvailable() {
     if (collector_) {
       if (collector_->IsIntrospectionCapable() && collector_->IsDynamicTracingCapable()) {
         return pti_result::PTI_SUCCESS;
-      } else {
-        return pti_result::PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED;
       }
+      return pti_result::PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED;
     }
     return pti_result::PTI_ERROR_INTERNAL;
   }
@@ -775,7 +769,7 @@ struct PtiViewRecordHandler {
     const std::lock_guard<std::mutex> lock(timestamp_api_mtx_);
 
     uint64_t now = utils::GetTime();  // CLOCK_MONOTONIC_RAW or equivalent
-    if ((now - timestamp_of_last_ts_shift_) > sync_clocks_every) {
+    if ((now - timestamp_of_last_ts_shift_) > sync_clocks_every_) {
       timestamp_of_last_ts_shift_ = utils::GetTime();  // CLOCK_MONOTONIC_RAW or equivalent
       ts_shift_ = utils::ConversionFactorMonotonicRawToUnknownClock(user_provided_ts_func_ptr_);
     }
@@ -808,9 +802,6 @@ struct PtiViewRecordHandler {
 #if defined(PTI_TRACE_SYCL)
     SyclCollector::Instance().DisableTracing();
 #endif
-    // if (collector_) {
-    // collector_->DisableTracer();
-    //}
     collection_enabled_ = false;
   }
   std::unique_ptr<ZeCollector> collector_ = nullptr;
@@ -827,7 +818,7 @@ struct PtiViewRecordHandler {
   mutable std::mutex insert_record_mtx_;  // protecting writing to buffers, as different threads
                                           // might be writing to the same buffer
   mutable std::mutex set_special_calls_map_mtx_;
-  mutable std::mutex set_granularity_map_mtx_;
+  mutable std::mutex map_granularity_set_mtx_;
 
   ViewEventTable view_event_map_;
   KernelNameStorageQueue kernel_name_storage_;
@@ -837,15 +828,15 @@ struct PtiViewRecordHandler {
   int64_t ts_shift_ = 0;  // conversion factor for switching from default clock to user provided
                           // one(defaults to monotonic raw)
   uint64_t timestamp_of_last_ts_shift_ = 0;  // every 1 second we recalculate time_shift_
-  inline static constexpr auto kDefaultSyncTime = 1000000ULL;
-  uint64_t sync_clocks_every =
+  inline static constexpr auto kDefaultSyncTime = 1'000'000ULL;
+  uint64_t sync_clocks_every_ =
       kDefaultSyncTime;  // time in nanoseconds, sync every millisecond by default --- this can be
                          // overridden by the env variable PTI_CONV_CLOCK_SYNC_TIME_NS.
   std::atomic<bool> deinit_ = false;
 
-  std::map<uint32_t, SpecialCallsData> map_spcalls_suppression;
+  std::map<uint32_t, SpecialCallsData> map_spcalls_suppression_;
   std::map<pti_api_group_id, std::atomic<bool>>
-      map_granularity_set;  // Are we in granular (individual api) mode for this api_group?
+      map_granularity_set_;  // Are we in granular (individual api) mode for this api_group?
 };
 
 // Required to access buffer from ze_collector callbacks
@@ -939,7 +930,7 @@ inline uint64_t ApplyTimeShift(uint64_t timestamp, int64_t time_shift) {
         SPDLOG_WARN("Timestamp overflow detected when shifting api_groups: TS: {}, time_shift: {}",
                     timestamp, time_shift);
         throw std::out_of_range("Timestamp overflow detected");
-      };
+      }
       out_ts = timestamp + static_cast<uint64_t>(time_shift);
     }
   } catch (const std::out_of_range&) {
@@ -955,10 +946,13 @@ inline void SetMemCpyIds(T& record, const ZeKernelCommandExecutionRecord& rec) {
     std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
     SetMemCopyType<T>(record, rec);
     return;
-  } else if (rec.dst_device_ != nullptr)
+  }
+
+  if (rec.dst_device_ != nullptr) {
     GetDeviceId(record._pci_address, rec.dst_pci_prop_);
-  else
+  } else {
     memset(record._pci_address, 0, PTI_MAX_PCI_ADDRESS_SIZE);
+  }
 
   std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
   SetMemCopyType<T>(record, rec);
@@ -986,7 +980,9 @@ inline auto DoCommonMemCopy(bool p2p, const ZeKernelCommandExecutionRecord& rec)
   utils::Zeroize(record);
 
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY;
-  if (p2p) record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
+  if (p2p) {
+    record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
+  }
 
   int64_t ts_shift = Instance().GetTimeShift();
 
@@ -1080,10 +1076,10 @@ inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecor
   // record._name = rec.sycl_func_name_;
   SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, record._correlation_id);
   Instance().InsertRecord(record, record._thread_id);
-  const char* pName = nullptr;
-  if (ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, record._api_id, &pName) ==
+  const char* api_id_name = nullptr;
+  if (ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, record._api_id, &api_id_name) ==
       pti_result::PTI_SUCCESS) {
-    std::string a_string(pName);
+    std::string a_string(api_id_name);
     // std::string a_string = record._name;
     if (a_string.find("EnqueueKernelLaunch") != std::string::npos) {
       SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
@@ -1290,9 +1286,9 @@ inline void ZeChromeKernelStagesCallback(void* data,
 
 inline void ZeApiCallsCallback([[maybe_unused]] void* data,
                                [[maybe_unused]] ZeKernelCommandExecutionRecord& rec) {
-  internal_result status = Instance()("ZecallEvent", data, rec);
+  InternalResult status = Instance()("ZecallEvent", data, rec);
   // Assume zecalls are disabled unless we know it is not so.
-  if (status == internal_result::kStatusSuccess) {
+  if (status == InternalResult::kStatusSuccess) {
     SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
     special_rec_data.zecall_disabled = false;
     Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
