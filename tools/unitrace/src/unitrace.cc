@@ -124,7 +124,7 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--chrome-no-thread-on-device   " <<
-    "Trace device activities without per-thread info." << std::endl << 
+    "Trace device activities without per-thread info" << std::endl << 
     "                               Device activities are traced per thread if this option is not present" <<
     std::endl;
   std::cout <<
@@ -187,7 +187,7 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--metric-query [-q]            " <<
-    "Query hardware metrics for each kernel instance is enabled for level-zero." <<
+    "Query hardware metrics for each kernel instance is enabled for level-zero" <<
     std::endl;
   std::cout <<
     "--metric-sampling [-k]         " <<
@@ -216,6 +216,11 @@ void Usage(char * progname) {
   std::cout <<
     "--ranks-to-sample <ranks>      " <<
     "MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks" <<
+    std::endl;
+  std::cout <<
+    "--teardown-on-signal           " <<
+    "Try to gracefully shut down in case the application crashes or is terminated" << std::endl <<
+    "                               This option may change the application behavior so please use it carefully" <<
     std::endl;
   std::cout <<
     "--version                      " <<
@@ -452,6 +457,9 @@ int ParseArgs(int argc, char* argv[]) {
       return 0;
     } else if (strcmp(argv[i], "--metric-list") == 0) {
       show_metric_list = true;
+      ++app_index;
+    } else if (strcmp(argv[i], "--teardown-on-signal") == 0) {
+      utils::SetEnv("UNITRACE_TeardownOnSignal", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--version") == 0) {
       std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
@@ -738,8 +746,6 @@ int main(int argc, char *argv[]) {
     // UNITRACE_KernelMetrics is not set
     SetProfilingEnvironment();
   }
-
-  utils::SetEnv("PTI_ENABLE", "1");
 
   std::string logfile;
   if (utils::GetEnv("UNITRACE_LogToFile") == "1") {

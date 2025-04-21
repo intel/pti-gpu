@@ -109,6 +109,8 @@ The options can be one or more of the following:
 --metric-list                  Print available metric groups and metrics
 --stall-sampling               Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs
 --ranks-to-sample <ranks>      MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks
+--teardown-on-signal           Try to gracefully shut down in case the application crashes or is terminated
+                               This option may change the application behavior so please use it carefully
 --version                      Print version
 --help                         Show the help message and exit
 ```

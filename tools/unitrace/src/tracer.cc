@@ -168,11 +168,6 @@ std::string get_version() {
 }
 
 void Teardown(void) {
-  std::string value = utils::GetEnv("PTI_ENABLE");
-  if (value != "1") {
-    return;
-  }
-
   if (tracer != nullptr) {
     delete tracer;
     tracer = nullptr;
@@ -226,10 +221,6 @@ void HandleAbnormalTermination(int sig) {
 }
 
 void CONSTRUCTOR Init(void) {
-  std::string value = utils::GetEnv("PTI_ENABLE");
-  if (value != "1") {
-    return;
-  }
   std::string unitrace_version = utils::GetEnv("UNITRACE_VERSION");
   if (unitrace_version.size() > 0) {
     auto libunitrace_version = get_version();
@@ -239,30 +230,32 @@ void CONSTRUCTOR Init(void) {
     }
   }
 
-  // save previous handlers and install new handlers
-  auto handler = std::signal(SIGINT, HandleAbnormalTermination);
-  if (handler != SIG_ERR) {
-    sigint_handler = handler;
-  }
-  handler = std::signal(SIGABRT, HandleAbnormalTermination);
-  if (handler != SIG_ERR) {
-    sigabrt_handler = handler;
-  }
-  handler = std::signal(SIGFPE, HandleAbnormalTermination);
-  if (handler != SIG_ERR) {
-    sigfpe_handler = handler;
-  }
-  handler = std::signal(SIGILL, HandleAbnormalTermination);
-  if (handler != SIG_ERR) {
-    sigill_handler = handler;
-  }
-  handler = std::signal(SIGSEGV, HandleAbnormalTermination);
-  if (handler != SIG_ERR) {
-    sigsegv_handler = handler;
-  }
-  handler = std::signal(SIGTERM, HandleAbnormalTermination);
-  if (handler != SIG_ERR) {
-    sigterm_handler = handler;
+  if (utils::GetEnv("UNITRACE_TeardownOnSignal") == "1") {
+    // save previous handlers and install new handlers
+    auto handler = std::signal(SIGINT, HandleAbnormalTermination);
+    if (handler != SIG_ERR) {
+      sigint_handler = handler;
+    }
+    handler = std::signal(SIGABRT, HandleAbnormalTermination);
+    if (handler != SIG_ERR) {
+      sigabrt_handler = handler;
+    }
+    handler = std::signal(SIGFPE, HandleAbnormalTermination);
+    if (handler != SIG_ERR) {
+      sigfpe_handler = handler;
+    }
+    handler = std::signal(SIGILL, HandleAbnormalTermination);
+    if (handler != SIG_ERR) {
+      sigill_handler = handler;
+    }
+    handler = std::signal(SIGSEGV, HandleAbnormalTermination);
+    if (handler != SIG_ERR) {
+      sigsegv_handler = handler;
+    }
+    handler = std::signal(SIGTERM, HandleAbnormalTermination);
+    if (handler != SIG_ERR) {
+      sigterm_handler = handler;
+    }
   }
 
   if (!tracer) {
