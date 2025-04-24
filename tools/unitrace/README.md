@@ -68,10 +68,14 @@ or
 nmake install
 ```
 
-The **BUILD_WITH_MPI=<1/0>** setting enables/disables MPI profiling support (enabled by default). In addition to BUILD_WITH_MPI, the tool can also be built with:
-**BUILD_WITH_ITT=<1/0>** to enable/disable oneCCL/oneDNN profiling support (enabled by default)
-**BUILD_WITH_XPTI=<1/0>** to enable/disable SYCL/Unified Runtime profiling support (enabled by default)
-**BUILD_WITH_OPENCL=<1/0>** to enable/disable OpenCL profiling support (enabled by default).
+The **BUILD_WITH_MPI=<1/0>** setting enables/disables MPI profiling support (enabled for Linux and disabled for Windows by default).
+
+In addition to BUILD_WITH_MPI, one or more of the following settings can also be passed to cmake:\
+**BUILD_WITH_ITT=<1/0>** to enable/disable oneCCL/oneDNN profiling support (enabled by default),\
+**BUILD_WITH_XPTI=<1/0>** to enable/disable SYCL/Unified Runtime profiling support (enabled by default),\
+**BUILD_WITH_OPENCL=<1/0>** to enable/disable OpenCL profiling support (enabled by default). 
+
+Example:
 
 ```
 cmake -DBUILD_WITH_ITT=0 -DBUILD_WITH_XPTI=0 -DBUILD_WITH_MPI=0 -DBUILD_WITH_OPENCL=0 ..
@@ -970,7 +974,7 @@ The `<device-config>` is required in both usage cases. This file is device speci
 
 The `<output-file>` is in HTML format. It can be loaded and viewd in a browser:
 
-![GPU Roofline and Kernel Summary!](/tools/unitrace/doc/images/Roofline.png)
+![GPU Roofline and Kernel Summary!](/tools/unitrace/doc/images/roofline.png)
 
 ## Recommended Usage
 
