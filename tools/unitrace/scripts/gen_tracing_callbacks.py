@@ -405,7 +405,8 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
               f.write("      str += \"])\";\n")
           else:
             f.write("      str += \" (" + name[1:] + " = \" ;\n")
-            f.write("      TO_HEX_STRING(str, **(params->p" + name + ")) + \")\";\n")
+            f.write("      TO_HEX_STRING(str, **(params->p" + name + "));\n")
+            f.write("      str += \")\";\n")
           f.write("    }\n")
         elif type.find("ze_group_count_t*") >= 0:
           f.write("    if (*(params->p" + name +") != nullptr) {\n")
@@ -679,7 +680,7 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
         f.write("          str += std::to_string(i);\n")
         f.write("          str += \"] = \";\n")
 
-        f.write("            (*(params->p" + name + "))[i];\n")
+        f.write("          TO_HEX_STRING(str, (*(params->p" + name + "))[i]);\n")
         f.write("        }\n")
         f.write("      }\n")
       else:
@@ -807,8 +808,11 @@ def gen_to_hex_string_functions(f):
     f.write("#include <cstdio>\n")
     f.write("#include <cstdint>\n")
     f.write("#define TO_HEX_STRING(str, val) \\\n")
-    f.write("    {char buffer[20]; \\\n")
-    f.write("    std::sprintf(buffer, \"%lx\", (uintptr_t)(val)); \\\n")
+    f.write("    {char buffer[32]; \\\n")
+    if (sys.platform == 'win32'):
+        f.write("    sprintf_s(buffer, sizeof(buffer), \"0x%lx\", (uintptr_t)(val)); \\\n")
+    else:
+        f.write("    std::sprintf(buffer, \"0x%lx\", (uintptr_t)(val)); \\\n")
     f.write("    str += std::string(buffer); \\\n")
     f.write("    }\n")
     f.write("\n")

@@ -111,6 +111,8 @@ The options can be one or more of the following:
 --ranks-to-sample <ranks>      MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks
 --teardown-on-signal           Try to gracefully shut down in case the application crashes or is terminated
                                This option may change the application behavior so please use it carefully
+--follow-child-process <0/1>   0: Do not follow or profile child processes on Linux
+                               1: Follow and profile child processes on Linux (default)
 --version                      Print version
 --help                         Show the help message and exit
 ```

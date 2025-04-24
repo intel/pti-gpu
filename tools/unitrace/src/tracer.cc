@@ -262,8 +262,15 @@ void CONSTRUCTOR Init(void) {
     UniTimer::StartUniTimer();
     tracer = UniTracer::Create(ReadArgs());
   }
-}
 
+  if (utils::GetEnv("UNITRACE_FollowChildProcess") == "0") {
+    // restore LD_PRELOAD from UNITRACE_LD_PRELOAD_OLD to prevent the unitrace library
+    // from being loaded and this Init() function being called in a child process
+    // to disable child process following
+    auto oldpreload = utils::GetEnv("UNITRACE_LD_PRELOAD_OLD");
+    utils::SetEnv("LD_PRELOAD", oldpreload.c_str());
+  }
+}
 
 void DESTRUCTOR Fini(void) {
   Teardown();

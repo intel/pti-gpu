@@ -218,6 +218,11 @@ void Usage(char * progname) {
     "MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks" <<
     std::endl;
   std::cout <<
+    "--follow-child-process <0/1>   " <<
+    "0: Do not follow or profile child processes on Linux" << std::endl <<
+    "                               1: Follow and profile child processes on Linux (default)" <<
+    std::endl;
+  std::cout <<
     "--teardown-on-signal           " <<
     "Try to gracefully shut down in case the application crashes or is terminated" << std::endl <<
     "                               This option may change the application behavior so please use it carefully" <<
@@ -458,6 +463,14 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--metric-list") == 0) {
       show_metric_list = true;
       ++app_index;
+    } else if (strcmp(argv[i], "--follow-child-process") == 0) {
+      ++i;
+      if ((i >= argc) || (strcmp(argv[i], "1") && strcmp(argv[i], "0"))) {
+        std::cout << "[ERROR] Option --follow-child-process takes argument 0 or 1" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_FollowChildProcess", argv[i]);
+      app_index += 2;
     } else if (strcmp(argv[i], "--teardown-on-signal") == 0) {
       utils::SetEnv("UNITRACE_TeardownOnSignal", "1");
       ++app_index;
@@ -470,6 +483,10 @@ int ParseArgs(int argc, char* argv[]) {
     } else {
       break;
     }
+  }
+
+  if (utils::GetEnv("UNITRACE_FollowChildProcess").empty()) {
+    utils::SetEnv("UNITRACE_FollowChildProcess", "1");	// default is to follow child processes
   }
 
   if (stall_sampling || metric_sampling) {
@@ -710,6 +727,7 @@ int main(int argc, char *argv[]) {
   app_args.push_back(nullptr);
 
   std::string preload = utils::GetEnv("LD_PRELOAD");
+  utils::SetEnv("UNITRACE_LD_PRELOAD_OLD", preload.c_str());
   if (preload.empty()) {
 #ifdef _WIN32
     preload = lib_path;	// lib_path is needed later
