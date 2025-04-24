@@ -41,16 +41,16 @@ static ZeMetricProfiler* metric_profiler = nullptr;
 static bool idle_sampling = false;
 
 void Usage(char * progname) {
+  std::cout << "(Built with ";
+  std::cout << "BUILD_WITH_L0=" << BUILD_WITH_L0 << ", ";
+  std::cout << "BUILD_WITH_OPENCL=" << BUILD_WITH_OPENCL << ", ";
+  std::cout << "BUILD_WITH_ITT=" << BUILD_WITH_ITT << ", ";
+  std::cout << "BUILD_WITH_XPTI=" << BUILD_WITH_XPTI << ", ";
+  std::cout << "BUILD_WITH_MPI=" << BUILD_WITH_MPI;
+  std::cout << ")" << std::endl;
   std::cout <<
     "Usage: " << progname << " [options] <application> <args>" <<
     std::endl;
-  std::cout << "Built with Level Zero support enabled and settings" << std::endl; // At present Level-zero is always ON hence no check is needed
-  std::cout << "[ ";
-  std::cout << "BUILD_WITH_OPENCL = " << BUILD_WITH_OPENCL << ", ";
-  std::cout << "BUILD_WITH_ITT = " << BUILD_WITH_ITT << ", ";
-  std::cout << "BUILD_WITH_XPTI = " << BUILD_WITH_XPTI << ", ";
-  std::cout << "BUILD_WITH_MPI = " << BUILD_WITH_MPI;
-  std::cout << " ]" << std::endl;
   std::cout << "Options:" << std::endl;
   std::cout <<
     "--call-logging [-c]            " <<

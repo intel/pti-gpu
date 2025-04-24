@@ -34,11 +34,16 @@ cd <....>/tools/unitrace
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
+make
+or
+cmake -GNinja -DCMAKE_BUILD_TYPE=Release ..
+ninja
 or
 cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=<0|1> ..
+make
 or
 cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=<0|1> -DCMAKE_INSTALL_PREFIX=<installpath> ..
-make
+make install
 or
 make install
 ```
@@ -49,8 +54,13 @@ cd <....>\tools\unitrace
 mkdir build
 cd build
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release ..
+nmake
+or
+cmake -GNinja -DCMAKE_BUILD_TYPE=Release ..
+ninja
 or
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=0 ..
+nmake
 or
 cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_WITH_MPI=0 -DCMAKE_INSTALL_PREFIX=<installpath> ..
 nmake
@@ -58,7 +68,14 @@ or
 nmake install
 ```
 
-The MPI support is not enabled if **BUILD_WITH_MPI=0** is defined.
+The **BUILD_WITH_MPI=<1/0>** setting enables/disables MPI profiling support (enabled by default). In addition to BUILD_WITH_MPI, the tool can also be built with:
+**BUILD_WITH_ITT=<1/0>** to enable/disable oneCCL/oneDNN profiling support (enabled by default)
+**BUILD_WITH_XPTI=<1/0>** to enable/disable SYCL/Unified Runtime profiling support (enabled by default)
+**BUILD_WITH_OPENCL=<1/0>** to enable/disable OpenCL profiling support (enabled by default).
+
+```
+cmake -DBUILD_WITH_ITT=0 -DBUILD_WITH_XPTI=0 -DBUILD_WITH_MPI=0 -DBUILD_WITH_OPENCL=0 ..
+```
 
 ## Run
 

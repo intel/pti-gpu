@@ -21,19 +21,26 @@ else()
   )
 endif()
 
-if (NOT BUILD_WITH_L0)
-  # ITT and XPTI are needed when tool is getting build for all supported APIs.
-  add_compile_definitions(BUILD_WITH_ITT=1)
-  add_compile_definitions(BUILD_WITH_XPTI=1)
-  set(BUILD_WITH_ITT 1)
-  set(BUILD_WITH_XPTI 1)
-else()
-  # Dependent component such as ITT is not getting build hence disabling MPI support as well
-  set(BUILD_WITH_MPI OFF)
-  add_compile_definitions(BUILD_WITH_ITT=0)
-  add_compile_definitions(BUILD_WITH_XPTI=0)
-  add_compile_definitions(BUILD_WITH_L0=1)
+if (NOT DEFINED BUILD_WITH_ITT)
+  set(BUILD_WITH_ITT 1) # Defaul value is 1
 endif()
+
+if (NOT DEFINED BUILD_WITH_XPTI)
+  set(BUILD_WITH_XPTI 1) # Defaul value is 1
+endif()
+
+if (NOT DEFINED BUILD_WITH_OPENCL)
+  set(BUILD_WITH_OPENCL 1) # Defaul value is 1
+endif()
+
+if (DEFINED BUILD_WITH_L0 AND BUILD_WITH_L0 STREQUAL "0")
+  message(FATAL_ERROR "BUILD_WITH_L0=0 is not supported. The unitrace tool can't be built without Level Zero")
+endif()
+
+add_compile_definitions(BUILD_WITH_ITT=${BUILD_WITH_ITT})
+add_compile_definitions(BUILD_WITH_XPTI=${BUILD_WITH_XPTI})
+add_compile_definitions(BUILD_WITH_OPENCL=${BUILD_WITH_OPENCL})
+add_compile_definitions(BUILD_WITH_L0=1)
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /bigobj ")
@@ -156,16 +163,18 @@ if(CMAKE_INCLUDE_PATH)
     PUBLIC "${CMAKE_INCLUDE_PATH}")
 endif()
 
-find_package(OpenCL 2.1)
-if (EXISTS ${OpenCL_LIBRARY})
-  message(STATUS "OpenCL installed on the machine")
-  add_compile_definitions(BUILD_WITH_OPENCL=1)
-  FindOpenCLLibrary(unitrace_tool)
-  FindOpenCLHeaders(unitrace_tool)
+if (BUILD_WITH_OPENCL)
+  find_package(OpenCL 2.1)
+  if (EXISTS ${OpenCL_LIBRARY})
+    message(STATUS "OpenCL installed on the machine")
+    add_compile_definitions(BUILD_WITH_OPENCL=1)
+    FindOpenCLLibrary(unitrace_tool)
+    FindOpenCLHeaders(unitrace_tool)
 
-  GetOpenCLTracingHeaders(unitrace_tool)
-else()
-    add_compile_definitions(BUILD_WITH_OPENCL=0)
+    GetOpenCLTracingHeaders(unitrace_tool)
+  else()
+      add_compile_definitions(BUILD_WITH_OPENCL=0)
+  endif()
 endif()
 
 set (LEVEL_ZERO_COMMIT_ID "v1.21.6")
