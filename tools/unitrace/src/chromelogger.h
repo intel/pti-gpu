@@ -558,7 +558,8 @@ class TraceBuffer {
       str += ", \"dur\": " + std::to_string(UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_));
       str += ", \"args\": {\"id\": \"" + std::to_string(rec.kid_) + "\"";
       if (metrics_enabled_) {
-        str += ", \"metrics\": \"https://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
+        // viewing the metrics on the same local host, no need to use https
+        str += ", \"metrics\": \"http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
       }
       str += "}},\n";
 
@@ -991,7 +992,8 @@ class ClTraceBuffer {
       str += ", \"dur\": " + std::to_string(UniTimer::GetTimeInUs(rec.end_time_ - rec.start_time_));
       str += ", \"args\": {\"id\": \"" + std::to_string(rec.kid_) + "\"";
       if (metrics_enabled_) {
-        str += ", \"metrics\": \"https://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
+        // viewing the metrics on the same local host, so no need to use https
+        str += ", \"metrics\": \"http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
       }
       str += "}},\n";
 
