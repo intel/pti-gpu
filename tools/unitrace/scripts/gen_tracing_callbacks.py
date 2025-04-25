@@ -315,9 +315,9 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
   f.write("\n")
   cb = get_kernel_tracing_callback('OnEnter' + func[2:])
   if (cb != ""):
-    f.write("  if (collector->options_.kernel_tracing) { \n")
+    f.write("  if (collector->options_.kernel_tracing) {\n")
     if (func in synchronize_func_list):
-      f.write("    " + cb + "(params, global_user_data, instance_user_data, &kids); \n")
+      f.write("    " + cb + "(params, global_user_data, instance_user_data, &kids);\n")
       f.write("    if (kids.size() != 0) {\n")
       f.write("        ze_instance_data.kid = kids[0];\n") # pass kid to the exit callback
       f.write("    }\n")
@@ -325,7 +325,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
       f.write("        ze_instance_data.kid = (uint64_t)(-1);\n")
       f.write("    }\n")     
     else:
-      f.write("    " + cb + "(params, global_user_data, instance_user_data); \n")
+      f.write("    " + cb + "(params, global_user_data, instance_user_data);\n")
     f.write("  }\n")
     f.write("\n")
   f.write("\n")
@@ -333,7 +333,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
   #f.write("    (((ZeInstanceData *)(*instance_user_data))->api_instance_data) = 0;\n")
   #f.write("    *reinterpret_cast<uint64_t*>(instance_user_data) = 0;\n")
   #f.write("    *reinterpret_cast<uint64_t*>(&ze_api_instance_data) = 0;\n")
-  f.write("    ze_instance_data.start_time_host = 0; \n")
+  f.write("    ze_instance_data.start_time_host = 0;\n")
   f.write("    return;\n")
   f.write("  }\n")
   f.write("\n")
@@ -617,11 +617,11 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
 def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, params, enum_map):
   f.write("  ZeCollector* collector =\n")
   f.write("    reinterpret_cast<ZeCollector*>(global_user_data);\n")
-  
+
   f.write("  uint64_t end_time_host = 0;\n")
 
   f.write("  end_time_host = UniTimer::GetHostTimestamp();\n")
-    
+
   cb = get_kernel_tracing_callback('OnExit' + func[2:])
 
   if ((func in submission_func_list) or (func in synchronize_func_list_on_enter) or (func in synchronize_func_list_on_exit)):
@@ -633,11 +633,11 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
     f.write("  }\n")
 
   if (cb != ""):
-    f.write("  if (collector->options_.kernel_tracing) { \n")
+    f.write("  if (collector->options_.kernel_tracing) {\n")
     if ((func in submission_func_list) or (func in synchronize_func_list_on_exit)):
-      f.write("    " + cb + "(params, result, global_user_data, instance_user_data, &kids); \n")
+      f.write("    " + cb + "(params, result, global_user_data, instance_user_data, &kids);\n")
     else:
-      f.write("    " + cb + "(params, result, global_user_data, instance_user_data); \n")
+      f.write("    " + cb + "(params, result, global_user_data, instance_user_data);\n")
     f.write("  }\n")
     
     f.write("\n")
@@ -679,7 +679,6 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
         f.write("          str += \" " + name[1:] + "[\";\n")
         f.write("          str += std::to_string(i);\n")
         f.write("          str += \"] = \";\n")
-
         f.write("          TO_HEX_STRING(str, (*(params->p" + name + "))[i]);\n")
         f.write("        }\n")
         f.write("      }\n")
@@ -725,15 +724,15 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
   f.write("    str += \"(0x\" + std::to_string(result) + \")\\n\";\n")
 
 
-  if func == "zeModuleCreate": 
-    f.write("    bool aot = (*(params->pdesc))->format; \n");
-    f.write("    unsigned int kcount = 0; \n")
+  if func == "zeModuleCreate":
+    f.write("    bool aot = (*(params->pdesc))->format;\n")
+    f.write("    unsigned int kcount = 0;\n")
     f.write("    if (ZE_FUNC(zeModuleGetKernelNames)(**(params->pphModule), &kcount, NULL) == ZE_RESULT_SUCCESS) {\n")
-    f.write("      if (aot) { \n")
-    f.write("        str += \"AOT (AOT_BINARY) \"; \n")
+    f.write("      if (aot) {\n")
+    f.write("        str += \"AOT (AOT_BINARY) \";\n")
     f.write("      }\n")
     f.write("      else {\n")
-    f.write("        str += \"JIT (IL_SPIRV) \"; \n")
+    f.write("        str += \"JIT (IL_SPIRV) \";\n")
     f.write("      }\n")
     f.write("      str += \"kernels in module: \" + std::to_string(kcount) + \"\\n\";\n")
     f.write("    }\n")
@@ -885,6 +884,7 @@ def main():
       "zeKernelSetGroupSize",
       "zeKernelDestroy",
       "zeEventHostSynchronize",
+      "zeCommandListHostSynchronize",
       "zeEventQueryStatus",
       "zeFenceHostSynchronize",
       "zeContextDestroy",
@@ -924,7 +924,8 @@ def main():
       "zeEventHostSynchronize",
       "zeEventQueryStatus",
       "zeFenceHostSynchronize",
-      "zeCommandQueueSynchronize"]
+      "zeCommandQueueSynchronize",
+      "zeCommandListHostSynchronize"]
 
   enum_map = get_enum_map(l0_path)
 
