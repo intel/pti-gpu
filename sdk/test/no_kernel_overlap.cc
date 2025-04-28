@@ -136,6 +136,9 @@ class NoKernelOverlapParametrizedTestFixture
   static std::vector<std::pair<uint64_t, uint64_t>> kernel_device_timestamps_pairs;
   static bool do_immediate;
 
+  static uint64_t expected_max_gap_to_submit;
+  static uint64_t expected_max_gap_from_submit;
+
   void SetUp() override {  // Called right after constructor before each test
     kernel_device_timestamps_pairs.clear();
     kernel_host_timestamps.clear();
@@ -143,10 +146,32 @@ class NoKernelOverlapParametrizedTestFixture
 
     auto [immediate, collection_mode] = GetParam();
     do_immediate = immediate;
+    if (immediate) {
+      std::cout << "Immediate command list mode" << std::endl;
+    } else {
+      std::cout << "Non-immediate command list mode" << std::endl;
+    }
+
+    // After we got more experience with this test - we can pass Gaps
+    // as test parameters.
+    // At the moment we want to test that different events of kernel life are not far away from
+    // each other.
+    //
     // while passed ModeLocal local it is expected it will be selected automatically of course
     // in case introspection API is available
     if (collection_mode != CollectionMode::kModeLocal) {
       utils::SetEnv("PTI_COLLECTION_MODE", std::to_string(collection_mode).c_str());
+      expected_max_gap_to_submit = 1'000'000;  // 1ms
+
+      expected_max_gap_from_submit = 20'000'000;
+      // there is no Bridge injection for Full and Hybrid modes
+      // so it is 20 not 50 ms
+    } else {
+      expected_max_gap_to_submit = 1'000'000;  // 1ms
+      // 50ms for Local mode between Submit and Start - the gap is expected to be bigger
+      // due to in Local mode we inject Bridge - injection is not cheap
+      // especially when done first time in context (kind of warm up)
+      expected_max_gap_from_submit = 50'000'000;
     }
   }
 
@@ -286,6 +311,38 @@ class NoKernelOverlapParametrizedTestFixture
             FAIL() << "------------>     Something wrong: Sycl Enq Launch Kernel Time is 0";
           }
 
+          if (0 != pti::test::utils::ValidateNoBigGapBetweenTimestampsNs(
+                       expected_max_gap_to_submit,
+                       {p_kernel_rec->_sycl_task_begin_timestamp,
+                        p_kernel_rec->_sycl_enqk_begin_timestamp, p_kernel_rec->_append_timestamp,
+                        p_kernel_rec->_submit_timestamp})) {
+            FAIL() << "------------>     ERROR: Gap between timestamps more than "
+                   << expected_max_gap_to_submit << " ns\n"
+                   << "Sycl Task Begin Time:        " << p_kernel_rec->_sycl_task_begin_timestamp
+                   << "\n"
+                   << "Sycl Enq Launch Kernel Time: " << p_kernel_rec->_sycl_enqk_begin_timestamp
+                   << "\n"
+                   << "Append Time:                 " << p_kernel_rec->_append_timestamp << "\n"
+                   << "Submit Time:                 " << p_kernel_rec->_submit_timestamp << "\n";
+          }
+
+          // this is rather big gap - but at the profiling start it might that big
+          // between submit and start -
+          // this is exactly where PTI instrumentation and Bridge kernel injected
+          //
+          // part of it the check between start and end on GPU - this somehow related to
+          // the kernel used in this test .. for big kernels - this will not hold
+          if (0 != pti::test::utils::ValidateNoBigGapBetweenTimestampsNs(
+                       expected_max_gap_from_submit,
+                       {p_kernel_rec->_submit_timestamp, p_kernel_rec->_start_timestamp,
+                        p_kernel_rec->_end_timestamp})) {
+            FAIL() << "------------>     ERROR: Gap between timestamps more than "
+                   << expected_max_gap_from_submit << " ns\n"
+                   << "Submit Time:                 " << p_kernel_rec->_submit_timestamp << "\n"
+                   << "Start Time:                  " << p_kernel_rec->_start_timestamp << "\n"
+                   << "End Time:                    " << p_kernel_rec->_end_timestamp;
+          }
+
           kernel_host_timestamps.push_back(p_kernel_rec->_append_timestamp);
           kernel_host_timestamps.push_back(p_kernel_rec->_submit_timestamp);
 
@@ -311,6 +368,10 @@ class NoKernelOverlapParametrizedTestFixture
 
 // static members initialization
 uint32_t NoKernelOverlapParametrizedTestFixture::times_buffer_completed = 0;
+uint64_t NoKernelOverlapParametrizedTestFixture::expected_max_gap_to_submit =
+    1'000'000;  // 1 ms - some value - anyway redefined in test SetUp
+uint64_t NoKernelOverlapParametrizedTestFixture::expected_max_gap_from_submit =
+    50'000'000;  // 50 ms - some value - anyway redefined in test SetUp
 std::vector<uint64_t> NoKernelOverlapParametrizedTestFixture::kernel_host_timestamps{};
 std::vector<std::pair<uint64_t, uint64_t>>
     NoKernelOverlapParametrizedTestFixture::kernel_device_timestamps_pairs{};
@@ -333,7 +394,8 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(NoKernelOverlapTests, NoKernelOverlapParametrizedTestFixture,
+INSTANTIATE_TEST_SUITE_P(NoKernelOverlapAndGapInSubmittingTests,
+                         NoKernelOverlapParametrizedTestFixture,
                          ::testing::Values(std::make_tuple(true, CollectionMode::kModeFull),
                                            std::make_tuple(false, CollectionMode::kModeFull),
                                            std::make_tuple(true, CollectionMode::kModeHybrid),

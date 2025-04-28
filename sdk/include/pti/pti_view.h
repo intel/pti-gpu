@@ -45,7 +45,7 @@ typedef enum _pti_view_kind {
 } pti_view_kind;
 
 /**
- * @brief Synchronization types:  
+ * @brief Synchronization types:
  *                             Type marked as *_GPU_* note the synchronization start/complete on device (e.g Barriers).
  *                             Type marked as *_HOST_* note the synchronization start/end on host (e.g. Fence).
  */
@@ -130,13 +130,13 @@ typedef enum _pti_api_group_id {
   PTI_API_GROUP_HYBRID_SYCL_LEVELZERO = 4,   // Sycl api_group, L0 api_id, only for output
   PTI_API_GROUP_HYBRID_SYCL_OPENCL    = 5,   // Sycl api_group, OCL api_id, only for output
   PTI_API_GROUP_ALL                   = 0x7fffffff // all groups, used as input only
-                                                   // Be careful using GROUP_ALL in api calls 
+                                                   // Be careful using GROUP_ALL in api calls
                                                    // -- you will get all *groups* now and in the *future*!
 } pti_api_group_id;
 
 /**
  * @brief API Classes across API groups, used for coarse-grain filtering of traced APIs,
- *                   serve only as input to PTI functions    
+ *                   serve only as input to PTI functions
  */
  typedef enum _pti_api_class {
   PTI_API_CLASS_RESERVED = 0,
@@ -144,8 +144,8 @@ typedef enum _pti_api_group_id {
                                                            //!< -- only Sycl Runtime mem/kernel apis covered for now.
   PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION = 2,        //!< Host synchronization APIs (no barriers)
                                                            //!< -- only LZ synch apis covered for now.
-  PTI_API_CLASS_ALL = 0x7fffffff,                          //!< all APIs, makes all valid values positive numbers 
-                                                           //!< Be careful using CLASS_ALL in api calls 
+  PTI_API_CLASS_ALL = 0x7fffffff,                          //!< all APIs, makes all valid values positive numbers
+                                                           //!< Be careful using CLASS_ALL in api calls
                                                            //!< -- you will get all classes *now* and in the *future*!
  } pti_api_class;
 
@@ -161,6 +161,13 @@ typedef void* pti_backend_evt_t; //!< Backend event handle
 typedef struct pti_view_record_base {
   pti_view_kind _view_kind;                   //!< Record View kind
 } pti_view_record_base;
+
+/**
+ * @note about the timestamps in the all records below:
+ * in case PTI collection was not able to determine the timestamp
+ * for a particular event in the life of a kernel, data transfer, a call, etc.,
+ * the timestamp value will be zero
+ */
 
 /**
  * @brief Device Compute kernel View record type
@@ -531,7 +538,7 @@ ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id api_group_id, uint32_t
  *
  * @return pti_result
  */
-pti_result  PTI_EXPORT 
+pti_result  PTI_EXPORT
 ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class api_class, pti_api_group_id group);
 
 /**
@@ -540,7 +547,7 @@ ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class api_class, pti_api_gr
  *
  * @return pti_result
  */
-pti_result  PTI_EXPORT 
+pti_result  PTI_EXPORT
 ptiViewEnableRuntimeApiClass(uint32_t enable, pti_api_class api_class, pti_api_group_id group);
 
 #if defined(__cplusplus)

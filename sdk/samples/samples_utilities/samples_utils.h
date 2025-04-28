@@ -282,7 +282,7 @@ inline void DumpRecord(pti_view_record_synchronization* record) {
   }
   std::cout << "Synch Start Time: " << record->_start_timestamp << '\n';
   std::cout << "  Synch End Time: " << record->_end_timestamp << '\n';
-  std::cout << "  Synch Duration: " << record->_end_timestamp - record->_start_timestamp << "ns \n";
+  std::cout << "  Synch Duration: " << record->_end_timestamp - record->_start_timestamp << "ns\n";
   std::cout << "Synch Thread Id: " << record->_thread_id << '\n';
   std::cout << "Synch Correlation Id: " << record->_correlation_id << '\n';
   std::cout << "Synch BE Queue Handle: " << record->_queue_handle << '\n';

@@ -2,6 +2,7 @@
 #define TEST_UTILS_TEST_HELPERS_H_
 
 #include <cstring>
+#include <initializer_list>
 #include <ostream>
 #include <type_traits>
 #include <vector>
@@ -32,6 +33,26 @@ constexpr std::size_t ValidateTimestamps(T... args) {
         prev_stamp = next_stamp;
       }(),
       ...);
+  return found_issues;
+}
+
+constexpr int ValidateNoBigGapBetweenTimestampsNs(uint64_t gap_in_ns,
+                                                  std::initializer_list<uint64_t> stamps) {
+  if (stamps.size() < 2) {
+    return -1;
+  }
+  int found_issues = 0;
+  auto it = stamps.begin();
+  auto prev_stamp = *it;
+  for (++it; it != stamps.end(); it++) {
+    auto next_stamp = *it;
+    if (next_stamp > prev_stamp + gap_in_ns) {
+      std::cout << "prev_stamp: " << prev_stamp << "\n"
+                << "next_stamp: " << next_stamp << std::endl;
+      found_issues++;
+    }
+    prev_stamp = next_stamp;
+  }
   return found_issues;
 }
 
