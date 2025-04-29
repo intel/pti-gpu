@@ -37,6 +37,10 @@ if (DEFINED BUILD_WITH_L0 AND BUILD_WITH_L0 STREQUAL "0")
   message(FATAL_ERROR "BUILD_WITH_L0=0 is not supported. The unitrace tool can't be built without Level Zero")
 endif()
 
+if (BUILD_WITH_MPI AND BUILD_WITH_ITT STREQUAL "0")
+  message(FATAL_ERROR "BUILD_WITH_ITT=0 and BUILD_WITH_MPI=1 is not a valid configuration for unitrace tool.")
+endif()
+
 add_compile_definitions(BUILD_WITH_ITT=${BUILD_WITH_ITT})
 add_compile_definitions(BUILD_WITH_XPTI=${BUILD_WITH_XPTI})
 add_compile_definitions(BUILD_WITH_OPENCL=${BUILD_WITH_OPENCL})
