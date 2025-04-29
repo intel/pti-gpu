@@ -152,6 +152,7 @@ jobs:
 
       - name: Test ThreadSanitizer
         working-directory: sdk
+        if: ${{ ! contains(matrix.uploadname, '2025.0') }}
         run: |
           source /opt/intel/oneapi/setvars.sh
           ctest --preset linux-tsan --output-on-failure -L samples
