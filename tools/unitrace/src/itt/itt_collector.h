@@ -14,8 +14,10 @@
 #include <string>
 #include <thread>
 #include <stack>
-#include "unicontrol.h"
 #include <tuple>
+
+#include "unicontrol.h"
+#include "unievent.h"
 
 static std::string rank_mpi = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
 typedef void (*OnIttLoggingCallback)(const char *name, uint64_t start_ts, uint64_t end_ts, IttArgs* metadata_args);
