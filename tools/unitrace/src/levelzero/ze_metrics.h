@@ -806,7 +806,7 @@ class ZeMetricProfiler {
 
               std::getline(kf, info.kernel_name);
               if ((info.metric_start != 0) && (info.metric_end != 0) && (!info.kernel_name.empty())) {
-                kinfo.push_back(info);
+                kinfo.push_back(std::move(info));
               }
             }
             kf.close();
