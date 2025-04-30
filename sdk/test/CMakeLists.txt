@@ -222,7 +222,6 @@ if(HAVE_SYCL)
   add_executable(dpc_gemm_threaded_profiled perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_baseline perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_linkonly perf_dpc_gemm_threaded.cc)
-  add_executable(dpc_gemm_threaded_overhead perf_dpc_gemm_threaded.cc)
 
   target_include_directories(
     dpc_gemm_threaded_profiled
@@ -230,26 +229,16 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_include_directories(
-    dpc_gemm_threaded_overhead
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
-         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
-         "${PROJECT_SOURCE_DIR}/src/utils")
-
-
   target_compile_options(dpc_gemm_threaded_profiled PRIVATE -fsycl -gline-tables-only)
   target_compile_options(dpc_gemm_threaded_baseline PRIVATE -fsycl -gline-tables-only)
   target_compile_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl -gline-tables-only)
-  target_compile_options(dpc_gemm_threaded_overhead PRIVATE -fsycl -gline-tables-only)
 
   target_compile_definitions(dpc_gemm_threaded_baseline PRIVATE NO_PTI)
   target_compile_definitions(dpc_gemm_threaded_linkonly PRIVATE NO_PTI)
-  target_compile_definitions(dpc_gemm_threaded_overhead PRIVATE CAPTURE_OVERHEAD)
 
   target_link_options(dpc_gemm_threaded_profiled PRIVATE -fsycl -gline-tables-only)
   target_link_options(dpc_gemm_threaded_baseline PRIVATE -fsycl -gline-tables-only)
   target_link_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl -gline-tables-only)
-  target_link_options(dpc_gemm_threaded_overhead PRIVATE -fsycl -gline-tables-only)
 
   target_link_libraries(dpc_gemm_threaded_profiled PUBLIC spdlog::spdlog
     Threads::Threads Pti::pti_view)
@@ -258,10 +247,6 @@ if(HAVE_SYCL)
     Threads::Threads Pti::pti_view)
 
   target_link_libraries(dpc_gemm_threaded_baseline PUBLIC Threads::Threads)
-
-  target_link_libraries(dpc_gemm_threaded_overhead PUBLIC spdlog::spdlog
-    Threads::Threads Pti::pti_view)
-
 
   gtest_discover_tests(
     dpcgemm_suite
@@ -362,6 +347,13 @@ if(HAVE_SYCL)
   )
 
   add_test(
+    NAME perf-prof-gpu-overhead
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 32.5 prof-gpu
+  )
+
+
+  add_test(
     NAME perf-link-overhead
     COMMAND
       ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" ${LINK_OVERHEAD_THRESHOLD} linkonly
@@ -377,8 +369,11 @@ if(HAVE_SYCL)
   set_tests_properties(
     perf-profiling-overhead perf-link-overhead PROPERTIES LABELS "performance")
 
+    set_tests_properties(
+    perf-prof-gpu-overhead perf-link-overhead PROPERTIES LABELS "performance")
+
   set_tests_properties(
-    perf-overhead-view PROPERTIES LABELS "performance;functional")
+    perf-overhead-view PROPERTIES LABELS "performance; functional")
 
 endif()
 

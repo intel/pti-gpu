@@ -110,13 +110,46 @@ static void Compute(sycl::queue queue, const std::vector<float>& a, const std::v
 }
 
 #if !defined(NO_PTI)
+
+enum class CollectionType : uint8_t {
+  kNone = 0x00,
+  kGpu = 0x01,
+  kOverheadL0 = 0x02,
+  kSyclMin = 0x04,
+};
+
+inline CollectionType operator|(CollectionType left, CollectionType right) {
+  return static_cast<CollectionType>(static_cast<std::underlying_type_t<CollectionType>>(left) |
+                                     static_cast<std::underlying_type_t<CollectionType>>(right));
+}
+
+inline constexpr bool operator&(CollectionType left, CollectionType right) {
+  return static_cast<std::underlying_type_t<CollectionType>>(left) &
+         static_cast<std::underlying_type_t<CollectionType>>(right);
+}
+
+std::ostream& operator<<(std::ostream& os, CollectionType type) {
+  std::string collect_string;
+  if (type & CollectionType::kGpu) {
+    collect_string += "Gpu_Ops";
+  }
+  if (type & CollectionType::kSyclMin) {
+    collect_string += " Sycl_Min";
+  }
+  if (type & CollectionType::kOverheadL0) {
+    collect_string += " Overhead_L0";
+  }
+  return os << collect_string;
+}
+
+CollectionType collection_type = CollectionType::kGpu;
+
 constexpr auto kRequestedRecordCount = 1'000ULL;
 constexpr auto kRequestedBufferSize = kRequestedRecordCount * sizeof(pti_view_record_kernel);
 
 std::atomic<uint64_t> g_record_count{0};
-#if defined(CAPTURE_OVERHEAD)
-std::atomic<uint64_t> overhead_time_ns{0};
-#endif
+
+[[maybe_unused]] std::atomic<uint64_t> overhead_time_ns{0};
 
 void EnableIndividualRuntimeApis() {
   PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
@@ -154,25 +187,33 @@ void EnableIndividualRuntimeApis() {
 }
 
 void StartTracing() {
-  PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
-  PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
-  PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
-#if !defined(CAPTURE_OVERHEAD)
-  PTI_THROW(ptiViewEnable(PTI_VIEW_RUNTIME_API));
-  // This is what we are doing in PyTorch/Kineto  - so lets' measure overhead on this typical flow
-  EnableIndividualRuntimeApis();
-#endif /* ! CAPTURE_OVERHEAD */
-  PTI_THROW(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
+  if (collection_type & CollectionType::kGpu) {
+    PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
+    PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
+    PTI_THROW(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
+  }
+  if (collection_type & CollectionType::kSyclMin) {
+    PTI_THROW(ptiViewEnable(PTI_VIEW_RUNTIME_API));
+    // This is what we are doing in PyTorch/Kineto  - so lets' measure overhead on this typical flow
+    EnableIndividualRuntimeApis();
+  }
+  if (collection_type & CollectionType::kOverheadL0) {
+    PTI_THROW(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD));
+  }
 }
 
 void StopTracing() {
-  PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
-  PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
-  PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
-#if !defined(CAPTURE_OVERHEAD)
-  PTI_THROW(ptiViewDisable(PTI_VIEW_RUNTIME_API));
-#endif /* ! CAPTURE_OVERHEAD */
-  PTI_THROW(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
+  if (collection_type & CollectionType::kGpu) {
+    PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
+    PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
+    PTI_THROW(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
+  }
+  if (collection_type & CollectionType::kSyclMin) {
+    PTI_THROW(ptiViewDisable(PTI_VIEW_RUNTIME_API));
+  }
+  if (collection_type & CollectionType::kOverheadL0) {
+    PTI_THROW(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
+  }
 }
 
 void ProvideBuffer(unsigned char** buf, std::size_t* buf_size) {
@@ -204,7 +245,6 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
       std::cerr << "Found Error Parsing Records from PTI" << '\n';
       break;
     }
-#if defined(CAPTURE_OVERHEAD)
     switch (ptr->_view_kind) {
       case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
         pti_view_record_overhead* record = reinterpret_cast<pti_view_record_overhead*>(ptr);
@@ -303,7 +343,6 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
         break;
       }
     }
-#endif  // CAPTURE_OVERHEAD
   }
   samples_utils::AlignedDealloc(buf);
 }
@@ -321,15 +360,21 @@ void Usage(const char* name) {
   std::cout << " Calculating floating point matrix multiply on gpu, submitting the work from many "
                "CPU threads\n"
             << "  Usage " << name << "  [ options ]" << std::endl;
-  std::cout << "--threads [-t]  integer         "
+  std::cout << "--threads [-t]  integer        "
             << "Threads number, default: " << default_thread_count << std::endl;
   std::cout << "--size [-s]     integer        "
             << "Matrix size, default: " << default_size << std::endl;
-  std::cout << "--repeat [-r]   integer         "
+  std::cout << "--repeat [-r]   integer        "
             << "Repetition number per thread, default: " << default_repetition_per_thread
             << std::endl;
   std::cout << "--verbose [-v]                 "
             << "Enable verbose mode to report the app progress, default: off" << std::endl;
+#if !defined(NO_PTI)
+  std::cout << "--collect [-c]  string         "
+            << "Enable PTI profiling. Could be passed several times with <gpu|overhead|sycl>,"
+               " default: gpu"
+            << std::endl;
+#endif
 }
 
 int main(int argc, char* argv[]) {
@@ -357,6 +402,22 @@ int main(int argc, char* argv[]) {
         // so profiling output won't be intermixed with the sample output
         // and could be analyzed by tests
         verbose = true;
+#if !defined(NO_PTI)
+      } else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--collect") == 0) {
+        i++;
+        auto temp = std::string(argv[i]);
+        if (temp.find("gpu") != std::string::npos) {
+          collection_type = collection_type | CollectionType::kGpu;
+        } else if (temp.find("over") != std::string::npos) {
+          collection_type = collection_type | CollectionType::kOverheadL0;
+        } else if (temp.find("sycl") != std::string::npos) {
+          collection_type = collection_type | CollectionType::kSyclMin;
+        } else {
+          std::cerr << "Unknown collection type (ignoring): " << temp << '\n';
+          Usage(argv[0]);
+          return EXIT_FAILURE;
+        }
+#endif
       } else {
         Usage(argv[0]);
         return EXIT_SUCCESS;
@@ -442,14 +503,13 @@ int main(int argc, char* argv[]) {
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
     auto gemm_count = thread_count * repeat_count;
-    std::cout << "-- PTI tracing was enabled, Record count: " << g_record_count << '\n';
-#if defined(CAPTURE_OVERHEAD)
-    std::cout << "-- For Overhead View test - only GPU ops and Overhead View are ON (not Sycl) "
-              << '\n';
-    std::cout << "-- Summed from Overhead View records Overhead time: "
-              << static_cast<float>(overhead_time_ns) / static_cast<float>(NSEC_IN_SEC) << " sec"
-              << '\n';
-#endif /* CAPTURE_OVERHEAD */
+    std::cout << "-- PTI tracing was enabled (" << collection_type
+              << "), Record count: " << g_record_count << '\n';
+    if (collection_type & CollectionType::kOverheadL0) {
+      std::cout << "-- Summed from Overhead View records Overhead time: "
+                << static_cast<float>(overhead_time_ns) / static_cast<float>(NSEC_IN_SEC) << " sec"
+                << '\n';
+    }
 #endif /* ! NO_PTI */
 
     std::cout << "-- Total execution time: " << time.count() << " sec" << std::endl;

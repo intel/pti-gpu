@@ -9,7 +9,12 @@ expected_stderr_strings = [
     "ZE_LOADER_DEBUG_TRACE:zeInitDrivers called first, "
     "but not supported by driver, returning uninitialized."
 ]
-test_profiled = [["dpc_gemm_threaded_profiled", "-t", "5", "-r", "50", "-s", "32"]]
+
+# fmt: off
+test_profiled = [["dpc_gemm_threaded_profiled", "-t", "5", "-r", "50", "-s", "32",
+                  "-c", "gpu", "-c", "sycl", "-c" , "overhead"]]
+test_prof_gpu = [["dpc_gemm_threaded_profiled", "-t", "5", "-r", "50", "-s", "32",
+                  "-c", "gpu"]]
 test_linkonly = [["dpc_gemm_threaded_linkonly", "-t", "5", "-r", "50", "-s", "32"]]
 test_baseline = [["dpc_gemm_threaded_baseline", "-t", "5", "-r", "50", "-s", "32"]]
 
@@ -17,8 +22,10 @@ test_baseline = [["dpc_gemm_threaded_baseline", "-t", "5", "-r", "50", "-s", "32
 # The test checks if the accumulated Overhead View time is at least
 # the threshold ratio (test parameter) multiplied by the difference between
 # the elapsed times of the baseline and the test under profiling.
-test_overhead = [["dpc_gemm_threaded_overhead", "-t", "1", "-r", "200", "-s", "32"]]
+test_overhead = [["dpc_gemm_threaded_profiled", "-t", "1", "-r", "200", "-s", "32",
+                  "-c", "gpu", "-c",  "overhead"]]
 test_baseline_t_1 = [["dpc_gemm_threaded_baseline", "-t", "1", "-r", "200", "-s", "32"]]
+# fmt: on
 
 
 def check_expected_content(text):
@@ -69,6 +76,8 @@ def run_test(path, test_type="profiled", repetitions=11):
     command_test = test_profiled[0]
     if test_type == "profiled":
         command_test = test_profiled[0]
+    elif test_type == "prof-gpu":
+        command_test = test_prof_gpu[0]
     elif test_type == "linkonly":
         command_test = test_linkonly[0]
     elif test_type == "overhead":
@@ -96,7 +105,7 @@ def run_test(path, test_type="profiled", repetitions=11):
             print(stderr_t)
             print(stderr_b)
             # If something not expected detected in stderr - fail the test
-            # if some new bening stderr detected - add it to the expected list
+            # if some new benign stderr detected - add it to the expected list
             if not (check_expected_content(stderr_t)):
                 print("Test failed due to unexpected stderr content (see above)")
                 return False, None, None, None, None, None
@@ -162,7 +171,7 @@ def process_data(values):
 def main():
     executable_path = sys.argv[1]
     print(" executable path: " + executable_path)
-    threshold_overhead = int(sys.argv[2]) if len(sys.argv) > 2 else 60
+    threshold_overhead = float(sys.argv[2]) if len(sys.argv) > 2 else 60
     test_type = sys.argv[3] if len(sys.argv) > 3 else "profiled"
     (
         Result,
@@ -193,14 +202,14 @@ def main():
             return 1
 
         if test_type != "overhead":
-            print("\nThreshold Overhread to pass: " + str(threshold_overhead) + "% => ")
+            print("\nThreshold Overhead to pass: " + str(threshold_overhead) + "% =>")
             print(
                 " Throughput of the test workload is less not more"
-                " than Threshold Overhread\n"
+                " than Threshold Overhead\n"
             )
         else:
             print(
-                "\nThreshold Ratio to pass: " + str(threshold_overhead * 0.01) + " => "
+                "\nThreshold Ratio to pass: " + str(threshold_overhead * 0.01) + " =>"
             )
             print(
                 " Reported PTI Overhead View time should account for at least for "

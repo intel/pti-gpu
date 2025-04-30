@@ -45,46 +45,6 @@ bool A2AppendBridgeKernel(ze_kernel_handle_t kernel, ze_command_list_handle_t co
   return result == ZE_RESULT_SUCCESS;
 }
 
-bool A2AppendBridgeMemoryCopyOrFill(ze_command_list_handle_t command_list,
-                                    ze_event_handle_t signal_event, ze_event_handle_t wait_event,
-                                    void* dst, void* src, size_t size1, size_t size2,
-                                    bool is_two_devices = false) {
-  // TODO make a small host to device mem transfer - kind of "brige" transfer
-  // this would require allocatiing memory on host and device in the specific context that
-  // the command list belongs to
-  PTI_ASSERT(command_list != nullptr);
-  PTI_ASSERT(wait_event != nullptr);
-
-  SPDLOG_DEBUG(
-      " --- In: {}, CmdList: {}, Signal event: {}, Wait event: {}, dst: {}, src: {}, \
-                size1: {}, size2: {}, is_two_devices: {}",
-      __FUNCTION__, (void*)command_list, (void*)signal_event, (void*)wait_event, dst, src, size1,
-      size2, is_two_devices);
-
-  uint32_t count = 1;
-  ze_result_t result = ZE_RESULT_SUCCESS;
-  if (0 == size2) {  // MemoryCopy
-    const size_t size_64 = (size1 > 64) ? 64 : size1;
-    size_t size_here = ((dst == src) || (is_two_devices)) ? size_64 : 0;
-    SPDLOG_TRACE("\tAppending Bridge MemoryCopy dst: {}, src: {}, size_here: {}", dst, src,
-                 size_here);
-    overhead::Init();
-    result = zeCommandListAppendMemoryCopy(command_list, dst, src, size_here, signal_event, count,
-                                           &wait_event);
-    overhead_fini(zeCommandListAppendMemoryCopy_id);
-  } else {  // MemoryFill
-    PTI_ASSERT(size1 >= size2);
-    SPDLOG_TRACE("\tAppending Bridge MemoryFill dst: {}, src: {}, size1: {}, size2: {}", dst, src,
-                 size1, size2);
-    overhead::Init();
-    result = zeCommandListAppendMemoryFill(command_list, dst, src, size2, 0, signal_event, count,
-                                           &wait_event);
-    overhead_fini(zeCommandListAppendMemoryFill_id);
-  }
-  SPDLOG_DEBUG("\t\tBridge MemOp Append result: {}", (uint32_t)result);
-  return result == ZE_RESULT_SUCCESS;
-}
-
 /**
  * \internal
  * ze..MemoryFill still has smaller latency than ze..MemoryCopy. So we use it to lower the overhead
