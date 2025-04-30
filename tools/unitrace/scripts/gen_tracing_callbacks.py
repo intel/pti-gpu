@@ -371,6 +371,23 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
       else:
         f.write("    str += \" " + name + " = \" ;\n")
         f.write("    TO_HEX_STRING(str, *(params->p" + name + "));\n")
+        if name == "pArgValue" and func == "zeKernelSetArgumentValue":
+          f.write("    void* argValuePtr = const_cast<void*>(*(params->ppArgValue));\n")
+          f.write("    if (*(params->pargSize) == 1) {\n")
+          f.write("      str += \" ArgValue = \";\n")
+          f.write("      TO_HEX_STRING(str, *(reinterpret_cast<uint8_t *>(argValuePtr)));\n")
+          f.write("    } else if (*(params->pargSize) == 2) {\n")
+          f.write("      str += \" ArgValue = \";\n")
+          f.write("      TO_HEX_STRING(str, *(reinterpret_cast<uint16_t *>(argValuePtr)));\n")
+          f.write("    } else if (*(params->pargSize) == 4) {\n")
+          f.write("      str += \" ArgValue = \";\n")
+          f.write("      TO_HEX_STRING(str, *(reinterpret_cast<uint32_t *>(argValuePtr)));\n")
+          f.write("    } else if (*(params->pargSize) == 8) {\n")
+          f.write("      str += \" ArgValue = \";\n")
+          f.write("      TO_HEX_STRING(str, *(reinterpret_cast<uint64_t *>(argValuePtr)));\n")
+          f.write("    } else {\n")
+          f.write("      // do nothing\n")
+          f.write("    }\n")
         if name.find("Kernel") >= 0 and func == "zeCommandListAppendLaunchKernel":
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
           f.write("      bool demangle = collector->options_.demangle;\n")
