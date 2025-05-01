@@ -1040,8 +1040,8 @@ TEST_F(MainZeFixtureTest, AllSynchronizationRelated) {
   // capture_records = true;
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   EXPECT_EQ(RunGemm(), 0);
-  EXPECT_EQ(RunGemm(false, true, true, true, false, true),
-            0);  // sycl, zecalls, kernel and sych enabled
+  EXPECT_EQ(RunGemm(false, false, true, true, false, true),
+            0);  // with_polling, sycl, zecalls, kernel and sych enabled
 
   // FenceSynchronization
   EXPECT_EQ(synchronization_record_fence_exec_seen, true);
@@ -1076,6 +1076,8 @@ TEST_F(MainZeFixtureTest, AllSynchronizationRelated) {
   EXPECT_EQ(synchronization_record_fence_exec_seen, true);
   EXPECT_EQ(synchronization_record_event_seen, true);
   EXPECT_EQ(synchronization_record_cqueue_seen, true);
+
+  EXPECT_EQ(external_corrid_special_record_seen, false);
 }
 
 TEST_F(MainZeFixtureTest, SyclBasedAndZeBasedKernelLaunchesPresent) {

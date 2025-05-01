@@ -1104,10 +1104,6 @@ inline void CommonSynchEvent(pti_view_record_synchronization& record,
                              const ZeKernelCommandExecutionRecord& rec) {
   int64_t ts_shift = Instance().GetTimeShift();
 
-  if (external_collection_enabled) {
-    GenerateExternalCorrelationRecords(rec);
-  }
-
   record._api_group = pti_api_group_id::PTI_API_GROUP_LEVELZERO;
   record._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
   record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
