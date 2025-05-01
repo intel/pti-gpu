@@ -65,7 +65,7 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --output-on-failure --preset ${{ matrix.preset }} -E 'RuntimeOpsSetOffMainFixtureTest.ValidateRealTimestampFromUser|perf-overhead-view|perf-link-overhead|perf-profiling-overhead'
+          ctest --output-on-failure --preset ${{ matrix.preset }} -E 'perf-overhead-view|perf-link-overhead|perf-profiling-overhead'
 
       - name: Quarantined tests # flaky tests
         continue-on-error: true
@@ -73,7 +73,7 @@ jobs:
         run: |
           source /opt/intel/oneapi/setvars.sh
           status=0
-          if ctest --output-on-failure --preset ${{ matrix.preset }} -R "RuntimeOpsSetOffMainFixtureTest.ValidateRealTimestampFromUser|perf-overhead-view|perf-link-overhead|perf-profiling-overhead"; then
+          if ctest --output-on-failure --preset ${{ matrix.preset }} -R "perf-overhead-view|perf-link-overhead|perf-profiling-overhead"; then
             status=0
           else
             status=1
