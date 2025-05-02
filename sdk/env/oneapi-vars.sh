@@ -35,8 +35,7 @@ fi
 
 CMAKE_PREFIX_PATH=$(prepend_path "${component_root}/lib/cmake/pti" "${CMAKE_PREFIX_PATH:-}") ; export CMAKE_PREFIX_PATH
 
-C_INCLUDE_PATH=$(prepend_path "${component_root}/include" "${C_INCLUDE_PATH:-}") ; export C_INCLUDE_PATH
-CPLUS_INCLUDE_PATH=$(prepend_path "${component_root}/include" "${CPLUS_INCLUDE_PATH:-}") ; export CPLUS_INCLUDE_PATH
+CPATH=$(prepend_path "${component_root}/include" "${CPATH:-}") ; export CPATH
 
 Pti_DIR=${ONEAPI_ROOT}/lib/cmake/pti; export Pti_DIR
 
