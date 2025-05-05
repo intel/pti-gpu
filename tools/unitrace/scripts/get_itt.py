@@ -28,18 +28,20 @@ def copy(src_path, dst_path, file_list):
 
     shutil.copy(src_file, dst_file)
 
-def build():
+def build(build_dir):
   curr_wrkng_dir = os.getcwd()
-  itt_dir = curr_wrkng_dir + "/ittapi"
+  itt_dir = build_dir + "/ittapi"
   os.chdir(itt_dir)
   if platform.system() == 'Windows':
     os.system("cmake -G \"NMake Makefiles\" .")
     os.system("nmake")
-    shutil.copyfile("./bin/libittnotify.lib", curr_wrkng_dir+"/libittnotify.lib")
+    shutil.copyfile("./bin/libittnotify.lib", build_dir + "/libittnotify.lib")
   else :
     os.system("cmake .")
     os.system("make")
-    shutil.copyfile("./bin/libittnotify.a", curr_wrkng_dir+"/libittnotify.a")
+    shutil.copyfile("./bin/libittnotify.a", build_dir + "/libittnotify.a")
+
+  # Restore back the location
   os.chdir(curr_wrkng_dir)
 
 def main():
@@ -75,7 +77,7 @@ def main():
   src_path = os.path.join(src_path, "legacy")
   copy(src_path, dst_path, ["ittnotify.h"])
 
-  # build ittnotify 
-  build()
+  # build ittnotify
+  build(sys.argv[2])
 if __name__ == "__main__":
   main()
