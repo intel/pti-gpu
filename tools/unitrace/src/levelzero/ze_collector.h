@@ -4638,6 +4638,24 @@ class ZeCollector {
     modules_on_devices_mutex_.unlock();
   }
 
+  static void OnEnterCommandListImmediateAppendCommandListsExp(
+      ze_command_list_immediate_append_command_lists_exp_params_t* params,
+      void* global_data, void** instance_data) {
+
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+
+    if (UniController::IsCollectionEnabled()) {
+      collector->command_lists_mutex_.lock_shared();
+
+      auto it = collector->command_lists_.find(*(params->phCommandListImmediate));
+      if (it != collector->command_lists_.end()) {
+        collector->PrepareToExecuteCommandListsLocked(*(params->pphCommandLists), *(params->pnumCommandLists),
+                                                it->second->device_, it->second->engine_ordinal_, it->second->engine_index_, nullptr);
+      }
+      collector->command_lists_mutex_.unlock_shared();
+    }
+  }
+
   static void OnExitCommandListImmediateAppendCommandListsExp(
     ze_command_list_immediate_append_command_lists_exp_params_t* params,
     ze_result_t result,
@@ -4645,16 +4663,13 @@ class ZeCollector {
     void** instance_data, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
-      collector->command_lists_mutex_.lock_shared();
-
-      auto it = collector->command_lists_.find(*(params->phCommandListImmediate));
-      if (it != collector->command_lists_.end()) {
-        collector->PrepareToExecuteCommandListsLocked(*(params->pphCommandLists), *(params->pnumCommandLists),
-                                                it->second->device_, it->second->engine_ordinal_, it->second->engine_index_, nullptr);
-        local_device_submissions_.SubmitStagedKernelCommandAndMetricQueries(collector->event_cache_, kids);
-      }
-      collector->command_lists_mutex_.unlock_shared();
+    if (UniController::IsCollectionEnabled()) {
+        if ((result == ZE_RESULT_SUCCESS)) {
+           local_device_submissions_.SubmitStagedKernelCommandAndMetricQueries(collector->event_cache_, kids);
+        }
+        else {
+           local_device_submissions_.RevertStagedKernelCommandAndMetricQueries();
+        }
     }
   }
 
