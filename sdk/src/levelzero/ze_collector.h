@@ -729,6 +729,23 @@ class ZeCollector {
     return destroyed;
   }
 
+  std::vector<ZeKernelCommandExecutionRecord> CollectCommandExecutionRecordsProcessingEvent(
+      ze_event_handle_t event, std::vector<uint64_t>* kids) {
+    std::vector<ZeKernelCommandExecutionRecord> kcexecrec;
+    {
+      const std::lock_guard<std::mutex> lock(lock_);
+      ProcessCallEvent(event, kids, &kcexecrec);
+    }
+    return kcexecrec;
+  }
+
+  void ReturnCommandExecutionRecordsToUser(
+      std::vector<ZeKernelCommandExecutionRecord>& kernel_exec_records) {
+    if (cb_enabled_.acallback && acallback_ != nullptr) {
+      acallback_(callback_data_, kernel_exec_records);
+    }
+  }
+
   void ProcessCallEvent(ze_event_handle_t event, std::vector<uint64_t>* kids,
                         std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
     // lock is acquired in caller
@@ -1326,11 +1343,9 @@ class ZeCollector {
     SPDLOG_TRACE("In {} event: {}", __FUNCTION__, (void*)*(params->phEvent));
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
-
-      if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
-        collector->acallback_(collector->callback_data_, kcexec);
-      }
+      auto exec_records =
+          collector->CollectCommandExecutionRecordsProcessingEvent(*(params->phEvent), kids);
+      collector->ReturnCommandExecutionRecordsToUser(exec_records);
 
       if (ZeCollectionMode::Local == collector->collection_mode_) {
         ze_event_handle_t swap_event =
