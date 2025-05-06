@@ -64,6 +64,10 @@ if (TARGET LevelZero::level-zero)
    target_link_libraries(local_ze_collection_suite PUBLIC GTest::gmock
      GTest::gtest_main LevelZero::level-zero spdlog::spdlog Pti::pti_view)
    add_dependencies(local_ze_collection_suite copy_test_spv)
+   gtest_discover_tests(
+      local_ze_collection_suite
+      DISCOVERY_TIMEOUT 60
+      PROPERTIES LABELS "functional")
 endif()
 
 if(HAVE_SYCL)
