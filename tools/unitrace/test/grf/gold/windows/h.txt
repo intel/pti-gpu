@@ -1,0 +1,58 @@
+=== API Timing Summary ===
+
+             Total Execution Time (ns):           1113239300
+    Total API Time for L0 backend (ns):            802260600
+
+== L0 Backend ==
+
+                              Function,        Calls,            Time (ns),      Time (%),         Average (ns),             Min (ns),             Max (ns)
+                zeEventHostSynchronize,           20,            494674600,     61.660084,             24733730,               127700,            114105000
+                        zeModuleCreate,            1,            302878400,     37.753117,            302878400,            302878400,            302878400
+                             zeMemFree,            9,               650100,      0.081034,                72233,                 4800,               280500
+                      zeMemAllocShared,            5,               581300,      0.072458,               116260,                16300,               257900
+         zeCommandListAppendMemoryCopy,            1,               549600,      0.068506,               549600,               549600,               549600
+     zeCommandQueueExecuteCommandLists,           21,               498700,      0.062162,                23747,                 4700,               121700
+          zeCommandListCreateImmediate,            1,               446300,      0.055630,               446300,               446300,               446300
+                   zeCommandListCreate,            1,               338800,      0.042231,               338800,               338800,               338800
+                        zeMemAllocHost,            3,               239000,      0.029791,                79666,                53900,               108300
+                      zeMemAllocDevice,            1,               186600,      0.023259,               186600,               186600,               186600
+           zeContextMakeMemoryResident,            1,               177200,      0.022088,               177200,               177200,               177200
+       zeCommandListAppendLaunchKernel,           20,               174300,      0.021726,                 8715,                 1600,                96800
+                    zeCommandListReset,           21,               167700,      0.020903,                 7985,                  600,                90200
+             zeCommandQueueSynchronize,            4,               165500,      0.020629,                41375,                 2000,               154200
+                  zeCommandQueueCreate,            1,               125900,      0.015693,               125900,               125900,               125900
+                 zeDeviceGetProperties,            1,                96100,      0.011979,                96100,                96100,                96100
+                     zeEventPoolCreate,            1,                69800,      0.008700,                69800,                69800,                69800
+                       zeModuleDestroy,            1,                49100,      0.006120,                49100,                49100,                49100
+                        zeKernelCreate,            4,                26600,      0.003316,                 6650,                 1500,                20300
+                      zeEventHostReset,           19,                26500,      0.003303,                 1394,                  400,                 5500
+              zeKernelSetArgumentValue,           40,                22600,      0.002817,                  565,                    0,                 3400
+                    zeFenceQueryStatus,           21,                20600,      0.002568,                  980,                  200,                 6000
+                  zeCommandListDestroy,            2,                12600,      0.001571,                 6300,                 2400,                10200
+        zeDriverGetExtensionProperties,            2,                10500,      0.001309,                 5250,                 5000,                 5500
+                    zeCommandListClose,           21,                 9000,      0.001122,                  428,                  200,                 1300
+                    zeEventPoolDestroy,            1,                 7600,      0.000947,                 7600,                 7600,                 7600
+                         zeEventCreate,            2,                 7100,      0.000885,                 3550,                 1000,                 6100
+               zeMemGetAllocProperties,            5,                 5400,      0.000673,                 1080,                  300,                 2300
+                       zeContextCreate,            1,                 4700,      0.000586,                 4700,                 4700,                 4700
+                       zeKernelDestroy,            4,                 4600,      0.000573,                 1150,                  700,                 1500
+                  zeKernelSetGroupSize,           20,                 4500,      0.000561,                  225,                    0,                  800
+           zeDeviceGetModuleProperties,            1,                 4100,      0.000511,                 4100,                 4100,                 4100
+zeDeviceGetCommandQueueGroupProperties,            2,                 3500,      0.000436,                 1750,                  500,                 3000
+                        zeEventDestroy,            2,                 3400,      0.000424,                 1700,                  400,                 3000
+                      zeContextDestroy,            1,                 3000,      0.000374,                 3000,                 3000,                 3000
+                           zeDriverGet,            3,                 2600,      0.000324,                  866,                  100,                 1400
+                 zeCommandQueueDestroy,            1,                 2100,      0.000262,                 2100,                 2100,                 2100
+                          zeFenceReset,           21,                 1700,      0.000212,                   80,                    0,                  100
+                 zeDeviceGetSubDevices,           10,                 1600,      0.000199,                  160,                    0,                  600
+               zeModuleBuildLogDestroy,            1,                 1500,      0.000187,                 1500,                 1500,                 1500
+             zeKernelSetIndirectAccess,            4,                 1300,      0.000162,                  325,                    0,                  700
+                        zeFenceDestroy,            1,                  900,      0.000112,                  900,                  900,                  900
+          zeDeviceGetComputeProperties,            1,                  800,      0.000100,                  800,                  800,                  800
+                 zeDriverGetProperties,            1,                  800,      0.000100,                  800,                  800,                  800
+                         zeFenceCreate,            1,                  700,      0.000087,                  700,                  700,                  700
+                           zeDeviceGet,            2,                  400,      0.000050,                  200,                  100,                  300
+                 zeDriverGetApiVersion,            1,                  400,      0.000050,                  400,                  400,                  400
+            zeDeviceGetImageProperties,            1,                  300,      0.000037,                  300,                  300,                  300
+                 zeModuleGetProperties,            1,                  200,      0.000025,                  200,                  200,                  200
+

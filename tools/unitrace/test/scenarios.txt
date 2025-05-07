@@ -1,0 +1,10 @@
+-c 
+-h 
+-d 
+-t 
+-s 
+--chrome-call-logging
+--chrome-device-logging
+--chrome-kernel-logging
+--chrome-sycl-logging
+--chrome-itt-logging

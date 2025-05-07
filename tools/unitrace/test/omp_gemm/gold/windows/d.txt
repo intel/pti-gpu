@@ -1,0 +1,20 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):           1918571400
+    Total Device Time for L0 backend (ns):            722573953
+
+== L0 Backend ==
+
+                                                                               Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+"__omp_offloading_e4ea70a0_ae24e1b9__Z12ComputeOnGPURKSt6vectorIfSaIfEES3_RS1_jf_l59",            4,            722469582,    99.985558,            180617395,            175209375,            188006250
+                                                 "zeCommandListAppendMemoryCopy(M2D)",            8,                64894,     0.008981,                 8111,                 4479,                20104
+                                                 "zeCommandListAppendMemoryCopy(D2M)",            5,                39477,     0.005463,                 7895,                 4270,                13958
+
+
+=== Kernel Properties ===
+
+                                                                               Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+"__omp_offloading_e4ea70a0_ae24e1b9__Z12ComputeOnGPURKSt6vectorIfSaIfEES3_RS1_jf_l59",      JIT,   16,                  10,                  0,                         0,                       0,                           128
+
+

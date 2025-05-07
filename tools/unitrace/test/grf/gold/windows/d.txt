@@ -1,0 +1,23 @@
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):            737455200
+    Total Device Time for L0 backend (ns):            489201137
+
+== L0 Backend ==
+
+                              Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+                "_ZTSZ4mainEUlT_E2_",            5,            488855103,    99.929260,             97771020,             88786875,            111671354
+                "_ZTSZ4mainEUlT_E1_",            5,               140727,     0.028767,                28145,                17187,                62187
+                "_ZTSZ4mainEUlT_E0_",            5,                82706,     0.016906,                16541,                 3541,                42916
+                 "_ZTSZ4mainEUlT_E_",            5,                75206,     0.015373,                15041,                 4583,                48020
+"zeCommandListAppendMemoryCopy(H2H)",            1,                47395,     0.009688,                47395,                47395,                47395
+
+
+=== Kernel Properties ===
+
+                              Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+                "_ZTSZ4mainEUlT_E2_",      JIT,   32,                   3,                  0,                         0,                       0,                           128
+                "_ZTSZ4mainEUlT_E1_",      JIT,   32,                   3,                  0,                         0,                       0,                           128
+                "_ZTSZ4mainEUlT_E0_",      JIT,   32,                   1,                  0,                         0,                       0,                           128
+                 "_ZTSZ4mainEUlT_E_",      JIT,   32,                   1,                  0,                         0,                       0,                           128
+

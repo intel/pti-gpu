@@ -1,0 +1,26 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):             93803157
+    Total Device Time for L0 backend (ns):               585600
+
+== L0 Backend ==
+
+                                                                                                                                                                      Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+                                                                                                                                        "zeCommandListAppendMemoryCopy(D2M)",            1,               166400,    28.415300,               166400,               166400,               166400
+                                                                                                                                        "zeCommandListAppendMemoryCopy(M2D)",            1,               122800,    20.969946,               122800,               122800,               122800
+                                                                                                                                             "zeCommandListAppendEventReset",           36,               116720,    19.931694,                 3242,                 2240,                 3840
+"run1(sycl::_V1::queue&, float*, float*, float*, float*, int)::{lambda(sycl::_V1::handler&)#1}::operator()(sycl::_V1::handler&) const::{lambda(sycl::_V1::item<1, true>)#1}",            6,                59680,    10.191257,                 9946,                 9440,                11840
+"run1(sycl::_V1::queue&, float*, float*, float*, float*, int)::{lambda(sycl::_V1::handler&)#2}::operator()(sycl::_V1::handler&) const::{lambda(sycl::_V1::item<1, true>)#1}",            6,                41120,     7.021858,                 6853,                 6720,                 6880
+"run1(sycl::_V1::queue&, float*, float*, float*, float*, int)::{lambda(sycl::_V1::handler&)#3}::operator()(sycl::_V1::handler&) const::{lambda(sycl::_V1::item<1, true>)#1}",            6,                40960,     6.994535,                 6826,                 6720,                 6880
+                                                                                                                                                "zeCommandListAppendBarrier",           19,                37920,     6.475410,                 1995,                 1440,                 3200
+
+
+=== Kernel Properties ===
+
+                                                                                                                                                                      Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+"run1(sycl::_V1::queue&, float*, float*, float*, float*, int)::{lambda(sycl::_V1::handler&)#1}::operator()(sycl::_V1::handler&) const::{lambda(sycl::_V1::item<1, true>)#1}",      JIT,   32,                   2,                  0,                         0,                       0,                           128
+"run1(sycl::_V1::queue&, float*, float*, float*, float*, int)::{lambda(sycl::_V1::handler&)#2}::operator()(sycl::_V1::handler&) const::{lambda(sycl::_V1::item<1, true>)#1}",      JIT,   32,                   2,                  0,                         0,                       0,                           128
+"run1(sycl::_V1::queue&, float*, float*, float*, float*, int)::{lambda(sycl::_V1::handler&)#3}::operator()(sycl::_V1::handler&) const::{lambda(sycl::_V1::item<1, true>)#1}",      JIT,   32,                   2,                  0,                         0,                       0,                           128
+
+

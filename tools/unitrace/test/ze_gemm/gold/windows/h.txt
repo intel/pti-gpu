@@ -1,0 +1,41 @@
+
+=== API Timing Summary ===
+
+             Total Execution Time (ns):           2434158600
+    Total API Time for L0 backend (ns):            338787300
+
+== L0 Backend ==
+
+                         Function,        Calls,            Time (ns),      Time (%),         Average (ns),             Min (ns),             Max (ns)
+                   zeModuleCreate,            1,            142387600,     42.028614,            142387600,            142387600,            142387600
+        zeCommandQueueSynchronize,            4,            122545900,     36.171928,             30636475,             21946600,             54812000
+             zeCommandListDestroy,            4,             61531100,     18.162163,             15382775,               645000,             59494900
+                  zeModuleDestroy,            1,              6569000,      1.938975,              6569000,              6569000,              6569000
+    zeCommandListAppendMemoryCopy,           12,              1645300,      0.485644,               137108,                35600,              1045600
+            zeDeviceGetProperties,            7,              1350800,      0.398716,               192971,                64100,               314100
+                 zeMemAllocDevice,           12,               723300,      0.213497,                60275,                17800,               134700
+               zeEventPoolDestroy,            4,               480000,      0.141682,               120000,                66000,               162900
+              zeCommandListCreate,            4,               407500,      0.120282,               101875,                18400,               347000
+                zeEventPoolCreate,            4,               233600,      0.068952,                58400,                39700,                98700
+zeCommandQueueExecuteCommandLists,            4,               232200,      0.068539,                58050,                42700,                85100
+                        zeMemFree,           12,               203400,      0.060038,                16950,                 5800,                37200
+             zeCommandQueueCreate,            4,               191400,      0.056496,                47850,                 5900,               171900
+      zeEventQueryKernelTimestamp,            4,                34500,      0.010183,                 8625,                 4400,                16500
+                    zeEventCreate,            4,                31700,      0.009357,                 7925,                 3400,                12600
+  zeCommandListAppendLaunchKernel,            4,                30200,      0.008914,                 7550,                 4500,                13600
+         zeKernelSetArgumentValue,           16,                27600,      0.008147,                 1725,                  300,                 6500
+            zeCommandQueueDestroy,            4,                25800,      0.007615,                 6450,                 5200,                 7200
+         zeKernelSuggestGroupSize,            4,                23700,      0.006996,                 5925,                 4100,                 6700
+                   zeEventDestroy,            4,                22500,      0.006641,                 5625,                 4300,                 8800
+                   zeKernelCreate,            1,                20300,      0.005992,                20300,                20300,                20300
+                  zeContextCreate,            1,                16400,      0.004841,                16400,                16400,                16400
+                 zeContextDestroy,            1,                16100,      0.004752,                16100,                16100,                16100
+                  zeKernelDestroy,            1,                15000,      0.004428,                15000,                15000,                15000
+               zeCommandListClose,            4,                 7200,      0.002125,                 1800,                 1100,                 2600
+             zeKernelSetGroupSize,            4,                 4400,      0.001299,                 1100,                  700,                 1800
+       zeCommandListAppendBarrier,            8,                 4300,      0.001269,                  537,                  200,                 1200
+                      zeDriverGet,            5,                 3400,      0.001004,                  680,                  100,                 2100
+                      zeDeviceGet,            4,                 2600,      0.000767,                  650,                  100,                 1800
+            zeDeviceGetSubDevices,            1,                  500,      0.000148,                  500,                  500,                  500
+
+

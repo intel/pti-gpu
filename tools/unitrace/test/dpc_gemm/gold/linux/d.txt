@@ -1,0 +1,18 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):            214649009
+    Total Device Time for L0 backend (ns):             97642160
+
+== L0 Backend ==
+
+                                                                                                                                                                                                                                                                                 Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+"RunAndCheck(sycl::_V1::queue, std::vector<float, std::allocator<float> > const&, std::vector<float, std::allocator<float> > const&, std::vector<float, std::allocator<float> >&, unsigned int, float)::{lambda(sycl::_V1::handler&)#1}::operator()(sycl::_V1::handler&) const::__GEMM",            4,             89769760,    91.937500,             22442440,             22436320,             22454240
+                                                                                                                                                                                                                                                   "zeCommandListAppendMemoryCopy(M2D)",           12,              5238880,     5.365387,               436573,               328560,               774800
+                                                                                                                                                                                                                                                   "zeCommandListAppendMemoryCopy(D2M)",            4,              2633520,     2.697114,               658380,               581280,               864800
+
+
+=== Kernel Properties ===
+
+                                                                                                                                                                                                                                                                                 Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+"RunAndCheck(sycl::_V1::queue, std::vector<float, std::allocator<float> > const&, std::vector<float, std::allocator<float> > const&, std::vector<float, std::allocator<float> >&, unsigned int, float)::{lambda(sycl::_V1::handler&)#1}::operator()(sycl::_V1::handler&) const::__GEMM",      JIT,   32,                   4,                  0,                         0,                       0,                           128

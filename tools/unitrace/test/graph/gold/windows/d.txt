@@ -1,0 +1,26 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):           1153236900
+    Total Device Time for L0 backend (ns):             52754824
+
+== L0 Backend ==
+
+                                                                                          Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+ "_ZTSZZ4run1RN4sycl3_V15queueEPfS3_S3_S3_iENKUlRNS0_7handlerEE_clES5_EUlNS0_4itemILi1ELb1EEEE_",            6,             52172185,    98.895576,              8695364,              8350104,              8907395
+                                                            "zeCommandListAppendMemoryCopy(D2M)",            1,               290312,     0.550304,               290312,               290312,               290312
+                                                            "zeCommandListAppendMemoryCopy(M2D)",            1,               249375,     0.472706,               249375,               249375,               249375
+                                                                 "zeCommandListAppendEventReset",           30,                29420,     0.055767,                  980,                  625,                 2916
+                                                                    "zeCommandListAppendBarrier",           18,                13532,     0.025651,                  751,                  416,                 1145
+"_ZTSZZ4run1RN4sycl3_V15queueEPfS3_S3_S3_iENKUlRNS0_7handlerEE1_clES5_EUlNS0_4itemILi1ELb1EEEE_",            6,                    0,     0.000000,                    0,                    0,                    0
+"_ZTSZZ4run1RN4sycl3_V15queueEPfS3_S3_S3_iENKUlRNS0_7handlerEE0_clES5_EUlNS0_4itemILi1ELb1EEEE_",            6,                    0,     0.000000,                    0,                    0,                    0
+
+
+=== Kernel Properties ===
+
+                                                                                          Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+ "_ZTSZZ4run1RN4sycl3_V15queueEPfS3_S3_S3_iENKUlRNS0_7handlerEE_clES5_EUlNS0_4itemILi1ELb1EEEE_",      JIT,    8,                   2,                  0,                      3264,                    3200,                           128
+"_ZTSZZ4run1RN4sycl3_V15queueEPfS3_S3_S3_iENKUlRNS0_7handlerEE1_clES5_EUlNS0_4itemILi1ELb1EEEE_",      JIT,    8,                   2,                  0,                      3264,                    3200,                           128
+"_ZTSZZ4run1RN4sycl3_V15queueEPfS3_S3_S3_iENKUlRNS0_7handlerEE0_clES5_EUlNS0_4itemILi1ELb1EEEE_",      JIT,    8,                   2,                  0,                      3264,                    3200,                           128
+
+

@@ -1,0 +1,45 @@
+
+=== API Timing Summary ===
+
+             Total Execution Time (ns):             54909372
+    Total API Time for L0 backend (ns):                10394
+Total API Time for CL CPU backend (ns):                 3149
+Total API Time for CL GPU backend (ns):             16233454
+
+== L0 Backend ==
+
+                           Function,        Calls,            Time (ns),      Time (%),         Average (ns),             Min (ns),             Max (ns)
+zeDriverGetExtensionFunctionAddress,            1,                 5304,     51.029442,                 5304,                 5304,                 5304
+                        zeDriverGet,            1,                 5090,     48.970558,                 5090,                 5090,                 5090
+
+== CL CPU Backend ==
+
+      Function,       Calls,           Time (ns),    Time (%),        Average (ns),            Min (ns),            Max (ns)
+clGetDeviceIDs,           2,                3149,      100.00,                1574,                 758,                2391
+
+== CL GPU Backend ==
+
+                          Function,       Calls,           Time (ns),    Time (%),        Average (ns),            Min (ns),            Max (ns)
+                          clFinish,           4,            11973950,       73.76,             2993487,             2929705,             3024733
+              clEnqueueWriteBuffer,           8,             1709589,       10.53,              213698,               84742,              910401
+               clEnqueueReadBuffer,           4,             1547551,        9.53,              386887,              348633,              457340
+            clEnqueueNDRangeKernel,           4,              380002,        2.34,               95000,               25415,              284353
+                    clBuildProgram,           1,              212721,        1.31,              212721,              212721,              212721
+                clReleaseMemObject,          12,              141960,        0.87,               11830,                5198,               20233
+                    clCreateBuffer,          12,               88477,        0.55,                7373,                2421,               18427
+                   clCreateContext,           1,               84020,        0.52,               84020,               84020,               84020
+                  clReleaseProgram,           1,               26458,        0.16,               26458,               26458,               26458
+           clGetEventProfilingInfo,           8,               21526,        0.13,                2690,                  74,                7643
+clCreateCommandQueueWithProperties,           1,                7637,        0.05,                7637,                7637,                7637
+                    clSetKernelArg,          16,                7361,        0.05,                 460,                  60,                2334
+                    clCreateKernel,           1,                5968,        0.04,                5968,                5968,                5968
+         clCreateProgramWithSource,           1,                5445,        0.03,                5445,                5445,                5445
+                    clReleaseEvent,           4,                4581,        0.03,                1145,                 683,                1792
+                  clReleaseContext,           1,                4476,        0.03,                4476,                4476,                4476
+             clReleaseCommandQueue,           1,                3938,        0.02,                3938,                3938,                3938
+                   clReleaseKernel,           1,                3749,        0.02,                3749,                3749,                3749
+                   clGetKernelInfo,           4,                2077,        0.01,                 519,                 290,                1125
+                   clGetDeviceInfo,           4,                1213,        0.01,                 303,                  99,                 569
+                    clGetDeviceIDs,           2,                 755,        0.00,                 377,                 308,                 447
+
+

@@ -8,6 +8,7 @@ Intel(R) GPU applications.
 ## Supported Platforms
 
 - Linux
+- Windows
 - Intel(R) oneAPI Base Toolkits
 - Intel(R) GPUs including Intel(R) Data Center GPU Max Series
 
@@ -79,6 +80,58 @@ Example:
 
 ```
 cmake -DBUILD_WITH_ITT=0 -DBUILD_WITH_XPTI=0 -DBUILD_WITH_MPI=0 -DBUILD_WITH_OPENCL=0 ..
+```
+
+## Test
+
+After unitrace is built, run ctest from the build folder:
+
+```sh
+ctest -V
+```
+or run test_unitrace.py from the test folder
+
+```sh
+cd test
+python test_unitrace.py
+```
+
+By default, command **python test_unitrace.py** builds and runs all the tests. If the tests are already built and rebuilding the tests is not needed, you can use **--run** to skip buidling the tests:
+
+```sh
+cd test
+python test_unitrace.py --run
+```
+
+The default testing scenarios are defined in file **test/scenarios.txt**. You can edit this file to change the scenarios. You can also create your own testing scenarios in a .txt file, for example, **myscenarios.txt**:
+
+```sh
+    -c
+    -h
+    --chrome-call-logging 
+    --chrome-kernel-logging
+```
+
+and test the scenarios:
+
+```sh
+cd test
+python test_unitrace.py --config myscenarios.txt
+```
+
+To create and add a new test, for example, **mytest**, you need to add the following statement in the **CMakeLists.txt** file of the new test:
+
+```sh
+add_test(NAME mytest COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/run_test.py ${CMAKE_SOURCE_DIR} mytest <args>)
+```
+
+The arguments of the test can be passed in **args**.
+
+
+If the new test is in a new folder, for example, **mytestdir**, you also need to add the new folder to the top **CMakeLists.txt** file:
+
+```sh
+add_subdirectory(mytestdir)
 ```
 
 ## Run

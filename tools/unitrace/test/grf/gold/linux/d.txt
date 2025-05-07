@@ -1,0 +1,25 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):             94801836
+    Total Device Time for L0 backend (ns):              2360080
+
+== L0 Backend ==
+
+                              Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+          "main::{lambda(auto:1)#4}",            5,              2091520,    88.620728,               418304,               405280,               466400
+          "main::{lambda(auto:1)#1}",            5,               163840,     6.942138,                32768,                30080,                42720
+          "main::{lambda(auto:1)#3}",            5,                44320,     1.877902,                 8864,                 6560,                17760
+          "main::{lambda(auto:1)#2}",            5,                42400,     1.796549,                 8480,                 8160,                 9440
+"zeCommandListAppendMemoryCopy(H2H)",            1,                18000,     0.762686,                18000,                18000,                18000
+
+
+=== Kernel Properties ===
+
+                              Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+          "main::{lambda(auto:1)#4}",      JIT,   32,                   3,                  0,                         0,                       0,                           256
+          "main::{lambda(auto:1)#1}",      JIT,   32,                   1,                  0,                         0,                       0,                           128
+          "main::{lambda(auto:1)#3}",      JIT,   32,                   3,                  0,                         0,                       0,                           128
+          "main::{lambda(auto:1)#2}",      JIT,   32,                   1,                  0,                         0,                       0,                           128
+
+

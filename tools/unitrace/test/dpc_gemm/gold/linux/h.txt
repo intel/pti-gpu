@@ -1,0 +1,70 @@
+
+=== API Timing Summary ===
+
+             Total Execution Time (ns):             81615043
+    Total API Time for L0 backend (ns):             31476739
+Total API Time for CL CPU backend (ns):                50771
+Total API Time for CL GPU backend (ns):                23006
+
+== L0 Backend ==
+
+                              Function,        Calls,            Time (ns),      Time (%),         Average (ns),             Min (ns),             Max (ns)
+          zeCommandListHostSynchronize,            8,             19911548,     63.257973,              2488943,                 1270,              5135361
+         zeCommandListAppendMemoryCopy,           16,              6393938,     20.313215,               399621,               132844,               891555
+          zeCommandListCreateImmediate,            3,              1481024,      4.705138,               493674,                44688,              1171763
+                zeEventHostSynchronize,            8,               968394,      3.076538,               121049,                  238,               289210
+                        zeModuleCreate,            1,               813091,      2.583149,               813091,               813091,               813091
+           zeContextMakeMemoryResident,           10,               807288,      2.564713,                80728,                 7263,               372251
+       zeCommandListAppendLaunchKernel,            4,               604590,      1.920752,               151147,                 7208,               564306
+                      zeMemAllocDevice,            5,               182827,      0.580832,                36565,                13746,                56347
+                      zeMemAllocShared,            4,               107340,      0.341014,                26835,                19661,                44807
+                             zeMemFree,            7,                68858,      0.218758,                 9836,                 4453,                21910
+           zeDeviceGetGlobalTimestamps,            2,                22008,      0.069918,                11004,                10154,                11854
+                        zeMemAllocHost,            1,                15875,      0.050434,                15875,                15875,                15875
+           zeEventQueryKernelTimestamp,            8,                15227,      0.048375,                 1903,                 1033,                 3357
+                         zeEventCreate,            5,                11872,      0.037717,                 2374,                  813,                 6465
+                        zeKernelCreate,            1,                 9828,      0.031223,                 9828,                 9828,                 9828
+                     zeEventPoolCreate,            1,                 8483,      0.026950,                 8483,                 8483,                 8483
+   zeDriverGetExtensionFunctionAddress,            7,                 7824,      0.024856,                 1117,                  192,                 5686
+                      zeEventHostReset,           15,                 6865,      0.021810,                  457,                   92,                 1027
+zeDeviceGetCommandQueueGroupProperties,            4,                 6144,      0.019519,                 1536,                   46,                 4723
+              zeKernelSetArgumentValue,           16,                 4945,      0.015710,                  309,                   32,                 1209
+                           zeDriverGet,            3,                 4930,      0.015662,                 1643,                   51,                 4696
+            zeKernelSetGlobalOffsetExp,            4,                 4668,      0.014830,                 1167,                  159,                 4068
+        zeDriverGetExtensionProperties,            2,                 3569,      0.011339,                 1784,                 1723,                 1846
+              zeKernelSuggestGroupSize,            4,                 2019,      0.006414,                  504,                  204,                  929
+           zeDeviceGetModuleProperties,            2,                 1922,      0.006106,                  961,                  269,                 1653
+                 zeDeviceGetProperties,            2,                 1865,      0.005925,                  932,                  432,                 1433
+                 zeDeviceCanAccessPeer,            5,                 1378,      0.004378,                  275,                  148,                  432
+                       zeContextCreate,            1,                 1157,      0.003676,                 1157,                 1157,                 1157
+               zeMemGetAllocProperties,            7,                 1069,      0.003396,                  152,                   66,                  540
+                 zeDeviceGetRootDevice,           22,                  954,      0.003031,                   43,                   20,                  385
+                 zeKernelGetProperties,            1,                  762,      0.002421,                  762,                  762,                  762
+                           zeDeviceGet,            2,                  654,      0.002078,                  327,                  135,                  519
+                    zeEventQueryStatus,            8,                  650,      0.002065,                   81,                   23,                  226
+                  zeKernelSetGroupSize,            4,                  617,      0.001960,                  154,                   98,                  231
+                 zeDeviceGetSubDevices,           10,                  537,      0.001706,                   53,                   22,                  225
+          zeDeviceGetComputeProperties,            1,                  503,      0.001598,                  503,                  503,                  503
+                 zeDriverGetProperties,            1,                  471,      0.001496,                  471,                  471,                  471
+            zeDeviceGetImageProperties,            2,                  370,      0.001175,                  185,                   30,                  340
+                 zeModuleGetProperties,            1,                  302,      0.000959,                  302,                  302,                  302
+             zeKernelSetIndirectAccess,            1,                  294,      0.000934,                  294,                  294,                  294
+                 zeDriverGetApiVersion,            1,                   79,      0.000251,                   79,                   79,                   79
+
+== CL CPU Backend ==
+
+         Function,       Calls,           Time (ns),    Time (%),        Average (ns),            Min (ns),            Max (ns)
+  clGetDeviceInfo,         105,               26673,       52.54,                 254,                  98,                3986
+clGetPlatformInfo,          24,               16249,       32.00,                 677,                 186,                5758
+   clGetDeviceIDs,           9,                4763,        9.38,                 529,                 100,                2728
+  clReleaseDevice,          12,                1627,        3.20,                 135,                  77,                 424
+   clRetainDevice,           8,                1459,        2.87,                 182,                  75,                 713
+
+== CL GPU Backend ==
+
+         Function,       Calls,           Time (ns),    Time (%),        Average (ns),            Min (ns),            Max (ns)
+  clGetDeviceInfo,         216,               16268,       70.71,                  75,                  30,                 709
+   clGetDeviceIDs,           8,                3263,       14.18,                 407,                  96,                1612
+clGetPlatformInfo,          24,                2175,        9.45,                  90,                  36,                 633
+  clReleaseDevice,          24,                 768,        3.34,                  32,                  24,                  78
+   clRetainDevice,          16,                 532,        2.31,                  33,                  24,                  67

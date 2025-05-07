@@ -1,0 +1,19 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):           5917626800
+    Total Device Time for L0 backend (ns):           4676410206
+
+== L0 Backend ==
+
+                                                                                                Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+"_ZTSZZL11RunAndCheckN4sycl3_V15queueERKSt6vectorIfSaIfEES6_RS4_jfENKUlRNS0_7handlerEE_clES9_E6__GEMM",            4,           4675211665,    99.974365,           1168802916,           1073651562,           1219552604
+                                                                  "zeCommandListAppendMemoryCopy(H2M)",            4,              1198541,     0.025630,               299635,               281875,               337500
+
+
+=== Kernel Properties ===
+
+                                                                                                Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+"_ZTSZZL11RunAndCheckN4sycl3_V15queueERKSt6vectorIfSaIfEES6_RS4_jfENKUlRNS0_7handlerEE_clES9_E6__GEMM",      JIT,    8,                  13,                  0,                      8320,                   11840,                           128
+
+
