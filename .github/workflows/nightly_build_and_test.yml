@@ -4,6 +4,8 @@ on:
   push:
     paths:
     - .github/workflows/nightly_build_and_test.yml
+    - .github/actions/linuxTest/action.yml
+
   workflow_dispatch:
   schedule:
     - cron: '30 5 * * *' # Daily 5:30 AM UTC / 12:30 AM EST
@@ -88,23 +90,11 @@ jobs:
           cmake --preset ${{ matrix.preset }}
           cmake --build --preset ${{ matrix.preset }} -j $(($(nproc)/2))
 
-      - name: Test
-        working-directory: sdk
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          ONEAPI_VER=${{ matrix.uploadname }}
-          ctest --output-on-failure --preset ${{ matrix.preset }} -E 'RuntimeOpsSetOffMainFixtureTest.ValidateRealTimestampFromUser|perf-overhead-view|perf-link-overhead|perf-profiling-overhead'
-
-      - name: Quarantined tests # flaky tests
-        continue-on-error: true
-        working-directory: sdk
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          ONEAPI_VER=${{ matrix.uploadname }}
-          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'RuntimeOpsSetOffMainFixtureTest.ValidateRealTimestampFromUser'
-          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-overhead-view'
-          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-link-overhead'
-          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-profiling-overhead'
+      - name: Test action
+        uses: ./.github/actions/linuxTest
+        with:
+          wdir: sdk
+          preset: ${{ matrix.preset }}
 
       - name: Build AddressSanitizer
         working-directory: sdk

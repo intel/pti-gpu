@@ -1,0 +1,37 @@
+name: 'Linux tests for PTI'
+description: |
+  Run the tests with a partition that is expected to ALWAYS succeed and
+  another partition that MAY fail. The latter is designated as Quarantine.
+inputs:
+  wdir:
+    description: Working directory
+    required: true
+  preset:
+    description: Preset used in the build to be tested.
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+
+    - name: Tests that MUST succeed.
+      working-directory: ${{ inputs.wdir }}
+      shell: bash
+      run: |
+        source /opt/intel/oneapi/setvars.sh
+        ctest --output-on-failure --preset ${{ inputs.preset }} -E 'perf-overhead-view|perf-link-overhead|perf-profiling-overhead'
+
+    - name: Quarantined tests # flaky tests
+      continue-on-error: true
+      working-directory: ${{ inputs.wdir }}
+      shell: bash
+      run: |
+        source /opt/intel/oneapi/setvars.sh
+        if ctest --output-on-failure --preset ${{ inputs.preset }} -R "perf-overhead-view|perf-link-overhead|perf-profiling-overhead"; then
+          echo "Test status: 0"
+          echo "Quarantine tests all pass."
+        else
+          echo "Test status: 1"
+          echo "::warning::Quarantine tests presented failures."
+        fi
+        exit 0
