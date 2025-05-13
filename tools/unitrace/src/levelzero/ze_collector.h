@@ -1958,7 +1958,7 @@ class ZeCollector {
       if (!units.empty()) {
         name += "[" + units + "]";
       }
-      names.push_back(name);
+      names.push_back(std::move(name));
     }
 
     return names;
