@@ -19,7 +19,7 @@ runs:
       shell: bash
       run: |
         source /opt/intel/oneapi/setvars.sh
-        ctest --output-on-failure --preset ${{ inputs.preset }} -E 'perf-overhead-view|perf-link-overhead|perf-profiling-overhead'
+        ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance
 
     - name: Quarantined tests # flaky tests
       continue-on-error: true
@@ -27,7 +27,7 @@ runs:
       shell: bash
       run: |
         source /opt/intel/oneapi/setvars.sh
-        if ctest --output-on-failure --preset ${{ inputs.preset }} -R "perf-overhead-view|perf-link-overhead|perf-profiling-overhead"; then
+        if ctest --output-on-failure --preset ${{ inputs.preset }} -L performance; then
           echo "Test status: 0"
           echo "Quarantine tests all pass."
         else

@@ -182,7 +182,7 @@ jobs:
           REM TODO Kernel name demangling not supported on Windows yet.
           REM TODO Tests need to be run without \DNDEBUG set
           REM TODO OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
-          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords|perf-overhead-view|perf-link-overhead"
+          ctest --output-on-failure --preset ${{ matrix.preset }} -LE performance -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords"
 
       - name: Quarantined tests # flaky tests
         continue-on-error: true
@@ -190,7 +190,7 @@ jobs:
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          ctest --output-on-failure --preset ${{ matrix.preset }} -R "perf-overhead-view|perf-link-overhead"
+          ctest --output-on-failure --preset ${{ matrix.preset }} -L performance
           if %ERRORLEVEL% NEQ 0 (
             echo ::warning::Quarantined tests step failed.
           )
