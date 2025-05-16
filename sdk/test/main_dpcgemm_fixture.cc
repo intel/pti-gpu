@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <mutex>
 #include <sycl/sycl.hpp>
 #include <tuple>
 
@@ -120,17 +121,16 @@ void GEMM(const float* a, const float* b, float* c, unsigned size, sycl::id<2> i
   c[i * size + j] = sum;
 }
 
-float RunAndCheck(sycl::queue queue, const std::vector<float>& a, const std::vector<float>& b,
-                  std::vector<float>& c, unsigned size, float expected_result) {
-  PTI_ASSERT(size > 0);
-  PTI_ASSERT(a.size() == size * size);
-  PTI_ASSERT(b.size() == size * size);
-  PTI_ASSERT(c.size() == size * size);
-
+void LaunchGemm(sycl::queue queue, const std::vector<float>& a_vector,
+                const std::vector<float>& b_vector, std::vector<float>& result, unsigned size) {
+  ASSERT_GT(size, 0);
+  ASSERT_EQ(a_vector.size(), size * size);
+  ASSERT_EQ(b_vector.size(), size * size);
+  ASSERT_EQ(result.size(), size * size);
   try {
-    sycl::buffer<float, 1> a_buf(a.data(), a.size());
-    sycl::buffer<float, 1> b_buf(b.data(), b.size());
-    sycl::buffer<float, 1> c_buf(c.data(), c.size());
+    sycl::buffer<float, 1> a_buf(a_vector.data(), a_vector.size());
+    sycl::buffer<float, 1> b_buf(b_vector.data(), b_vector.size());
+    sycl::buffer<float, 1> c_buf(result.data(), result.size());
 
     sycl::event event = queue.submit([&](sycl::handler& cgh) {
       auto a_acc = a_buf.get_access<sycl::access::mode::read>(cgh);
@@ -146,9 +146,19 @@ float RunAndCheck(sycl::queue queue, const std::vector<float>& a, const std::vec
     });
     queue.wait_and_throw();
   } catch (const sycl::exception& e) {
-    std::cerr << "[ERROR] " << e.what() << std::endl;
+    FAIL() << "[ERROR] Launching GEMM Kernel" << e.what();
   }
+}
 
+void ValidateGemm(const std::vector<float>& result, float a_value, float b_value, unsigned size) {
+  auto expected_result = a_value * b_value * static_cast<float>(size);
+  auto eps = Check(result, expected_result);
+  ASSERT_LE(eps, MAX_EPS);
+}
+
+float RunAndCheck(sycl::queue queue, const std::vector<float>& a, const std::vector<float>& b,
+                  std::vector<float>& c, unsigned size, float expected_result) {
+  LaunchGemm(queue, a, b, c, size);
   return Check(c, expected_result);
 }
 
@@ -371,7 +381,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
           std::string kernel_name = reinterpret_cast<pti_view_record_kernel*>(ptr)->_name;
-          if (kernel_name.find("RunAndCheck(") != std::string::npos) {
+          if (kernel_name.find("LaunchGemm(") != std::string::npos) {
             demangled_kernel_name = true;
           }
           std::string kernel_source_filename =
@@ -746,6 +756,7 @@ TEST_F(MainFixtureTest, ValidateNotImplementedViewReturn) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   EXPECT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
   EXPECT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_CPU_KERNEL), pti_result::PTI_ERROR_NOT_IMPLEMENTED);
+  EXPECT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
   EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
 }
 
@@ -854,15 +865,29 @@ TEST_P(MainFixtureTest, ZeCallsGeneration) {
 
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
 
-  if (kernel) ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
-  if (sycl) ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
-  if (zecall) ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  if (kernel) {
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  }
+
+  if (sycl) {
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+  }
+
+  if (zecall) {
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  }
 
   RunGemmNoTrace();
 
-  if (kernel) ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
-  if (sycl) ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
-  if (zecall) ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  if (kernel) {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  }
+  if (sycl) {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+  }
+  if (zecall) {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  }
 
   if (zecall) {
     EXPECT_EQ(zecall_present, true);
@@ -894,9 +919,17 @@ TEST_P(MainFixtureTest, ApiCallsGenerationDriver) {
   env_off = (utils::IsSetEnv("PTI_VIEW_DRIVER_API") == 0);
   bool env_on = (utils::IsSetEnv("PTI_VIEW_DRIVER_API") == 1);
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  if (driver_view_kind) ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
-  if (granular_on) EnableIndividualApis(true, pti_api_group_id::PTI_API_GROUP_ALL);
+  if (driver_view_kind) {
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  }
+  if (granular_on) {
+    EnableIndividualApis(true, pti_api_group_id::PTI_API_GROUP_ALL);
+  }
   RunGemmNoTrace();
+  if (driver_view_kind) {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  }
+  EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   if (driver_view_kind && !env_off) {
     // We get here if env variable for DRIVER API is on or unset  ---  L0 calls should be found.
     EXPECT_EQ(zecall_present, true);
@@ -933,9 +966,16 @@ TEST_P(MainFixtureTest, ApiCallsGenerationRuntime) {
   env_off = (utils::IsSetEnv("PTI_VIEW_RUNTIME_API") == 0);
   bool env_on = (utils::IsSetEnv("PTI_VIEW_RUNTIME_API") == 1);
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  if (runtime_view_kind) ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
-  if (granular_on) EnableIndividualApis(false, pti_api_group_id::PTI_API_GROUP_ALL);
+  if (runtime_view_kind) {
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+  }
+  if (granular_on) {
+    EnableIndividualApis(false, pti_api_group_id::PTI_API_GROUP_ALL);
+  }
   RunGemmNoTrace();
+  if (runtime_view_kind) {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+  }
   if (runtime_view_kind && !env_off) {
     // We get here if env variable for RUNTIME API is on or unset  ---  ur calls should be found.
     EXPECT_EQ(urcall_present, true);
@@ -1007,3 +1047,169 @@ TEST_P(ExternalCorrelationOverFlowSuite, ValidatePopExternalOverflowValues) {
 INSTANTIATE_TEST_SUITE_P(OverflowGroup, ExternalCorrelationOverFlowSuite,
                          testing::Combine(testing::ValuesIn(kExternalKinds),
                                           testing::ValuesIn(kExternalIds)));
+
+// Can be a tad easier to read than boolean.
+enum class QueueType { kImmediate, kNonImmediate };
+
+class GemmLaunchTest
+    : public ::testing::TestWithParam<std::tuple<std::size_t, unsigned int, QueueType>> {
+ protected:
+  static constexpr unsigned int kDefaultMatrixSize = 8;
+  // This is a reasonable default. We are storing the buffers during the tests, so not super
+  // important.
+  static constexpr auto kRequestedBufferSize = 1'000 * sizeof(pti_view_record_kernel);
+
+  struct TimestampRange {
+    uint64_t start = 0;
+    uint64_t end = 0;
+  };
+
+  struct GemmLaunchTestData {
+    static GemmLaunchTestData& Instance() {
+      static GemmLaunchTestData data{};
+      return data;
+    }
+
+    void Reset() {
+      range = std::nullopt;
+      kernels = 0;
+      buffers.clear();
+    }
+
+    std::optional<TimestampRange> range = std::nullopt;  // If set, only consider values in range
+    std::size_t kernels = 0;
+    mutable std::mutex buffers_mtx;  // buffers requested and stored in different threads.
+    std::unordered_map<unsigned char*, pti::test::utils::PtiViewBuffer> buffers;
+  };
+
+  GemmLaunchTest() {
+    GemmLaunchTestData::Instance().Reset();
+    const auto [iterations, mat_size, queue_type] = GetParam();
+    const std::size_t vec_size = mat_size * mat_size;
+
+    a_vector_ = std::vector<float>(vec_size, A_VALUE);
+    b_vector_ = std::vector<float>(vec_size, B_VALUE);
+    result_vector_ = std::vector<float>(vec_size, 0.0f);
+  }
+
+  static bool WithinRange(TimestampRange range, uint64_t timestamp) {
+    return timestamp >= range.start && timestamp <= range.end;
+  }
+
+  static void HandleView(pti_view_record_base* view) {
+    switch (view->_view_kind) {
+      case PTI_VIEW_DEVICE_GPU_KERNEL: {
+        const auto* const kernel = reinterpret_cast<const pti_view_record_kernel*>(view);
+        auto range = GemmLaunchTestData::Instance().range;
+        if (range.has_value()) {
+          auto within_range = WithinRange(*range, kernel->_start_timestamp);
+          EXPECT_TRUE(within_range) << "Range Start: " << range->start
+                                    << " Kernel Start Timestamp: " << kernel->_start_timestamp
+                                    << " Range End: " << range->end << '\n';
+          if (within_range) {
+            ++GemmLaunchTestData::Instance().kernels;
+          }
+        }
+        break;
+      }
+      default: {
+        FAIL() << "View found but not handled: " << view->_view_kind;
+        break;
+      }
+    }
+  }
+
+  static void ProvideBuffer(unsigned char** buf, size_t* buf_size) {
+    auto buffer = pti::test::utils::PtiViewBuffer(kRequestedBufferSize);
+    if (!buffer.Valid()) {
+      FAIL() << "Unable to allocate buffer for PTI tracing";
+    }
+    *buf = buffer.data();
+    *buf_size = buffer.size();
+
+    const std::lock_guard<std::mutex> lock(GemmLaunchTestData::Instance().buffers_mtx);
+    GemmLaunchTestData::Instance().buffers[*buf] = std::move(buffer);
+  }
+
+  static void ParseBuffer(unsigned char* buf, size_t used_bytes) {
+    pti_view_record_base* record = nullptr;
+    while (true) {
+      auto buf_status = ptiViewGetNextRecord(buf, used_bytes, &record);
+      if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
+        break;
+      }
+      if (buf_status != pti_result::PTI_SUCCESS) {
+        FAIL() << "Found Error Parsing Records from PTI";
+        break;
+      }
+      HandleView(record);
+    }
+  }
+
+  static void MarkBuffer(unsigned char* buf, size_t /*buf_size*/, size_t used_bytes) {
+    const std::lock_guard<std::mutex> lock(GemmLaunchTestData::Instance().buffers_mtx);
+    if (auto buffer = GemmLaunchTestData::Instance().buffers.find(buf);
+        buffer != GemmLaunchTestData::Instance().buffers.end()) {
+      buffer->second.SetUsedBytes(used_bytes);
+    }
+  }
+
+  void SetUp() override {
+    try {
+      dev_ = sycl::device(sycl::gpu_selector_v);
+
+      const auto [iterations, mat_size, queue_type] = GetParam();
+
+      sycl::property_list prop_list;
+
+      if (queue_type == QueueType::kImmediate) {
+        sycl::property_list prop{sycl::property::queue::in_order(),
+                                 sycl::ext::intel::property::queue::immediate_command_list()};
+        prop_list = prop;
+      } else {
+        sycl::property_list prop{sycl::property::queue::in_order(),
+                                 sycl::ext::intel::property::queue::no_immediate_command_list()};
+        prop_list = prop;
+      }
+
+      queue_ = sycl::queue(dev_, prop_list);
+
+    } catch (const std::exception& e) {
+      FAIL() << "Unable to select valid device to run tests on. Check your hardware, driver "
+                "install, or system configuration.";
+    }
+  }
+
+  unsigned int mat_size_ = kDefaultMatrixSize;
+  std::vector<float> a_vector_;
+  std::vector<float> b_vector_;
+  std::vector<float> result_vector_;
+  sycl::device dev_;
+  sycl::queue queue_;
+};
+
+TEST_P(GemmLaunchTest, CheckWhetherAllLaunchedKernelDeviceTimestampsFitWithinAGivenTimeRange) {
+  const auto [iterations, mat_size, queue_type] = GetParam();
+  TimestampRange range;
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), PTI_SUCCESS);
+  range.start = ptiViewGetTimestamp();
+  for (std::size_t run_idx = 0; run_idx < iterations; ++run_idx) {
+    LaunchGemm(queue_, a_vector_, b_vector_, result_vector_, mat_size);
+    ValidateGemm(result_vector_, A_VALUE, B_VALUE, mat_size);
+  }
+  range.end = ptiViewGetTimestamp();
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), PTI_SUCCESS);
+  GemmLaunchTestData::Instance().range = range;
+  ASSERT_EQ(ptiFlushAllViews(), PTI_SUCCESS);
+
+  for (auto& [buf, buffer] : GemmLaunchTestData::Instance().buffers) {
+    ParseBuffer(buffer.data(), buffer.UsedBytes());
+  }
+
+  ASSERT_EQ(GemmLaunchTestData::Instance().kernels, iterations);
+}
+
+INSTANTIATE_TEST_SUITE_P(GranularGemmLaunchTest, GemmLaunchTest,
+                         testing::Values(std::make_tuple(100, 8, QueueType::kImmediate),
+                                         std::make_tuple(100, 8, QueueType::kNonImmediate)));

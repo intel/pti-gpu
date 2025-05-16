@@ -149,7 +149,7 @@ struct ZeDeviceDescriptor {
   uint64_t device_time_origin = 0;
   uint64_t device_timer_frequency = 0;
   uint64_t device_timer_mask = 0;
-  uint64_t device_sync_delta = 50'000'000ULL;  // 50ms
+  uint64_t device_sync_delta = CPUGPUTimeInterpolationHelper::kSyncDeltaDefault;
   ze_driver_handle_t driver = nullptr;
   ze_context_handle_t context = nullptr;
   ze_pci_ext_properties_t pci_properties{};
@@ -542,9 +542,9 @@ class ZeCollector {
         delta = std::stoll(env_string);
         SPDLOG_INFO("\tPTI_DEVICE_SYNC_DELTA is {} ns, will use it in device tracing", delta);
       } catch (std::invalid_argument const& /*ex*/) {
-        delta = CPUGPUTimeInterpolationHelper::kSycnDeltaDefault;  // fallback to default
+        delta = CPUGPUTimeInterpolationHelper::kSyncDeltaDefault;  // fallback to default
       } catch (std::out_of_range const& /*ex*/) {
-        delta = CPUGPUTimeInterpolationHelper::kSycnDeltaDefault;  // fallback to default
+        delta = CPUGPUTimeInterpolationHelper::kSyncDeltaDefault;  // fallback to default
       }
     }
     for (auto& [device, descriptor] : device_descriptors_) {

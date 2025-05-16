@@ -2,8 +2,10 @@
 #define TEST_UTILS_TEST_HELPERS_H_
 
 #include <cstring>
+#include <functional>
 #include <initializer_list>
 #include <iostream>
+#include <memory>
 #include <ostream>
 #include <type_traits>
 #include <vector>
@@ -13,6 +15,64 @@
 // Needs to be in the same namespace as pti_result so leave it outside.
 inline std::ostream& operator<<(std::ostream& out, pti_result result_val) {
   out << ptiResultTypeToString(result_val);
+  return out;
+}
+
+inline std::ostream& operator<<(std::ostream& out, pti_view_kind view_kind) {
+  switch (view_kind) {
+    case pti_view_kind::PTI_VIEW_INVALID: {
+      out << "PTI_VIEW_INVALID";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
+      out << "PTI_VIEW_DEVICE_GPU_KERNEL";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_DEVICE_CPU_KERNEL: {
+      out << "PTI_VIEW_DEVICE_CPU_KERNEL";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
+      out << "PTI_VIEW_DEVICE_GPU_MEM_COPY";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P: {
+      out << "PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
+      out << "PTI_VIEW_COLLECTION_OVERHEAD";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
+      out << "PTI_VIEW_DEVICE_GPU_MEM_FILL";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_DRIVER_API: {
+      out << "PTI_VIEW_DRIVER_API";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_RUNTIME_API: {
+      out << "PTI_VIEW_RUNTIME_API";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_RESERVED: {
+      out << "PTI_VIEW_RESERVED";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION: {
+      out << "PTI_VIEW_DEVICE_SYNCHRONIZATION";
+      break;
+    }
+    case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
+      out << "PTI_VIEW_EXTERNAL_CORRELATION";
+      break;
+    }
+    default: {
+      out << "UNKNOWN_VIEW";
+      break;
+    }
+  }
   return out;
 }
 
@@ -88,6 +148,40 @@ template <typename T>
 inline void AlignedDealloc(T* buf_ptr) {
   return AlignedDealloc<T>(buf_ptr, kDefaultPtiBufferAlignment);
 }
+
+class PtiViewBuffer {
+ public:
+  using UnderlyingType = unsigned char;
+  using BufferType = std::unique_ptr<UnderlyingType, std::function<void(UnderlyingType*)>>;
+
+  PtiViewBuffer() = default;
+
+  explicit PtiViewBuffer(size_t size) : size_(size) {
+    UnderlyingType* pti_buffer = AlignedAlloc<UnderlyingType>(size);
+    if (pti_buffer) {
+      buffer_ = BufferType{pti_buffer, [](UnderlyingType* ptr) { AlignedDealloc(ptr); }};
+    }
+  }
+
+  UnderlyingType* data() {  // NOLINT
+    return buffer_.get();
+  }
+
+  size_t size() const {  // NOLINT
+    return size_;
+  }
+
+  bool Valid() const { return buffer_ != nullptr; }
+
+  void SetUsedBytes(std::size_t used_bytes) { used_bytes_ = used_bytes; }
+
+  std::size_t UsedBytes() const { return used_bytes_; }
+
+ private:
+  std::size_t size_ = 0;
+  std::size_t used_bytes_ = 0;
+  BufferType buffer_ = nullptr;
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 /// @brief Helper functions for creating "empty" view records.
