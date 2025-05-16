@@ -1124,12 +1124,14 @@ macro(CheckSOVersion PROJ_SOVERSION)
   endif()
 endmacro()
 
-macro(GetLevelZero)
+macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
   if (NOT TARGET LevelZero::level-zero)
     # Need zelEnableTracingLayer
-    set(LZ_VER_MAJOR "1")
-    set(LZ_VER_MINOR "17")
-    set(LZ_VER_PATCH "25")
+    message("-- Fetching L0: ${PTI_L0_LOADER}")
+    string(REPLACE "." ";" LZ_TMP_LIST ${PTI_L0_LOADER})
+    list(GET LZ_TMP_LIST 0 LZ_VER_MAJOR)
+    list(GET LZ_TMP_LIST 1 LZ_VER_MINOR)
+    list(GET LZ_TMP_LIST 2 LZ_VER_PATCH)
     set(LZ_VER "${LZ_VER_MAJOR}.${LZ_VER_MINOR}.${LZ_VER_PATCH}")
     set(LZ_BASE_DIR ${CMAKE_CURRENT_BINARY_DIR}/_deps)
 
@@ -1140,10 +1142,9 @@ macro(GetLevelZero)
     include(FetchContent)
     FetchContent_Declare(
         LevelZero
-        URL
-        https://github.com/oneapi-src/level-zero/archive/refs/tags/v${LZ_VER}.tar.gz
-        URL_HASH
-        SHA256=3cfa1eb001d5974efed3002b6a5e6e687c7413141b3ae26e8bdac8085acddb9e
+        GIT_REPOSITORY
+        https://github.com/oneapi-src/level-zero.git
+        GIT_TAG ${PTI_L0_LOADER_COMMIT_HASH}
     )
     # Prevent content from automatically being installed with PTI
     FetchContent_GetProperties(LevelZero)
@@ -1154,23 +1155,43 @@ macro(GetLevelZero)
         add_subdirectory(${levelzero_SOURCE_DIR} ${levelzero_BINARY_DIR} EXCLUDE_FROM_ALL)
     endif()
 
+    get_target_property(PTI_ZE_LOADER_RUNTIME_DIR ze_loader RUNTIME_OUTPUT_DIRECTORY)
+
     # Create new target to treat level zero loader as an external dependency.
     # This prevents it from being added to the export set.
     # (Basically treat as if including via find_package)
     add_library(pti_ze_loader INTERFACE IMPORTED)
-    add_dependencies(pti_ze_loader ze_tracing_layer)
+    add_dependencies(pti_ze_loader ze_tracing_layer ze_validation_layer)
 
-    set(PTI_LZ_COMPILE_OPTIONS $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-parameter>
-                               $<$<CXX_COMPILER_ID:MSVC>:/wd6285
-                                $<$<CONFIG:Release>:/wd4702 /wd6385 /wd6386>>)
+    set(PTI_LZ_COMPILE_OPTIONS
+        $<$<CXX_COMPILER_ID:IntelLLVM>:
+            -Wno-error
+            -Wno-unused-parameter
+            -Wno-cast-function-type-mismatch
+            -Wno-extra-semi
+        >
+        $<$<CXX_COMPILER_ID:MSVC>:
+            /wd6285
+            $<$<CONFIG:Release>:/wd4702 /wd6385 /wd6386>
+        >
+        $<$<CXX_COMPILER_ID:GNU>:
+            -Wno-error
+            -Wno-unused-parameter
+            $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,8.0.0>:-Wno-extra-semi>
+        >
+        $<$<CXX_COMPILER_ID:Clang>:
+            -Wno-error
+            -Wno-unused-parameter
+            $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,3.0.0>:-Wno-extra-semi>
+        >
+    )
 
     # Silence Warnings from Level Zero Loader. Allows us to better detect PTI
     # warnings and errors.
-    target_compile_options(ze_loader PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
-    target_compile_options(ze_tracing_layer PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
-    target_compile_options(ze_null PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
-    target_compile_options(ze_validation_layer PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
-    target_compile_options(utils PRIVATE ${PTI_LZ_COMPILE_OPTIONS})
+    set_target_properties(ze_loader ze_tracing_layer ze_null ze_validation_layer
+      PROPERTIES
+        COMPILE_OPTIONS "${PTI_LZ_COMPILE_OPTIONS}"
+        RUNTIME_OUTPUT_DIRECTORY "${PTI_ZE_LOADER_RUNTIME_DIR}/loader")
 
     # Pull Headers out of source tree and add them to level_zero/
     # This allows us to keep the normal way to include level zero
@@ -1203,10 +1224,6 @@ macro(GetLevelZero)
 
     target_link_libraries(pti_ze_loader INTERFACE
                             $<BUILD_INTERFACE:ze_loader>)
-    message(WARNING "Linking different version of Level Zero Loader, please set"
-                    " $LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}/path/to/l0/:$LD_LIBRARY_PATH "
-                    "Or Install Level Zero Loader Version >= ${LZ_VER} on your"
-                    "system")
     # Add Alias target to treat it as if we found it via find_packge
     add_library(LevelZero::level-zero ALIAS pti_ze_loader)
     add_library(LevelZero::headers INTERFACE IMPORTED)

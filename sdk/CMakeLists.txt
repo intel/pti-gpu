@@ -14,19 +14,19 @@ project(
   LANGUAGES C CXX
 )
 
-# Global Settings
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin CACHE STRING "")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE STRING "")
-
 ProjectIsTopLevel()
 RemoveNDebugFlag()
 SetBuildType()
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-if(CMAKE_EXPORT_COMPILE_COMMANDS)
-  set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
-      ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+# Global Settings
+if(PROJECT_IS_TOP_LEVEL)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin CACHE STRING "")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE STRING "")
 endif()
+
+# For developer use with tools like clangd (can be used by vscode and vim
+# plugins).
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(PROJECT_IS_TOP_LEVEL)
   AddFormatTarget()
@@ -67,6 +67,8 @@ set(PTI_INSTALL_BIN_DIR "${CMAKE_INSTALL_BINDIR}")
 set(PTI_INSTALL_LIC_DIR "${CMAKE_INSTALL_DOCDIR}")
 set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
+set(PTI_L0_LOADER 1.20.1)
+set(PTI_L0_LOADER_COMMIT_HASH 3969f34c16a843b943b948f8fe7081ef87deb369)
 CheckSOVersion(${PTI_API_SOVERSION})
 
 if(PTI_DEBUG)
@@ -78,29 +80,14 @@ GetSpdlog()
 
 find_package(Xpti)
 
-# Why version 1.14.0?
-# It is an IPEX requirement for PTI to link against the LTS version of the
-# Level Zero Loader.
-# However, for best results, we recommend installing, Level Zero Loader >=
-# 1.17.25.
-# Notice about loader versions:
-#  * 1.15.8 supports dynamic tracing i.e. ze[Enable/Disable]TracingLayer.
-#  * 1.16.1 supports Level-Zero core Introspection API introduced in Spec 1.9.
-#   *  Notice: this supports the new API, but not the new feature (local
-#      collection). One needs to install a compatible Level Zero driver to
-#      use the feature. Currently supported in the Intel GPU rolling release
-#      drivers.
-#  * 1.16.15 fixes a critical bug in ze[Enable/Disable]TracingLayer.
-#  * 1.17.25 fixes a bug in ze[Enable/Disable]TracingLayer.
-#   * Fixes compatiblity with zet*/zes* APIs.
 if(NOT PROJECT_IS_TOP_LEVEL)
-  find_package(LevelZero 1.14.0 REQUIRED)
+  find_package(LevelZero ${PTI_L0_LOADER} REQUIRED)
 else()
-  find_package(LevelZero 1.14.0)
+  find_package(LevelZero ${PTI_L0_LOADER})
 endif()
 
 if(NOT TARGET LevelZero::level-zero)
-  GetLevelZero()
+  GetLevelZero(${PTI_L0_LOADER} ${PTI_L0_LOADER_COMMIT_HASH})
 endif()
 
 find_package(Threads REQUIRED)
