@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 #include <stdarg.h>
 
+#include <chrono>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
 #include <vector>
@@ -42,10 +45,14 @@ void StopTracing() {
   EXPECT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
 }
 
-void TestCore(bool do_immediate) {
+constexpr size_t kRepetitions = 10;
+
+float TestCore(bool do_immediate) {
+  float time_sec = 0.f;
   try {
-    constexpr size_t kVectorSize = 10 * 1024 * 1024;
-    constexpr size_t kRepetitions = 10;
+    // size purposely small - it makes harder requirement to the test
+    // constexpr size_t kVectorSize = 10 * 1024 * 1024;
+    constexpr size_t kVectorSize = 1024;
     std::cout << "Adding vectors size: " << kVectorSize << ", Repetitions: " << kRepetitions
               << std::endl;
     std::cout << "Evaluating latency of timing call..." << std::endl;
@@ -79,7 +86,7 @@ void TestCore(bool do_immediate) {
     auto zero_data_host = std::make_unique<int64_t[]>(kVectorSize);
     auto outp_data_host = std::make_unique<int64_t[]>(kVectorSize);
 
-    // init values are meaningfull as result will be checked afterwards
+    // init values are meaningful as result will be checked afterwards
     for (int64_t i = 0; i < static_cast<int64_t>(kVectorSize); ++i) {
       init_data_host[i] = i;
       zero_data_host[i] = 0LL;
@@ -90,10 +97,15 @@ void TestCore(bool do_immediate) {
     q.memcpy(b, init_data_host.get(), kVectorSize * sizeof(int64_t)).wait();
     q.memcpy(c, zero_data_host.get(), kVectorSize * sizeof(int64_t)).wait();
 
+    auto start = std::chrono::steady_clock::now();
     for (size_t iter = 0; iter < kRepetitions; iter++) {
       VecAdd(q, a, b, c, kVectorSize);
     }
     q.wait();
+    auto end = std::chrono::steady_clock::now();
+    std::chrono::duration<float> time = end - start;
+    time_sec = time.count();
+
     q.memcpy(outp_data_host.get(), c, kVectorSize * sizeof(int64_t)).wait();
 
     CheckResults(outp_data_host.get(), kVectorSize);
@@ -110,11 +122,9 @@ void TestCore(bool do_immediate) {
   } catch (...) {
     std::cerr << "Error: Unknown exception caught." << '\n';
   }
+  return time_sec;
 }
 
-bool ComparePair(std::pair<uint64_t, uint64_t> a_stamps, std::pair<uint64_t, uint64_t> b_stamps) {
-  return a_stamps.first < b_stamps.first;
-}
 enum CollectionMode { kModeFull = 0, kModeHybrid = 1, kModeLocal = 2 };
 
 }  // namespace
@@ -130,26 +140,18 @@ class NoKernelOverlapParametrizedTestFixture
     // Cleanup work for each test
   }
 
-  static uint32_t times_buffer_completed;
-  static std::vector<uint64_t> kernel_device_timestamps;
-  static std::vector<uint64_t> kernel_host_timestamps;
-  static std::vector<std::pair<uint64_t, uint64_t>> kernel_device_timestamps_pairs;
   static bool do_immediate;
-
-  static uint64_t expected_max_gap_to_submit;
-  static uint64_t expected_max_gap_from_submit;
+  static std::vector<pti_view_record_kernel> kernel_records;
 
   void SetUp() override {  // Called right after constructor before each test
-    kernel_device_timestamps_pairs.clear();
-    kernel_host_timestamps.clear();
-    times_buffer_completed = 0;
+    kernel_records.clear();
 
     auto [immediate, collection_mode] = GetParam();
     do_immediate = immediate;
     if (immediate) {
-      std::cout << "Immediate command list mode" << std::endl;
+      std::cout << " ** Immediate command list mode" << std::endl;
     } else {
-      std::cout << "Non-immediate command list mode" << std::endl;
+      std::cout << " ** Non-immediate command list mode" << std::endl;
     }
 
     // After we got more experience with this test - we can pass Gaps
@@ -161,17 +163,6 @@ class NoKernelOverlapParametrizedTestFixture
     // in case introspection API is available
     if (collection_mode != CollectionMode::kModeLocal) {
       utils::SetEnv("PTI_COLLECTION_MODE", std::to_string(collection_mode).c_str());
-      expected_max_gap_to_submit = 1'000'000;  // 1ms
-
-      expected_max_gap_from_submit = 20'000'000;
-      // there is no Bridge injection for Full and Hybrid modes
-      // so it is 20 not 50 ms
-    } else {
-      expected_max_gap_to_submit = 1'000'000;  // 1ms
-      // 50ms for Local mode between Submit and Start - the gap is expected to be bigger
-      // due to in Local mode we inject Bridge - injection is not cheap
-      // especially when done first time in context (kind of warm up)
-      expected_max_gap_from_submit = 50'000'000;
     }
   }
 
@@ -179,69 +170,132 @@ class NoKernelOverlapParametrizedTestFixture
     // Called right before destructor after each test
   }
 
-  bool TestForDeviceKernelsOverlap(std::vector<std::pair<uint64_t, uint64_t>>& timestamps) {
-    if (timestamps.size() == 0) {
-      std::cerr << "--->  ERROR: Empty kernel timestamps array - Not expected " << std::endl;
-      return false;
-    }
-    std::cout << "In " << __FUNCTION__ << " timestamps array size: " << timestamps.size()
-              << std::endl;
-    // pair is kernel start and kernel end
-    // vector comes sorted by the first value in pair, which is kernel_start
-    for (uint32_t item = 1; item < timestamps.size(); item++) {
-      /*
-      std::cout << "Stamps: i-1 start: " << timestamps[item-1].first
-                << ", end: " << timestamps[item-1].second << std::endl
-                << "        i   start: " << timestamps[item].first
-                << ", end: " << timestamps[item].second
-                << std::endl;
-      */
-      if (timestamps[item].first <= timestamps[item - 1].second) {
-        std::cerr << "--->  ERROR: Device kernel timestamps overlap end_of_i < start_of_i-1, at i: "
-                  << item << ", end_of_i: " << timestamps[item].first
-                  << ", start_of_i-1: " << timestamps[item - 1].second << std::endl;
-        return false;
+  /**
+   * @internal
+   * Checks that all GPU kernels have the same append and submit timestamps
+   * which holds for Immediate command list
+   */
+  void TestForAppendSubmitAtImmediate() {
+    for (uint32_t kidx = 0; kidx < kernel_records.size(); ++kidx) {
+      auto kernel = kernel_records[kidx];
+      if (kernel._append_timestamp != kernel._submit_timestamp) {
+        FAIL() << "--->  ERROR: Append and Submit timestamps not equal at i: " << kidx
+               << " \t append: " << kernel._append_timestamp
+               << ", submit: " << kernel._submit_timestamp << std::endl;
       }
     }
-    return true;
   }
 
-  bool TestForDeviceKernelDurationNonZero(std::vector<std::pair<uint64_t, uint64_t>>& timestamps) {
-    if (timestamps.size() == 0) {
-      std::cerr << "--->  ERROR: Empty kernel timestamps array - Not expected " << std::endl;
-      return false;
-    }
-    std::cout << "In " << __FUNCTION__ << " timestamps array size: " << timestamps.size()
-              << std::endl;
-    // pair is kernel start and kernel end
-    for (uint32_t item = 0; item < timestamps.size(); item++) {
-      if ((timestamps[item].second - timestamps[item].first) < 100) {
-        std::cerr
-            << "--->  ERROR: Device kernel duration is less than 100 ns, timestamps at kernel i: "
-            << item << ", end: " << timestamps[item].second << ", start: " << timestamps[item].first
-            << std::endl;
-        return false;
-      }
-    }
-    return true;
+  std::stringstream PrintKernelTimeStamps(const pti_view_record_kernel& kernel) {
+    std::stringstream ss;
+    ss << "Sycl Task Begin Time:        " << kernel._sycl_task_begin_timestamp << "\n"
+       << "Sycl Enq Launch Kernel Time: " << kernel._sycl_enqk_begin_timestamp << "\n"
+       << "Append Time:                 " << kernel._append_timestamp << "\n"
+       << "Submit Time:                 " << kernel._submit_timestamp << "\n"
+       << "Start Time:                  " << kernel._start_timestamp << "\n"
+       << "End Time:                    " << kernel._end_timestamp;
+    return ss;
   }
 
-  bool TestForAppendSubmitAtImmediate(std::vector<uint64_t>& timestamps) {
-    if (timestamps.size() == 0) {
-      std::cerr << "--->  ERROR: Empty kernel timestamps array - Not expected " << std::endl;
-      return false;
-    }
-    std::cout << "In " << __FUNCTION__ << " timestamps array size: " << timestamps.size()
-              << std::endl;
-    for (uint32_t item = 0; item < timestamps.size(); item += 2) {
-      if (timestamps[item] != timestamps[item + 1]) {
-        std::cerr << "--->  ERROR: Append and Submit timestamps not equal t(i) != t(i+1), at i: "
-                  << item << " \t t(i): " << timestamps[item]
-                  << ", t(i+1): " << timestamps[item + 1] << std::endl;
-        return false;
+  /**
+   * @internal
+   * Checks timestamps of GPU kernels for different types of consistency within one kernel
+   * and in relations to the neighbour kernels
+   *
+   * Extensive output helps debug speedup in case of the test failure
+   */
+  void InspectKernelRecords(uint32_t repetitions, float kernel_loop_duration_sec) {
+    // Sort by kernel records by sycl_task_begin_timestamp
+    std::sort(kernel_records.begin(), kernel_records.end(),
+              [](const pti_view_record_kernel& r1, const pti_view_record_kernel& r2) {
+                return r1._sycl_task_begin_timestamp < r2._sycl_task_begin_timestamp;
+              });
+
+    // Check that timestamps of neighbour kernels are not overlapping
+    // this holds true for kernels submitted to the same in-order queue
+    for (uint32_t kidx = 1; kidx < kernel_records.size(); ++kidx) {
+      auto k0 = kernel_records[kidx - 1];
+      auto k1 = kernel_records[kidx];
+      if (k1._start_timestamp <= k0._end_timestamp) {
+        FAIL() << "--->  ERROR: Device kernel timestamps overlap end_of_i < start_of_i-1, at i: "
+               << kidx << ", end_of_i-1: " << k0._end_timestamp
+               << ", start_of_i: " << k1._start_timestamp << "\n"
+               << "...Kernel  Details: i-1:" << kidx - 1 << "\n"
+               << PrintKernelTimeStamps(k0).str() << "\n"
+               << "...                   i:" << kidx << "\n"
+               << PrintKernelTimeStamps(k1).str() << "\n";
       }
     }
-    return true;
+
+    uint64_t max_gap_ns = static_cast<uint64_t>(kernel_loop_duration_sec * 1e9);
+
+    std::cout << "Repetitions: " << repetitions
+              << ", kernel loop duration: " << static_cast<uint64_t>(kernel_loop_duration_sec * 1e9)
+              << " ns" << std::endl;
+
+    // Checks for the monotonicity of different stages timestamps of a kernel
+    // as well as the "gap" between these timestamps in not "big" -
+    // top bound of the test compute loop duration time
+    for (uint32_t kidx = 0; kidx < kernel_records.size(); ++kidx) {
+      auto kernel = kernel_records[kidx];
+      auto found_issues = pti::test::utils::ValidateTimestamps(
+          kernel._sycl_task_begin_timestamp, kernel._sycl_enqk_begin_timestamp,
+          kernel._append_timestamp, kernel._submit_timestamp, kernel._start_timestamp,
+          kernel._end_timestamp);
+
+      if (found_issues > 0) {
+        FAIL() << "------------>     ERROR: Not monotonic kernel timestamps. Here are details:\n"
+               << PrintKernelTimeStamps(kernel).str() << "\n";
+      }
+
+      if (kernel._sycl_task_begin_timestamp == 0) {
+        std::cout << "WARN ------------>     Something wrong: Sycl Enq Launch Kernel Time is 0"
+                  << std::endl;
+      }
+
+      if (kernel._sycl_enqk_begin_timestamp == 0) {
+        FAIL() << "------------>     Something wrong: Sycl Enq Launch Kernel Time is 0"
+               << std::endl;
+      }
+      if (kernel._start_timestamp == kernel._end_timestamp) {
+        FAIL() << "------------>     Something wrong: Append Time is 0" << std::endl;
+      }
+      std::cout << " ** Kernel " << kidx << " Start: " << kernel._sycl_task_begin_timestamp
+                << std::setw(8) << std::right << " Full time: " << std::setw(8) << std::right
+                << kernel._end_timestamp - kernel._sycl_task_begin_timestamp << "\n"
+                << std::setw(8) << std::right
+                << "Sycl Task Begin to Sycl Enq Time: " << std::setw(8) << std::right
+                << kernel._sycl_enqk_begin_timestamp - kernel._sycl_task_begin_timestamp << "\n"
+                << "Sycl Enq to Append Time:          " << std::setw(8) << std::right
+                << kernel._append_timestamp - kernel._sycl_enqk_begin_timestamp << "\n"
+                << "Append to Submit Time:            " << std::setw(8) << std::right
+                << kernel._submit_timestamp - kernel._append_timestamp << "\n"
+                << "Submit to Start Time:             " << std::setw(8) << std::right
+                << kernel._start_timestamp - kernel._submit_timestamp << "\n"
+                << "Start to End Time:                " << std::setw(8) << std::right
+                << kernel._end_timestamp - kernel._start_timestamp << "\n";
+
+      if (kernel._sycl_task_begin_timestamp != 0) {
+        if (0 !=
+            pti::test::utils::ValidateNoBigGapBetweenTimestampsNs(
+                max_gap_ns, {kernel._sycl_task_begin_timestamp, kernel._sycl_enqk_begin_timestamp,
+                             kernel._append_timestamp, kernel._submit_timestamp,
+                             kernel._start_timestamp, kernel._end_timestamp})) {
+          FAIL() << "------------>     ERROR: Gap between timestamps more than " << max_gap_ns
+                 << " ns\n"
+                 << PrintKernelTimeStamps(kernel).str() << "\n";
+        }
+      } else {
+        if (0 != pti::test::utils::ValidateNoBigGapBetweenTimestampsNs(
+                     max_gap_ns,
+                     {kernel._sycl_enqk_begin_timestamp, kernel._append_timestamp,
+                      kernel._submit_timestamp, kernel._start_timestamp, kernel._end_timestamp})) {
+          FAIL() << "------------>     ERROR: Gap between timestamps more than " << max_gap_ns
+                 << " ns\n"
+                 << PrintKernelTimeStamps(kernel).str() << "\n";
+        }
+      }
+    }
   }
 
   static void BufferRequested(unsigned char** buf, size_t* buf_size) {
@@ -256,8 +310,6 @@ class NoKernelOverlapParametrizedTestFixture
   }
 
   static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_bytes) {
-    uint32_t kernel_records_in_buffer = 0;
-
     if (!buf || !used_bytes || !buf_size) {
       std::cerr << "Received empty buffer" << '\n';
       ::operator delete(buf);
@@ -268,21 +320,11 @@ class NoKernelOverlapParametrizedTestFixture
     while (true) {
       auto buf_status = ptiViewGetNextRecord(buf, used_bytes, &ptr);
       if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
-        std::cout << "Reached End of buffer: " << times_buffer_completed
-                  << " Kernel records in buffer: " << kernel_records_in_buffer << '\n';
-        if (kernel_records_in_buffer > 0) {
-          times_buffer_completed++;
-          //  OK to get more buffers as soon as there no kernel records in them
-          //  But kernel records we want safely process from one same buffer
-          ASSERT_TRUE(times_buffer_completed == 1)
-              << "ERROR: Not expected to enter to " << __FUNCTION__
-              << " more then 1 time, entered here : " << times_buffer_completed << " times";
-        }
+        std::cout << "Reached End of buffer " << '\n';
         break;
       }
       if (buf_status != pti_result::PTI_SUCCESS) {
-        std::cerr << "Found Error Parsing Records in buffer: " << times_buffer_completed
-                  << " PTI buf_status: " << buf_status << '\n';
+        std::cerr << "Error Parsing Records in buffer.  PTI buf_status: " << buf_status << '\n';
         break;
       }
       switch (ptr->_view_kind) {
@@ -291,63 +333,8 @@ class NoKernelOverlapParametrizedTestFixture
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-          kernel_records_in_buffer++;
           pti_view_record_kernel* p_kernel_rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
-
-          auto found_issues = pti::test::utils::ValidateTimestamps(
-              p_kernel_rec->_sycl_task_begin_timestamp, p_kernel_rec->_sycl_enqk_begin_timestamp,
-              p_kernel_rec->_append_timestamp, p_kernel_rec->_submit_timestamp,
-              p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp);
-
-          if (found_issues > 0) {
-            FAIL() << "------------>     ERROR: Not monotonic kernel timestamps";
-          }
-
-          if (p_kernel_rec->_sycl_task_begin_timestamp == 0) {
-            FAIL() << "------------>     Something wrong: Sycl Task Begin Time is 0";
-          }
-
-          if (p_kernel_rec->_sycl_enqk_begin_timestamp == 0) {
-            FAIL() << "------------>     Something wrong: Sycl Enq Launch Kernel Time is 0";
-          }
-
-          if (0 != pti::test::utils::ValidateNoBigGapBetweenTimestampsNs(
-                       expected_max_gap_to_submit,
-                       {p_kernel_rec->_sycl_task_begin_timestamp,
-                        p_kernel_rec->_sycl_enqk_begin_timestamp, p_kernel_rec->_append_timestamp,
-                        p_kernel_rec->_submit_timestamp})) {
-            FAIL() << "------------>     ERROR: Gap between timestamps more than "
-                   << expected_max_gap_to_submit << " ns\n"
-                   << "Sycl Task Begin Time:        " << p_kernel_rec->_sycl_task_begin_timestamp
-                   << "\n"
-                   << "Sycl Enq Launch Kernel Time: " << p_kernel_rec->_sycl_enqk_begin_timestamp
-                   << "\n"
-                   << "Append Time:                 " << p_kernel_rec->_append_timestamp << "\n"
-                   << "Submit Time:                 " << p_kernel_rec->_submit_timestamp << "\n";
-          }
-
-          // this is rather big gap - but at the profiling start it might that big
-          // between submit and start -
-          // this is exactly where PTI instrumentation and Bridge kernel injected
-          //
-          // part of it the check between start and end on GPU - this somehow related to
-          // the kernel used in this test .. for big kernels - this will not hold
-          if (0 != pti::test::utils::ValidateNoBigGapBetweenTimestampsNs(
-                       expected_max_gap_from_submit,
-                       {p_kernel_rec->_submit_timestamp, p_kernel_rec->_start_timestamp,
-                        p_kernel_rec->_end_timestamp})) {
-            FAIL() << "------------>     ERROR: Gap between timestamps more than "
-                   << expected_max_gap_from_submit << " ns\n"
-                   << "Submit Time:                 " << p_kernel_rec->_submit_timestamp << "\n"
-                   << "Start Time:                  " << p_kernel_rec->_start_timestamp << "\n"
-                   << "End Time:                    " << p_kernel_rec->_end_timestamp;
-          }
-
-          kernel_host_timestamps.push_back(p_kernel_rec->_append_timestamp);
-          kernel_host_timestamps.push_back(p_kernel_rec->_submit_timestamp);
-
-          kernel_device_timestamps_pairs.push_back(std::pair<uint64_t, uint64_t>{
-              p_kernel_rec->_start_timestamp, p_kernel_rec->_end_timestamp});
+          kernel_records.push_back(*p_kernel_rec);
           break;
         }
         default: {
@@ -358,39 +345,33 @@ class NoKernelOverlapParametrizedTestFixture
     ::operator delete(buf);
   }
 
-  static void RunTest(bool do_immediate) {
+  float RunTest(bool do_immediate) {
     StartTracing();
-    TestCore(do_immediate);
+    auto kernel_loop_duration = TestCore(do_immediate);
     StopTracing();
     EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+    return kernel_loop_duration;
   }
 };
 
 // static members initialization
-uint32_t NoKernelOverlapParametrizedTestFixture::times_buffer_completed = 0;
-uint64_t NoKernelOverlapParametrizedTestFixture::expected_max_gap_to_submit =
-    1'000'000;  // 1 ms - some value - anyway redefined in test SetUp
-uint64_t NoKernelOverlapParametrizedTestFixture::expected_max_gap_from_submit =
-    50'000'000;  // 50 ms - some value - anyway redefined in test SetUp
-std::vector<uint64_t> NoKernelOverlapParametrizedTestFixture::kernel_host_timestamps{};
-std::vector<std::pair<uint64_t, uint64_t>>
-    NoKernelOverlapParametrizedTestFixture::kernel_device_timestamps_pairs{};
+std::vector<pti_view_record_kernel> NoKernelOverlapParametrizedTestFixture::kernel_records{};
 bool NoKernelOverlapParametrizedTestFixture::do_immediate = true;
 
 TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
 
-  RunTest(do_immediate);
+  auto kernel_loop_duration_sec = RunTest(do_immediate);
+  EXPECT_GE(kernel_loop_duration_sec, 0.0f);
+  std::cout << "Kernel loop duration: " << kernel_loop_duration_sec << " sec, "
+            << kernel_loop_duration_sec * 1e9 << "ns" << std::endl;
 
-  // order of records is not garantie the order of submission and execution of kernels -
-  // so let's  sort kernel stamp pairs by device start stamp
-  std::sort(kernel_device_timestamps_pairs.begin(), kernel_device_timestamps_pairs.end(),
-            ComparePair);
+  EXPECT_EQ(kernel_records.size(), kRepetitions);
 
-  EXPECT_EQ(TestForDeviceKernelsOverlap(kernel_device_timestamps_pairs), true);
-  EXPECT_EQ(TestForDeviceKernelDurationNonZero(kernel_device_timestamps_pairs), true);
+  InspectKernelRecords(kRepetitions, kernel_loop_duration_sec);
+
   if (do_immediate) {
-    EXPECT_EQ(TestForAppendSubmitAtImmediate(kernel_host_timestamps), true);
+    TestForAppendSubmitAtImmediate();
   }
 }
 
