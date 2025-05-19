@@ -10,6 +10,7 @@
 #include <pti/pti_view.h>
 
 #include <cstdint>
+#include <iostream>
 #include <stdexcept>
 #include <sycl/sycl.hpp>
 #include <vector>
@@ -43,15 +44,26 @@ void PtiZeInitDrivers(std::vector<ze_driver_handle_t>& drivers) {
   ze_init_des.pNext = nullptr;
   ze_init_des.flags = ZE_INIT_DRIVER_TYPE_FLAG_GPU;
   uint32_t driver_count = 0;
-  ASSERT_EQ(zeInitDrivers(&driver_count, nullptr, &ze_init_des), ZE_RESULT_SUCCESS);
-  drivers = std::vector<ze_driver_handle_t>(driver_count);
-  ASSERT_EQ(zeInitDrivers(&driver_count, drivers.data(), &ze_init_des), ZE_RESULT_SUCCESS);
+  if (zeInitDrivers(&driver_count, nullptr, &ze_init_des) != ZE_RESULT_SUCCESS) {
+    std::cerr << "zeInitDrivers failed on first call." << '\n';
+    drivers = std::vector<ze_driver_handle_t>();
+    return;
+  }
+  if (driver_count) {
+    drivers = std::vector<ze_driver_handle_t>(driver_count);
+    if (zeInitDrivers(&driver_count, drivers.data(), &ze_init_des) != ZE_RESULT_SUCCESS) {
+      std::cerr << "zeInitDrivers failed to get drivers." << '\n';
+      drivers = std::vector<ze_driver_handle_t>();
+    }
+  }
 }
 
-void ZeInitOrGetDrivers(std::vector<ze_driver_handle_t>& drivers) {
+void ZeInitOrGetDrivers(std::vector<ze_driver_handle_t>& drivers, bool called_ze_init) {
   if (ProperLoaderForZeInitDrivers()) {
     PtiZeInitDrivers(drivers);
-  } else {
+  }
+  // If zeInitDrivers is not supported, we can still use the old APIs to get the drivers.
+  if (called_ze_init && drivers.empty()) {
     drivers = utils::ze::GetDriverList();
   }
 }
@@ -126,6 +138,7 @@ void CopyToAndFromDevice(ze_driver_handle_t driver, T& memory) {
   ASSERT_EQ(zeCommandListClose(list), ZE_RESULT_SUCCESS);
   ASSERT_EQ(zeCommandQueueExecuteCommandLists(queue, 1, &list, nullptr), ZE_RESULT_SUCCESS);
   ASSERT_EQ(zeCommandQueueSynchronize(queue, UINT64_MAX), ZE_RESULT_SUCCESS);
+  EXPECT_EQ(zeMemFree(ctx, device_storage), ZE_RESULT_SUCCESS);
 }
 
 template <typename T>
@@ -218,7 +231,7 @@ TEST_F(InitTestsFixture, CallAllTheZeInitFunctionsAndForceZesInitAfterTracingBeg
   EXPECT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), PTI_SUCCESS);
   ASSERT_EQ(zeInit(ZE_INIT_FLAG_GPU_ONLY), ZE_RESULT_SUCCESS);
   std::vector<ze_driver_handle_t> drivers;
-  ZeInitOrGetDrivers(drivers);
+  ZeInitOrGetDrivers(drivers, true);
 
   auto bmg_or_newer = utils::ze::ContainsDeviceWithAtLeastIpVersion(
       drivers, pti::test::utils::level_zero::kBmgIpVersion);
@@ -269,7 +282,7 @@ TEST_F(InitTestsFixture, CallTheZeInitFunctionsBesidesZesInitAfterTracingBegins)
   EXPECT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), PTI_SUCCESS);
   ASSERT_EQ(zeInit(ZE_INIT_FLAG_GPU_ONLY), ZE_RESULT_SUCCESS);
   std::vector<ze_driver_handle_t> drivers;
-  ZeInitOrGetDrivers(drivers);
+  ZeInitOrGetDrivers(drivers, true);
 
   constexpr std::size_t kSizeOfTestVector = 10;
   constexpr int kDefaultValue = 8;
@@ -287,13 +300,18 @@ TEST_F(InitTestsFixture, CallTheZeInitFunctionsBesidesZesInitAfterTracingBegins)
 }
 
 TEST_F(InitTestsFixture, CallOnlyZeInitDriversAfterTracingBegins) {
-  if (!ProperLoaderForZeInitDrivers()) {
-    GTEST_SKIP() << "Skipping test because zeInitDrivers is not supported";
-  }
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), PTI_SUCCESS);
+  if (!ProperLoaderForZeInitDrivers()) {  // this will fail without calling a
+                                          // zeInit* function first. However, we want to test w/only
+                                          // zeInitDrivers.
+    GTEST_SKIP() << "Skipping test because zeInitDrivers is not supported by the loader.";
+  }
   EXPECT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), PTI_SUCCESS);
   std::vector<ze_driver_handle_t> drivers;
   PtiZeInitDrivers(drivers);
+  if (drivers.empty()) {
+    GTEST_SKIP() << "Skipping test because zeInitDrivers is not supported by the driver.";
+  }
 
   constexpr std::size_t kSizeOfTestVector = 10;
   constexpr int kDefaultValue = 8;
