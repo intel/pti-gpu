@@ -12,6 +12,7 @@
 #include <level_zero/zet_api.h>
 #include <pti/pti_driver_levelzero_api_ids.h>
 
+#include <algorithm>
 #include <array>
 #include <iomanip>
 #include <optional>
@@ -25,6 +26,8 @@
 
 namespace utils {
 namespace ze {
+
+inline constexpr static uint32_t kIntelVendorId = 0x8086;
 
 inline std::vector<ze_driver_handle_t> GetDriverList() {
   ze_result_t status = ZE_RESULT_SUCCESS;
@@ -71,15 +74,18 @@ inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) 
   return device_list;
 }
 
-inline std::vector<ze_device_handle_t> GetDeviceList() {
+inline std::vector<ze_device_handle_t> GetDeviceList(
+    const std::vector<ze_driver_handle_t>& driver_list) {
   std::vector<ze_device_handle_t> device_list;
-  for (auto* driver : utils::ze::GetDriverList()) {
+  for (auto* driver : driver_list) {
     for (auto* device : utils::ze::GetDeviceList(driver)) {
       device_list.push_back(device);
     }
   }
   return device_list;
 }
+
+inline std::vector<ze_device_handle_t> GetDeviceList() { return GetDeviceList(GetDriverList()); }
 
 inline std::vector<ze_device_handle_t> GetSubDeviceList(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);
@@ -514,6 +520,34 @@ inline std::optional<zel_version_t> GetLoaderVersion() {
   }
 
   return std::nullopt;
+}
+
+inline std::optional<uint32_t> GetGpuDeviceIpVersion(ze_device_handle_t device) {
+  ze_device_ip_version_ext_t ip_version_ext_props{};
+  ip_version_ext_props.stype = ZE_STRUCTURE_TYPE_DEVICE_IP_VERSION_EXT;
+  ip_version_ext_props.pNext = nullptr;
+
+  ze_device_properties_t props{};
+  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
+  props.pNext = &ip_version_ext_props;
+
+  auto status = zeDeviceGetProperties(device, &props);
+  if (status != ZE_RESULT_SUCCESS || props.type != ZE_DEVICE_TYPE_GPU ||
+      props.vendorId != kIntelVendorId) {
+    return std::nullopt;
+  }
+
+  return static_cast<ze_device_ip_version_ext_t*>(props.pNext)->ipVersion;
+}
+
+inline bool ContainsDeviceWithAtLeastIpVersion(const std::vector<ze_driver_handle_t>& driver_list,
+                                               uint32_t ip_version) {
+  const auto device_list = GetDeviceList(driver_list);
+  return std::any_of(std::cbegin(device_list), std::cend(device_list),
+                     [ip_version](ze_device_handle_t device) {
+                       const auto dev_ip_version = GetGpuDeviceIpVersion(device);
+                       return dev_ip_version && *dev_ip_version >= ip_version;
+                     });
 }
 
 }  // namespace ze

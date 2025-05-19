@@ -24,6 +24,7 @@ class ZeDriverInit {
  private:
   bool InitDrivers();
   void CollectLegacyDrivers();
+  void InitSysmanDrivers();
 
   bool init_success_ = false;
   std::vector<ze_driver_handle_t> drivers_;

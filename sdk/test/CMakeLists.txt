@@ -220,6 +220,24 @@ if(HAVE_SYCL)
                                             LevelZero::level-zero
                                             ${FS_LIB})
 
+  add_executable(init_tests init_tests.cc)
+
+  target_include_directories(
+    init_tests
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_compile_options(init_tests PUBLIC -fsycl -gline-tables-only)
+  target_link_options(init_tests PUBLIC -fsycl -gline-tables-only)
+
+  target_link_libraries(init_tests PUBLIC spdlog::spdlog Pti::pti_view
+                                            GTest::gtest_main
+                                            GTest::gmock
+                                            LevelZero::level-zero
+                                            ${FS_LIB})
+
   add_executable(multi_threaded_submission multi_threaded_submission.cc)
 
   target_include_directories(
@@ -337,6 +355,11 @@ if(HAVE_SYCL)
   add_dependencies(zegemm_suite copy_test_spv)
 
   gtest_discover_tests(
+    init_tests
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS "unit")
+
+  gtest_discover_tests(
     multi_threaded_submission
     DISCOVERY_TIMEOUT 60
     TEST_LIST TIMESTAMPS_CORRECTNESS_LIST
@@ -392,8 +415,6 @@ if(HAVE_SYCL)
     perf-overhead-view PROPERTIES LABELS "performance; functional")
 
 endif()
-
-
 
 if (HAVE_SYCL AND TARGET unified-runtime::loader)
   add_executable(urgemm_suite main_urgemm_fixture.cc)

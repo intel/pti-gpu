@@ -8,11 +8,16 @@
 
 #include <level_zero/loader/ze_loader.h>
 #include <level_zero/ze_api.h>
+#include <level_zero/zes_api.h>
 #include <spdlog/spdlog.h>
+
+#include <optional>
+#include <vector>
 
 #include "lz_api_tracing_api_loader.h"
 #include "overhead_kinds.h"
 #include "pti_assert.h"
+#include "utils.h"
 #include "ze_utils.h"
 
 namespace {
@@ -20,6 +25,31 @@ namespace {
 // Versions prior to this one have bugs (or don't have it at all).
 // zeInitDrivers is the preferred method for initializing drivers from this point on.
 constexpr zel_version_t kProperLoaderVersionForZeInitDrivers = {1, 19, 2};
+constexpr uint32_t kBmgIpVersion = 0x05004000;
+
+// Environment variable that determines whether to call zesInit.
+//
+// This is needed to allow users to disable zesInit if they want or if oneAPI changes the default
+// behavior in the future, we can still have a way to fix it.
+//
+// PTI_SYSMAN_ZESINIT=0 not not call zesInit.
+// PTI_SYSMAN_ZESINIT=1 call zesInit.
+// unset - default to oneAPI behavior, calling it on BMG and later platforms.
+constexpr const char* const kCallZesInitEnv = "PTI_SYSMAN_ZESINIT";
+
+std::optional<bool> GetZesInitEnv() {
+  auto env_value = utils::GetEnv(kCallZesInitEnv);
+  if (env_value.empty()) {
+    return std::nullopt;
+  }
+  if (env_value == "1") {
+    return true;
+  }
+  if (env_value == "0") {
+    return false;
+  }
+  return std::nullopt;
+}
 
 inline bool operator>=(const zel_version_t& left, const zel_version_t& right) {
   bool same_major_version = left.major == right.major;
@@ -76,6 +106,9 @@ ZeDriverInit::ZeDriverInit() : init_success_(InitLegacyDrivers()) {
       init_success_ = true;
     }
   }
+  if (init_success_) {
+    InitSysmanDrivers();
+  }
 }
 
 bool ZeDriverInit::Success() const { return init_success_; }
@@ -121,3 +154,37 @@ bool ZeDriverInit::InitDrivers() {
 }
 
 void ZeDriverInit::CollectLegacyDrivers() { drivers_ = utils::ze::GetDriverList(); }
+
+void ZeDriverInit::InitSysmanDrivers() {
+  auto call_zesinit_env = GetZesInitEnv();
+
+  // As of oneAPI 2025.1, zesInit will be called for BMG/LNL and later platforms. Until now,
+  // pti_view has not required the Sysman API. However, without this, subsequent calls to zesInit
+  // will disable tracing for users.
+  // The SYCL runtime will call zesInit on BMG and later platforms if zesDriverGetDeviceByUuid
+  // symbol is available. We will mirror this behavior due to potential compatibility issues with
+  // other oneAPI components.
+  //
+  // zesInit is only supported on platforms newer than PVC.
+  //
+  // See specifics regarding Sysman / zes* compatiblity below:
+  // https://github.com/intel/compute-runtime/blob/master/programmers-guide/SYSMAN.md
+  bool call_zesinit = false;
+  if (!call_zesinit_env) {
+    if (pti::PtiLzTracerLoader::Instance().zesDriverGetDeviceByUuidExp_) {
+      if (utils::ze::ContainsDeviceWithAtLeastIpVersion(drivers_, kBmgIpVersion)) {
+        call_zesinit = true;
+      }
+    }
+  } else {
+    call_zesinit = *call_zesinit_env;
+  }
+  if (call_zesinit) {
+    constexpr zes_init_flags_t kZesInitFlags = 0;
+    if (zesInit(kZesInitFlags) != ZE_RESULT_SUCCESS) {
+      SPDLOG_WARN(
+          "zesInit failed, tracing state might be disabled after another call to a oneAPI "
+          "component or driver");
+    }
+  }
+}
