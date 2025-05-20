@@ -7,10 +7,15 @@
 #ifndef PTI_UTILS_ZE_UTILS_H_
 #define PTI_UTILS_ZE_UTILS_H_
 
+#include <level_zero/loader/ze_loader.h>
 #include <level_zero/ze_api.h>
 #include <level_zero/zet_api.h>
 
 #include <limits>
+#include <array>
+#include <iomanip>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -309,12 +314,63 @@ inline bool GetDeviceTimerFrequency_TimestampMask_UUID(ze_device_handle_t device
   return true;
 }
 
-inline ze_api_version_t GetVersion() {
-  auto driver_list = GetDriverList();
+inline bool GetDeviceUUID(ze_device_handle_t device, uint8_t* uuid, bool measure_overhead = false) {
+  PTI_ASSERT(device != nullptr);
+
+  ze_device_properties_t props;
+  std::memset(&props, 0, sizeof(props));
+  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2;
+  props.pNext = nullptr;
+  if (measure_overhead) {
+    overhead::Init();
+  }
+  ze_result_t status = zeDeviceGetProperties(device, &props);
+  if (measure_overhead) {
+    overhead_fini("zeDeviceGetProperties");
+  }
+  if (status != ZE_RESULT_SUCCESS) {
+    return false;
+  }
+  std::copy_n(props.uuid.id, ZE_MAX_DEVICE_UUID_SIZE, uuid);
+  return true;
+}
+
+inline ze_api_version_t GetVersion(const std::vector<ze_driver_handle_t>& driver_list) {
   if (driver_list.empty()) {
     return ZE_API_VERSION_FORCE_UINT32;
   }
   return GetDriverVersion(driver_list.front());
+}
+
+inline ze_api_version_t GetVersion() {
+  auto driver_list = GetDriverList();
+  return GetVersion(driver_list);
+}
+
+inline std::optional<zel_version_t> GetLoaderVersion() {
+  constexpr auto* kLoaderComponentName = "loader";
+  constexpr auto kLoaderComponentNameLength = std::char_traits<char>::length(kLoaderComponentName);
+  size_t number_of_components = 0;
+  auto status = zelLoaderGetVersions(&number_of_components, nullptr);
+  if (number_of_components == 0 || status != ZE_RESULT_SUCCESS) {
+    return std::nullopt;
+  }
+
+  std::vector<zel_component_version_t> versions(number_of_components);
+
+  status = zelLoaderGetVersions(&number_of_components, versions.data());
+  if (status != ZE_RESULT_SUCCESS) {
+    return std::nullopt;
+  }
+
+  for (const auto& component_version : versions) {
+    if (!std::strncmp(component_version.component_name, kLoaderComponentName,
+                      kLoaderComponentNameLength)) {
+      return component_version.component_lib_version;
+    }
+  }
+
+  return std::nullopt;
 }
 
 }  // namespace ze

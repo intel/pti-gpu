@@ -336,7 +336,8 @@ target_link_libraries(view_record_test PUBLIC Pti::pti_view GTest::gtest_main
                                               spdlog::spdlog
                                               LevelZero::headers)
 
-add_executable(assert_exception_test assert_exception_test.cc)
+add_executable(assert_exception_test assert_exception_test.cc
+   "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc")
 
 target_include_directories(
   assert_exception_test

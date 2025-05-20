@@ -39,6 +39,7 @@
 #include "pti/pti_view.h"
 #include "unikernel.h"
 #include "utils.h"
+#include "ze_driver_init.h"
 #include "ze_event_cache.h"
 #include "ze_local_collection_helpers.h"
 #include "ze_utils.h"
@@ -161,33 +162,22 @@ class ZeCollector {
                                              void* callback_data = nullptr) {
     SPDLOG_DEBUG("In {}", __FUNCTION__);
     PTI_ASSERT(nullptr != pti_state);
-    ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
-    if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_CRITICAL(
-          "zeInit() returned: {}. There might be Level-Zero Loader "
-          "and Tracing library mismatch. Cannot continue",
-          static_cast<uint32_t>(status));
+    ZeDriverInit driver_init{};
+    if (!driver_init.Success()) {
+      SPDLOG_ERROR("Unable to initialize Level Zero driver(s)");
       *pti_state = pti_result::PTI_ERROR_DRIVER;
-    }
-
-    ze_api_version_t version = utils::ze::GetVersion();
-    PTI_ASSERT(ZE_MAJOR_VERSION(version) >= 1 && ZE_MINOR_VERSION(version) >= 3);
-    SPDLOG_DEBUG("Driver version major: {}, minor: {}", ZE_MAJOR_VERSION(version),
-                 ZE_MINOR_VERSION(version));
-    if ((*pti_state) != pti_result::PTI_SUCCESS) {
-      // zeInit returned not SUCCESS but we want to know version of driver in any case
       return nullptr;
     }
 
-    auto collector =
-        std::unique_ptr<ZeCollector>(new ZeCollector(options, acallback, callback_data));
+    auto collector = std::unique_ptr<ZeCollector>(
+        new ZeCollector(options, acallback, callback_data, driver_init.Drivers()));
     PTI_ASSERT(collector != nullptr);
     collector->parent_state_ = pti_state;
 
     zel_tracer_desc_t tracer_desc = {ZEL_STRUCTURE_TYPE_TRACER_EXP_DESC, nullptr, collector.get()};
     zel_tracer_handle_t tracer = nullptr;
     overhead::Init();
-    status = zelTracerCreate(&tracer_desc, &tracer);
+    auto status = zelTracerCreate(&tracer_desc, &tracer);
     overhead_fini("zelTracerCreate");
 
     if (status != ZE_RESULT_SUCCESS) {
@@ -357,14 +347,15 @@ class ZeCollector {
   }
 
  private:  // Implementation
-  ZeCollector(CollectorOptions options, OnZeKernelFinishCallback acallback, void* callback_data)
+  ZeCollector(CollectorOptions options, OnZeKernelFinishCallback acallback, void* callback_data,
+              const std::vector<ze_driver_handle_t>& drv_list)
       : options_(options),
         acallback_(acallback),
         callback_data_(callback_data),
         event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP),
         swap_event_pool_(512),
         startstop_mode_changer(this) {
-    CreateDeviceMap();
+    CreateDeviceMap(drv_list);
     ze_result_t res = l0_wrapper_.InitDynamicTracingWrappers();
     if (ZE_RESULT_SUCCESS == res) {
       loader_dynamic_tracing_capable_ = true;
@@ -423,6 +414,10 @@ class ZeCollector {
   void CreateDeviceMap() {
     SPDLOG_DEBUG("In {}", __FUNCTION__);
     const auto drivers = utils::ze::GetDriverList();
+    CreateDeviceMap(drivers);
+  }
+
+  void CreateDeviceMap(const std::vector<ze_driver_handle_t>& drivers) {
     for (auto* const driver : drivers) {
       const auto devices = utils::ze::GetDeviceList(driver);
       for (auto* const device : devices) {

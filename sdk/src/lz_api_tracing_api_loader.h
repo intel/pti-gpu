@@ -6,6 +6,10 @@
 #ifndef SRC_LZ_API_TRACING_API_LOADER_H_
 #define SRC_LZ_API_TRACING_API_LOADER_H_
 
+#include <level_zero/layers/zel_tracing_api.h>
+#include <level_zero/layers/zel_tracing_register_cb.h>
+#include <level_zero/ze_api.h>
+#include <level_zero/zet_api.h>
 #include <spdlog/cfg/env.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
@@ -35,6 +39,8 @@ class PtiLzTracerLoader {
 
   bool ViewAvailable() const { return api_dlsyms_lib_ != nullptr; }
 
+  decltype(&zeInitDrivers) zeInitDrivers_ = nullptr;  // NOLINT
+
   // Forward to implementation in core library
 #include <tracing_api_dlsym_public.gen>  // Auto-generated callbacks
 
@@ -50,6 +56,7 @@ class PtiLzTracerLoader {
 #define LEVEL_ZERO_LOADER_GET_SYMBOL(X) \
   X##_ = api_dlsyms_lib_->GetSymbol<decltype(&X)>(#X)  // NOLINT
 #include <tracing_api_dlsym_private.gen>               // Auto-generated callbacks
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeInitDrivers);
 #undef LEVEL_ZERO_LOADER_GET_SYMBOL
   }
   std::unique_ptr<LibraryLoader> api_dlsyms_lib_ = nullptr;

@@ -102,7 +102,8 @@ add_library(pti_all INTERFACE)
 add_library(Pti::pti_all ALIAS pti_all)
 
 # formerly pti_view
-add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc")
+add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
+                       "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc")
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
 include(GenerateExportHeader)
