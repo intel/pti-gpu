@@ -137,18 +137,6 @@ void Usage(char * progname) {
     "Size of event buffer on host per host thread(default is -1 or unlimited)" <<
     std::endl;
   std::cout <<
-    "--chrome-device-timeline       " <<
-    "DEPRECATED - use --chrome-kernel-logging instead" <<
-    std::endl;
-  std::cout <<
-    "--chrome-kernel-timeline       " <<
-    "DEPRECATED - use --chrome-kernel-logging instead" <<
-    std::endl;
-  std::cout <<
-    "--chrome-device-stages         " <<
-    "DEPRECATED - use --chrome-kernel-logging instead" <<
-    std::endl;
-  std::cout <<
     "--verbose [-v]                 " <<
     "Enable verbose mode to show kernel shapes" << std::endl <<
     "                               Kernel shapes are always enabled in timelines for Level Zero backend" <<
@@ -156,10 +144,6 @@ void Usage(char * progname) {
   std::cout <<
     "--demangle                     " <<
     "Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend" <<
-    std::endl;
-  std::cout <<
-    "--kernels-per-tile             " <<
-    "DEPRECATED - use --separate-tiles instead" <<
     std::endl;
   std::cout <<
     "--separate-tiles               " <<
@@ -335,27 +319,11 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_ChromeEventBufferSize", argv[i]);
       app_index += 2;
-    } else if (strcmp(argv[i], "--chrome-device-timeline") == 0) {
-      std::cerr << "Deprecated: --chrome-device-timeline is deprecated, using --chrome-device-logging" << std::endl;
-      utils::SetEnv("UNITRACE_ChromeDeviceLogging", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--chrome-kernel-timeline") == 0) {
-      std::cerr << "Deprecated: --chrome-kernel-timeline is deprecated, using --chrome-kernel-logging" << std::endl;
-      utils::SetEnv("UNITRACE_ChromeKernelLogging", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--chrome-device-stages") == 0) {
-      std::cerr << "Deprecated: --chrome-device-stages is deprecated, using --chrome-kernel-logging" << std::endl;
-      utils::SetEnv("UNITRACE_ChromeKernelLogging", "1");
-      ++app_index;
     } else if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
       utils::SetEnv("UNITRACE_Verbose", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--demangle") == 0) {
       utils::SetEnv("UNITRACE_Demangle", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--kernels-per-tile") == 0) {
-      std::cerr << "Deprecated: --kernels-per-tile is deprecated, using --separate-tiles" << std::endl;
-      utils::SetEnv("UNITRACE_KernelOnSeparateTiles", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--separate-tiles") == 0) {
       utils::SetEnv("UNITRACE_KernelOnSeparateTiles", "1");

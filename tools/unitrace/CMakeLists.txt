@@ -288,6 +288,7 @@ if(NOT LOWER_CMAKE_BUILD_TYPE STREQUAL "debug")
   endif()
 endif()
 
+configure_file(${PROJECT_SOURCE_DIR}/scripts/uniview.py ${CMAKE_BINARY_DIR}/scripts/uniview.py COPYONLY)
 configure_file(${PROJECT_SOURCE_DIR}/scripts/tracemerge/mergetrace.py ${CMAKE_BINARY_DIR}/scripts/tracemerge/mergetrace.py COPYONLY)
 configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/analyzeperfmetrics.py ${CMAKE_BINARY_DIR}/scripts/metrics/analyzeperfmetrics.py COPYONLY)
 configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/addrasm.py ${CMAKE_BINARY_DIR}/scripts/metrics/addrasm.py COPYONLY)
@@ -303,6 +304,7 @@ configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/bmg/MemoryProfile.tx
 # Installation
 install(TARGETS unitrace)
 install(TARGETS unitrace_tool RUNTIME)
+install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/uniview.py DESTINATION bin)
 install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/tracemerge/mergetrace.py DESTINATION bin)
 install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/metrics/analyzeperfmetrics.py DESTINATION bin)
 install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/metrics/addrasm.py DESTINATION bin)

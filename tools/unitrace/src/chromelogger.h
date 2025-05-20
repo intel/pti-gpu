@@ -65,7 +65,7 @@ static std::string EncodeURI(const std::string &input) {
 }
 
 static std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-static uint32_t mpi_rank = std::atoi(rank.c_str());
+static uint32_t mpi_rank = rank.empty() ? getpid() : std::atoi(rank.c_str());	// use pid as a dummy rank id
 
 static std::string pmi_hostname = GetHostName();
 
@@ -106,7 +106,7 @@ struct ZeDevicePidKeyCompare {
     return (memcmp((char *)(&lhs), (char *)(&rhs), sizeof(ZeDevicePidKey)) < 0);
   }
 };
-static std::map<ZeDevicePidKey, std::tuple<uint32_t,uint64_t>, ZeDevicePidKeyCompare> device_pid_map_;
+static std::map<ZeDevicePidKey, std::tuple<uint32_t, uint64_t>, ZeDevicePidKeyCompare> device_pid_map_;
 struct ZeDeviceTidKeyCompare {
   bool operator()(const ZeDeviceTidKey& lhs, const ZeDeviceTidKey& rhs) const {
     return (memcmp((char *)(&lhs), (char *)(&rhs), sizeof(ZeDeviceTidKey)) < 0);
@@ -115,8 +115,8 @@ struct ZeDeviceTidKeyCompare {
 
 static std::map<ZeDeviceTidKey, std::tuple<uint32_t, uint32_t, uint64_t>, ZeDeviceTidKeyCompare> device_tid_map_;
 
-static uint32_t next_device_pid_ = (uint32_t)(~0) - (mpi_rank * (1 << 13));	// each rank has no more than (1 << 13) threads
-static uint32_t next_device_tid_ = (uint32_t)(~0) - (mpi_rank * (1 << 13));    // each rank has no more than (1 << 13) threads
+static uint32_t next_device_pid_ = (uint32_t)(~0) - (mpi_rank << 5);	// each rank uses no more than 32 devices
+static uint32_t next_device_tid_ = (uint32_t)(~0) - (mpi_rank << 5);	// the first device thread is the "main" thread which has the same id as the device process id
 
 static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device, uint32_t engine_ordinal,
   uint32_t engine_index, int host_pid, int host_tid) {
@@ -142,7 +142,9 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
   props = GetZeDevicePciPropertiesAndId(device, &parent_device_id, &device_id, &subdevice_id);
   PTI_ASSERT(props != nullptr);
   
-  ZeDeviceTidKey tid_key; memset(&tid_key, 0, sizeof(ZeDeviceTidKey));
+  ZeDeviceTidKey tid_key;
+
+  memset(&tid_key, 0, sizeof(ZeDeviceTidKey));
   tid_key.pci_addr_ = props->address;
   tid_key.parent_device_id_ = parent_device_id;
   tid_key.device_id_ = device_id;
@@ -158,7 +160,9 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
     device_tid = std::get<1>(it->second);
   }
   else {
-    ZeDevicePidKey pid_key; memset(&pid_key, 0, sizeof(ZeDevicePidKey));
+    ZeDevicePidKey pid_key;
+
+    memset(&pid_key, 0, sizeof(ZeDevicePidKey));
     pid_key.pci_addr_ = props->address;
     pid_key.parent_device_id_ = parent_device_id;
     pid_key.device_id_ = device_id;
@@ -173,10 +177,69 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
       device_pid = next_device_pid_--;
       auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
       device_pid_map_.insert({pid_key, std::make_tuple(device_pid, start_time)});
+
+      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
+
+      std::string str = ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
+            ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+      if (rank.empty()) {
+        str += "DEVICE<" + pmi_hostname + ">";
+      }
+      else {
+        str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
+      }
+
+      char str2[128];
+      snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.domain);
+      str += std::string(str2) + ":";
+      snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.bus);
+      str += std::string(str2) + ":";
+      snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.device);
+      str += std::string(str2) + ":";
+      snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.function);
+      str += std::string(str2);
+
+      if (pid_key.parent_device_id_ >= 0) {
+        str += " #" + std::to_string(pid_key.parent_device_id_) + "." + std::to_string(pid_key.subdevice_id_);
+      }
+      else {
+        str += " #" + std::to_string(pid_key.device_id_);
+      }
+
+      str += "\"}}";
+
+      logger_->Log(str);
+      logger_->Flush();
     }
+
     device_tid = next_device_tid_--;
     auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
-    device_tid_map_.insert({tid_key, std::make_tuple(device_pid, device_tid,start_time)});
+    device_tid_map_.insert({tid_key, std::make_tuple(device_pid, device_tid, start_time)});
+
+    std::lock_guard<std::recursive_mutex> lock(logger_lock_);
+
+    std::string str = ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) + ", \"tid\": " +
+           std::to_string(device_tid) + ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+    if (device_logging_no_thread_) {
+      if (device_logging_no_engine_) {
+        str += "L0\"}}";
+      }
+      else {
+        str += "L0 Engine<" + std::to_string(tid_key.engine_ordinal_) + "," + std::to_string(tid_key.engine_index_) + ">\"}}"; 
+      }
+    }
+    else {
+      if (device_logging_no_engine_) {
+        str += "Thread " + std::to_string(tid_key.host_tid_) + " L0\"}}"; 
+      }
+      else {
+        str += "Thread " + std::to_string(tid_key.host_tid_) + " L0 Engine<" + std::to_string(tid_key.engine_ordinal_) +
+               "," + std::to_string(tid_key.engine_index_) + ">\"}}"; 
+      }
+    }
+
+    logger_->Log(str);
+    logger_->Flush();
   }
 
   return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
@@ -203,7 +266,7 @@ struct ClDevicePidKeyCompare {
     return (memcmp((char *)(&lhs), (char *)(&rhs), sizeof(ClDevicePidKey)) < 0);
   }
 };
-static std::map<ClDevicePidKey, std::tuple<uint32_t,uint64_t>, ClDevicePidKeyCompare> cl_device_pid_map_;
+static std::map<ClDevicePidKey, std::tuple<uint32_t, uint64_t>, ClDevicePidKeyCompare> cl_device_pid_map_;
 struct ClDeviceTidKeyCompare {
   bool operator()(const ClDeviceTidKey& lhs, const ClDeviceTidKey& rhs) const {
     return (memcmp((char *)(&lhs), (char *)(&rhs), sizeof(ClDeviceTidKey)) < 0);
@@ -227,7 +290,9 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
   uint32_t device_tid;
   const std::lock_guard<std::mutex> lock(device_pid_tid_map_lock_);
 
-  ClDeviceTidKey tid_key; memset(&tid_key, 0, sizeof(ClDeviceTidKey));
+  ClDeviceTidKey tid_key;
+
+  memset(&tid_key, 0, sizeof(ClDeviceTidKey));
   tid_key.pci_addr_ = pci;
   tid_key.device_ = device;
   tid_key.queue_ = queue;
@@ -240,7 +305,9 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
     device_tid = std::get<1>(it->second);
   }
   else {
-    ClDevicePidKey pid_key; memset(&pid_key, 0, sizeof(ClDevicePidKey));
+    ClDevicePidKey pid_key;
+
+    memset(&pid_key, 0, sizeof(ClDevicePidKey));
     pid_key.pci_addr_ = pci;
     pid_key.device_ = device;
     pid_key.host_pid_ = host_pid;
@@ -252,10 +319,67 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
       device_pid = next_device_pid_--;
       auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
       cl_device_pid_map_.insert({pid_key, std::make_tuple(device_pid, start_time)});
+    
+      std::lock_guard<std::recursive_mutex> lock(logger_lock_);
+
+      std::string str = ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
+             ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+      if (rank.empty()) {
+        str += "DEVICE<" + pmi_hostname + ">";
+      }
+      else {
+        str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
+      }
+
+      char str2[128];
+      snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_domain);
+      str += std::string(str2) + ":";
+      snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_bus);
+      str += std::string(str2) + ":";
+      snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_device);
+      str += std::string(str2) + ":";
+      snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_function);
+      str += std::string(str2);
+
+      str += "\"}}"; 
+  
+      logger_->Log(str);
+      logger_->Flush();
     }
     device_tid = next_device_tid_--;
     auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
     cl_device_tid_map_.insert({tid_key, std::make_tuple(device_pid, device_tid, start_time)});
+
+    std::lock_guard<std::recursive_mutex> lock(logger_lock_);
+
+    std::string str = ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) +
+           ", \"tid\": " + std::to_string(device_tid) +
+           ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+    if (device_logging_no_thread_) {
+      if (device_logging_no_engine_) {
+        str += "CL\"}}";
+      }
+      else {
+        char str2[128];
+
+        snprintf(str2, sizeof(str2), "%p", tid_key.queue_);
+        str += "CL Queue<" + std::string(str2) + ">\"}}"; 
+      }
+    }
+    else {
+      if (device_logging_no_engine_) {
+        str += "Thread " + std::to_string(tid_key.host_tid_) + " CL\"}}"; 
+      }
+      else {
+        char str2[128];
+
+        snprintf(str2, sizeof(str2), "%p", tid_key.queue_);
+        str += "Thread " + std::to_string(tid_key.host_tid_) + " CL Queue<" + std::string(str2) + ">\"}}"; 
+      }
+    }
+  
+    logger_->Log(str);
+    logger_->Flush();
   }
 
   return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
@@ -498,6 +622,7 @@ class TraceBuffer {
 
     void BufferHostEvent(void) {
       if (flush_immediately_) {
+        std::lock_guard<std::recursive_mutex> lock(logger_lock_);
         FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][next_host_event_index_]);
         // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
         host_event_buffer_flushed_ = true;
@@ -510,6 +635,7 @@ class TraceBuffer {
 
     void BufferDeviceEvent(void) {
       if (flush_immediately_) {
+        std::lock_guard<std::recursive_mutex> lock(logger_lock_);
         FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][next_device_event_index_]);
         // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
         host_event_buffer_flushed_ = true;
@@ -526,7 +652,7 @@ class TraceBuffer {
     std::string StringifyDeviceEvent(ZeKernelCommandExecutionRecord& rec) {
       auto [pid, tid] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, pid_, rec.tid_);
       std::string kname = GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
-      std::string str = "{";
+      std::string str = ",\n{";
 
       str += "\"ph\": \"X\"";
       str += ", \"tid\": " + std::to_string(tid);
@@ -561,10 +687,10 @@ class TraceBuffer {
         // viewing the metrics on the same local host, no need to use https
         str += ", \"metrics\": \"http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
       }
-      str += "}},\n";
+      str += "}}";
 
       if (!rec.implicit_scaling_) {
-        str += "{";
+        str += ",\n{";
         str += "\"ph\": \"t\"";
         str += ", \"tid\": " + std::to_string(tid);
         str += ", \"pid\": " + std::to_string(pid);
@@ -582,14 +708,14 @@ class TraceBuffer {
         str += ", \"cat\": \"Flow_D2H_" + std::to_string(rec.kid_) + "_" + std::to_string(mpi_rank) + "\"";
         str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
         str += ", \"id\": " + std::to_string(rec.kid_);
-        str += "},\n";
+        str += "}";
       }
 
       return str;
     }
 
     std::string StringifyHostEvent(HostEventRecord& rec) {
-      std::string str = "{";  // header
+      std::string str = ",\n{";  // header
 
       if (rec.type_ == EVENT_COMPLETE) {
         str += "\"ph\": \"X\"";
@@ -646,7 +772,7 @@ class TraceBuffer {
       }
 
       std::string str_args = "";  // build arguments
-      if (rec.api_type_ == MPI) {
+      if (rec.api_type_ == API_TYPE_MPI) {
         const MpiArgs& args = rec.mpi_args_;
 
         bool isFirst = true;  // First argument can be zero and second non zero
@@ -671,33 +797,36 @@ class TraceBuffer {
         if (args.mpi_counter >= 0) {
           str_args += ", \"mpi_counter\": " + std::to_string(args.mpi_counter);
         }
-      } else if (rec.api_type_ == ITT) {
-          str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
-          str_args += convertDataToString(&rec.itt_args_);
-          str_args += "]";
-          if (rec.itt_args_.isIndirectData) {
-            free(rec.itt_args_.data[0]);
-          }
-          IttArgs* args = rec.itt_args_.next;
-          while (args != nullptr) {
-            str_args += ",";
-            str_args = str_args + "\"" + args->key + "\":[";
-            str_args += convertDataToString(args);
-            str_args += "]";
-            IttArgs* toFree = args;
-            args = args->next;
-            free(toFree);
-          }
+      } else if (rec.api_type_ == API_TYPE_ITT) {
+        str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
+        str_args += convertDataToString(&rec.itt_args_);
+        str_args += "]";
+        if (rec.itt_args_.isIndirectData) {
+          free(rec.itt_args_.data[0]);
         }
+        IttArgs* args = rec.itt_args_.next;
+        while (args != nullptr) {
+          str_args += ",";
+          str_args = str_args + "\"" + args->key + "\":[";
+          str_args += convertDataToString(args);
+          str_args += "]";
+          IttArgs* toFree = args;
+          args = args->next;
+          free(toFree);
+        }
+        // reset count to 0 and type to API_TYPE_NONE
+        rec.itt_args_.count = 0;
+        rec.api_type_ = API_TYPE_NONE;
+      }
 
       if (!str_args.empty()) {
         str += ", \"args\": {" + str_args + "}";
       } else {
-        str += ", \"id\": " + std::to_string(rec.id_);;
+        str += ", \"id\": " + std::to_string(rec.id_);
       }
 
       // end
-      str += "},\n";  // footer
+      str += "}";  // footer
 
       return str;
     }
@@ -930,6 +1059,7 @@ class ClTraceBuffer {
 
     void BufferHostEvent(void) {
       if (flush_immediately_) {
+        std::lock_guard<std::recursive_mutex> lock(logger_lock_);
         FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][next_host_event_index_]);
         // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
         host_event_buffer_flushed_ = true;
@@ -942,6 +1072,7 @@ class ClTraceBuffer {
 
     void BufferDeviceEvent(void) {
       if (flush_immediately_) {
+        std::lock_guard<std::recursive_mutex> lock(logger_lock_);
         FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][next_device_event_index_]);
         // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
         host_event_buffer_flushed_ = true;
@@ -960,7 +1091,7 @@ class ClTraceBuffer {
       auto [pid, tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_);
       std::string kname = GetClKernelCommandName(rec.kernel_command_id_);
 
-      std::string str = "{";
+      std::string str = ",\n{";
 
       str += "\"ph\": \"X\"";
       str += ", \"tid\": " + std::to_string(tid);
@@ -995,10 +1126,10 @@ class ClTraceBuffer {
         // viewing the metrics on the same local host, so no need to use https
         str += ", \"metrics\": \"http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
       }
-      str += "}},\n";
+      str += "}}";
 
       if (!rec.implicit_scaling_) {
-        str += "{";
+        str += ",\n{";
         str += "\"ph\": \"t\"";
         str += ", \"tid\": " + std::to_string(tid);
         str += ", \"pid\": " + std::to_string(pid);
@@ -1016,7 +1147,7 @@ class ClTraceBuffer {
         str += ", \"cat\": \"CL_Flow_D2H_" + std::to_string(rec.kid_) + "_" + std::to_string(mpi_rank) + "\"";
         str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(rec.start_time_));
         str += ", \"id\": " + std::to_string(rec.kid_);
-        str += "},\n";
+        str += "}";
       }
 
       return str;
@@ -1050,7 +1181,7 @@ class ClTraceBuffer {
     }
 
     std::string StringifyHostEvent(HostEventRecord& rec) {
-      std::string str = "{";  // header
+      std::string str = ",\n{";  // header
 
       if (rec.type_ == EVENT_COMPLETE) {
         str += "\"ph\": \"X\"";
@@ -1107,7 +1238,7 @@ class ClTraceBuffer {
       }
 
       std::string str_args = "";  // build arguments
-      if (rec.api_type_ == MPI) {
+      if (rec.api_type_ == API_TYPE_MPI) {
         const MpiArgs& args = rec.mpi_args_;
 
         bool isFirst = true;  // First argument can be zero and second non zero
@@ -1134,24 +1265,26 @@ class ClTraceBuffer {
           str_args += ", \"mpi_counter\": " + std::to_string(args.mpi_counter);
         }
 
-      } else if (rec.api_type_ == ITT) {
-          str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
-          str_args += convertDataToString(&rec.itt_args_);
-          str_args += "]";
-          if (rec.itt_args_.isIndirectData) {
-            free(rec.itt_args_.data[0]);
-          }
-          IttArgs* args = rec.itt_args_.next;
-          while (args != nullptr) {
-            str_args += ",";
-            str_args = str_args + "\"" + args->key + "\":[";
-            str_args += convertDataToString(args);
-            str_args += "]";
-            IttArgs* toFree = args;
-            args = args->next;
-            free(toFree);
-          }
+      } else if (rec.api_type_ == API_TYPE_ITT) {
+        str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
+        str_args += convertDataToString(&rec.itt_args_);
+        str_args += "]";
+        if (rec.itt_args_.isIndirectData) {
+          free(rec.itt_args_.data[0]);
         }
+        IttArgs* args = rec.itt_args_.next;
+        while (args != nullptr) {
+          str_args += ",";
+          str_args = str_args + "\"" + args->key + "\":[";
+          str_args += convertDataToString(args);
+          str_args += "]";
+          IttArgs* toFree = args;
+          args = args->next;
+          free(toFree);
+        }
+	// reset count to 0
+	rec.itt_args_.count = 0;
+      }
 
       if (!str_args.empty()) {
         str += ", \"args\": {" + str_args + "}";
@@ -1160,7 +1293,7 @@ class ClTraceBuffer {
       }
 
       // end
-      str += "},\n";  // footer
+      str += "}";  // footer
 
       return str;
     }
@@ -1287,6 +1420,22 @@ class ChromeLogger {
       UniMemory::ExitIfOutOfMemory((void *)(logger_));
 
       logger_->Log("{ \"traceEvents\":[\n");
+
+      std::string str("{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": ");
+
+      str += std::to_string(utils::GetPid()) + ", \"ts\": " + std::to_string(process_start_time_) + ", \"args\": {\"name\": \"";
+
+      std::string host = GetHostName();
+      std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+
+      if (rank.empty()) {
+        str += "HOST<" + host + ">\"}}";
+      }
+      else {
+        str += "RANK " + rank + " HOST<" + host + ">\"}}";
+      }
+
+      logger_->Log(str);
       logger_->Flush();
       data_start_pos_ = logger_->GetLogFilePosition();
     }
@@ -1314,128 +1463,6 @@ class ChromeLogger {
 
         logger_lock_.unlock();
 
-        std::string str("{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": ");
-
-        str += std::to_string(utils::GetPid()) + ", \"ts\": " + std::to_string(process_start_time_) + ", \"args\": {\"name\": \"";
-
-        if (rank.empty()) {
-          str += "HOST<" + pmi_hostname + ">\"}}";
-        }
-        else {
-          str += "RANK " + std::to_string(mpi_rank) + " HOST<" + pmi_hostname + ">\"}}";
-        }
-
-        const std::lock_guard<std::mutex> lock(device_pid_tid_map_lock_);
-
-        for (auto it = device_pid_map_.cbegin(); it != device_pid_map_.cend(); it++) {
-          uint32_t device_pid = std::get<0>(it->second);
-          str += ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
-                 ", \"ts\": " + std::to_string(std::get<1>(it->second)) + ", \"args\": {\"name\": \"";
-          if (rank.empty()) {
-            str += "DEVICE<" + pmi_hostname + ">";
-          }
-          else {
-            str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
-          }
-
-          char str2[128];
-          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.domain);
-          str += std::string(str2) + ":";
-          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.bus);
-          str += std::string(str2) + ":";
-          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.device);
-          str += std::string(str2) + ":";
-          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.function);
-          str += std::string(str2);
-
-          if (it->first.parent_device_id_ >= 0) {
-            str += " #" + std::to_string(it->first.parent_device_id_) + "." + std::to_string(it->first.subdevice_id_);
-          }
-          else {
-            str += " #" + std::to_string(it->first.device_id_);
-          }
-
-          str += "\"}}";
-        }
-        for (auto it = device_tid_map_.cbegin(); it != device_tid_map_.cend(); it++) {
-          uint32_t device_pid = std::get<0>(it->second);
-          uint32_t device_tid = std::get<1>(it->second);
-          str += ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) + ", \"tid\": " +
-                 std::to_string(device_tid) + ", \"ts\": " + std::to_string(std::get<2>(it->second)) + ", \"args\": {\"name\": \"";
-          if (device_logging_no_thread_) {
-            if (device_logging_no_engine_) {
-              str += "L0\"}}";
-            }
-            else {
-              str += "L0 Engine<" + std::to_string(it->first.engine_ordinal_) + "," + std::to_string(it->first.engine_index_) + ">\"}}"; 
-            }
-          }
-          else {
-            if (device_logging_no_engine_) {
-              str += "Thread " + std::to_string(it->first.host_tid_) + " L0\"}}"; 
-            }
-            else {
-              str += "Thread " + std::to_string(it->first.host_tid_) + " L0 Engine<" + std::to_string(it->first.engine_ordinal_) +
-                     "," + std::to_string(it->first.engine_index_) + ">\"}}"; 
-            }
-          }
-        }
-
-#if BUILD_WITH_OPENCL
-        for (auto it = cl_device_pid_map_.cbegin(); it != cl_device_pid_map_.cend(); it++) {
-          uint32_t device_pid = std::get<0>(it->second);
-          str += ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
-                 ", \"ts\": " + std::to_string(std::get<1>(it->second)) + ", \"args\": {\"name\": \"";
-          if (rank.empty()) {
-            str += "DEVICE<" + pmi_hostname + ">";
-          }
-          else {
-            str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
-          }
-
-          char str2[128];
-          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.pci_domain);
-          str += std::string(str2) + ":";
-          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.pci_bus);
-          str += std::string(str2) + ":";
-          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.pci_device);
-          str += std::string(str2) + ":";
-          snprintf(str2, sizeof(str2), "%x", it->first.pci_addr_.pci_function);
-          str += std::string(str2);
-
-          str += "\"}}"; 
-        }
-        for (auto it = cl_device_tid_map_.cbegin(); it != cl_device_tid_map_.cend(); it++) {
-          uint32_t device_pid = std::get<0>(it->second);
-          uint32_t device_tid = std::get<1>(it->second);
-          str += ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) +
-                 ", \"tid\": " + std::to_string(device_tid) +
-                 ", \"ts\": " + std::to_string(std::get<2>(it->second)) + ", \"args\": {\"name\": \"";
-          if (device_logging_no_thread_) {
-            if (device_logging_no_engine_) {
-              str += "CL\"}}";
-            }
-            else {
-              char str2[128];
-
-              snprintf(str2, sizeof(str2), "%p", it->first.queue_);
-              str += "CL Queue<" + std::string(str2) + ">\"}}"; 
-            }
-          }
-          else {
-            if (device_logging_no_engine_) {
-              str += "Thread " + std::to_string(it->first.host_tid_) + " CL\"}}"; 
-            }
-            else {
-              char str2[128];
-
-              snprintf(str2, sizeof(str2), "%p", it->first.queue_);
-              str += "Thread " + std::to_string(it->first.host_tid_) + " CL Queue<" + std::string(str2) + ">\"}}"; 
-            }
-          }
-        }
-#endif /* BUILD_WITH_OPENCL */
-
         if (logger_->GetLogFilePosition() == data_start_pos_) {
           // no data has been logged
           // remove the log file, but close it first
@@ -1446,7 +1473,7 @@ class ChromeLogger {
             std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ") in file " << chrome_trace_file_name_ << std::endl;
           }
         } else {
-          str += "\n]\n}\n";
+          std::string str = "\n]\n}\n";
           logger_->Log(str);
           delete logger_;
           std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
@@ -1475,6 +1502,7 @@ class ChromeLogger {
           rec->name_ = nullptr;
         }
 
+        rec->api_type_ = API_TYPE_NONE;
         rec->api_id_ = XptiTracingId;
         rec->start_time_ = start_ts;
         if (etype == EVENT_COMPLETE) {
@@ -1501,10 +1529,16 @@ class ChromeLogger {
         rec->start_time_ = start_ts;
         rec->end_time_ = end_ts;
         rec->id_ = 0;
-        if (metadata_args != nullptr && metadata_args->count != 0) {
-          rec->api_type_ = ITT;
+        if ((metadata_args != nullptr) && (metadata_args->count != 0)) {
+          rec->api_type_ = API_TYPE_ITT;
           rec->itt_args_ = *metadata_args;
         }
+	else {
+          // no arguments so set api_type_ to API_TYPE_NONE
+          rec->api_type_ = API_TYPE_NONE;
+          rec->itt_args_.count = 0;
+	}
+
         thread_local_buffer_.BufferHostEvent();
       }
     }
@@ -1525,7 +1559,7 @@ class ChromeLogger {
         rec->start_time_ = start_ts;
         rec->end_time_ = end_ts;
         rec->id_ = 0;
-        rec->api_type_ = MPI;
+        rec->api_type_ = API_TYPE_MPI;
         rec->mpi_args_.src_size = src_size;
         rec->mpi_args_.src_location = src_location;
         rec->mpi_args_.src_tag = src_tag;
@@ -1554,7 +1588,7 @@ class ChromeLogger {
         rec->start_time_ = start_ts;
         rec->end_time_ = end_ts;
         rec->id_ = 0;
-        rec->api_type_ = MPI;
+        rec->api_type_ = API_TYPE_MPI;
         rec->mpi_args_.mpi_counter = mpi_counter;
         rec->mpi_args_.src_size = src_size;
         rec->mpi_args_.dst_size = dst_size;
@@ -1628,6 +1662,7 @@ class ChromeLogger {
       HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
 
       rec->type_ = EVENT_COMPLETE;
+      rec->api_type_ = API_TYPE_NONE;
       rec->api_id_ = api_id;
       rec->start_time_ = started;
       rec->end_time_ = ended;
@@ -1640,6 +1675,7 @@ class ChromeLogger {
           rec = thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SOURCE;
+          rec->api_type_ = API_TYPE_NONE;
           rec->api_id_ = DummyTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
@@ -1652,6 +1688,7 @@ class ChromeLogger {
           rec = thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SINK;
+          rec->api_type_ = API_TYPE_NONE;
           rec->api_id_ = DummyTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
@@ -1669,6 +1706,7 @@ class ChromeLogger {
 
       HostEventRecord *rec = cl_thread_local_buffer_.GetHostEvent();
       rec->type_ = EVENT_COMPLETE;
+      rec->api_type_ = API_TYPE_NONE;
       rec->api_id_ = api_id;
       rec->start_time_ = started;
       rec->end_time_ = ended;
@@ -1681,6 +1719,7 @@ class ChromeLogger {
           rec = cl_thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SOURCE;
+          rec->api_type_ = API_TYPE_NONE;
           rec->api_id_ = DummyTracingId;
           rec->start_time_ = started;
           rec->id_ = id;
@@ -1694,6 +1733,7 @@ class ChromeLogger {
           rec = cl_thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SINK;
+          rec->api_type_ = API_TYPE_NONE;
           rec->api_id_ = DummyTracingId;
           rec->start_time_ = started;
           rec->id_ = id;

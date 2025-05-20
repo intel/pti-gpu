@@ -19,10 +19,10 @@ enum EVENT_TYPE {
 };
 
 enum API_TYPE {
-  NONE,
-  MPI,
-  ITT,
-  CCL
+  API_TYPE_NONE,
+  API_TYPE_MPI,
+  API_TYPE_ITT,
+  API_TYPE_CCL
 };
 
 typedef struct MpiArgs_ {
@@ -53,7 +53,7 @@ typedef struct HostEventRecord_ {
   API_TRACING_ID api_id_;
   EVENT_TYPE type_;
 
-  API_TYPE api_type_ = API_TYPE::NONE;
+  API_TYPE api_type_ = API_TYPE::API_TYPE_NONE;
   union{
     MpiArgs mpi_args_;
     IttArgs itt_args_;

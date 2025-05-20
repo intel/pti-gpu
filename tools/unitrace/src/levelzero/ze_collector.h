@@ -65,7 +65,10 @@ struct ZeMetricQueryPoolKeyCompare {
 };
  
 struct ZeMetricQueryPools {
-  constexpr static uint32_t pool_size_ = 128;
+  // The pool size was reduced from 128 to 64 to optimize memory usage
+  // and align with typical workload requirements, ensuring efficient
+  // resource utilization without compromising performance.
+  constexpr static uint32_t pool_size_ = 64;
   std::mutex query_pool_mutex_;
   std::map<zet_metric_query_handle_t, ZeMetricQueryPoolKey> query_pool_map_;
   std::map<ZeMetricQueryPoolKey, std::vector<zet_metric_query_handle_t>, ZeMetricQueryPoolKeyCompare> free_pool_;

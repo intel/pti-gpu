@@ -19,7 +19,10 @@ class Logger {
   Logger(const std::string& filename, bool lazy_flush = false, bool lock_free = false) {
     if (!filename.empty()) {
       file_.open(filename);
-      PTI_ASSERT(file_.is_open());
+      if (!(file_.is_open())) {
+        std::cerr << "[ERROR] Failed to open file " << filename << " for writing. Do you have the right permission?" << std::endl;
+        exit(-1);
+      }
     }
     lazy_flush_ = lazy_flush;
     lock_free_ = lock_free;

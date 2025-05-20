@@ -10,10 +10,15 @@ import os
 import socketserver
 import sys
 import webbrowser
-try:
-    import analyzeperfmetrics as apm
-except ImportError:
-    from metrics import analyzeperfmetrics as apm
+import json
+
+# analyzeperfmetrics module is either at the same folder of this script or subfolder "metrics"
+# add the paths
+modpath = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(modpath)
+sys.path.append(modpath + "/metrics")
+
+import analyzeperfmetrics as apm
 
 
 def ParseArguments():
@@ -100,6 +105,47 @@ def main():
         if ((args.config is not None) or (args.shaderdump is not None)):
             print(f'Metrics file is missing')
             return 1
+
+    # validate trace file
+    fsize = os.stat(args.trace).st_size
+    if (fsize != 0):
+        valid = True
+        with open(args.trace, 'r') as fp:
+            try:
+                data = json.load(fp)
+            except Exception as ex:
+                valid = False
+        if (valid == False):
+            # trace file may not be closely closed
+            # Try to add closing tags
+            with open(args.trace, 'a') as fp:
+                try:
+                    fp.write("\n]\n}\n")
+                except Exception as ex:
+                    # give up
+                    print("Failed to add closing tags to trace file " + args.trace)
+                    return 1
+            # read the file again
+            rollback = False
+            with open(args.trace, 'r') as fp:
+                try:
+                    data = json.load(fp)
+                except Exception as ex:
+                    # give up, but need to roll back the changes made to the file
+                    rollback = True
+            if (rollback == True):
+                with open(args.trace, 'a') as fp:
+                    try:
+                        fp.truncate(fsize)
+                    except Exception as ex:
+                        print("Failed to rollback the changes to trace file " + args.trace)
+                print("Trace file " + args.trace + " is invalid")
+                return 1 
+            else:
+                print("Trace file " + args.trace + " is modified with proper closing tags added")
+    else:
+        print("Trace file " + args.trace + " is empty")
+        return 1
 
     LoadTrace(args.trace)
 
