@@ -37,8 +37,10 @@ GtGenProcedure SubTgl(const IGtKernelInstrument& instrumentor, const GtDstRegion
       proc += insF.MakeMov(dstL, GtReg(dst.Reg(), sizeof(uint32_t), 0)).SetPredicate(predicate);
     }
 
-    GtReg src0L = {src0.Reg(), std::min(static_cast<uint32_t>(sizeof(uint32_t)), src0.DataType().Size()), 0};
-    GtReg src1L = {src1.Reg(), std::min(static_cast<uint32_t>(sizeof(uint32_t)), src1.DataType().Size()), 0};
+    GtReg src0L = {src0.Reg(),
+                   std::min(static_cast<uint32_t>(sizeof(uint32_t)), src0.DataType().Size()), 0};
+    GtReg src1L = {src1.Reg(),
+                   std::min(static_cast<uint32_t>(sizeof(uint32_t)), src1.DataType().Size()), 0};
 
     proc += insF.MakeAddc(dstL, src0L, src1L, execMask)
                 .SetSrcModifier(1, GED_SRC_MOD_Negative)
@@ -150,8 +152,9 @@ GtGenProcedure Macro::Sub(const IGtKernelInstrument& instrumentor, const GtDstRe
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
              "Destination size should be no less than source size");
   uint64_t mask = Macro::GetMaskBySizeBytes(dst.DataType().Size());
-  PTI_ASSERT((static_cast<int64_t>(srcI1.Value()) >= 0) &&
-             srcI1.Value() <= mask && "Immediate value is too large for the destination size");
+  PTI_ASSERT(static_cast<int64_t>(srcI1.Value()) >= -static_cast<int64_t>(mask) &&
+             static_cast<int64_t>(srcI1.Value()) <= static_cast<int64_t>(mask) &&
+             "Immediate value is too large for the destination size");
 
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;

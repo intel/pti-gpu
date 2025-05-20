@@ -632,7 +632,9 @@ GtGenProcedure Macro::Mul(const IGtKernelInstrument& instrumentor, const GtDstRe
   PTI_ASSERT(dst.DataType().Size() >= src0.DataType().Size() &&
              "Destination size should be no less than source size");
   uint64_t mask = Macro::GetMaskBySizeBytes(dst.DataType().Size());
-  PTI_ASSERT(srcI1.Value() <= mask && "Immediate value is too large for the destination size");
+  PTI_ASSERT(static_cast<int64_t>(srcI1.Value()) >= -static_cast<int64_t>(mask) &&
+             static_cast<int64_t>(srcI1.Value()) <= static_cast<int64_t>(mask) &&
+             "Immediate value is too large for the destination size");
 
   IGtInsFactory& insF = instrumentor.Coder().InstructionFactory();
   GtGenProcedure proc;
