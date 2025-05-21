@@ -883,7 +883,7 @@ class ZeCollector {
         rec.source_line_number_ = command->source_line_number_;
       }
 
-      kcexecrec->push_back(rec);
+      kcexecrec->push_back(std::move(rec));
     }
   }
 
@@ -1347,7 +1347,6 @@ class ZeCollector {
         return;
       }
     }
-    const std::lock_guard<std::mutex> lock(collector->lock_);
     ze_context_handle_t context = collector->GetCommandListContext(command_list);
     ze_device_handle_t device = collector->GetCommandListDevice(command_list);
 
@@ -2383,25 +2382,9 @@ class ZeCollector {
   std::atomic<pti_result>* parent_state_ = nullptr;
 
   class ZeStartStopModeChanger {
-   private:
-    // Track enable/disable tracing layer calls on a global basis - in order to swap apis.
-    // zelEnableTracingLayer and zelDisableTracingLayer are not thread specific -- and act globally.
-    //      We use ref_count to track how many L0 view_kinds are enabled/disabled on a global basis.
-
-    std::atomic<uint64_t> ref_count = 0;
-    ZeCollector* parent_collector_;
-    std::mutex ss_lock_;
-
    public:
-    ZeStartStopModeChanger(const ZeStartStopModeChanger&) = delete;
-    ZeStartStopModeChanger& operator=(const ZeStartStopModeChanger&) = delete;
-    ZeStartStopModeChanger(ZeStartStopModeChanger&&) = delete;
-    ZeStartStopModeChanger& operator=(ZeStartStopModeChanger&&) = delete;
-    ZeStartStopModeChanger() = delete;
-    ZeStartStopModeChanger(ZeCollector* collector) {
-      parent_collector_ = collector;
-      ref_count = 0;
-    }
+    explicit ZeStartStopModeChanger(ZeCollector* collector)
+        : ref_count(0), parent_collector_(collector) {}
 
     // switches to fully start tracing mode - only if we are not already in start mode.  Else
     // records another view_kind active in region.
@@ -2455,6 +2438,15 @@ class ZeCollector {
         parent_collector_->options_.hybrid_mode = true;
       return ref_count;
     }
+
+   private:
+    // Track enable/disable tracing layer calls on a global basis - in order to swap apis.
+    // zelEnableTracingLayer and zelDisableTracingLayer are not thread specific -- and act globally.
+    //      We use ref_count to track how many L0 view_kinds are enabled/disabled on a global basis.
+
+    std::atomic<uint64_t> ref_count = 0;
+    ZeCollector* parent_collector_;
+    std::mutex ss_lock_;
   };
   ZeStartStopModeChanger startstop_mode_changer;
 };
