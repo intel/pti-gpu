@@ -17,13 +17,17 @@
 
 #if defined(_WIN32)
 inline static constexpr const char* const kLevelZeroLoaderName = "ze_loader.dll";
-inline static constexpr const char* const kLevelZeroDriverName =
-    kLevelZeroLoaderName;  // Use ze_loader.dll. ze_intel_gpu64 is the driver if this is an issue in
-                           // the future.
 #else
 inline static constexpr const char* const kLevelZeroLoaderName = "libze_loader.so.1";
-inline static constexpr const char* const kLevelZeroDriverName = "libze_intel_gpu.so.1";
 #endif
+
+inline static constexpr const char* const kLevelZeroDriverName =
+    kLevelZeroLoaderName;  // Use the loader instead of the driver due to crashes we've seen on
+                           // client platforms.
+                           //
+                           // Driver names:
+                           // * ze_intel_gpu64.dll on Windows
+                           // * libze_intel_gpu.so.1 on Linux
 
 /*
  * Wrappers for L0 Instrospection APIs and for Loader Enable/Disable Tracing.
