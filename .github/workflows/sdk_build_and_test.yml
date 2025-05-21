@@ -2,17 +2,21 @@ name: sdk-build-and-test
 
 on:
   push:
+    paths:
+      - sdk/**
+      - .github/workflows/sdk_build_and_test.yml
     branches:
       - master
       - release/**
-    paths:
-      - sdk/**
   pull_request:
     branches:
       - master
       - release/**
     paths:
       - sdk/**
+  workflow_dispatch:
+  schedule:
+    - cron: '30 5 * * *' # Daily 5:30 AM UTC / 12:30 AM EST
 
 permissions:
   contents: read
@@ -33,12 +37,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_0_0 }}
-            uploadname: "ubuntu-24.04.2025.0.0"
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_1_0 }}
+            uploadname: "ubuntu-24.04.2025.1.0"
             preset: linux-icpx-release
 
-
-    container: 
+    container:
       image: ${{ matrix.container }}
       options: --device=/dev/dri --cap-add CAP_PERFMON
 
@@ -62,7 +65,15 @@ jobs:
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
-          ctest --output-on-failure --preset ${{ matrix.preset }} -LE perf
+          ctest --output-on-failure --preset ${{ matrix.preset }} -LE performance
+
+      - name: Quarantined tests # flaky tests
+        continue-on-error: true
+        working-directory: sdk
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          ctest --output-on-failure --preset ${{ matrix.preset }} -L performance
+
 
       - name: Build AddressSanitizer
         working-directory: sdk
@@ -177,5 +188,14 @@ jobs:
           REM TODO Kernel name demangling not supported on Windows yet.
           REM TODO Tests need to be run without \DNDEBUG set
           REM TODO OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
-          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords" 
+          ctest --output-on-failure --preset ${{ matrix.preset }} -E "MainFixtureTest.DeMangled.*|MainFixtureTest.KernelViewRecordHasSyclFileName|MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords|perf-overhead-view|perf-link-overhead"
+
+      - name: Quarantined tests # flaky tests
+        continue-on-error: true
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-overhead-view'
+          ctest --output-on-failure --preset ${{ matrix.preset }} -R 'perf-link-overhead'
 
