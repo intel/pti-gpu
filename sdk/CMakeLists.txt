@@ -221,8 +221,25 @@ target_link_libraries(
 	pti_all INTERFACE Pti::pti_view)
 
 include(CTest)
+
+if(BUILD_TESTING AND PTI_BUILD_SAMPLES)
+  # https://github.com/uxlfoundation/oneTBB/commit/d784b628190cbbcb6139916da3efe8c0b60abaa2
+  set(TBB_FIND_RELEASE_ONLY ON CACHE BOOL
+    "Only use release TBB to workaround crash with tbb_debug")
+  add_subdirectory(samples/dlworkloads)
+  add_subdirectory(samples/dpc_gemm)
+  add_subdirectory(samples/dpc_gemm_threaded)
+  add_subdirectory(samples/vector_sq_add)
+  add_subdirectory(samples/onemkl_gemm)
+  add_subdirectory(samples/iso3dfd_dpcpp)
+endif()
+
 if(BUILD_TESTING AND PTI_BUILD_TESTING)
   add_subdirectory(test)
+endif()
+
+if(BUILD_TESTING AND PTI_FUZZ)
+  add_subdirectory(fuzz)
 endif()
 
 # Targets / Install phase
@@ -337,20 +354,6 @@ if(PTI_INSTALL)
       [[\"\${CMAKE_INSTALL_PREFIX}/etc/*\"]])
 
  endif()
-
-endif()
-
-if(PTI_BUILD_SAMPLES)
- add_subdirectory(samples/dpc_gemm)
- add_subdirectory(samples/dpc_gemm_threaded)
- add_subdirectory(samples/vector_sq_add)
- add_subdirectory(samples/onemkl_gemm)
- add_subdirectory(samples/iso3dfd_dpcpp)
- add_subdirectory(samples/dlworkloads)
-endif()
-
-if(BUILD_TESTING AND PTI_FUZZ)
-  add_subdirectory(fuzz)
 endif()
 
 if(PROJECT_IS_TOP_LEVEL AND PTI_INSTALL)
