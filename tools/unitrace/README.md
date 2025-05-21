@@ -30,6 +30,7 @@ set up Intel(R) MPI Environment (optional)
 ```
 
 ### Linux
+
 ```sh
 cd <....>/tools/unitrace
 mkdir build
@@ -50,6 +51,7 @@ make install
 ```
 
 ### Windows
+
 ```sh
 cd <....>\tools\unitrace
 mkdir build
@@ -163,12 +165,8 @@ The options can be one or more of the following:
 --chrome-no-engine-on-device   Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info.
                                Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present
 --chrome-event-buffer-size <number-of-events>    Size of event buffer on host per host thread(default is -1 or unlimited)
---chrome-device-timeline       DEPRECATED - use --chrome-kernel-logging instead
---chrome-kernel-timeline       DEPRECATED - use --chrome-kernel-logging instead
---chrome-device-stages         DEPRECATED - use --chrome-kernel-logging instead
 --verbose [-v]                 Enable verbose mode to show more kernel information.
 --demangle                     Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend
---kernels-per-tile             DEPRECATED - use --separate-tiles instead
 --separate-tiles               Trace each tile separately in case of implicit scaling
 --tid                          Output TID in host API trace
 --pid                          Output PID in host API and device activity trace
@@ -191,22 +189,123 @@ The options can be one or more of the following:
 --help                         Show the help message and exit
 ```
 
-## Level Zero or Level Zero + OpenCL
-
 By default, only Level Zero tracing/profiling is enabled. To enable OpenCL tracing and profiling, please use --opencl option.
 
-## View Event Trace
+### View Traces and Profiles
 
-If one of more of the **--chrome-** options are present, a .json trace file will be generated. To view the event trace, one can load
-the .json trace file to **https://ui.perfetto.dev/** in either Google Chrome or Microsoft Edge browser.
+If one or more of the **--chrome-** options are used, a .json file, for example, **myapp.json**, will be generated. To view the trace, please open **https://ui.perfetto.dev/** in either Google Chrome or Microsoft Edge browser and load the .json file. **Do NOT use chrome://tracing/**! 
 
+Alternatively, you can run the **uniview.py** utility to view the data, assuming all required Python packages are installed:
+
+```sh
+python uniview.py -t <myapp.json>
+```
+
+This utility launches the default browser and loads **myapp.json** in **https://ui.perfetto.dev/** for you.
+ 
 ![Host-Device Timelines!](/tools/unitrace/doc/images/host-device-times.png)
 
-Do **NOT** use **chrome://tracing/** to view the event trace!
+If metric query (**--metric-query [-q]**) or metric sampling (**--metric-sampling [-k]**) or stall sampling (**--stall-sampling**) option is also enabled along with **--chrome-kernel-logging** or **--chrome-device-logging** option, you can view performance metrics of each kernel instance by selecting the kernel instance then following the metrics link in the **Arguments** in the browser.
 
-## Host Level Zero and/or OpenCL Activities
+    ```sh
+     $ unitrace -k --chrome-kernel-logging -o perf.csv ./testapp
+     ... ...
 
-To trace/profile Level Zero and/or OpenCL host activities, one can use one or more of the following options:
+     [INFO] Log is stored in perf.1092793.csv
+     [INFO] Timeline is stored in testapp.1092793.json
+     [INFO] Device metrics are stored in perf.metrics.1092768.csv
+
+     $ python uniview.py -t testapp.1092793.json -m perf.metrics.1092768.csv -f metrics/config/PVC/ComputeBasic.txt
+    ```
+    
+![Performance Metrics Through Event Trace!](/tools/unitrace/doc/images/perfmetricstrace.png)
+    
+Once you click the link next to **metrics:** in the **"Arguments"**, another browser window is opened:
+
+![Performance Metrics Browser Window!](/tools/unitrace/doc/images/perfmetricsbrowser.png)
+
+In case of stall sampling, for example:
+
+    ```sh
+     $ unitrace --stall-sampling --chrome-kernel-logging -o perfstall.csv ./testapp
+    ```
+To view the source stall analysis report, you also need to provide the shaderdump (see details in [Sample Stalls at Instruction Level](#analyze-stalls-at-instruction-level)) folder path to **uniview.py**:
+
+    ```sh
+    python uniview.py -t testapp.1092793.json -m ./perfstall.metrics.564289.csv -s ./dump.1
+    ```
+
+![Stall Statistics!](/tools/unitrace/doc/images/stallstatistics.png)
+
+followed by source stall analysis report:
+
+![Stall Report!](/tools/unitrace/doc/images/stallreport.png)
+
+Please note that **-f <config>** is not needed for viewing stall sampling report.
+
+Only the top 10 most expensive stalls of each type are reported by default. You can change the number of top expensive stalls of each type to report using **-n** option, for example:
+
+    ```sh
+    python uniview.py -t testapp.1092793.json -m ./perfstall.metrics.564289.csv -s ./dump.1 -n 5
+    ```
+
+The stall analysis reporting uses a demangler utility and the default is **c++filt**. If **c++filt** is missing, you either need to install it or force **uniview.py** to use a different demangler using **-g <demanger>** option:
+
+You can even use an online demangler, for example:
+
+    ```sh
+    python uniview.py -t testapp.1092793.json -m ./perfstall.metrics.564289.csv -s ./dump.1 -n 5 -g mydemangler.bat
+    ```
+    
+and the **mydemangler.bat** has:
+
+    ```sh
+    @echo off
+    curl -s -d "input=%1" https://demangler.com/raw
+    ```
+#### View Large Traces
+
+By default, the memory limit of the internal representation of a trace is 2GB. To view large traces that requires more than 2GB of memory, an external trace processor is needed.
+
+One way to run the external trace processor on Windows is to use Windows Subsystem for Linux or WSL:
+
+1. Start your Linux distribution (Ubuntu 22.02.2 LTS, for example) on Windows.
+2. Inside Linux, download and run trace_processor:
+  
+   ```sh
+   curl -LO https://get.perfetto.dev/trace_processor
+   chmod +x ./trace_processor
+   trace_processor --httpd
+   ```
+3. Start the browser in Windows, load https://ui.perfetto.dev/ and open the trace file. If the trace is loaded successfully, inside Linux, you
+   should see something like:
+
+   ```sh
+   $ ./trace_processor --httpd
+   [924.614]             httpd.cc:99 [HTTP] Starting RPC server on localhost:9001
+   [924.614]            httpd.cc:104 [HTTP] This server can be used by reloading https://ui.perfetto.dev and clicking on YES on the "Trace Process   or native acceleration" dialog or through the Python API (see https://perfetto.dev/docs/analysis/trace-processor#python-api).
+   [957.821]       http_server.cc:83 [HTTP] New connection
+   [957.822]      http_server.cc:231 [HTTP] POST /status [body=0B, origin="https://ui.perfetto.dev"]
+   [957.892]       http_server.cc:83 [HTTP] New connection
+   [957.894]      http_server.cc:231 [HTTP] GET /websocket [body=0B, origin="https://ui.perfetto.dev"]
+   Loading trace 2004.29 MB (0.7 MB/s)
+   ```
+
+To view performance metrics of kernel instances along with large traces, please see [Analyze Performance Metrics](#analyze-performance-metrics).
+
+#### Query Trace Events
+
+You can switch to SQL mode by typing ":" in the search box, write your SQL query statement(s) and then navigate to the events of interest from the query result, for example.
+
+![Query Trace Events!](/tools/unitrace/doc/images/event_query.png)
+
+Please refer to https://perfetto.dev/docs/ for more information.
+
+## Usages and Options
+
+### Host Level Zero and/or OpenCL Activities
+
+To trace/profile Level Zero and/or OpenCL host activities, you need one or more of the following options:
 
 --call-logging [-c]
 --host-timing  [-h]
@@ -222,9 +321,9 @@ The **--chrome-call-logging** option generates a Level Zero and/or OpenCL host .
 ![Host Event Trace!](/tools/unitrace/doc/images/call-logging.png)
 
 
-## Device and Kernel Activities
+### Device and Kernel Activities
 
-To trace/profile device and kernel activities, one can use one or more of the following options:
+To trace/profile device and kernel activities, you need one or more of the following options:
 
 --device-timing [-d]
 --kernel-submission [-s]
@@ -235,7 +334,6 @@ To trace/profile device and kernel activities, one can use one or more of the fo
 --chrome-no-engine-on-device
 
 The **--device-timing [-d]** option outputs a timing summary of kernels and commands executed on the device:
-
 
 ![Device Timing With No Shape!](/tools/unitrace/doc/images/device-timing-with-no-shape.png)
 
@@ -258,7 +356,6 @@ By default, the kernel timing is summarized regardless of shapes. In case the ke
 ![Device Timing!](/tools/unitrace/doc/images/device-timing.png)
 
 ![Kernel Info!](/tools/unitrace/doc/images/kernel-info.png)
-
 
 The **--kernel-submission [-s]** option outputs a time summary of kernels spent in queuing, submission and execution:
 ![Kernel Submissions!](/tools/unitrace/doc/images/kernel-submissions.png)
@@ -299,10 +396,9 @@ or both to suppress thread and engine and/or queue data at the same time:
 
 ![Device Activities!](/tools/unitrace/doc/images/device-no-thread-no-engine.png)
 
-
 ### Tile Activities in Implicit Scaling
 
-In case of implicit scaling, the hardware partitions the load of each kernel and distributes portions to each tile. By default, the tool treats the whole device as a unit. To trace activities on each tile separately, one can use **--separate-tiles** together with **--chrome-kernel-logging/--chrome-device-logging** options:
+In case of implicit scaling, the hardware partitions the load of each kernel and distributes portions to each tile. By default, the tool treats the whole device as a unit. To trace activities on each tile separately, you need to use **--separate-tiles** together with **--chrome-kernel-logging/--chrome-device-logging** options:
 
 ![Tile Activities Logging!](/tools/unitrace/doc/images/implicit-per-tile-kernel-logging.png)
 
@@ -310,7 +406,7 @@ or with **--device-timing [-d]** option:
 
 ![Tile Activities Timing!](/tools/unitrace/doc/images/implicit-per-tile-timing.png)
 
-## Trace and Profile Layers above Level Zero/OpenCL
+### Trace and Profile Layers above Level Zero/OpenCL
 
 The **--chrome-mpi-logging** traces MPI activities
 
@@ -332,78 +428,360 @@ The **--chrome-itt-logging** traces activities in applications instrumented usin
 The **--ccl-summary-report  [-r]** option outputs CCL call timing summary:
 ![CCL Call Timing!](/tools/unitrace/doc/images/ccl_summary_report.png)
 
-If the application is a PyTorch workload, one or more options from **--chrome-mpi-logging**, **--chrome-ccl-logging** and **--chrome-dnn-logging** also enables PyTorch profiling(see **Profile PyTorch** section for more information).
+If the application is a PyTorch workload, one or more options from **--chrome-mpi-logging**, **--chrome-ccl-logging** and **--chrome-dnn-logging** also enables PyTorch profiling(see [Profile PyTorch](#profile-pytorch) for more information).
 
+### Location of Output
 
-## Categorizing GPU Kernels
+By default, all output profile data are written to files in the current working directory. You can use the **--output-dir-path** option to specify a different location:
 
-In case of a large application, for example, LLaMA, there may be a lot of small kernels with long 
-kernel names in the profiled data. To analyze the data at a high level, you may find the kernel categorizing script are helpful.
-
-The summarizing and categorizing script analyzes unitrace reports and aggregates kernels by categories. The summary is stored in `JSON` format (see example below) for further analysis or as input to other tools.
-
-```json
-{
-  "allreduce_time": 660801949838.875,
-  "allreduce_calls": 6937803.0,
-  "matmul_time": 163155211000.0,
-  "matmul_calls": 11520000.0,
-  "attn_time": 53528349820.0,
-  "attn_calls": 3276800.0,
-  "norm_time": 26989135820.0,
-  "norm_calls": 3379201.0,
-  "mem_op_time": 4660369802.857142,
-  "mem_op_calls": 873879.0,
-}
+```
+unitrace --chrome-kernel-logging --output-dir-path /tmp/unitrace-result myapp
 ```
 
-Before runing the script, all summary outputs from all processes should be packed into a single `tarball`. 
+The output profile data are written to files in **/tmp/unitrace-result**.
+
+This option is especially useful when the application is distributed workload.
+
+### Hardware Performance Metrics
+
+Hardware performance metric counter can be profiled at the same time while host/device activities are profiled in the same run or they can be done in separate runs.
+
+Please note that device timing is also enabled if hardware performance metric counter profiling is enabled. The device timing information guides you to the hot kernels so you know which kernel's performance counters are of most interest.
+
+Please also note that FLAT device hierarchy is required for hardware metric profiling.
+
+#### Query Metrics for Each Kernel Instance
+
+The **--metric-query [-q]** option enables metric query for each kernel instance.
+
+   ```sh
+   unitrace -q -o perfquery.csv myapp
+   ```
+Performance metrics data are stored in **perfquery.<pid>.csv** file.
+
+![Metric Query!](/tools/unitrace/doc/images/metric-query.png)
+
+By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
+
+#### Sample Metrics in Time-based Mode
+
+Different from **--metric-query [-q]** option, the **--metric-sampling [-k]** option profile hardware metrics in time-based sampling mode.
+
+   ```sh
+   unitrace -k -o perfmetrics.csv myapp
+   ```
+Performance metrics data are stored in **perfmetrics.<pid>.csv** file.
+
+![Metric Sampling!](/tools/unitrace/doc/images/metric-sampling.png)
+
+To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option, for example:
+
+   ```sh
+   unitrace -k -i 20 -o perfmetrics.csv myapp
+   ```
+
+By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
+
+#### Sample Stalls at Instruction Level
+
+The **--stall-sampling** works on Intel(R) Data Center GPU Max Series and later products.
+
+![Metric Query!](/tools/unitrace/doc/images/stall-sampling.png)
+
+To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option.
+
+#### Sample Metrics of MPI Ranks
+
+If the workload is an MPI application, sampling multiple ranks running on the same node with **-k** or **--stall-sampling** is usually unnecessary. You can use option **--ranks-to-sample** to specify which rank/ranks to sample. If the workload has 8 ranks running on 2 nodes with 4 ranks each, for example, you can sample rank #0 on one node and rank #4 on the other node:
+
+   ```sh
+   mpiexec -n 8 -ppn 4 unitrace -k -o perfmetrics.csv --ranks-to-sample 0,4 <app>
+   ```
+
+#### Analyze Performance Metrics
+
+Once you have the hardware performance metrics data collected, you can use **uniview.py** to analyze and view the metrics if **--chrome-kernel-logging** or **--chrome-device-logging** was used (see [View](#view)). Alternatively, you can use the script **scripts/metrics/analyzeperfmetrics.py** to view and analyze the metrics with more flexibility and control. Plus, this script allows you to analyze and view performance metrics in case that **--chrome-kernel-logging** or **--chrome-device-logging** was absent. This section focuses on the usage of this script.
+
+##### List Contents of the Metric Data File
+
+The first step is to inspect the contents of the metric data file using **-l** or **--list** option. 
+
+   ```sh
+   python analyzeperfmetrics.py -l perfmetrics.12345.csv
+   ```
+
+This shows the device, metrics and kernels profiled:
 
 ```sh
-unitrace -h -d -r mpirun -np 4 python ...
-tar cfz unitrace_4_mpi_100iter.tgz output.*
+Device 0
+    Metric
+        GpuTime[ns]
+        GpuCoreClocks[cycles]
+        AvgGpuCoreFrequencyMHz[MHz]
+        GpuSliceClocksCount[events]
+        AvgGpuSliceFrequencyMHz[MHz]
+        L3_BYTE_READ[bytes]
+        L3_BYTE_WRITE[bytes]
+        GPU_MEMORY_BYTE_READ[bytes]
+        GPU_MEMORY_BYTE_WRITE[bytes]
+        XVE_ACTIVE[%]
+        XVE_STALL[%]
+        XVE_BUSY[events]
+        XVE_THREADS_OCCUPANCY_ALL[%]
+        XVE_COMPUTE_THREAD_COUNT[threads]
+        XVE_ATOMIC_ACCESS_COUNT[messages]
+        XVE_BARRIER_MESSAGE_COUNT[messages]
+        XVE_INST_EXECUTED_ALU0_ALL[events]
+        XVE_INST_EXECUTED_ALU1_ALL[events]
+        XVE_INST_EXECUTED_XMX_ALL[events]
+        XVE_INST_EXECUTED_SEND_ALL[events]
+        XVE_INST_EXECUTED_CONTROL_ALL[events]
+        XVE_PIPE_ALU0_AND_ALU1_ACTIVE[%]
+        XVE_PIPE_ALU0_AND_XMX_ACTIVE[%]
+        XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%]
+        XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%]
+        XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%]
+        XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%]
+        XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]
+        QueryBeginTime[ns]
+        CoreFrequencyMHz[MHz]
+        XveSliceFrequencyMHz[MHz]
+        ReportReason
+        ContextIdValid
+        ContextId
+        SourceId
+        StreamMarker
+    Kernel, Number of Instances
+        "main::{lambda(auto:1)#1}[SIMD32 {8192; 1; 1} {128; 1; 1}]", 1
+        "main::{lambda(auto:1)#2}[SIMD32 {8192; 1; 1} {128; 1; 1}]", 1
+        "main::{lambda(auto:1)#3}[SIMD32 {8192; 1; 1} {128; 1; 1}]", 1
+        "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]", 5
+        "main::{lambda(auto:1)#5}[SIMD32 {4096; 1; 1} {256; 1; 1}]", 5
+        "main::{lambda(auto:1)#6}[SIMD32 {4096; 1; 1} {256; 1; 1}]", 5
+        "main::{lambda(auto:1)#7}[SIMD32 {2048; 1; 1} {512; 1; 1}]", 5
 ```
 
-The summary script takes the `tarball` and a schema file as inputs and aggregates kernels from all processes before categorizing them.
+The **Device** is the device on which the metrics are sampled. In this example output, the decice is 0. If multiple devices are used and sampled, multiple sections of **Device** will be present.
+
+The **Metric** section shows the metrics collected on the device and the **Kernel, Number of Instances** shows the kernels and number of instances for each kernel are profiled. An instance is one kernel execution sampled on the device. For example, The kernel "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" having 5 instances means the 5 exeuctions of the kernel are sampled. Please note that the number of instances of a kernel here may be less than the total number of exeuctions or submissions of the kernel in the application, especially when the kernel is short and/or sampling interval is large. 
+
+The number of instances is not applicable to stall sampling metric data:
 
 ```sh
-python summary.py --input unitrace_4_mpi_100iter.tgz --schema schemas/LLaMA.json --output summary_4_mpi_100iter.json
+Device 0
+    Metric
+        Active[Events]
+        ControlStall[Events]
+        PipeStall[Events]
+        SendStall[Events]
+        DistStall[Events]
+        SbidStall[Events]
+        SyncStall[Events]
+        InstrFetchStall[Events]
+        OtherStall[Events]
+    Kernel
+        "main::{lambda(auto:1)#1}"
+        "main::{lambda(auto:1)#2}"
+        "main::{lambda(auto:1)#3}"
+        "main::{lambda(auto:1)#5}"
+        "main::{lambda(auto:1)#6}"
+        "main::{lambda(auto:1)#7}"
+        "main::{lambda(auto:1)#4}"
 ```
 
-The schema defines classes of kernels and how the kerenls should be categorized in INI format:
+You can also use the **-o** option to redirect the output to a text file for later reference:
 
-```ini
-[matmul if equals to]
-gemm_kernel
+   ```sh
+   python analyzeperfmetrics.py -l -o contents.txt perfmetrics.12345.csv
+   ```
 
-[matmul if starts with]
-xpu::xetla::hgemm_caller
-xpu::xetla::HgemmQKVKernel
+##### Analyze Kernel Performance Metrics
 
-[allreduce if ends with]
-ALLREDUCE_SMALL
-ALLREDUCE_MEDIUM
-ALLREDUCE_LARGE
-```
+Once you have the knowledge of the device, the metrics and the kernels in the metric data file, you can run the same script to analyze specific performance metrics of a specific instance of a specific kernel, all instances of a specific kernel or all instances of all kernels executed on a specific device. The performance chart will be stored in a PDF file. 
 
-Each section starts with a category name (matmul, allreduce etc.) and a condition followed by a list of kernel names.
-There are 3 kinds of conditions: equals to, starts with and ends with.
+   ```sh
+   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
+   ```
 
-Before it can be used with `summary.py`, a schema needs to be converted to JSON format:
+This command plots a chart of XVE stall and function unit utilizations for the **second** instance of kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** profiled on device **0** and stores the chart in file **perfchart.pdf**.
+
+![Analyze Kernel Performance Metrics!](/tools/unitrace/doc/images/perfchart.png)
+
+If instance is 0, all 5 instances of the kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** are analyzed.
+
+   ```sh
+   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 0 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
+
+   ```
+
+If **-k** option is not present and instance is 0, all instances of all kernels are analyzed.
+
+   ```sh
+   python analyzeperfmetrics.py -d 0 -i 0 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
+
+   ```
+
+The **-m** option can be repeated multiple times to analyze multiple sets of metrics at the same time, for example:
+
+   ```sh
+   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -m "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes]" -y "L3 Cache Read/Write (bytes)" -o perfchart.pdf perfmetrics.12345.csv
+   ```
+
+![Analyze Multiple Performance Metric Sets!](/tools/unitrace/doc/images/perfchart-multi-sets.png)
+
+Instead of typing the command options in every run, you can store the options in a text configuration file and use the **-f** or **--config** option to read the options from the file. For example, the command options above can be stored in a **myconfig.txt**:
+
+   ```sh
+   python analyzeperfmetrics.py -f myconfig.txt -o perfchart.pdf perfmetrics.12345.csv
+   ```
+
+Please note that the input file cannot be present in the command option configuration file.
+
+You can also use the **-b** option together with one or more **-m** options to get throughput data.
+
+![Analyze Multiple Performance Metric Sets and Throughputs!](/tools/unitrace/doc/images/throughput.png)
+
+If the input metric data file has stall sampling events collected using **--stall-sampling** option, the chart generated shows stall events and instruction addresses.
+
+![Analyze Stall Metrics!](/tools/unitrace/doc/images/stallchart.png)
+
+From this chart, we can easily see that the most stalls are **SbidStalls** at instruction **0x000001B8**. To reduce or eliminate the stalls, we need to analyze the stalls at instruction level to find out the cause of the stalls.
+
+###### Use Pre-configured Options #####
+
+A pre-configured option file **metrics/config/ComputeBasic.txt** for **ComputeBasic** (the default metric group) on PVC is provided. You can use it as it is:
+
+   ```sh
+   python analyzeperfmetrics.py -f config/pvc/ComputeBasic.txt -o perfchart.pdf perfmetrics.12345.csv
+   ```
+
+Or you can customize it to create your own recipes. 
+
+You may also want to create configurations for other metric groups and/or devices.
+
+##### Analyze Stalls at Instruction Level
+
+To pinpoint stalls to exact instructions, you need kernel shader dump. If you want to pinpoint to the source lines and source files, you also need to use the compiler option **-gline-tables-only**, for example:
+
+    ```sh
+    icpx -fsycl -gline-tables-only -O2 -o mytest mytest.cpp
+    ````
+
+To get a kernel shader dump, run the application with environment variables **IGC_ShaderDumpEnable** and **IGC_DumpToCustomDir** set:
+
+    ```sh
+    IGC_ShaderDumpEnable=1 IGC_DumpToCustomDir=dump mytest
+    ````
+
+After you run unitrace using **--stall-sampling**, you can run the same script to analyze stalls:
+
+    ```sh
+     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf ./stallmetrics.56789.csv
+    ```
+
+In addition to the stall statistics chart, a stall analysis report is also generated:
 
 ```sh
-python categorize.py --input LLaMA.ini --output LLaMA.json
+Kernel: main::{lambda(auto:1)#3}
+Assembly with instruction addresses: ./dump.3/OCL_asme5a3f8d8dcdadd7e_simd32_entry_0003.asm.ip
+***********************************************************************************************
+Sbid Stalls:
+
+Instruction
+  /* [000001B8] */         sync.nop                             null                             {Compacted,$5.dst}     // $15
+  Line 40:  c[index] = a[index] + b[index];
+  File: /nfs/pdx/home/zma2/Box/PVC/grf.cpp
+is stalled potentially by
+  instruction
+    /* [00000198] */         load.ugm.d32.a64 (32|M0)  r18:2         [r14:4]            {I@1,$5} // ex_desc:0x0; desc:0x8200580 // $14
+    Line 40:  c[index] = a[index] + b[index];
+    File: /nfs/pdx/home/zma2/Box/PVC/grf.cpp
+
+Instruction
+  /* [00000118] */ (W)     mul (1|M0)               acc0.0<1>:d   r5.0<0;1,0>:d     r0.2<0;1,0>:uw   {Compacted,A@1,$3.dst} //  ALU pipe: int; $4
+  Line 96:  return __spirv_BuiltInGlobalInvocationId.x;
+  File: /opt/hpc_software/compilers/intel/nightly/20240527/compiler/latest/bin/compiler/../../include/sycl/CL/__spirv/spirv_vars.hpp
+is stalled potentially by
+  instruction
+    /* [00000100] */ (W)     load.ugm.d32x8t.a32.ca.ca (1|M0)  r5:1  bti[255][r126:1]   {I@1,$3} // ex_desc:0xFF000000; desc:0x6218C500 //
+    Line 1652:  }
+    File: /opt/hpc_software/compilers/intel/nightly/20240527/compiler/latest/bin/compiler/../../include/sycl/handler.hpp
 ```
 
-## Location of Trace Data
+The report shows not only the instruction and the location (address, source line and source file if available) of each stall, but also the instruction and the location if available that causes the stall.
 
-By default, all output data are written in the current working directory. However, one can specify a different directory for output:
+To eliminate or reduce the stalls, you need to fix the cause.
 
-```
---output-dir-path <path>
-```
+The stall analysis report can also be stored in a text file if you prefer:
 
-This option is especially useful when the application is a distributed MPI one.
+
+    ```sh
+     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf -r stallreport.txt ./stallmetrics.56789.csv
+    ```
+
+##### View Kernel Performance Metrics in a Browser
+
+If you use **-k** or **-q** or **--stall-sampling** option together with **--chrome-kernel-logging** or **--chrome-device-logging** option, you can use **analyzeperfmetrics.py** to view metrics in a browser.  
+    
+    ```sh
+     $ unitrace -k --chrome-kernel-logging -o perf.csv ./testapp
+     ... ...
+
+     [INFO] Log is stored in perf.1092793.csv
+     [INFO] Timeline is stored in testapp.1092793.json
+     [INFO] Device metrics are stored in perf.metrics.1092768.csv
+    ```
+
+The performance metrics are stored in file **perf.metrics.1092768.csv** and the event trace is stored in the .json file. 
+
+Run **analyzeperfmetrics.py** in a shell window with **-q** option, for example:
+
+    ```sh
+     $ python analyzeperfmetrics.py -q -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],
+     XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Stall and Utilizations" -t "Stall and Utilizations" ./perf.metrics.1092768.csv
+    ```
+
+The **-q** option starts a http server.
+
+If you have a .json file that contains https links generated using earlier versions of the tool, please use **-p** instead of **-q**. In this case, if no certificate and private key are provided, a self-signed certificate and private key will be generated and used.
+    
+Now load the event trace .json file into https://ui.perfetto.dev:
+
+![Performance Metrics Through Event Trace!](/tools/unitrace/doc/images/perfmetricstrace.png)
+    
+Once you click the link next to **metrics:** in the **"Arguments"**, another browser window is opened:
+
+![Performance Metrics Browswe Window!](/tools/unitrace/doc/images/perfmetricsbrowser.png)
+
+The metrics shown in the browser are the metrics passed to the **-m** option when you start **analyzeperfmetrics.py**. If you stop and restart **analyzeperfmetrics.py** with a different set of metrics passed to **-m** option, for example:
+
+    ```sh
+     $ python analyzeperfmetrics.py -p -m "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes]" -y "Bytes" -t "L3 Traffic" ./grfbasic.metrics.1092768.csv
+    ```
+
+Refreshing the same link will show the new metrics:
+
+![Performance Metrics Browswe Window #2!](/tools/unitrace/doc/images/perfmetricsbrowser2.png)
+
+In case of stall sampling, for example:
+
+    ```sh
+     $ unitrace --stall-sampling --chrome-kernel-logging -o perfstall.csv ./testapp
+    ```
+
+The **-m** option is not required for **analyzeperfmetrics.py**:
+
+    ```sh
+    python analyzeperfmetrics.py -s ./dump.1 -p ./perfstall.metrics.564289.csv -t "XVE Stall Statistics and Report"
+    ```
+
+Rereshing the same link will show stall statistics by type and instruction address:
+
+![Stall Statistics!](/tools/unitrace/doc/images/stallstatistics.png)
+
+followed by source stall analysis report:
+
+![Stall Report!](/tools/unitrace/doc/images/stallreport.png)
 
 ## Activate and Deactivate Tracing and Profiling at Runtime
 
@@ -480,11 +858,11 @@ The argument `mpi_counter` in the device-initiated communication event is a non-
 
 ![mpi_counter Argument!](/tools/unitrace/doc/images/mpi-counter-parameter.png)
 
-### View Event Timelines of Multiple MPI Ranks
+### Merge and View Traces from Multiple MPI Ranks
 
 You can view the result files rank by rank. But often you may want to view the traces from multiple ranks at the same time.
 To view traces from multiple MPI ranks, you can use **scripts/tracemerge/mergetrace.py** script to merge them first and then load the merged trace into
-https://ui.perfetto.dev/.
+manually load the merged trace into https://ui.perfetto.dev/ or use **uniview.py**.
 
 ```sh
 python mergetrace.py -o <output-trace-file> <input-trace-file-1> <input-trace-file-2> <input-trace-file-3> ...
@@ -583,389 +961,66 @@ with torch.autograd.profiler.emit_itt(record_shapes=False):
 unitrace --chrome-kernel-logging --chrome-dnn-logging --conditional-collection python ./rn50.py
 ```
 
-## View Large Traces
+## Categorize GPU Kernels
 
-By default, the memory limit of the internal representation of a trace is 2GB. To view large traces that requires more than 2GB of memory, an external trace processor is needed.
+In case of a large application, for example, LLaMA, there may be a lot of small kernels with long 
+kernel names in the profiled data. To analyze the data at a high level, you may find the kernel categorizing script are helpful.
 
-One way to run the external trace processor on Windows is to use Windows Subsystem for Linux or WSL:
+The summarizing and categorizing script analyzes unitrace reports and aggregates kernels by categories. The summary is stored in `JSON` format (see example below) for further analysis or as input to other tools.
 
-1. Start your Linux distribution (Ubuntu 22.02.2 LTS, for example) on Windows.
-2. Inside Linux, download and run trace_processor:
-  
-   ```sh
-   curl -LO https://get.perfetto.dev/trace_processor
-   chmod +x ./trace_processor
-   trace_processor --httpd
-   ```
-3. Start the browser in Windows, load https://ui.perfetto.dev/ and open the trace file. If the trace is loaded successfully, inside Linux, you
-   should see something like:
-
-
-   ```sh
-   $ ./trace_processor --httpd
-   [924.614]             httpd.cc:99 [HTTP] Starting RPC server on localhost:9001
-   [924.614]            httpd.cc:104 [HTTP] This server can be used by reloading https://ui.perfetto.dev and clicking on YES on the "Trace Process   or native acceleration" dialog or through the Python API (see https://perfetto.dev/docs/analysis/trace-processor#python-api).
-   [957.821]       http_server.cc:83 [HTTP] New connection
-   [957.822]      http_server.cc:231 [HTTP] POST /status [body=0B, origin="https://ui.perfetto.dev"]
-   [957.892]       http_server.cc:83 [HTTP] New connection
-   [957.894]      http_server.cc:231 [HTTP] GET /websocket [body=0B, origin="https://ui.perfetto.dev"]
-   Loading trace 2004.29 MB (0.7 MB/s)
-   ```
-## Profile Hardware Performance Metrics
-
-Hardware performance metric counter can be profiled at the same time while host/device activities are profiled in the same run or they can be done in separate runs.
-
-Please note that device timing is also enabled if hardware performance metric counter profiling is enabled. The device timing information will guide you to the hot kernels so you know which kernel's performance counters are of most interest.
-
-Please also note that FLAT device hierarchy is required for hardware metric profiling.
-
-### Query Metrics for Each Kernel Instance
-
-The **--metric-query [-q]** option enables metric query for each kernel instance.
-
-   ```sh
-   unitrace -q -o perfquery.csv myapp
-   ```
-Performance metrics data will be stored in **perfquery.<pid>.csv** file.
-
-![Metric Query!](/tools/unitrace/doc/images/metric-query.png)
-
-By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
-
-### Sample Metrics in Time-based Mode
-
-Different from **--metric-query [-q]** option, the **--metric-sampling [-k]** option profile hardware metrics in time-based sampling mode.
-
-   ```sh
-   unitrace -k -o perfmetrics.csv myapp
-   ```
-Performance metrics data will be stored in **perfmetrics.<pid>.csv** file.
-
-![Metric Sampling!](/tools/unitrace/doc/images/metric-sampling.png)
-
-To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option, for example:
-
-
-   ```sh
-   unitrace -k -i 20 -o perfmetrics.csv myapp
-   ```
-
-By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
-
-### Sample Stalls at Instruction Level
-
-The **--stall-sampling** works on Intel(R) Data Center GPU Max Series and later products.
-
-![Metric Query!](/tools/unitrace/doc/images/stall-sampling.png)
-
-To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option.
-
-### Sample Metrics of MPI Ranks
-
-If the workload is an MPI application, sampling multiple ranks running on the same node with **-k** or **--stall-sampling** is usually unnecessary. You can use option **--ranks-to-sample** to specify which rank/ranks to sample. If the workload has 8 ranks running on 2 nodes with 4 ranks each, for example, you can sample rank #0 on one node and rank #4 on the other node:
-
-   ```sh
-   mpiexec -n 8 -ppn 4 unitrace -k -o perfmetrics.csv --ranks-to-sample 0,4 <app>
-   ```
-
-### Analyze Performance Metrics
-
-Once you have the hardware performance metrics data collected, you can use the script **scripts/metrics/analyzeperfmetrics.py** to analyze the metrics. 
-
-#### List Contents of the Metric Data File
-
-The first step is to inspect the contents of the metric data file using **-l** or **--list** option. 
-
-   ```sh
-   python analyzeperfmetrics.py -l perfmetrics.12345.csv
-   ```
-
-This shows the device, metrics and kernels profiled:
-
-```sh
-Device 0
-    Metric
-        GpuTime[ns]
-        GpuCoreClocks[cycles]
-        AvgGpuCoreFrequencyMHz[MHz]
-        GpuSliceClocksCount[events]
-        AvgGpuSliceFrequencyMHz[MHz]
-        L3_BYTE_READ[bytes]
-        L3_BYTE_WRITE[bytes]
-        GPU_MEMORY_BYTE_READ[bytes]
-        GPU_MEMORY_BYTE_WRITE[bytes]
-        XVE_ACTIVE[%]
-        XVE_STALL[%]
-        XVE_BUSY[events]
-        XVE_THREADS_OCCUPANCY_ALL[%]
-        XVE_COMPUTE_THREAD_COUNT[threads]
-        XVE_ATOMIC_ACCESS_COUNT[messages]
-        XVE_BARRIER_MESSAGE_COUNT[messages]
-        XVE_INST_EXECUTED_ALU0_ALL[events]
-        XVE_INST_EXECUTED_ALU1_ALL[events]
-        XVE_INST_EXECUTED_XMX_ALL[events]
-        XVE_INST_EXECUTED_SEND_ALL[events]
-        XVE_INST_EXECUTED_CONTROL_ALL[events]
-        XVE_PIPE_ALU0_AND_ALU1_ACTIVE[%]
-        XVE_PIPE_ALU0_AND_XMX_ACTIVE[%]
-        XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%]
-        XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%]
-        XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%]
-        XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%]
-        XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]
-        QueryBeginTime[ns]
-        CoreFrequencyMHz[MHz]
-        XveSliceFrequencyMHz[MHz]
-        ReportReason
-        ContextIdValid
-        ContextId
-        SourceId
-        StreamMarker
-    Kernel, Number of Instances
-        "main::{lambda(auto:1)#1}[SIMD32 {8192; 1; 1} {128; 1; 1}]", 1
-        "main::{lambda(auto:1)#2}[SIMD32 {8192; 1; 1} {128; 1; 1}]", 1
-        "main::{lambda(auto:1)#3}[SIMD32 {8192; 1; 1} {128; 1; 1}]", 1
-        "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]", 5
-        "main::{lambda(auto:1)#5}[SIMD32 {4096; 1; 1} {256; 1; 1}]", 5
-        "main::{lambda(auto:1)#6}[SIMD32 {4096; 1; 1} {256; 1; 1}]", 5
-        "main::{lambda(auto:1)#7}[SIMD32 {2048; 1; 1} {512; 1; 1}]", 5
+```json
+{
+  "allreduce_time": 660801949838.875,
+  "allreduce_calls": 6937803.0,
+  "matmul_time": 163155211000.0,
+  "matmul_calls": 11520000.0,
+  "attn_time": 53528349820.0,
+  "attn_calls": 3276800.0,
+  "norm_time": 26989135820.0,
+  "norm_calls": 3379201.0,
+  "mem_op_time": 4660369802.857142,
+  "mem_op_calls": 873879.0,
+}
 ```
 
-The **Device** is the device on which the metrics are sampled. In this example output, the decice is 0. If multiple devices are used and sampled, multiple sections of **Device** will be present.
-
-The **Metric** section shows the metrics collected on the device and the **Kernel, Number of Instances** shows the kernels and number of instances for each kernel are profiled. An instance is one kernel execution sampled on the device. For example, The kernel "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" having 5 instances means the 5 exeuctions of the kernel are sampled. Please note that the number of instances of a kernel here may be less than the total number of exeuctions or submissions of the kernel in the application, especially when the kernel is short and/or sampling interval is large. 
-
-The number of instances is not applicable to stall sampling metric data:
+Before runing the script, all summary outputs from all processes should be packed into a single `tarball`. 
 
 ```sh
-Device 0
-    Metric
-        Active[Events]
-        ControlStall[Events]
-        PipeStall[Events]
-        SendStall[Events]
-        DistStall[Events]
-        SbidStall[Events]
-        SyncStall[Events]
-        InstrFetchStall[Events]
-        OtherStall[Events]
-    Kernel
-        "main::{lambda(auto:1)#1}"
-        "main::{lambda(auto:1)#2}"
-        "main::{lambda(auto:1)#3}"
-        "main::{lambda(auto:1)#5}"
-        "main::{lambda(auto:1)#6}"
-        "main::{lambda(auto:1)#7}"
-        "main::{lambda(auto:1)#4}"
+unitrace -h -d -r mpirun -np 4 python ...
+tar cfz unitrace_4_mpi_100iter.tgz output.*
 ```
 
-You can also use the **-o** option to redirect the output to a text file for later reference:
-
-   ```sh
-   python analyzeperfmetrics.py -l -o contents.txt perfmetrics.12345.csv
-   ```
-
-
-#### Analyze Kernel Performance Metrics
-
-Once you have the knowledge of the device, the metrics and the kernels in the metric data file, you can run the same script to analyze specific performance metrics of a specific instance of a specific kernel, all instances of a specific kernel or all instances of all kernels executed on a specific device. The performance chart will be stored in a PDF file. 
-
-   ```sh
-   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
-   ```
-
-This command plots a chart of XVE stall and function unit utilizations for the **second** instance of kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** profiled on device **0** and stores the chart in file **perfchart.pdf**.
-
-![Analyze Kernel Performance Metrics!](/tools/unitrace/doc/images/perfchart.png)
-
-If instance is 0, all 5 instances of the kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** are analyzed.
-
-   ```sh
-   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 0 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
-
-   ```
-
-If **-k** option is not present and instance is 0, all instances of all kernels are analyzed.
-
-   ```sh
-   python analyzeperfmetrics.py -d 0 -i 0 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
-
-   ```
-
-The **-m** option can be repeated multiple times to analyze multiple sets of metrics at the same time, for example:
-
-   ```sh
-   python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 2 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -m "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes]" -y "L3 Cache Read/Write (bytes)" -o perfchart.pdf perfmetrics.12345.csv
-   ```
-
-![Analyze Multiple Performance Metric Sets!](/tools/unitrace/doc/images/perfchart-multi-sets.png)
-
-Instead of typing the command options in every run, you can store the options in a text configuration file and use the **-f** or **--config** option to read the options from the file. For example, the command options above can be stored in a **myconfig.txt**:
-
-   ```sh
-   python analyzeperfmetrics.py -f myconfig.txt -o perfchart.pdf perfmetrics.12345.csv
-   ```
-
-Please note that the input file cannot be present in the command option configuration file.
-
-You can also use the **-b** option together with one or more **-m** options to get throughput data.
-
-![Analyze Multiple Performance Metric Sets and Throughputs!](/tools/unitrace/doc/images/throughput.png)
-
-If the input metric data file has stall sampling events collected using **--stall-sampling** option, the chart generated shows stall events and instruction addresses.
-
-![Analyze Stall Metrics!](/tools/unitrace/doc/images/stallchart.png)
-
-From this chart, we can easily see that the most stalls are **SbidStalls** at instruction **0x000001B8**. To reduce or eliminate the stalls, we need to analyze the stalls at instruction level to find out the cause of the stalls.
-
-##### Use Pre-configured Options #####
-
-A pre-configured option file **metrics/config/ComputeBasic.txt** for **ComputeBasic** (the default metric group) on PVC is provided. You can use it as it is:
-
-   ```sh
-   python analyzeperfmetrics.py -f config/pvc/ComputeBasic.txt -o perfchart.pdf perfmetrics.12345.csv
-   ```
-
-Or you can customize it to create your own recipes. 
-
-You may also want to create configurations for other metric groups and/or devices.
-
-#### Analyze Stalls at Instruction Level
-
-To pinpoint stalls to exact instructions, you need kernel shader dump. If you want to pinpoint to the source lines and source files, you also need to use the compiler option **-gline-tables-only**, for example:
-
-    ```sh
-    icpx -fsycl -gline-tables-only -O2 -o mytest mytest.cpp
-    ````
-
-To get a kernel shader dump, run the application with environment variables **IGC_ShaderDumpEnable** and **IGC_DumpToCustomDir** set:
-
-    ```sh
-    IGC_ShaderDumpEnable=1 IGC_DumpToCustomDir=dump mytest
-    ````
-
-After you run unitrace using **--stall-sampling**, you can run the same script to analyze stalls:
-
-    ```sh
-     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf ./stallmetrics.56789.csv
-    ```
-
-In addition to the stall statistics chart, a stall analysis report is also generated:
+The summary script takes the `tarball` and a schema file as inputs and aggregates kernels from all processes before categorizing them.
 
 ```sh
-Kernel: main::{lambda(auto:1)#3}
-Assembly with instruction addresses: ./dump.3/OCL_asme5a3f8d8dcdadd7e_simd32_entry_0003.asm.ip
-***********************************************************************************************
-Sbid Stalls:
-
-Instruction
-  /* [000001B8] */         sync.nop                             null                             {Compacted,$5.dst}     // $15
-  Line 40:  c[index] = a[index] + b[index];
-  File: /nfs/pdx/home/zma2/Box/PVC/grf.cpp
-is stalled potentially by
-  instruction
-    /* [00000198] */         load.ugm.d32.a64 (32|M0)  r18:2         [r14:4]            {I@1,$5} // ex_desc:0x0; desc:0x8200580 // $14
-    Line 40:  c[index] = a[index] + b[index];
-    File: /nfs/pdx/home/zma2/Box/PVC/grf.cpp
-
-Instruction
-  /* [00000118] */ (W)     mul (1|M0)               acc0.0<1>:d   r5.0<0;1,0>:d     r0.2<0;1,0>:uw   {Compacted,A@1,$3.dst} //  ALU pipe: int; $4
-  Line 96:  return __spirv_BuiltInGlobalInvocationId.x;
-  File: /opt/hpc_software/compilers/intel/nightly/20240527/compiler/latest/bin/compiler/../../include/sycl/CL/__spirv/spirv_vars.hpp
-is stalled potentially by
-  instruction
-    /* [00000100] */ (W)     load.ugm.d32x8t.a32.ca.ca (1|M0)  r5:1  bti[255][r126:1]   {I@1,$3} // ex_desc:0xFF000000; desc:0x6218C500 //
-    Line 1652:  }
-    File: /opt/hpc_software/compilers/intel/nightly/20240527/compiler/latest/bin/compiler/../../include/sycl/handler.hpp
+python summary.py --input unitrace_4_mpi_100iter.tgz --schema schemas/LLaMA.json --output summary_4_mpi_100iter.json
 ```
 
-The report shows not only the instruction and the location (address, source line and source file if available) of each stall, but also the instruction and the location if available that causes the stall.
+The schema defines classes of kernels and how the kerenls should be categorized in INI format:
 
-To eliminate or reduce the stalls, you need to fix the cause.
+```ini
+[matmul if equals to]
+gemm_kernel
 
-The stall analysis report can also be stored in a text file if you prefer:
+[matmul if starts with]
+xpu::xetla::hgemm_caller
+xpu::xetla::HgemmQKVKernel
 
+[allreduce if ends with]
+ALLREDUCE_SMALL
+ALLREDUCE_MEDIUM
+ALLREDUCE_LARGE
+```
 
-    ```sh
-     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf -r stallreport.txt ./stallmetrics.56789.csv
-    ```
+Each section starts with a category name (matmul, allreduce etc.) and a condition followed by a list of kernel names.
+There are 3 kinds of conditions: equals to, starts with and ends with.
 
-## View Kernel Performance Metrics in Browser
+Before it can be used with `summary.py`, a schema needs to be converted to JSON format:
 
-If you use **-k** or **--stall-sampling** option together with **--chrome-kernel-logging** or **--chrome-device-logging** option, you can view performance metrics of each kernel instance by selecting the kernel instance then following the metrics link in the "Arguments" in the browser.
-
-    
-    ```sh
-     $ unitrace -k --chrome-kernel-logging -o perf.csv ./testapp
-     ... ...
-
-     [INFO] Log is stored in perf.1092793.csv
-     [INFO] Timeline is stored in testapp.1092793.json
-     [INFO] Device metrics are stored in perf.metrics.1092768.csv
-    ```
-
-The performance metrics are stored in file **perf.metrics.1092768.csv** and the event trace is stored in the .json file. 
-
-Run **analyzeperfmetrics.py** in a shell window with **-p** option, for example:
-
-    ```sh
-     $ python analyzeperfmetrics.py -p -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],
-     XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Stall and Utilizations" -t "Stall and Utilizations" ./perf.metrics.1092768.csv
-    ```
-
-The **-p** option starts a server. If no certificate and private key are provided, a self-signed certificate and private key will be generated and used.
-    
-
-Now load the event trace .json file into https://ui.perfetto.dev:
-
-
-![Performance Metrics Through Event Trace!](/tools/unitrace/doc/images/perfmetricstrace.png)
-    
-
-Once you click the link next to **metrics:** in the **"Arguments"**, another browser window is opened:
-
-
-![Performance Metrics Browswe Window!](/tools/unitrace/doc/images/perfmetricsbrowser.png)
-
-
-The metrics shown in the browser are the metrics passed to the **-m** option when you start **analyzeperfmetrics.py**. If you stop and restart **analyzeperfmetrics.py** with a different set of metrics passed to **-m** option, for example:
-
-    ```sh
-     $ python analyzeperfmetrics.py -p -m "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes]" -y "Bytes" -t "L3 Traffic" ./grfbasic.metrics.1092768.csv
-    ```
-
-Refreshing the same link will show the new metrics:
-
-![Performance Metrics Browswe Window #2!](/tools/unitrace/doc/images/perfmetricsbrowser2.png)
-
-In case of stall sampling, for example:
-
-    ```sh
-     $ unitrace --stall-sampling --chrome-kernel-logging -o perfstall.csv ./testapp
-    ```
-
-No **-m** option is required for **analyzeperfmetrics.py**:
-
-    ```sh
-    python analyzeperfmetrics.py -s ./dump.1 -p ./perfstall.metrics.564289.csv -t "XVE Stall Statistics and Report"
-    ```
-
-Rereshing the same link will show stall statistics by type and instruction address:
-
-![Stall Statistics!](/tools/unitrace/doc/images/stallstatistics.png)
-
-followed by source stall analysis report:
-
-![Stall Report!](/tools/unitrace/doc/images/stallreport.png)
+```sh
+python categorize.py --input LLaMA.ini --output LLaMA.json
+```
  
-## Query Trace Events
-
-Search in https://ui.perfetto.dev/ can be done in command or SQL. After loading the trace file user can switch to SQL mode by typing ":" in the search box, then the user can type in the SQL query statement(s) and navigate to the events of interest from the query result, as shown below.
-
-Please refer to https://perfetto.dev/docs/ for more information,
-
-![Query Trace Events!](/tools/unitrace/doc/images/event_query.png)
-
 ## GPU Roofline
 
 It is often desirable to estimate the peak performance of a GPU kernel on a specific device using the roofline model.  This can be done by running the **roofline.py** tool. 
@@ -1033,7 +1088,7 @@ The `<output-file>` is in HTML format. It can be loaded and viewd in a browser:
 
 How to make the best use of the tool and to get the most out of it really depends on what you want to do and what part of your code you want to focus on.
 
-If you care about just the host activities, you don't need any options to enable profiling on the device. If you just want to focus on one specific layer of the software stack, for example, the SYCL runtime and SYCL Plugins, you can use the corresponding layer specific options to enable profiling only the layer of interest, for example, **--chrome-sycl-logging**. Of course, if you need to see interactions between layers, you need to enable profiling multiple layers at the same time.
+If you care about just the host activities, you don't need options for device profiling. If you just want to focus on one specific layer of the software stack, for example, the SYCL runtime, you can use the corresponding layer specific options to enable profiling only the layer of interest, for example, **--chrome-sycl-logging**. Of course, if you need to see interactions between layers, you need to enable profiling multiple layers at the same time.
 
 Similarly, if you care about just the device activities, you can use the options to turn on device profiling only. By default, device activities are profiled by thread (not GPU thread) and by Level Zero engines and/or OpenCL queues. This gives detailed information of how the device is utilized and if concurrencies between engines/queues match the expectations. In case you don't need the details and care only how the device is utilized in general, you may use **--chrome-no-thread-on-device** and/or **--chrome-no-engine-on-device** to turn one or both off.
 
