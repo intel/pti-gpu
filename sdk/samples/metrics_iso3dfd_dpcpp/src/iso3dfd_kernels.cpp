@@ -365,12 +365,12 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
       if (i == 0 || i == (nIterations / 2)) {
         if (i == 0) { // Collect a different group for the first half of the iterations
           // TIME metric groups
-          group_name = /*"GpuOffload"*/ "ComputeBasic" /* "MemProfile" "DataportProfile" "L1ProfileReads" "L1ProfileSlmBankConflicts" "L1ProfileWrites" */;
+          group_name = "ComputeBasic"; //"GpuOffload" "ComputeBasic" "MemProfile" "DataportProfile" "L1ProfileReads"  "L1ProfileSlmBankConflicts" "L1ProfileWrites"
 
           // TRACE metric groups
           //group_name = "tpcs_utilization_and_bw" /* "nic_stms" "dcore0_bmons_bw"*/;
           group_type = /*PTI_METRIC_GROUP_TYPE_TRACE_BASED*/ PTI_METRIC_GROUP_TYPE_TIME_BASED;
-        } else { // collect a different metric group for the second hald of the iterations
+        } else { // collect a different metric group for the second half of the iterations
           // Stop the collection for the first half of the iterations
           if (MetricsProfiler::MetricsProfilerInstance().StopCollection() != true) {
             exit(-1);
@@ -388,8 +388,10 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
           DeleteFile(lib_filename);
           DeleteFile(sample_filename);
 
-          // TIME metric groups
-          group_name = /*"GpuOffload"*/ /*"ComputeBasic"  "MemProfile" "DataportProfile"*/ "L1ProfileReads" /* "L1ProfileSlmBankConflicts" "L1ProfileWrites"*/ ;
+          // TIME metric groups for second half -- this needs to be *named* same across other architectures!
+          // Choose same group to ensure we do not fail on other architectures.
+          //group_name = "TestOa";
+          group_name = "ComputeBasic"; //"GpuOffload" "ComputeBasic" "MemProfile" "DataportProfile" "L1ProfileReads"  "L1ProfileSlmBankConflicts" "L1ProfileWrites"
 
           // TRACE metric groups
           //group_name = "tpcs_utilization_and_bw" /* "nic_stms" "dcore0_bmons_bw"*/;

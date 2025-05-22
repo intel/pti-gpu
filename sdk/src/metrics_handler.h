@@ -587,7 +587,10 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
           std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
       PTI_ASSERT(inf.is_open());
       inf.seekg(0, inf.end);
-      uint32_t file_size = inf.tellg();
+      std::streamsize stream_file_size = inf.tellg();
+      PTI_ASSERT(stream_file_size >= 0);
+      size_t file_size = static_cast<size_t>(stream_file_size);
+
       inf.seekg(0, inf.beg);  // rewind
       std::vector<uint8_t> raw_metrics(file_size);
 
@@ -611,7 +614,6 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
     }
 
     // Option 2: user wants the buffer filled.
-    std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());
 
     *metrics_values_count = 0;
 
@@ -661,9 +663,14 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
         // open input file stream where metrics data is saved
         std::ifstream inf =
             std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
-        if (!inf.is_open()) {
-          continue;
-        }
+        PTI_ASSERT(inf.is_open());
+        inf.seekg(0, inf.end);
+        std::streamsize stream_file_size = inf.tellg();
+        PTI_ASSERT(stream_file_size >= 0);
+        size_t file_size = static_cast<size_t>(stream_file_size);
+
+        inf.seekg(0, inf.beg);  // rewind
+        std::vector<uint8_t> raw_metrics(file_size);
 
         user_logger_->info("{\n\t\"displayTimeUnit\": \"us\",\n\t\"traceEvents\": [");
 
@@ -1162,7 +1169,10 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     // Option 1: user wants metrics values count
     if (metrics_values_buffer == nullptr) {
       inf.seekg(0, inf.end);
-      uint32_t file_size = inf.tellg();
+      std::streamsize stream_file_size = inf.tellg();
+      PTI_ASSERT(stream_file_size >= 0);
+      size_t file_size = static_cast<size_t>(stream_file_size);
+
       inf.seekg(0, inf.beg);  // rewind
       std::vector<uint8_t> raw_metrics(file_size);
 
