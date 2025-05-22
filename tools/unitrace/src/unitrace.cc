@@ -253,6 +253,7 @@ int ParseArgs(int argc, char* argv[]) {
 #if BUILD_WITH_ITT
     } else if (strcmp(argv[i], "--ccl-summary-report") == 0 || strcmp(argv[i], "-r") == 0) {
       utils::SetEnv("UNITRACE_CclSummaryReport", "1");
+      utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
       utils::SetEnv("CCL_ITT_LEVEL", "1");
       ++app_index;
 #endif /* BUILD_WITH_ITT */
@@ -722,12 +723,9 @@ int main(int argc, char *argv[]) {
 #endif
 
   SetTracingEnvironment();
+  //OpenCL and oneCCL require sysman enabled
+  SetSysmanEnvironment();
   
-  if (utils::GetEnv("UNITRACE_OpenCLTracing") == "1") {
-    // opencl tracing requires sysman enabled for device enumeration
-    SetSysmanEnvironment();
-  }
-
   if (utils::GetEnv("UNITRACE_MetricQuery") == "1") {
     // UNITRACE_KernelMetrics is not set
     SetProfilingEnvironment();

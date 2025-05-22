@@ -4667,7 +4667,7 @@ class ZeCollector {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
     if (UniController::IsCollectionEnabled()) {
-        if ((result == ZE_RESULT_SUCCESS)) {
+        if (result == ZE_RESULT_SUCCESS) {
            local_device_submissions_.SubmitStagedKernelCommandAndMetricQueries(collector->event_cache_, kids);
         }
         else {
