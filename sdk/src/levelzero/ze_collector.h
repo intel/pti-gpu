@@ -51,7 +51,7 @@ struct CallbacksEnabled {
 
 inline std::atomic<uint64_t> global_ref_count =
     0;  // Keeps track of zelEnable/zelDisable TracingLayer()
-        // calls issued. 0 => truely disabled tracing.
+        // calls issued. 0 => truly disabled tracing.
 
 struct ZeInstanceData {
   uint64_t start_time_host;
@@ -83,7 +83,7 @@ struct ZeKernelCommandProps {
   std::byte* value_array;
   ze_device_handle_t src_device = nullptr;  // Device for p2p memcpy, source of copy data
   ze_device_handle_t dst_device = nullptr;  // Device for p2p memcpy, destination of copy data
-  void* dst = nullptr;                      // Addressess for MemorCopy or Fill
+  void* dst = nullptr;                      // Addressess for MemoryCopy or Fill
   void* src = nullptr;
 };
 
@@ -91,7 +91,7 @@ struct ZeKernelCommand {
   ZeKernelCommandProps props;
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
-  ze_event_handle_t event_self = nullptr;  // in Local mode this evet goes to the Bridge kernel
+  ze_event_handle_t event_self = nullptr;  // in Local mode this event goes to the Bridge kernel
   ze_event_handle_t event_swap = nullptr;  // event created in Local collection mode
   ze_device_handle_t device =
       nullptr;  // Device where the operation is submitted, associated with command list
@@ -243,10 +243,10 @@ class ZeCollector {
       int32_t env_value = -1;
       if (!env_string.empty()) {
         env_value = std::stoi(env_string);
-        SPDLOG_DEBUG("\tDetected var: {}", env_value);
+        SPDLOG_INFO("\tDetected var: {}", env_value);
         switch (env_value) {
           case 0:  // FullAPI collection mode
-            SPDLOG_DEBUG("\tForced Full collection");
+            SPDLOG_INFO("\tForced Full collection");
             disabled_mode = false;
             hybrid_mode = false;
             mode = ZeCollectionMode::Full;
@@ -777,28 +777,39 @@ class ZeCollector {
     // - at Enter to CommandListAppendLaunch<...>  time for an Immediate Command List
     // - at Enter to CommandQueueExecuteCommandLists for not Immediate CommandLists
 
-    //  GPU time mask applied to the GPU time to remove some spiritous bits (in case they made
+    //  GPU time mask applied to the GPU time to remove some spurious bits (in case they made
     //  there)
     uint64_t device_submit_time = (command->submit_time_device_ & device_mask);
 
-    // time_shift calculated in GPU scale between sync point and GPU command start,
-    // then it recalculated to CPU timescale units
-    uint64_t time_shift = 0;
+    if (device_start != 0ULL || device_end != 0ULL) {
+      // typically both stamps are non-zero, but could be [rare] a case when one of them is zero
+      // due to timer overflow
 
-    if (device_start > device_submit_time) {
-      time_shift = (device_start - device_submit_time) * NSEC_IN_SEC / device_freq;
+      // time_shift calculated in GPU scale between sync point and GPU command start,
+      // then it recalculated to CPU timescale units
+      uint64_t time_shift = 0;
+
+      if (device_start > device_submit_time) {
+        time_shift = (device_start - device_submit_time) * NSEC_IN_SEC / device_freq;
+      } else {
+        // overflow
+        time_shift =
+            (device_mask - device_submit_time + 1 + device_start) * NSEC_IN_SEC / device_freq;
+      }
+
+      // GPU command duration recalculated to CPU time scale units
+      uint64_t duration = ComputeDuration(device_start, device_end, device_freq, device_mask);
+
+      // here GPU command start and end (on GPU) are calculated in CPU timescale
+      start = command->submit_time + time_shift;
+      end = start + duration;
     } else {
-      // overflow
-      time_shift =
-          (device_mask - device_submit_time + 1 + device_start) * NSEC_IN_SEC / device_freq;
+      // This processes the case when for some reason a profiling event was not ready (not signaled)
+      // and we have not received GPU timestamps - so we zeroed them out.
+      // Such "pathological" GPU op records could be easily spotted in the result trace.
+      start = command->submit_time;
+      end = command->submit_time;
     }
-
-    // GPU command duration recalculated to CPU time scale units
-    uint64_t duration = ComputeDuration(device_start, device_end, device_freq, device_mask);
-
-    // here GPU command start and end (on GPU) are calculated in CPU timescale
-    start = command->submit_time + time_shift;
-    end = start + duration;
   }
 
   void ProcessCallTimestamp(const ZeKernelCommand* command,
@@ -923,8 +934,17 @@ class ZeCollector {
     overhead_fini("zeEventQueryKernelTimestamp");
     if (status != ZE_RESULT_SUCCESS) {
       // sporadic - smth wrong with event from time to time
-      SPDLOG_WARN("In {}, zeEventQueryKernelTimestamp returned: {} for event: {}", __FUNCTION__,
-                  static_cast<uint32_t>(status), static_cast<const void*>(event_to_query));
+      // TODO: watch for it and investigate
+      SPDLOG_WARN("In {}, zeEventQueryKernelTimestamp returned: {} for event: {} command type: {}",
+                  __FUNCTION__, static_cast<uint32_t>(status),
+                  static_cast<const void*>(event_to_query),
+                  static_cast<uint32_t>(command->props.type));
+      // zero-ing timestamp (although test shows that when Query failed - it not changed,
+      // so stays zero in this code - but to make sure)
+      // then later in ProcessCallTimestamp - Zero timestamp signals about this issue
+      // and further if GPU record has Zero duration - it tells that PTI was not able to capture
+      // GPU duration
+      timestamp = {{0ULL, 0ULL}, {0ULL, 0ULL}};
     }
 
     ProcessCallTimestamp(command, timestamp, -1, true, kcexecrec);
