@@ -1,8 +1,10 @@
 #ifndef TEST_UTILS_ZE_CONFIG_INFO_H_
 #define TEST_UTILS_ZE_CONFIG_INFO_H_
 
+#include <level_zero/loader/ze_loader.h>
 #include <level_zero/ze_api.h>
 
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -10,7 +12,19 @@
 
 #include "pti_assert.h"
 
+inline bool operator>=(const zel_version_t& left, const zel_version_t& right) {
+  bool same_major_version = left.major == right.major;
+  return (same_major_version && left.minor > right.minor) ||
+         (same_major_version && left.minor == right.minor && left.patch >= right.patch) ||
+         (left.major > right.major);
+}
+
 namespace pti::test::utils::level_zero {
+
+constexpr zel_version_t kProperLoaderVersionForZeInitDrivers = {1, 19, 2};
+constexpr zel_version_t kProperLoaderVersionForZesInit = {1, 16, 0};
+constexpr uint32_t kBmgIpVersion = 0x05004000;
+
 [[nodiscard]] inline bool CheckIntegratedGraphics(ze_device_handle_t device) {
   ze_device_properties_t device_props{};
   auto return_cd = zeDeviceGetProperties(device, &device_props);
