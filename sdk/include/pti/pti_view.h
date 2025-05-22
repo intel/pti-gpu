@@ -94,10 +94,10 @@ typedef enum _pti_view_external_kind {
 /**
  *  @brief Collection Overhead kinds
  */
-typedef enum _pti_view_overhead_kind { 
+typedef enum _pti_view_overhead_kind {
   PTI_VIEW_OVERHEAD_KIND_INVALID = 0,        //!< Invalid overhead kind
   PTI_VIEW_OVERHEAD_KIND_UNKNOWN = 1,        //!< Unknown overhead kind
-  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< Overhead due to a resource 
+  PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< Overhead due to a resource
   PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,   //!< Overhead due to a buffer flush
   PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,         //!< Overhead due to driver
   PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to L0 api processing time
@@ -109,6 +109,13 @@ typedef enum _pti_view_overhead_kind {
 typedef struct pti_view_record_base {
   pti_view_kind _view_kind;                   //!< Record View kind
 } pti_view_record_base;
+
+/**
+ * @note about the timestamps in the all records below:
+ * in case PTI collection was not able to determine the timestamp
+ * for a particular event in the life of a kernel, data transfer, a call, etc.,
+ * the timestamp value will be zero
+ */
 
 /**
  * @brief Device Compute kernel View record type

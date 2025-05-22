@@ -624,20 +624,31 @@ inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRec
 
 inline uint64_t ApplyTimeShift(uint64_t timestamp, int64_t time_shift) {
   uint64_t out_ts = 0;
+  if (timestamp == 0) {
+    // this could happen if some collections disabled so not collected timestamps
+    // (e.g. task_enqueue.. ) might be zeros
+    SPDLOG_DEBUG("Timestamp is 0 when shifting time domains: TS: {}, time_shift: {}", timestamp,
+                 time_shift);
+    return 0;
+  }
   try {
     if (time_shift < 0) {
       if (timestamp < static_cast<uint64_t>(-time_shift)) {  // underflow?
-        SPDLOG_WARN("Timestamp underflow detected when shifting domains: TS: {}, time_shift: {}",
-                    timestamp, time_shift);
+        SPDLOG_WARN(
+            "Timestamp underflow detected when shifting time domains: TS: {}, "
+            "time_shift: {}",
+            timestamp, time_shift);
         throw std::out_of_range("Timestamp underflow detected");
       }
       out_ts = timestamp - static_cast<uint64_t>(-time_shift);
     } else {
       if ((UINT64_MAX - timestamp) < static_cast<uint64_t>(time_shift)) {  // overflow?
-        SPDLOG_WARN("Timestamp overflow detected when shifting domains: TS: {}, time_shift: {}",
-                    timestamp, time_shift);
+        SPDLOG_WARN(
+            "Timestamp overflow detected when shifting time domains: TS: {}, "
+            "time_shift: {}",
+            timestamp, time_shift);
         throw std::out_of_range("Timestamp overflow detected");
-      };
+      }
       out_ts = timestamp + static_cast<uint64_t>(time_shift);
     }
   } catch (const std::out_of_range&) {
