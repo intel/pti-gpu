@@ -2,6 +2,8 @@
 #define TEST_UTILS_TEST_HELPERS_H_
 
 #include <cstring>
+#include <initializer_list>
+#include <iostream>
 #include <ostream>
 #include <type_traits>
 #include <vector>
@@ -33,6 +35,58 @@ constexpr std::size_t ValidateTimestamps(T... args) {
       }(),
       ...);
   return found_issues;
+}
+
+constexpr int ValidateNoBigGapBetweenTimestampsNs(uint64_t gap_in_ns,
+                                                  std::initializer_list<uint64_t> stamps) {
+  if (stamps.size() < 2) {
+    return -1;
+  }
+  int found_issues = 0;
+  auto it = stamps.begin();
+  auto prev_stamp = *it;
+  for (++it; it != stamps.end(); it++) {
+    auto next_stamp = *it;
+    if (next_stamp > prev_stamp + gap_in_ns) {
+      std::cout << "prev_stamp: " << prev_stamp << "\n"
+                << "next_stamp: " << next_stamp << std::endl;
+      found_issues++;
+    }
+    prev_stamp = next_stamp;
+  }
+  return found_issues;
+}
+
+inline constexpr auto kDefaultPtiBufferAlignment = std::align_val_t{1};
+
+template <typename T>
+[[nodiscard]] inline T* AlignedAlloc(std::size_t size, std::align_val_t align) {
+  try {
+    return static_cast<T*>(::operator new(size, align));
+  } catch (const std::bad_alloc& e) {
+    std::cerr << "Alloc failed " << e.what() << '\n';
+    return nullptr;
+  }
+}
+
+template <typename T>
+inline void AlignedDealloc(T* buf_ptr, std::align_val_t align) {
+  try {
+    ::operator delete(buf_ptr, align);
+  } catch (...) {
+    std::cerr << "DeAlloc failed, abort" << '\n';
+    std::abort();
+  }
+}
+
+template <typename T>
+[[nodiscard]] inline T* AlignedAlloc(std::size_t size) {
+  return AlignedAlloc<T>(size, kDefaultPtiBufferAlignment);
+}
+
+template <typename T>
+inline void AlignedDealloc(T* buf_ptr) {
+  return AlignedDealloc<T>(buf_ptr, kDefaultPtiBufferAlignment);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -98,7 +152,7 @@ inline pti_view_record_external_correlation CreateRecord() {
 template <typename T, std::size_t N>
 struct RecordInserts {
   using Type = T;
-  inline constexpr static std::size_t kNumber = N;
+  constexpr static std::size_t kNumber = N;
 };
 
 template <typename... RecordInsert>

@@ -53,6 +53,22 @@ if(TARGET LevelZero::level-zero OR TARGET unified-runtime::loader)
   )
 endif()
 
+if (TARGET LevelZero::level-zero)
+  add_executable(local_ze_collection_suite local_ze_collection_fixture.cc)
+  target_include_directories(
+    local_ze_collection_suite
+    PUBLIC  "${PROJECT_SOURCE_DIR}/include"
+            "${PROJECT_SOURCE_DIR}/src"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+   target_link_libraries(local_ze_collection_suite PUBLIC GTest::gmock
+     GTest::gtest_main LevelZero::level-zero spdlog::spdlog Pti::pti_view)
+   add_dependencies(local_ze_collection_suite copy_test_spv)
+   gtest_discover_tests(
+      local_ze_collection_suite
+      DISCOVERY_TIMEOUT 60
+      PROPERTIES LABELS "functional")
+endif()
+
 if(HAVE_SYCL)
   add_executable(dpcgemm_suite main_dpcgemm_fixture.cc)
   target_include_directories(
