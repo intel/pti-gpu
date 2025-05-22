@@ -1015,8 +1015,10 @@ class ZeCollector {
       // as all command lists submitted to the execution into queue - they are not immediate
       PTI_ASSERT(!info.immediate);
       PTI_ASSERT(info.device != nullptr);
+      overhead::Init();
       ze_result_t status =
           zeDeviceGetGlobalTimestamps(info.device, &host_time_sync, &device_time_sync);
+      overhead_fini("zeDeviceGetGlobalTimestamps");
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       const std::lock_guard<std::mutex> lock(lock_);
@@ -1413,7 +1415,9 @@ class ZeCollector {
     uint64_t host_timestamp = 0;
     uint64_t device_timestamp = 0;  // in ticks
 
+    overhead::Init();
     ze_result_t status = zeDeviceGetGlobalTimestamps(device, &host_timestamp, &device_timestamp);
+    overhead_fini("zeDeviceGetGlobalTimestamps");
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     ze_instance_data.timestamp_host = host_timestamp;
@@ -1514,13 +1518,12 @@ class ZeCollector {
       } else if (command->props.type == KernelCommandType::kMemory) {
         SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
                      (void*)command->props.src_device, (void*)command->props.dst_device);
-        bool is_two_devices =
-            (command->props.src_device != nullptr && command->props.dst_device != nullptr) ? true
-                                                                                           : false;
-        append_res = A2AppendBridgeMemoryCopyOrFill(
-            command->command_list, command->event_self, command->event_swap, command->props.dst,
-            command->props.src, command->props.bytes_transferred, command->props.value_size,
-            is_two_devices);
+
+        auto buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
+        PTI_ASSERT(buffer != nullptr);
+        append_res = A2AppendBridgeMemoryCopyOrFillEx(command->command_list, command->event_self,
+                                                      command->event_swap, buffer,
+                                                      device_buffer_pool_.buffer_size_);
       } else if (command->props.type == KernelCommandType::kCommand) {
         append_res =
             A2AppendBridgeBarrier(command->command_list, command->event_self, command->event_swap);
@@ -2371,6 +2374,7 @@ class ZeCollector {
   std::map<ze_command_queue_handle_t, ZeCommandQueue> command_queues_;
 
   A2BridgeKernelPool bridge_kernel_pool_;
+  A2DeviceBufferPool device_buffer_pool_;
   A2EventPool swap_event_pool_;
 
   Level0Wrapper l0_wrapper_;

@@ -243,7 +243,7 @@ inline std::string GetKernelName(ze_kernel_handle_t kernel, bool demangle = fals
 }
 
 inline void GetDeviceTimestamps(ze_device_handle_t device, uint64_t* host_timestamp,
-                                uint64_t* device_timestamp) {
+                                       uint64_t* device_timestamp) {
   PTI_ASSERT(device != nullptr);
   PTI_ASSERT(host_timestamp != nullptr);
   PTI_ASSERT(device_timestamp != nullptr);
