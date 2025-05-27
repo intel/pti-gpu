@@ -13,7 +13,7 @@
 #include "pti_assert.h"
 
 struct CPUGPUTimeInterpolationHelper {
-  constexpr static uint64_t kSyncDeltaDefault = 10'000;  // 10 us
+  constexpr static uint64_t kSyncDeltaDefault = 1;  // 1 ns
   ze_device_handle_t device_;
   uint32_t gpu_freq_;
   uint64_t gpu_timer_mask_;
