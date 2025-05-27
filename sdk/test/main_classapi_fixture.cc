@@ -368,9 +368,9 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
       ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
       ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
       EXPECT_EQ(ClassTestData::Get().zecall_present, true);
-      EXPECT_EQ(ClassTestData::Get().zecall_count, 1);
+      EXPECT_EQ(ClassTestData::Get().zecall_count, 1ULL);
       EXPECT_EQ(ClassTestData::Get().urcall_present, true);
-      EXPECT_GT(ClassTestData::Get().urcall_count, 2);
+      EXPECT_GT(ClassTestData::Get().urcall_count, 2ULL);
     }
   } else if (use_all_classes && use_all_groups) {
     // Test with use_all_classes and use_all_groups --- class level apis
@@ -381,8 +381,8 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
     ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
     EXPECT_EQ(ClassTestData::Get().zecall_present, true);
     EXPECT_EQ(ClassTestData::Get().urcall_present, false);
-    EXPECT_GT(ClassTestData::Get().zecall_count, 1);
-    EXPECT_EQ(ClassTestData::Get().urcall_count, 0);
+    EXPECT_GT(ClassTestData::Get().zecall_count, 1ULL);
+    EXPECT_EQ(ClassTestData::Get().urcall_count, 0ULL);
     EXPECT_EQ(ClassTestData::Get().event_host_synch_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().ze_kernel_rec_present, false);
   } else if (!use_all_classes && use_all_groups) {  // any valid class and use_all_groups
@@ -394,7 +394,7 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
     EXPECT_EQ(ClassTestData::Get().urcall_present, true);
-    EXPECT_GT(ClassTestData::Get().urcall_count, 2);
+    EXPECT_GT(ClassTestData::Get().urcall_count, 2ULL);
     EXPECT_EQ(ClassTestData::Get().ur_event_wait_rec_present, false);
     EXPECT_EQ(ClassTestData::Get().ur_mem_write_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().ur_mem_read_rec_present, true);
@@ -409,7 +409,7 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
     EXPECT_EQ(ClassTestData::Get().zecall_present, true);
-    EXPECT_GT(ClassTestData::Get().zecall_count, 1);
+    EXPECT_GT(ClassTestData::Get().zecall_count, 1ULL);
     EXPECT_EQ(ClassTestData::Get().event_host_synch_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().ze_kernel_rec_present, false);
   } else {
@@ -422,8 +422,8 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
     ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
     EXPECT_EQ(ClassTestData::Get().urcall_present, true);
     EXPECT_EQ(ClassTestData::Get().zecall_present, false);
-    EXPECT_GT(ClassTestData::Get().urcall_count, 2);
-    EXPECT_EQ(ClassTestData::Get().zecall_count, 0);
+    EXPECT_GT(ClassTestData::Get().urcall_count, 2ULL);
+    EXPECT_EQ(ClassTestData::Get().zecall_count, 0ULL);
     EXPECT_EQ(ClassTestData::Get().ur_event_wait_rec_present, false);
     EXPECT_EQ(ClassTestData::Get().ur_mem_write_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().ur_mem_read_rec_present, true);

@@ -1033,7 +1033,7 @@ TEST_F(MainZeFixtureTest, TestCLImmediateSynch) {
   // CommandListSynchronization
   EXPECT_EQ(synchronization_record_clist_seen, true);
   EXPECT_EQ(synch_clist_record_context, synch_input_context);
-  EXPECT_EQ(synch_clist_record_api_group, 1);
+  EXPECT_EQ(synch_clist_record_api_group, 1ULL);
 }
 
 TEST_F(MainZeFixtureTest, AllSynchronizationRelated) {

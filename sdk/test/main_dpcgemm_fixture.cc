@@ -123,7 +123,7 @@ void GEMM(const float* a, const float* b, float* c, unsigned size, sycl::id<2> i
 
 void LaunchGemm(sycl::queue queue, const std::vector<float>& a_vector,
                 const std::vector<float>& b_vector, std::vector<float>& result, unsigned size) {
-  ASSERT_GT(size, 0);
+  ASSERT_GT(size, 0U);
   ASSERT_EQ(a_vector.size(), size * size);
   ASSERT_EQ(b_vector.size(), size * size);
   ASSERT_EQ(result.size(), size * size);
