@@ -1,43 +1,13 @@
+# syntax=docker/dockerfile:1.3
+
 # hadolint ignore=DL3007
 
-# This is ubuntu:24.04
-FROM ubuntu:noble-20250127
+ARG MIN_OS_CONTAINER
+FROM ${MIN_OS_CONTAINER}
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 USER root
-
-
-#hadolint ignore=DL3008
-RUN apt-get update -y && \
-    apt-get upgrade --no-install-recommends  -y && \
-    apt-get install --no-install-recommends -y \
-    cmake \
-    ninja-build \
-    ncurses*\
-    wget \
-    gpg \
-    git \
-    gpg-agent \
-    vim \
-    make \
-    ca-certificates
-
-# Setup the appropriate repos for oneAPI
-#
-RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
-    gpg --dearmor | \
-    tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null && \
-    echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
-     tee /etc/apt/sources.list.d/oneAPI.list
-
-#
-# Setup the appropriate repos for GPU
-#
-RUN wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
-    gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble unified" | \
-    tee /etc/apt/sources.list.d/intel-gpu-noble.list
 
 RUN apt update -y && \
     apt install -y \
@@ -68,4 +38,3 @@ RUN apt update -y && \
 
 RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.12 10
 
-#
