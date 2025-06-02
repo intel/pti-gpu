@@ -679,8 +679,8 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
         uint32_t buffer_idx = 0;
         // Read and process input file stream where metrics data is saved
         while (!inf.eof()) {
-          inf.read(reinterpret_cast<char *>(raw_metrics.data()),
-                   PtiMetricsProfiler::GetMaxMetricBufferSize());
+          inf.read(reinterpret_cast<char *>(raw_metrics.data()), file_size);
+
           int raw_size = inf.gcount();
           if (raw_size > 0) {
             // first call to Calculate metrics to capture the size of reports and values
