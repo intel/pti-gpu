@@ -1,8 +1,8 @@
 include("../../build_utils/CMakeLists.txt")
-SetRequiredCMakeVersion()
-cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
 
+cmake_minimum_required(VERSION 3.22)
 project(PTI_Tools_UniTrace C CXX)
+find_package(Python 3.9 COMPONENTS Interpreter REQUIRED)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 SetCompilerFlags()
@@ -54,7 +54,6 @@ endif()
 
 # Tool Library
 macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target)
-  RequirePythonInterp()
   find_path(L0_INC_PATH
     NAMES level_zero
     PATHS ENV CPATH)
@@ -71,7 +70,7 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target)
   add_custom_target(${custom_target} ALL
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME})
   add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
-                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${OCL_DIR_PATH}")
+                     COMMAND "${Python_EXECUTABLE}" ${L0_GEN_SCRIPT} ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero" "${OCL_DIR_PATH}")
   target_include_directories(${TARGET}
     PUBLIC "${L0_GEN_INC_PATH}")
   add_dependencies(${TARGET}
@@ -81,21 +80,23 @@ endmacro()
 
 # Get Git Commit Hash
 macro(GetGitCommitHash TARGET GET_COMMIT_HASH_SCRIPT COMMIT_HASH_FILE_NAME target)
-  RequirePythonInterp()
 
   add_custom_target(${target} ALL DEPENDS ${CMAKE_BINARY_DIR}/${COMMIT_HASH_FILE_NAME})
   add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/${COMMIT_HASH_FILE_NAME}
-                     COMMAND "${PYTHON_EXECUTABLE}" ${GET_COMMIT_HASH_SCRIPT} ${CMAKE_BINARY_DIR} ${COMMIT_HASH_FILE_NAME})
+                     COMMAND "${Python_EXECUTABLE}" ${GET_COMMIT_HASH_SCRIPT} ${CMAKE_BINARY_DIR} ${COMMIT_HASH_FILE_NAME})
   add_dependencies(${TARGET} ${target})
 endmacro()
 
-find_package(PythonInterp 3.9 REQUIRED)
-
 if (${BUILD_WITH_ITT})
   # Download itt source from github repo
-  set(ITT_HASH 47467459a7984988ab838b5108c03ab1cf0a3f73)
-  RequirePythonInterp()
-  execute_process(COMMAND "${PYTHON_EXECUTABLE}" ${PROJECT_SOURCE_DIR}/scripts/get_itt.py ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR} ${ITT_HASH})
+  set(ITT_HASH 6ddf03848b46f78a8d2cbe596cbe1b5e2602005c)
+  execute_process(COMMAND "${Python_EXECUTABLE}" ${PROJECT_SOURCE_DIR}/scripts/get_itt.py ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR} ${ITT_HASH}
+    RESULT_VARIABLE result
+    ERROR_VARIABLE error_msg
+  )
+  if (NOT result EQUAL 0)
+    message(FATAL_ERROR "Error occurred while building ITT component")
+  endif()
 endif()
 
 if (BUILD_WITH_MPI)
@@ -134,9 +135,9 @@ if (BUILD_WITH_XPTI)
     message(STATUS "XPTI found")
     target_include_directories(unitrace_tool PRIVATE "${Xptifw_INCLUDE_DIR}")
     if(WIN32)
-      target_link_libraries(unitrace_tool PRIVATE ${Xptifw_LIBRARY})
+      target_link_libraries(unitrace_tool ${Xptifw_LIBRARY})
     else()
-      target_link_libraries(unitrace_tool PRIVATE xptifw)
+      target_link_libraries(unitrace_tool xptifw)
     endif()
   endif()
 endif()
@@ -274,7 +275,7 @@ endif()
 
 # Testing
 enable_testing()
-add_test(NAME test_unitrace COMMAND "${PYTHON_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/test/test_unitrace.py" --test-dir "${PROJECT_SOURCE_DIR}/test" --config "${PROJECT_SOURCE_DIR}/test/scenarios.txt")
+add_test(NAME test_unitrace COMMAND "${Python_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/test/test_unitrace.py" --test-dir "${PROJECT_SOURCE_DIR}/test" --config "${PROJECT_SOURCE_DIR}/test/scenarios.txt")
 
 # Clearning files only for release build, for any other build types lets skip deletion for better debuggability
 string(TOLOWER "${CMAKE_BUILD_TYPE}" LOWER_CMAKE_BUILD_TYPE)
