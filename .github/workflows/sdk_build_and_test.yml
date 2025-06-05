@@ -24,13 +24,9 @@ permissions:
 
 jobs:
   sdk-build-and-test:
-    name: Test pti-sdk on Ubuntu
+    name: Test PTI ${{ matrix.os_id }} ${{ matrix.tags }}
 
-    #
-    # pti is a selector to machines with Intel Ponte Vecchio officially
-    # Intel(R) Data Center GPU Max 1100
-    #
-    runs-on: [self-hosted, Linux, pti]
+    runs-on: ${{ fromJSON(matrix.tags) }}
     defaults:
       run:
         shell: bash
@@ -39,8 +35,14 @@ jobs:
       matrix:
         include:
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_1_0 }}
-            uploadname: "ubuntu-24.04.2025.1.0"
+            os_id: "ubuntu-24.04.2025.1.0"
             preset: linux-icpx-release
+            tags: '["self-hosted", "Linux", "pti", "client", "BMG"]'
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_1_0 }}
+            os_id: "ubuntu-24.04.2025.1.0"
+            preset: linux-icpx-release
+            tags: '["self-hosted", "Linux", "pti", "server", "PVC"]'
+
 
     container:
       image: ${{ matrix.container }}
@@ -69,6 +71,7 @@ jobs:
           preset: ${{ matrix.preset }}
 
       - name: Build AddressSanitizer
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -76,6 +79,7 @@ jobs:
           cmake --build --preset linux-asan --parallel $(($(nproc)/2))
 
       - name: Build ThreadSanitizer
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -83,6 +87,7 @@ jobs:
           cmake --build --preset linux-tsan --parallel $(($(nproc)/2))
 
       - name: Build libFuzzer
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           # To ensure it still builds, run build for fuzz targets until we have
@@ -95,6 +100,7 @@ jobs:
       # Rocky8 has a problem with this test.
       #
       - name: Test AddressSanitizer
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -110,6 +116,7 @@ jobs:
           ctest --preset linux-asan --output-on-failure -L samples
 
       - name: Test ThreadSanitizer
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh

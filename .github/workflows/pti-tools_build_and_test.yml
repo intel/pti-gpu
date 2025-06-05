@@ -26,12 +26,13 @@ jobs:
 
     if: vars.PTI_RUN_TESTS == 1
 
-    runs-on: [self-hosted, Linux, pti]
+    runs-on: ${{ fromJSON(matrix.tags) }}
 
     strategy:
       matrix:
         include:
           - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
+            tags: '["self-hosted", "Linux", "pti", "PVC"]'
 
     container: 
       image: ${{ matrix.container }}
