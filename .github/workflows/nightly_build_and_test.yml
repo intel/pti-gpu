@@ -165,7 +165,7 @@ jobs:
     if: vars.PTI_RUN_TESTS == 1
     name: Build and Test PTI Tools
 
-    runs-on: [Linux, pti]
+    runs-on: [Linux, pti, pvc]
 
     continue-on-error: true
 
