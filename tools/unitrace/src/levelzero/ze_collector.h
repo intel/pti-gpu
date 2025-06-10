@@ -1164,8 +1164,14 @@ class ZeCollector {
     PTI_ASSERT(logger != nullptr);
 
     std::string data_dir_name = utils::GetEnv("UNITRACE_DataDir");
+    bool reset_event_on_device = true;
+    std::string reset_event_env = utils::GetEnv("UNITRACE_ResetEventOnDevice");
+    if (!reset_event_env.empty() && reset_event_env == "0") {
+      reset_event_on_device = false;
+    }
+
     ZeCollector* collector = new ZeCollector(
-        logger, options, kcallback, fcallback, callback_data, data_dir_name);
+        logger, options, kcallback, fcallback, callback_data, data_dir_name, reset_event_on_device);
 
     UniMemory::ExitIfOutOfMemory((void *)(collector));
 
@@ -1646,11 +1652,13 @@ class ZeCollector {
       OnZeKernelFinishCallback kcallback,
       OnZeFunctionFinishCallback fcallback,
       void* callback_data,
-      std::string& data_dir_name)
+      std::string& data_dir_name,
+      bool reset_event_on_device)
       : logger_(logger),
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
+        reset_event_on_device_(reset_event_on_device),
         event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP) {
     data_dir_name_ = data_dir_name;
     EnumerateAndSetupDevices();
@@ -2868,7 +2876,7 @@ class ZeCollector {
           *cmd = *command;
 
           cmd->engine_ordinal_ = engine_ordinal;
-          cmd->engine_index_ =engine_index;
+          cmd->engine_index_ = engine_index;
           cmd->submit_time_ = host_timestamp;		//in ns
           cmd->submit_time_device_ = device_timestamp;	//in ticks
           cmd->tid_ = utils::GetTid();;
@@ -3243,17 +3251,20 @@ class ZeCollector {
 
         command_lists_mutex_.lock();
 
-        int seq = it->second->num_timestamps_++;
-        it->second->index_timestamps_on_commands_completion_.push_back(-1);
-        it->second->index_timestamps_on_event_reset_.push_back(-1);
-        it->second->event_to_timestamp_seq_.insert({event_to_signal, seq});
+        if (reset_event_on_device_) {
+          int seq = it->second->num_timestamps_++;
+          it->second->index_timestamps_on_commands_completion_.push_back(-1);
+          it->second->index_timestamps_on_event_reset_.push_back(-1);
+          it->second->event_to_timestamp_seq_.insert({event_to_signal, seq});
         
-        desc->timestamp_seq_ = seq;
-        desc->timestamps_on_event_reset_ = &(it->second->timestamps_on_event_reset_);
-        desc->timestamps_on_commands_completion_ = &(it->second->timestamps_on_commands_completion_);
+          desc->timestamp_seq_ = seq;
+          desc->timestamps_on_event_reset_ = &(it->second->timestamps_on_event_reset_);
+          desc->timestamps_on_commands_completion_ = &(it->second->timestamps_on_commands_completion_);
+          desc->index_timestamps_on_commands_completion_ = &(it->second->index_timestamps_on_commands_completion_);
+          desc->index_timestamps_on_event_reset_ = &(it->second->index_timestamps_on_event_reset_);
+	}
+
         desc->timestamp_event_ = it->second->timestamp_event_to_signal_;
-        desc->index_timestamps_on_commands_completion_ = &(it->second->index_timestamps_on_commands_completion_);
-        desc->index_timestamps_on_event_reset_ = &(it->second->index_timestamps_on_event_reset_);
 
         it->second->commands_.push_back(desc);
         if (query != nullptr) {
@@ -4315,6 +4326,10 @@ class ZeCollector {
   static void OnEnterCommandListAppendEventReset(ze_command_list_append_event_reset_params_t* params, void* global_data, void** instance_data) {
 
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    
+    if (!(collector->reset_event_on_device_)) {
+      return;
+    }
 
     collector->command_lists_mutex_.lock();
     auto it = collector->command_lists_.find(*(params->phCommandList));
@@ -4339,7 +4354,7 @@ class ZeCollector {
         else {
           ts = it->second->timestamps_on_event_reset_[slice];
         }
-	      int idx = slot % number_timestamps_per_slice_;
+        int idx = slot % number_timestamps_per_slice_;
         auto status = ZE_FUNC(zeCommandListAppendQueryKernelTimestamps)(*(params->phCommandList), 1, (ze_event_handle_t *)(params->phEvent), (void *)&(ts[idx]), nullptr, nullptr, 1, (ze_event_handle_t *)(params->phEvent));
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to get kernel timestamps (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
@@ -4391,6 +4406,10 @@ class ZeCollector {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     
+      if (!(collector->reset_event_on_device_)) {
+        return;
+      }
+
       collector->command_lists_mutex_.lock();
       auto it = collector->command_lists_.find(*(params->phCommandList));
       if ((it != collector->command_lists_.end()) && !(it->second->immediate_)) {
@@ -4411,7 +4430,9 @@ class ZeCollector {
 
   static void OnExitCommandListCreate(
       ze_command_list_create_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
+      ze_result_t result,
+      void* global_data,
+      void** instance_data) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
@@ -4423,7 +4444,9 @@ class ZeCollector {
 
   static void OnExitCommandListCreateImmediate(
       ze_command_list_create_immediate_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data) {
+      ze_result_t result,
+      void* global_data,
+      void** instance_data) {
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(**params->pphCommandList != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
@@ -4923,6 +4946,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   constexpr static size_t kTimeLength = 20;
 
   std::string data_dir_name_;
+  bool reset_event_on_device_; // support event reset on device
 };
 
 #endif // PTI_TOOLS_UNITRACE_LEVEL_ZERO_COLLECTOR_H_

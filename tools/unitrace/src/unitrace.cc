@@ -409,7 +409,7 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--idle-sampling") == 0) {
       idle_sampling = true;
       ++app_index;
-    } else if (strcmp(argv[i], "--system-time") == 0) {
+    } else if (strcmp(argv[i], "--system-time") == 0) { // internal option
       utils::SetEnv("UNITRACE_SystemTime", "1");
       ++app_index;
 #if BUILD_WITH_ITT
@@ -443,6 +443,14 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--teardown-on-signal") == 0) {
       utils::SetEnv("UNITRACE_TeardownOnSignal", "1");
       ++app_index;
+    } else if (strcmp(argv[i], "--reset-event-on-device") == 0) { // internal option
+      ++i;
+      if ((i >= argc) || (strcmp(argv[i], "1") && strcmp(argv[i], "0"))) {
+        std::cout << "[ERROR] Option --reset-event-on-device takes argument 0 or 1" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_ResetEventOnDevice", argv[i]);
+      app_index += 2;
     } else if (strcmp(argv[i], "--version") == 0) {
       std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
       return 0;
@@ -866,29 +874,35 @@ int main(int argc, char *argv[]) {
     do {
       void *pathname = VirtualAllocEx(pi.hProcess, nullptr, lib_path.size() + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
       if (pathname == nullptr) {
+        std::cerr << "[ERROR] Failed to allocate memory: " << GetLastError() << std::endl;
         break;
       }
 
       if (!WriteProcessMemory(pi.hProcess, pathname, lib_path.c_str(), lib_path.size() + 1, nullptr)) {
+        std::cerr << "[ERROR] Failed to write target process memory: " << GetLastError() << std::endl;
         break;
       }
 
       LPTHREAD_START_ROUTINE loadlibrary = reinterpret_cast<LPTHREAD_START_ROUTINE>(GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA"));
       if (!loadlibrary) {
+        std::cerr << "[ERROR] Failed to get address of LoadLibraryA: " << GetLastError() << std::endl;
         break;
       }
 
       HANDLE thr = CreateRemoteThread(pi.hProcess, nullptr, CREATE_SUSPENDED, loadlibrary, pathname, 0, nullptr);
       if (!thr) {
+        std::cerr << "[ERROR] Failed to create thread for initialization: " << GetLastError() << std::endl;
         break;
       }
 
       if (WaitForSingleObject(thr, INFINITE) != WAIT_OBJECT_0) {
+        std::cerr << "[ERROR] Failed to wait for thread to complete the initialization: " << GetLastError() << std::endl;
         break;
       }
       DWORD ret = 0;
       GetExitCodeThread(thr, &ret);
       if (ret == 0) {
+        std::cerr << "[ERROR] Initialization thread failed: " << GetLastError() << std::endl;
         break;
       }
 
