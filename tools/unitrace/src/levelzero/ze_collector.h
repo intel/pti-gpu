@@ -2488,10 +2488,20 @@ class ZeCollector {
       }
     }
     else {
-      ze_result_t status = ZE_FUNC(zeEventQueryKernelTimestamp)(command->event_, &timestamp);
-      if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[ERROR] Unable to query event for timestamps" << std::endl;
-        return;
+      // Workaround: There is a L0 bug found on LNL where query timestamp values are bad hence retrying it few times.
+      const uint8_t MAX_RETRY = 10;
+      uint8_t retry_query_event_count = 0;
+      do {
+        ze_result_t status = ZE_FUNC(zeEventQueryKernelTimestamp)(command->event_, &timestamp);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] Unable to query event for timestamps" << std::endl;
+          return;
+        }
+        retry_query_event_count++;
+      } while((timestamp.global.kernelStart > timestamp.global.kernelEnd) && retry_query_event_count < MAX_RETRY);
+
+      if (timestamp.global.kernelStart > timestamp.global.kernelEnd) {
+        std::cerr << "[WARNING] zeEventQueryKernelTimestamp has returned unexpect kernel timings" << std::endl;
       }
     }
 
