@@ -895,7 +895,9 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
                 "Failed to open metric streamer. The sampling interval might be too small.");
 #ifndef _WIN32
             SPDLOG_ERROR(
-                "Please also make sure /proc/sys/dev/i915/perf_stream_paranoid "
+                "Please also make sure: "
+                "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
+                "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
                 "is set to 0.");
 #endif /* _WIN32 */
             break;
@@ -1442,7 +1444,9 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
             SPDLOG_ERROR("Failed to open metric tracer.");
 #ifndef _WIN32
             SPDLOG_ERROR(
-                "Please also make sure /proc/sys/dev/i915/perf_stream_paranoid "
+                "Please also make sure: "
+                "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
+                "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
                 "is set to 0.");
 #endif /* _WIN32 */
             break;
@@ -1508,7 +1512,9 @@ class PtiMetricsCollectorHandler {
       SPDLOG_ERROR("Failed to initialize Level Zero runtime");
 #ifndef _WIN32
       SPDLOG_ERROR(
-          "Please also make sure /proc/sys/dev/i915/perf_stream_paranoid "
+          "Please also make sure: "
+          "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
+          "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
           "is set to 0.");
 #endif /* _WIN32 */
       l0_initialized = false;

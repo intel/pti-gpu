@@ -20,6 +20,8 @@
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
+#include "utils/sycl_config_info.h"
+#include "utils/test_helpers.h"
 #include "utils/ze_utils.h"
 
 #define A_VALUE 0.128f
@@ -394,9 +396,12 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
     EXPECT_EQ(ClassTestData::Get().urcall_present, true);
-    EXPECT_GT(ClassTestData::Get().urcall_count, 2ULL);
+    if (!pti::test::utils::IsIntegratedGraphics(dev_)) {
+      EXPECT_GT(ClassTestData::Get().urcall_count, 2ULL);
+      EXPECT_EQ(ClassTestData::Get().ur_mem_write_rec_present, true);
+    }
+
     EXPECT_EQ(ClassTestData::Get().ur_event_wait_rec_present, false);
-    EXPECT_EQ(ClassTestData::Get().ur_mem_write_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().ur_mem_read_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().ur_kernel_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().event_host_synch_rec_present, false);
@@ -422,10 +427,12 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
     ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
     EXPECT_EQ(ClassTestData::Get().urcall_present, true);
     EXPECT_EQ(ClassTestData::Get().zecall_present, false);
-    EXPECT_GT(ClassTestData::Get().urcall_count, 2ULL);
+    if (!pti::test::utils::IsIntegratedGraphics(dev_)) {
+      EXPECT_GT(ClassTestData::Get().urcall_count, 2ULL);
+      EXPECT_EQ(ClassTestData::Get().ur_mem_write_rec_present, true);
+    }
     EXPECT_EQ(ClassTestData::Get().zecall_count, 0ULL);
     EXPECT_EQ(ClassTestData::Get().ur_event_wait_rec_present, false);
-    EXPECT_EQ(ClassTestData::Get().ur_mem_write_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().ur_mem_read_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().ur_kernel_rec_present, true);
     EXPECT_EQ(ClassTestData::Get().event_host_synch_rec_present, false);

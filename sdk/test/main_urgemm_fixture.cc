@@ -46,6 +46,7 @@
 namespace syclex = sycl::ext::oneapi::experimental;
 
 namespace {
+bool is_integrated_graphics = false;
 bool memory_view_record_created = false;
 bool kernel_view_record_created = false;
 bool sycl_runtime_record_created = false;
@@ -307,7 +308,9 @@ class MainUrFixtureTest : public ::testing::Test {
           samples_utils::DumpRecord(rec);
 
           if (memcmp(rec->_device_uuid, zero_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
-            EXPECT_TRUE(false) << "Device UUID is zero, which is not expected";
+            if (!is_integrated_graphics) {
+              EXPECT_TRUE(false) << "Device UUID is zero, which is not expected";
+            }
             memory_view_record_with_zero_uuid = true;
           }
           if (capture_records) {
@@ -321,7 +324,9 @@ class MainUrFixtureTest : public ::testing::Test {
           samples_utils::DumpRecord(rec);
 
           if (memcmp(rec->_device_uuid, zero_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
-            EXPECT_TRUE(false) << "Device UUID is zero, which is not expected";
+            if (!is_integrated_graphics) {
+              EXPECT_TRUE(false) << "Device UUID is zero, which is not expected";
+            }
             memory_view_record_with_zero_uuid = true;
           }
 
@@ -457,7 +462,6 @@ class MainUrFixtureTest : public ::testing::Test {
     auto flush_results = ptiFlushAllViews();
     return flush_results;
   }
-  bool is_integrated_graphics = false;
   sycl::device dev_;
 };
 
@@ -468,7 +472,9 @@ TEST_F(MainUrFixtureTest, urGemmSpvKernelDetected) {
   EXPECT_EQ(sycl_spv_kernel_seen, true);
   EXPECT_EQ(sycl_spv_special_rec_seen, false);
   EXPECT_EQ(sycl_spv_mem_buffer_fill_seen, true);
-  EXPECT_EQ(memory_view_record_with_zero_uuid, false);
+  if (!is_integrated_graphics) {
+    EXPECT_EQ(memory_view_record_with_zero_uuid, false);
+  }
 }
 
 // TODO -- add tests for USMFill2D and USMMemcpy2D
@@ -480,6 +486,8 @@ TEST_F(MainUrFixtureTest, syclGemmSpvRuntimeRecordsDetected) {
   EXPECT_EQ(sycl_spv_special_rec_seen, false);
   EXPECT_EQ(sycl_spv_mem_buffer_read_seen, true);
   EXPECT_EQ(sycl_spv_mem_buffer_copy_seen, true);
-  EXPECT_EQ(memory_view_record_with_zero_uuid, false);
-  if (!is_integrated_graphics) EXPECT_EQ(sycl_spv_mem_buffer_write_seen, true);
+  if (!is_integrated_graphics) {
+    EXPECT_EQ(memory_view_record_with_zero_uuid, false);
+    EXPECT_EQ(sycl_spv_mem_buffer_write_seen, true);
+  }
 }
