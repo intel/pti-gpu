@@ -11,7 +11,6 @@
 #include <string.h>
 
 #include <level_zero/ze_api.h>
-#include <level_zero/zes_api.h>
 #include <level_zero/zet_api.h>
 #include <level_zero/layers/zel_tracing_api.h>
 #include "ze_loader.h"
@@ -61,8 +60,8 @@ inline void PrintDeviceList() {
     status = ZE_FUNC(zeDeviceGetProperties)(device_list[i], &device_properties);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
-    status = ZE_FUNC(zesDevicePciGetProperties)(device_list[i], &pci_props);
+    ze_pci_ext_properties_t pci_props{ZE_STRUCTURE_TYPE_PCI_EXT_PROPERTIES, };
+    status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device_list[i], &pci_props);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     std::cout << "Device #" << i << ": [" << std::hex <<
