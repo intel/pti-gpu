@@ -854,7 +854,7 @@ class ZeMetricProfiler {
 
         uint64_t cur_sampling_ts = 0;
         auto kit = kinfo.begin();
-        while (!inf.eof()) {
+        while (!inf.eof() && kit != kinfo.end()) {
           // Read metric data in two stages, first actual size (in bytes), followed by actual metrics
           uint64_t data_size;
           inf.read(reinterpret_cast<char *>(&data_size), sizeof(data_size));
@@ -1177,6 +1177,8 @@ class ZeMetricProfiler {
         std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
         break;
       }
+      if (size < MAX_METRIC_BUFFER)
+        break;
       size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
     }
     free (raw_metrics);
