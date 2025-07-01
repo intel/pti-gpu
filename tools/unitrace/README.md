@@ -181,6 +181,7 @@ The options can be one or more of the following:
 --metric-list                  Print available metric groups and metrics
 --stall-sampling               Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs
 --ranks-to-sample <ranks>      MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks
+--devices-to-sample <devices>  GPU devices to sample. The argument <devices> is a list of comma separated GPU devices, as listed by --device-list
 --teardown-on-signal           Try to gracefully shut down in case the application crashes or is terminated
                                This option may change the application behavior so please use it carefully
 --follow-child-process <0/1>   0: Do not follow or profile child processes on Linux
@@ -481,6 +482,8 @@ To kernels that take short time, you may find that the default sampling rate is 
    ```
 
 By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
+
+The **--metric-sampling [-k]** option alone samples all devices. but it can be used together with the **--devices-to-sample** option to sample only specific devices. The devices are given in a comma-separated list of integer identifiers as reported by **--device-list**. Those identifiers that do not match actual devices will be ignored. In the event that no valid or existent device is specified, no sampling will be performed at all.
 
 #### Sample Stalls at Instruction Level
 

@@ -111,6 +111,7 @@ if (BUILD_WITH_MPI)
     PRIVATE "${PROJECT_SOURCE_DIR}"
     PRIVATE "${I_MPI_ROOT}/include"
     PRIVATE "${PROJECT_SOURCE_DIR}/src"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
     PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
     PRIVATE "${PROJECT_SOURCE_DIR}/../../utils"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/itt"
@@ -146,6 +147,7 @@ target_include_directories(unitrace_tool
   PRIVATE "${PROJECT_SOURCE_DIR}"
   PRIVATE "${ONEAPI_COMPILER_HOME}/include"
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/opencl"
@@ -255,6 +257,7 @@ target_include_directories(unitrace
   PRIVATE "${CMAKE_BINARY_DIR}"
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
   PRIVATE "${PROJECT_SOURCE_DIR}/src/levelzero"
+  PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(UNIX)

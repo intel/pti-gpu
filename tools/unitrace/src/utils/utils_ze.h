@@ -22,8 +22,18 @@
 #include "pti_assert.h"
 #include "utils.h"
 
-namespace utils {
-namespace ze {
+inline bool InitializeL0() {
+  auto status = ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY);
+  if (status != ZE_RESULT_SUCCESS) {
+    std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
+#ifndef _WIN32
+    std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid is set to 0." << std::endl;
+#endif /* _WIN32 */
+    return false;
+  } else {
+    return true;
+  }
+}
 
 inline std::vector<ze_driver_handle_t> GetDriverList() {
   ze_result_t status = ZE_RESULT_SUCCESS;
@@ -64,8 +74,8 @@ inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) 
 
 inline std::vector<ze_device_handle_t> GetDeviceList() {
   std::vector<ze_device_handle_t> device_list;
-  for (auto driver : utils::ze::GetDriverList()) {
-    for (auto device : utils::ze::GetDeviceList(driver)) {
+  for (auto driver : GetDriverList()) {
+    for (auto device : GetDeviceList(driver)) {
       device_list.push_back(device);
     }
   }
@@ -212,7 +222,7 @@ inline zet_metric_group_handle_t FindMetricGroup(
     ze_device_handle_t device, std::string name,
     zet_metric_group_sampling_type_flag_t type) {
   PTI_ASSERT(device != nullptr);
-  
+
   ze_result_t status = ZE_RESULT_SUCCESS;
   uint32_t group_count = 0;
   status = ZE_FUNC(zetMetricGroupGet)(device, &group_count, nullptr);
@@ -390,15 +400,12 @@ inline ze_api_version_t GetDriverVersion(ze_driver_handle_t driver) {
   return version;
 }
 
-inline ze_api_version_t GetVersion() {
+inline ze_api_version_t GetZeVersion() {
   auto driver_list = GetDriverList();
   if (driver_list.empty()) {
     return ZE_API_VERSION_FORCE_UINT32;
   }
   return GetDriverVersion(driver_list.front());
 }
-
-} // namespace ze
-} // namespace utils
 
 #endif // PTI_UTILS_ZE_UTILS_H_

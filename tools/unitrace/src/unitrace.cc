@@ -5,6 +5,7 @@
 // =============================================================
 
 #include <array>
+#include <set>
 #include <iostream>
 
 #if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
@@ -202,6 +203,11 @@ void Usage(char * progname) {
     "MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks" <<
     std::endl;
   std::cout <<
+    "--devices-to-sample <devices>  " <<
+    "Devices ID to sample. The argument <devices> is a list of comma separated devices as reported" << std::endl <<
+    "                               by --device-list" <<
+    std::endl;
+  std::cout <<
     "--follow-child-process <0/1>   " <<
     "0: Do not follow or profile child processes on Linux" << std::endl <<
     "                               1: Follow and profile child processes on Linux (default)" <<
@@ -237,7 +243,9 @@ int ParseArgs(int argc, char* argv[]) {
   bool show_metric_list = false;
   bool stall_sampling = false;
   bool metric_sampling = false;
-  std::vector<int> ranks_to_sample;
+  std::set<int> ranks_to_sample;
+  std::set<int> devices_to_sample;
+  bool devices_to_sample_present = false;
   int app_index = 1;
 
   for (int i = 1; i < argc; ++i) {
@@ -369,37 +377,62 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--ranks-to-sample") == 0) {
       ++i;
       if (i >= argc) {
-        std::cout << "[ERROR] MPI ranks to sample are not specified" << std::endl;
+        std::cout << "[ERROR] Missing MPI ranks to sample" << std::endl;
         return -1;
       }
-      char *c = argv[i];
-      char *p = c;
-      // rank identifiers start with a digit
-      if (isdigit(*c) == 0) {
-        std::cout << "[ERROR] Invalid MPI ranks to sample" << std::endl;
+      auto my_MPI_size = (utils::GetEnv("PMI_SIZE").empty()) ? utils::GetEnv("PMIX_SIZE") : utils::GetEnv("PMI_SIZE");
+      if (my_MPI_size.empty()) {
+        std::cout << "[ERROR] Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
         return -1;
       }
-      c++;
-      while (*c) {
-        if ((isdigit(*c) == 0) && (*c != ',')) {
-          std::cout << "[ERROR] Invalid MPI ranks to sample" << std::endl;
-          return -1;
+      int32_t my_MPI_size_ = std::stoi(my_MPI_size);
+      auto my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+      if (my_MPI_rank.empty()) {
+        std::cout << "[ERROR] Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
+        return -1;
+      }
+      int32_t my_MPI_rank_ = std::stoi(my_MPI_rank);
+      auto list_mpi_ranks_str = utils::SplitString (argv[i], ',');
+      for (const auto &s : list_mpi_ranks_str) {
+        if (!s.empty()) {
+          bool is_number = std::find_if(s.begin(), s.end(), [] (unsigned char c) { return !std::isdigit(c); }) == s.end();
+          if (is_number) {
+            auto rank_to_sample = std::stoi(s.c_str());
+            if ((0 <= rank_to_sample) && (rank_to_sample < my_MPI_size_)) {
+              ranks_to_sample.insert (rank_to_sample);
+            } else {
+              if (my_MPI_rank_ == 0) {
+                std::cout << "[WARNING] Given MPI rank to sample (" << s << ") is out of bounds for given execution. Ignoring." << std::endl;
+              }
+            }
+          } else {
+            if (my_MPI_rank_ == 0) {
+              std::cout << "[ERROR] Given MPI rank to sample (" << s << ") is invalid" << std::endl;
+              return -1;
+            }
+          }
         }
-        if (*c == ',') {
-          *c = 0;
-          ranks_to_sample.push_back(atoi(p));
-          p = c + 1;
-        }
-        c++;
       }
-      c--;
-      // rank identifiers end with a digit
-      if (isdigit(*c) == 0) {
-        std::cout << "[ERROR] Invalid MPI ranks to sample" << std::endl;
+      app_index += 2;
+    } else if (strcmp(argv[i], "--devices-to-sample") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] Missing devices to sample" << std::endl;
         return -1;
       }
-      else {
-        ranks_to_sample.push_back(atoi(p));
+      devices_to_sample_present = true;
+      auto list_devices_str = utils::SplitString (argv[i], ',');
+      for (const auto &s : list_devices_str) {
+        if (!s.empty()) {
+          bool is_number = std::find_if(s.begin(), s.end(), [] (unsigned char c) { return !std::isdigit(c); }) == s.end();
+          if (is_number) {
+            auto device_no = std::stoi(s.c_str());
+            devices_to_sample.insert (device_no);
+          } else {
+            std::cout << "[ERROR] Given device to sample (" << s << ") is invalid" << std::endl;
+            return -1;
+          }
+        }
       }
       app_index += 2;
     } else if (strcmp(argv[i], "--metric-sampling") == 0 || strcmp(argv[i], "-k") == 0) {
@@ -426,7 +459,7 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_SamplingInterval", argv[i]);
       app_index += 2;
     } else if (strcmp(argv[i], "--device-list") == 0) {
-      SetSysmanEnvironment();	// enable ZES_ENABLE_SYSMAN
+      SetSysmanEnvironment();    // enable ZES_ENABLE_SYSMAN
       PrintDeviceList();
       return 0;
     } else if (strcmp(argv[i], "--metric-list") == 0) {
@@ -466,36 +499,10 @@ int ParseArgs(int argc, char* argv[]) {
     utils::SetEnv("UNITRACE_FollowChildProcess", "1");	// default is to follow child processes
   }
 
-  if (stall_sampling || metric_sampling) {
-    static std::string myrank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-    if (!myrank.empty()) {
-      if (ranks_to_sample.empty()) {
-        std::cout << "[WARNING] MPI ranks to smaple are not specified" << std::endl;
-      }
-      else {
-        auto r = std::stoi(myrank);
-        bool found = false;
-        for (auto i : ranks_to_sample) {
-          if (r == i) {
-            found = true;
-            break;
-          }
-        } 
-        if (found == false) {
-          // turn off sampling on this rank
-          stall_sampling = false;
-          metric_sampling = false;
-          // reset UNITRACE_KernelMetrics
-          utils::SetEnv("UNITRACE_KernelMetrics", "");
-        }
-      }
-    }
-  }
-
   if (stall_sampling) {
     if (metric_sampling && (utils::GetEnv("UNITRACE_MetricGroup") != "EuStallSampling")) {
       std::cerr << "[ERROR] Stall sampling cannot be enabled together with other metric group sampling" << std::endl;
-      return 0;
+      return -1;
     }
     if (utils::GetEnv("UNITRACE_MetricGroup").empty()) {
       utils::SetEnv("UNITRACE_MetricGroup", "EuStallSampling");
@@ -503,10 +510,67 @@ int ParseArgs(int argc, char* argv[]) {
     utils::SetEnv("UNITRACE_KernelMetrics", "1");
   }
 
+  if (stall_sampling || metric_sampling) {
+    auto my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+    if (!my_MPI_rank.empty()) {
+      if (ranks_to_sample.empty()) {
+        std::cout << "[WARNING] MPI ranks to sample are not specified" << std::endl;
+      }
+      else {
+        auto my_MPI_rank_ = std::stoi(my_MPI_rank);
+        if (ranks_to_sample.find(my_MPI_rank_) == ranks_to_sample.end()) {
+          // turn off sampling on this rank
+          stall_sampling = false;
+          metric_sampling = false;
+          // reset UNITRACE_KernelMetrics
+          utils::SetEnv("UNITRACE_KernelMetrics", "");
+          // ignore devices to samples
+          devices_to_sample_present = false;
+        }
+      }
+    }
+
+    if (devices_to_sample_present) {
+      // Need to initialize L0 now to get the device list
+      SetTracingEnvironment();
+      SetSysmanEnvironment();
+      if (utils::GetEnv("UNITRACE_MetricQuery") == "1" || utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+        SetProfilingEnvironment();
+      }
+      if (!InitializeL0()) {
+        return -1;
+      }
+      auto device_list = GetDeviceList();
+      auto device_count = device_list.size();
+      if (device_count == 0) {
+        std::cerr << "[ERROR] No Level Zero devices found" << std::endl;
+        return -1;
+      }
+      std::string s;
+      for (const auto &device_no : devices_to_sample) {
+        if ((0 <= device_no) && (device_no < device_count)) {
+          if (s.length() == 0) {
+            s = std::to_string(device_no);
+          } else {
+            s += "," + std::to_string(device_no);
+          }
+        } else {
+          std::cout << "[WARNING] Given device to sample (" << device_no << ") does not exist. Ignoring." << std::endl;
+        }
+      }
+      if (s.length() > 0) {
+        utils::SetEnv("UNITRACE_DevicesToSample", s.c_str());
+      } else {
+        std::cout << "[WARNING] Given devices to sample resulted in an empty device list. Skipping metric sampling." << std::endl;
+        utils::SetEnv("UNITRACE_KernelMetrics", "");
+      }
+    }
+  }
+
   if (utils::GetEnv("UNITRACE_MetricQuery") == "1") {
     if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
       std::cerr << "[ERROR] Hardware performance metric query mode cannot be used together with time-based mode" << std::endl;
-      return 0;
+      return -1;
     }
   }
 
@@ -560,7 +624,7 @@ int ParseArgs(int argc, char* argv[]) {
 
 
   if (show_metric_list) {
-    SetProfilingEnvironment();	// enable ZET_ENABLE_METRICS
+    SetProfilingEnvironment(); // enable ZET_ENABLE_METRICS
     std::string value = utils::GetEnv("UNITRACE_DeviceId");
     uint32_t device_id = value.empty() ? 0 : std::stoul(value);
     PrintMetricList(device_id);
@@ -574,14 +638,11 @@ int ParseArgs(int argc, char* argv[]) {
 }
 
 ZeMetricProfiler *EnableProfiling(char *dir, std::string& logfile, bool idle_sampling) {
-  if (ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY) != ZE_RESULT_SUCCESS) {
-    std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
-#ifndef _WIN32
-    std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid are set to 0." << std::endl;
-#endif /* _WIN32 */
+  if (!InitializeL0()) {
     return nullptr;
+  } else {
+    return ZeMetricProfiler::Create(dir, logfile, idle_sampling, utils::GetEnv("UNITRACE_DevicesToSample"));
   }
-  return ZeMetricProfiler::Create(dir, logfile, idle_sampling);
 }
 
 void DisableProfiling() {
@@ -697,7 +758,7 @@ int main(int argc, char *argv[]) {
     return 0;
   }
   std::vector<char*> app_args;
-  
+
   for (int i = app_index; i < argc; ++i) {
     app_args.push_back(argv[i]);
   }
@@ -730,20 +791,20 @@ int main(int argc, char *argv[]) {
   }
 #endif
 
-  SetTracingEnvironment();
-  //OpenCL and oneCCL require sysman enabled
-  SetSysmanEnvironment();
-  
-  if (utils::GetEnv("UNITRACE_MetricQuery") == "1") {
-    // UNITRACE_KernelMetrics is not set
-    SetProfilingEnvironment();
-  }
-
   std::string logfile;
   if (utils::GetEnv("UNITRACE_LogToFile") == "1") {
     logfile = utils::GetEnv("UNITRACE_LogFilename");
   }
-    
+
+  SetTracingEnvironment();
+  //OpenCL and oneCCL require sysman enabled
+  SetSysmanEnvironment();
+
+  if (utils::GetEnv("UNITRACE_MetricQuery") == "1" || utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+    // UNITRACE_KernelMetrics is not set
+    SetProfilingEnvironment();
+  }
+
 #ifndef _WIN32
   utils::SetEnv("LD_PRELOAD", preload.c_str());
 
@@ -777,7 +838,6 @@ int main(int argc, char *argv[]) {
       if (execvp(app_args[0], app_args.data())) {
         std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
         Usage(argv[0]);
-       
         std::_Exit(-1);
       }
     } else if (child > 0) {
@@ -868,7 +928,7 @@ int main(int argc, char *argv[]) {
   PROCESS_INFORMATION pi = {0};
   STARTUPINFO si = {0};
   si.cb = sizeof(si);
-      
+
   if (CreateProcessA(app_args[0], LPSTR(cmdline.c_str()), nullptr, nullptr, false, CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {
     BOOL success = FALSE;
     do {
@@ -910,7 +970,7 @@ int main(int argc, char *argv[]) {
 
       if (metrics_enabled) {
         SetProfilingEnvironment();
-	metric_profiler = EnableProfiling(data_dir, logfile, idle_sampling);
+        metric_profiler = EnableProfiling(data_dir, logfile, idle_sampling);
       }
 
       ResumeThread(pi.hThread); 

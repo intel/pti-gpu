@@ -392,7 +392,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
           f.write("      bool demangle = collector->options_.demangle;\n")
           f.write("      std::string kernel_name =\n")
-          f.write("        utils::ze::GetKernelName(*(params->p" + name + "), demangle);\n")
+          f.write("        GetKernelName(*(params->p" + name + "), demangle);\n")
           f.write("      if (!kernel_name.empty()) {\n")
           f.write("        str += \" (\" + kernel_name + \")\";\n")
           f.write("      }\n")

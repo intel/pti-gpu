@@ -175,7 +175,7 @@ inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
 
   cl_device_pci_bus_info_khr pci_info = GetDevicePciInfo(device_id);
 
-  for (auto device : utils::ze::GetDeviceList()) {
+  for (auto device : GetDeviceList()) {
     zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
     ze_result_t status = ZE_FUNC(zesDevicePciGetProperties)(device, &pci_props);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
@@ -1021,8 +1021,8 @@ class ClCollector {
 
         ze_device = GetZeDevice(device);
         PTI_ASSERT(ze_device != nullptr);
-        mask = utils::ze::GetMetricTimestampMask(ze_device);
-        freq = utils::ze::GetMetricTimerFrequency(ze_device);
+        mask = GetMetricTimestampMask(ze_device);
+        freq = GetMetricTimerFrequency(ze_device);
 
         ZE_FUNC(zeDeviceGetGlobalTimestamps)(ze_device, &ze_host_timestamp, &ze_device_timestamp);
         ze_device_timestamp = ze_device_timestamp & mask;

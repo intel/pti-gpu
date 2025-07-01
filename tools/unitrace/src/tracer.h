@@ -70,13 +70,7 @@ static std::string GetChromeTraceFileName(void) {
 class UniTracer {
  public:
   static UniTracer* Create(const TraceOptions& options) {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    status = ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY);
-    if (status != ZE_RESULT_SUCCESS) {
-      std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
-#ifndef _WIN32
-      std::cerr << "[INFO] Please ensure that either /proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid are set to 0." << std::endl;
-#endif /* _WIN32 */
+    if (!InitializeL0()) {
       exit(-1);
     }
 

@@ -11,7 +11,6 @@
 #include <mutex>
 #include <vector>
 
-#include "unitrace_ze_utils.h"
 #include "ze_loader.h"
 
 #define EVENT_POOL_SIZE	1024

@@ -31,7 +31,7 @@
 
 #include "utils.h"
 #include "ze_event_cache.h"
-#include "ze_utils.h"
+#include "utils_ze.h"
 #include "collector_options.h"
 #include "unikernel.h"
 #include "unitimer.h"
@@ -1156,7 +1156,7 @@ class ZeCollector {
       OnZeKernelFinishCallback kcallback = nullptr,
       OnZeFunctionFinishCallback fcallback = nullptr,
       void* callback_data = nullptr) {
-    ze_api_version_t version = utils::ze::GetVersion();
+    ze_api_version_t version = GetZeVersion();
     PTI_ASSERT(
         ZE_MAJOR_VERSION(version) >= 1 &&
         ZE_MINOR_VERSION(version) >= 2);
@@ -1759,10 +1759,10 @@ class ZeCollector {
             desc.parent_id_ = -1;	// no parent
             desc.parent_device_ = nullptr;
             desc.subdevice_id_ = -1;	// not a subdevice
-            desc.device_timer_frequency_ = utils::ze::GetDeviceTimerFrequency(device);
-            desc.device_timer_mask_ = utils::ze::GetDeviceTimestampMask(device);
-            desc.metric_timer_frequency_ = utils::ze::GetMetricTimerFrequency(device);
-            desc.metric_timer_mask_ = utils::ze::GetMetricTimestampMask(device);
+            desc.device_timer_frequency_ = GetDeviceTimerFrequency(device);
+            desc.device_timer_mask_ = GetDeviceTimestampMask(device);
+            desc.metric_timer_frequency_ = GetMetricTimerFrequency(device);
+            desc.metric_timer_mask_ = GetMetricTimestampMask(device);
 
             ze_pci_ext_properties_t pci_device_properties;
             ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device, &pci_device_properties);
@@ -1862,10 +1862,10 @@ class ZeCollector {
                 sub_desc.num_subdevices_ = 0;
                 sub_desc.subdevice_id_ = j;
                 sub_desc.id_ = did;	// take parent device's id
-                sub_desc.device_timer_frequency_ = utils::ze::GetDeviceTimerFrequency(sub_devices[j]);
-                sub_desc.device_timer_mask_ = utils::ze::GetDeviceTimestampMask(sub_devices[j]);
-                sub_desc.metric_timer_frequency_ = utils::ze::GetMetricTimerFrequency(sub_devices[j]);
-                sub_desc.metric_timer_mask_ = utils::ze::GetMetricTimestampMask(sub_devices[j]);
+                sub_desc.device_timer_frequency_ = GetDeviceTimerFrequency(sub_devices[j]);
+                sub_desc.device_timer_mask_ = GetDeviceTimestampMask(sub_devices[j]);
+                sub_desc.metric_timer_frequency_ = GetMetricTimerFrequency(sub_devices[j]);
+                sub_desc.metric_timer_mask_ = GetMetricTimestampMask(sub_devices[j]);
   
                 ze_pci_ext_properties_t pci_device_properties;
                 ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(sub_devices[j], &pci_device_properties);

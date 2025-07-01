@@ -248,6 +248,18 @@ inline size_t UpperBound(const std::vector<uint64_t>& data, uint64_t value) {
   return start;
 }
 
+inline std::vector<std::string> SplitString(const std::string& s, char delimiter) {
+  std::vector<std::string> res;
+  size_t start = 0;
+  size_t end = 0;
+  while ((end = s.find(delimiter, start)) != std::string::npos) {
+    res.push_back(s.substr(start, end - start));
+    start = end + 1;
+  }
+  res.push_back(s.substr(start));
+  return res;
+}
+
 } // namespace utils
 
 #endif // PTI_UTILS_UTILS_H_
