@@ -225,6 +225,11 @@ struct ZeInstanceData {
   uint64_t timestamp_host;	// in ns
   uint64_t timestamp_device;	// in ticks
   uint64_t kid;	// passing kid from enter callback to exit callback
+
+  // These used in Append commands
+  zet_metric_query_handle_t query_; // Appended command query handle
+  ze_event_handle_t in_order_counter_event_;  // Appended command event counter based event or null
+  bool instrument_;                 // false if command should be skipped
 };
 
 thread_local ZeInstanceData ze_instance_data;
@@ -717,6 +722,7 @@ struct ZeCommand {
   uint64_t instance_id_;        // unique kernel or command instance identifier
   ze_event_handle_t event_;
   ze_event_handle_t timestamp_event_;
+  ze_event_handle_t in_order_counter_event_;
   ze_device_handle_t device_;
   uint64_t host_time_origin_;   // in ns
   uint64_t device_timer_frequency_;
@@ -826,6 +832,7 @@ struct ZeDeviceSubmissions {
     // Explicitly initialize ZeCommand members.
     command->instance_id_ = 0;
     command->event_ = nullptr;
+    command->in_order_counter_event_ = nullptr;
     command->device_ = nullptr;
     command->append_time_ = 0;
     command->submit_time_ = 0;
@@ -2359,7 +2366,7 @@ class ZeCollector {
     for (auto it = local_device_submissions_.commands_submitted_.begin(); it != local_device_submissions_.commands_submitted_.end();) {
       ZeCommand *command = *it;
 
-      if (command->event_ == event) {
+      if (command->event_ == event || command->in_order_counter_event_ == event) {
         ProcessCommandSubmitted(local_device_submissions_, command, kids, true);
         if (command->immediate_) {
           event_cache_.ReleaseEvent(command->event_);
@@ -2709,6 +2716,7 @@ class ZeCollector {
       event_cache_.ResetEvent(command->event_);
     }
     command->event_ = nullptr;
+    command->in_order_counter_event_ = nullptr;
   }
 
   void CreateCommandList( ze_command_list_handle_t command_list,
@@ -3025,6 +3033,15 @@ class ZeCollector {
       return;
     }
 
+    // Do not override flags if counter based pool
+    const void *pNext = desc->pNext;
+    while(pNext) {
+      if (((ze_base_cb_params_t *)pNext)->stype == ZE_STRUCTURE_TYPE_COUNTER_BASED_EVENT_POOL_EXP_DESC) {
+        return;
+      }
+      pNext = ((ze_base_cb_params_t *)pNext)->pNext;
+    }
+
     ze_event_pool_desc_t* profiling_desc = new ze_event_pool_desc_t;
     UniMemory::ExitIfOutOfMemory((void *)(profiling_desc));
     PTI_ASSERT(profiling_desc != nullptr);
@@ -3043,9 +3060,51 @@ class ZeCollector {
                                     ze_result_t result,
                                     void *global_data,
                                     void **instance_data) {
+
+    if (result == ZE_RESULT_SUCCESS && params->pphEventPool && *params->pphEventPool) {
+      const ze_event_pool_desc_t* desc = *(params->pdesc);
+      const void *pNext = desc ? desc->pNext : nullptr;
+      while(pNext) {
+        if (((ze_base_cb_params_t *)pNext)->stype == ZE_STRUCTURE_TYPE_COUNTER_BASED_EVENT_POOL_EXP_DESC) {
+          ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+          collector->events_mutex_.lock();
+          collector->counter_based_pools_.insert(**params->pphEventPool);
+          collector->events_mutex_.unlock();
+          break;
+        }
+        pNext = ((ze_base_cb_params_t *)pNext)->pNext;
+      }
+    }
+
     ze_event_pool_desc_t* desc = static_cast<ze_event_pool_desc_t*>(*instance_data);
     if (desc != nullptr) {
       delete desc;
+    }
+  }
+
+  static void OnExitEventPoolDestroy(ze_event_pool_destroy_params_t *params,
+                                ze_result_t result,
+                                void* global_data,
+                                void** instance_data) {
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+      collector->events_mutex_.lock();
+      collector->counter_based_pools_.erase(*params->phEventPool);
+      collector->events_mutex_.unlock();
+    }
+  }
+
+  static void OnExitEventCreate(ze_event_create_params_t* params,
+                                ze_result_t result,
+                                void* global_data,
+                                void** instance_data) {
+    if (result == ZE_RESULT_SUCCESS && params->pphEvent && *params->pphEvent) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+      collector->events_mutex_.lock();
+      if (collector->counter_based_pools_.find(*params->phEventPool) != collector->counter_based_pools_.end()) {
+        collector->counter_based_events_.insert(**params->pphEvent);
+      }
+      collector->events_mutex_.unlock();
     }
   }
 
@@ -3058,6 +3117,17 @@ class ZeCollector {
       if (ZE_FUNC(zeEventQueryStatus)(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
         collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
       }
+    }
+  }
+
+  static void OnExitEventDestroy(
+      ze_event_destroy_params_t *params, ze_result_t result,
+      void *global_data, void **instance_data) {
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+      collector->events_mutex_.lock();
+      collector->counter_based_events_.erase(*params->phEvent);
+      collector->events_mutex_.unlock();
     }
   }
 
@@ -3160,7 +3230,7 @@ class ZeCollector {
     }
   }
 
-  static zet_metric_query_handle_t PrepareToAppendKernelCommand(
+  static void PrepareToAppendKernelCommand(
     ZeCollector* collector,
     ze_event_handle_t& signal_event,
     ze_command_list_handle_t command_list,
@@ -3168,6 +3238,11 @@ class ZeCollector {
 
     ze_context_handle_t context = nullptr;
     ze_device_handle_t device = nullptr;
+    bool in_order = false;
+
+    ze_instance_data.query_ = nullptr;
+    ze_instance_data.in_order_counter_event_ = nullptr;
+    ze_instance_data.instrument_ = true;
 
     collector->command_lists_mutex_.lock_shared();
 
@@ -3175,6 +3250,7 @@ class ZeCollector {
     if (it != collector->command_lists_.end()) {
       context = it->second->context_;
       device = it->second->device_;
+      in_order = it->second->in_order_;
     }
 
     collector->command_lists_mutex_.unlock_shared();
@@ -3182,27 +3258,43 @@ class ZeCollector {
     if ((context == nullptr) || (device == nullptr)) {
       // should never get here
       std::cerr << "[ERROR] Command list (" << command_list << ") is not found for appending." << std::endl;
-      return nullptr;
+      ze_instance_data.instrument_ = true;
+      return;
     }
 
     if (signal_event == nullptr) {
       signal_event = collector->event_cache_.GetEvent(context);
       PTI_ASSERT(signal_event != nullptr);
-    } 
+    } else {
+      collector->events_mutex_.lock();
+      if (collector->counter_based_events_.find(signal_event) != collector->counter_based_events_.end()) {
+        if (in_order) {
+          ze_instance_data.in_order_counter_event_ = signal_event;
+          signal_event = collector->event_cache_.GetEvent(context);
+        } else {
+          // This is an error that should never happen since counter based events can be
+          // used only in in-order command lists.
+          std::cerr << "[ERROR] Counter based events are used in non immediate command list - command will not be instrumented" << std::endl;
+          ze_instance_data.instrument_ = false;
+          collector->events_mutex_.unlock();
+          return;
+        }
+      }
+      collector->events_mutex_.unlock();
+    }
    
     ze_result_t status;
-    zet_metric_query_handle_t query = nullptr;
     if (collector->options_.metric_query && iskernel) {
       devices_mutex_.lock_shared();
 
       auto it2 = devices_->find(device);
 
       PTI_ASSERT(it2 != devices_->end());
-      query = collector->query_pools_.GetQuery(context, device, it2->second.metric_group_);
+      ze_instance_data.query_ = collector->query_pools_.GetQuery(context, device, it2->second.metric_group_);
 
       devices_mutex_.unlock_shared();
 
-      status = ZE_FUNC(zetCommandListAppendMetricQueryBegin)(command_list, query);
+      status = ZE_FUNC(zetCommandListAppendMetricQueryBegin)(command_list, ze_instance_data.query_);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
 
@@ -3214,8 +3306,6 @@ class ZeCollector {
 
     ze_instance_data.timestamp_host = host_timestamp;
     ze_instance_data.timestamp_device = device_timestamp;
-
-    return query;
   }
 
   static void PrepareToAppendKernelCommand(ZeCommandList *cl) {
@@ -3289,11 +3379,17 @@ class ZeCollector {
 
       desc->mem_size_ = 0;
       desc->event_ = event_to_signal;
+      desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->command_list_ = command_list;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
 
       desc->device_global_timestamps_ = nullptr;
+
+      if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
+        ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      }
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -3419,6 +3515,7 @@ class ZeCollector {
       desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
       desc->metric_timer_mask_ = it->second->metric_timer_mask_;
       desc->event_ = event_to_signal;
+      desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
       command_lists_mutex_.unlock_shared();
@@ -3436,6 +3533,11 @@ class ZeCollector {
       desc->timestamp_seq_ = -1;
       desc->index_timestamps_on_commands_completion_ = nullptr;
       desc->index_timestamps_on_event_reset_ = nullptr;
+
+      if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
+        ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      }
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -3539,6 +3641,7 @@ class ZeCollector {
       desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
       desc->metric_timer_mask_ = it->second->metric_timer_mask_;
       desc->event_ = event_to_signal;
+      desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
       command_lists_mutex_.unlock_shared();
@@ -3556,6 +3659,11 @@ class ZeCollector {
       desc->timestamp_seq_ = -1;
       desc->index_timestamps_on_commands_completion_ = nullptr;
       desc->index_timestamps_on_event_reset_ = nullptr;
+
+      if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
+        ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      }
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -3666,6 +3774,7 @@ class ZeCollector {
 
       desc->group_count_ = {0, 0, 0};
       desc->event_ = event_to_signal;
+      desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->command_list_ = command_list;
       desc->mem_size_ = size;
       desc->queue_ = nullptr;
@@ -3678,6 +3787,11 @@ class ZeCollector {
       desc->timestamp_seq_ = -1;
       desc->index_timestamps_on_commands_completion_ = nullptr;
       desc->index_timestamps_on_event_reset_ = nullptr;
+
+      if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
+        ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      }
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -3775,6 +3889,7 @@ class ZeCollector {
       desc->group_count_ = {0, 0, 0};
       desc->mem_size_ = 0;
       desc->event_ = event_to_signal;
+      desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->command_list_ = command_list;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
@@ -3786,6 +3901,11 @@ class ZeCollector {
       desc->timestamp_event_ = nullptr;
       desc->index_timestamps_on_commands_completion_ = nullptr;
       desc->index_timestamps_on_event_reset_ = nullptr;
+
+      if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
+        ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      }
 
       if (query != nullptr) {
         desc_query = local_device_submissions_.GetCommandMetricQuery();
@@ -3876,6 +3996,7 @@ class ZeCollector {
       desc->group_count_ = {0, 0, 0};
       desc->mem_size_ = 0;
       desc->event_ = nullptr;
+      desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->command_list_ = cl->cmdlist_;
       desc->queue_ = nullptr;
       desc->tid_ = utils::GetTid();
@@ -3917,8 +4038,7 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
-      *instance_data = reinterpret_cast<void*>(query);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
     }
     else {
       *instance_data = nullptr;
@@ -3929,19 +4049,18 @@ class ZeCollector {
     ze_command_list_append_launch_kernel_params_t* params,
     ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
 
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendLaunchKernel(
         *(params->phKernel),
         *(params->ppLaunchFuncArgs),
         *(params->phSignalEvent),
-        query,
+        ze_instance_data.query_,
         *(params->phCommandList),
         kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -3951,30 +4070,25 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
     }
   }
 
   static void OnExitCommandListAppendLaunchCooperativeKernel(
       ze_command_list_append_launch_cooperative_kernel_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
         collector->AppendLaunchKernel(
           *(params->phKernel),
           *(params->ppLaunchFuncArgs),
           *(params->phSignalEvent),
-          query,
+          ze_instance_data.query_,
           *(params->phCommandList),
           kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -3984,30 +4098,25 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
     }
   }
 
   static void OnExitCommandListAppendLaunchKernelIndirect(
       ze_command_list_append_launch_kernel_indirect_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
         collector->AppendLaunchKernel(
           *(params->phKernel),
           *(params->ppLaunchArgumentsBuffer),
           *(params->phSignalEvent),
-          query,
+          ze_instance_data.query_,
           *(params->phCommandList),
           kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4105,26 +4214,21 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendMemoryCopy(
       ze_command_list_append_memory_copy_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendMemoryCommand(MemoryCopy, *(params->psize),
-          *(params->psrcptr), *(params->pdstptr), *(params->phSignalEvent), query,
+          *(params->psrcptr), *(params->pdstptr), *(params->phSignalEvent), ze_instance_data.query_,
           *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4134,26 +4238,21 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendMemoryFill(
       ze_command_list_append_memory_fill_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendMemoryCommand(MemoryFill, *(params->psize),
-          *(params->pptr), nullptr, *(params->phSignalEvent), query,
+          *(params->pptr), nullptr, *(params->phSignalEvent), ze_instance_data.query_,
           *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4163,26 +4262,21 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendBarrier(
       ze_command_list_append_barrier_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
-      collector->AppendCommand(Barrier, *(params->phSignalEvent), query,
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
+      collector->AppendCommand(Barrier, *(params->phSignalEvent), ze_instance_data.query_,
           *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4192,25 +4286,20 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendMemoryRangesBarrier(
       ze_command_list_append_memory_ranges_barrier_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
-      collector->AppendCommand(MemoryRangesBarrier, *(params->phSignalEvent), query,
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
+      collector->AppendCommand(MemoryRangesBarrier, *(params->phSignalEvent), ze_instance_data.query_,
           *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4220,20 +4309,15 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendMemoryCopyRegion(
       ze_command_list_append_memory_copy_region_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       size_t bytes_transferred = 0;
       const ze_copy_region_t* region = *(params->psrcRegion);
 
@@ -4244,11 +4328,11 @@ class ZeCollector {
       }
 
       collector->AppendMemoryCommand(MemoryCopyRegion, bytes_transferred,
-        *(params->psrcptr), *(params->pdstptr), *(params->phSignalEvent), query,
+        *(params->psrcptr), *(params->pdstptr), *(params->phSignalEvent), ze_instance_data.query_,
          *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4258,27 +4342,22 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendMemoryCopyFromContext(
       ze_command_list_append_memory_copy_from_context_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       ze_context_handle_t src_context = *(params->phContextSrc);
       collector->AppendMemoryCommandContext(MemoryCopyFromContext, *(params->psize),
-        src_context, *(params->psrcptr), nullptr, *(params->pdstptr), *(params->phSignalEvent), query,
+        src_context, *(params->psrcptr), nullptr, *(params->pdstptr), *(params->phSignalEvent), ze_instance_data.query_,
         *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4288,26 +4367,21 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendImageCopy(
       ze_command_list_append_image_copy_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendImageMemoryCopyCommand(ImageCopy, *(params->phSrcImage),
-        nullptr, nullptr, *(params->phSignalEvent), query,
+        nullptr, nullptr, *(params->phSignalEvent), ze_instance_data.query_,
         *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4317,26 +4391,21 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendImageCopyRegion(
       ze_command_list_append_image_copy_region_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendImageMemoryCopyCommand(ImageCopyRegion, *(params->phSrcImage),
-        nullptr, nullptr, *(params->phSignalEvent), query,
+        nullptr, nullptr, *(params->phSignalEvent), ze_instance_data.query_,
         *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4346,26 +4415,21 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendImageCopyToMemory(
       ze_command_list_append_image_copy_to_memory_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendImageMemoryCopyCommand(ImageCopyToMemory, *(params->phSrcImage),
-        nullptr, *(params->pdstptr), *(params->phSignalEvent), query,
+        nullptr, *(params->pdstptr), *(params->phSignalEvent), ze_instance_data.query_,
         *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -4375,20 +4439,15 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      zet_metric_query_handle_t query = PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
-      *instance_data = reinterpret_cast<void*>(query);
-    }
-    else {
-      *instance_data = nullptr;
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
     }
   }
 
   static void OnExitCommandListAppendImageCopyFromMemory(
       ze_command_list_append_image_copy_from_memory_params_t* params,
       ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
-    zet_metric_query_handle_t query = reinterpret_cast<zet_metric_query_handle_t>(*instance_data);
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled())) {
+    if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       size_t bytes_transferred = 0;
       const ze_image_region_t* region = *(params->ppDstRegion);
 
@@ -4400,11 +4459,11 @@ class ZeCollector {
       }
 
       collector->AppendMemoryCommand(ImageCopyFromMemory, bytes_transferred,
-        *(params->psrcptr), nullptr, *(params->phSignalEvent), query,
+        *(params->psrcptr), nullptr, *(params->phSignalEvent), ze_instance_data.query_,
         *(params->phCommandList), kids);
     }
     else {
-      collector->query_pools_.PutQuery(query);
+      collector->query_pools_.PutQuery(ze_instance_data.query_);
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -5027,6 +5086,10 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   ZeMetricQueryPools query_pools_;
 
   std::vector<ze_context_handle_t> metric_contexts_;
+
+  mutable std::shared_mutex events_mutex_;
+  std::set<ze_event_pool_handle_t> counter_based_pools_;
+  std::set<ze_event_handle_t> counter_based_events_;
 
   constexpr static size_t kCallsLength = 12;
   constexpr static size_t kTimeLength = 20;

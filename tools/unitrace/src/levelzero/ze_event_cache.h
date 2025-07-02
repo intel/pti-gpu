@@ -132,7 +132,14 @@ class ZeEventCache {
 
     event = result->second.back();
     result->second.pop_back();
-    PTI_ASSERT(ZE_FUNC(zeEventQueryStatus)(event) == ZE_RESULT_NOT_READY);
+
+    // TODO: Removing the below assert for now. Reason is that we see
+    //       a behavior that if an event has signaled from an immediate
+    //       command list, it stays at signaled state even after zeEventHostReset.
+    //       This is not causing a real issue since once a new command is appended
+    //       using the same event as the signal event, the event state becomes
+    //       not ready.
+    //PTI_ASSERT(ZE_FUNC(zeEventQueryStatus)(event) == ZE_RESULT_NOT_READY);
 
     return event;
   }

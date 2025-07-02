@@ -662,14 +662,19 @@ macro(FindL0Library TARGET)
           NAMES ze_loader
           PATHS ${SEARCH_LIB_PATH})
         if(NOT L0_LIB_PATH)
-          RequirePythonInterp()
+          if (NOT TARGET level_zero_lib)
+            RequirePythonInterp()
 
-          add_custom_target(level_zero_lib ALL
-                            DEPENDS ${CMAKE_BINARY_DIR}/ze_loader.lib)
-          add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/ze_loader.lib
-                             COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/convert_dll_to_lib.py" ${CMAKE_BINARY_DIR} ${L0_DLL_PATH})
-          add_dependencies(${TARGET} level_zero_lib)
-          target_link_libraries(${TARGET} "${CMAKE_BINARY_DIR}/ze_loader.lib")
+            add_custom_target(level_zero_lib ALL
+                              DEPENDS ${CMAKE_BINARY_DIR}/ze_loader.lib)
+            add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/ze_loader.lib
+                               COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/convert_dll_to_lib.py" ${CMAKE_BINARY_DIR} ${L0_DLL_PATH})
+            add_dependencies(${TARGET} level_zero_lib)
+            target_link_libraries(${TARGET} "${CMAKE_BINARY_DIR}/ze_loader.lib")
+          else()
+            add_dependencies(${TARGET} level_zero_lib)
+            target_link_libraries(${TARGET} "${CMAKE_BINARY_DIR}/ze_loader.lib")
+          endif()
         else()
           message(STATUS
             "Level Zero library is found at ${L0_LIB_PATH}")

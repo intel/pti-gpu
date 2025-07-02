@@ -373,7 +373,9 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
         f.write("    TO_HEX_STRING(str, *(params->p" + name + "));\n")
         if name == "pArgValue" and func == "zeKernelSetArgumentValue":
           f.write("    void* argValuePtr = const_cast<void*>(*(params->ppArgValue));\n")
-          f.write("    if (*(params->pargSize) == 1) {\n")
+          f.write("    if (!argValuePtr) {\n")
+          f.write("      str += \" (NULL)\";\n")
+          f.write("    } else if (*(params->pargSize) == 1) {\n")
           f.write("      str += \" ArgValue = \";\n")
           f.write("      TO_HEX_STRING(str, *(reinterpret_cast<uint8_t *>(argValuePtr)));\n")
           f.write("    } else if (*(params->pargSize) == 2) {\n")
@@ -867,6 +869,7 @@ def main():
   func_list += exp_func_list
 
   kfunc_list = [
+      "zeEventCreate",
       "zeEventDestroy",
       "zeEventHostReset",
       "zeEventPoolCreate",

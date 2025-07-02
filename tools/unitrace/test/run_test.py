@@ -9,6 +9,7 @@ import subprocess
 import os
 import platform
 import unidiff
+import argparse
 
 def extract_test_case_output(cmake_root_path, test_case_nmae, scenario):
     # Construct the path to the expected output file within the "gold" folder
@@ -55,7 +56,7 @@ def call_unidiff(scenario, output_dir, output_file_with_pid, expected_output_fil
         print(f"[ERROR] Unknown scenario: {scenario}")
         return 1
 
-def run_unitrace(cmake_root_path, scenario, test_case_nmae, args):
+def run_unitrace(cmake_root_path, scenario, test_case_nmae, args, extra_test_prog):
     output_dir = cmake_root_path + "/build/results"
     if platform.system() == "Windows":
         unitrace_exe = cmake_root_path + "/../build/unitrace.exe"
@@ -88,7 +89,7 @@ def run_unitrace(cmake_root_path, scenario, test_case_nmae, args):
 
     try:
 
-        result = subprocess.run(command, text=True) # executing unitrace command
+        result = subprocess.run(command, text=True, capture_output=True) # executing unitrace command
         if result.returncode != 0:
             print(f"[ERROR] Unitrace execution failed with return code {result.returncode}.", file = sys.stderr)
             return 1  # Indicate failure due to unitrace ERROR
@@ -115,6 +116,24 @@ def run_unitrace(cmake_root_path, scenario, test_case_nmae, args):
                 print(f"[ERROR] found in output file '{output_file}'.", file = sys.stderr)
                 return 1  # Indicate failure due to ERROR in output
 
+        if extra_test_prog != None:
+            # obtain list of generated files from unitrace stderr output
+            full_path_output_files = []
+            err_lines = result.stderr.splitlines()
+            for line in err_lines:
+                i = line.find("is stored in")
+                if i > 0:
+                    full_path_output_files.append(line[i+13:].strip())
+
+            # execute provided test with list of files as arguments
+            if extra_test_prog.endswith(".py"):
+                cmd = [sys.executable, extra_test_prog] + full_path_output_files
+            else:
+                cmd = [extra_test_prog] + full_path_output_files
+            rc = subprocess.run(cmd, text=True)
+            if rc.returncode != 0:
+                return 1  # extra test prog failed
+
         # check for unidiff supported commands
         if scenario not in ["--device-timing", "-d", "--device-timeline", "-t"]:
             return 0 # unidiff.py not required for this scenario
@@ -136,17 +155,21 @@ def run_unitrace(cmake_root_path, scenario, test_case_nmae, args):
           return 1
 
 def main():
-    if len(sys.argv) < 3:
-        print("[ERROR] Minimum 4 arguments required")
-        print(sys.argv)
-        return 1
+    parser = argparse.ArgumentParser(prog="run_test.py", description="Run unitrace test")
+    parser.add_argument('-s', '--scenario', type=str)
+    parser.add_argument('-t', '--extra_test_prog', type=str)
+    parser.add_argument('cmake_root_path')
+    parser.add_argument('args', nargs='+')
+    args = parser.parse_args()
 
-    cmake_root_path = sys.argv[1]
     scenario = os.environ["UNITRACE_OPTION"]
-    test_case_name = sys.argv[2]
-    args = sys.argv[3:]
 
-    return run_unitrace(cmake_root_path, scenario, test_case_name, args)
+    #if scenario provided in command line - run only that scenario
+    if (args.scenario):
+        if (scenario.lstrip('-') != args.scenario.lstrip('-')):
+            return 0;
+
+    return run_unitrace(args.cmake_root_path, scenario, args.args[0], args.args[1:], args.extra_test_prog)
     
 if __name__ == "__main__":
     sys.exit(main())
