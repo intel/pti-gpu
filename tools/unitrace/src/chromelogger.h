@@ -65,7 +65,11 @@ static std::string EncodeURI(const std::string &input) {
 }
 
 static std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+#ifdef _WIN32
+static uint32_t mpi_rank = rank.empty() ? _getpid() : std::atoi(rank.c_str());	// use pid as a dummy rank id
+#else /* _WIN32 */
 static uint32_t mpi_rank = rank.empty() ? getpid() : std::atoi(rank.c_str());	// use pid as a dummy rank id
+#endif /* _WIN32 */
 
 static std::string pmi_hostname = GetHostName();
 

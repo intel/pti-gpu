@@ -43,7 +43,7 @@ inline void PrintDeviceList() {
   if (!InitializeL0()) {
     return;
   }
-
+  
   auto device_list = GetDeviceList();
   if (device_list.empty()) {
     std::cout << "[WARNING] No Level Zero devices found" << std::endl;
@@ -188,7 +188,7 @@ struct ZeDeviceDescriptor {
   int32_t num_sub_devices_;
   zet_metric_group_handle_t metric_group_;
   ze_pci_ext_properties_t pci_properties_;
-  std::thread *profiling_thread_; 
+  std::thread *profiling_thread_;
   std::atomic<ZeProfilerState> profiling_state_;
   std::string metric_file_name_;
   std::ofstream metric_file_stream_;
@@ -197,8 +197,8 @@ struct ZeDeviceDescriptor {
 
 class ZeMetricProfiler {
  public:
-  static ZeMetricProfiler* Create(char *dir, std::string& logfilename, bool idle_sampling, std::string devices_to_sample) {
-    ZeMetricProfiler* profiler = new ZeMetricProfiler(dir, logfilename, idle_sampling, devices_to_sample);
+  static ZeMetricProfiler* Create(uint32_t app_pid, char *dir, std::string& logfilename, bool idle_sampling, std::string devices_to_sample) {
+    ZeMetricProfiler* profiler = new ZeMetricProfiler(app_pid, dir, logfilename, idle_sampling, devices_to_sample);
     UniMemory::ExitIfOutOfMemory((void *)(profiler));
 
     profiler->StartProfilingMetrics();
@@ -208,7 +208,7 @@ class ZeMetricProfiler {
 
   ~ZeMetricProfiler() {
     StopProfilingMetrics();
-    ComputeMetrics();
+    ComputeMetricsSampled();
     delete logger_;
     if (!log_name_.empty()) {
       std::cerr << "[INFO] Device metrics are stored in " << log_name_ << std::endl;
@@ -218,11 +218,248 @@ class ZeMetricProfiler {
   ZeMetricProfiler(const ZeMetricProfiler& that) = delete;
   ZeMetricProfiler& operator=(const ZeMetricProfiler& that) = delete;
 
- private:
+#ifdef _WIN32
+  static void ComputeMetricsQueried(uint32_t pid) {
 
+    std::string metric_group_name = utils::GetEnv("UNITRACE_MetricGroup");
+    std::vector<zet_metric_group_handle_t> groups;
+    ze_result_t status = ZE_RESULT_SUCCESS;
+ 
+    // get handle of the metric group on each device
+    // but initialize L0 first
+    if (ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY) != ZE_RESULT_SUCCESS) {
+      std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
+      return;
+    }
+
+    uint32_t num_drivers = 0;
+    status = ZE_FUNC(zeDriverGet)(&num_drivers, nullptr);
+    if (status != ZE_RESULT_SUCCESS) {
+      std::cerr << "[ERROR] Unable to get driver" << std::endl;
+      return;
+    }
+ 
+    if (num_drivers > 0) {
+      std::vector<ze_driver_handle_t> drivers(num_drivers);
+      status = ZE_FUNC(zeDriverGet)(&num_drivers, drivers.data());
+      if (status != ZE_RESULT_SUCCESS) {
+        std::cerr << "[ERROR] Unable to get driver" << std::endl;
+        return;
+      }
+ 
+      for (auto driver : drivers) {
+        uint32_t num_devices = 0;
+        status = ZE_FUNC(zeDeviceGet)(driver, &num_devices, nullptr);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[WARNING] Unable to get device" << std::endl;
+          return;
+        }
+        if (num_devices) {
+          std::vector<ze_device_handle_t> devices(num_devices);
+          status = ZE_FUNC(zeDeviceGet)(driver, &num_devices, devices.data());
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[WARNING] Unable to get device" << std::endl;
+            return;
+          }
+          for (auto device : devices) {
+            uint32_t num_groups = 0;
+            status = ZE_FUNC(zetMetricGroupGet)(device, &num_groups, nullptr);
+            if (status != ZE_RESULT_SUCCESS) {
+              std::cerr << "[ERROR] Unable to get metric group" << std::endl;
+              return;
+            }
+            if (num_groups > 0) {
+              std::vector<zet_metric_group_handle_t> grps(num_groups, nullptr);
+              status = ZE_FUNC(zetMetricGroupGet)(device, &num_groups, grps.data());
+              if (status != ZE_RESULT_SUCCESS) {
+                std::cerr << "[ERROR] Unable to get metric group" << std::endl;
+                return;
+              }
+
+    	      uint32_t k;
+              for (k = 0; k < num_groups; ++k) {
+                zet_metric_group_properties_t group_props{};
+                group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
+                status = ZE_FUNC(zetMetricGroupGetProperties)(grps[k], &group_props);
+                if (status != ZE_RESULT_SUCCESS) {
+                  std::cerr << "[ERROR] Unable to get metric group properties" << std::endl;
+                  return;
+                }
+
+                if ((strcmp(group_props.name, metric_group_name.c_str()) == 0) && (group_props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED)) {
+                  groups.push_back(grps[k]);
+                  break;
+                }
+              }
+    	      if (k == num_groups) {
+                // no metric group found
+    	        // should not get here
+                groups.push_back(nullptr);
+    	      }
+            }
+    	    else {
+              // unable to get metric groups
+    	      // should get here
+              groups.push_back(nullptr);
+    	    }
+          }
+        }
+      }
+    }
+
+    // derive computed metrics file name from the log file name if "-o" option is present, otherwise output to stdout
+    std::string  log_file_name = utils::GetEnv("UNITRACE_LogFilename");
+    Logger *metrics_logger = nullptr;
+    std::string computed_metrics_file_name;
+    if (log_file_name.empty()) {
+      metrics_logger = new Logger(log_file_name);  // output to stdout
+    }
+    else {
+      size_t pos = log_file_name.find_first_of('.');
+
+      if (pos == std::string::npos) {
+        computed_metrics_file_name = log_file_name;
+      } else {
+        computed_metrics_file_name = log_file_name.substr(0, pos);
+      }
+
+      computed_metrics_file_name = computed_metrics_file_name + ".metrics." + std::to_string(pid);      // embed the target process id in the final data file
+
+      std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+      if (!rank.empty()) {
+        computed_metrics_file_name = computed_metrics_file_name + "." + rank;
+      }
+
+      if (pos != std::string::npos) {
+        computed_metrics_file_name = computed_metrics_file_name + log_file_name.substr(pos);
+      }
+
+      metrics_logger = new Logger(computed_metrics_file_name, true, true);
+      if (metrics_logger == nullptr) {
+        std::cerr << "[ERROR] Failed to create metric data file" << std::endl;
+      }
+    }
+
+    // raw metrics data is stored in ".metrics.<pid>.q" in the folder stored in UNITRACE_DataDir
+    std::string data_dir = utils::GetEnv("UNITRACE_DataDir");
+    std::string metrics_file_name = data_dir + "/.metrics." + std::to_string(pid) + ".q";
+    std::ifstream mf(metrics_file_name, std::ios::binary);
+    if (!mf) {
+      std::cerr << "[ERROR] Could not open the metric data file" << std::endl;
+      return;
+    }
+    int did = -1;
+    zet_metric_group_handle_t group = nullptr;
+    std::vector<std::string> metric_names;
+    while (!mf.eof()) {
+      int32_t device;
+      size_t kname_size;
+      std::string kname;
+      uint64_t instance_id;
+      uint64_t data_size;
+      std::vector<uint8_t> metrics_data;
+ 
+      mf.read(reinterpret_cast<char *>(&device), sizeof(int32_t));
+      if (mf.gcount() != sizeof(int32_t)) {
+        break;
+      }
+      mf.read(reinterpret_cast<char *>(&kname_size), sizeof(size_t));
+      if (mf.gcount() != sizeof(size_t)) {
+        break;
+      }
+      if (kname.size() < kname_size) {
+        kname.resize(kname_size);
+      }
+      mf.read(&kname[0], kname_size);
+      if (mf.gcount() != kname_size) {
+        break;
+      }
+      mf.read(reinterpret_cast<char *>(&instance_id), sizeof(uint64_t));
+      if (mf.gcount() != sizeof(uint64_t)) {
+        break;
+      }
+      mf.read(reinterpret_cast<char *>(&data_size), sizeof(uint64_t));
+      if (mf.gcount() != sizeof(uint64_t)) {
+        break;
+      }
+      if (metrics_data.size() < data_size) {
+        metrics_data.resize(data_size);
+      }
+      mf.read(reinterpret_cast<char *>(metrics_data.data()), data_size);
+      if (mf.gcount() != data_size) {
+        break;
+      }
+ 
+      if (device != did) {
+        did = device;
+        group = groups[device];
+        metric_names = GetMetricNames(groups[device]);
+        PTI_ASSERT(!metric_names.empty());
+        metrics_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
+        std::string header("\nKernel,GlobalInstanceId,SubDeviceId");
+        for (auto& metric : metric_names) {
+          header += "," + metric;
+        }
+        header += "\n";
+        metrics_logger->Log(header);
+      }
+ 
+      // compute metrics
+      uint32_t num_samples = 0;
+      uint32_t num_metrics = 0;
+      ze_result_t status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
+        group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+        data_size, metrics_data.data(), &num_samples, &num_metrics,
+        nullptr, nullptr);
+   
+      if ((status == ZE_RESULT_SUCCESS) && (num_samples > 0) && (num_metrics > 0)) {
+        std::vector<uint32_t> samples(num_samples);
+        std::vector<zet_typed_value_t> computed_metrics(num_metrics);
+   
+        status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
+          group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+          data_size, metrics_data.data(), &num_samples, &num_metrics,
+          samples.data(), computed_metrics.data());
+   
+        if (status == ZE_RESULT_SUCCESS) {
+          std::string str;
+          for (uint32_t i = 0; i < num_samples; ++i) {
+            str = kname + ",";
+            str += std::to_string(instance_id) + ",";
+            str += std::to_string(i);
+ 
+            uint32_t size = samples[i];
+            const zet_typed_value_t *value = computed_metrics.data() + i * size;
+            for (int j = 0; j < size; ++j) {
+              str += ",";
+  	    str += PrintTypedValue(value[j]);
+            }
+            str += "\n";
+          }
+          str += "\n";
+ 
+          metrics_logger->Log(str);
+        }
+        else {
+          std::cerr << "[WARNING] Not able to calculate metrics" << std::endl;
+        }
+      }
+      else {
+        std::cerr << "[WARNING] Not able to calculate metrics" << std::endl;
+      }
+    }
+
+    if (!log_file_name.empty()) {
+      std::cerr << "[INFO] Kernel metrics are stored in " << computed_metrics_file_name << std::endl;
+    }
+    delete metrics_logger; // close metric data file
+  }
+#endif /* _WIN32 */
+
+ private:
   std::set<int> devices_to_sample_;
 
-  ZeMetricProfiler(char *dir, std::string& logfile, bool idle_sampling, std::string &devices_to_sample) {
+  ZeMetricProfiler(uint32_t app_pid, char *dir, std::string& logfile, bool idle_sampling, std::string &devices_to_sample) {
     data_dir_name_ = std::string(dir);
     if (!logfile.empty()) {
       size_t pos = logfile.find_first_of('.');
@@ -234,7 +471,7 @@ class ZeMetricProfiler {
         filename = logfile.substr(0, pos);
       }
 
-      filename = filename + ".metrics." + std::to_string(utils::GetPid());
+      filename = filename + ".metrics." + std::to_string(app_pid);
 
       std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
       if (!rank.empty()) {
@@ -254,7 +491,7 @@ class ZeMetricProfiler {
     idle_sampling_ = idle_sampling;
 
     logger_ = new Logger(log_name_, true, true);
-
+    
     if (devices_to_sample.length() > 0) {
       auto list_devices_str = utils::SplitString (devices_to_sample, ',');
       for (const auto &s : list_devices_str) {
@@ -264,10 +501,10 @@ class ZeMetricProfiler {
       }
     }
 
-    EnumerateDevices(dir);
+    EnumerateDevices(app_pid, dir);
   }
 
-  void EnumerateDevices(char *dir) {
+  void EnumerateDevices(uint32_t app_pid, char *dir) {
 
     std::string metric_group = utils::GetEnv("UNITRACE_MetricGroup");
     std::string output_dir = utils::GetEnv("UNITRACE_TraceOutputDir");
@@ -381,6 +618,7 @@ class ZeMetricProfiler {
           ze_pci_ext_properties_t pci_device_properties;
           ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(sub_devices[j], &pci_device_properties);
           PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+          
           sub_desc->pci_properties_ = pci_device_properties;
 
           uint64_t ticks;
@@ -407,7 +645,7 @@ class ZeMetricProfiler {
           sub_desc->profiling_state_.store(PROFILER_DISABLED, std::memory_order_release);
 
 #if 0
-          sub_desc->metric_file_name_ = std::string(dir) + "/." + std::to_string(global_dev_cnt) + "." + std::to_string(j) + "." + metric_group + "." + std::to_string(utils::GetPid()) + ".t";
+          sub_desc->metric_file_name_ = std::string(dir) + "/." + std::to_string(global_dev_cnt) + "." + std::to_string(j) + "." + metric_group + "." + std::to_string(app_pid) + ".t";
           sub_desc->metric_file_stream_ = std::ofstream(sub_desc->metric_file_name_, std::ios::out | std::ios::trunc | std::ios::binary);
 #endif /* 0 */
 
@@ -453,7 +691,6 @@ class ZeMetricProfiler {
   }
 
   void StopProfilingMetrics() {
-
     for (auto [handle, device] : device_descriptors_) {
       if (device->parent_device_ != nullptr) {
         // subdevice 
@@ -481,10 +718,10 @@ class ZeMetricProfiler {
     return (iv1.metric_start < iv2.metric_start);
   }
 
-  void ComputeMetrics() {
+  void ComputeMetricsSampled() {
     auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
-
+    
     for (auto [handle, device] : device_descriptors_) {
       if (device->parent_device_ != nullptr) {
         // subdevice
@@ -556,12 +793,11 @@ class ZeMetricProfiler {
 
         uint32_t ip_idx = GetMetricId(metric_list, "IP");
         if (ip_idx >= metric_list.size()) {
-          // no IP metric 
+          // no IP metric
           continue;
         }
 
         std::ifstream inf = std::ifstream(device->metric_file_name_, std::ios::in | std::ios::binary);
-
         if (!inf.is_open()) {
           continue;
         }
@@ -618,7 +854,6 @@ class ZeMetricProfiler {
               std::string str;
 
               uint32_t size = samples[i];
-
               for (int j = 0; j < size; j += metric_list.size()) {
                 uint64_t ip;
                 ip = (value[j + 0].value.ui64 << 3);
@@ -664,7 +899,7 @@ class ZeMetricProfiler {
 
         header += std::to_string(device->device_id_) + " Metrics ===\n\n";
         int field_sizes[11];
-        field_sizes[0] = max_kname_size; 
+        field_sizes[0] = max_kname_size;
         field_sizes[1] = std::max(sizeof("0x00000000") - 1, metric_list[0].size());
         header += std::string(std::max(int(field_sizes[0] + 1 - sizeof("Kernel")), 0), ' ') + "Kernel, ";
         logger_->Log(header);  // in case the kernel name is too long
@@ -675,7 +910,6 @@ class ZeMetricProfiler {
         }
 
         header += "\n";
-
         logger_->Log(header);
 
         for (auto [ip, stall] : eustalls) {
@@ -728,7 +962,6 @@ class ZeMetricProfiler {
 
             while (!kf.eof()) {
               ZeKernelInfo info;
-
               std::string line;
 
               std::getline(kf, line);
@@ -737,7 +970,6 @@ class ZeMetricProfiler {
               }
               info.subdevice_id = std::strtol(line.c_str(), nullptr, 0);
               line.clear();
-
               std::getline(kf, line);
               if (kf.eof()) {
                 break;
@@ -780,7 +1012,7 @@ class ZeMetricProfiler {
 
         uint32_t ts_idx = GetMetricId(metric_list, "QueryBeginTime");
         if (ts_idx >= metric_list.size()) {
-          // no QueryBeginTime metric 
+          // no QueryBeginTime metric
           continue;
         }
 
@@ -803,7 +1035,6 @@ class ZeMetricProfiler {
         }
 
         header += "\n";
-
         logger_->Log(header);
 
         uint64_t dummy_global_instance_id = max_global_instance_id + min_dummy_instance_id;  // for samples that do not belong to any kernel
@@ -860,7 +1091,6 @@ class ZeMetricProfiler {
             bool kernelsampled = false;
             bool idle = false;	// is the sample collected while the device is idle?
             for (uint32_t i = 0; i < num_samples; ++i) {
-
               uint32_t size = samples[i];
 
               for (int j = 0; j < (size / metric_list.size()); ++j) {
@@ -875,7 +1105,7 @@ class ZeMetricProfiler {
                 cur_sampling_ts = ts;
                 if ((ts >= kit->metric_start) && (ts <= kit->metric_end)) {
                   if (idle) {
-                    logger_->Log("\n");	// separate from samples that do not belong to any kernels/commands 
+                    logger_->Log("\n");	// separate from samples that do not belong to any kernels/commands
                     idle = false;
                   }
 
@@ -944,6 +1174,35 @@ class ZeMetricProfiler {
       }
     }
     free (raw_metrics);
+  }
+
+  static std::vector<std::string> GetMetricNames(zet_metric_group_handle_t group) {
+    PTI_ASSERT(group != nullptr);
+
+    uint32_t metric_count = GetMetricCount(group);
+    PTI_ASSERT(metric_count > 0);
+
+    std::vector<zet_metric_handle_t> metrics(metric_count);
+    ze_result_t status = ZE_FUNC(zetMetricGet)(group, &metric_count, metrics.data());
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    PTI_ASSERT(metric_count == metrics.size());
+
+    std::vector<std::string> names;
+    for (auto metric : metrics) {
+      zet_metric_properties_t metric_props{
+          ZET_STRUCTURE_TYPE_METRIC_PROPERTIES, };
+      status = ZE_FUNC(zetMetricGetProperties)(metric, &metric_props);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+      std::string units = GetMetricUnits(metric_props.resultUnits);
+      std::string name = metric_props.name;
+      if (!units.empty()) {
+        name += "[" + units + "]";
+      }
+      names.push_back(std::move(name));
+    }
+
+    return names;
   }
 
  private:
@@ -1157,7 +1416,7 @@ class ZeMetricProfiler {
   std::vector<ze_context_handle_t> metric_contexts_;
   std::map<ze_device_handle_t, ZeDeviceDescriptor *> device_descriptors_;
   std::string data_dir_name_;
-  Logger* logger_; 
+  Logger* logger_;
   std::string log_name_;
   bool idle_sampling_;
 };

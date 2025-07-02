@@ -87,7 +87,11 @@ struct ZeMetricQueryPools {
     for (auto it = query_pool_map_.begin(); it != query_pool_map_.end(); it++) {
       status = ZE_FUNC(zetMetricQueryDestroy)(it->first);
       if (status != ZE_RESULT_SUCCESS) {
+#ifndef _WIN32
+        // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
+        // so ignore the error
         std::cerr << "[WARNING] Failed to destroy metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
+#endif /* _WIN32 */
       }
     }
     query_pool_map_.clear();
@@ -95,7 +99,11 @@ struct ZeMetricQueryPools {
     for (auto it = pools_.begin(); it != pools_.end(); it++) {
       status = ZE_FUNC(zetMetricQueryPoolDestroy)(*it);
       if (status != ZE_RESULT_SUCCESS) {
+#ifndef _WIN32
+        // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
+        // so ignore the error
         std::cerr << "[WARNING] Failed to destroy metric query pool (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
+#endif /* _WIN32 */
       }
     }
     
@@ -1208,15 +1216,16 @@ class ZeCollector {
   void Finalize() {
 
     ProcessAllCommandsSubmitted(nullptr);
-    // Win_Todo: For windows zelTracerDestroy is returning ZE_RESULT_ERROR_UNINITIALIZED error
-#ifndef _WIN32
     if (tracer_ != nullptr) {
       ze_result_t status = ZE_FUNC(zelTracerDestroy)(tracer_);
       if (status != ZE_RESULT_SUCCESS) {
+#ifndef _WIN32
+        // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
+        // so ignore the error
         std::cerr << "[WARNING] Failed to destroy tracer (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
+#endif /* _WIN32 */
       }
     }
-#endif /* _WIN32 */
 
     global_device_submissions_mutex_.lock();
     if (global_device_submissions_) {
@@ -1231,14 +1240,22 @@ class ZeCollector {
       for (auto it = metric_activations_.begin(); it != metric_activations_.end(); it++) {
         auto status = ZE_FUNC(zetContextActivateMetricGroups)(it->first, it->second, 0, nullptr);
         if (status != ZE_RESULT_SUCCESS) {
+#ifndef _WIN32
+          // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
+          // so ignore the error
           std::cerr << "[WARNING] Failed to deactivate metric groups (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
+#endif /* _WIN32 */
         }
       }
       metric_activations_.clear();
       for (auto& context : metric_contexts_) {
         auto status = ZE_FUNC(zeContextDestroy)(context);
         if (status != ZE_RESULT_SUCCESS) {
+#ifndef _WIN32
+          // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
+          // so ignore the error
           std::cerr << "[WARNING] Failed to destroy context for metrics query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
+#endif /* _WIN32 */
         }
       }
       metric_contexts_.clear();
@@ -2132,6 +2149,76 @@ class ZeCollector {
     }
 
     // metric query
+    
+#ifdef _WIN32
+    // On Windows, L0 may have been unloaded or be being unloaded at this point
+    // So we save the metric data in a file and the saved metrics will be computed in the parent process
+    // The metric data file path: <data_dir>/.metrics.<pid>.q
+    // The format of each entry in the file is: device id (int32_t), size of kernel name (size_t), kernel name, instance (uin64_t), size of metric data (uint64_t), metric data
+
+    std::string fpath = data_dir_name_ + "/.metrics." + std::to_string(utils::GetPid()) + ".q";
+    std::ofstream mf(fpath, std::ios::binary);
+
+    if (!mf) {
+        std::cerr << "[ERROR] Failed to create metric data file" << std::endl;
+        exit(-1);
+    }
+
+    while (1) {
+      if (global_kernel_profiles_.empty()) {
+        break;	// done
+      }
+      ze_device_handle_t device = nullptr;
+      int32_t did = -1;
+      for (auto it = global_kernel_profiles_.begin(); it != global_kernel_profiles_.end();) {
+        if ((it->second.metrics_ == nullptr) || it->second.metrics_->empty() || (it->second.device_ == nullptr)) {
+          // skip empty entries
+          it = global_kernel_profiles_.erase(it);
+          continue;
+        }
+  
+        if (device == nullptr) {
+          auto it2 = devices_->find(it->second.device_);
+          
+          if (it2 == devices_->end()) {
+            // should never get here
+            it = global_kernel_profiles_.erase(it);
+            continue;
+          }
+  
+          device = it->second.device_;
+          did = it2->second.id_;
+        }
+        else {
+          if (it->second.device_ != device) {
+            it++;  // different device, dump later
+            continue;
+          }
+        }
+
+        std::string kname = GetZeKernelCommandName(it->second.kernel_command_id_, it->second.group_count_, it->second.mem_size_);
+        if (kname.empty()) {
+          // skip invalid kernels
+          // should never get here
+          it = global_kernel_profiles_.erase(it);
+          continue;
+        }
+  
+        mf.write(reinterpret_cast<char *>(&did), sizeof(int32_t));
+        size_t kname_size = kname.size();
+        mf.write(reinterpret_cast<char *>(&(kname_size)), sizeof(size_t));
+        mf.write(kname.c_str(), kname_size);
+        mf.write(reinterpret_cast<char *>(&(it->second.instance_id_)), sizeof(uint64_t));
+        uint64_t metrics_size =  it->second.metrics_->size();
+        mf.write(reinterpret_cast<char *>(&(metrics_size)), sizeof(uint64_t));
+        mf.write(reinterpret_cast<char *>(it->second.metrics_->data()), it->second.metrics_->size());
+        it = global_kernel_profiles_.erase(it);
+      }
+    }
+
+    mf.close();
+
+#else /* _WIN32 */
 
     std::string logfile = logger_->GetLogFileName();
     Logger *metric_logger = nullptr;
@@ -2159,8 +2246,6 @@ class ZeCollector {
 	      exit(-1);
       }
     }
-
-
     while (1) {
       if (global_kernel_profiles_.empty()) {
         break;	// done
@@ -2263,6 +2348,7 @@ class ZeCollector {
       std::cerr << "[INFO] Kernel metrics are stored in " << filename << std::endl;
       delete metric_logger; // close metric data file
     }
+#endif /* _WIN32 */
   }
 
   void ProcessCommandsSubmittedOnSignaledEvent(ze_event_handle_t event, std::vector<uint64_t> *kids) {

@@ -42,7 +42,11 @@ class ZeEventCache {
       }
     }
     if (!destroyed) {
+#ifndef _WIN32
+      // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
+      // so ignore the error
       std::cerr << "[WARNING] Event in event cache is not destroyed" << std::endl;
+#endif /* _WIN32 */
     }
     destroyed = true;
     for (auto& value : event_pools_) {
@@ -54,7 +58,11 @@ class ZeEventCache {
       }
     }
     if (!destroyed) {
+#ifndef _WIN32
+      // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
+      // so ignore the error
       std::cerr << "[WARNING] Event pool in event cache is not destroyed" << std::endl;
+#endif /* _WIN32 */
     }
   }
 

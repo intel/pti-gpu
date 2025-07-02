@@ -637,11 +637,11 @@ int ParseArgs(int argc, char* argv[]) {
   return app_index;
 }
 
-ZeMetricProfiler *EnableProfiling(char *dir, std::string& logfile, bool idle_sampling) {
+ZeMetricProfiler *EnableProfiling(uint32_t app_pid, char *dir, std::string& logfile, bool idle_sampling) {
   if (!InitializeL0()) {
     return nullptr;
   } else {
-    return ZeMetricProfiler::Create(dir, logfile, idle_sampling, utils::GetEnv("UNITRACE_DevicesToSample"));
+    return ZeMetricProfiler::Create(app_pid, dir, logfile, idle_sampling, utils::GetEnv("UNITRACE_DevicesToSample"));
   }
 }
 
@@ -827,13 +827,28 @@ int main(int argc, char *argv[]) {
     std::signal(SIGSEGV, CleanUp);
     std::signal(SIGTERM, CleanUp);
 
-    metric_profiler = EnableProfiling(data_dir, logfile, idle_sampling);
-
+    std::string latch_file_name = std::string(data_dir) + "/latch.tmp";
     int child;
 
     child = fork();
+
     if (child == 0) {
       // child process
+      // wait for the profiler to be ready
+      std::ifstream inf;
+      
+      inf.open(latch_file_name, std::ios_base::in);
+      uint32_t t = 0;
+      while (!inf.is_open() && (t < 10)) {	// wait for no more than 10s
+        sleep(1);
+        t += 1;
+        inf.open(latch_file_name, std::ios_base::in);
+      }
+      if (inf.is_open()) {
+        inf.close();
+      }
+
+      // ready to go
       utils::SetEnv("UNITRACE_DataDir", data_dir);
       if (execvp(app_args[0], app_args.data())) {
         std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
@@ -842,6 +857,18 @@ int main(int argc, char *argv[]) {
       }
     } else if (child > 0) {
       // parent process
+
+      metric_profiler = EnableProfiling(child, data_dir, logfile, idle_sampling);
+
+    
+      // create a latch file to notify the application process to proceed
+      std::ofstream outf(latch_file_name, std::ios_base::out);
+      if (!outf.is_open()) {
+        std::cerr << "[ERROR] Failed to create profiler latch file: " << app_args[0] << std::endl;
+      }
+      else {
+        outf.close();
+      }
 
       // wait for child process to complete
       while (wait(nullptr) > 0);
@@ -881,10 +908,11 @@ int main(int argc, char *argv[]) {
     }
   }
 #else /* _WIN32 */
-  bool metrics_enabled = (utils::GetEnv("UNITRACE_KernelMetrics") == "1");
+  bool metrics_sampling_enabled = (utils::GetEnv("UNITRACE_KernelMetrics") == "1");
+  bool metrics_query_enabled = (utils::GetEnv("UNITRACE_MetricQuery") == "1");
 
   // metric data collection
-  if (metrics_enabled) {
+  if (metrics_sampling_enabled || metrics_query_enabled) {
     char tpath[MAX_PATH];
     auto tpath_length = GetTempPathA(MAX_PATH, tpath);
     if (tpath_length == 0) {
@@ -968,9 +996,11 @@ int main(int argc, char *argv[]) {
 
       CloseHandle(thr);
 
-      if (metrics_enabled) {
+      DWORD app_pid = pi.dwProcessId;
+
+      if (metrics_sampling_enabled) {
         SetProfilingEnvironment();
-        metric_profiler = EnableProfiling(data_dir, logfile, idle_sampling);
+        metric_profiler = EnableProfiling(app_pid, data_dir, logfile, idle_sampling);
       }
 
       ResumeThread(pi.hThread); 
@@ -979,7 +1009,12 @@ int main(int argc, char *argv[]) {
       CloseHandle(pi.hThread);
       CloseHandle(pi.hProcess);
 
-      if (metrics_enabled && (metric_profiler != nullptr)) {
+      if (metrics_query_enabled) {
+        // compute metrics
+	ZeMetricProfiler::ComputeMetricsQueried(app_pid);
+      }
+
+      if (metrics_sampling_enabled && (metric_profiler != nullptr)) {
         DisableProfiling();
       }
 
@@ -996,7 +1031,7 @@ int main(int argc, char *argv[]) {
     Usage(argv[0]);
   }
 
-  if (metrics_enabled) {
+  if (metrics_sampling_enabled || metrics_query_enabled) {
     if (CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
       for (const auto& e : CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
         CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
