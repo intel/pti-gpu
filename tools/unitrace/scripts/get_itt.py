@@ -28,17 +28,24 @@ def copy(src_path, dst_path, file_list):
 
     shutil.copy(src_file, dst_file)
 
-def build(build_dir):
+def build(build_dir, install_path):
   curr_wrkng_dir = os.getcwd()
   itt_dir = build_dir + "/ittapi"
   os.chdir(itt_dir)
+  cmake_flags = ""
+  if (install_path != ""):
+    cmake_flags += "-DCMAKE_INSTALL_PREFIX={} ".format(install_path)
   if platform.system() == 'Windows':
-    os.system("cmake -G \"NMake Makefiles\" .")
+    os.system("cmake -G \"NMake Makefiles\" {} .".format(cmake_flags))
     os.system("nmake")
+    if (install_path != ""):
+      os.system("nmake install")
     shutil.copyfile("./bin/libittnotify.lib", build_dir + "/libittnotify.lib")
   else :
-    os.system("cmake .")
+    os.system("cmake {} .".format(cmake_flags))
     os.system("make")
+    if (install_path != ""):
+      os.system("make install")
     shutil.copyfile("./bin/libittnotify.a", build_dir + "/libittnotify.a")
 
   # Restore back the location
@@ -46,7 +53,7 @@ def build(build_dir):
 
 def main():
   if len(sys.argv) < 4:
-    print("Usage: python get_itt.py <include_path> <build_path> <commit_hash>")
+    print("Usage: python get_itt.py <include_path> <build_path> <commit_hash> [<cmake flags>]")
     return
 
   dst_path = sys.argv[1]
@@ -61,6 +68,11 @@ def main():
 
   commit = sys.argv[3]
   clone(url, commit, clone_path)
+
+  if len(sys.argv) > 4:
+    install_path = sys.argv[4]
+  else:
+    install_path = ""
 
   src_path = os.path.join(clone_path, "src")
   src_path = os.path.join(src_path, "ittnotify")
@@ -78,6 +90,7 @@ def main():
   copy(src_path, dst_path, ["ittnotify.h"])
 
   # build ittnotify
-  build(sys.argv[2])
+  build(sys.argv[2], install_path)
+
 if __name__ == "__main__":
   main()

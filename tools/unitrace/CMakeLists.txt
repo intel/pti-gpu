@@ -90,7 +90,10 @@ endmacro()
 if (${BUILD_WITH_ITT})
   # Download itt source from github repo
   set(ITT_HASH 6ddf03848b46f78a8d2cbe596cbe1b5e2602005c)
-  execute_process(COMMAND "${Python_EXECUTABLE}" ${PROJECT_SOURCE_DIR}/scripts/get_itt.py ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR} ${ITT_HASH}
+  if (CMAKE_INSTALL_PREFIX AND INSTALL_ITT)
+    set (ITT_INSTALL_PATH ${CMAKE_INSTALL_PREFIX})
+  endif()
+  execute_process(COMMAND "${Python_EXECUTABLE}" ${PROJECT_SOURCE_DIR}/scripts/get_itt.py ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR} ${ITT_HASH} ${ITT_INSTALL_PATH}
     RESULT_VARIABLE result
     ERROR_VARIABLE error_msg
   )
