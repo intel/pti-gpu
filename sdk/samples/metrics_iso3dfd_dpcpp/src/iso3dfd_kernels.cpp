@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <thread>
 
 #include "iso3dfd.h"
 #include "metrics_utils.h"

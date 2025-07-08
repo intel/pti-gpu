@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
 #include <iostream>
 #include <random>
 #include <thread>
