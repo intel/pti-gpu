@@ -901,14 +901,14 @@ class ClCollector {
 
     cl_ulong queued =
       utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_QUEUED);
-    PTI_ASSERT(queued > 0);
+    //PTI_ASSERT(queued > 0);
     cl_ulong submitted =
       utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_SUBMIT);
-    PTI_ASSERT(submitted > 0);
+    //PTI_ASSERT(submitted > 0);
 
     //PTI_ASSERT(instance->device_sync <= queued);
     // This is workaround due to driver bug. In some cases driver does not give right timestamp
-    int64_t time_diff = queued - instance->device_sync;
+    int64_t time_diff = 0 < queued ? (queued - instance->device_sync) : 0;
     uint64_t time_shift = ((time_diff > 0) ? time_diff : 0);
     host_queued = instance->host_sync + time_shift;
     //Win_Todo: Investigate why sometime "submitted > started" is happening
