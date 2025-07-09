@@ -24,12 +24,19 @@ public:
 #endif /* _WIN32 */
         if ((utils::GetEnv("UNITRACE_SystemTime") != "1") && (epoch_start_time_ == 0)) {
             // loop multiple times to mitigate context switch impact
-            for (int i = 0; i < 100; i++) {
-                uint64_t start;
-                const std::chrono::time_point<std::chrono::system_clock> now = std::chrono::system_clock::now();
-                start = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - GetHostTimestamp();
-                if (start > epoch_start_time_) {
-                    epoch_start_time_ = start;
+            uint64_t smallest_delta = uint64_t(-1);
+            for (int i = 0; i < 200; i++) {
+                const std::chrono::time_point<std::chrono::system_clock> t0 = std::chrono::system_clock::now();
+                uint64_t t1 = GetHostBootTimestamp();
+                uint64_t t2 = GetHostBootTimestamp();
+                const std::chrono::time_point<std::chrono::system_clock> t3 = std::chrono::system_clock::now();
+                uint64_t delta = std::chrono::duration_cast<std::chrono::nanoseconds>(t3.time_since_epoch()).count() - std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count();
+                if (delta < smallest_delta) {
+                    // approximate epoch time of system boot
+                    // t2 - t1 is the time to get boot time
+                    // t0 + (t2 - t1) - t1 is the epoch time of system boot
+                    epoch_start_time_ = std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count() + (t2 - t1) - t1;
+                    smallest_delta = delta;
                 }
             }
         }
@@ -53,6 +60,24 @@ public:
         return double(us) + (double(ns) * 0.001);
     }
         
+    static uint64_t GetHostBootTimestamp() {
+#if defined(_WIN32)
+        LARGE_INTEGER ticks;
+        if (!QueryPerformanceCounter(&ticks)) {
+          std::cerr << "[ERROR] Failed to query performance counter" << std::endl;
+          exit(-1);
+        }
+        return ticks.QuadPart * (NSEC_IN_SEC / frequency_.QuadPart);
+#else /* _WIN32 */
+        timespec ts;
+        if (clock_gettime(CLOCK_BOOTTIME, &ts)) {
+          std::cerr << "[ERROR] Failed to get timestamp" << std::endl;
+          exit(-1);
+        }
+        return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
+#endif /* _WIN32 */
+    }
+
     static uint64_t GetHostTimestamp() {
 #if defined(_WIN32)
         LARGE_INTEGER ticks;
