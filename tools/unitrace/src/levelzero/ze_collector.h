@@ -883,7 +883,6 @@ struct ZeDeviceSubmissions {
 
       if (cmd_query != nullptr) {
         cmd_query->instance_id_ = cmd->instance_id_;
-        event_cache.ResetEvent(cmd_query->metric_query_event_);
         SubmitCommandMetricQuery(cmd_query);
       }
     }
@@ -2021,6 +2020,8 @@ class ZeCollector {
             delete kmetrics;
           }
         }
+      } else {
+        return false;
       }
       event_cache_.ResetEvent(command_metric_query->metric_query_event_);
       query_pools_.ResetQuery(command_metric_query->metric_query_);
