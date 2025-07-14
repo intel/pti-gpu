@@ -200,7 +200,7 @@ pti_result ptiMetricsGetMetricsProperties(pti_metrics_group_handle_t metrics_gro
  *
  * @return pti_result
  */
-pti_result PTI_EXPORT ptiMetricsConfigureCollection(
+pti_result ptiMetricsConfigureCollection(
     pti_device_handle_t device_handle, pti_metrics_group_collection_params_t* metric_config_params,
     uint32_t metrics_group_count) {
   try {

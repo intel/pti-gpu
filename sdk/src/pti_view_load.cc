@@ -9,6 +9,7 @@
 #include <spdlog/spdlog.h>
 
 #include "pti/pti.h"
+#include "pti/pti_metrics.h"
 #include "pti/pti_view.h"
 #include "pti_lib_handler.h"
 
@@ -303,6 +304,179 @@ pti_result ptiViewEnableRuntimeApiClass(uint32_t enable, pti_api_class api_class
     }
 
     return pti::PtiLibHandler::Instance().ptiViewEnableRuntimeApiClass_(enable, api_class, group);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+// Metrics functions
+pti_result ptiMetricsGetDevices(pti_device_properties_t* devices, uint32_t* device_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsGetDevices_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsGetDevices_(devices, device_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsGetMetricGroups(pti_device_handle_t device_handle,
+                                     pti_metrics_group_properties_t* metrics_groups,
+                                     uint32_t* metrics_group_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsGetMetricGroups_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsGetMetricGroups_(device_handle, metrics_groups,
+                                                                     metrics_group_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsGetMetricsProperties(pti_metrics_group_handle_t metrics_group_handle,
+                                          pti_metric_properties_t* metrics) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsGetMetricsProperties_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsGetMetricsProperties_(metrics_group_handle,
+                                                                          metrics);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsConfigureCollection(
+    pti_device_handle_t device_handle, pti_metrics_group_collection_params_t* metric_config_params,
+    uint32_t metrics_group_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsConfigureCollection_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsConfigureCollection_(
+        device_handle, metric_config_params, metrics_group_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsStartCollection(pti_device_handle_t device_handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsStartCollection_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsStartCollection_(device_handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsStartCollectionPaused(pti_device_handle_t device_handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsStartCollectionPaused_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsStartCollectionPaused_(device_handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsPauseCollection(pti_device_handle_t device_handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsPauseCollection_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsPauseCollection_(device_handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsResumeCollection(pti_device_handle_t device_handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsResumeCollection_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsResumeCollection_(device_handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsStopCollection(pti_device_handle_t device_handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsStopCollection_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsStopCollection_(device_handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricGetCalculatedData(pti_device_handle_t device_handle,
+                                      pti_metrics_group_handle_t metrics_group_handle,
+                                      pti_value_t* metrics_values_buffer,
+                                      uint32_t* metrics_values_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricGetCalculatedData_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricGetCalculatedData_(
+        device_handle, metrics_group_handle, metrics_values_buffer, metrics_values_count);
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
   }

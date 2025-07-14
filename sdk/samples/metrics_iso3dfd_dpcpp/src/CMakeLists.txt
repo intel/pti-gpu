@@ -18,8 +18,10 @@ target_link_options(metrics_iso3dfd PUBLIC -O3 -fsycl)
 target_include_directories(
   metrics_iso3dfd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../samples_utilities
                           ${PROJECT_SOURCE_DIR}/../../src/utils
-                          ${CMAKE_CURRENT_SOURCE_DIR}/../include)
-target_link_libraries(metrics_iso3dfd PUBLIC spdlog::spdlog Pti::pti_view Pti::pti_metrics LevelZero::level-zero DevUtilities::utils)
+                          
+                          ${CMAKE_CURRENT_SOURCE_DIR}/../include
+                          )
+target_link_libraries(metrics_iso3dfd PUBLIC spdlog::spdlog Pti::pti_view DevUtilities::utils)
 
 if(SHARED_KERNEL)
   target_compile_definitions(metrics_iso3dfd PUBLIC USED_SHARED)

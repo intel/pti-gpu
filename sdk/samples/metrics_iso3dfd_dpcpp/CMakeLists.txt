@@ -34,10 +34,6 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-if (NOT TARGET Pti::pti_metrics)
-  find_package(Pti REQUIRED)
-endif()
-
 if (NOT TARGET LevelZero::level-zero)
   find_package(LevelZero REQUIRED)
 endif()

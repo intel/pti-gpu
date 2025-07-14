@@ -13,6 +13,7 @@
 #include <memory>
 
 #include "pti/pti.h"
+#include "pti/pti_metrics.h"
 #include "pti/pti_view.h"
 #include "utils/library_loader.h"
 #include "utils/platform_strings.h"
@@ -83,6 +84,17 @@ class PtiLibHandler {
   decltype(&ptiViewEnableRuntimeApi) ptiViewEnableRuntimeApi_ = nullptr;                  // NOLINT
   decltype(&ptiViewEnableRuntimeApiClass) ptiViewEnableRuntimeApiClass_ = nullptr;        // NOLINT
 
+  decltype(&ptiMetricsConfigureCollection) ptiMetricsConfigureCollection_ = nullptr;      // NOLINT
+  decltype(&ptiMetricsStopCollection) ptiMetricsStopCollection_ = nullptr;                // NOLINT
+  decltype(&ptiMetricsGetMetricGroups) ptiMetricsGetMetricGroups_ = nullptr;              // NOLINT
+  decltype(&ptiMetricsGetMetricsProperties) ptiMetricsGetMetricsProperties_ = nullptr;    // NOLINT
+  decltype(&ptiMetricsStartCollectionPaused) ptiMetricsStartCollectionPaused_ = nullptr;  // NOLINT
+  decltype(&ptiMetricsPauseCollection) ptiMetricsPauseCollection_ = nullptr;              // NOLINT
+  decltype(&ptiMetricsResumeCollection) ptiMetricsResumeCollection_ = nullptr;            // NOLINT
+  decltype(&ptiMetricsGetDevices) ptiMetricsGetDevices_ = nullptr;                        // NOLINT
+  decltype(&ptiMetricsStartCollection) ptiMetricsStartCollection_ = nullptr;              // NOLINT
+  decltype(&ptiMetricGetCalculatedData) ptiMetricGetCalculatedData_ = nullptr;            // NOLINT
+
  private:
   PtiLibHandler() {
     try {
@@ -125,6 +137,17 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiViewEnableDriverApiClass);
     PTI_VIEW_GET_SYMBOL(ptiViewEnableRuntimeApi);
     PTI_VIEW_GET_SYMBOL(ptiViewEnableRuntimeApiClass);
+
+    PTI_VIEW_GET_SYMBOL(ptiMetricsConfigureCollection);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsStopCollection);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsGetMetricGroups);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsGetMetricsProperties);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsStartCollectionPaused);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsPauseCollection);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsResumeCollection);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsGetDevices);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsStartCollection);
+    PTI_VIEW_GET_SYMBOL(ptiMetricGetCalculatedData);
 #undef PTI_VIEW_GET_SYMBOL
   }
   std::unique_ptr<LibraryLoader> pti_view_lib_ = nullptr;
