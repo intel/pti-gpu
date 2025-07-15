@@ -205,9 +205,10 @@ target_include_directories(unitrace_tool PRIVATE "${L0_INC_PATH}")
 # Loader
 
 add_executable(unitrace "${PROJECT_SOURCE_DIR}/src/unitrace.cc")
-# unitrace_tool to depeadn on unitrace so that unitrace is built first and then we can
+# unitrace_tool to depend on gen_l0_loader_header to ensure that it exists, but
+# also to depend on unitrace so that unitrace is built first and then we can
 # remove l0_loader.gen when unitrace_tool (and unitrace) are built
-add_dependencies(unitrace_tool unitrace)
+add_dependencies(unitrace_tool unitrace gen_l0_loader_header)
 
 if(UNIX)
     include(CMakePushCheckState)
