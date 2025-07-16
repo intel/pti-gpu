@@ -1,5 +1,6 @@
 include(macros)
 RemoveNDebugFlag() # For SYCL Function Name
+CheckExperimentalFilesystem()
 CheckIfSyclIsAvailable()
 GetGTest()
 
@@ -122,7 +123,7 @@ if(HAVE_SYCL)
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
-            
+
             "${PROJECT_SOURCE_DIR}/samples/samples_utilities")
 
   target_compile_options(
@@ -134,7 +135,7 @@ if(HAVE_SYCL)
   target_compile_definitions(vecsqadd_metrics_suite PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(vecsqadd_metrics_suite PUBLIC spdlog::spdlog
-    GTest::gtest_main Pti::pti_view)
+    GTest::gtest_main Pti::pti_view ${FS_LIB})
 
   add_executable(no_kernel_overlap no_kernel_overlap.cc)
   target_include_directories(

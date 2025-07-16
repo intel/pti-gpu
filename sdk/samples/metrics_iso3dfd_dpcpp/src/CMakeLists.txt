@@ -1,3 +1,5 @@
+CheckExperimentalFilesystem()
+
 option(SHARED_KERNEL "Use SLM Kernel Version - Only for GPU" OFF)
 
 # Set default build type to RelWithDebInfo if not specified
@@ -13,15 +15,18 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 add_executable(metrics_iso3dfd iso3dfd.cpp iso3dfd_kernels.cpp utils.cpp)
+
 target_compile_options(metrics_iso3dfd PUBLIC -O3 -fsycl)
 target_link_options(metrics_iso3dfd PUBLIC -O3 -fsycl)
+
 target_include_directories(
-  metrics_iso3dfd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../samples_utilities
+  metrics_iso3dfd PRIVATE ${PROJECT_SOURCE_DIR}/include
+                          ${PROJECT_SOURCE_DIR}/../samples_utilities
                           ${PROJECT_SOURCE_DIR}/../../src/utils
-                          
-                          ${CMAKE_CURRENT_SOURCE_DIR}/../include
                           )
-target_link_libraries(metrics_iso3dfd PUBLIC spdlog::spdlog Pti::pti_view DevUtilities::utils)
+
+target_link_libraries(metrics_iso3dfd PUBLIC spdlog::spdlog Pti::pti_view
+  DevUtilities::utils ${FS_LIB})
 
 if(SHARED_KERNEL)
   target_compile_definitions(metrics_iso3dfd PUBLIC USED_SHARED)
