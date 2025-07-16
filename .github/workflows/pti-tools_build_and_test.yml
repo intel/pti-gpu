@@ -1,6 +1,7 @@
 name: pti-tools-build-and-test
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "master" ]
     paths-ignore:
@@ -22,7 +23,7 @@ permissions:
 jobs:
 
   pti-tools-build-and-test:
-    name: Test pti tools Ubuntu-22-04
+    name: Test PTI Tools ${{ matrix.os_id }} ${{ matrix.tags }}
 
     if: vars.PTI_RUN_TESTS == 1
 
@@ -33,6 +34,10 @@ jobs:
         include:
           - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
             tags: '["self-hosted", "Linux", "pti", "PVC"]'
+            os_id: "ubuntu-22.04.2025.1.0"
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
+            tags: '["self-hosted", "Linux", "pti", "BMG"]'
+            os_id: "ubuntu-22.04.2025.1.0"
 
     container: 
       image: ${{ matrix.container }}
@@ -65,32 +70,39 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s onetrace
 
+      # TODO: Fix tools on platforms later than PVC.
       - name: Build-and-test-oneprof
+        if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s oneprof
 
       - name: Build-and-test-sysmon
+        if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s sysmon
 
       - name: Build-and-test-cl_gpu_metrics
+        if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s cl_gpu_metrics
 
       - name: Build-and-test-instcount
+        if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s instcount
 
       - name: Build-and-test-ze_debug_info
+        if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s ze_debug_info
 
       - name: Build-and-test-cl_debug_info
+        if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s cl_debug_info
