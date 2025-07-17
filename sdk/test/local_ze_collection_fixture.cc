@@ -573,3 +573,29 @@ TEST_F(LocalModeZeGemmTest, TestAsynchInorderQueueImplementationWithImmediateCom
 
   ValidateGemmKernel();
 }
+
+TEST_F(LocalModeZeGemmTest,
+       TestInorderQueueImplementationWithCommandListImmediateAppendCommandListsExp) {
+  InitializeDrivers();
+  InitializeEvents(4);
+  InitializeQueue();
+  InitializeLists(false);
+  CreateKernel();
+  SetKernelGroupSize();
+  SetKernelArguments();
+  SetKernelGroupCount();
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  EnableView(PTI_VIEW_DEVICE_GPU_MEM_COPY);
+  PrepareCommandList();
+  ASSERT_EQ(zeCommandListImmediateAppendCommandListsExp(compute_cmd_list_, 1, &cmd_list_, evts_[1],
+                                                        0, nullptr),
+            ZE_RESULT_SUCCESS);
+  ASSERT_EQ(zeEventHostSynchronize(evts_[1], ((std::numeric_limits<uint64_t>::max)() - 1)),
+            ZE_RESULT_SUCCESS);
+
+  DisableAndFlushAllViews();
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_mem_copies, static_cast<size_t>(3));
+
+  ValidateGemmKernel();
+}

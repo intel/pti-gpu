@@ -38,6 +38,7 @@
 #include "lz_api_tracing_api_loader.h"
 #include "overhead_kinds.h"
 #include "pti/pti_view.h"
+#include "pti_api_ids_state_maps.h"
 #include "unikernel.h"
 #include "utils.h"
 #include "ze_driver_init.h"
@@ -380,9 +381,9 @@ class ZeCollector {
     return mode;
   }
 
-  bool IsIntrospectionCapable() { return driver_introspection_capable_; }
+  bool IsIntrospectionCapable() const { return driver_introspection_capable_; }
 
-  bool IsDynamicTracingCapable() { return loader_dynamic_tracing_capable_; }
+  bool IsDynamicTracingCapable() const { return loader_dynamic_tracing_capable_; }
 
   // We get here on StartTracing/enable of L0 related view kinds.
   // The caller needs to ensure duplicated enable of view_kinds do not happen on a per thread basis.
@@ -559,14 +560,14 @@ class ZeCollector {
       for (auto const device : devices) {
         ze_device_properties_t device_properties = {};
         device_properties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+        device_properties.pNext = nullptr;
         overhead::Init();
         ze_result_t status = zeDeviceGetProperties(device, &device_properties);
         overhead_fini(zeDeviceGetProperties_id);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
         // Checking only on one driver for GPU device
-        const ze_device_type_t type = ZE_DEVICE_TYPE_GPU;
-        if (type == device_properties.type) {
+        if (device_properties.type == ZE_DEVICE_TYPE_GPU) {
           // Issue api call here and detect if introspection apis are supported by underlying
           // rolling driver.
           status = DetectIntrospectionApis(driver);
@@ -607,17 +608,17 @@ class ZeCollector {
     return desc;
   }
 
-  ze_result_t ReBuildCommandListInfo([[maybe_unused]] ze_command_list_handle_t command_list) {
+  ze_result_t ReBuildCommandListInfo(ze_command_list_handle_t command_list) {
     SPDLOG_DEBUG("In {}", __FUNCTION__);
     ze_result_t status = ZE_RESULT_SUCCESS;
 
-    ze_bool_t isImmediate = true;
-    ze_context_handle_t hContext;
-    ze_device_handle_t hDevice;
+    ze_bool_t is_immediate = true;
+    ze_context_handle_t ctx_handle = nullptr;
+    ze_device_handle_t device_handle = nullptr;
     uint32_t ordinal = static_cast<uint32_t>(-1);
     uint32_t index = static_cast<uint32_t>(-1);
 
-    status = l0_wrapper_.w_zeCommandListGetDeviceHandle(command_list, &hDevice);
+    status = l0_wrapper_.w_zeCommandListGetDeviceHandle(command_list, &device_handle);
 
     if (ZE_RESULT_SUCCESS != status) {
       // as this function is called from many places - makes sense to communicate an issue here
@@ -630,20 +631,20 @@ class ZeCollector {
       return status;
     }
 
-    status = l0_wrapper_.w_zeCommandListGetContextHandle(command_list, &hContext);
+    status = l0_wrapper_.w_zeCommandListGetContextHandle(command_list, &ctx_handle);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    status = l0_wrapper_.w_zeCommandListIsImmediate(command_list, &isImmediate);
+    status = l0_wrapper_.w_zeCommandListIsImmediate(command_list, &is_immediate);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    SPDLOG_DEBUG("\tIs CmdList immediate?  {}", isImmediate);
-    if (isImmediate) {
+    SPDLOG_DEBUG("\tIs CmdList immediate?  {}", is_immediate);
+    if (is_immediate) {
       status = l0_wrapper_.w_zeCommandListImmediateGetIndex(command_list, &index);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       status = l0_wrapper_.w_zeCommandListGetOrdinal(command_list, &ordinal);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
 
-    std::pair<uint32_t, uint32_t> oi(ordinal, index);
-    CreateCommandListInfo(command_list, hContext, hDevice, oi, isImmediate);
+    std::pair<uint32_t, uint32_t> ordinal_index(ordinal, index);
+    CreateCommandListInfo(command_list, ctx_handle, device_handle, ordinal_index, is_immediate);
 
     return status;
   }
@@ -693,7 +694,36 @@ class ZeCollector {
                  (void*)device_handle);
     device_descriptors_[device_handle] = GetZeDeviceDescriptor(device_handle);
     std::copy_n(device_descriptors_[device_handle].uuid.id, ZE_MAX_DEVICE_UUID_SIZE, ptr);
-    return;
+  }
+
+  void CollectOrdinalAndIndex(ze_command_queue_handle_t queue) {
+    uint32_t ordinal = static_cast<uint32_t>(-1);
+    uint32_t index = static_cast<uint32_t>(-1);
+    const std::lock_guard<std::mutex> lock(lock_);
+    if (queue_ordinal_index_map_.count(queue) == 0) {
+      ze_result_t res = l0_wrapper_.w_zeCommandQueueGetIndex(queue, &index);
+      ze_result_t res2 = l0_wrapper_.w_zeCommandQueueGetOrdinal(queue, &ordinal);
+      if (ZE_RESULT_SUCCESS != res || ZE_RESULT_SUCCESS != res2) {
+        if (nullptr != parent_state_) {
+          *(parent_state_) = pti_result::PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED;
+        }
+        SPDLOG_WARN("Failed to get queue ordinal and index, disabling Level Zero Tracing.");
+        AbnormalStopTracing();
+      }
+      queue_ordinal_index_map_[queue] = std::make_pair(ordinal, index);
+    }
+  }
+
+  void CollectOrdinalAndIndex(ze_command_list_handle_t command_list) {
+    // Ordinal and index will be acquired regardless
+    auto ordinal_index = GetCommandListInfoConst(command_list).oi_pair;
+    // Immediate command lists ordinal and indexes are stored as queues so we
+    // can cast. This is done in a few places.
+    const auto queue = reinterpret_cast<ze_command_queue_handle_t>(command_list);
+    const std::lock_guard<std::mutex> lock(lock_);
+    if (queue_ordinal_index_map_.count(queue) == 0) {
+      queue_ordinal_index_map_[queue] = std::move(ordinal_index);
+    }
   }
 
   /**
@@ -1138,8 +1168,6 @@ class ZeCollector {
   void PrepareToExecuteCommandLists(ze_command_list_handle_t* command_lists,
                                     uint32_t command_list_count, ze_command_queue_handle_t queue,
                                     ze_fence_handle_t fence) {
-    uint32_t q_index;
-    uint32_t q_ordinal;
     uint64_t host_time_sync = 0;
     uint64_t device_time_sync = 0;
 
@@ -1158,6 +1186,8 @@ class ZeCollector {
       ze_command_list_handle_t clist = command_lists[i];
       PTI_ASSERT(clist != nullptr);
 
+      // This will rebuild the command list info (via introspection) if it does
+      // not exist.
       const ZeCommandListInfo& info = GetCommandListInfoConst(clist);
 
       // as all command lists submitted to the execution into queue - they are not immediate
@@ -1166,19 +1196,7 @@ class ZeCollector {
       ze_result_t status = GetDeviceTimestamps(info.device, &host_time_sync, &device_time_sync);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-      const std::lock_guard<std::mutex> lock(lock_);
-      if (queue_ordinal_index_map_.count(queue) == 0) {
-        ze_result_t res = l0_wrapper_.w_zeCommandQueueGetIndex(queue, &q_index);
-        ze_result_t res2 = l0_wrapper_.w_zeCommandQueueGetOrdinal(queue, &q_ordinal);
-        if (ZE_RESULT_SUCCESS != res || ZE_RESULT_SUCCESS != res2) {
-          if (nullptr != parent_state_) {
-            *(parent_state_) = pti_result::PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED;
-          }
-          AbnormalStopTracing();
-        }
-        queue_ordinal_index_map_[queue] = std::make_pair(q_ordinal, q_index);
-      }
-
+      const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
       for (auto it = info.kernel_commands.begin(); it != info.kernel_commands.end(); it++) {
         ZeKernelCommand* command = (*it).get();
         if (!command->tid) {
@@ -2020,15 +2038,6 @@ class ZeCollector {
     return props;
   }
 
-  static ZeKernelCommandProps GetCommandProps(std::string name) {
-    PTI_ASSERT(!name.empty());
-
-    ZeKernelCommandProps props{};
-    props.name = name;
-    props.type = KernelCommandType::kCommand;
-    return props;
-  }
-
   static void OnEnterCommandListAppendLaunchKernel(
       ze_command_list_append_launch_kernel_params_t* params, void* global_data,
       void** instance_data) {
@@ -2426,8 +2435,8 @@ class ZeCollector {
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(**params->pphCommandList != nullptr);
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      ze_device_handle_t* hDevice = params->phDevice;
-      if (hDevice == nullptr) {
+      ze_device_handle_t* device_handle = params->phDevice;
+      if (device_handle == nullptr) {
         return;
       }
 
@@ -2501,7 +2510,7 @@ class ZeCollector {
     if (command_lists == nullptr) {
       return;
     }
-
+    collector->CollectOrdinalAndIndex(*(params->phCommandQueue));
     collector->PrepareToExecuteCommandLists(command_lists, command_list_count,
                                             *(params->phCommandQueue), *(params->phFence));
   }
@@ -2655,6 +2664,50 @@ class ZeCollector {
       if (collector->collection_mode_ == ZeCollectionMode::Local) {
         collector->swap_event_pool_.Clean(*(params->phContext));
       }
+    }
+  }
+
+  static void OnEnterCommandListImmediateAppendCommandListsExp(
+      ze_command_list_immediate_append_command_lists_exp_params_t* params, void* global_data,
+      void** /*instance_user_data*/) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+
+    auto command_list_count = *params->pnumCommandLists;
+    if (command_list_count == 0) {
+      return;
+    }
+
+    auto* command_lists = *params->pphCommandLists;
+    if (command_lists == nullptr) {
+      return;
+    }
+
+    auto imm_command_list = *(params->phCommandListImmediate);
+
+    collector->CollectOrdinalAndIndex(imm_command_list);
+    collector->PrepareToExecuteCommandLists(
+        command_lists, command_list_count,
+        reinterpret_cast<ze_command_queue_handle_t>(imm_command_list), nullptr);
+  }
+
+  static void OnExitCommandListImmediateAppendCommandListsExp(
+      ze_command_list_immediate_append_command_lists_exp_params_t* params, ze_result_t result,
+      void* global_data, void** /*instance_user_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+      uint32_t command_list_count = *params->pnumCommandLists;
+      if (command_list_count == 0) {
+        return;
+      }
+
+      ze_command_list_handle_t* command_lists = *params->pphCommandLists;
+      if (command_lists == nullptr) {
+        return;
+      }
+
+      collector->PostSubmitKernelCommands(command_lists, command_list_count, nullptr);
     }
   }
 

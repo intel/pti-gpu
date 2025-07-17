@@ -738,13 +738,6 @@ def gen_exit_callback(
     f.write("    return;\n")
     f.write("  }\n")
 
-    if func in ze_gen_func_list:
-        f.write(
-            "  ZeKernelCommand *kc = static_cast<ZeKernelCommand*>(*instance_user_data);\n"
-        )
-        f.write("  kc->callback_id_ = zeCommandListAppendLaunchKernel_id;\n")
-        f.write("  kc->api_start_time_ = start_time_host;\n")
-        f.write("  kc->api_end_time_ = end_time_host;\n")
     if regen_api_files or (func + "_id" in existing_apiids):
         # The following assert()'s are debug asserts and become noops in release builds
         f.write("  [[maybe_unused]] const char* api_name = nullptr;\n")
