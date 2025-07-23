@@ -874,7 +874,8 @@ struct ZeDeviceSubmissions {
 
       // back fill kernel instance id and reset event    
       cmd->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
-      event_cache.ResetEvent(cmd->event_);
+      // Do not reset cmd->event_ here. The command may have already completed so the cmd->event_ may have already been signaled.
+      // cmd->event_ is reset inside ProcessComamndSubmitted()
 
       if (kids) {
         kids->push_back(cmd->instance_id_);
@@ -1558,14 +1559,7 @@ class ZeCollector {
         }
       }
       if (processed) {
-        if (command->event_) {
-          if (command->immediate_) {
-            event_cache_.ReleaseEvent(command->event_);
-          }
-          else {
-            event_cache_.ResetEvent(command->event_);
-          }
-        }
+        // event_cache_.ReleaseEvent(command->event_) or event_cache_.ResetEvent(command->event_) is already called inside ProcessCommandSubmitted()
         local_device_submissions_.commands_free_pool_.push_back(command);
         it = local_device_submissions_.commands_submitted_.erase(it);
         continue;
@@ -1605,14 +1599,7 @@ class ZeCollector {
             }
           }
           if (processed) {
-            if (command->event_) {
-              if (command->immediate_) {
-                event_cache_.ReleaseEvent(command->event_);
-              }
-              else {
-                event_cache_.ResetEvent(command->event_);
-              }
-            }
+            // event_cache_.ReleaseEvent(command->event_) or event_cache_.ResetEvent(command->event_) is already called inside ProcessCommandSubmitted()
             local_submissions.commands_free_pool_.push_back(command);
             it = local_submissions.commands_submitted_.erase(it);
             continue;
@@ -1648,14 +1635,7 @@ class ZeCollector {
         }
       }
       if (processed) {
-        if (command->event_) {
-          if (command->immediate_) {
-            event_cache_.ReleaseEvent(command->event_);
-          }
-          else {
-            event_cache_.ResetEvent(command->event_);
-          }
-        }
+        // event_cache_.ReleaseEvent(command->event_) or event_cache_.ResetEvent(command->event_) is already called inside ProcessCommandSubmitted()
         local_device_submissions_.commands_free_pool_.push_back(command);
         it = local_device_submissions_.commands_submitted_.erase(it);
         continue;
@@ -2369,16 +2349,12 @@ class ZeCollector {
 
       if (command->event_ == event || command->in_order_counter_event_ == event) {
         ProcessCommandSubmitted(local_device_submissions_, command, kids, true);
-        if (command->immediate_) {
-          event_cache_.ReleaseEvent(command->event_);
-        }
-        else {
-          event_cache_.ResetEvent(command->event_);
-        }
+        // event_cache_.ReleaseEvent(command->event_) or event_cache_.ResetEvent(command->event_) is already called inside ProcessCommandSubmitted()
         local_device_submissions_.commands_free_pool_.push_back(command);
         it = local_device_submissions_.commands_submitted_.erase(it);
         continue;
       }
+#if 0
       else {
         bool processed = false;
         if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
@@ -2407,6 +2383,7 @@ class ZeCollector {
           continue;
         }
       }
+#endif /* 0 */
       it++;
     }
 
@@ -2427,14 +2404,7 @@ class ZeCollector {
       ZeCommand *command = *it;
       if ((command->fence_ != nullptr) && (command->fence_ == fence)) {
         ProcessCommandSubmitted(local_device_submissions_, command, kids, true);
-        if (command->event_) {
-          if (command->immediate_) {
-            event_cache_.ReleaseEvent(command->event_);
-          }
-          else {
-            event_cache_.ResetEvent(command->event_);
-          }
-        }
+        // event_cache_.ReleaseEvent(command->event_) or event_cache_.ResetEvent(command->event_) is already called inside ProcessCommandSubmitted()
         local_device_submissions_.commands_free_pool_.push_back(command);
         it = local_device_submissions_.commands_submitted_.erase(it);
         continue;
@@ -2454,14 +2424,7 @@ class ZeCollector {
           }
         }
         if (processed) {
-          if (command->event_) {
-            if (command->immediate_) {
-              event_cache_.ReleaseEvent(command->event_);
-            }
-            else {
-              event_cache_.ResetEvent(command->event_);
-            }
-          }
+          // event_cache_.ReleaseEvent(command->event_) or event_cache_.ResetEvent(command->event_) is already called inside ProcessCommandSubmitted()
           local_device_submissions_.commands_free_pool_.push_back(command);
           it = local_device_submissions_.commands_submitted_.erase(it);
           continue;
@@ -3165,11 +3128,8 @@ class ZeCollector {
       ze_event_query_status_params_t *params,
       ze_result_t result, void *global_data, void **instance_data, std::vector<uint64_t> *kids) {
     if (result == ZE_RESULT_SUCCESS) {
-      PTI_ASSERT(*(params->phEvent) != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      if (ZE_FUNC(zeEventQueryStatus)(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
-        collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
-      }
+      collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
     }
   }
 
