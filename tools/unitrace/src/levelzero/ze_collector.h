@@ -2890,12 +2890,10 @@ class ZeCollector {
 
       if (!it->second->immediate_) {
         if (it->second->timestamp_event_to_signal_) {
-          if (ZE_FUNC(zeEventQueryStatus)(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
-            auto status = ZE_FUNC(zeEventHostSynchronize)(it->second->timestamp_event_to_signal_, UINT64_MAX);
-            if (status != ZE_RESULT_SUCCESS) {
-              std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
-              return;
-            }
+          auto status = ZE_FUNC(zeEventHostSynchronize)(it->second->timestamp_event_to_signal_, UINT64_MAX);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
+            return;
           }
           ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted last time are processed
           if (ZE_FUNC(zeEventHostReset)(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {    // reset event 
