@@ -2762,13 +2762,11 @@ class ZeCollector {
     if (it != command_lists_.end()) {
       if (!it->second->immediate_) {
         if (it->second->timestamp_event_to_signal_) {
-          if (ZE_FUNC(zeEventQueryStatus)(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
-            auto status = ZE_FUNC(zeEventHostSynchronize)(it->second->timestamp_event_to_signal_, UINT64_MAX);
-            if (status != ZE_RESULT_SUCCESS) {
-              std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
-              command_lists_mutex_.unlock();
-              return;
-            }
+          auto status = ZE_FUNC(zeEventHostSynchronize)(it->second->timestamp_event_to_signal_, UINT64_MAX);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
+            command_lists_mutex_.unlock();
+            return;
           }
           ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted already are processed
         }
@@ -2824,13 +2822,11 @@ class ZeCollector {
     if (it != command_lists_.end()) {
       if (!it->second->immediate_) {
         if (it->second->timestamp_event_to_signal_) {
-          if (ZE_FUNC(zeEventQueryStatus)(it->second->timestamp_event_to_signal_) != ZE_RESULT_SUCCESS) {
-            auto status = ZE_FUNC(zeEventHostSynchronize)(it->second->timestamp_event_to_signal_, UINT64_MAX);
-            if (status != ZE_RESULT_SUCCESS) {
-              std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
-              command_lists_mutex_.unlock();
-              return;
-            }
+          auto status = ZE_FUNC(zeEventHostSynchronize)(it->second->timestamp_event_to_signal_, UINT64_MAX);
+          if (status != ZE_RESULT_SUCCESS) {
+            std::cerr << "[ERROR] Timestamp event is not signaled" << std::endl;
+            command_lists_mutex_.unlock();
+            return;
           }
           ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted already are processed
         }
