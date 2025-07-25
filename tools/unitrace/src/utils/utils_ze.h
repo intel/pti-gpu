@@ -123,7 +123,7 @@ inline ze_driver_handle_t GetGpuDriver() {
 
   std::string value = utils::GetEnv("PTI_DEVICE_ID");
   uint32_t device_id = value.empty() ? 0 : std::stoul(value);
-  PTI_ASSERT(device_id >= 0 && device_id < driver_list.size());
+  PTI_ASSERT(device_id < driver_list.size());
   return driver_list[device_id];
 }
 
@@ -147,7 +147,7 @@ inline ze_device_handle_t GetGpuDevice() {
 
   std::string value = utils::GetEnv("PTI_DEVICE_ID");
   uint32_t device_id = value.empty() ? 0 : std::stoul(value);
-  PTI_ASSERT(device_id >= 0 && device_id < device_list.size());
+  PTI_ASSERT(device_id < device_list.size());
 
   std::vector<ze_device_handle_t> sub_device_list =
     GetSubDeviceList(device_list[device_id]);
@@ -161,7 +161,7 @@ inline ze_device_handle_t GetGpuDevice() {
   }
 
   uint32_t sub_device_id = value.empty() ? 0 : std::stoul(value);
-  PTI_ASSERT(sub_device_id >= 0 && sub_device_id < sub_device_list.size());
+  PTI_ASSERT(sub_device_id < sub_device_list.size());
   return sub_device_list[sub_device_id];
 }
 

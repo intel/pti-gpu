@@ -398,7 +398,7 @@ static std::string convertDataToString(IttArgs* args) {
     switch (args->type) {
       case __itt_metadata_u64: {
         const uint64_t* uint64Ptr = reinterpret_cast<const uint64_t*>(dataPtr);
-        for (int i=0; i < args->count; i++) {
+        for (size_t i=0; i < args->count; i++) {
           if (i) {
             strData += ",";
           }
@@ -408,7 +408,7 @@ static std::string convertDataToString(IttArgs* args) {
       }
       case __itt_metadata_s64: {
         const int64_t* int64Ptr = reinterpret_cast<const int64_t*>(dataPtr);
-        for (int i=0; i < args->count; i++) {
+        for (size_t i=0; i < args->count; i++) {
           if (i) {
             strData += ",";
           }
@@ -418,7 +418,7 @@ static std::string convertDataToString(IttArgs* args) {
       }
       case __itt_metadata_u32: {
         const uint32_t* uint32Ptr = reinterpret_cast<const uint32_t*>(dataPtr);
-        for (int i=0; i < args->count; i++) {
+        for (size_t i=0; i < args->count; i++) {
           if (i) {
             strData += ",";
           }
@@ -428,7 +428,7 @@ static std::string convertDataToString(IttArgs* args) {
       }
       case __itt_metadata_s32: {
         const int32_t* int32Ptr = reinterpret_cast<const int32_t*>(dataPtr);
-        for (int i=0; i < args->count; i++) {
+        for (size_t i=0; i < args->count; i++) {
           if (i) {
             strData += ",";
           }
@@ -438,7 +438,7 @@ static std::string convertDataToString(IttArgs* args) {
       }
       case __itt_metadata_u16: {
         const uint16_t* uint16Ptr = reinterpret_cast<const uint16_t*>(dataPtr);
-        for (int i=0; i < args->count; i++) {
+        for (size_t i=0; i < args->count; i++) {
           if (i) {
             strData += ",";
           }
@@ -448,7 +448,7 @@ static std::string convertDataToString(IttArgs* args) {
       }
       case __itt_metadata_s16: {
         const int16_t* uint16Ptr = reinterpret_cast<const int16_t*>(dataPtr);
-        for (int i=0; i < args->count; i++) {
+        for (size_t i=0; i < args->count; i++) {
           if (i) {
             strData += ",";
           }
@@ -458,7 +458,7 @@ static std::string convertDataToString(IttArgs* args) {
       }
       case __itt_metadata_float: {
         const float* floatPtr = reinterpret_cast<const float*>(dataPtr);
-        for (int i=0; i < args->count; i++) {
+        for (size_t i=0; i < args->count; i++) {
           if (i) {
             strData += ",";
           }
@@ -468,7 +468,7 @@ static std::string convertDataToString(IttArgs* args) {
       }
       case __itt_metadata_double: {
         const double* doublePtr = reinterpret_cast<const double*>(dataPtr);
-        for (int i=0; i < args->count; i++) {
+        for (size_t i=0; i < args->count; i++) {
           if (i) {
             strData += ",";
           }

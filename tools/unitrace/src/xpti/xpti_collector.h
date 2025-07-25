@@ -73,7 +73,7 @@ static XptiCollector *xpti_collector = nullptr;
 
 XPTI_CALLBACK_API void tpCallback(uint16_t trace_type, xpti::trace_event_data_t *parent, xpti::trace_event_data_t *event, uint64_t instance, const void *user_data);
 
-void xptiTraceInit(unsigned int major_version, unsigned int minor_version, const char *version_str, const char *stream_name) {
+void xptiTraceInit(unsigned int /* major_version */, unsigned int /* minor_version */, const char * /* version_str */, const char *stream_name) {
   if ((std::string(stream_name) == "sycl") ||
       (std::string(stream_name) == "sycl.pi") ||
       (std::string(stream_name) == "ur.call") ||
@@ -125,7 +125,7 @@ std::string truncate(std::string Name) {
   }
 }
 
-void xptiTraceFinish(const char* stream_name)
+void xptiTraceFinish(const char* /* stream_name */)
 {
   // We do nothing here
 }
@@ -149,7 +149,7 @@ constexpr static int max_xpti_trace_nesting_level = 8;	// 8 layers should be suf
 static thread_local uint64_t xpti_event_start_ts[XPTI_EVENT_LAST][max_xpti_trace_nesting_level];
 static thread_local int xpti_tracing_level = 0;
 
-void tpCallback(uint16_t TraceType, xpti::trace_event_data_t *Parent, xpti::trace_event_data_t *Event, uint64_t Instance, const void *UserData) {
+void tpCallback(uint16_t TraceType, xpti::trace_event_data_t * /* Parent */, xpti::trace_event_data_t * /* Event */, uint64_t /* Instance */, const void *UserData) {
   if (xpti_collector) {
     switch (TraceType) {
       case (uint16_t)xpti::trace_point_type_t::function_begin:

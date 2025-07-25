@@ -732,7 +732,7 @@ class ZeMetricProfiler {
 
       if (device->stall_sampling_) {
         std::map<uint64_t, std::pair<std::string, size_t>> kprops;
-        int max_kname_size = 0;
+        size_t max_kname_size = 0;
         // enumerate all kernel property files
         for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir_name_))) {
           // kernel properties file path: <data_dir>/.kprops.<device_id>.<pid>.txt
@@ -856,7 +856,7 @@ class ZeMetricProfiler {
               std::string str;
 
               uint32_t size = samples[i];
-              for (int j = 0; j < size; j += metric_list.size()) {
+              for (uint32_t j = 0; j < size; j += metric_list.size()) {
                 uint64_t ip;
                 ip = (value[j + 0].value.ui64 << 3);
                 if (ip == 0) {
@@ -906,7 +906,7 @@ class ZeMetricProfiler {
         header += std::string(std::max(int(field_sizes[0] + 1 - sizeof("Kernel")), 0), ' ') + "Kernel, ";
         logger_->Log(header);  // in case the kernel name is too long
         header = std::string(std::max(int(field_sizes[1] - metric_list[0].length()), 0), ' ') + metric_list[0];
-        for (int i = 1; i <  metric_list.size(); i++) {
+        for (size_t i = 1; i <  metric_list.size(); i++) {
           field_sizes[i + 1] = metric_list[i].size();
           header += ", " + metric_list[i];
         }
@@ -1032,7 +1032,7 @@ class ZeMetricProfiler {
         logger_->Log(header);
 
         header = "\nKernel, GlobalInstanceId";
-        for (int i = 0; i <  metric_list.size(); i++) {
+        for (size_t i = 0; i <  metric_list.size(); i++) {
           header += ", " + metric_list[i];
         }
 
@@ -1060,7 +1060,7 @@ class ZeMetricProfiler {
             break;
           }
           inf.read(reinterpret_cast<char *>(raw_metrics), data_size);
-          int raw_size = inf.gcount();
+          size_t raw_size = inf.gcount();
           if (raw_size < data_size) {
             std::cerr << "[WARNING] Intermediate metrics file is incomplete. Expecting " << data_size << " bytes but only " << raw_size << " bytes were found. Output likely to be incomplete." << std::endl;
             break;
@@ -1095,7 +1095,7 @@ class ZeMetricProfiler {
             for (uint32_t i = 0; i < num_samples; ++i) {
               uint32_t size = samples[i];
 
-              for (int j = 0; j < (size / metric_list.size()); ++j) {
+              for (uint32_t j = 0; j < (size / metric_list.size()); ++j) {
                 std::string str;
                 const zet_typed_value_t *v = value + j * metric_list.size();
                 uint64_t ts = v[ts_idx].value.ui64;
@@ -1116,7 +1116,7 @@ class ZeMetricProfiler {
                   str = kit->kernel_name + ", ";
                   logger_->Log(str);	// in case the kernel name is too long
                   str = std::to_string(kit->global_instance_id);
-                  for (int k = 0; k < metric_list.size(); k++) {
+                  for (size_t k = 0; k < metric_list.size(); k++) {
                     str += ", ";
                     if (k == ts_idx) {
                       str += std::to_string(ts);
@@ -1152,7 +1152,7 @@ class ZeMetricProfiler {
                       }
                       logger_->Log(str);	// in case the kernel name is too long
                       str = std::to_string(dummy_global_instance_id);
-                      for (int k = 0; k < metric_list.size(); k++) {
+                      for (size_t k = 0; k < metric_list.size(); k++) {
                         str += ", ";
                         if (k == ts_idx) {
                           str += std::to_string(ts);

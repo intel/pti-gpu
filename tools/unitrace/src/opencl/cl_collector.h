@@ -357,8 +357,7 @@ class ClCollector {
 
     if (options_.metric_stream) {
       std::map<int32_t, std::vector<ClKernelProfileRecord>> device_kprofiles;
-      for (auto record_idx=0; record_idx < profile_records_.size(); ++record_idx) {
-        ClKernelProfileRecord record = profile_records_[record_idx];
+      for (const auto &record : profile_records_) {
         auto it = present_cl_devices_.find(record.device_);
         if (it == present_cl_devices_.end()) {
           std::cerr << "[ERROR] Invalid device is found\n";
@@ -374,18 +373,17 @@ class ClCollector {
         }
       }
 
-      for (auto it = device_kprofiles.begin(); it != device_kprofiles.end(); ++it) {
+      for (const auto &dev_kprofile : device_kprofiles) {
         std::ofstream ouf;
         // kernel instance time file path: <data_dir>/.ktime.<device_id>.<pid>.txt
-        std::string fpath = data_dir_name_ + "/.ktime." + std::to_string(it->first) + "." + std::to_string(utils::GetPid()) + ".txt";
+        std::string fpath = data_dir_name_ + "/.ktime." + std::to_string(dev_kprofile.first) + "." + std::to_string(utils::GetPid()) + ".txt";
         ouf = std::ofstream(fpath, std::ios::out | std::ios::trunc);
-        std::vector<ClKernelProfileRecord> profile = it->second;
-        for(auto i=0; i < profile.size(); ++i) {
+        for(const auto &profile : dev_kprofile.second) {
           ouf << std::to_string((-1)) << std::endl;
-          ouf << std::to_string(profile[i].global_instance_id_) << std::endl;
-          ouf << std::to_string(profile[i].device_started_) << std::endl;
-          ouf << std::to_string(profile[i].device_ended_) << std::endl;
-          ouf << "\"" << profile[i].kernel_name_ << "\"" << std::endl;
+          ouf << std::to_string(profile.global_instance_id_) << std::endl;
+          ouf << std::to_string(profile.device_started_) << std::endl;
+          ouf << std::to_string(profile.device_ended_) << std::endl;
+          ouf << "\"" << profile.kernel_name_ << "\"" << std::endl;
         }
         ouf.close();
       }
@@ -677,7 +675,7 @@ class ClCollector {
       CollectorOptions options,
       OnClKernelFinishCallback kcallback,
       OnClFunctionFinishCallback fcallback,
-      void* callback_data,
+      void* /* callback_data */,
       std::string& data_dir_name)
       : device_(device),
         logger_(logger),
@@ -1157,7 +1155,7 @@ class ClCollector {
     }
   }
 
-  void CalculateKernelLocalSize(const cl_params_clEnqueueTask* params, ClKernelProps* props) {
+  void CalculateKernelLocalSize(const cl_params_clEnqueueTask* /* params */, ClKernelProps* props) {
     PTI_ASSERT(props != nullptr);
     props->local_size[0] = 1;
     props->local_size[1] = 1;
@@ -1177,7 +1175,7 @@ class ClCollector {
     }
   }
 
-  void CalculateKernelGlobalSize(const cl_params_clEnqueueTask* params, ClKernelProps* props) {
+  void CalculateKernelGlobalSize(const cl_params_clEnqueueTask* /* params */, ClKernelProps* props) {
     PTI_ASSERT(props != nullptr);
     props->global_size[0] = 1;
     props->global_size[1] = 1;
@@ -1185,7 +1183,7 @@ class ClCollector {
   }
 
   // Callbacks
-  static void OnEnterCreateCommandQueueWithProperties(cl_callback_data* data, ClCollector* collector) {
+  static void OnEnterCreateCommandQueueWithProperties(cl_callback_data* data, ClCollector* /* collector */) {
     PTI_ASSERT(data != nullptr);
 
     const cl_params_clCreateCommandQueueWithProperties* params =
@@ -1226,7 +1224,7 @@ class ClCollector {
     *(params->properties) = props;
   }
 
-  static void OnExitCreateCommandQueueWithProperties(cl_callback_data* data, ClCollector* collector) {
+  static void OnExitCreateCommandQueueWithProperties(cl_callback_data* data, ClCollector* /* collector */) {
     PTI_ASSERT(data != nullptr);
 
     cl_queue_properties* props = reinterpret_cast<cl_queue_properties*>(data->correlationData[0]);
@@ -1235,7 +1233,7 @@ class ClCollector {
     }
   }
 
-  static void OnEnterCreateCommandQueue(cl_callback_data* data, ClCollector* collector) {
+  static void OnEnterCreateCommandQueue(cl_callback_data* data, ClCollector* /* collector */) {
     PTI_ASSERT(data != nullptr);
 
     const cl_params_clCreateCommandQueue* params =
@@ -1660,7 +1658,7 @@ class ClCollector {
     }
   }
 
-  static void KernelTracingCallBackOnEnter(cl_function_id function, ClCollector *collector, cl_callback_data *callback_data, uint64_t *kid) {
+  static void KernelTracingCallBackOnEnter(cl_function_id function, ClCollector *collector, cl_callback_data *callback_data, uint64_t * /* kid */) {
     switch (function) {
       case CL_FUNCTION_clCreateCommandQueueWithProperties:
         OnEnterCreateCommandQueueWithProperties(callback_data, collector);
@@ -1910,12 +1908,10 @@ class ClCollector {
   inline static thread_local uint64_t trace_start_time_[max_trace_nesting_level_] = {0}; // start time of traced API 
   inline static thread_local bool trace_now_ = false; // prevent recursive tracing
 
-  ClApiTracer* tracer_ = nullptr;
-  Logger *logger_ = nullptr;
-
-  CollectorOptions options_;
-
   cl_device_id device_ = nullptr;
+  Logger *logger_ = nullptr;
+  CollectorOptions options_;
+  ClApiTracer* tracer_ = nullptr;
 
   OnClKernelFinishCallback kcallback_ = nullptr;
   OnClFunctionFinishCallback fcallback_ = nullptr;

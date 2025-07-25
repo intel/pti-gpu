@@ -80,7 +80,7 @@ struct ComparatorPciAddress {
 #if defined(__gnu_linux__)
 
 inline uint64_t GetTime(clockid_t id) {
-  timespec ts{0};
+  timespec ts{0,0};
   int status = clock_gettime(id, &ts);
   PTI_ASSERT(status == 0);
   return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;

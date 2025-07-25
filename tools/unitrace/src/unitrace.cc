@@ -653,7 +653,7 @@ void DisableProfiling() {
 
 static char *data_dir = nullptr;
 
-void CleanUp(int sig) {
+void CleanUp(int /* sig */) {
   if (data_dir == nullptr) {
     return;
   }

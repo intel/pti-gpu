@@ -133,7 +133,7 @@ struct ZeMetricQueryPools {
       pools_.push_back(pool);
 
       std::vector<zet_metric_query_handle_t> queries;
-      for (int i = 0; i < pool_size_ - 1; i++) {
+      for (uint32_t i = 0; i < pool_size_ - 1; i++) {
         status = ZE_FUNC(zetMetricQueryCreate)(pool, i, &query);
         if (status != ZE_RESULT_SUCCESS) {
           std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
@@ -165,7 +165,7 @@ struct ZeMetricQueryPools {
         }
         pools_.push_back(pool);
 
-        for (int i = 0; i < pool_size_ - 1; i++) {
+        for (uint32_t i = 0; i < pool_size_ - 1; i++) {
           status = ZE_FUNC(zetMetricQueryCreate)(pool, i, &query);
           if (status != ZE_RESULT_SUCCESS) {
             std::cerr << "[ERROR] Failed to create metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
@@ -1654,7 +1654,7 @@ class ZeCollector {
       CollectorOptions options,
       OnZeKernelFinishCallback kcallback,
       OnZeFunctionFinishCallback fcallback,
-      void* callback_data,
+      void* /* callback_data */,
       std::string& data_dir_name,
       bool reset_event_on_device)
       : logger_(logger),
@@ -1856,7 +1856,7 @@ class ZeCollector {
                 num_sub_devices = 0;
               }
 
-              for (int j = 0; j < num_sub_devices; j++) {
+              for (uint32_t j = 0; j < num_sub_devices; j++) {
                 ZeDevice sub_desc;
   
                 sub_desc.device_ = sub_devices[j];
@@ -2311,7 +2311,7 @@ class ZeCollector {
               PTI_ASSERT(size == metric_names.size());
       
               const zet_typed_value_t *value = metrics.data() + i * size;
-              for (int j = 0; j < size; ++j) {
+              for (uint32_t j = 0; j < size; ++j) {
                 str += ",";
                 str += PrintTypedValue(value[j]);
               }
@@ -2589,7 +2589,7 @@ class ZeCollector {
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
         if (options_.metric_query || options_.metric_stream) {
-          for (int i = 0; i < count; i++) {
+          for (uint32_t i = 0; i < count; i++) {
             ZeKernelProfileTimestamps ts;
 
             ts.subdevice_id = i;
@@ -2986,7 +2986,7 @@ class ZeCollector {
 
  private: // Callbacks
 
-  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t *params, void *global_data, void **instance_data) {
+  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t *params, void * /* global_data */, void **instance_data) {
     const ze_event_pool_desc_t* desc = *(params->pdesc);
     if (desc == nullptr) {
       return;
@@ -3047,7 +3047,7 @@ class ZeCollector {
   static void OnExitEventPoolDestroy(ze_event_pool_destroy_params_t *params,
                                 ze_result_t result,
                                 void* global_data,
-                                void** instance_data) {
+                                void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->events_mutex_.lock();
@@ -3059,7 +3059,7 @@ class ZeCollector {
   static void OnExitEventCreate(ze_event_create_params_t* params,
                                 ze_result_t result,
                                 void* global_data,
-                                void** instance_data) {
+                                void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS && params->pphEvent && *params->pphEvent) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->events_mutex_.lock();
@@ -3072,7 +3072,7 @@ class ZeCollector {
 
   static void OnEnterEventDestroy(
       ze_event_destroy_params_t *params,
-      void *global_data, void **instance_data, std::vector<uint64_t> *kids) {
+      void *global_data, void ** /* instance_data */, std::vector<uint64_t> *kids) {
 
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
@@ -3084,7 +3084,7 @@ class ZeCollector {
 
   static void OnExitEventDestroy(
       ze_event_destroy_params_t *params, ze_result_t result,
-      void *global_data, void **instance_data) {
+      void *global_data, void ** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->events_mutex_.lock();
@@ -3095,7 +3095,7 @@ class ZeCollector {
 
   static void OnEnterEventHostReset(
       ze_event_host_reset_params_t *params,
-      void *global_data, void **instance_data, std::vector<uint64_t> *kids) {
+      void *global_data, void ** /* instance_data */, std::vector<uint64_t> *kids) {
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       if (ZE_FUNC(zeEventQueryStatus)(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
@@ -3106,7 +3106,7 @@ class ZeCollector {
 
   static void OnExitEventHostSynchronize(
       ze_event_host_synchronize_params_t *params,
-      ze_result_t result, void *global_data, void **instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void *global_data, void ** /* instance_data */, std::vector<uint64_t> *kids) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
@@ -3114,8 +3114,8 @@ class ZeCollector {
   }
 
   static void OnExitCommandListHostSynchronize(
-      ze_command_list_host_synchronize_params_t *params,
-      ze_result_t result, void *global_data, void **instance_data, std::vector<uint64_t> *kids) {
+      ze_command_list_host_synchronize_params_t * /* params */,
+      ze_result_t result, void *global_data, void ** /* instance_data */, std::vector<uint64_t> *kids) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->ProcessAllCommandsSubmitted(kids);
@@ -3124,7 +3124,7 @@ class ZeCollector {
 
   static void OnExitEventQueryStatus(
       ze_event_query_status_params_t *params,
-      ze_result_t result, void *global_data, void **instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void *global_data, void ** /* instance_data */, std::vector<uint64_t> *kids) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
@@ -3133,7 +3133,7 @@ class ZeCollector {
 
   static void OnExitFenceHostSynchronize(
       ze_fence_host_synchronize_params_t *params,
-      ze_result_t result, void *global_data, void **instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void *global_data, void ** /* instance_data */, std::vector<uint64_t> *kids) {
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*(params->phFence) != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
@@ -3143,7 +3143,7 @@ class ZeCollector {
 
   static void OnExitImageCreate(
       ze_image_create_params_t *params, ze_result_t result,
-      void *global_data, void **instance_data) {
+      void *global_data, void ** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
@@ -3182,7 +3182,7 @@ class ZeCollector {
 
   static void OnExitImageDestroy(
       ze_image_destroy_params_t *params, ze_result_t result,
-      void *global_data, void **instance_data) {
+      void *global_data, void ** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->DestroyImage(*(params->phImage));
@@ -4006,7 +4006,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendLaunchKernel(
     ze_command_list_append_launch_kernel_params_t* params,
-    ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+    ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
 
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
@@ -4026,7 +4026,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendLaunchCooperativeKernel(
       ze_command_list_append_launch_cooperative_kernel_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
@@ -4035,7 +4035,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendLaunchCooperativeKernel(
       ze_command_list_append_launch_cooperative_kernel_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
         collector->AppendLaunchKernel(
@@ -4054,7 +4054,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendLaunchKernelIndirect(
       ze_command_list_append_launch_kernel_indirect_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
@@ -4063,7 +4063,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendLaunchKernelIndirect(
       ze_command_list_append_launch_kernel_indirect_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
         collector->AppendLaunchKernel(
@@ -4170,7 +4170,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryCopy(
       ze_command_list_append_memory_copy_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4179,7 +4179,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendMemoryCopy(
       ze_command_list_append_memory_copy_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendMemoryCommand(MemoryCopy, *(params->psize),
@@ -4194,7 +4194,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryFill(
       ze_command_list_append_memory_fill_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4203,7 +4203,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendMemoryFill(
       ze_command_list_append_memory_fill_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendMemoryCommand(MemoryFill, *(params->psize),
@@ -4218,7 +4218,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendBarrier(
       ze_command_list_append_barrier_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4227,7 +4227,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendBarrier(
       ze_command_list_append_barrier_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
@@ -4242,7 +4242,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryRangesBarrier(
       ze_command_list_append_memory_ranges_barrier_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4251,7 +4251,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendMemoryRangesBarrier(
       ze_command_list_append_memory_ranges_barrier_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendCommand(MemoryRangesBarrier, *(params->phSignalEvent), ze_instance_data.query_,
@@ -4265,7 +4265,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryCopyRegion(
       ze_command_list_append_memory_copy_region_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4274,7 +4274,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendMemoryCopyRegion(
       ze_command_list_append_memory_copy_region_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       size_t bytes_transferred = 0;
@@ -4298,7 +4298,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendMemoryCopyFromContext(
       ze_command_list_append_memory_copy_from_context_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4307,7 +4307,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendMemoryCopyFromContext(
       ze_command_list_append_memory_copy_from_context_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       ze_context_handle_t src_context = *(params->phContextSrc);
@@ -4323,7 +4323,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendImageCopy(
       ze_command_list_append_image_copy_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4332,7 +4332,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendImageCopy(
       ze_command_list_append_image_copy_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendImageMemoryCopyCommand(ImageCopy, *(params->phSrcImage),
@@ -4347,7 +4347,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendImageCopyRegion(
       ze_command_list_append_image_copy_region_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4356,7 +4356,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendImageCopyRegion(
       ze_command_list_append_image_copy_region_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendImageMemoryCopyCommand(ImageCopyRegion, *(params->phSrcImage),
@@ -4371,7 +4371,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendImageCopyToMemory(
       ze_command_list_append_image_copy_to_memory_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4380,7 +4380,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendImageCopyToMemory(
       ze_command_list_append_image_copy_to_memory_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       collector->AppendImageMemoryCopyCommand(ImageCopyToMemory, *(params->phSrcImage),
@@ -4395,7 +4395,7 @@ class ZeCollector {
 
   static void OnEnterCommandListAppendImageCopyFromMemory(
       ze_command_list_append_image_copy_from_memory_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
@@ -4404,7 +4404,7 @@ class ZeCollector {
 
   static void OnExitCommandListAppendImageCopyFromMemory(
       ze_command_list_append_image_copy_from_memory_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if ((result == ZE_RESULT_SUCCESS) && (UniController::IsCollectionEnabled()) && ze_instance_data.instrument_) {
       size_t bytes_transferred = 0;
@@ -4444,7 +4444,7 @@ class ZeCollector {
         int slot = it->second->num_timestamps_on_event_reset_++;
         it->second->index_timestamps_on_event_reset_[it2->second] = slot;
         ze_kernel_timestamp_result_t *ts = nullptr;
-        int slice = slot / number_timestamps_per_slice_;
+        size_t slice = slot / number_timestamps_per_slice_;
         if (it->second->timestamps_on_event_reset_.size() <= slice) {
           ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
           auto status = ZE_FUNC(zeMemAllocHost)(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(ze_kernel_timestamp_result_t), cache_line_size_, (void **)&ts);
@@ -4470,7 +4470,7 @@ class ZeCollector {
       if (UniController::IsCollectionEnabled()) {
         // each command or kernel needs two slots: one for start and one for end
         uint64_t *dts = nullptr;
-        int slice = it->second->num_device_global_timestamps_ / (2 * number_timestamps_per_slice_);
+        size_t slice = it->second->num_device_global_timestamps_ / (2 * number_timestamps_per_slice_);
         if (it->second->device_global_timestamps_.size() <= slice) {
           ze_host_mem_alloc_desc_t host_alloc_desc = {ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
           auto status = ZE_FUNC(zeMemAllocHost)(it->second->context_, &host_alloc_desc, number_timestamps_per_slice_ * sizeof(uint64_t) * 2, cache_line_size_, (void **)&dts);
@@ -4536,7 +4536,7 @@ class ZeCollector {
       ze_command_list_create_params_t* params,
       ze_result_t result,
       void* global_data,
-      void** instance_data) {
+      void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
@@ -4550,7 +4550,7 @@ class ZeCollector {
       ze_command_list_create_immediate_params_t* params,
       ze_result_t result,
       void* global_data,
-      void** instance_data) {
+      void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(**params->pphCommandList != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
@@ -4576,7 +4576,7 @@ class ZeCollector {
 
   static void OnExitCommandListDestroy(
     ze_command_list_destroy_params_t* params,
-    ze_result_t result, void* global_data, void** instance_data) {
+    ze_result_t result, void* global_data, void** /* instance_data */) {
 
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*params->phCommandList != nullptr);
@@ -4586,7 +4586,7 @@ class ZeCollector {
     }
   }
 
-  static void OnEnterCommandListClose (ze_command_list_close_params_t* params, void* global_data, void** instance_data) {
+  static void OnEnterCommandListClose (ze_command_list_close_params_t* params, void* global_data, void** /* instance_data */) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
     collector->command_lists_mutex_.lock();
@@ -4641,7 +4641,7 @@ class ZeCollector {
     collector->command_lists_mutex_.unlock();
   }
 
-  static void OnExitCommandListReset(ze_command_list_reset_params_t* params, ze_result_t result, void* global_data, void** instance_data) {
+  static void OnExitCommandListReset(ze_command_list_reset_params_t* params, ze_result_t result, void* global_data, void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       PTI_ASSERT(*params->phCommandList != nullptr);
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
@@ -4652,7 +4652,7 @@ class ZeCollector {
 
   static void OnEnterCommandQueueExecuteCommandLists(
       ze_command_queue_execute_command_lists_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
 
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
@@ -4677,8 +4677,8 @@ class ZeCollector {
   }
 
   static void OnExitCommandQueueExecuteCommandLists(
-      ze_command_queue_execute_command_lists_params_t* params,
-      ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+      ze_command_queue_execute_command_lists_params_t* /* params */,
+      ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
 
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
@@ -4693,15 +4693,15 @@ class ZeCollector {
   }
 
   static void OnExitCommandQueueSynchronize(
-    ze_command_queue_synchronize_params_t* params,
-    ze_result_t result, void* global_data, void** instance_data, std::vector<uint64_t> *kids) {
+    ze_command_queue_synchronize_params_t* /* params */,
+    ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->ProcessAllCommandsSubmitted(kids);
     }
   }
 
-  static void OnExitCommandQueueCreate(ze_command_queue_create_params_t* params, ze_result_t result, void* global_data, void** instance_data) {
+  static void OnExitCommandQueueCreate(ze_command_queue_create_params_t* params, ze_result_t /* result */, void* global_data, void** /* instance_data */) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     ze_device_handle_t* device = params->phDevice;
     if (device == nullptr) {
@@ -4730,7 +4730,7 @@ class ZeCollector {
   }
 
   static void OnExitCommandQueueDestroy(ze_command_queue_destroy_params_t* params, ze_result_t result,
-    void* global_data, void** instance_data) {
+    void* global_data, void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->ProcessAllCommandsSubmitted(nullptr);
@@ -4740,7 +4740,7 @@ class ZeCollector {
     }
   }
 
-  static void OnExitModuleCreate(ze_module_create_params_t* params, ze_result_t result, void* global_data, void** instance_user_data) {
+  static void OnExitModuleCreate(ze_module_create_params_t* params, ze_result_t result, void* /* global_data */, void** /* instance_user_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       ze_module_handle_t mod = **(params->pphModule);
       ze_device_handle_t device = *(params->phDevice);
@@ -4761,7 +4761,7 @@ class ZeCollector {
     }
   }
 
-  static void OnEnterModuleDestroy(ze_module_destroy_params_t* params, void* global_data, void** instance_user_data) {
+  static void OnEnterModuleDestroy(ze_module_destroy_params_t* params, void* /* global_data */, void** /* instance_user_data */) {
     ze_module_handle_t mod = *(params->phModule);
     modules_on_devices_mutex_.lock();
     modules_on_devices_.erase(mod);
@@ -4770,7 +4770,7 @@ class ZeCollector {
 
   static void OnEnterCommandListImmediateAppendCommandListsExp(
       ze_command_list_immediate_append_command_lists_exp_params_t* params,
-      void* global_data, void** instance_data) {
+      void* global_data, void** /* instance_data */) {
 
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
@@ -4787,10 +4787,10 @@ class ZeCollector {
   }
 
   static void OnExitCommandListImmediateAppendCommandListsExp(
-    ze_command_list_immediate_append_command_lists_exp_params_t* params,
+    ze_command_list_immediate_append_command_lists_exp_params_t* /* params */,
     ze_result_t result,
     void* global_data,
-    void** instance_data, std::vector<uint64_t> *kids) {
+    void** /* instance_data */, std::vector<uint64_t> *kids) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
     if (UniController::IsCollectionEnabled()) {
@@ -4814,7 +4814,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
 
 #endif /* !defined(ZEX_STRUCTURE_KERNEL_REGISTER_FILE_SIZE_EXP) */
 
-  static void OnExitKernelCreate(ze_kernel_create_params_t *params, ze_result_t result, void* global_data, void** instance_user_data) {
+  static void OnExitKernelCreate(ze_kernel_create_params_t *params, ze_result_t result, void* global_data, void** /* instance_user_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       ze_kernel_handle_t kernel = **(params->pphKernel);
@@ -4921,7 +4921,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   }
 
   static void OnExitKernelSetGroupSize(ze_kernel_set_group_size_params_t* params, ze_result_t result,
-    void* global_data, void** instance_data) {
+    void* /* global_data */, void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       if (UniController::IsCollectionEnabled()) {
         ZeKernelGroupSize group_size{*(params->pgroupSizeX), *(params->pgroupSizeY), *(params->pgroupSizeZ)};
@@ -4957,7 +4957,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
     }
   }
 
-  static void OnExitKernelDestroy(ze_kernel_destroy_params_t* params, ze_result_t result, void* global_data, void** instance_data) {
+  static void OnExitKernelDestroy(ze_kernel_destroy_params_t* params, ze_result_t result, void* /* global_data */, void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       kernel_command_properties_mutex_.lock();
       active_kernel_properties_->erase(*(params->phKernel));
@@ -4965,7 +4965,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
     }
   }
 
-  static void OnExitContextDestroy(ze_context_destroy_params_t* params, ze_result_t result, void* global_data, void** instance_data) {
+  static void OnExitContextDestroy(ze_context_destroy_params_t* params, ze_result_t result, void* global_data, void** /* instance_data */) {
     if (result == ZE_RESULT_SUCCESS) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       collector->ProcessAllCommandsSubmitted(nullptr);
@@ -5023,16 +5023,18 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   }
 
  private: // Data
-  zel_tracer_handle_t tracer_ = nullptr;
-  CollectorOptions options_;
   Logger *logger_ = nullptr;
+  CollectorOptions options_;
   OnZeKernelFinishCallback kcallback_ = nullptr;
   OnZeFunctionFinishCallback fcallback_ = nullptr;
+  bool reset_event_on_device_; // support event reset on device
+  ZeEventCache event_cache_;
+
+  zel_tracer_handle_t tracer_ = nullptr;
 
   mutable std::shared_mutex images_mutex_;
   std::map<ze_image_handle_t, size_t> images_;
 
-  ZeEventCache event_cache_;
   
   mutable std::shared_mutex command_queues_mutex_;
   std::map<ze_command_queue_handle_t, ZeCommandQueue> command_queues_;
@@ -5054,7 +5056,6 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   constexpr static size_t kTimeLength = 20;
 
   std::string data_dir_name_;
-  bool reset_event_on_device_; // support event reset on device
 };
 
 #endif // PTI_TOOLS_UNITRACE_LEVEL_ZERO_COLLECTOR_H_

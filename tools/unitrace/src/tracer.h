@@ -96,9 +96,6 @@ class UniTracer {
 
     ClCollector* cl_gpu_collector = nullptr;
     ClCollector* cl_cpu_collector = nullptr;
-
-    cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
-    cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
 #endif /* BUILD_WITH_OPENCL */
 
 #if BUILD_WITH_XPTI
@@ -459,7 +456,7 @@ class UniTracer {
            "\n";
 
     if (ze_collector != nullptr) {
-      uint64_t total_time = 0;
+      uint64_t total_time{0};
       if (stype == "API") {
         total_time = CalculateTotalFunctionTime(ze_collector);
       }
@@ -474,7 +471,7 @@ class UniTracer {
     }
 #if BUILD_WITH_OPENCL
     if (cl_cpu_collector != nullptr) {
-      uint64_t total_time;
+      uint64_t total_time{0};
       if (stype == "API") {
         total_time = CalculateTotalFunctionTime(cl_cpu_collector);
       }
@@ -489,7 +486,7 @@ class UniTracer {
     }
 
     if (cl_gpu_collector != nullptr) {
-      uint64_t total_time;
+      uint64_t total_time{0};
       if (stype == "API") {
         total_time = CalculateTotalFunctionTime(cl_gpu_collector);
       }
