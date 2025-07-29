@@ -6,6 +6,7 @@
 
 #include "pti/pti_view.h"
 #include "utils.h"
+#include "utils/gtest_helpers.h"
 #include "utils/test_helpers.h"
 #include "utils/ze_config_info.h"
 #include "ze_utils.h"
@@ -587,9 +588,9 @@ TEST_F(LocalModeZeGemmTest,
   EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
   EnableView(PTI_VIEW_DEVICE_GPU_MEM_COPY);
   PrepareCommandList();
-  ASSERT_EQ(zeCommandListImmediateAppendCommandListsExp(compute_cmd_list_, 1, &cmd_list_, evts_[1],
-                                                        0, nullptr),
-            ZE_RESULT_SUCCESS);
+  ZE_ASSERT_SUCCESS_BUT_SKIP_UNSUPPORTED(zeCommandListImmediateAppendCommandListsExp(
+      compute_cmd_list_, 1, &cmd_list_, evts_[1], 0, nullptr));
+
   ASSERT_EQ(zeEventHostSynchronize(evts_[1], ((std::numeric_limits<uint64_t>::max)() - 1)),
             ZE_RESULT_SUCCESS);
 
