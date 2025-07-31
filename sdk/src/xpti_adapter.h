@@ -19,4 +19,6 @@ PTI_XPTI_HOOK_VISIBILITY void xptiTraceInit(unsigned int major_version, unsigned
 PTI_XPTI_HOOK_VISIBILITY void xptiTraceFinish(const char* stream_name);  // NOLINT
 }
 
+std::pair<bool, bool> IsForeignXPTISubscriber();
+
 #endif  // SRC_XPTI_ADAPTER_H_

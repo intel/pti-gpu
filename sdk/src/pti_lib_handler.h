@@ -49,6 +49,11 @@ inline std::string GetPathToWindowsLibraryDirectory() {
 }
 #endif
 
+// API implemented in PTI Core library
+// to pass from PTI Interface library status of detected "foreign" XPTI subscribers,
+// if such were detected at the library load time
+void PtiSetXPTIEnvironmentDetails(bool is_foreign_subscriber, bool is_likely_unitrace_subscriber);
+
 class PtiLibHandler {
  public:
   static auto& Instance() {
@@ -94,8 +99,21 @@ class PtiLibHandler {
   decltype(&ptiMetricsGetDevices) ptiMetricsGetDevices_ = nullptr;                        // NOLINT
   decltype(&ptiMetricsStartCollection) ptiMetricsStartCollection_ = nullptr;              // NOLINT
   decltype(&ptiMetricGetCalculatedData) ptiMetricGetCalculatedData_ = nullptr;            // NOLINT
+  decltype(&PtiSetXPTIEnvironmentDetails) PtiSetXPTIEnvironmentDetails_ = nullptr;        // NOLINT
 
  private:
+  inline void CommunicateForeignXPTISubscriber() {
+    // Passing information about XPTI subscriber to PTI Core library right after it is loaded.
+    // This should be done before any other call to PTI Core, as it might create Sycl collector
+    // and it should not enable it, in case if some foreign subscriber already subscribed for XPTI
+    if (PtiSetXPTIEnvironmentDetails_) {
+      auto [is_foreign_subscriber, is_likely_unitrace_subscriber] = IsForeignXPTISubscriber();
+      PtiSetXPTIEnvironmentDetails_(is_foreign_subscriber, is_likely_unitrace_subscriber);
+    } else {
+      SPDLOG_DEBUG("PtiSetXPTIEnvironmentDetails_ is not available in the loaded library.");
+    }
+  }
+
   PtiLibHandler() {
     try {
       spdlog::set_level(spdlog::level::off);
@@ -104,6 +122,7 @@ class PtiLibHandler {
       if (!env_string.empty()) {
         spdlog::cfg::helpers::load_levels(env_string);
       }
+      ::utils::SetGlobalSpdLogPattern();
 
       std::string pti_dir;
 #if defined(_WIN32)
@@ -148,7 +167,9 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiMetricsGetDevices);
     PTI_VIEW_GET_SYMBOL(ptiMetricsStartCollection);
     PTI_VIEW_GET_SYMBOL(ptiMetricGetCalculatedData);
+    PTI_VIEW_GET_SYMBOL(PtiSetXPTIEnvironmentDetails);
 #undef PTI_VIEW_GET_SYMBOL
+    CommunicateForeignXPTISubscriber();
   }
   std::unique_ptr<LibraryLoader> pti_view_lib_ = nullptr;
 };

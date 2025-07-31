@@ -1502,9 +1502,7 @@ class PtiMetricsCollectorHandler {
     if (!env_string.empty()) {
       spdlog::cfg::helpers::load_levels(env_string);
     }
-
-    // https://github.com/gabime/spdlog/wiki/3.-Custom-formatting
-    spdlog::set_pattern("[%H:%M][%^-%l-%$]%P:%t %s:%# %v");
+    utils::SetGlobalSpdLogPattern();
 
     // Initialize L0
     ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);

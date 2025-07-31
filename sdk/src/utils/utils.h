@@ -460,6 +460,17 @@ inline void* GetFunctionPtr(HMODULE lib_handle, const char* func_name) {
 #endif /* _WIN32 */
 }
 
+inline std::pair<bool, bool> IsSubscriberToXPTI() {
+  auto current_xpti_subscriber = utils::GetEnv("XPTI_SUBSCRIBERS");
+  // and may be it is unitrace
+  return {!current_xpti_subscriber.empty(),
+          current_xpti_subscriber.find("unitrace") != std::string::npos};
+}
+
+inline void SetGlobalSpdLogPattern() {
+  // https://github.com/gabime/spdlog/wiki/3.-Custom-formatting
+  spdlog::set_pattern("PTI:[%H:%M][%^-%l-%$]%P:%t %s:%# %v");
+}
 }  // namespace utils
 
 #endif  // PTI_UTILS_UTILS_H_

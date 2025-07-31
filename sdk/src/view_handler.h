@@ -278,8 +278,7 @@ struct PtiViewRecordHandler {
     if (!env_string.empty()) {
       spdlog::cfg::helpers::load_levels(env_string);
     }
-    // https://github.com/gabime/spdlog/wiki/3.-Custom-formatting
-    spdlog::set_pattern("[%H:%M][%^-%l-%$]%P:%t %s:%# %v");
+    utils::SetGlobalSpdLogPattern();
 
     if (!collector_) {
       CollectorOptions collector_options{};

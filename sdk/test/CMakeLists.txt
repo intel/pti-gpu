@@ -257,6 +257,7 @@ if(HAVE_SYCL)
   add_executable(dpc_gemm_threaded_profiled perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_baseline perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_linkonly perf_dpc_gemm_threaded.cc)
+  add_executable(dpc_gemm_threaded_prof_print perf_dpc_gemm_threaded.cc)
 
   target_include_directories(
     dpc_gemm_threaded_profiled
@@ -264,16 +265,25 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/utils")
 
+  target_include_directories(
+    dpc_gemm_threaded_prof_print
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+         "${PROJECT_SOURCE_DIR}/src/utils")
+
   target_compile_options(dpc_gemm_threaded_profiled PRIVATE -fsycl -gline-tables-only)
   target_compile_options(dpc_gemm_threaded_baseline PRIVATE -fsycl -gline-tables-only)
   target_compile_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl -gline-tables-only)
+  target_compile_options(dpc_gemm_threaded_prof_print PRIVATE -fsycl -gline-tables-only)
 
   target_compile_definitions(dpc_gemm_threaded_baseline PRIVATE NO_PTI)
   target_compile_definitions(dpc_gemm_threaded_linkonly PRIVATE NO_PTI)
+  target_compile_definitions(dpc_gemm_threaded_prof_print PRIVATE  RECORD_PARSE_AND_PRINT)
 
   target_link_options(dpc_gemm_threaded_profiled PRIVATE -fsycl -gline-tables-only)
   target_link_options(dpc_gemm_threaded_baseline PRIVATE -fsycl -gline-tables-only)
   target_link_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl -gline-tables-only)
+  target_link_options(dpc_gemm_threaded_prof_print PRIVATE -fsycl -gline-tables-only)
 
   target_link_libraries(dpc_gemm_threaded_profiled PUBLIC spdlog::spdlog
     Threads::Threads Pti::pti_view)
@@ -282,6 +292,9 @@ if(HAVE_SYCL)
     Threads::Threads Pti::pti_view)
 
   target_link_libraries(dpc_gemm_threaded_baseline PUBLIC Threads::Threads)
+
+  target_link_libraries(dpc_gemm_threaded_prof_print PUBLIC spdlog::spdlog
+    Threads::Threads Pti::pti_view)
 
   gtest_discover_tests(
     dpcgemm_suite
@@ -414,6 +427,14 @@ if(HAVE_SYCL)
 
   set_tests_properties(
     perf-overhead-view PROPERTIES LABELS "performance; functional")
+
+  # Add interoperability test
+  add_test(
+    NAME xpti_interop_test
+    COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/xpti_interop_test.py "${PTI_TEST_BIN_DIR}"
+  )
+  set_tests_properties(
+    xpti_interop_test PROPERTIES LABELS "interop; functional")
 
 endif()
 

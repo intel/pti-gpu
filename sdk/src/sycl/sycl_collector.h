@@ -150,12 +150,21 @@ inline bool InMemoryCoreApis(const char* function_name) {
 
 class SyclCollector {
  public:
+  // Variables to indicate the presence of a foreign subscriber to XPTI.
+  // To be set via call to ptiSetXPTIEnvironmentDetails before SyclCollector created
+  static inline bool foreign_subscriber_ = false;
+  static inline bool likely_unitrace_subscriber_ = false;
+
   inline static auto& Instance() {
     static SyclCollector sycl_collector{nullptr};
     return sycl_collector;
   }
 
   inline void EnableTracing() {
+    // Do not change the behaviour here depending on foreign_subscriber_!
+    // The current behavior ensures that in the absense of XPTI subscription (and Sycl records)
+    // PTI generates to-called Special Records
+    // About Special Records: see comments in unitrace.h
     enabled_ = true;
     xptiForceSetTraceEnabled(enabled_);
   }
@@ -361,8 +370,24 @@ class SyclCollector {
   }
 
  private:
+#define WARNING_FOREIGN_SUBSCRIBER                                                 \
+  "Another subscriber already subscribed to Sycl runtime events, "                 \
+  "so PTI will not subscribe to them. It will affect correctness of PTI profile: " \
+  "e.g. report zero XPU time for CPU callers of GPU kernels."
+
+#define WARNING_LIKELY_UNITRACE_SUBSCRIBER           \
+  " Likely the application running under Unitrace. " \
+  "To get correct PTI profile - run without Unitrace."
+
   explicit SyclCollector(OnSyclRuntimeViewCallback buffer_callback)
-      : acallback_(buffer_callback), xptiGetStashedKV(GetStashedFuncPtrFromSharedObject()) {}
+      : acallback_(buffer_callback), xptiGetStashedKV(GetStashedFuncPtrFromSharedObject()) {
+    static constexpr char warn_foreign_subscriber[] = WARNING_FOREIGN_SUBSCRIBER;
+    static constexpr char warn_likely_unitrace_subscriber[] = WARNING_LIKELY_UNITRACE_SUBSCRIBER;
+    if (foreign_subscriber_) {
+      const char* warn_add = likely_unitrace_subscriber_ ? warn_likely_unitrace_subscriber : "";
+      SPDLOG_WARN("{}{}", warn_foreign_subscriber, warn_add);
+    }
+  }
 
   int32_t trace_all_env_value = utils::IsSetEnv("PTI_VIEW_RUNTIME_API");
   inline static thread_local ZeKernelCommandExecutionRecord sycl_runtime_rec_;
@@ -571,18 +596,30 @@ XPTI_CALLBACK_API void xptiTraceInit(unsigned int major_version, unsigned int mi
 }
 
 XPTI_CALLBACK_API void xptiTraceFinish(const char* /*stream_name*/) {}
+
+// clang-format off
+extern "C" {
+  void
+#if (defined(_WIN32) || defined(_WIN64))
+  __declspec(dllexport)
+#else
+  __attribute__((visibility("default")))
+#endif
+  PtiSetXPTIEnvironmentDetails(bool is_foreign_subscriber,
+                               bool is_likely_unitrace_subscriber) {
+    SyclCollector::foreign_subscriber_ = is_foreign_subscriber;
+    SyclCollector::likely_unitrace_subscriber_ = is_likely_unitrace_subscriber;
+  }
+}
+// clang-format on
+
 #if (defined(_WIN32) || defined(_WIN64))
 
 #include <windows.h>
 
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fwdReason, LPVOID /*lpvReserved*/) {
+BOOL WINAPI DllMain(HINSTANCE /*hinstDLL*/, DWORD fwdReason, LPVOID /*lpvReserved*/) {
   switch (fwdReason) {
     case DLL_PROCESS_ATTACH: {
-      utils::SetEnv("XPTI_SUBSCRIBERS", utils::GetPathToSharedObject(hinstDLL).c_str());
-      utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER",
-                    utils::GetPathToSharedObject(pti::strings::kXptiLibName).c_str());
-      utils::SetEnv("XPTI_TRACE_ENABLE", "1");
-      utils::SetEnv("UR_ENABLE_LAYERS", "UR_LAYER_TRACING");
       break;
     }
     case DLL_THREAD_ATTACH:
@@ -598,16 +635,6 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fwdReason, LPVOID /*lpvReserved*/)
 }
 
 #else  // Linux (possibly macOS?)
-
-// Work-around for ensuring XPTI_SUBSCRIBERS and XPTI_FRAMEWORK_DISPATCHER are
-// set before xptiTraceInit() is called.
-__attribute__((constructor)) static void framework_init() {
-  utils::SetEnv("XPTI_SUBSCRIBERS", utils::GetPathToSharedObject(Truncate).c_str());
-  utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", utils::GetPathToSharedObject(xptiReset).c_str());
-  utils::SetEnv("XPTI_TRACE_ENABLE", "1");
-
-  utils::SetEnv("UR_ENABLE_LAYERS", "UR_LAYER_TRACING");
-}
 
 __attribute__((destructor)) static void framework_fini() { framework_finalized = true; }
 
