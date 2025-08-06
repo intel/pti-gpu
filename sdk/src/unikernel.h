@@ -97,6 +97,8 @@ struct ZeMemoryCommandRoute {
   }
 };
 
+enum class KernelCommandType { kInvalid = 0, kKernel = 1, kMemory = 2, kCommand = 3 };
+
 struct ZeKernelCommandExecutionRecord {
   uint64_t sycl_node_id_;
   uint64_t sycl_queue_id_ = PTI_INVALID_QUEUE_ID;
@@ -107,8 +109,9 @@ struct ZeKernelCommandExecutionRecord {
   const char* sycl_function_name_ = nullptr;
   uint32_t source_line_number_;
 
-  uint64_t kid_;
-  uint32_t cid_;
+  KernelCommandType command_type_;
+  uint64_t kid_;  // kernel id
+  uint32_t cid_;  // correlation id
   uint32_t tid_;
   uint32_t pid_;
   int32_t tile_;

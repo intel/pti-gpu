@@ -10,6 +10,7 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "pti/pti_sync_callback.h"
 #include "pti/pti_view.h"
 
 namespace samples_utils {
@@ -327,6 +328,105 @@ inline pti_backend_queue_t GetLevelZeroBackendQueue(sycl::queue& queue) {
     backend_queue = static_cast<pti_backend_queue_t>(*ptr_queue_handle);
   }
   return backend_queue;
+}
+
+inline std::string GetCommandListTypeString(pti_backend_command_list_type cmd_list_type) {
+  std::string result;
+  if (cmd_list_type & PTI_BACKEND_COMMAND_LIST_TYPE_UNKNOWN) {
+    result += " | Unknown ";
+  }
+  if (cmd_list_type & PTI_BACKEND_COMMAND_LIST_TYPE_IMMEDIATE) {
+    result += " | Immediate";
+  }
+  if (cmd_list_type & PTI_BACKEND_COMMAND_LIST_TYPE_MUTABLE) {
+    result += " | Mutable";
+  }
+
+  if (!result.empty()) {
+    result = result.substr(3);  // remove leading " | "
+  } else {
+    result = "INVALID_VALUE";
+  }
+  return result;
+}
+
+inline void DumpCallbackData(pti_callback_domain domain, pti_api_group_id driver_api_group_id,
+                             uint32_t driver_api_id, pti_backend_ctx_t backend_context,
+                             void* cb_data, void* global_user_data, void** instance_user_data) {
+  std::cout << "=== Callback Data Dump ===" << std::endl;
+  std::cout << "Domain: " << ptiCallbackDomainTypeToString(domain) << " (" << domain << ")"
+            << std::endl;
+  std::cout << "Backend Context: " << backend_context << std::endl;
+
+  const char* api_name = nullptr;
+  if (PTI_SUCCESS == ptiViewGetApiIdName(driver_api_group_id, driver_api_id, &api_name)) {
+    std::cout << "Driver API Group ID/API ID/Name: " << driver_api_group_id << "/" << driver_api_id
+              << "/" << api_name << std::endl;
+  } else {
+    std::cout << "Driver API Group ID/API ID/Name: " << driver_api_group_id << "/" << driver_api_id
+              << "/Unknown" << std::endl;
+  }
+  if (cb_data != nullptr) {
+    switch (domain) {
+      case PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED:
+      case PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_DISPATCHED:
+      case PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED: {
+        pti_callback_gpu_op_data* gpu_op_data = static_cast<pti_callback_gpu_op_data*>(cb_data);
+        std::cout << "GPU Operation Data:" << std::endl;
+        std::cout << "  Command List Type: "
+                  << GetCommandListTypeString(gpu_op_data->_cmd_list_properties) << std::endl;
+        std::cout << "  Cmd List Handle: " << gpu_op_data->_cmd_list_handle << std::endl;
+        std::cout << "  Queue Handle: " << gpu_op_data->_queue_handle << std::endl;
+        std::cout << "  Device Handle: " << gpu_op_data->_device_handle << std::endl;
+        std::cout << "  Phase: " << ptiCallbackPhaseTypeToString(gpu_op_data->_phase) << " ("
+                  << gpu_op_data->_phase << ")" << std::endl;
+        std::cout << "  Return Code: " << gpu_op_data->_return_code << std::endl;
+        std::cout << "  Correlation ID: " << gpu_op_data->_correlation_id << std::endl;
+        std::cout << "  Operation Count: " << gpu_op_data->_operation_count << std::endl;
+
+        if (gpu_op_data->_operation_details != nullptr) {
+          pti_gpu_op_details* op_details =
+              static_cast<pti_gpu_op_details*>(gpu_op_data->_operation_details);
+          std::cout << "  Operation Details:" << std::endl;
+          std::cout << "    Operation Kind: " << op_details->_operation_kind << std::endl;
+          std::cout << "    Operation ID: " << op_details->_operation_id << std::endl;
+          std::cout << "    Kernel Handle: " << op_details->_kernel_handle << std::endl;
+          if (op_details->_name != nullptr) {
+            std::cout << "    Name: " << op_details->_name << std::endl;
+          }
+        }
+        break;
+      }
+      case PTI_CB_DOMAIN_INTERNAL_THREADS:
+      case PTI_CB_DOMAIN_INTERNAL_EVENT: {
+        pti_internal_callback_data* internal_data =
+            static_cast<pti_internal_callback_data*>(cb_data);
+        std::cout << "Internal Callback Data:" << std::endl;
+        std::cout << "  Phase: " << ptiCallbackPhaseTypeToString(internal_data->_phase) << " ("
+                  << internal_data->_phase << ")" << std::endl;
+        std::cout << "  Detail: " << internal_data->_detail << std::endl;
+        if (internal_data->_message != nullptr) {
+          std::cout << "  Message: " << internal_data->_message << std::endl;
+        }
+        break;
+      }
+      default:
+        std::cout << "Unknown domain type for callback data" << std::endl;
+        break;
+    }
+  } else {
+    std::cout << "Callback data is null" << std::endl;
+  }
+
+  if (global_user_data != nullptr) {
+    std::cout << "Global User Data: " << global_user_data << std::endl;
+  }
+
+  if (instance_user_data != nullptr && *instance_user_data != nullptr) {
+    std::cout << "Instance User Data: " << *instance_user_data << std::endl;
+  }
+
+  std::cout << "=========================" << std::endl;
 }
 
 }  // namespace samples_utils

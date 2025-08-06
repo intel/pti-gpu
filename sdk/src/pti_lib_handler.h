@@ -14,6 +14,7 @@
 
 #include "pti/pti.h"
 #include "pti/pti_metrics.h"
+#include "pti/pti_sync_callback.h"
 #include "pti/pti_view.h"
 #include "utils/library_loader.h"
 #include "utils/platform_strings.h"
@@ -99,6 +100,11 @@ class PtiLibHandler {
   decltype(&ptiMetricsGetDevices) ptiMetricsGetDevices_ = nullptr;                        // NOLINT
   decltype(&ptiMetricsStartCollection) ptiMetricsStartCollection_ = nullptr;              // NOLINT
   decltype(&ptiMetricGetCalculatedData) ptiMetricGetCalculatedData_ = nullptr;            // NOLINT
+  decltype(&ptiCallbackSubscribe) ptiCallbackSubscribe_ = nullptr;                        // NOLINT
+  decltype(&ptiCallbackUnsubscribe) ptiCallbackUnsubscribe_ = nullptr;                    // NOLINT
+  decltype(&ptiCallbackEnableDomain) ptiCallbackEnableDomain_ = nullptr;                  // NOLINT
+  decltype(&ptiCallbackDisableDomain) ptiCallbackDisableDomain_ = nullptr;                // NOLINT
+  decltype(&ptiCallbackDisableAllDomains) ptiCallbackDisableAllDomains_ = nullptr;        // NOLINT
   decltype(&PtiSetXPTIEnvironmentDetails) PtiSetXPTIEnvironmentDetails_ = nullptr;        // NOLINT
 
  private:
@@ -167,6 +173,13 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiMetricsGetDevices);
     PTI_VIEW_GET_SYMBOL(ptiMetricsStartCollection);
     PTI_VIEW_GET_SYMBOL(ptiMetricGetCalculatedData);
+
+    PTI_VIEW_GET_SYMBOL(ptiCallbackSubscribe);
+    PTI_VIEW_GET_SYMBOL(ptiCallbackUnsubscribe);
+    PTI_VIEW_GET_SYMBOL(ptiCallbackEnableDomain);
+    PTI_VIEW_GET_SYMBOL(ptiCallbackDisableDomain);
+    PTI_VIEW_GET_SYMBOL(ptiCallbackDisableAllDomains);
+
     PTI_VIEW_GET_SYMBOL(PtiSetXPTIEnvironmentDetails);
 #undef PTI_VIEW_GET_SYMBOL
     CommunicateForeignXPTISubscriber();
