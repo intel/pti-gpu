@@ -2354,7 +2354,6 @@ class ZeCollector {
         it = local_device_submissions_.commands_submitted_.erase(it);
         continue;
       }
-#if 0
       else {
         bool processed = false;
         if ((command->device_global_timestamps_ != nullptr) || (command->timestamps_on_event_reset_ != nullptr)) {
@@ -2370,20 +2369,12 @@ class ZeCollector {
           }
         }
         if (processed) {
-          if (command->event_) {
-            if (command->immediate_) {
-              event_cache_.ReleaseEvent(command->event_);
-            }
-            else {
-              event_cache_.ResetEvent(command->event_);
-            }
-          }
+          // event_cache_.ReleaseEvent(command->event_) or event_cache_.ResetEvent(command->event_) is already called inside ProcessCommandSubmitted()
           local_device_submissions_.commands_free_pool_.push_back(command);
           it = local_device_submissions_.commands_submitted_.erase(it);
           continue;
         }
       }
-#endif /* 0 */
       it++;
     }
 
