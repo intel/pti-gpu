@@ -1,0 +1,29 @@
+{
+    "default_configuration":
+        {
+            "name": "default",
+            "platform": ["Windows", "Linux"],
+            "scenarios": ["-c", "-h", "-d", "-t", "-s", "--chrome-call-logging --chrome-kernel-logging", "--chrome-device-logging"]
+        },
+    "test_configuration": [
+        {
+            "name": "cl_gemm",
+            "platform": ["Windows", "Linux"],
+            "scenarios": ["-c --opencl", "-d -v --opencl", "--opencl --chrome-call-logging --chrome-kernel-logging", "-h --opencl", "-s --opencl"]
+        },
+        {
+            "name": "graph",
+            "platform": ["Windows", "Linux"],
+            "skip_scenarios":["-t"]
+        },
+        {
+            "name": "ze_counterbased_events",
+            "platform": ["Windows", "Linux"],
+            "scenarios":["--chrome-device-logging"]
+        }
+    ]
+}
+
+
+
+

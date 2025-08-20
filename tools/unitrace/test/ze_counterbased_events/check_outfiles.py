@@ -38,7 +38,7 @@ def calc_stats(name, rangevec):
           "min_gap": min_gap,
           "max_gap": max_gap,
           "overlaps": busy - (total - idle)
-         };
+         }
 
 def parse_timeline_stats(filename):
   thread_names = {}
@@ -79,6 +79,6 @@ for i in range(1,len(sys.argv)):
       exit(-1)
     for stat in stats:
       if stat["min_gap"] < 0 or stat["overlaps"] > 0:
-         print("[ERROR] ovellaping execution found in {}:\n {}\n".format(sys.argv[i], stat))
+         print("[ERROR] overlapping execution found in {}:\n {}\n".format(sys.argv[i], stat))
          exit(-1)
 exit(0)

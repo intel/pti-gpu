@@ -80,7 +80,7 @@ class ApiTiming:
         if total_functions > 0:
             mismatch_percentage = (mismatched_functions / total_functions) * 100
         else:
-            print("[ERROR] Division by zero. 'total_functions' is zero.")
+            print("[ERROR] Number of functions is zero.")
             return 3
 
         if mismatch_percentage >= 10:
@@ -187,7 +187,7 @@ class DeviceTiming:
         if total_kernels > 0:
             mismatch_percentage = (mismatched_kernels / total_kernels) * 100
         else:
-            print("[ERROR] Division by zero. 'total_kernels' is zero.")
+            print("[ERROR] Number of kernels in the file is zero.")
             return 3
 
         if mismatch_percentage >= 10:

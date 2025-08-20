@@ -286,7 +286,7 @@ endif()
 
 # Testing
 enable_testing()
-add_test(NAME test_unitrace COMMAND "${Python_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/test/test_unitrace.py" --test-dir "${PROJECT_SOURCE_DIR}/test" --config "${PROJECT_SOURCE_DIR}/test/scenarios.txt")
+add_test(NAME test_unitrace COMMAND "${Python_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/test/test_unitrace.py" --test-dir "${PROJECT_SOURCE_DIR}/test" --config "${PROJECT_SOURCE_DIR}/test/test_config.json")
 
 # Clearning files only for release build, for any other build types lets skip deletion for better debuggability
 string(TOLOWER "${CMAKE_BUILD_TYPE}" LOWER_CMAKE_BUILD_TYPE)

@@ -14,4 +14,4 @@ else()
 endif()
 
 add_test(NAME ze_counterbased_events
-	COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/run_test.py -s "chrome-device-logging" -t ${CMAKE_CURRENT_SOURCE_DIR}/check_outfiles.py ${CMAKE_SOURCE_DIR} ze_counterbased_events)
+  COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/run_test.py -e ${CMAKE_CURRENT_SOURCE_DIR}/check_outfiles.py ${CMAKE_SOURCE_DIR} ze_counterbased_events)
