@@ -36,6 +36,6 @@ TEST_F(AssertExceptionFixtureTest, AssertApplyTimeShiftOverflow) {
 
 TEST_F(AssertExceptionFixtureTest, ExceptionGetViewNameAndCallbackThrow) {
   Instance().SetState(pti_result::PTI_SUCCESS);
-  EXPECT_THROW({ GetViewNameAndCallback(pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION); },
-               std::out_of_range);
+  EXPECT_THROW(
+      { GetViewNameAndCallback(pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION); }, std::out_of_range);
 }

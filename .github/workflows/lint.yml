@@ -30,6 +30,9 @@ jobs:
     runs-on: [self-hosted, Linux, pti]
 
     steps:
+      - name: Clean
+        run: rm -rf ./*
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -41,13 +44,11 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade setuptools wheel pip
-          pip install clang-format==14
+          python -m pip install "clang-format>=18,<19" # Ubuntu 24.04 ships with clang-format 18
 
       - name: Check SDK Format
         working-directory: sdk
         run: |
-          mkdir build
-          cd build
           # Expedited configure
-          cmake .. -DPTI_BUILD_TESTING=OFF -DPTI_BUILD_SAMPLES=OFF -DPTI_INSTALL=OFF
-          make format-chk
+          cmake -S . -B build -DPTI_BUILD_TESTING=OFF -DPTI_BUILD_SAMPLES=OFF -DPTI_INSTALL=OFF
+          cmake --build build --target format-chk
