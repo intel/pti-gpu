@@ -66,9 +66,9 @@ endif()
 FILE(GLOB SOURCES "*.cpp")
 add_executable(dlworkload ${SOURCES})
 
-target_compile_options(dlworkload PUBLIC -fsycl -gline-tables-only)
+target_compile_options(dlworkload PUBLIC -fsycl)
 
-target_link_options(dlworkload PUBLIC -fsycl -gline-tables-only)
+target_link_options(dlworkload PUBLIC -fsycl)
 
 if(USE_HOST_MEMORY)
   target_compile_definitions(dlworkload PUBLIC USE_HOST_MEMORY)

@@ -192,8 +192,8 @@ macro(GetGTest)
     FetchContent_MakeAvailable(googletest)
 
     set(PTI_GTEST_COMPILE_OPTIONS
-      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:Release>:-Wno-deprecated-declarations -Wno-unknown-warning-option>>
-      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:RelWithDebInfo>:-Wno-deprecated-declarations -Wno-unknown-warning-option>>
+      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:Release>:-Wno-deprecated-declarations -Wno-character-conversion -Wno-unknown-warning-option>>
+      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:RelWithDebInfo>:-Wno-deprecated-declarations -Wno-character-conversion -Wno-unknown-warning-option>>
       $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
 
     target_compile_options(gmock_main PRIVATE ${PTI_GTEST_COMPILE_OPTIONS})

@@ -150,8 +150,18 @@ float RunAndCheck(ur_kernel_handle_t kernel, ur_device_handle_t device, ur_conte
   const size_t lWorkSize[] = {1, 1, 1};
 
   ur_event_handle_t event;
-  UR_CHECK_SUCCESS(urEnqueueKernelLaunch(queue, kernel, 2, gWorkOffset, gWorkSize, lWorkSize, 0,
-                                         nullptr, &event));
+
+#if defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20250300)
+  UR_CHECK_SUCCESS(urEnqueueKernelLaunch(queue, kernel, 2, gWorkOffset, gWorkSize, lWorkSize,
+                                         /* num_events_in_wait_list */ 0,
+                                         /* event_wait_list */ nullptr,
+                                         /* num_sync_points_in_wait_list */ 0,
+                                         /* sync_point_wait_list */ nullptr, &event));
+#else
+  UR_CHECK_SUCCESS(urEnqueueKernelLaunch(queue, kernel, 2, gWorkOffset, gWorkSize, lWorkSize,
+                                         /* num_events_in_wait_list */ 0,
+                                         /* event_wait_list */ nullptr, &event));
+#endif
 
   UR_CHECK_SUCCESS(urEnqueueMemBufferRead(queue, dC, true, 0, size * size * sizeof(float), c.data(),
                                           1, &event, nullptr));
@@ -164,11 +174,18 @@ float RunAndCheck(ur_kernel_handle_t kernel, ur_device_handle_t device, ur_conte
 ur_result_t GetL0Adapter(std::vector<ur_adapter_handle_t>& adapters, unsigned int& idx) {
   unsigned int index = 0;
   for (auto adapter : adapters) {
+#if defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20250300)
+    ur_backend_t backend;
+    UR_CHECK_SUCCESS(urAdapterGetInfo(adapter, UR_ADAPTER_INFO_BACKEND, sizeof(ur_backend_t),
+                                      &backend, nullptr));
+
+    if (backend == UR_BACKEND_LEVEL_ZERO) {
+#else
     ur_adapter_backend_t backend;
     UR_CHECK_SUCCESS(urAdapterGetInfo(adapter, UR_ADAPTER_INFO_BACKEND,
                                       sizeof(ur_adapter_backend_t), &backend, nullptr));
-
     if (backend == UR_ADAPTER_BACKEND_LEVEL_ZERO) {
+#endif
       idx = index;
       return UR_RESULT_SUCCESS;
     }
@@ -195,7 +212,11 @@ void ComputeUsingUr(std::vector<float>& a, std::vector<float>& b, std::vector<fl
   UR_CHECK_SUCCESS(GetL0Adapter(adapters, idx));
 
   std::vector<ur_platform_handle_t> platforms(count);
+#if defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20250300)
+  UR_CHECK_SUCCESS(urPlatformGet(adapters[idx], 1, platforms.data(), nullptr));
+#else
   UR_CHECK_SUCCESS(urPlatformGet(&adapters[idx], 1, 1, platforms.data(), nullptr));
+#endif
 
   UR_CHECK_SUCCESS(urDeviceGet(platforms[0], UR_DEVICE_TYPE_GPU, 0, nullptr, &dcount));
   std::vector<ur_device_handle_t> devices(dcount);

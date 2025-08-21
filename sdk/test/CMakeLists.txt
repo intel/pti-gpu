@@ -80,8 +80,8 @@ if(HAVE_SYCL)
            "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(dpcgemm_suite PUBLIC -fsycl -gline-tables-only)
-  target_link_options(dpcgemm_suite PUBLIC -fsycl -gline-tables-only)
+  target_compile_options(dpcgemm_suite PUBLIC -fsycl)
+  target_link_options(dpcgemm_suite PUBLIC -fsycl)
   target_compile_definitions(dpcgemm_suite PUBLIC PTI_LEVEL_ZERO=1)
   target_link_libraries(dpcgemm_suite PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main LevelZero::level-zero)
 
@@ -94,8 +94,8 @@ if(HAVE_SYCL)
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
 
-  target_compile_options( classapi_suite PUBLIC -fsycl -gline-tables-only)
-  target_link_options(classapi_suite PUBLIC -fsycl -gline-tables-only)
+  target_compile_options( classapi_suite PUBLIC -fsycl)
+  target_link_options(classapi_suite PUBLIC -fsycl)
   target_compile_definitions(classapi_suite PUBLIC PTI_LEVEL_ZERO=1)
   target_link_libraries(classapi_suite PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main LevelZero::level-zero)
 
@@ -108,9 +108,9 @@ if(HAVE_SYCL)
 
   target_compile_options(
     vecsqadd_suite
-    PUBLIC -fsycl -gline-tables-only)
+    PUBLIC -fsycl)
 
-  target_link_options(vecsqadd_suite PUBLIC -fsycl -gline-tables-only)
+  target_link_options(vecsqadd_suite PUBLIC -fsycl)
 
   target_compile_definitions(vecsqadd_suite PUBLIC PTI_LEVEL_ZERO=1)
 
@@ -128,9 +128,9 @@ if(HAVE_SYCL)
 
   target_compile_options(
     vecsqadd_metrics_suite
-    PUBLIC -fsycl -gline-tables-only)
+    PUBLIC -fsycl)
 
-  target_link_options(vecsqadd_metrics_suite PUBLIC -fsycl -gline-tables-only)
+  target_link_options(vecsqadd_metrics_suite PUBLIC -fsycl)
 
   target_compile_definitions(vecsqadd_metrics_suite PUBLIC PTI_LEVEL_ZERO=1)
 
@@ -145,9 +145,9 @@ if(HAVE_SYCL)
 
   target_compile_options(
     no_kernel_overlap
-    PUBLIC -fsycl -gline-tables-only)
+    PUBLIC -fsycl)
 
-  target_link_options(no_kernel_overlap PUBLIC -fsycl -gline-tables-only)
+  target_link_options(no_kernel_overlap PUBLIC -fsycl)
 
   target_compile_definitions(no_kernel_overlap PUBLIC PTI_LEVEL_ZERO=1)
 
@@ -163,9 +163,9 @@ if(HAVE_SYCL)
 
   target_compile_options(
     startstop_suite
-    PUBLIC -fsycl -gline-tables-only)
+    PUBLIC -fsycl)
 
-  target_link_options(startstop_suite PUBLIC -fsycl -gline-tables-only)
+  target_link_options(startstop_suite PUBLIC -fsycl)
 
   target_compile_definitions(startstop_suite PUBLIC PTI_LEVEL_ZERO=1)
 
@@ -181,9 +181,9 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(mem_ops_test PRIVATE -fsycl -gline-tables-only)
+  target_compile_options(mem_ops_test PRIVATE -fsycl)
 
-  target_link_options(mem_ops_test PRIVATE -fsycl -gline-tables-only)
+  target_link_options(mem_ops_test PRIVATE -fsycl)
 
   target_link_libraries(mem_ops_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
     LevelZero::level-zero)
@@ -197,8 +197,8 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only)
-  target_link_options(sycl_queue_id PRIVATE -fsycl -gline-tables-only)
+  target_compile_options(sycl_queue_id PRIVATE -fsycl)
+  target_link_options(sycl_queue_id PRIVATE -fsycl)
 
   target_link_libraries(sycl_queue_id PUBLIC spdlog::spdlog Pti::pti_view
     GTest::gtest_main)
@@ -212,8 +212,8 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(zegemm_suite  PUBLIC -fsycl -gline-tables-only)
-  target_link_options(zegemm_suite PUBLIC -fsycl -gline-tables-only)
+  target_compile_options(zegemm_suite  PUBLIC -fsycl)
+  target_link_options(zegemm_suite PUBLIC -fsycl)
 
   target_link_libraries(zegemm_suite PUBLIC spdlog::spdlog Pti::pti_view
                                             GTest::gtest_main
@@ -230,8 +230,8 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(init_tests PUBLIC -fsycl -gline-tables-only)
-  target_link_options(init_tests PUBLIC -fsycl -gline-tables-only)
+  target_compile_options(init_tests PUBLIC -fsycl)
+  target_link_options(init_tests PUBLIC -fsycl)
 
   target_link_libraries(init_tests PUBLIC spdlog::spdlog Pti::pti_view
                                             GTest::gtest_main
@@ -248,8 +248,8 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(multi_threaded_submission PRIVATE -fsycl -gline-tables-only)
-  target_link_options(multi_threaded_submission PRIVATE -fsycl -gline-tables-only)
+  target_compile_options(multi_threaded_submission PRIVATE -fsycl)
+  target_link_options(multi_threaded_submission PRIVATE -fsycl)
 
   target_link_libraries(multi_threaded_submission PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
@@ -271,19 +271,19 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(dpc_gemm_threaded_profiled PRIVATE -fsycl -gline-tables-only)
-  target_compile_options(dpc_gemm_threaded_baseline PRIVATE -fsycl -gline-tables-only)
-  target_compile_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl -gline-tables-only)
-  target_compile_options(dpc_gemm_threaded_prof_print PRIVATE -fsycl -gline-tables-only)
+  target_compile_options(dpc_gemm_threaded_profiled PRIVATE -fsycl)
+  target_compile_options(dpc_gemm_threaded_baseline PRIVATE -fsycl)
+  target_compile_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl)
+  target_compile_options(dpc_gemm_threaded_prof_print PRIVATE -fsycl)
 
   target_compile_definitions(dpc_gemm_threaded_baseline PRIVATE NO_PTI)
   target_compile_definitions(dpc_gemm_threaded_linkonly PRIVATE NO_PTI)
   target_compile_definitions(dpc_gemm_threaded_prof_print PRIVATE  RECORD_PARSE_AND_PRINT)
 
-  target_link_options(dpc_gemm_threaded_profiled PRIVATE -fsycl -gline-tables-only)
-  target_link_options(dpc_gemm_threaded_baseline PRIVATE -fsycl -gline-tables-only)
-  target_link_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl -gline-tables-only)
-  target_link_options(dpc_gemm_threaded_prof_print PRIVATE -fsycl -gline-tables-only)
+  target_link_options(dpc_gemm_threaded_profiled PRIVATE -fsycl)
+  target_link_options(dpc_gemm_threaded_baseline PRIVATE -fsycl)
+  target_link_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl)
+  target_link_options(dpc_gemm_threaded_prof_print PRIVATE -fsycl)
 
   target_link_libraries(dpc_gemm_threaded_profiled PUBLIC spdlog::spdlog
     Threads::Threads Pti::pti_view)
@@ -450,8 +450,8 @@ if (HAVE_SYCL AND TARGET unified-runtime::loader)
            "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(urgemm_suite  PUBLIC -fsycl -gline-tables-only)
-  target_link_options(urgemm_suite PUBLIC -fsycl -gline-tables-only)
+  target_compile_options(urgemm_suite  PUBLIC -fsycl)
+  target_link_options(urgemm_suite PUBLIC -fsycl)
   target_link_libraries(urgemm_suite PUBLIC spdlog::spdlog
                                             Pti::pti_view
                                             GTest::gtest_main

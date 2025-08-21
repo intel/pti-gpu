@@ -16,8 +16,8 @@ endif()
 
 add_executable(vec_sqadd vector_sq_add.cc)
 
-target_link_options(vec_sqadd PUBLIC -fsycl -gline-tables-only)
-target_compile_options(vec_sqadd PUBLIC -fsycl -gline-tables-only)
+target_link_options(vec_sqadd PUBLIC -fsycl)
+target_compile_options(vec_sqadd PUBLIC -fsycl)
 target_include_directories(vec_sqadd
                            PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities")
 

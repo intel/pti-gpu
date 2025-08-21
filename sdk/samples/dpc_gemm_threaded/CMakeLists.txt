@@ -16,8 +16,8 @@ endif()
 
 add_executable(dpc_gemm_threaded main.cc)
 
-target_compile_options(dpc_gemm_threaded PRIVATE -fsycl -gline-tables-only)
-target_link_options(dpc_gemm_threaded PRIVATE -fsycl -gline-tables-only)
+target_compile_options(dpc_gemm_threaded PRIVATE -fsycl)
+target_link_options(dpc_gemm_threaded PRIVATE -fsycl)
 target_include_directories(dpc_gemm_threaded PRIVATE
                            "${PROJECT_SOURCE_DIR}/../samples_utilities")
 
