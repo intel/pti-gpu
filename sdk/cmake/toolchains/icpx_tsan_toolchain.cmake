@@ -8,5 +8,5 @@ if (WIN32)
   set(CMAKE_CXX_COMPILER icx)
 endif()
 
-set(CMAKE_CXX_FLAGS_DEBUG_INIT "-fsanitize=thread -fno-omit-frame-pointer -fsanitize-recover=all")
-set(CMAKE_C_FLAGS_DEBUG_INIT "-fsanitize=thread -fno-omit-frame-pointer -fsanitize-recover=all")
+set(CMAKE_CXX_FLAGS_DEBUG_INIT "-fno-omit-frame-pointer -Xarch_host -fsanitize=thread -fsanitize-recover=all")
+set(CMAKE_C_FLAGS_DEBUG_INIT " -fno-omit-frame-pointer -Xarch_host -fsanitize=thread -fsanitize-recover=all")
