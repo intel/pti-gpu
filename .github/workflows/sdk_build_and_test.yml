@@ -125,7 +125,7 @@ jobs:
 
   win-lib-build-and-test:
     name: Test pti-lib on Windows
-    runs-on: [self-hosted, Windows, pti]
+    runs-on: [self-hosted, Windows, pti, ARC]
     env:
       LEVEL_ZERO_LOADER_VERSION: 1.20.2
     defaults:

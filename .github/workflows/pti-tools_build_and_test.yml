@@ -113,7 +113,7 @@ jobs:
 
     if: vars.PTI_RUN_TESTS == 1
 
-    runs-on: [self-hosted, Windows, pti]
+    runs-on: [self-hosted, Windows, pti, ARC]
 
     defaults:
       run:
