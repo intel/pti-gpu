@@ -11,12 +11,12 @@ USER root
 
 #
 # Install the essential packages from oneAPI to build pti
-# instead of intel-oneapi-base-toolkit-2025.1.0
+# instead of intel-oneapi-base-toolkit
 #
-RUN dnf install -y intel-dpcpp-cpp-compiler-2025.1 \
-                    intel-oneapi-mkl-devel-2025.1 \
-                    intel-oneapi-dnnl-devel-2025.1 \
-                    intel-oneapi-ccl-devel-2021.15 && \
+RUN dnf install -y intel-dpcpp-cpp-compiler-2025.2 \
+                    intel-oneapi-mkl-devel-2025.2 \
+                    intel-oneapi-dnnl-devel-2025.2 \
+                    intel-oneapi-ccl-devel-2021.16 && \
     dnf clean all
 
 RUN dnf install -y \

@@ -10,19 +10,19 @@ REL_UBUNTU_24:= ubuntu-24-04
 REL_RHEL:= redhat-9
 REL_SLES:= sles-15
 REL_ROCKY:= rocky-8
-OS_TARGETS:= ${REL_SLES} ${REL_UBUNTU_22} ${REL_UBUNTU_24} 
+OS_TARGETS:= ${REL_SLES} ${REL_UBUNTU_22} ${REL_UBUNTU_24}
 .PHONY:${OS_TARGETS}
 
-ONEAPI_VER=2025.1.0
+ONEAPI_VER=2025.2.0
 
 targets: ${OS_TARGETS}
 	@echo BUILT ${OS_TARGETS}
 
-VER_UBUNTU_22:=02
-VER_UBUNTU_24:=02
-VER_REDHAT:=02
-VER_SLES:=02
-VER_ROCKY:=02
+VER_UBUNTU_22:=03
+VER_UBUNTU_24:=03
+VER_REDHAT:=03
+VER_SLES:=03
+VER_ROCKY:=03
 define getOsVer
 	$(if $(filter $1, ${REL_UBUNTU_22}),${VER_UBUNTU_22},\
 	$(if $(filter $1, ${REL_UBUNTU_24}),${VER_UBUNTU_24},\
@@ -93,6 +93,6 @@ $(foreach os,$(OS_TARGETS),$(eval $(os): min_os_$(os) ;\
 	echo "Proxy setting:" ${PARSED_PROXY}  ; \
 	DOCKER_BUILDKIT=${USE_BUILDKIT} docker build \
 	--file $(os)/bldrun.Dockerfile ${PARSED_PROXY} \
-	--build-arg MIN_OS_CONTAINER=""${PTI_CONTAINER_NAME}_min_os:$(os)"" \
+	--build-arg MIN_OS_CONTAINER=""${PTI_CONTAINER_NAME}_min_os:$(strip $(call getOsVer, $(os)))-$(os)"" \
 	--tag ""${PTI_CONTAINER_NAME}:$(strip $(call getOsVer, $(os)))-$(os)_${ONEAPI_VER}"" . \
 ))

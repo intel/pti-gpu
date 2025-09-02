@@ -3,7 +3,7 @@
 # hadolint ignore=DL3007
 
 # This is ubuntu:24.04
-FROM ubuntu:noble-20250415.1
+FROM ubuntu:noble
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 

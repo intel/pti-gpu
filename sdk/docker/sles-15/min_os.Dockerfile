@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.3
 
-FROM registry.suse.com/suse/sle15:15.6.47.20.38
+FROM registry.suse.com/suse/sle15
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -25,7 +25,7 @@ RUN  zypper refresh && \
       which \
       git \
       vim \
-      python312 && \
+      python311 && \
      zypper clean --all
 
 RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
@@ -33,5 +33,5 @@ RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
   zypper addrepo -f -r https://repositories.intel.com/gpu/sles/15sp6/unified/intel-gpu-15sp6.repo && \
   rpm --import https://repositories.intel.com/gpu/intel-graphics.key
 
-RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.12 10
+RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.11 10
 

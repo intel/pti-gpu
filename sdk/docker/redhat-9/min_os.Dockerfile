@@ -1,4 +1,4 @@
-FROM redhat/ubi9:9.5-1747112166
+FROM redhat/ubi9
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -14,7 +14,8 @@ USER root
 # and our Data Center GPU / PVC will have library dependencies problems
 # with libLLVM.so.18.1
 #
-RUN dnf install -y --setopt=tsflags=nodocs \
+RUN dnf update -y && \
+    dnf install -y --setopt=tsflags=nodocs \
       gcc-c++ \
       procps-ng \
       cmake \
@@ -29,7 +30,7 @@ RUN dnf install -y --setopt=tsflags=nodocs \
 
 #
 # Install the essential packages from oneAPI to build pti
-# instead of intel-oneapi-base-toolkit-2025.1.0
+# instead of intel-oneapi-base-toolkit
 #
 RUN echo '[oneAPI]' > /etc/yum.repos.d/oneAPI.repo; \
     echo 'name=Intel® oneAPI repository' >> /etc/yum.repos.d/oneAPI.repo; \

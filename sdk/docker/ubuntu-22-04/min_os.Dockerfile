@@ -3,7 +3,7 @@
 # hadolint ignore=DL3007
 
 # This is ubuntu:22.04 / jammy
-FROM ubuntu:jammy-20250415.1
+FROM ubuntu:jammy
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 

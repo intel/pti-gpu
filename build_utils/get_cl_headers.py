@@ -13,10 +13,10 @@ def main():
 
   dst_path = sys.argv[1]
   if (not os.path.exists(dst_path)):
-    os.mkdir(dst_path)
+    os.makedirs(dst_path, exist_ok=True)
   dst_path = os.path.join(dst_path, "CL")
   if (not os.path.exists(dst_path)):
-    os.mkdir(dst_path)
+    os.makedirs(dst_path, exist_ok=True)
 
   clone_path = sys.argv[2]
   clone_path = os.path.join(clone_path, "OpenCL-Headers")
