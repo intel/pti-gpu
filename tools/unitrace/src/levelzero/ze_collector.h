@@ -2491,7 +2491,6 @@ class ZeCollector {
     }
 
     if (kcallback_) {
-
       bool implicit_scaling = ((tile >= 0) && command->implicit_scaling_);
       
       kcallback_(command->instance_id_, command->tid_, kernel_start, kernel_end, command->engine_ordinal_, command->engine_index_, tile, command->device_, command->kernel_command_id_, implicit_scaling, command->group_count_, command->mem_size_);

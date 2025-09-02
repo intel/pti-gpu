@@ -1864,6 +1864,10 @@ class ClCollector {
       if (function == CL_FUNCTION_clGetExtensionFunctionAddress) {
         const cl_params_clGetExtensionFunctionAddress *params =
           reinterpret_cast<const cl_params_clGetExtensionFunctionAddress *>(callback_data->functionParams);
+        if (params == nullptr) {
+          std::cout<<"[ERROR] functionParams in callbackdata is null.";
+          return;
+        }
         REPLACE_INTEL_EXTENSION_FUNCTION(params, clHostMemAllocINTEL, ClExtHostMemAllocINTEL - ClExtApiStart, callback_data);
         REPLACE_INTEL_EXTENSION_FUNCTION(params, clDeviceMemAllocINTEL, ClExtDeviceMemAllocINTEL - ClExtApiStart, callback_data);
         REPLACE_INTEL_EXTENSION_FUNCTION(params, clSharedMemAllocINTEL, ClExtSharedMemAllocINTEL - ClExtApiStart, callback_data);
@@ -1882,6 +1886,10 @@ class ClCollector {
       } else if (function == CL_FUNCTION_clGetExtensionFunctionAddressForPlatform) {
         const cl_params_clGetExtensionFunctionAddressForPlatform *params =
           reinterpret_cast<const cl_params_clGetExtensionFunctionAddressForPlatform *>(callback_data->functionParams);
+        if (params == nullptr) {
+          std::cout<<"[ERROR] functionParams in callbackdata is null.";
+          return;
+        }
         REPLACE_INTEL_EXTENSION_FUNCTION(params, clHostMemAllocINTEL, ClExtHostMemAllocINTEL - ClExtApiStart, callback_data);
         REPLACE_INTEL_EXTENSION_FUNCTION(params, clDeviceMemAllocINTEL, ClExtDeviceMemAllocINTEL - ClExtApiStart, callback_data);
         REPLACE_INTEL_EXTENSION_FUNCTION(params, clSharedMemAllocINTEL, ClExtSharedMemAllocINTEL - ClExtApiStart, callback_data);
