@@ -11,7 +11,7 @@ import pprint
 import bisect
 
 # Parse Level Zero Headers ####################################################
-# Extract registratable apis from 2 headers (ze_api.h, layers/zel_tracing_register_cb.h)
+# Extract registerable apis from 2 headers (ze_api.h, layers/zel_tracing_register_cb.h)
 # Generate a tracing.gen file to be included into ze_collector.h that can be used to register callbacks.
 
 STATE_NORMAL = 0
@@ -106,7 +106,7 @@ def get_ur_api_list(ur_file_path):
 
 
 #
-# Generates a api func_name -> <exposed apiid> mapping for all L0 api registrable functions.
+# Generates an API func_name -> <exposed apiid> mapping for all L0 API registerable functions.
 # returns a dict of this to caller.
 #
 def get_apiids_per_category(src_path, category_dict):
@@ -153,7 +153,7 @@ def get_apiids_per_category(src_path, category_dict):
     return apiids_dict_per_category
 
 
-# Generates a func_name -> <name of matching param structure> mapping for all L0 api registrable functions.
+# Generates a func_name -> <name of matching param structure> mapping for all L0 API registerable functions.
 # returns a dict of this to caller.
 # e.g entry in dict:  'zeCommandListAppendLaunchKernel': 'ze_command_list_append_launch_kernel_params_t* '
 
@@ -428,7 +428,7 @@ def gen_apiid_files_per_category(
             )
         else:
             print(
-                "Skipped api_id generation - rebuilding collateral files from existing api files"
+                "Skipped api_id generation - rebuilding collateral files from existing API files"
             )
             del existing_apiids["next_elem_index"]
             generate_cb_api_file_info(
@@ -440,7 +440,7 @@ def gen_apiid_files_per_category(
             )
 
 
-# Generates EnableTracing function and populates with registrable signatures for all apis: partitioned by all or just kfunc.
+# Generates EnableTracing function and populates with registerable signatures for all APIs: partitioned by all or just kfunc.
 def gen_api(
     f,
     func_list,
@@ -770,7 +770,16 @@ def gen_exit_callback(
             f.write("       } else if (sycl_data_mview.cid_) {\n")
             f.write("         rec.cid_ = sycl_data_mview.cid_;\n")
             f.write("       } else {\n")
-            f.write("         rec.cid_ = UniCorrId::GetUniCorrId();\n")
+            f.write("          if (collector->options_.kernel_tracing) {\n")
+            f.write("           // UniCorrId was already incremented when GPU op was processed\n")
+            f.write("           // For correlation purposes PTI need to assign and report the same corr_id\n")
+            f.write("           // on the corresponding Driver API record\n")
+            f.write("           // TODO (PTI-289): ensure this works when only particular GPU ops (e.g. memory fill) requested for ptiView\n")
+            f.write("           //   this would require instead of one collector->options_.kernel_tracing option field - have several ones\n")
+            f.write("           rec.cid_ = (static_cast<ZeKernelCommand*>(*instance_user_data))->corr_id_;\n")
+            f.write("          } else {\n")
+            f.write("           rec.cid_ = UniCorrId::GetUniCorrId();\n")
+            f.write("          }\n")
             f.write("       }\n")
         else:
             if func in synchronization_viewkind_api_list:
@@ -932,8 +941,8 @@ def main():
 
     l0_path = sys.argv[2]
 
-    # Extract registratable apis from 2 headers (ze_api.h, layers/zel_tracing_register_cb.h)
-    # Both are complementary to each other. One addresses apis from v1.0(ze_api.h) the other v1.1+.
+    # Extract registerable apis from 2 headers (ze_api.h, layers/zel_tracing_register_cb.h)
+    # Both are complementary. One addresses APIs from v1.0(ze_api.h) the other v1.1+.
     l0_file_path_api_1_0 = os.path.join(l0_path, "ze_api.h")
     l0_file_path_api_1_1_plus = os.path.join(
         l0_path, "layers", "zel_tracing_register_cb.h"
@@ -961,10 +970,10 @@ def main():
     else:
         sys.exit("UR file not found: " + ur_file_path)
 
-    regen_api_files = False  # Should we regenerate and update api_id_files as well?
+    regen_api_files = False  # Should we regenerate and update API ID files as well?
     if sys.argv[6] == "ON":
-        print("Regeneration of api files requested!")
-        regen_api_files = True  # Should we regenerate and update api_id_files as well?
+        print("Regeneration of API files requested!")
+        regen_api_files = True  # Should we regenerate and update API ID files as well?
 
     l0_loader_info = sys.argv[7]
 

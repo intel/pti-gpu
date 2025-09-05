@@ -38,11 +38,13 @@ bool demangled_kernel_name = false;
 bool kernel_launch_func_name = false;
 uint64_t kernel_launch_func_id = 0;
 bool zecall_corrids_unique = true;
+bool zecall_at_gpu_op_corrids_unique = true;
 bool zecall_good_id_name = false;
 bool zecall_bad_id_name = false;
 bool zecall_present = false;
 uint64_t zecall_count = 0;
 std::set<uint32_t> zecall_corrids_already_seen;
+std::set<uint32_t> zecall_at_gpu_op_corrids_already_seen;
 bool urcall_present = false;
 uint64_t urcall_count = 0;
 bool sycl_has_all_records = false;
@@ -206,11 +208,13 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     kernel_has_task_begin0_record = false;
     kernel_has_enqk_begin0_record = false;
     zecall_corrids_unique = true;
+    zecall_at_gpu_op_corrids_unique = true;
     zecall_good_id_name = false;
     zecall_bad_id_name = false;
     zecall_present = false;
     zecall_count = 0;
     zecall_corrids_already_seen.clear();
+    zecall_at_gpu_op_corrids_already_seen.clear();
     urcall_present = false;
     urcall_count = 0;
     memory_bytes_copied = 0;
@@ -271,6 +275,15 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy);
   }
 
+  static void CheckIfIdUniqueAndSaveIt(bool& is_unique, uint32_t id, std::set<uint32_t>& id_set,
+                                       const char* message_when_not_unique) {
+    if (is_unique && id_set.find(id) != id_set.end()) {
+      is_unique = false;
+      std::cout << "corr_id: " << id << message_when_not_unique << "\n";
+    }
+    id_set.insert(id);
+  }
+
   static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_bytes) {
     if (!buf || !used_bytes || !buf_size) {
       std::cerr << "Received empty buffer" << '\n';
@@ -323,15 +336,22 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
                0);
           break;
         }
+        case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL:
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
-          memory_bytes_copied = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_bytes;
           memory_view_record_created = true;
           memory_view_record_count += 1;
-          break;
-        }
-        case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
-          memory_view_record_created = true;
-          memory_view_record_count += 1;
+          uint32_t this_corrid = 0;
+          if (ptr->_view_kind == PTI_VIEW_DEVICE_GPU_MEM_COPY) {
+            memory_bytes_copied = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_bytes;
+            this_corrid = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_correlation_id;
+          } else {
+            this_corrid = reinterpret_cast<pti_view_record_memory_fill*>(ptr)->_correlation_id;
+          }
+
+          CheckIfIdUniqueAndSaveIt(zecall_at_gpu_op_corrids_unique, this_corrid,
+                                   zecall_at_gpu_op_corrids_already_seen,
+                                   " ,found in GPU memory op , is not unique across GPU ops and "
+                                   "seen before");
           break;
         }
         case pti_view_kind::PTI_VIEW_DRIVER_API: {
@@ -341,13 +361,9 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
             zecall_present = true;
             zecall_count++;
           }
-          if (zecall_corrids_unique &&
-              zecall_corrids_already_seen.find(this_corrid) != zecall_corrids_already_seen.end()) {
-            zecall_corrids_unique = false;
-
-            std::cout << this_corrid << " is not unique since already seen in zecalls before. \n";
-          }
-          zecall_corrids_already_seen.insert(this_corrid);
+          CheckIfIdUniqueAndSaveIt(zecall_corrids_unique, this_corrid, zecall_corrids_already_seen,
+                                   " ,found in Driver API (ZECALL) record , "
+                                   "is not unique across ZECALLs records and seen before");
           const char* api_name = nullptr;
           pti_result status = ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO,
                                                   rec->_api_id, &api_name);
@@ -411,6 +427,12 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
           ASSERT_EQ(rec->_context_handle, context_test);
           ASSERT_EQ(rec->_queue_handle, queue_test);
           std::cout << " == Queue reported by PTI: " << rec->_queue_handle << std::endl;
+
+          uint32_t this_corrid = rec->_correlation_id;
+          CheckIfIdUniqueAndSaveIt(zecall_at_gpu_op_corrids_unique, this_corrid,
+                                   zecall_at_gpu_op_corrids_already_seen,
+                                   " ,found at GPU Kernel record , is not unique across GPU ops "
+                                   "and seen before");
 
           if (samples_utils::stringify_uuid(rec->_device_uuid, "") !=
               "00000000-0000-0000-0000-000000000000") {
@@ -861,12 +883,14 @@ TEST_F(MainFixtureTest, OnlyZeCallsTraced) {
 TEST_P(MainFixtureTest, ZeCallsGeneration) {
   bool env_off = (utils::IsSetEnv("PTI_VIEW_DRIVER_API") == 0);
   if (env_off) GTEST_SKIP();
-  auto [sycl, zecall, kernel] = GetParam();
+  auto [sycl, zecall, gpu_ops] = GetParam();
 
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
 
-  if (kernel) {
+  if (gpu_ops) {
     ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
   }
 
   if (sycl) {
@@ -879,8 +903,10 @@ TEST_P(MainFixtureTest, ZeCallsGeneration) {
 
   RunGemmNoTrace();
 
-  if (kernel) {
+  if (gpu_ops) {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
   }
   if (sycl) {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
@@ -892,11 +918,30 @@ TEST_P(MainFixtureTest, ZeCallsGeneration) {
   if (zecall) {
     EXPECT_EQ(zecall_present, true);
     EXPECT_EQ(special_sycl_rec_present, false);
+
+    // When both zecall and gpu_ops are enabled, verify that all GPU operation
+    // correlation IDs are found in DRIVER_API records
+    if (gpu_ops) {
+      std::cout << "Validating correlation ID correspondence between GPU ops and DRIVER_API "
+                   "records\n";
+      std::cout << "GPU ops correlation IDs seen: " << zecall_at_gpu_op_corrids_already_seen.size()
+                << "\n";
+      std::cout << "DRIVER_API correlation IDs seen: " << zecall_corrids_already_seen.size()
+                << "\n";
+
+      // Check that all GPU operation correlation IDs exist in DRIVER_API correlation IDs
+      for (const auto& gpu_corrid : zecall_at_gpu_op_corrids_already_seen) {
+        EXPECT_TRUE(zecall_corrids_already_seen.find(gpu_corrid) !=
+                    zecall_corrids_already_seen.end())
+            << "GPU operation correlation ID " << gpu_corrid << " not found in DRIVER_API records";
+      }
+    }
   } else {
     // special rec requires (no sycl rec+sycl+kernel enabled+zecalls disabled) -- hence false
     // expected.
     EXPECT_EQ(special_sycl_rec_present, false);
     EXPECT_EQ(zecall_present, false);
+    EXPECT_EQ(zecall_at_gpu_op_corrids_unique, true);
   }
 }
 

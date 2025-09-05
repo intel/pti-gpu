@@ -1717,7 +1717,11 @@ class ZeCollector {
         command->corr_id_ = sycl_data_kview.cid_;
       } else {
         command->corr_id_ = UniCorrId::GetUniCorrId();
-        sycl_data_kview.cid_ = command->corr_id_;
+#if defined(PTI_TRACE_SYCL)
+        if (SyclCollector::Instance().Enabled()) {
+          sycl_data_kview.cid_ = command->corr_id_;
+        }
+#endif
       }
     } else if (command->props.type == KernelCommandType::kMemory) {
       command->props.src_device = props.src_device;
@@ -1729,7 +1733,11 @@ class ZeCollector {
         command->corr_id_ = sycl_data_mview.cid_;
       } else {
         command->corr_id_ = UniCorrId::GetUniCorrId();
-        sycl_data_mview.cid_ = command->corr_id_;
+#if defined(PTI_TRACE_SYCL)
+        if (SyclCollector::Instance().Enabled()) {
+          sycl_data_mview.cid_ = command->corr_id_;
+        }
+#endif
       }
 
       command->sycl_node_id_ = sycl_data_mview.sycl_node_id_;

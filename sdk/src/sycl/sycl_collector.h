@@ -581,6 +581,15 @@ class XptiStreamRegistrationHandler {
       SyclCollector::Instance().StreamsInitialized();
       if (!SyclCollector::Instance().Enabled()) {
         SyclCollector::Instance().DisableTracing();
+        // To remove effects of first callabacks that Sycl collector gets
+        // until all streams registered
+        // Zeroing cid_ -s is particularly important for correlation_id fields correctness
+        sycl_data_kview.kid_ = 0;
+        sycl_data_kview.tid_ = 0;
+        sycl_data_kview.cid_ = 0;
+        sycl_data_mview.kid_ = 0;
+        sycl_data_mview.tid_ = 0;
+        sycl_data_mview.cid_ = 0;
       }
     }
   }
