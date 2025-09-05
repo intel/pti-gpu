@@ -48,29 +48,43 @@ The path to the Unified Runtime library.
 # * `/opt/sycl` - Intel/LLVM open-source compiler container installation location
 #                 on Linux.
 #
-find_path(
-  unified-runtime_INCLUDE_DIR
-# the file order seems impacts if it finds UR in the dir under CMPLR_ROOT
-  NAMES ur_api.h sycl/ur_api.h
-  HINTS ENV CMPLR_ROOT
-        ENV CPATH
-  PATHS /opt/intel/oneapi/compiler/latest
-        /opt/intel/oneapi/compiler/latest/linux
-        /opt/sycl
-  PATH_SUFFIXES include
-                linux/include
-)
-
 find_library(
   unified-runtime_LIBRARY
   NAMES ur_loader
-  HINTS ENV CMPLR_ROOT
-        ENV LIBRARY_PATH
+  HINTS ENV LIBRARY_PATH
+        ENV LD_LIBRARY_PATH
+        ENV LIB
+        ENV CMPLR_ROOT
   PATHS /opt/intel/oneapi/compiler/latest
         /opt/intel/oneapi/compiler/latest/linux
         /opt/sycl
   PATH_SUFFIXES lib
                 linux/lib
+)
+
+if(unified-runtime_LIBRARY)
+  # Get the root directory of the unified-runtime installation. This will help
+  # us find the include directory, given some versions of the compiler do not
+  # have an environment variable pointing to the installation root.
+  get_filename_component(UNIFIED_RUNTIME_LIB_DIR "${unified-runtime_LIBRARY}" DIRECTORY)
+  get_filename_component(UNIFIED_RUNTIME_ROOT_DIR "${UNIFIED_RUNTIME_LIB_DIR}" DIRECTORY)
+endif()
+
+find_path(
+  unified-runtime_INCLUDE_DIR
+# the file order seems impacts if it finds UR in the dir under CMPLR_ROOT
+  NAMES ur_api.h sycl/ur_api.h
+  HINTS ${UNIFIED_RUNTIME_ROOT_DIR}
+        ENV CPATH
+        ENV C_INCLUDE_PATH
+        ENV CPLUS_INCLUDE_PATH
+        ENV INCLUDE
+        ENV CMPLR_ROOT
+  PATHS /opt/intel/oneapi/compiler/latest
+        /opt/intel/oneapi/compiler/latest/linux
+        /opt/sycl
+  PATH_SUFFIXES include
+                linux/include
 )
 
 include(FindPackageHandleStandardArgs)

@@ -5,7 +5,6 @@
 // =============================================================
 
 #include <gtest/gtest.h>
-#include <math.h>
 #include <string.h>
 
 // Unified Runtime header(s) can be found in either directory.
@@ -16,6 +15,7 @@
 #endif
 
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -42,6 +42,13 @@
       std::exit(EXIT_FAILURE);                                                                \
     }                                                                                         \
   } while (0)
+
+#if !defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
+#if (defined(__SYCL_COMPILER_VERSION) && (__SYCL_COMPILER_VERSION >= 20250830)) || \
+    (defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20250300))
+#define PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3 1
+#endif
+#endif
 
 namespace syclex = sycl::ext::oneapi::experimental;
 
@@ -75,7 +82,7 @@ float Check(const std::vector<float>& a, float value) {
 
   float eps = 0.0f;
   for (size_t i = 0; i < a.size(); ++i) {
-    eps += fabs((a[i] - value) / value);
+    eps += std::fabs((a[i] - value) / value);
   }
 
   return eps / a.size();
@@ -151,7 +158,7 @@ float RunAndCheck(ur_kernel_handle_t kernel, ur_device_handle_t device, ur_conte
 
   ur_event_handle_t event;
 
-#if defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20250300)
+#if defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
   UR_CHECK_SUCCESS(urEnqueueKernelLaunch(queue, kernel, 2, gWorkOffset, gWorkSize, lWorkSize,
                                          /* num_events_in_wait_list */ 0,
                                          /* event_wait_list */ nullptr,
@@ -174,7 +181,7 @@ float RunAndCheck(ur_kernel_handle_t kernel, ur_device_handle_t device, ur_conte
 ur_result_t GetL0Adapter(std::vector<ur_adapter_handle_t>& adapters, unsigned int& idx) {
   unsigned int index = 0;
   for (auto adapter : adapters) {
-#if defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20250300)
+#if defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
     ur_backend_t backend;
     UR_CHECK_SUCCESS(urAdapterGetInfo(adapter, UR_ADAPTER_INFO_BACKEND, sizeof(ur_backend_t),
                                       &backend, nullptr));
@@ -212,7 +219,7 @@ void ComputeUsingUr(std::vector<float>& a, std::vector<float>& b, std::vector<fl
   UR_CHECK_SUCCESS(GetL0Adapter(adapters, idx));
 
   std::vector<ur_platform_handle_t> platforms(count);
-#if defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20250300)
+#if defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
   UR_CHECK_SUCCESS(urPlatformGet(adapters[idx], 1, platforms.data(), nullptr));
 #else
   UR_CHECK_SUCCESS(urPlatformGet(&adapters[idx], 1, 1, platforms.data(), nullptr));

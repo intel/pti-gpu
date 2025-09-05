@@ -51,7 +51,12 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET
     find_package(unified-runtime)
   endif()
 
-  get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
+  # Temporary until we remove UR build dependency.
+  set(UR_HEADER_PATH "<empty>")
+  if (TARGET unified-runtime::loader)
+    get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
+  endif()
+
   add_custom_target(${custom_target} ALL
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME})
   string(CONCAT PTI_L0_LOADER_COMMIT_INFO "commit: " ${PTI_L0_LOADER_COMMIT_HASH} " - v" ${PTI_L0_LOADER})
@@ -192,14 +197,20 @@ macro(GetGTest)
     FetchContent_MakeAvailable(googletest)
 
     set(PTI_GTEST_COMPILE_OPTIONS
-      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:Release>:-Wno-deprecated-declarations -Wno-character-conversion -Wno-unknown-warning-option>>
-      $<$<CXX_COMPILER_ID:IntelLLVM>:$<$<CONFIG:RelWithDebInfo>:-Wno-deprecated-declarations -Wno-character-conversion -Wno-unknown-warning-option>>
-      $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>)
+      $<$<OR:$<CXX_COMPILER_ID:IntelLLVM>,$<CXX_COMPILER_ID:Clang>>:
+        $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:
+          -Wno-deprecated-declarations
+          -Wno-character-conversion
+          -Wno-unknown-warning-option
+        >
+      >
+      $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>
+    )
 
-    target_compile_options(gmock_main PRIVATE ${PTI_GTEST_COMPILE_OPTIONS})
-    target_compile_options(gmock PRIVATE ${PTI_GTEST_COMPILE_OPTIONS})
-    target_compile_options(gtest PRIVATE ${PTI_GTEST_COMPILE_OPTIONS})
-    target_compile_options(gtest_main PRIVATE ${PTI_GTEST_COMPILE_OPTIONS})
+    set_target_properties(gmock_main gmock gtest gtest_main
+      PROPERTIES
+        COMPILE_OPTIONS "${PTI_GTEST_COMPILE_OPTIONS}")
+
   endif()
 endmacro()
 
@@ -376,7 +387,12 @@ macro(AddApiGenTarget L0_GEN_SCRIPT GEN_FILE_NAME L0_TARGET)
     find_package(unified-runtime)
   endif()
 
-  get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
+  # Temporary until we remove UR build dependency.
+  set(UR_HEADER_PATH "<empty>")
+  if (TARGET unified-runtime::loader)
+    get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
+  endif()
+
   string(CONCAT L0_LOADER_INFO "commit: " ${PTI_L0_LOADER_COMMIT_HASH} " - v" ${PTI_L0_LOADER})
   add_custom_target(generate-ids
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
