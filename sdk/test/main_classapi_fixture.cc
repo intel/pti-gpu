@@ -841,8 +841,87 @@ TEST_F(ClassApiFixtureTest, ValidateApiIdsNotChanged) {
   EXPECT_EQ((std::strcmp(api_name, "urLoaderConfigSetMockingEnabled") == 0), true);
   PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 230, &api_name));
   EXPECT_EQ((std::strcmp(api_name, "urBindlessImagesReleaseExternalMemoryExp") == 0), true);
+
+  // Start using EXPECT_STREQ for string comparison TODO: Change above but for now keep to minimize
+  // changes to existing tests (Perhaps even consider using an array).
+
+  // Warning: API name for ID 231 changed in oneAPI 2025.1.
+  // This is not supposed to happen (URT-967)
+  // urBindlessImagesMapExternalLinearMemoryExp -> urCommandBufferAppendUSMMemcpyExp
   PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 231, &api_name));
-  EXPECT_EQ((std::strcmp(api_name, "urBindlessImagesMapExternalLinearMemoryExp") == 0), true);
+  EXPECT_STREQ(api_name, "urCommandBufferAppendUSMMemcpyExp");
+  /////////////////////////////////////////////////////////////////////////////////////////////
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 232, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendUSMFillExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 233, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendMemBufferCopyExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 234, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendMemBufferWriteExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 235, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendMemBufferReadExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 236, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendMemBufferCopyRectExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 237, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendMemBufferWriteRectExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 238, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendMemBufferReadRectExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 239, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendMemBufferFillExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 240, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendUSMPrefetchExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 241, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendUSMAdviseExp");
+  // Warning: API name for ID 242 changed in oneAPI 2025.2.
+  // This is not supposed to happen (URT-967)
+  // urCommandBufferEnqueueExp -> urEnqueueCommandBufferExp
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 242, &api_name));
+  EXPECT_STREQ(api_name, "urEnqueueCommandBufferExp");
+  /////////////////////////////////////////////////////////////////////////////////////////////
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 243, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferUpdateSignalEventExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 244, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferUpdateWaitEventsExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 245, &api_name));
+  EXPECT_STREQ(api_name, "urBindlessImagesMapExternalLinearMemoryExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 246, &api_name));
+  EXPECT_STREQ(api_name, "urEnqueueEventsWaitWithBarrierExt");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 247, &api_name));
+  EXPECT_STREQ(api_name, "urTensorMapEncodeIm2ColExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 248, &api_name));
+  EXPECT_STREQ(api_name, "urTensorMapEncodeTiledExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 249, &api_name));
+  EXPECT_STREQ(api_name, "urPhysicalMemGetInfo");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 250, &api_name));
+  EXPECT_STREQ(api_name, "urEnqueueUSMDeviceAllocExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 251, &api_name));
+  EXPECT_STREQ(api_name, "urEnqueueUSMSharedAllocExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 252, &api_name));
+  EXPECT_STREQ(api_name, "urEnqueueUSMHostAllocExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 253, &api_name));
+  EXPECT_STREQ(api_name, "urEnqueueUSMFreeExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 254, &api_name));
+  EXPECT_STREQ(api_name, "urUSMPoolCreateExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 255, &api_name));
+  EXPECT_STREQ(api_name, "urUSMPoolDestroyExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 256, &api_name));
+  EXPECT_STREQ(api_name, "urUSMPoolSetThresholdExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 257, &api_name));
+  EXPECT_STREQ(api_name, "urUSMPoolGetDefaultDevicePoolExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 259, &api_name));
+  EXPECT_STREQ(api_name, "urUSMPoolSetDevicePoolExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 260, &api_name));
+  EXPECT_STREQ(api_name, "urUSMPoolGetDevicePoolExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 261, &api_name));
+  EXPECT_STREQ(api_name, "urUSMPoolTrimToExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 262, &api_name));
+  EXPECT_STREQ(api_name, "urUSMPoolGetInfoExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 263, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferAppendNativeCommandExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 264, &api_name));
+  EXPECT_STREQ(api_name, "urCommandBufferGetNativeHandleExp");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, 271, &api_name));
+  EXPECT_STREQ(api_name, "urBindlessImagesFreeMappedLinearMemoryExp");
+
   PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 1, &api_name));
   EXPECT_EQ((std::strcmp(api_name, "zeInit") == 0), true);
   PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 2, &api_name));

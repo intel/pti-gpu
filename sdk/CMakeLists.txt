@@ -89,10 +89,6 @@ endif()
 
 find_package(Threads REQUIRED)
 
-if(PROJECT_IS_TOP_LEVEL)
-  AddApiGenTarget(
-    "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py" "tracing.gen" LevelZero::level-zero)
-endif()
 
 # Build PTI libraries.
 configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
@@ -170,6 +166,12 @@ target_link_libraries(
 FindHeadersPath(
   pti "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py"
   "tracing.gen" gen_tracing_header LevelZero::level-zero)
+
+if(PROJECT_IS_TOP_LEVEL)
+  AddApiGenTarget(
+    "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py" "tracing.gen" LevelZero::level-zero)
+  add_dependencies(generate-ids gen_tracing_header)
+endif()
 
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/xpti_adapter.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti.cc"

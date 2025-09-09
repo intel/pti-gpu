@@ -426,7 +426,7 @@ if(HAVE_SYCL)
     perf-prof-gpu-overhead perf-link-overhead PROPERTIES LABELS "performance")
 
   set_tests_properties(
-    perf-overhead-view PROPERTIES LABELS "performance; functional")
+    perf-overhead-view PROPERTIES LABELS "performance;functional")
 
   # Add interoperability test
   add_test(
@@ -434,11 +434,12 @@ if(HAVE_SYCL)
     COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/xpti_interop_test.py "${PTI_TEST_BIN_DIR}"
   )
   set_tests_properties(
-    xpti_interop_test PROPERTIES LABELS "interop; functional")
+    xpti_interop_test PROPERTIES LABELS "interop;functional")
 
 endif()
 
 if (HAVE_SYCL AND TARGET unified-runtime::loader)
+
   add_executable(urgemm_suite main_urgemm_fixture.cc)
 
   target_include_directories(
@@ -466,6 +467,22 @@ if (HAVE_SYCL AND TARGET unified-runtime::loader)
     PROPERTIES LABELS "unit" "sycl" "unified-runtime")
 
   add_dependencies(urgemm_suite copy_test_spv)
+
+  RequirePythonInterp()
+
+  get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
+
+  if (UR_HEADER_PATH)
+    add_test(
+      NAME validate-sycl-ur-api-ids-test
+      COMMAND ${Python_EXECUTABLE}
+      ${PROJECT_SOURCE_DIR}/test/validate_sycl_api_ids.py --validate --pti-include-dir ${PROJECT_SOURCE_DIR}/include --ur-include-dir "${UR_HEADER_PATH}"
+    )
+
+    set_tests_properties(
+      validate-sycl-ur-api-ids-test PROPERTIES LABELS "interop;functional")
+  endif()
+
 endif()
 
 add_executable(view_record_test view_buffer_test.cc)

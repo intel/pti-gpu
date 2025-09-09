@@ -6,17 +6,12 @@
 
 import os
 import sys
-import re
-import pprint
 import bisect
 
 # Parse Level Zero Headers ####################################################
 # Extract registerable apis from 2 headers (ze_api.h, layers/zel_tracing_register_cb.h)
 # Generate a tracing.gen file to be included into ze_collector.h that can be used to register callbacks.
 
-STATE_NORMAL = 0
-STATE_CONDITION = 1
-STATE_SKIP = 2
 FILE_OPEN_PERMISSIONS = 0o600
 DEFAULT_UNIFIED_RUNTIME_PUBLIC_HEADERS = ["ur_api.h", "sycl/ur_api.h"]
 
@@ -24,28 +19,6 @@ DEFAULT_UNIFIED_RUNTIME_PUBLIC_HEADERS = ["ur_api.h", "sycl/ur_api.h"]
 # https://docs.python.org/3/library/functions.html#open
 def default_file_opener(path, flags):
     return os.open(path, flags, mode=FILE_OPEN_PERMISSIONS)
-
-
-#
-# Extracts api function names from tracing_types.h and returns as list.
-#
-def get_ocl_api_list(ocl_path):
-    ocl_file_path = os.path.join(ocl_path, "tracing_types.h")
-    ocl_file = open(ocl_file_path, "rt")
-    func_list = []
-    cl_function_id_found = False
-    for line in ocl_file.readlines():
-        line = line.strip()
-        # print(line)
-        if cl_function_id_found == True and line.find("CL_FUNCTION_COUNT") == -1:
-            if line.startswith("CL_FUNCTION_"):
-                api_name = line[
-                    len("CL_FUNCTION_") : line.find("=", len("CL_FUNCTION_"))
-                ]
-                func_list.append(api_name.strip())
-        elif line.find("ClFunctionId") != -1:
-            cl_function_id_found = True
-    return func_list
 
 
 def get_ur_api_file_path(include_file_path, include_file=None):
@@ -81,28 +54,42 @@ def get_ur_api_file_path(include_file_path, include_file=None):
 
 
 #
-# Extracts api function names from ur_api.h and returns as list.
-# Note:  The ur_api.h contains predefined ids for each api -- assumption is no recycle on deprecation.
+# Extracts api function names and version from ur_api.h and returns as list.
+# Note:  The ur_api.h contains predefined ids for each api -- assumption is no
+# recycle on deprecation. There was a recycled id in the past with oneAPI 2025.1
+# (URT-967).
+#
+# Each API has an enum value and associated comment with the api name.
+# This can be either on the same line or on the line before the enum value.
 #
 def get_ur_api_list(ur_file_path):
-    ur_file = open(ur_file_path, "rt")
-    func_list = []
+    ur_enum_defs = []  # list of "ApiName,ApiId"
     ur_function_id_found = False
-    for line in ur_file.readlines():
-        line = line.strip()
-        # print(line)
-        if line.find("version v") != -1:
-            ur_api_version = line
-        if ur_function_id_found == True and line.find("UR_FUNCTION_FORCE_UINT32") == -1:
-            if line.startswith("UR_FUNCTION_"):
-                api_id = line[line.find("=") + 1 : line.find(",")].strip()
-                api_name = line[
-                    line.find("Enumerator for ::") + len("Enumerator for ::") :
-                ]
-                func_list.append(api_name.strip() + "," + api_id)
-        elif line.find("ur_function_t") != -1:
-            ur_function_id_found = True
-    return (func_list, ur_api_version)
+    ur_api_version = None
+    current_ur_api_name = ""
+    API_NAME_COMMENT_PREFIX = "Enumerator for ::"
+    with open(ur_file_path, "rt", opener=default_file_opener) as ur_file:
+        for line in ur_file:
+            line = line.strip()
+            if "version v" in line:
+                ur_api_version = line
+            if ur_function_id_found and "UR_FUNCTION_FORCE_UINT32" not in line:
+                if line.startswith("UR_FUNCTION_"):
+                    api_id = line[line.find("=") + 1 : line.find(",")].strip()
+                    # If line has comment with API name, extract and prioritize it as current
+                    if API_NAME_COMMENT_PREFIX in line:
+                        # Line with API_NAME_COMMENT_PREFIXApiName -> ApiName
+                        current_ur_api_name = line.split(API_NAME_COMMENT_PREFIX)[
+                            1
+                        ].strip()
+                    api_name = current_ur_api_name
+                    ur_enum_defs.append(api_name.strip() + "," + api_id)
+                elif line.startswith("/// " + API_NAME_COMMENT_PREFIX):
+                    # Line with API_NAME_COMMENT_PREFIXApiName -> ApiName
+                    current_ur_api_name = line.split(API_NAME_COMMENT_PREFIX)[1].strip()
+            elif "ur_function_t" in line:
+                ur_function_id_found = True
+        return (ur_enum_defs, ur_api_version)
 
 
 #
@@ -206,42 +193,76 @@ def gen_apiid_terminate_header(api_file):
     api_file.write("#endif\n")
 
 
-#
+def get_new_version_tag(api_name):
+    """Get a version to append to enum member"""
+    VERSION_SEPARATOR = "_v"
+    STARTING_VERSION_TAG = VERSION_SEPARATOR + "2"
+
+    version_to_add = STARTING_VERSION_TAG
+    # urApiFunction_v<> -> [urApiFunction, v<>]
+    api_ver = api_name.split("_")
+    if len(api_ver) >= 2:
+        if "v" in api_ver[1]:
+            # Shave off 'v'
+            version_to_add = f"{VERSION_SEPARATOR}{int(api_ver[1][1:]) + 1}"
+    return version_to_add
+
+
+def strip_version_from_api_name(api_name):
+    # urApiFunction_v<> -> urApiFunction
+    stripped_name = api_name.split("_", 1)[0].strip()
+    return stripped_name
+
+
+def reverse_bi_dict(dict_to_reverse):
+    reversed_dict = {}
+    for key, value in dict_to_reverse.items():
+        if value not in reversed_dict:
+            reversed_dict[value] = key
+        else:
+            raise ValueError(
+                f"Duplicate value {value}. This is not a bidirectional map. E.g., make sure api ids are unique."
+            )
+    return reversed_dict
+
+
 def generate_api_file_portion(
     apiids_file_path,
-    callback_list,
+    enum_definition_list,
     category,
     api_group,
     existing_apiids,
     dst_validation_file,
     version_dict,
 ):
-    kApiIdEnumInterval = 1
+    API_ID_ENUM_INTERVAL = 1
     with open(apiids_file_path, "wt", opener=default_file_opener) as f:
         gen_apiid_header(
             f, category.upper() + "_" + api_group.upper(), version_dict[api_group]
         )
         f.write("typedef enum _pti_api_id_" + category + "_" + api_group + " {\n")
         f.write("    reserved_" + category + "_" + api_group + "_id=" + str(0) + ",\n")
-        next_id = int(existing_apiids.get("next_elem_index", kApiIdEnumInterval))
+        next_id = int(existing_apiids.get("next_elem_index", API_ID_ENUM_INTERVAL))
         if existing_apiids:
             del existing_apiids["next_elem_index"]
         id_counter = 0
         id_set = set()
-        # clist = sorted(callback_list, key=lambda x: x[0])
         sorted_api_list = []
-        unknown_sorted_api_list = []
-        for func in callback_list:
-            items = func.partition(",")
-            # print(items)
-            apiid = int(existing_apiids.get(items[0] + "_id", 0))
-            # Use existing apiid or use one in the header or create one if not known
-            # Is this header api already known to ptisdk
-            known_api = True
+        existing_api_id_to_enum_map = reverse_bi_dict(existing_apiids)
+
+        for enum_def in enum_definition_list:
+            next_enum_def = enum_def.partition(",")
+            apiid = int(existing_apiids.get(next_enum_def[0] + "_id", 0))
+            add_version = False
+
+            if apiid == 0 and len(next_enum_def) >= 3:
+                enum_mem = existing_api_id_to_enum_map.get(next_enum_def[2], None)
+                if enum_mem and enum_mem.startswith(next_enum_def[0]):
+                    apiid = int(next_enum_def[2])
+
             if apiid == 0:  # not known, no existing id
-                known_api = False
                 if (
-                    items[2] == ""
+                    next_enum_def[2] == ""
                 ):  # and no default value in the header file, create one.
                     apiid = next_id
                     if bool(id_set) and (
@@ -250,20 +271,59 @@ def generate_api_file_portion(
                         apiid = max(id_set) + 1
                     else:
                         next_id += 1
-                    # print("Apidd: ", apiid)
                 else:  # there is a default value in the header -- use it.
-                    apiid = int(items[2])
-                    # print("items2: ", type(apiid))
+                    # 'Recycle' case. We break our API by removing an existing
+                    # enum definition if it has changed ID in the header.
+                    if next_enum_def[2] in existing_api_id_to_enum_map:
+                        del existing_apiids[
+                            existing_api_id_to_enum_map[next_enum_def[2]]
+                        ]
+                    apiid = int(next_enum_def[2])
             else:
-                del existing_apiids[items[0] + "_id"]
-            # f.write("    " + items[0] + "_id=" + str(apiid) + ",\n")
-            # if (not known_api):
-            #    bisect.insort(unknown_sorted_api_list, (apiid,items[0]+"_id="+str(apiid)))
-            bisect.insort(sorted_api_list, (apiid, items[0] + "_id=" + str(apiid)))
+                if (
+                    len(next_enum_def) >= 3
+                    and next_enum_def[2]
+                    and int(next_enum_def[2]) != apiid
+                ):
+                    # We need to create a new enum value but leave the old one in place.
+                    # enum_mem = api_id_to_enum_map.get(int(items[2]), None)
+                    # if enum_mem:
+                    print(
+                        "Warning: Existing apiid for ",
+                        next_enum_def[0],
+                        " is different from the one in the header file. Existing: ",
+                        apiid,
+                        " vs Next: ",
+                        next_enum_def[2],
+                    )
+                    # 'Recycle' case. We break our API by allowing the enum to be reused by a future API.
+                    # This shouldn't happen after 2025.3.
+                    if next_enum_def[2] in existing_api_id_to_enum_map:
+                        del existing_apiids[
+                            existing_api_id_to_enum_map[next_enum_def[2]]
+                        ]
+
+                    add_version = True
+                    # Keep the existing API id
+                    existing_apiids[next_enum_def[0] + "_id"] = apiid
+                    # Use the new API id from the header file
+                    apiid = int(next_enum_def[2])
+                else:
+                    del existing_apiids[next_enum_def[0] + "_id"]
+
+            version_to_add = ""
+            if add_version:
+                version_to_add = get_new_version_tag(next_enum_def[0])
+
+            enum_line = f"{next_enum_def[0]}{version_to_add}_id=" + str(apiid)
+
+            api_id_and_line = (apiid, enum_line)
+            if api_id_and_line not in sorted_api_list:
+                bisect.insort(sorted_api_list, api_id_and_line)
+
             id_counter += 1
             id_set.add(apiid)
-            # print(id_counter, apiid, len(id_set))
-            # print(id_set)
+
             assert (
                 len(id_set) == id_counter
             ), "Duplicated api id generated or found when creating from existing"
@@ -276,19 +336,28 @@ def generate_api_file_portion(
                 + "&api_name));\n"
             )
             dst_validation_file.write(
-                'EXPECT_EQ((std::strcmp(api_name, "' + items[0] + '") == 0), true);\n'
+                'EXPECT_STREQ(api_name, "'
+                + strip_version_from_api_name(next_enum_def[0])
+                + '");\n'
             )
-        # f.write("    last_"+category+"_id=" + str(apiid) +",\n")
-        # print(existing_apiids)
+
         for func in existing_apiids:
             apiid = existing_apiids[func]
-            print("Existing: ", func, apiid)
-            bisect.insort(sorted_api_list, (int(apiid), func + "=" + str(apiid)))
+            if apiid not in id_set:
+                print("Existing: ", func, apiid)
+                api_id_and_line = (int(apiid), func + "=" + str(apiid))
+                if api_id_and_line not in sorted_api_list:
+                    bisect.insort(sorted_api_list, api_id_and_line)
+
+        enum_members = list()
         for func in sorted_api_list:
+            # urApiFunction_v<>_id -> urApiFunction_v<>,
+            enum_members.append(f"{func[1].rsplit('_', 1)[0]},")
             f.write("    " + func[1] + ",\n")
         f.write(" } pti_api_id_" + category + "_" + api_group + ";\n")
         f.write("\n")
         gen_apiid_terminate_header(f)
+        return enum_members
 
 
 def generate_cb_api_file_info(cb_api_file, callbacks, category, api_group, regen=True):
@@ -311,12 +380,12 @@ def generate_cb_api_file_info(cb_api_file, callbacks, category, api_group, regen
                 + "::"
                 + items[0]
                 + '_id, "'
-                + items[0]
+                + strip_version_from_api_name(items[0])
                 + '"},\n'
             )
     else:
         for key in callbacks.keys():
-            items = key.partition("_")
+            items = key.split("_", 1)
             cb_api_file.write(
                 "    {pti_api_id_"
                 + category
@@ -325,7 +394,7 @@ def generate_cb_api_file_info(cb_api_file, callbacks, category, api_group, regen
                 + "::"
                 + key
                 + ', "'
-                + items[0]
+                + items[0].strip()
                 + '"},\n'
             )
     cb_api_file.write("  }; \n\n")
@@ -408,9 +477,7 @@ def gen_apiid_files_per_category(
         print("Generation: Working with: ", api_group)
         print(existing_apiids.get("next_elem_index", 1))
         if regen_api_files:
-            # pprint.pprint(existing_apiids)
-            # pprint.pprint(callback_list)
-            generate_api_file_portion(
+            generated_apis = generate_api_file_portion(
                 apiids_file_path,
                 callback_list,
                 category,
@@ -420,11 +487,11 @@ def gen_apiid_files_per_category(
                 version_dict,
             )
             generate_cb_api_file_info(
-                cb_api_file, callback_list, category, api_group, regen_api_files
+                cb_api_file, generated_apis, category, api_group, regen_api_files
             )
 
             generate_state_file_info(
-                api_state_file, callback_list, category, api_group, regen_api_files
+                api_state_file, generated_apis, category, api_group, regen_api_files
             )
         else:
             print(
@@ -771,12 +838,22 @@ def gen_exit_callback(
             f.write("         rec.cid_ = sycl_data_mview.cid_;\n")
             f.write("       } else {\n")
             f.write("          if (collector->options_.kernel_tracing) {\n")
-            f.write("           // UniCorrId was already incremented when GPU op was processed\n")
-            f.write("           // For correlation purposes PTI need to assign and report the same corr_id\n")
+            f.write(
+                "           // UniCorrId was already incremented when GPU op was processed\n"
+            )
+            f.write(
+                "           // For correlation purposes PTI need to assign and report the same corr_id\n"
+            )
             f.write("           // on the corresponding Driver API record\n")
-            f.write("           // TODO (PTI-289): ensure this works when only particular GPU ops (e.g. memory fill) requested for ptiView\n")
-            f.write("           //   this would require instead of one collector->options_.kernel_tracing option field - have several ones\n")
-            f.write("           rec.cid_ = (static_cast<ZeKernelCommand*>(*instance_user_data))->corr_id_;\n")
+            f.write(
+                "           // TODO (PTI-289): ensure this works when only particular GPU ops (e.g. memory fill) requested for ptiView\n"
+            )
+            f.write(
+                "           //   this would require instead of one collector->options_.kernel_tracing option field - have several ones\n"
+            )
+            f.write(
+                "           rec.cid_ = (static_cast<ZeKernelCommand*>(*instance_user_data))->corr_id_;\n"
+            )
             f.write("          } else {\n")
             f.write("           rec.cid_ = UniCorrId::GetUniCorrId();\n")
             f.write("          }\n")
@@ -1095,7 +1172,6 @@ def main():
     resource_list = []
 
     (ur_func_list, ur_api_version) = get_ur_api_list(ur_file_path)
-    # pprint.pprint(ur_func_list)
 
     # category_dict = {"runtime": ur_func_list, "driver": func_list}
     # category_dict = {"runtime": ur_func_list, "driver": func_list + ocl_api_list}

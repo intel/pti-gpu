@@ -63,7 +63,8 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET
   add_custom_command(OUTPUT ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
                      COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT}
                      ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero"
-                     "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include/pti" ${UR_HEADER_PATH} ${PTI_API_ID_REGENERATE} ${PTI_L0_LOADER_COMMIT_INFO})
+                     "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include/pti" ${UR_HEADER_PATH} ${PTI_API_ID_REGENERATE} ${PTI_L0_LOADER_COMMIT_INFO}
+                     DEPENDS ${L0_GEN_SCRIPT})
   target_include_directories(${TARGET}
     PUBLIC "$<BUILD_INTERFACE:${L0_GEN_INC_PATH}>")
   add_dependencies(${TARGET}
@@ -398,7 +399,7 @@ macro(AddApiGenTarget L0_GEN_SCRIPT GEN_FILE_NAME L0_TARGET)
                     DEPENDS ${L0_GEN_INC_PATH}/${GEN_FILE_NAME}
                     COMMAND "${PYTHON_EXECUTABLE}" ${L0_GEN_SCRIPT}
                     ${L0_GEN_INC_PATH} "${L0_INC_PATH}/level_zero"
-                    "${PROJECT_BINARY_DIR}/include/pti" "${PROJECT_SOURCE_DIR}/include/pti" ${UR_HEADER_PATH} "ON" ${L0_LOADER_INFO})
+                    "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include/pti" ${UR_HEADER_PATH} "ON" ${L0_LOADER_INFO})
 endmacro()
 
 macro(AddFormatTarget)

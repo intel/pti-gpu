@@ -25,6 +25,7 @@
 #include <sycl/sycl.hpp>
 #include <vector>
 
+#include "pti/pti_runtime_sycl_api_ids.h"
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
@@ -49,6 +50,55 @@
 #define PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3 1
 #endif
 #endif
+
+// Static asserts to ensure PTI and UR API ids match.
+// These are critical for PyTorch framework. We have to tolerate some breakages between oneAPI
+// versions due to a bug but not these.
+static_assert(static_cast<uint32_t>(urEnqueueUSMFill_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_USM_FILL),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urEnqueueUSMFill2D_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_USM_FILL_2D),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urEnqueueUSMMemcpy2D_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_USM_MEMCPY_2D),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urEnqueueUSMMemcpy_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_USM_MEMCPY),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urEnqueueKernelLaunch_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_KERNEL_LAUNCH),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+#if !defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
+// These were removed in 2025.3. They should not be reassigned though.
+static_assert(static_cast<uint32_t>(urEnqueueKernelLaunchCustomExp_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_KERNEL_LAUNCH_CUSTOM_EXP),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urEnqueueCooperativeKernelLaunchExp_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_COOPERATIVE_KERNEL_LAUNCH_EXP),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+#endif
+static_assert(static_cast<uint32_t>(urEnqueueMemBufferFill_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_MEM_BUFFER_FILL),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urEnqueueMemBufferRead_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_MEM_BUFFER_READ),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urEnqueueMemBufferWrite_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_MEM_BUFFER_WRITE),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urEnqueueMemBufferCopy_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_MEM_BUFFER_COPY),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urUSMHostAlloc_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_USM_HOST_ALLOC),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urUSMSharedAlloc_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_USM_SHARED_ALLOC),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urUSMDeviceAlloc_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_USM_DEVICE_ALLOC),
+              "Critical PTI - Unified Runtime API ID Mismatch");
 
 namespace syclex = sycl::ext::oneapi::experimental;
 
