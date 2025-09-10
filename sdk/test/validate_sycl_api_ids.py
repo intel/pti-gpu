@@ -103,6 +103,12 @@ class PtiApiIdValidator:
     DEFAULT_UR_API_NAME_COMMENT_PREFIX = "Enumerator for ::"
     DEFAULT_UR_API_ID_ENUM_START = "typedef enum ur_function_t"
 
+    # 'Recycled' (Broken!) API Ids due to URT-967.
+    UR_API_RECYCLE_LIST = [
+        "urCommandBufferEnqueueExp",  # 2025.0 (id: 128) -> 2025.1 (id: 242) -> 2025.2 (doesn't exist, however, changed to urEnqueueCommandBufferExp)
+        "urBindlessImagesMapExternalLinearMemoryExp",  # 2025.0 (id: 231) -> 2025.1 (id: 245)
+    ]
+
     def __init__(
         self,
         pti_include_file: pathlib.Path,
@@ -151,6 +157,7 @@ class PtiApiIdValidator:
                         if (
                             pti_existing_api_id != api_id_value
                             and not pti_existing_api_name.startswith(current_api_name)
+                            and current_api_name not in self.UR_API_RECYCLE_LIST
                         ):
                             error_msg = f"{initial_error_msg} does not match PTI SYCL API ID value {self.__pti_ur_api_to_ids_map[f'{current_api_name}_id']}."
                             self.__log_or_throw(
@@ -180,7 +187,7 @@ class PtiApiIdValidator:
         if raise_on_error:
             raise ApiIdRulesViolationError(message)
         else:
-            print(f"[{"WARNING" if warning else "ERROR"}] {message}", file=sys.stderr)
+            print(f"[{'WARNING' if warning else 'ERROR'}] {message}", file=sys.stderr)
 
     def __load_pti_api_ids(self, pti_include_file: pathlib.Path):
         """Load PTI API Ids into data structures that can be used for validation."""
