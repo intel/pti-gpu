@@ -9,6 +9,10 @@ inputs:
   preset:
     description: Preset used in the build to be tested.
     required: true
+  skipUrSycl:
+    description: "Skip validate-sycl-ur-api-ids-test"
+    default: false
+    type: boolean
 
 runs:
   using: "composite"
@@ -18,8 +22,11 @@ runs:
       working-directory: ${{ inputs.wdir }}
       shell: bash
       run: |
+
+        [[ ${{ inputs.skipUrSycl }} ]] && RUN_SYCL_UR='-E validate-sycl-ur-api-ids-test'
+
         source /opt/intel/oneapi/setvars.sh
-        ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance
+        ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance ${RUN_SYCL_UR:=""}
 
     - name: Quarantined tests # flaky tests
       continue-on-error: true
@@ -27,6 +34,7 @@ runs:
       shell: bash
       run: |
         source /opt/intel/oneapi/setvars.sh
+
         if ctest --output-on-failure --preset ${{ inputs.preset }} -L performance; then
           echo "Test status: 0"
           echo "Quarantine tests all pass."

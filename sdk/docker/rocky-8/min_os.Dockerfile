@@ -30,4 +30,3 @@ RUN dnf install -y --setopt=tsflags=nodocs  \
     sudo \
     python3.12 && \
     dnf clean all
-

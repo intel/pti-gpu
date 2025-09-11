@@ -33,5 +33,6 @@ RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
   zypper addrepo -f -r https://repositories.intel.com/gpu/sles/15sp6/unified/intel-gpu-15sp6.repo && \
   rpm --import https://repositories.intel.com/gpu/intel-graphics.key
 
-RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.11 10
+RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.11 10 && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+
 

@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   sdk-build-and-test:
-    name: Build and Test PTI Lib
+    name: BldTest PTI
 
     #
     # pti is a selector to machines with Intel Ponte Vecchio officially
@@ -30,47 +30,41 @@ jobs:
     continue-on-error: true
 
     strategy:
-      max-parallel: 2
+      max-parallel: 3
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_RHEL_9_ONEAPI_25_0_0 }}
-            uploadname: "rhel-9.2025.0.0"
+          - container: ${{ vars.PTI_DOCKER_SLES_15_3_ONEAPI_NMINUS1 }}
+            uploadname: ${{ vars.PTI_PKG_SLES_15_3_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_SLES_15_3_ONEAPI_25_0_0 }}
-            uploadname: "sles-15.3.2025.0.0"
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_NMINUS1 }}
+            uploadname: ${{ vars.PTI_PKG_UBUNTU_22_4_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_0_0 }}
-            uploadname: "ubuntu-22.04.2025.0.0"
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_NMINUS1 }}
+            uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_0_0 }}
-            uploadname: "ubuntu-24.04.2025.0.0"
+          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_NMINUS1 }}
+            uploadname: ${{ vars.PTI_PKG_ROCKY_8_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_25_0_0 }}
-            uploadname: "rocky-8.2025.0.0"
-            preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_25_0_0 }}
-            uploadname: "rocky-8.gxx.2025.0.0"
+          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_NMINUS1 }}
+            uploadname: ${{ vars.PTI_PKG_ROCKY_8_GXX_NMINUS1 }}
             preset: linux-gxx-release
-          - container: ${{ vars.PTI_DOCKER_RHEL_9_ONEAPI_25_1_0 }}
-            uploadname: "rhel-9.2025.1.0"
+          - container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_SLES_15_ONEAPI_N }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_25_1_0 }}
-            uploadname: "sles-15.2025.1.0"
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_UBUNTU_22_4_ONEAPI_N }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
-            uploadname: "ubuntu-22.04.2025.1.0"
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_ONEAPI_N }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_25_1_0 }}
-            uploadname: "ubuntu-24.04.2025.1.0"
+          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_ROCKY_8_ONEAPI_N }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_25_1_0 }}
-            uploadname: "rocky-8.2025.1.0"
-            preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_25_1_0 }}
-            uploadname: "rocky-8.gxx.2025.1.0"
+          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_ROCKY_8_GXX_N }}
             preset: linux-gxx-release
 
-    container: 
+    container:
       image: ${{ matrix.container }}
       options: --device=/dev/dri --cap-add CAP_PERFMON ${{ vars.PTI_DOCKER_PROXIES }}
 
@@ -78,7 +72,10 @@ jobs:
 
     steps:
       - name: Clean-up
-        run:  rm -rf *
+        run: |
+          rm -rf *
+          echo uploadname ${{ matrix.uploadname }}
+          echo container ${{ matrix.container }}
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -127,22 +124,10 @@ jobs:
         run: |
           source /opt/intel/oneapi/setvars.sh
 
-          #
-          # Must skip Rocky8 with more than one GPU because of
-          # an unexpected failure as documented in PTI-74
-          #
-          if [ $(sycl-ls|grep 'ext_oneapi_level_zero:gpu:' -c) -gt 1 ] || \
-             [[ $(cat /etc/redhat-release)  =~ Rocky.*8 ]] || \
-             [[ $(cat /etc/redhat-release)  =~ Red\ Hat.*9 ]]; then
-            [ -f /etc/redhat-release] && cat /etc/redhat-release
-            echo "Skipping Test AddressSanitizer"
-            exit 0
-          fi
           ctest --preset linux-asan --output-on-failure -L samples
 
       - name: Test ThreadSanitizer
         working-directory: sdk
-        if: ${{ ! contains(matrix.uploadname, '2025.0') }}
         run: |
           source /opt/intel/oneapi/setvars.sh
           ctest --preset linux-tsan --output-on-failure -L samples
@@ -163,7 +148,7 @@ jobs:
 
   pti-tools-build-and-test:
     if: vars.PTI_RUN_TESTS == 1
-    name: Build and Test PTI Tools
+    name: PTI Tools
 
     runs-on: [Linux, pti, pvc]
 
@@ -207,7 +192,6 @@ jobs:
           python3 ./tests/run.py -s sysmon
 
       - name: Build-and-test-cl_gpu_metrics
-        if: vars.PTI_DOCKER_IMAGE_ONPUSH_2025_0_1 == matrix.container
         run: |
           source /opt/intel/oneapi/setvars.sh
           python3 ./tests/run.py -s cl_gpu_metrics
@@ -220,7 +204,7 @@ jobs:
       #
       # Fix!!
       # A problem with GLIBCXX_3.4.26 as noted in VASP-30704
-      # 
+      #
       - name: Build-and-test-instcount
         if: vars.PTI_DOCKER_IMAGE_ONPUSH_2025_0_1 == matrix.container
         run: |
@@ -230,9 +214,8 @@ jobs:
       #
       # TODO:
       # Add code to ze_debug_info to handle std::experimental::filesystem case.
-      # 
+      #
       - name: Build-and-test-ze_debug_info
-        if: vars.PTI_DOCKER_IMAGE_ROCKY8_2024_1_1 != matrix.container
         run: |
           source /opt/intel/oneapi/setvars.sh
           python3 ./tests/run.py -s ze_debug_info

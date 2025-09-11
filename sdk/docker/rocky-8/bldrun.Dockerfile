@@ -11,7 +11,7 @@ USER root
 
 #
 # Install the essential packages from oneAPI to build pti
-# instead of intel-oneapi-base-toolkit-2025.1.0
+# instead of intel-oneapi-base-toolkit
 #
 RUN echo '[oneAPI]' > /etc/yum.repos.d/oneAPI.repo; \
     echo 'name=Intel® oneAPI repository' >> /etc/yum.repos.d/oneAPI.repo; \
@@ -20,10 +20,10 @@ RUN echo '[oneAPI]' > /etc/yum.repos.d/oneAPI.repo; \
     echo 'gpgcheck=1' >> /etc/yum.repos.d/oneAPI.repo; \
     echo 'repo_gpgcheck=1' >> /etc/yum.repos.d/oneAPI.repo; \
     echo 'gpgkey=https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB' >> /etc/yum.repos.d/oneAPI.repo && \
-    dnf install -y intel-dpcpp-cpp-compiler-2025.1 \
-                    intel-oneapi-mkl-devel-2025.1 \
-                    intel-oneapi-dnnl-devel-2025.1 \
-                    intel-oneapi-ccl-devel-2021.15 && \
+    dnf install -y intel-dpcpp-cpp-compiler-2025.2 \
+                    intel-oneapi-mkl-devel-2025.2 \
+                    intel-oneapi-dnnl-devel-2025.2 \
+                    intel-oneapi-ccl-devel-2021.16 && \
     dnf clean all
 
 #
