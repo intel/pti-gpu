@@ -1,0 +1,18 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):             91428339
+    Total Device Time for L0 backend (ns):               842395
+
+== L0 Backend ==
+
+                    Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+"main::{lambda(auto:1)#4}",            1,               842395,   100.000008,               842395,               842395,               842395
+
+
+=== Kernel Properties ===
+
+                    Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+"main::{lambda(auto:1)#4}",      JIT,    8,                   3,                  0,                         0,                       0,                           128
+
+

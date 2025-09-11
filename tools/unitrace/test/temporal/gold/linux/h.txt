@@ -1,0 +1,26 @@
+
+=== API Timing Summary ===
+
+             Total Execution Time (ns):             95833972
+    Total API Time for L0 backend (ns):              2579912
+
+== L0 Backend ==
+
+                         Function,        Calls,            Time (ns),      Time (%),         Average (ns),             Min (ns),             Max (ns)
+           zeEventHostSynchronize,            1,              2472199,     95.824936,              2472199,              2472199,              2472199
+zeCommandQueueExecuteCommandLists,            1,                88615,      3.434807,                88615,                88615,                88615
+                   zeKernelCreate,            1,                 4898,      0.189851,                 4898,                 4898,                 4898
+  zeCommandListAppendLaunchKernel,            1,                 4615,      0.178882,                 4615,                 4615,                 4615
+               zeCommandListReset,            1,                 3319,      0.128648,                 3319,                 3319,                 3319
+         zeKernelSetArgumentValue,            3,                 2511,      0.097329,                  837,                  242,                 1835
+               zeFenceQueryStatus,            1,                 1005,      0.038955,                 1005,                 1005,                 1005
+                 zeEventHostReset,            1,                  865,      0.033528,                  865,                  865,                  865
+             zeKernelSetGroupSize,            1,                  522,      0.020233,                  522,                  522,                  522
+               zeCommandListClose,            1,                  412,      0.015970,                  412,                  412,                  412
+            zeKernelGetProperties,            1,                  304,      0.011783,                  304,                  304,                  304
+            zeDeviceGetSubDevices,            2,                  214,      0.008295,                  107,                   26,                  188
+       zeKernelSetGlobalOffsetExp,            1,                  189,      0.007326,                  189,                  189,                  189
+        zeKernelSetIndirectAccess,            1,                  170,      0.006589,                  170,                  170,                  170
+                     zeFenceReset,            1,                   74,      0.002868,                   74,                   74,                   74
+
+

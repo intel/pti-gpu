@@ -9,6 +9,7 @@
 
 #include "tracer.h"
 #include "unitimer.h"
+#include "unicontrol.h"
 
 #include "version.h"
 #include "unitrace_tool_commit_hash.h"
@@ -135,7 +136,7 @@ static TraceOptions ReadArgs() {
     PTI_ASSERT(!log_file.empty());
   }
 
-  value = utils::GetEnv("UNITRACE_ConditionalCollection");
+  value = utils::GetEnv("UNITRACE_StartPaused");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_CONDITIONAL_COLLECTION);
   }
@@ -181,6 +182,7 @@ static SignalHandler sigfpe_handler = nullptr;
 static SignalHandler sigill_handler = nullptr;
 static SignalHandler sigsegv_handler = nullptr;
 static SignalHandler sigterm_handler = nullptr;
+static SignalHandler siguser_handler = nullptr;
 
 void HandleAbnormalTermination(int sig) {
   Teardown();
@@ -216,6 +218,9 @@ void HandleAbnormalTermination(int sig) {
       }
       break;
     default:
+      if (siguser_handler) {
+        siguser_handler(sig);
+      }
       break;
   }
 }
@@ -230,8 +235,13 @@ void CONSTRUCTOR Init(void) {
     }
   }
 
-  if (utils::GetEnv("UNITRACE_TeardownOnSignal") == "1") {
+  if (!utils::GetEnv("UNITRACE_Session").empty()) {
+    UniController::AttachTemporalControlRead(utils::GetEnv("UNITRACE_Session").c_str());
+  }
+
+  if (!utils::GetEnv("UNITRACE_TeardownOnSignal").empty()) {
     // save previous handlers and install new handlers
+    // default signals first
     auto handler = std::signal(SIGINT, HandleAbnormalTermination);
     if (handler != SIG_ERR) {
       sigint_handler = handler;
@@ -256,6 +266,16 @@ void CONSTRUCTOR Init(void) {
     if (handler != SIG_ERR) {
       sigterm_handler = handler;
     }
+
+    // signals user specified
+    int signum = std::atoi(utils::GetEnv("UNITRACE_TeardownOnSignal").c_str());
+    handler = std::signal(signum, HandleAbnormalTermination);
+    if (handler != SIG_ERR) {
+      siguser_handler = handler;
+    }
+    else {
+      std::cerr << "[ERROR] Invlid signal specified for teardown" << std::endl;
+    }
   }
 
   if (!tracer) {
@@ -267,8 +287,15 @@ void CONSTRUCTOR Init(void) {
     // restore LD_PRELOAD from UNITRACE_LD_PRELOAD_OLD to prevent the unitrace library
     // from being loaded and this Init() function being called in a child process
     // to disable child process following
+#ifndef _WIN32
     auto oldpreload = utils::GetEnv("UNITRACE_LD_PRELOAD_OLD");
-    utils::SetEnv("LD_PRELOAD", oldpreload.c_str());
+    if (oldpreload.empty()) {
+     unsetenv("LD_PRELOAD");
+    }
+    else {
+      utils::SetEnv("LD_PRELOAD", oldpreload.c_str());
+    }
+#endif /* _WIN32 */
   }
 }
 

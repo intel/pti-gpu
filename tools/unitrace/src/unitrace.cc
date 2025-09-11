@@ -23,6 +23,9 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #else /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
@@ -37,6 +40,7 @@
 #include "utils.h"
 #include "version.h"
 #include "unitrace_commit_hash.h"
+#include "unicontrol.h"
 
 static ZeMetricProfiler* metric_profiler = nullptr;
 static bool idle_sampling = false;
@@ -164,7 +168,12 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--conditional-collection       " <<
-    "Enable conditional collection" <<
+    "Enable conditional collection. " <<
+    "This options is deprecated. Use --start-paused instead" <<
+    std::endl;
+  std::cout <<
+    "--start-paused                 " <<
+    "Start the tool with tracing and profiling paused" <<
     std::endl;
   std::cout <<
     "--output-dir-path <path>       " <<
@@ -213,10 +222,28 @@ void Usage(char * progname) {
     "                               1: Follow and profile child processes on Linux (default)" <<
     std::endl;
   std::cout <<
-    "--teardown-on-signal           " <<
-    "Try to gracefully shut down in case the application crashes or is terminated" << std::endl <<
+    "--teardown-on-signal <signum>  " <<
+    "Try to gracefully shut down in case the application crashes or is terminated or <signum> is raised" << std::endl <<
     "                               This option may change the application behavior so please use it carefully" <<
     std::endl;
+#ifndef _WIN32
+  std::cout <<
+    "--session <session>            " <<
+    "Name this session <session> for dynamic control. The argument <session> is an alphanumeric string" <<
+    std::endl;
+  std::cout <<
+    "--pause <session>              " <<
+    "Pause session <session>. The argument <session> must be the same session named with --session option" <<
+    std::endl;
+  std::cout <<
+    "--resume <session>             " <<
+    "Resume session <session>. The argument <session> must be the same session named with --session option" <<
+    std::endl;
+  std::cout <<
+    "--stop <session>               " <<
+    "Stop session <session>. The argument <session> must be the same session named with --session option" <<
+    std::endl;
+#endif /* _WIN32 */
   std::cout <<
     "--version                      " <<
     "Print version" <<
@@ -237,6 +264,14 @@ void SetProfilingEnvironment() {
 
 void SetSysmanEnvironment() {
   utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
+}
+
+bool IsAlphanumericString(const std::string& str) {
+  return std::all_of(str.begin(), str.end(), [](unsigned char c) {return std::isalnum(c);});
+}
+
+bool IsNumericString(const std::string& str) {
+  return std::all_of(str.begin(), str.end(), [](unsigned char c) {return std::isdigit(c);});
 }
 
 int ParseArgs(int argc, char* argv[]) {
@@ -352,8 +387,11 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_LogFilename", argv[i]);
       app_index += 2;
-    } else if (strcmp(argv[i], "--conditional-collection") == 0) {
-      utils::SetEnv("UNITRACE_ConditionalCollection", "1");
+    } else if (strcmp(argv[i], "--conditional-collection") == 0) { // deptrcate this option
+      utils::SetEnv("UNITRACE_StartPaused", "1");
+      ++app_index;
+    } else if (strcmp(argv[i], "--start-paused") == 0) {
+      utils::SetEnv("UNITRACE_StartPaused", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--output-dir-path") == 0) {
       ++i;
@@ -474,8 +512,13 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_FollowChildProcess", argv[i]);
       app_index += 2;
     } else if (strcmp(argv[i], "--teardown-on-signal") == 0) {
-      utils::SetEnv("UNITRACE_TeardownOnSignal", "1");
-      ++app_index;
+      ++i;
+      if ((i >= argc) || !IsNumericString(argv[i])) {
+        std::cout << "[ERROR] --teardown-on-signal takes a sigal number argument" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_TeardownOnSignal", argv[i]);
+      app_index += 2;
     } else if (strcmp(argv[i], "--reset-event-on-device") == 0) { // internal option
       ++i;
       if ((i >= argc) || (strcmp(argv[i], "1") && strcmp(argv[i], "0"))) {
@@ -484,6 +527,37 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_ResetEventOnDevice", argv[i]);
       app_index += 2;
+#ifndef _WIN32
+    } else if (strcmp(argv[i], "--session") == 0) { // internal option
+      ++i;
+      if ((i >= argc) || !IsAlphanumericString(argv[i])) {
+        std::cout << "[ERROR] Option --session takes an argument of an alphanumeric string" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_Session", argv[i]);
+      app_index += 2;
+    } else if (strcmp(argv[i], "--pause") == 0) { // internal option
+      ++i;
+      if ((i >= argc) || !IsAlphanumericString(argv[i])) {
+        std::cout << "[ERROR] Option --pause takes an argument of an alphanumeric string" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_PauseSession", argv[i]);
+    } else if (strcmp(argv[i], "--resume") == 0) { // internal option
+      ++i;
+      if ((i >= argc) || !IsAlphanumericString(argv[i])) {
+        std::cout << "[ERROR] Option --resume takes an argument of an alphanumeric string" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_ResumeSession", argv[i]);
+    } else if (strcmp(argv[i], "--stop") == 0) { // internal option
+      ++i;
+      if ((i >= argc) || !IsAlphanumericString(argv[i])) {
+        std::cout << "[ERROR] Option --stop takes an argument of an alphanumeric string" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_StopSession", argv[i]);
+#endif /* _WIN32 */
     } else if (strcmp(argv[i], "--version") == 0) {
       std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
       return 0;
@@ -493,6 +567,21 @@ int ParseArgs(int argc, char* argv[]) {
     } else {
       break;
     }
+  }
+
+  if (!utils::GetEnv("UNITRACE_PauseSession").empty()) {
+    UniController::TemporalPause(utils::GetEnv("UNITRACE_PauseSession").c_str());
+    return 0;
+  }
+
+  if (!utils::GetEnv("UNITRACE_ResumeSession").empty()) {
+    UniController::TemporalResume(utils::GetEnv("UNITRACE_ResumeSession").c_str());
+    return 0;
+  }
+
+  if (!utils::GetEnv("UNITRACE_StopSession").empty()) {
+    UniController::TemporalStop(utils::GetEnv("UNITRACE_StopSession").c_str());
+    return 0;
   }
 
   if (utils::GetEnv("UNITRACE_FollowChildProcess").empty()) {
@@ -622,7 +711,6 @@ int ParseArgs(int argc, char* argv[]) {
   }
 #endif /* 0 */
 
-
   if (show_metric_list) {
     SetProfilingEnvironment(); // enable ZET_ENABLE_METRICS
     std::string value = utils::GetEnv("UNITRACE_DeviceId");
@@ -630,6 +718,7 @@ int ParseArgs(int argc, char* argv[]) {
     PrintMetricList(device_id);
     return 0;
   }
+
 
   // __itt_pause()/__itt_resume() support always enabled
   utils::SetEnv("INTEL_LIBITTNOTIFY64", "libunitrace_tool.so");
@@ -683,6 +772,7 @@ int main(int argc, char *argv[]) {
     rlim.rlim_cur = rlim.rlim_max;
     setrlimit(RLIMIT_STACK, &rlim);
   }
+
 #endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
   std::string executable_path = utils::GetExecutablePath();
@@ -757,6 +847,14 @@ int main(int argc, char *argv[]) {
     }
     return 0;
   }
+
+  if (!utils::GetEnv("UNITRACE_Session").empty()) {
+    UniController::CreateTemporalControl(utils::GetEnv("UNITRACE_Session").c_str());
+    if (!utils::GetEnv("UNITRACE_StartPaused").empty()) {
+      UniController::TemporalPause(utils::GetEnv("UNITRACE_Session").c_str());
+    }
+  }
+
   std::vector<char*> app_args;
 
   for (int i = app_index; i < argc; ++i) {
@@ -907,6 +1005,7 @@ int main(int argc, char *argv[]) {
       Usage(argv[0]);
     }
   }
+
 #else /* _WIN32 */
   bool metrics_sampling_enabled = (utils::GetEnv("UNITRACE_KernelMetrics") == "1");
   bool metrics_query_enabled = (utils::GetEnv("UNITRACE_MetricQuery") == "1");

@@ -156,24 +156,26 @@ The options can be one or more of the following:
 --chrome-sycl-logging          Trace SYCL runtime and plugin
 --chrome-ccl-logging           Trace oneCCL
 --chrome-dnn-logging           Trace oneDNN
---chrome-itt-logging           Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs
 --chrome-call-logging          Trace Level Zero and/or OpenCL host calls
 --chrome-kernel-logging        Trace device and host kernel activities
 --chrome-device-logging        Trace device activities
---chrome-no-thread-on-device   Trace device activities without per-thread info.
+--chrome-itt-logging           Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs
+--chrome-no-thread-on-device   Trace device activities without per-thread info
                                Device activities are traced per thread if this option is not present
 --chrome-no-engine-on-device   Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info.
                                Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present
 --chrome-event-buffer-size <number-of-events>    Size of event buffer on host per host thread(default is -1 or unlimited)
---verbose [-v]                 Enable verbose mode to show more kernel information.
+--verbose [-v]                 Enable verbose mode to show kernel shapes
+                               Kernel shapes are always enabled in timelines for Level Zero backend
 --demangle                     Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend
 --separate-tiles               Trace each tile separately in case of implicit scaling
 --tid                          Output TID in host API trace
 --pid                          Output PID in host API and device activity trace
 --output [-o] <filename>       Output profiling result to file
---conditional-collection       Enable conditional collection
+--conditional-collection       Enable conditional collection. This options is deprecated. Use --start-paused instead
+--start-paused                 Start the tool with tracing and profiling paused
 --output-dir-path <path>       Output directory path for result files
---metric-query [-q]            Query hardware metrics for each kernel instance
+--metric-query [-q]            Query hardware metrics for each kernel instance is enabled for level-zero
 --metric-sampling [-k]         Sample hardware performance metrics for each kernel instance in time-based mode
 --group [-g] <metric-group>    Hardware metric group (ComputeBasic by default)
 --sampling-interval [-i] <interval> Hardware performance metric sampling interval in us (default is 50 us) in time-based mode
@@ -181,13 +183,18 @@ The options can be one or more of the following:
 --metric-list                  Print available metric groups and metrics
 --stall-sampling               Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs
 --ranks-to-sample <ranks>      MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks
---devices-to-sample <devices>  GPU devices to sample. The argument <devices> is a list of comma separated GPU devices, as listed by --device-list
---teardown-on-signal           Try to gracefully shut down in case the application crashes or is terminated
-                               This option may change the application behavior so please use it carefully
+--devices-to-sample <devices>  Devices ID to sample. The argument <devices> is a list of comma separated devices as reported
+                               by --device-list
 --follow-child-process <0/1>   0: Do not follow or profile child processes on Linux
                                1: Follow and profile child processes on Linux (default)
+--teardown-on-signal <signum>  Try to gracefully shut down in case the application crashes or is terminated or <signum> is raised
+                               This option may change the application behavior so please use it carefully
+--session <session>            Name this session <session> for dynamic control. The argument <session> is an alphanumeric string
+--pause <session>              Pause session <session>. The argument <session> must be the same session named with --session option
+--resume <session>             Resume session <session>. The argument <session> must be the same session named with --session option
+--stop <session>               Stop session <session>. The argument <session> must be the same session named with --session option
 --version                      Print version
---help                         Show the help message and exit
+--help                         Show this help message and exit. Please refer to the README.md file for further details.
 ```
 
 By default, only Level Zero tracing/profiling is enabled. To enable OpenCL tracing and profiling, please use --opencl option.
@@ -789,8 +796,53 @@ followed by source stall analysis report:
 ## Activate and Deactivate Tracing and Profiling at Runtime
 
 By default, the application is traced/profiled from the start to the end. In certain cases, however, it is more efficient and desirable to
-dynamically activate and deactivate tracing at runtime. You can do so by using **--conditional-collection** option together with setting and
-unsetting environment variable **"PTI_ENABLE_COLLECTION"** in the application:
+dynamically activate and deactivate tracing at runtime. 
+
+There are 2 ways to control tracing/processing at runtime: temporal or out-of-application control and spatial or in-application control. 
+
+If both temporal or out-of-application control and spatial or in-application control are used, temporal or out-of-application control takes precedence.
+
+### Temporal or Out-of-Application Control (Linux Only)
+
+The temporal or out-of-application control runs control commands in a sperate process to pause/resume/stop tracing/profiling. It does not require any application code change.
+
+By default, a unitrace session is unnamed. To use temporal or out-of-application control, you have to name the unitrace session using the **--session** option. The name must be an alphanumeric string.
+
+```sh
+unitrace --chrome-call-logging --chrome-kernel-logging --session mysession1 --start-paused <application> [args]
+```
+
+The optional **--start-paused** flag paues tracing/profiling of the application when it starts. Later, when it is the time to trace/profile the execution, you can run the following commnad in a different terminal:
+
+```sh
+unitrace --resume mysession1
+```
+
+to resume tracing/profiling.
+
+Once you have the execution of interest traced/profiled, you can run
+
+```sh
+unitrace --pause mysession1
+```
+
+to pause tracing/profiling.
+
+You can pause and resume multiple time. When all the executions of interest are traced/profiled, you can run command
+
+```sh
+unitrace --stop mysession1
+```
+
+to stop tracing/profiling. 
+
+Once a session is stopped, it can no longer be resumed or paused.
+
+A session may have more than one process and the pause/resume/stop command simultaneously controls all processes in the same session.
+
+### Spatial or In-Application Control (Linux and Windows)
+
+The spatial or in-application control requies application code changes with pause/resume functions/statements added. Inside the application, you can resume/pause tracing/profiling by setting/unsetting environment variable **"PTI_ENABLE_COLLECTION"**:
 
 ```cpp
 // activate tracing
@@ -804,12 +856,13 @@ setenv("PTI_ENABLE_COLLECTION", "0", 1);
 // tracing is now deactivated
 ```
 
-The following command traces events only in the code section between **setenv("PTI_ENABLE_COLLECTION", "1", 1)** and
-**unsetenv("PTI_ENABLE_COLLECTION")**.
+To use spatial or in-application control, You have to start unitrace with **--start-paused** (or the deprecated **--conditional-collection**), for example:
 
 ```sh
-unitrace --chrome-call-logging --chrome-kernel-logging --conditional-collection <application> [args]
+unitrace --chrome-call-logging --chrome-kernel-logging --start-paused <application> [args]
 ```
+
+Events in the code region between **setenv("PTI_ENABLE_COLLECTION", "1", 1)** and **setenv("PTI_ENABLE_COLLECTION", "0", 1)** are collected. Any event outside this region is ignored.
 
 You can also use __itt_pause() and __itt_resume() APIs to pause and resume collection:
 
@@ -825,13 +878,14 @@ __itt_resume();
 
 If both environment variable **PTI_ENABLE_COLLECTION** and **__itt_pause()/__itt_resume()** are present, **__itt_pause()/__itt_resume()** takes precedence.
 
-By default, collection is disabled when the application is started. To change the default, you can start the application with  **PTI_ENABLE_COLLECTION** set to 1, for example:
+Collection is disabled by default when the application is started (you have to use **--start-paused** to enable in-application control). However, you can set **PTI_ENABLE_COLLECTION** to 1 when unitrace is started to enable collection at the beginning, for example:
 
 ```sh
-PTI_ENABLE_COLLECTION=1 unitrace --chrome-call-logging --chrome-kernel-logging --conditional-collection <application> [args]
+PTI_ENABLE_COLLECTION=1 unitrace --chrome-call-logging --chrome-kernel-logging --start-paused <application> [args]
 ```
 
-If **--conditional-collection** option is not specified, however, PTI_ENABLE_COLLECTION settings or __itt_pause()/__itt_resume() calls have **no** effect and the application is traced/profiled from the start to the end.
+If **--start-paused** option is not specified, PTI_ENABLE_COLLECTION settings or __itt_pause()/__itt_resume() calls have **no** effect and the application is traced/profiled from the start to the end.
+
 
 ## Profile MPI Workloads
 
