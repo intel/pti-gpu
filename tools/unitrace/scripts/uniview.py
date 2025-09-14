@@ -11,6 +11,7 @@ import socketserver
 import sys
 import webbrowser
 import json
+import gc
 
 # analyzeperfmetrics module is either at the same folder of this script or subfolder "metrics"
 # add the paths
@@ -113,6 +114,8 @@ def main():
         with open(args.trace, 'r') as fp:
             try:
                 data = json.load(fp)
+                del data
+                gc.collect()
             except Exception as ex:
                 valid = False
         if (valid == False):
@@ -130,6 +133,8 @@ def main():
             with open(args.trace, 'r') as fp:
                 try:
                     data = json.load(fp)
+                    del data
+                    gc.collect()
                 except Exception as ex:
                     # give up, but need to roll back the changes made to the file
                     rollback = True

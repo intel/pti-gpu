@@ -613,8 +613,6 @@ struct ZeKernelCommandNameKeyCompare {
 struct ZeKernelProfileTimestamps {
   uint64_t metric_start;
   uint64_t metric_end;
-  uint64_t device_start;
-  uint64_t device_end;
   int32_t subdevice_id;
 };
 
@@ -2550,12 +2548,6 @@ class ZeCollector {
       }
     }
 
-    uint64_t device_freq = command->device_timer_frequency_;
-    uint64_t device_mask = command->device_timer_mask_;
-
-    uint64_t metric_freq = command->metric_timer_frequency_;
-    uint64_t metric_mask = command->metric_timer_mask_;
-
     ZeKernelProfileRecord r;
 
     if (options_.metric_query || options_.metric_stream) {
@@ -2566,7 +2558,6 @@ class ZeCollector {
       r.mem_size_ = command->mem_size_;
     }
       
-
     if (options_.kernels_per_tile && (command->type_ == KERNEL_COMMAND_TYPE_COMPUTE)) {
       if (command->implicit_scaling_) { // Implicit Scaling
         uint32_t count = 0;
@@ -2584,17 +2575,8 @@ class ZeCollector {
 
             ts.subdevice_id = i;
             
-            ts.device_start = timestamps[i].global.kernelStart & device_mask;
-            ts.device_start = (ts.device_start * NSEC_IN_SEC / device_freq);
-  
-            ts.metric_start = timestamps[i].global.kernelStart & metric_mask;
-            ts.metric_start = (ts.metric_start * NSEC_IN_SEC / metric_freq);
-            
-            ts.device_end = timestamps[i].global.kernelEnd & device_mask;
-            ts.device_end = (ts.device_end * NSEC_IN_SEC / device_freq);
-  
-            ts.metric_end = timestamps[i].global.kernelEnd & metric_mask;
-            ts.metric_end = (ts.metric_end * NSEC_IN_SEC / metric_freq);
+            ts.metric_start = timestamps[i].global.kernelStart;
+            ts.metric_end = timestamps[i].global.kernelEnd;
       
             r.timestamps_.push_back(std::move(ts));
           }
@@ -2618,20 +2600,10 @@ class ZeCollector {
         if (options_.metric_query || options_.metric_stream) {
           ZeKernelProfileTimestamps ts;
 
-          ts.device_start = timestamp.global.kernelStart & device_mask;
-          ts.device_start = (ts.device_start * NSEC_IN_SEC / device_freq);
-  
-          ts.metric_start = timestamp.global.kernelStart & metric_mask;
-          ts.metric_start = (ts.metric_start * NSEC_IN_SEC / metric_freq);
-            
-          ts.device_end = timestamp.global.kernelEnd & device_mask;
-          ts.device_end = (ts.device_end * NSEC_IN_SEC / device_freq);
-  
-          ts.metric_end = timestamp.global.kernelEnd & metric_mask;
-          ts.metric_end = (ts.metric_end * NSEC_IN_SEC / metric_freq);
+          ts.metric_start = timestamp.global.kernelStart;
+          ts.metric_end = timestamp.global.kernelEnd;
   
           ts.subdevice_id = -1;
-      
   
           r.timestamps_.push_back(std::move(ts));
             
@@ -2642,17 +2614,8 @@ class ZeCollector {
       if (options_.metric_query || options_.metric_stream) {
         ZeKernelProfileTimestamps ts;
 
-        ts.device_start = timestamp.global.kernelStart & device_mask;
-        ts.device_start = (ts.device_start * NSEC_IN_SEC / device_freq);
-  
-        ts.metric_start = timestamp.global.kernelStart & metric_mask;
-        ts.metric_start = (ts.metric_start * NSEC_IN_SEC / metric_freq);
-            
-        ts.device_end = timestamp.global.kernelEnd & device_mask;
-        ts.device_end = (ts.device_end * NSEC_IN_SEC / device_freq);
-  
-        ts.metric_end = timestamp.global.kernelEnd & metric_mask;
-        ts.metric_end = (ts.metric_end * NSEC_IN_SEC / metric_freq);
+        ts.metric_start = timestamp.global.kernelStart;
+        ts.metric_end = timestamp.global.kernelEnd;
       
         ts.subdevice_id = -1;
         r.timestamps_.push_back(std::move(ts));

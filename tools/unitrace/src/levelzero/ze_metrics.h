@@ -995,6 +995,16 @@ class ZeMetricProfiler {
               }
               info.metric_end = std::strtoll(line.c_str(), nullptr, 0);
 
+              info.metric_start = info.metric_start & device->metric_timer_mask_;
+              info.metric_start = info.metric_start * (NSEC_IN_SEC / device->metric_timer_frequency_);
+
+              info.metric_end = info.metric_end & device->metric_timer_mask_;
+              info.metric_end = info.metric_end * (NSEC_IN_SEC / device->metric_timer_frequency_);
+
+              if (info.metric_end < info.metric_start) {
+                // clock wraps around
+                info.metric_end += (device->metric_timer_mask_ + 1UL) * (NSEC_IN_SEC / device->metric_timer_frequency_);
+              }
               std::getline(kf, info.kernel_name);
               if ((info.metric_start != 0) && (info.metric_end != 0) && (!info.kernel_name.empty())) {
                 kinfo.push_back(std::move(info));
@@ -1019,7 +1029,7 @@ class ZeMetricProfiler {
         }
 
         //TODO: handle subdevices in case of implicit scaling
-        uint64_t time_span_between_clock_resets = (device->metric_timer_mask_ + 1ull) * static_cast<uint64_t>(NSEC_IN_SEC) / device->metric_timer_frequency_;
+        uint64_t time_span_between_clock_resets = (device->metric_timer_mask_ + 1ull) * (static_cast<uint64_t>(NSEC_IN_SEC) / device->metric_timer_frequency_);
 
         std::ifstream inf = std::ifstream(device->metric_file_name_, std::ios::in | std::ios::binary);
         if (!inf.is_open()) {
