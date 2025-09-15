@@ -199,18 +199,16 @@ The options can be one or more of the following:
 
 By default, only Level Zero tracing/profiling is enabled. To enable OpenCL tracing and profiling, please use --opencl option.
 
-### View Traces and Profiles
+## View
 
-If one or more of the **--chrome-** options are used, a .json file, for example, **myapp.json**, will be generated. To view the trace, please open **https://ui.perfetto.dev/** in either Google Chrome or Microsoft Edge browser and load the .json file. **Do NOT use chrome://tracing/**! 
-
-Alternatively, you can run the **uniview.py** utility to view the data, assuming all required Python packages are installed:
+If one or more of the **--chrome-** options are used, a .json file, for example, **myapp.json** is generated. You can run the **uniview.py** utility to view the data, assuming all required Python packages are installed:
 
 ```sh
 python uniview.py -t <myapp.json>
 ```
 
-This utility launches the default browser and loads **myapp.json** in **https://ui.perfetto.dev/** for you.
- 
+This utility launches the default browser and loads **myapp.json** in **https://ui.perfetto.dev/**.
+
 ![Host-Device Timelines!](/tools/unitrace/doc/images/host-device-times.png)
 
 If metric query (**--metric-query [-q]**) or metric sampling (**--metric-sampling [-k]**) or stall sampling (**--stall-sampling**) option is also enabled along with **--chrome-kernel-logging** or **--chrome-device-logging** option, you can view performance metrics of each kernel instance by selecting the kernel instance then following the metrics link in the **Arguments** in the browser.
@@ -271,35 +269,8 @@ and the **mydemangler.bat** has:
     @echo off
     curl -s -d "input=%1" https://demangler.com/raw
     ```
-#### View Large Traces
 
-By default, the memory limit of the internal representation of a trace is 2GB. To view large traces that requires more than 2GB of memory, an external trace processor is needed.
-
-One way to run the external trace processor on Windows is to use Windows Subsystem for Linux or WSL:
-
-1. Start your Linux distribution (Ubuntu 22.02.2 LTS, for example) on Windows.
-2. Inside Linux, download and run trace_processor:
-  
-   ```sh
-   curl -LO https://get.perfetto.dev/trace_processor
-   chmod +x ./trace_processor
-   trace_processor --httpd
-   ```
-3. Start the browser in Windows, load https://ui.perfetto.dev/ and open the trace file. If the trace is loaded successfully, inside Linux, you
-   should see something like:
-
-   ```sh
-   $ ./trace_processor --httpd
-   [924.614]             httpd.cc:99 [HTTP] Starting RPC server on localhost:9001
-   [924.614]            httpd.cc:104 [HTTP] This server can be used by reloading https://ui.perfetto.dev and clicking on YES on the "Trace Process   or native acceleration" dialog or through the Python API (see https://perfetto.dev/docs/analysis/trace-processor#python-api).
-   [957.821]       http_server.cc:83 [HTTP] New connection
-   [957.822]      http_server.cc:231 [HTTP] POST /status [body=0B, origin="https://ui.perfetto.dev"]
-   [957.892]       http_server.cc:83 [HTTP] New connection
-   [957.894]      http_server.cc:231 [HTTP] GET /websocket [body=0B, origin="https://ui.perfetto.dev"]
-   Loading trace 2004.29 MB (0.7 MB/s)
-   ```
-
-To view performance metrics of kernel instances along with large traces, please see [Analyze Performance Metrics](#analyze-performance-metrics).
+If you just want to view only the .json trace, alternatively, you can open **https://ui.perfetto.dev/** in either Google Chrome or Microsoft Edge browser and load the .json file manually. **Do NOT use chrome://tracing/**! 
 
 #### Query Trace Events
 
