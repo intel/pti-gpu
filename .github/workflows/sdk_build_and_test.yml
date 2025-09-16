@@ -127,7 +127,7 @@ jobs:
     name: Test pti-lib on Windows
     runs-on: [self-hosted, Windows, pti, ARC]
     env:
-      LEVEL_ZERO_LOADER_VERSION: 1.20.2
+      LEVEL_ZERO_LOADER_VERSION: 1.24.2
     defaults:
       run:
         shell: cmd

@@ -54,6 +54,7 @@ find_path(
         ${PC_ze_loader_INCLUDE_DIRS}
         ${PC_ze_loader_INCLUDEDIR}
   PATHS ${CMAKE_INCLUDE_PATH}
+        ENV LEVEL_ZERO_V1_SDK_PATH
   PATH_SUFFIXES include
 )
 
@@ -64,6 +65,7 @@ find_library(
         ${PC_ze_loader_LIBRARY_DIRS}
         ${PC_ze_loader_LIBDIR}
   PATHS ${CMAKE_LIBRARY_PATH}
+        ENV LEVEL_ZERO_V1_SDK_PATH
         ENV LD_LIBRARY_PATH
   PATH_SUFFIXES lib
 )
