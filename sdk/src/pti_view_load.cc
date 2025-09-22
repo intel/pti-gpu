@@ -481,3 +481,88 @@ pti_result ptiMetricGetCalculatedData(pti_device_handle_t device_handle,
     return pti_result::PTI_ERROR_INTERNAL;
   }
 }
+
+pti_result ptiCallbackSubscribe(pti_callback_subscriber_handle* subscriber,
+                                pti_callback_function callback, void* user_data) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiCallbackSubscribe_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiCallbackSubscribe_(subscriber, callback, user_data);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiCallbackUnsubscribe(pti_callback_subscriber_handle subscriber) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiCallbackUnsubscribe_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiCallbackUnsubscribe_(subscriber);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiCallbackEnableDomain(pti_callback_subscriber_handle subscriber,
+                                   pti_callback_domain domain, uint32_t enter_cb,
+                                   uint32_t exit_cb) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiCallbackEnableDomain_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiCallbackEnableDomain_(subscriber, domain, enter_cb,
+                                                                   exit_cb);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiCallbackDisableDomain(pti_callback_subscriber_handle subscriber,
+                                    pti_callback_domain domain) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiCallbackDisableDomain_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiCallbackDisableDomain_(subscriber, domain);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiCallbackDisableAllDomains(pti_callback_subscriber_handle subscriber) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiCallbackDisableAllDomains_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiCallbackDisableAllDomains_(subscriber);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}

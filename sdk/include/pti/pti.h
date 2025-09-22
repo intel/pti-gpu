@@ -31,7 +31,8 @@ typedef enum {
                                           //!< PTI_VIEW_EXTERNAL_CORRELATION
   PTI_ERROR_BAD_TIMESTAMP = 6,            //!< error in timestamp conversion, might be related with the user
                                           //!< provided TimestampCallback
-  PTI_ERROR_BAD_API_ID = 7,               //!< invalid api_id when enable/disable runtime/driver specific api_id 
+  PTI_ERROR_BAD_API_ID = 7,               //!< invalid api_id when enable/disable runtime/driver specific api_id
+  PTI_ERROR_AT_LEAST_ONE_GPU_VIEW_MUST_BE_ENABLED = 8, //!< at least one GPU view must be enabled for kernel tracing
   PTI_ERROR_DRIVER = 50,                  //!< unknown driver error
   PTI_ERROR_TRACING_NOT_INITIALIZED = 51,  //!< installed driver requires tracing enabling with
                                            //!< setting environment variable ZE_ENABLE_TRACING_LAYER

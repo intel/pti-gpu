@@ -575,7 +575,7 @@ def gen_api(
         f.write("    }\n")
     f.write("  }\n")
 
-    f.write("  else if (options_.kernel_tracing) {\n")
+    f.write("  else if (options_.kernel_tracing || IsAnyCallbackSubscriberActive() ) {\n")
     for func in kfunc_list:
         # if func not in exclude_from_prologue_list:
         #    f.write(
@@ -692,13 +692,14 @@ def gen_enter_callback(f, func, synchronize_func_list_on_enter, hybrid_mode_func
     if func not in hybrid_mode_func_list:
         f.write("  if (collector->options_.hybrid_mode) return;\n")
 
+    f.write("  ze_instance_data.callback_id_ = " + func + "_id;\n")
     if func in synchronize_func_list_on_enter:
         f.write("  std::vector<uint64_t> kids;\n")
 
     f.write("\n")
     cb = get_kernel_tracing_callback("OnEnter" + func[2:])
     if cb != "":
-        f.write("  if (collector->options_.kernel_tracing) { \n")
+        f.write("  if (collector->options_.kernel_tracing || collector->IsAnyCallbackSubscriberActive() ) { \n")
         if func in synchronize_func_list_on_enter:
             f.write(
                 "    " + cb + "(params, global_data, instance_user_data, &kids); \n"
@@ -746,6 +747,7 @@ def gen_exit_callback(
     f.write("  [[maybe_unused]] uint64_t end_time_host = 0;\n")
     f.write("  end_time_host = utils::GetTime();\n")
     f.write("  ze_instance_data.end_time_host = end_time_host;\n")
+    f.write("  ze_instance_data.callback_id_ = " + func + "_id;\n")
 
     cb = get_kernel_tracing_callback("OnExit" + func[2:])
 
@@ -767,7 +769,7 @@ def gen_exit_callback(
         f.write("  uint64_t synch_corrid = UniCorrId::GetUniCorrId();\n")
 
     if cb != "":
-        f.write("  if (collector->options_.kernel_tracing) { \n")
+        f.write("  if (collector->options_.kernel_tracing || collector->IsAnyCallbackSubscriberActive() ) { \n")
         if (func in submission_func_list) or (func in synchronize_func_list_on_exit):
             if func in synchronization_viewkind_api_list:
                 f.write(
