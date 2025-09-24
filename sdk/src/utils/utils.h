@@ -23,6 +23,12 @@
 #define HMODULE void*
 #endif /* _WIN32 */
 
+#if defined(_WIN32)
+#define PTI_LIB_PREFIX "pti"
+#else
+#define PTI_LIB_PREFIX "libpti"
+#endif
+
 #include <spdlog/cfg/env.h>
 #include <spdlog/pattern_formatter.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -462,9 +468,21 @@ inline void* GetFunctionPtr(HMODULE lib_handle, const char* func_name) {
 
 inline std::pair<bool, bool> IsSubscriberToXPTI() {
   auto current_xpti_subscriber = utils::GetEnv("XPTI_SUBSCRIBERS");
-  // and may be it is unitrace
-  return {!current_xpti_subscriber.empty(),
-          current_xpti_subscriber.find("unitrace") != std::string::npos};
+  bool is_unitrace = current_xpti_subscriber.find("unitrace") != std::string::npos;
+
+  if (current_xpti_subscriber.empty()) {
+    return {false, is_unitrace};
+  }
+
+  // NOTE: This is not a 100% bulletproof solution, but a practical one.
+  // In rare cases, a "foreign" subscriber such as libpti_some_another.so
+  // might be incorrectly recognized as PTI.
+  if (current_xpti_subscriber.find(PTI_LIB_PREFIX) != std::string::npos) {
+    return {false, is_unitrace};
+  }
+
+  // It's a real foreign subscriber (not PTI)
+  return {true, is_unitrace};
 }
 
 inline void SetGlobalSpdLogPattern() {
