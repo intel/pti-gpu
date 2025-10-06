@@ -161,7 +161,7 @@ class A2EventPool {
   }
 
   bool ReturnSwapEvent(ze_event_handle_t our_event) {
-    SPDLOG_TRACE("In: {} with swap event: {}", __FUNCTION__, (void*)our_event);
+    SPDLOG_TRACE("In: {} with swap event: {}", __FUNCTION__, static_cast<void*>(our_event));
     // move this event to be ready to use
     if (our_event == nullptr) {
       return false;
@@ -181,7 +181,7 @@ class A2EventPool {
           ze_result_t status = zeEventHostReset(our_event);
           if (status != ZE_RESULT_SUCCESS) {
             SPDLOG_DEBUG("\tIn {} zeEventHostReset for event: {} returned {}", __FUNCTION__,
-                         (void*)our_event, (uint32_t)status);
+                         static_cast<void*>(our_event), static_cast<uint32_t>(status));
           }
           res = true;
         }

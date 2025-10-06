@@ -769,10 +769,11 @@ class ZeCollector {
     return kcexecrec;
   }
 
-  void ReturnCommandExecutionRecordsToUser(
-      std::vector<ZeKernelCommandExecutionRecord>& kernel_exec_records) {
+  void ProcessEventAndReturnCommandExecutionsRecordsToUser(ze_event_handle_t event,
+                                                           std::vector<uint64_t>* kids) {
+    auto cmd_records = CollectCommandExecutionRecordsProcessingEvent(event, kids);
     if (cb_enabled_.acallback && acallback_ != nullptr) {
-      acallback_(callback_data_, kernel_exec_records);
+      acallback_(callback_data_, cmd_records);
     }
   }
 
@@ -780,7 +781,7 @@ class ZeCollector {
                         std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
     // lock is acquired in caller
     // const std::lock_guard<std::mutex> lock(lock_);
-    SPDLOG_TRACE("In {}, event: {}", __FUNCTION__, (void*)event);
+    SPDLOG_TRACE("In {}, event: {}", __FUNCTION__, static_cast<const void*>(event));
 
     ze_result_t status = ZE_RESULT_SUCCESS;
     overhead::Init();
@@ -1165,6 +1166,45 @@ class ZeCollector {
     }
   }
 
+  void CleanEventsAssociatedWithCommandsInList(
+      std::vector<std::unique_ptr<ZeKernelCommand>>& commands) {
+    for (auto& cmd : commands) {
+      if (collection_mode_ != ZeCollectionMode::Local) {
+        event_cache_.ReleaseEvent(cmd->event_self);
+      } else {
+        CleanDestroyedEvent(destroyed_events_.find(cmd->event_self) != destroyed_events_.end(),
+                            cmd->event_self);
+      }
+    }
+  }
+
+  void ResetCommandList(ze_command_list_handle_t command_list) {
+    const std::lock_guard<std::mutex> lock(lock_);
+    const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
+    auto cmd_list_iter = command_list_map_.find(command_list);
+    if (cmd_list_iter != command_list_map_.end()) {
+      CleanEventsAssociatedWithCommandsInList(cmd_list_iter->second.kernel_commands);
+      cmd_list_iter->second.kernel_commands.clear();
+    }
+  }
+
+  void DestroyCommandList(ze_command_list_handle_t command_list) {
+    const std::lock_guard<std::mutex> lock(lock_);
+    const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
+    auto cmd_list_iter = command_list_map_.find(command_list);
+    if (cmd_list_iter != command_list_map_.end()) {
+      if (cmd_list_iter->second.immediate) {
+        auto queue_ordinal_index_map_iter = queue_ordinal_index_map_.find(
+            reinterpret_cast<ze_command_queue_handle_t>(command_list));
+        if (queue_ordinal_index_map_iter != queue_ordinal_index_map_.end()) {
+          queue_ordinal_index_map_.erase(queue_ordinal_index_map_iter);
+        }
+      }
+      CleanEventsAssociatedWithCommandsInList(cmd_list_iter->second.kernel_commands);
+      command_list_map_.erase(cmd_list_iter);
+    }
+  }
+
   void PrepareToExecuteCommandLists(ze_command_list_handle_t* command_lists,
                                     uint32_t command_list_count, ze_command_queue_handle_t queue,
                                     ze_fence_handle_t fence) {
@@ -1225,7 +1265,6 @@ class ZeCollector {
       // info is a reference to an element in this map, which we're modifying here.
       const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
       // as all command lists submitted to the execution into queue - they are not immediate
-      // TODO: does this effect zeCommandListImmediateAppendCommandListsExp ?
       PTI_ASSERT(!info.immediate);
       for (auto it = info.kernel_commands.begin(); it != info.kernel_commands.end(); it++) {
         ZeKernelCommand* command = (*it).get();
@@ -1343,10 +1382,12 @@ class ZeCollector {
   }
 
   static void OnEnterEventDestroy(ze_event_destroy_params_t* params, void* global_data,
-                                  void** /*instance_data*/, std::vector<uint64_t>* /*kids*/) {
-    SPDLOG_TRACE("In {} event: {}", __FUNCTION__, (void*)*(params->phEvent));
+                                  void** /*instance_data*/, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {} event: {}", __FUNCTION__, static_cast<const void*>(*(params->phEvent)));
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+      collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*(params->phEvent), kids);
+
       // only events that managed by collector should be taken care
       if (ZeCollectionMode::Local == collector->collection_mode_) {
         const std::lock_guard<std::mutex> lock(collector->lock_);
@@ -1356,20 +1397,18 @@ class ZeCollector {
   }
 
   static void OnEnterEventHostReset(ze_event_host_reset_params_t* params, void* global_data,
-                                    void** /*instance_data*/,
-                                    [[maybe_unused]] std::vector<uint64_t>* kids) {
-    SPDLOG_TRACE("In {} event: {}", __FUNCTION__, (void*)*(params->phEvent));
+                                    void** /*instance_data*/, std::vector<uint64_t>* kids) {
+    SPDLOG_TRACE("In {} event: {}", __FUNCTION__, static_cast<const void*>(*(params->phEvent)));
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      auto exec_records =
-          collector->CollectCommandExecutionRecordsProcessingEvent(*(params->phEvent), kids);
-      collector->ReturnCommandExecutionRecordsToUser(exec_records);
+      collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*(params->phEvent), kids);
 
       if (ZeCollectionMode::Local == collector->collection_mode_) {
         ze_event_handle_t swap_event =
             collector->swap_event_pool_.GetSwapEventFromShadowCache(*(params->phEvent));
         SPDLOG_TRACE("--- In {} , self_event: {}, swap_event: {}", __FUNCTION__,
-                     (void*)(*(params->phEvent)), (void*)(swap_event));
+                     static_cast<const void*>((*(params->phEvent))),
+                     static_cast<const void*>(swap_event));
         if (nullptr != swap_event) {
           ze_result_t status = zeEventHostReset(swap_event);
           if (status != ZE_RESULT_SUCCESS) {
@@ -1387,13 +1426,8 @@ class ZeCollector {
     SPDLOG_TRACE("In {} event: {}", __FUNCTION__, (void*)*(params->phEvent));
     ze_result_t status;
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    const std::lock_guard<std::mutex> lock(collector->lock_);
     if (result == ZE_RESULT_SUCCESS) {
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      collector->ProcessCallEvent(*(params->phEvent), kids, &kcexec);
-      if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
-        collector->acallback_(collector->callback_data_, kcexec);
-      }
+      collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*(params->phEvent), kids);
     }
     // Process generation of synch record even if result is not successful.
     if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
@@ -1477,14 +1511,19 @@ class ZeCollector {
     }
   }
 
-  static void OnExitEventQueryStatus([[maybe_unused]] ze_event_query_status_params_t* params,
-                                     [[maybe_unused]] ze_result_t result, void* /*global_data*/,
-                                     void** /*instance_data*/, std::vector<uint64_t>* /*kids*/) {
+  static void OnExitEventQueryStatus(ze_event_query_status_params_t* params, ze_result_t result,
+                                     void* global_data, void** /*instance_data*/,
+                                     std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, result {} event: {}", __FUNCTION__, static_cast<uint32_t>(result),
                  static_cast<const void*>(*(params->phEvent)));
+
     // this call-back is useful to see if we are re-entering to it via Tracing level
     // this should not happen when we are inside of Tracing layer..
     // but things can get weird..
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+      collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*(params->phEvent), kids);
+    }
   }
 
   static void OnExitFenceCreate(ze_fence_create_params_t* params,
@@ -2481,6 +2520,7 @@ class ZeCollector {
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
         collector->acallback_(collector->callback_data_, kcexec);
       }
+      collector->DestroyCommandList(*params->phCommandList);
     }
   }
 
@@ -2500,6 +2540,7 @@ class ZeCollector {
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
         collector->acallback_(collector->callback_data_, kcexec);
       }
+      collector->ResetCommandList(*params->phCommandList);
     }
   }
 

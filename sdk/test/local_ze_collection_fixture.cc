@@ -2,7 +2,9 @@
 #include <gtest/gtest.h>
 #include <level_zero/ze_api.h>
 
+#include <chrono>
 #include <stdexcept>
+#include <thread>
 
 #include "pti/pti_view.h"
 #include "utils.h"
@@ -17,6 +19,26 @@ constexpr auto kAlign = 64;
 constexpr auto kAValue = 0.128f;
 constexpr auto kBValue = 0.256f;
 constexpr auto kMaxEps = 1.0e-4f;
+constexpr uint32_t kDefaultEventWaitTimeMs = 5000;
+
+// Prevent Test from hanging indefinitely
+ze_result_t SpinBlockEvent(ze_event_handle_t event, uint32_t milliseconds) {
+  ze_result_t result = ZE_RESULT_NOT_READY;
+  auto start = std::chrono::high_resolution_clock::now();
+  while ((result = zeEventQueryStatus(event)) == ZE_RESULT_NOT_READY) {
+    auto now = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
+    if (elapsed > milliseconds) {
+      return ZE_RESULT_NOT_READY;
+    }
+    std::this_thread::yield();
+  }
+  return result;
+}
+
+ze_result_t SpinBlockEvent(ze_event_handle_t event) {
+  return SpinBlockEvent(event, kDefaultEventWaitTimeMs);
+}
 
 float Check(const std::vector<float>& result, float value) {
   if (value <= kMaxEps) {
@@ -279,7 +301,15 @@ class LocalModeZeGemmTest : public testing::Test {
   }
 
   void TearDown() override {
-    DisableAndFlushAllViews();
+    // Workaround for driver reusing handles:
+    // The collector's internal state does not reset between tests. Also, unless tracing is enabled,
+    // we do not properly track command list destruction.
+    // Therefore, this is a workaround to enable tracing and ensure any internal state tracking the
+    // queues is properly reset. For example, a handle being tracked as an "immediate" command list
+    // could become a regular command list in the next test, and if we do not reset the state.
+    // TODO: fix in the collector.
+
+    EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
 
     // TODO: RAII-ify this
     if (result_buf_) {
@@ -311,7 +341,9 @@ class LocalModeZeGemmTest : public testing::Test {
     }
 
     for (auto* evt : evts_) {
-      EXPECT_EQ(zeEventDestroy(evt), ZE_RESULT_SUCCESS);
+      if (evt) {
+        EXPECT_EQ(zeEventDestroy(evt), ZE_RESULT_SUCCESS);
+      }
     }
 
     if (evt_pl_) {
@@ -329,6 +361,7 @@ class LocalModeZeGemmTest : public testing::Test {
     if (ctx_) {
       EXPECT_EQ(zeContextDestroy(ctx_), ZE_RESULT_SUCCESS);
     }
+    DisableAndFlushAllViews();
   }
 
   static void ProvideBuffer(unsigned char** buf, size_t* buf_size) {
@@ -595,6 +628,120 @@ TEST_F(LocalModeZeGemmTest,
             ZE_RESULT_SUCCESS);
 
   DisableAndFlushAllViews();
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_mem_copies, static_cast<size_t>(3));
+
+  ValidateGemmKernel();
+}
+
+TEST_F(LocalModeZeGemmTest,
+       TestAsynchInorderQueueImplementationWithImmediateCommandListsAndEventDestroy) {
+  constexpr auto kNumberOfEventsRequired = 4;
+  InitializeDrivers();
+  InitializeEvents(kNumberOfEventsRequired);
+  InitializeLists(true);  // ensure we're OK regarding synchronization.
+  CreateKernel();
+  SetKernelGroupSize();
+  SetKernelArguments();
+  SetKernelGroupCount();
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  EnableView(PTI_VIEW_DEVICE_GPU_MEM_COPY);
+
+  auto* memcpy_signal_1 = evts_[0];
+  auto* memcpy_signal_2 = evts_[1];
+  auto* kernel_signal = evts_[2];
+  auto* memcpy_signal_3 = evts_[3];
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, a_buf_, std::data(a_vector_),
+                                          std::size(a_vector_) * sizeof(float), memcpy_signal_1, 0,
+                                          nullptr),
+            ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, b_buf_, std::data(b_vector_),
+                                          std::size(b_vector_) * sizeof(float), memcpy_signal_2, 1,
+                                          &memcpy_signal_1),
+            ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(zeCommandListAppendLaunchKernel(compute_cmd_list_, knl_, &dim_, kernel_signal, 1,
+                                            &memcpy_signal_2),
+            ZE_RESULT_SUCCESS);
+
+  // 2 waits for 1, so no need to wait for 1.
+  ASSERT_EQ(SpinBlockEvent(memcpy_signal_2), ZE_RESULT_SUCCESS)
+      << "Timeout waiting for event to be signaled";
+
+  ASSERT_EQ(zeEventDestroy(memcpy_signal_1), ZE_RESULT_SUCCESS);
+  evts_[0] = nullptr;  // prevent clean up segv
+
+  ASSERT_EQ(zeCommandListReset(copy_cmd_list_), ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, std::data(result_vector_), result_buf_,
+                                          std::size(result_vector_) * sizeof(float),
+                                          memcpy_signal_3, 1, &kernel_signal),
+            ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(zeEventHostSynchronize(memcpy_signal_3, ((std::numeric_limits<uint64_t>::max)() - 1)),
+            ZE_RESULT_SUCCESS);
+
+  DisableAndFlushAllViews();
+
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_mem_copies, static_cast<size_t>(3));
+
+  ValidateGemmKernel();
+}
+
+TEST_F(LocalModeZeGemmTest,
+       TestAsynchInorderQueueImplementationWithImmediateCommandListsSpinBlock) {
+  constexpr auto kNumberOfEventsRequired = 4;
+  InitializeDrivers();
+  InitializeEvents(kNumberOfEventsRequired);
+  InitializeLists(false);
+  CreateKernel();
+  SetKernelGroupSize();
+  SetKernelArguments();
+  SetKernelGroupCount();
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  EnableView(PTI_VIEW_DEVICE_GPU_MEM_COPY);
+
+  auto* memcpy_signal_1 = evts_[0];
+  auto* memcpy_signal_2 = evts_[1];
+  auto* kernel_signal = evts_[2];
+  auto* memcpy_signal_3 = evts_[3];
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, a_buf_, std::data(a_vector_),
+                                          std::size(a_vector_) * sizeof(float), memcpy_signal_1, 0,
+                                          nullptr),
+            ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(SpinBlockEvent(memcpy_signal_1), ZE_RESULT_SUCCESS)
+      << "Timeout waiting for event to be signaled";
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, b_buf_, std::data(b_vector_),
+                                          std::size(b_vector_) * sizeof(float), memcpy_signal_2, 0,
+                                          nullptr),
+            ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(SpinBlockEvent(memcpy_signal_2), ZE_RESULT_SUCCESS)
+      << "Timeout waiting for event to be signaled";
+
+  ASSERT_EQ(
+      zeCommandListAppendLaunchKernel(compute_cmd_list_, knl_, &dim_, kernel_signal, 0, nullptr),
+      ZE_RESULT_SUCCESS);
+
+  // TODO: Investate why this doesn't work in FULL mode (i.e., PTI_COLLECTION_MODE=0)
+  // ASSERT_EQ(SpinBlockEvent(kernel_signal), ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, std::data(result_vector_), result_buf_,
+                                          std::size(result_vector_) * sizeof(float),
+                                          memcpy_signal_3, 1, &kernel_signal),
+            ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(SpinBlockEvent(memcpy_signal_3), ZE_RESULT_SUCCESS)
+      << "Timeout waiting for event to be signaled";
+
+  DisableAndFlushAllViews();
+
   EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
   EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_mem_copies, static_cast<size_t>(3));
 
