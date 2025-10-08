@@ -1114,6 +1114,7 @@ inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
   record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
   record._submit_timestamp = ApplyTimeShift(rec.submit_time_, ts_shift);
   record._queue_handle = rec.queue_;
+  record._sycl_queue_id = rec.sycl_queue_id_;
   record._context_handle = rec.context_;
   record._bytes = rec.bytes_xfered_;
   record._value_for_set = rec.value_set_;

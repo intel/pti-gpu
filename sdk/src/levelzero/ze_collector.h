@@ -32,6 +32,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "collector_options.h"
@@ -1965,11 +1966,11 @@ class ZeCollector {
     command->device_timer_frequency_ = device_descriptors_[command->device].device_timer_frequency;
     command->device_timer_mask_ = device_descriptors_[command->device].device_timer_mask;
     if (command->props.type == KernelCommandType::kKernel) {
-      command->sycl_node_id_ = sycl_data_kview.sycl_node_id_;
-      command->sycl_queue_id_ = sycl_data_kview.sycl_queue_id_;
-      command->sycl_invocation_id_ = sycl_data_kview.sycl_invocation_id_;
-      command->sycl_task_begin_time_ = sycl_data_kview.sycl_task_begin_time_;
-      command->sycl_enqk_begin_time_ = sycl_data_kview.sycl_enqk_begin_time_;
+      command->sycl_node_id_ = std::exchange(sycl_data_kview.sycl_node_id_, 0);
+      command->sycl_queue_id_ = std::exchange(sycl_data_kview.sycl_queue_id_, PTI_INVALID_QUEUE_ID);
+      command->sycl_invocation_id_ = std::exchange(sycl_data_kview.sycl_invocation_id_, 0);
+      command->sycl_task_begin_time_ = std::exchange(sycl_data_kview.sycl_task_begin_time_, 0);
+      command->sycl_enqk_begin_time_ = std::exchange(sycl_data_kview.sycl_enqk_begin_time_, 0);
       sycl_data_kview.kid_ = command->kernel_id;
       sycl_data_kview.tid_ = command->tid;
       command->source_file_name_ = sycl_data_kview.source_file_name_;
@@ -1977,10 +1978,18 @@ class ZeCollector {
     } else if (command->props.type == KernelCommandType::kMemory) {
       sycl_data_mview.kid_ = command->kernel_id;
       sycl_data_mview.tid_ = command->tid;
-      command->sycl_node_id_ = sycl_data_mview.sycl_node_id_;
-      command->sycl_queue_id_ = sycl_data_mview.sycl_queue_id_;
-      command->sycl_invocation_id_ = sycl_data_mview.sycl_invocation_id_;
-      command->sycl_task_begin_time_ = sycl_data_mview.sycl_task_begin_time_;
+      command->sycl_node_id_ = std::exchange(sycl_data_mview.sycl_node_id_, 0);
+      command->sycl_invocation_id_ = std::exchange(sycl_data_mview.sycl_invocation_id_, 0);
+      command->sycl_task_begin_time_ = std::exchange(sycl_data_mview.sycl_task_begin_time_, 0);
+      command->sycl_queue_id_ = std::exchange(sycl_data_mview.sycl_queue_id_, PTI_INVALID_QUEUE_ID);
+
+      // Some memory operations come in as kernel ops from XPTI.
+      // TODO: Work with XPTI team and investigate
+      if (command->sycl_queue_id_ == PTI_INVALID_QUEUE_ID) {
+        SPDLOG_TRACE("Missing SYCL queue id. Taking from kernel view.");
+        command->sycl_queue_id_ =
+            std::exchange(sycl_data_kview.sycl_queue_id_, PTI_INVALID_QUEUE_ID);
+      }
       command->source_file_name_ = sycl_data_mview.source_file_name_;
       command->source_line_number_ = sycl_data_mview.source_line_number_;
     } else {

@@ -28,8 +28,7 @@
 inline static constexpr std::string_view kStashedSymbolName = "xptiGetStashedTuple";
 inline static constexpr std::string_view kUnknownFunctionName = "<unknown>";
 
-using StashedFuncPtr = xpti::result_t (*)(
-    char**, uint64_t&);  // signature of xpti function to get queue_id (xptiGetStashedTuple)
+using StashedFuncPtr = decltype(&xptiGetStashedTuple);
 
 inline constexpr auto kMaxFuncNameLen = static_cast<std::size_t>(2048);
 static_assert(
@@ -56,42 +55,42 @@ inline constexpr static std::array<const char* const, 13> kSTraceType = {
     "FunctionWithArgsEnd", "Metadata",    "WaitBegin", "WaitEnd",    "FunctionBegin",
     "FunctionEnd",         "QueueCreate", "Other"};
 
-enum class ApiType { Invalid = 0, Kernel = 1, Memory = 2 };
+enum class ApiType { kInvalid = 0, kKernel = 1, kMemory = 2 };
 
 inline static const std::unordered_map<std::string, ApiType> kCoreApis = {
-    {"piextUSMEnqueueFill", ApiType::Memory},
-    {"piextUSMEnqueueFill2D", ApiType::Memory},
-    {"piextUSMEnqueueMemcpy", ApiType::Memory},
-    {"piextUSMEnqueueMemset", ApiType::Memory},
-    {"piextUSMEnqueueMemcpy2D", ApiType::Memory},
-    {"piextUSMEnqueueMemset2D", ApiType::Memory},
+    {"piextUSMEnqueueFill", ApiType::kMemory},
+    {"piextUSMEnqueueFill2D", ApiType::kMemory},
+    {"piextUSMEnqueueMemcpy", ApiType::kMemory},
+    {"piextUSMEnqueueMemset", ApiType::kMemory},
+    {"piextUSMEnqueueMemcpy2D", ApiType::kMemory},
+    {"piextUSMEnqueueMemset2D", ApiType::kMemory},
 
-    {"piEnqueueKernelLaunch", ApiType::Kernel},
-    {"piextEnqueueKernelLaunchCustom", ApiType::Kernel},
-    {"piextEnqueueCooperativeKernelLaunch", ApiType::Kernel},
+    {"piEnqueueKernelLaunch", ApiType::kKernel},
+    {"piextEnqueueKernelLaunchCustom", ApiType::kKernel},
+    {"piextEnqueueCooperativeKernelLaunch", ApiType::kKernel},
 
-    {"piEnqueueMemBufferRead", ApiType::Memory},
-    {"piEnqueueMemBufferWrite", ApiType::Memory},
-    {"piextUSMSharedAlloc", ApiType::Memory},
-    {"piextUSMHostAlloc", ApiType::Memory},
-    {"piextUSMDeviceAlloc", ApiType::Memory},
+    {"piEnqueueMemBufferRead", ApiType::kMemory},
+    {"piEnqueueMemBufferWrite", ApiType::kMemory},
+    {"piextUSMSharedAlloc", ApiType::kMemory},
+    {"piextUSMHostAlloc", ApiType::kMemory},
+    {"piextUSMDeviceAlloc", ApiType::kMemory},
 
-    {"urEnqueueUSMFill", ApiType::Memory},
-    {"urEnqueueUSMFill2D", ApiType::Memory},
-    {"urEnqueueUSMMemcpy", ApiType::Memory},
-    {"urEnqueueUSMMemcpy2D", ApiType::Memory},
+    {"urEnqueueUSMFill", ApiType::kMemory},
+    {"urEnqueueUSMFill2D", ApiType::kMemory},
+    {"urEnqueueUSMMemcpy", ApiType::kMemory},
+    {"urEnqueueUSMMemcpy2D", ApiType::kMemory},
 
-    {"urEnqueueKernelLaunch", ApiType::Kernel},
-    {"urEnqueueKernelLaunchCustomExp", ApiType::Kernel},
-    {"urEnqueueCooperativeKernelLaunchExp", ApiType::Kernel},
+    {"urEnqueueKernelLaunch", ApiType::kKernel},
+    {"urEnqueueKernelLaunchCustomExp", ApiType::kKernel},
+    {"urEnqueueCooperativeKernelLaunchExp", ApiType::kKernel},
 
-    {"urEnqueueMemBufferFill", ApiType::Memory},
-    {"urEnqueueMemBufferRead", ApiType::Memory},
-    {"urEnqueueMemBufferWrite", ApiType::Memory},
-    {"urEnqueueMemBufferCopy", ApiType::Memory},
-    {"urUSMHostAlloc", ApiType::Memory},
-    {"urUSMSharedAlloc", ApiType::Memory},
-    {"urUSMDeviceAlloc", ApiType::Memory}};
+    {"urEnqueueMemBufferFill", ApiType::kMemory},
+    {"urEnqueueMemBufferRead", ApiType::kMemory},
+    {"urEnqueueMemBufferWrite", ApiType::kMemory},
+    {"urEnqueueMemBufferCopy", ApiType::kMemory},
+    {"urUSMHostAlloc", ApiType::kMemory},
+    {"urUSMSharedAlloc", ApiType::kMemory},
+    {"urUSMDeviceAlloc", ApiType::kMemory}};
 
 inline const char* GetTracePointTypeString(xpti::trace_point_type_t trace_type) {
   switch (trace_type) {
@@ -133,19 +132,33 @@ inline std::string Truncate(const std::string& name) {
 }
 
 inline bool InKernelCoreApis(const char* function_name) {
-  const std::unordered_map<std::string, ApiType>::const_iterator it = kCoreApis.find(function_name);
+  const auto it = kCoreApis.find(function_name);
   if (it != kCoreApis.end()) {
-    return it->second == ApiType::Kernel;
+    return it->second == ApiType::kKernel;
   }
   return false;
 }
 
 inline bool InMemoryCoreApis(const char* function_name) {
-  const std::unordered_map<std::string, ApiType>::const_iterator it = kCoreApis.find(function_name);
+  const auto it = kCoreApis.find(function_name);
   if (it != kCoreApis.end()) {
-    return it->second == ApiType::Memory;
+    return it->second == ApiType::kMemory;
   }
   return false;
+}
+
+inline bool IsMemoryOperation(xpti::string_id_t xpti_metadata_key) {
+  const auto* const xpti_metadata_name = xptiLookupString(xpti_metadata_key);
+
+  constexpr const char* const kMemorySubStr = "memory";
+
+  return std::strstr(xpti_metadata_name, kMemorySubStr) != nullptr;
+}
+
+inline bool IsKernelOperation(xpti::string_id_t xpti_metadata_key) {
+  const auto* const xpti_metadata_name = xptiLookupString(xpti_metadata_key);
+
+  return std::strcmp(xpti_metadata_name, "kernel_name") == 0;
 }
 
 class SyclCollector {
@@ -155,12 +168,12 @@ class SyclCollector {
   static inline bool foreign_subscriber_ = false;
   static inline bool likely_unitrace_subscriber_ = false;
 
-  inline static auto& Instance() {
+  static auto& Instance() {
     static SyclCollector sycl_collector{nullptr};
     return sycl_collector;
   }
 
-  inline void EnableTracing() {
+  void EnableTracing() {
     // Do not change the behaviour here depending on foreign_subscriber_!
     // The current behavior ensures that in the absense of XPTI subscription (and Sycl records)
     // PTI generates to-called Special Records
@@ -169,7 +182,7 @@ class SyclCollector {
     xptiForceSetTraceEnabled(enabled_);
   }
 
-  inline void DisableTracing() {
+  void DisableTracing() {
     enabled_ = false;
     if (streams_found_) {
       // Don't allow the collector to be disabled unless all the xpti streams we require are found.
@@ -197,13 +210,13 @@ class SyclCollector {
     return xptiGetStashedTuple;
   }
 
-  inline void SetCallback(const OnSyclRuntimeViewCallback callback) { acallback_ = callback; }
+  void SetCallback(const OnSyclRuntimeViewCallback callback) { acallback_ = callback; }
 
   static XPTI_CALLBACK_API void TpCallback(uint16_t TraceType, xpti::trace_event_data_t* /*Parent*/,
-                                           xpti::trace_event_data_t* Event, uint64_t,
+                                           xpti::trace_event_data_t* Event, uint64_t /*instance*/,
                                            const void* UserData) {
-    auto Payload = xptiQueryPayload(Event);
-    uint64_t Time = utils::GetTime();
+    const uint64_t time = utils::GetTime();
+    const auto* payload = xptiQueryPayload(Event);
 
     uint64_t ID = Event ? Event->unique_id : 0;
     uint64_t Instance_ID = Event ? Event->instance_id : 0;
@@ -212,7 +225,7 @@ class SyclCollector {
 
     const auto trace_type = static_cast<xpti::trace_point_type_t>(TraceType);
 
-    SPDLOG_TRACE("{}: TraceType: {} - id: {}", Time, GetTracePointTypeString(trace_type),
+    SPDLOG_TRACE("{}: TraceType: {} - id: {}", time, GetTracePointTypeString(trace_type),
                  TraceType);
     SPDLOG_TRACE(" Event_id: {}, Instance_id: {}, pid: {}, tid: {}", ID, Instance_ID, pid, tid);
 
@@ -244,14 +257,14 @@ class SyclCollector {
           current_func_task_info.func_pid = pid;
           current_func_task_info.func_tid = tid;
           if (InKernelCoreApis(function_name)) {
-            sycl_data_kview.sycl_enqk_begin_time_ = Time;
+            sycl_data_kview.sycl_enqk_begin_time_ = time;
           }
           if (InMemoryCoreApis(function_name)) {
-            sycl_data_mview.sycl_task_begin_time_ = Time;
+            sycl_data_mview.sycl_task_begin_time_ = time;
           }
           SyclCollector::Instance().sycl_runtime_rec_.pid_ = pid;
           SyclCollector::Instance().sycl_runtime_rec_.tid_ = tid;
-          SyclCollector::Instance().sycl_runtime_rec_.start_time_ = Time;
+          SyclCollector::Instance().sycl_runtime_rec_.start_time_ = time;
           SyclCollector::Instance().sycl_runtime_rec_.sycl_func_name_ = function_name;
           SyclCollector::Instance().sycl_runtime_rec_.callback_id_ = args->function_id;
         }
@@ -279,23 +292,19 @@ class SyclCollector {
                        current_func_task_info.func_tid);
           if (InKernelCoreApis(function_name)) {
             SyclCollector::Instance().sycl_runtime_rec_.kid_ = sycl_data_kview.kid_;
-            SyclCollector::Instance().sycl_runtime_rec_.sycl_queue_id_ =
-                sycl_data_kview.sycl_queue_id_;
           }
           if (InMemoryCoreApis(function_name)) {
             SyclCollector::Instance().sycl_runtime_rec_.kid_ = sycl_data_mview.kid_;
             SyclCollector::Instance().sycl_runtime_rec_.tid_ = sycl_data_mview.tid_;
-            SyclCollector::Instance().sycl_runtime_rec_.sycl_queue_id_ =
-                sycl_data_mview.sycl_queue_id_;
           }
-          SyclCollector::Instance().sycl_runtime_rec_.end_time_ = Time;
+          SyclCollector::Instance().sycl_runtime_rec_.end_time_ = time;
           if (SyclCollector::Instance().acallback_ != nullptr) {
             {
               const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
               uint32_t id_enabled = 1;  // by default state maps are 1
               id_enabled = pti_api_id_runtime_sycl_state[args->function_id];
 
-              int32_t trace_all = SyclCollector::Instance().trace_all_env_value;
+              int32_t trace_all = SyclCollector::Instance().trace_all_env_value_;
               if ((trace_all > 0) || ((trace_all < 0) && id_enabled)) {
                 if (SyclCollector::Instance().enabled_ && !framework_finalized) {
                   (SyclCollector::Instance().acallback_.load())(
@@ -315,21 +324,29 @@ class SyclCollector {
         break;
       case xpti::trace_point_type_t::task_begin:
         if (Event) {
-          xpti::metadata_t* Metadata = xptiQueryMetadata(Event);
-          for (const auto& Item : *Metadata) {
-            if (std::strcmp(xptiLookupString(Item.first), "kernel_name") == 0) {
-              if (Payload) {
-                if (Payload->source_file) {
-                  sycl_data_kview.source_file_name_ = std::string{Payload->source_file};
+          const auto* metadata = xptiQueryMetadata(Event);
+          for (const auto& item : *metadata) {
+            if (IsKernelOperation(item.first)) {
+              if (payload) {
+                if (payload->source_file) {
+                  sycl_data_kview.source_file_name_ = std::string{payload->source_file};
                 }
-                sycl_data_kview.source_line_number_ = Payload->line_no;
+                sycl_data_kview.source_line_number_ = payload->line_no;
               }
               sycl_data_kview.sycl_node_id_ = ID;
-              sycl_data_kview.sycl_queue_id_ = node_q_map[ID];
+              const auto queue_id_loc = node_q_map.find(ID);
+              sycl_data_kview.sycl_queue_id_ =
+                  (queue_id_loc != std::cend(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
               sycl_data_kview.sycl_invocation_id_ = static_cast<uint32_t>(Instance_ID);
-              sycl_data_kview.sycl_task_begin_time_ = Time;
-            } else if (std::strcmp(xptiLookupString(Item.first), "memory_object") == 0) {
-              sycl_data_mview.sycl_queue_id_ = node_q_map[ID];
+              sycl_data_kview.sycl_task_begin_time_ = time;
+              break;  // no need to keep searching metadata
+            }
+
+            if (IsMemoryOperation(item.first)) {
+              const auto queue_id_loc = node_q_map.find(ID);
+              sycl_data_mview.sycl_queue_id_ =
+                  (queue_id_loc != std::cend(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
+              break;  // no need to keep searching metadata
             }
           }
         }
@@ -340,25 +357,26 @@ class SyclCollector {
         break;
       case xpti::trace_point_type_t::node_create: {
         if (Event) {
-          char* key = nullptr;
-          uint64_t value = 0;
-          if (SyclCollector::Instance().xptiGetStashedKV) {
-            if (SyclCollector::Instance().xptiGetStashedKV(&key, value) ==
-                xpti::result_t::XPTI_RESULT_SUCCESS) {
-              if (strcmp(key, "queue_id") == 0) {
-                node_q_map[ID] = value;
-              }
+          char* stashed_key = nullptr;
+          uint64_t stashed_value = 0;
+          if (SyclCollector::Instance().xptiGetStashedKV_ &&
+              SyclCollector::Instance().xptiGetStashedKV_(&stashed_key, stashed_value) ==
+                  xpti::result_t::XPTI_RESULT_SUCCESS) {
+            if (std::strcmp(stashed_key, "queue_id") == 0) {
+              node_q_map[ID] = stashed_value;
             }
           } else {
             node_q_map[ID] = kDefaultQueueId;
           }
-          xpti::metadata_t* Metadata = xptiQueryMetadata(Event);
-          for (const auto& Item : *Metadata) {
-            if (strcmp(xptiLookupString(Item.first), "enqueue_kernel_data") == 0) {
+          const auto* metadata = xptiQueryMetadata(Event);
+          for (const auto& item : *metadata) {
+            if (IsKernelOperation(item.first)) {
               sycl_data_kview.sycl_queue_id_ = node_q_map[ID];
+              break;
             }
-            if (strcmp(xptiLookupString(Item.first), "memory_object") == 0) {
+            if (IsMemoryOperation(item.first)) {
               sycl_data_mview.sycl_queue_id_ = node_q_map[ID];
+              break;
             }
           }
         }
@@ -370,40 +388,38 @@ class SyclCollector {
   }
 
  private:
-#define WARNING_FOREIGN_SUBSCRIBER                                                 \
-  "Another subscriber already subscribed to Sycl runtime events, "                 \
-  "so PTI will not subscribe to them. It will affect correctness of PTI profile: " \
-  "e.g. report zero XPU time for CPU callers of GPU kernels."
+  static constexpr const char* const kWarnForeignSubscriber =
+      "Another subscriber already subscribed to Sycl runtime events, "
+      "so PTI will not subscribe to them. It will affect correctness of PTI profile: "
+      "e.g. report zero XPU time for CPU callers of GPU kernels.";
 
-#define WARNING_LIKELY_UNITRACE_SUBSCRIBER           \
-  " Likely the application running under Unitrace. " \
-  "To get correct PTI profile - run without Unitrace."
+  static constexpr const char* const kWarnLikelyUnitraceSubscriber =
+      " Likely the application running under Unitrace. "
+      "To get correct PTI profile - run without Unitrace.";
 
   explicit SyclCollector(OnSyclRuntimeViewCallback buffer_callback)
-      : acallback_(buffer_callback), xptiGetStashedKV(GetStashedFuncPtrFromSharedObject()) {
-    static constexpr char warn_foreign_subscriber[] = WARNING_FOREIGN_SUBSCRIBER;
-    static constexpr char warn_likely_unitrace_subscriber[] = WARNING_LIKELY_UNITRACE_SUBSCRIBER;
+      : acallback_(buffer_callback), xptiGetStashedKV_(GetStashedFuncPtrFromSharedObject()) {
     if (foreign_subscriber_) {
-      const char* warn_add = likely_unitrace_subscriber_ ? warn_likely_unitrace_subscriber : "";
-      SPDLOG_WARN("{}{}", warn_foreign_subscriber, warn_add);
+      SPDLOG_WARN("{}{}", kWarnForeignSubscriber,
+                  likely_unitrace_subscriber_ ? kWarnLikelyUnitraceSubscriber : "");
     }
   }
 
-  int32_t trace_all_env_value = utils::IsSetEnv("PTI_VIEW_RUNTIME_API");
+  int32_t trace_all_env_value_ = utils::IsSetEnv("PTI_VIEW_RUNTIME_API");
   inline static thread_local ZeKernelCommandExecutionRecord sycl_runtime_rec_;
   std::atomic<OnSyclRuntimeViewCallback> acallback_ = nullptr;
   std::atomic<bool> enabled_ = false;
   std::atomic<bool> streams_found_ = false;
-  StashedFuncPtr xptiGetStashedKV = nullptr;
+  StashedFuncPtr xptiGetStashedKV_ = nullptr;
 };
 
 class XptiStreamRegistrationHandler {
  public:
   // We register two streams. One for "sycl" and another for the sycl implementation (e.g. plugin
   // interface or unified runtime)
-  inline constexpr static size_t kNumberOfStreams = 2;
+  constexpr static size_t kNumberOfStreams = 2;
 
-  inline static auto& Instance() {
+  static auto& Instance() {
     static XptiStreamRegistrationHandler handler{};
     return handler;
   }

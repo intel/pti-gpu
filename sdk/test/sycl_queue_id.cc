@@ -10,23 +10,23 @@
 #include "samples_utils.h"
 #include "utils.h"
 
-inline constexpr auto kAValue = 0.128f;
-
 namespace {
 constexpr int kVectorSize = 1024;
+constexpr auto kMaxQueueId = static_cast<uint64_t>(PTI_INVALID_QUEUE_ID);
+constexpr uint32_t kThreadCount = 5;
+constexpr auto kAValue = 0.128f;
+
 bool queue_id_kernel_records = false;
 bool queue_id_memcpy_records = false;
 bool queue_id_memfill_records = false;
 std::set<uint64_t> mt_q_ids;
-constexpr uint32_t kThreadCount = 5;
-uint64_t queue_id_K1 = -1;
-uint64_t queue_id_K2 = 0;
-uint64_t queue_id = -1;
+auto queue_id_k1 = static_cast<uint64_t>(PTI_INVALID_QUEUE_ID);
+uint64_t queue_id_k2 = 0;
+auto queue_id = static_cast<uint64_t>(PTI_INVALID_QUEUE_ID);
 bool use_same_q = false;
-bool use_same_k = false;
+bool use_same_kernel = false;
 [[maybe_unused]] bool use_stacked_q = false;
 [[maybe_unused]] bool templated_run = false;
-inline constexpr uint64_t kMaxQueueId = static_cast<uint64_t>(-1);
 }  // namespace
 
 void StartTracing() {
@@ -75,39 +75,36 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
-        [[maybe_unused]] pti_view_record_external_correlation *aExtRec =
-            reinterpret_cast<pti_view_record_external_correlation *>(ptr);
         break;
       }
       case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
-        [[maybe_unused]] pti_view_record_overhead *record =
-            reinterpret_cast<pti_view_record_overhead *>(ptr);
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
-        [[maybe_unused]] pti_view_record_memory_copy *rec =
-            reinterpret_cast<pti_view_record_memory_copy *>(ptr);
-        if (rec->_sycl_queue_id != kMaxQueueId) queue_id_memcpy_records = true;
+        auto *rec = reinterpret_cast<pti_view_record_memory_copy *>(ptr);
+        if (rec->_sycl_queue_id != kMaxQueueId) {
+          queue_id_memcpy_records = true;
+        }
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P: {
-        [[maybe_unused]] pti_view_record_memory_copy_p2p *rec =
-            reinterpret_cast<pti_view_record_memory_copy_p2p *>(ptr);
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
-        [[maybe_unused]] pti_view_record_memory_fill *rec =
-            reinterpret_cast<pti_view_record_memory_fill *>(ptr);
-        if (rec->_sycl_queue_id != kMaxQueueId) queue_id_memfill_records = true;
+        auto *rec = reinterpret_cast<pti_view_record_memory_fill *>(ptr);
+        if (rec->_sycl_queue_id != kMaxQueueId) {
+          queue_id_memfill_records = true;
+        }
         break;
       }
       case pti_view_kind::PTI_VIEW_RUNTIME_API: {
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-        [[maybe_unused]] pti_view_record_kernel *rec =
-            reinterpret_cast<pti_view_record_kernel *>(ptr);
-        if (rec->_sycl_queue_id != kMaxQueueId) queue_id_kernel_records = true;
+        auto *rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
+        if (rec->_sycl_queue_id != kMaxQueueId) {
+          queue_id_kernel_records = true;
+        }
         queue_id = rec->_sycl_queue_id;
         mt_q_ids.insert(queue_id);
         break;
@@ -119,6 +116,24 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t used_byt
     }
   }
   ::operator delete(buf);
+}
+
+sycl::property_list GetSyclPropList(bool use_immediate_command_lists) {
+  sycl::property_list prop_list;
+
+  if (use_immediate_command_lists) {
+    sycl::property_list prop{sycl::property::queue::in_order(),
+                             sycl::property::queue::enable_profiling(),
+                             sycl::ext::intel::property::queue::immediate_command_list()};
+    prop_list = prop;
+  } else {
+    sycl::property_list prop{sycl::property::queue::in_order(),
+                             sycl::property::queue::enable_profiling(),
+                             sycl::ext::intel::property::queue::no_immediate_command_list()};
+    prop_list = prop;
+  }
+
+  return prop_list;
 }
 
 template <typename T>
@@ -157,13 +172,14 @@ static void InitKernelA(sycl::queue queue, std::vector<float> &a, unsigned size)
   }
 }
 
-static void InitKernelAStackedQ(std::vector<float> &a, unsigned size) {
+static void InitKernelAStackedQ(bool use_immediate_command_list, std::vector<float> &a,
+                                unsigned size) {
   PTI_ASSERT(size > 0);
   PTI_ASSERT(a.size() == size * size);
   sycl::device dev;
   dev = sycl::device(sycl::gpu_selector_v);
 
-  sycl::property_list prop_list{sycl::property::queue::in_order()};
+  auto prop_list = GetSyclPropList(use_immediate_command_list);
   sycl::queue q(dev, sycl::async_handler{}, prop_list);
 
   try {
@@ -286,7 +302,8 @@ void VecSq(sycl::queue &q, const std::vector<T> &a_vector, const std::vector<T> 
 }
 
 template <typename T>
-void VecSqStackedQ(const std::vector<T> &a_vector, const std::vector<T> &b_vector) {
+void VecSqStackedQ(bool use_immediate_command_list, const std::vector<T> &a_vector,
+                   const std::vector<T> &b_vector) {
   sycl::range<1> num_items{a_vector.size()};
   sycl::buffer a_buf(a_vector);
   sycl::buffer b_buf(b_vector);
@@ -294,7 +311,7 @@ void VecSqStackedQ(const std::vector<T> &a_vector, const std::vector<T> &b_vecto
   sycl::device dev;
   dev = sycl::device(sycl::gpu_selector_v);
 
-  sycl::property_list prop_list{sycl::property::queue::in_order()};
+  auto prop_list = GetSyclPropList(use_immediate_command_list);
   sycl::queue q(dev, sycl::async_handler{}, prop_list);
 
   q.submit([&](sycl::handler &h) {
@@ -309,11 +326,14 @@ void VecSqStackedQ(const std::vector<T> &a_vector, const std::vector<T> &b_vecto
 }
 
 template <typename T>
-void SyclQueueIdMtTestsRouted(std::vector<sycl::queue> &queues, bool stacked_q) {
+void SyclQueueIdMtTestsRouted(bool use_immediate_command_list, std::vector<sycl::queue> &queues,
+                              bool stacked_q) {
   std::vector<T> a(kVectorSize);
   std::vector<T> b(kVectorSize);
   auto thread_function = [](sycl::queue &q, const auto &a, const auto &b) { VecSq(q, a, b); };
-  auto thread_function_stacked_q = [](const auto &a, const auto &b) { VecSqStackedQ(a, b); };
+  auto thread_function_stacked_q = [&use_immediate_command_list](const auto &a, const auto &b) {
+    VecSqStackedQ(use_immediate_command_list, a, b);
+  };
 
   std::vector<std::thread> the_threads;
   for (uint32_t i = 0; i < kThreadCount; i++) {
@@ -333,15 +353,14 @@ void SyclQueueIdMtTestsRouted(std::vector<sycl::queue> &queues, bool stacked_q) 
   }
 }
 
-int RunSyclQueueIdMtTests(bool stacked_q = false) {
+int RunSyclQueueIdMtTests(bool use_immediate_command_list, bool stacked_q = false) {
   int exit_code = EXIT_SUCCESS;
 
   StartTracing();
   sycl::device dev;
   dev = sycl::device(sycl::gpu_selector_v);
 
-  sycl::property_list prop_list{sycl::property::queue::enable_profiling(),
-                                sycl::property::queue::in_order()};
+  auto prop_list = GetSyclPropList(use_immediate_command_list);
 
   std::vector<sycl::queue> mt_queues;
   unsigned int queue_size = 5;
@@ -350,22 +369,24 @@ int RunSyclQueueIdMtTests(bool stacked_q = false) {
     mt_queues.push_back(sycl::queue(dev, sycl::async_handler{}, prop_list));
   }
 
-  auto devA = static_cast<float *>(malloc_device(kVectorSize * sizeof(float), mt_queues[2]));
+  auto *device_alloc =
+      static_cast<float *>(malloc_device(kVectorSize * sizeof(float), mt_queues[2]));
   mt_queues[2]
-      .memset(devA, 0, kVectorSize * sizeof(float))
+      .memset(device_alloc, 0, kVectorSize * sizeof(float))
       .wait();  // force a memfill pti record to test.
 
   if (dev.has(sycl::aspect::fp64)) {
-    SyclQueueIdMtTestsRouted<double>(mt_queues, stacked_q);
+    SyclQueueIdMtTestsRouted<double>(use_immediate_command_list, mt_queues, stacked_q);
   } else {
-    SyclQueueIdMtTestsRouted<float>(mt_queues, stacked_q);
+    SyclQueueIdMtTestsRouted<float>(use_immediate_command_list, mt_queues, stacked_q);
   }
 
   return exit_code;
 }
 
-int RunSyclQueueIdTests(bool use_same_q = false, bool use_same_k = false,
-                        bool templated_run = false, bool use_stacked_q = false) {
+int RunSyclQueueIdTests(bool use_immediate_command_lists, bool use_same_q = false,
+                        bool use_same_kernel = false, bool templated_run = false,
+                        bool use_stacked_q = false) {
   int exit_code = EXIT_SUCCESS;
   unsigned size = 1024;
   std::vector<float> a(size * size, kAValue);
@@ -373,17 +394,15 @@ int RunSyclQueueIdTests(bool use_same_q = false, bool use_same_k = false,
   if (use_stacked_q) {
     StartTracing();
     for (unsigned i = 0; i < kThreadCount; i++) {
-      InitKernelAStackedQ(a, size);
+      InitKernelAStackedQ(use_immediate_command_lists, a, size);
     }
     StopTracing();
     return exit_code;
   }
   StartTracing();
-  sycl::device dev;
-  dev = sycl::device(sycl::gpu_selector_v);
+  auto dev = sycl::device(sycl::gpu_selector_v);
 
-  sycl::property_list prop_list{sycl::property::queue::enable_profiling(),
-                                sycl::property::queue::in_order()};
+  auto prop_list = GetSyclPropList(use_immediate_command_lists);
 
   std::vector<sycl::queue> queues;
   std::vector<sycl::queue> mt_queues;
@@ -393,60 +412,64 @@ int RunSyclQueueIdTests(bool use_same_q = false, bool use_same_k = false,
     queues.push_back(sycl::queue(dev, sycl::async_handler{}, prop_list));
   }
 
-  auto devA = static_cast<float *>(malloc_device(size * sizeof(float), queues[2]));
-  queues[2].memset(devA, 0, size * sizeof(float)).wait();  // force a memfill pti record to test.
+  auto *device_alloc = static_cast<float *>(malloc_device(size * sizeof(float), queues[2]));
+  queues[2]
+      .memset(device_alloc, 0, size * sizeof(float))
+      .wait();  // force a memfill pti record to test.
   try {
     if (!templated_run) {
-      if (use_same_q && use_same_k) {
+      if (use_same_q && use_same_kernel) {
         // same kernel, same Q
         InitKernelA(queues[1], a, size);
-        queue_id_K1 = queue_id;
+        queue_id_k1 = queue_id;
         InitKernelA(queues[1], a, size);
-        queue_id_K2 = queue_id;
-      } else if (use_same_q && !use_same_k) {  // Do not use KernelA or queue2 in below paths
+        queue_id_k2 = queue_id;
+      } else if (use_same_q && !use_same_kernel) {  // Do not use KernelA or queue2 in below paths
         // different kernel, same Q
         InitKernelB(queues[1], a, size);
-        queue_id_K1 = queue_id;
+        queue_id_k1 = queue_id;
         InitKernelC(queues[1], a, size);
-        queue_id_K2 = queue_id;
-      } else if (!use_same_q && use_same_k) {  // Do not use KernelA/B/C or queue2/3 in below paths
+        queue_id_k2 = queue_id;
+      } else if (!use_same_q &&
+                 use_same_kernel) {  // Do not use KernelA/B/C or queue2/3 in below paths
         // same kernel, different Q
         InitKernelD(queues[1], a, size);
-        queue_id_K1 = queue_id;
+        queue_id_k1 = queue_id;
         InitKernelD(queues[2], a, size);
-        queue_id_K2 = queue_id;
+        queue_id_k2 = queue_id;
       } else if (!use_same_q &&
-                 !use_same_k) {  // Do not use KernelA/B/C/D or queue2/3/4/5 in below paths
+                 !use_same_kernel) {  // Do not use KernelA/B/C/D or queue2/3/4/5 in below paths
         // different kernel, different Q
         InitKernelE(queues[1], a, size);
-        queue_id_K1 = queue_id;
+        queue_id_k1 = queue_id;
         InitKernelF(queues[2], a, size);
-        queue_id_K2 = queue_id;
+        queue_id_k2 = queue_id;
       }
     } else {
-      if (use_same_q && use_same_k) {
+      if (use_same_q && use_same_kernel) {
         InitKernel<uint32_t>(queues[1], a, size);
-        queue_id_K1 = queue_id;
+        queue_id_k1 = queue_id;
         InitKernel<uint32_t>(queues[1], a, size);
-        queue_id_K2 = queue_id;
-      } else if (!use_same_q && use_same_k) {
+        queue_id_k2 = queue_id;
+      } else if (!use_same_q && use_same_kernel) {
         InitKernel<uint64_t>(queues[1], a, size);
-        queue_id_K1 = queue_id;
+        queue_id_k1 = queue_id;
         InitKernel<uint64_t>(queues[2], a, size);
-        queue_id_K2 = queue_id;
-      } else if (!use_same_q && !use_same_k) {
+        queue_id_k2 = queue_id;
+      } else if (!use_same_q && !use_same_kernel) {
         InitKernel<double>(queues[1], a, size);
-        queue_id_K1 = queue_id;
+        queue_id_k1 = queue_id;
         InitKernel<float>(queues[2], a, size);
-        queue_id_K2 = queue_id;
-      } else if (use_same_q && !use_same_k) {
+        queue_id_k2 = queue_id;
+      } else if (use_same_q && !use_same_kernel) {
         InitKernel<char>(queues[1], a, size);
-        queue_id_K1 = queue_id;
+        queue_id_k1 = queue_id;
         InitKernel<uint8_t>(queues[1], a, size);
-        queue_id_K2 = queue_id;
+        queue_id_k2 = queue_id;
       }
     }
     StopTracing();
+    PTI_ASSERT(ptiFlushAllViews() == PTI_SUCCESS);
   } catch (const sycl::exception &e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';
     std::cerr << "\tError code: " << e.code().value() << "\n\tCategory: " << e.category().name()
@@ -470,12 +493,15 @@ class SyclQueueIdFixtureTest : public ::testing::TestWithParam<bool> {
     queue_id_memcpy_records = false;
     queue_id_memfill_records = false;
     mt_q_ids.clear();
-    queue_id_K1 = -1;
-    queue_id_K2 = 0;
-    queue_id = -1;
+    queue_id_k1 = PTI_INVALID_QUEUE_ID;
+    queue_id_k2 = 0;
+    queue_id = PTI_INVALID_QUEUE_ID;
+    use_immediate_command_lists_ = GetParam();
   }
 
   void TearDown() override {}
+
+  bool use_immediate_command_lists_ = false;
 };
 
 //
@@ -483,105 +509,95 @@ class SyclQueueIdFixtureTest : public ::testing::TestWithParam<bool> {
 // itself).
 //
 TEST_P(SyclQueueIdFixtureTest, SameQSameKernelSameQID) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = true, use_same_k = true, templated_run = false);
-  ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0ULL);
-  ASSERT_EQ(queue_id_K1, queue_id_K2);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = true, use_same_kernel = true,
+                      templated_run = false);
+  ASSERT_NE(queue_id_k1, kMaxQueueId);
+  ASSERT_NE(queue_id_k2, 0ULL);
+  ASSERT_EQ(queue_id_k1, queue_id_k2);
 }
 
 TEST_P(SyclQueueIdFixtureTest, SameQDifferentKernelSameQID) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = true, use_same_k = false, templated_run = false);
-  ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0ULL);
-  ASSERT_EQ(queue_id_K1, queue_id_K2);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = true, use_same_kernel = false,
+                      templated_run = false);
+  ASSERT_NE(queue_id_k1, kMaxQueueId);
+  ASSERT_NE(queue_id_k2, 0ULL);
+  ASSERT_EQ(queue_id_k1, queue_id_k2);
 }
 
 #if __INTEL_LLVM_COMPILER >= 20240101 || __LIBSYCL_MAJOR_VERSION >= 8
 TEST_P(SyclQueueIdFixtureTest, DifferentQSameKernelDifferentQID) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = false, use_same_k = true, templated_run = false);
-  ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0ULL);
-  ASSERT_NE(queue_id_K1, queue_id_K2);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = false, use_same_kernel = true,
+                      templated_run = false);
+  ASSERT_NE(queue_id_k1, kMaxQueueId);
+  ASSERT_NE(queue_id_k2, 0ULL);
+  ASSERT_NE(queue_id_k1, queue_id_k2);
 }
 
 TEST_P(SyclQueueIdFixtureTest, DifferentQDifferentKernelDifferentQID) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = false, use_same_k = false, templated_run = false);
-  ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0ULL);
-  ASSERT_NE(queue_id_K1, queue_id_K2);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = false, use_same_kernel = false,
+                      templated_run = false);
+  ASSERT_NE(queue_id_k1, kMaxQueueId);
+  ASSERT_NE(queue_id_k2, 0ULL);
+  ASSERT_NE(queue_id_k1, queue_id_k2);
 }
 #endif
 
 TEST_P(SyclQueueIdFixtureTest, SameQSameTemplatedKernelSameQID) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = true, use_same_k = true, templated_run = true);
-  ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0ULL);
-  ASSERT_EQ(queue_id_K1, queue_id_K2);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = true, use_same_kernel = true,
+                      templated_run = true);
+  ASSERT_NE(queue_id_k1, kMaxQueueId);
+  ASSERT_NE(queue_id_k2, 0ULL);
+  ASSERT_EQ(queue_id_k1, queue_id_k2);
 }
 
 TEST_P(SyclQueueIdFixtureTest, SameQDifferentTemplatedKernelSameQID) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = true, use_same_k = false, templated_run = true);
-  ASSERT_NE(queue_id_K1, kMaxQueueId);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = true, use_same_kernel = false,
+                      templated_run = true);
+  ASSERT_NE(queue_id_k1, kMaxQueueId);
 #if __INTEL_LLVM_COMPILER >= 20240101 || __LIBSYCL_MAJOR_VERSION >= 8
-  ASSERT_NE(queue_id_K1, (kMaxQueueId - 1));
+  ASSERT_NE(queue_id_k1, (kMaxQueueId - 1));
 #endif
-  ASSERT_NE(queue_id_K2, 0ULL);
-  ASSERT_EQ(queue_id_K1, queue_id_K2);
+  ASSERT_NE(queue_id_k2, 0ULL);
+  ASSERT_EQ(queue_id_k1, queue_id_k2);
 }
 
 #if __INTEL_LLVM_COMPILER >= 20240101 || __LIBSYCL_MAJOR_VERSION >= 8
 TEST_P(SyclQueueIdFixtureTest, DifferentQSameTemplatedKernelDifferentQID) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = false, use_same_k = true, templated_run = true);
-  ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0ULL);
-  ASSERT_NE(queue_id_K1, queue_id_K2);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = false, use_same_kernel = true,
+                      templated_run = true);
+  ASSERT_NE(queue_id_k1, kMaxQueueId);
+  ASSERT_NE(queue_id_k2, 0ULL);
+  ASSERT_NE(queue_id_k1, queue_id_k2);
 }
 
 TEST_P(SyclQueueIdFixtureTest, DifferentQDifferentTemplatedKernelDifferentQID) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = false, use_same_k = false, templated_run = true);
-  ASSERT_NE(queue_id_K1, kMaxQueueId);
-  ASSERT_NE(queue_id_K2, 0ULL);
-  ASSERT_NE(queue_id_K1, queue_id_K2);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = false, use_same_kernel = false,
+                      templated_run = true);
+  ASSERT_NE(queue_id_k1, kMaxQueueId);
+  ASSERT_NE(queue_id_k2, 0ULL);
+  ASSERT_NE(queue_id_k1, queue_id_k2);
 }
 #else
 TEST_P(SyclQueueIdFixtureTest, InvalidQueueIDGeneratedAndUsed) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = false, use_same_k = false, templated_run = true);
-  ASSERT_EQ(queue_id_K1, (kMaxQueueId - 1));
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = false, use_same_kernel = false,
+                      templated_run = true);
+  ASSERT_EQ(queue_id_k1, (kMaxQueueId - 1));
 }
 #endif
 
 TEST_P(SyclQueueIdFixtureTest, QueueIDPresentInAllRecords) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = false, use_same_k = false, templated_run = false);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = false, use_same_kernel = false,
+                      templated_run = false);
   ASSERT_EQ(queue_id_kernel_records, true);
   ASSERT_EQ(queue_id_memcpy_records, true);
   ASSERT_EQ(queue_id_memfill_records, true);
@@ -589,28 +605,32 @@ TEST_P(SyclQueueIdFixtureTest, QueueIDPresentInAllRecords) {
 
 #if __INTEL_LLVM_COMPILER >= 20240101 || __LIBSYCL_MAJOR_VERSION >= 8
 TEST_P(SyclQueueIdFixtureTest, STQueueIDsUniqueInLoopInstancesStackedQ) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdTests(use_same_q = false, use_same_k = false, templated_run = false,
-                      use_stacked_q = true);
+  RunSyclQueueIdTests(use_immediate_command_lists_, use_same_q = false, use_same_kernel = false,
+                      templated_run = false, use_stacked_q = true);
   ASSERT_EQ(mt_q_ids.size(), kThreadCount);
 }
 TEST_P(SyclQueueIdFixtureTest, MTQueueIDsUniqueInAllThreads) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdMtTests();
+  RunSyclQueueIdMtTests(use_immediate_command_lists_);
   ASSERT_EQ(mt_q_ids.size(), kThreadCount);
 }
 
 TEST_P(SyclQueueIdFixtureTest, MTQueueIDsUniqueInAllThreadsStackedQ) {
-  bool do_immediate = GetParam();
-  utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  RunSyclQueueIdMtTests(use_stacked_q = true);
+  RunSyclQueueIdMtTests(use_immediate_command_lists_, use_stacked_q = true);
   ASSERT_EQ(mt_q_ids.size(), kThreadCount);
 }
 #endif
 
 INSTANTIATE_TEST_SUITE_P(SyclQueueIdTests, SyclQueueIdFixtureTest, ::testing::Values(false, true));
+
+TEST(SyclInvalidQueueIdTest, InvalidQueueIdIsCorrect) {
+  constexpr uint64_t kValueFromDocComment = static_cast<uint64_t>(UINT64_MAX - 1);
+  constexpr auto kValueFromDocCommentStl = (std::numeric_limits<uint64_t>::max)() - 1;
+  constexpr uint64_t kIntegerValueForInvalidQueueId = static_cast<uint64_t>(-2);
+  EXPECT_EQ(PTI_INVALID_QUEUE_ID, kValueFromDocComment);
+  EXPECT_EQ(PTI_INVALID_QUEUE_ID, kValueFromDocCommentStl);
+  EXPECT_EQ(PTI_INVALID_QUEUE_ID, kIntegerValueForInvalidQueueId);
+  ASSERT_EQ(PTI_INVALID_QUEUE_ID, kMaxQueueId);
+}

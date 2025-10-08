@@ -11,6 +11,8 @@
 using namespace sycl;
 
 namespace {
+constexpr uint64_t kMaxQueueId = static_cast<uint64_t>(PTI_INVALID_QUEUE_ID);
+
 bool p2p_d2d_record = false;
 bool p2p_d2s_record = false;
 bool p2p_s2d_record = false;
@@ -37,7 +39,6 @@ bool memory_src_type_p2p_stringified = false;
 bool memory_dst_type_stringified = false;
 bool memory_dst_type_p2p_stringified = false;
 bool queue_id_memp2p_records = false;
-inline constexpr uint64_t kMaxQueueId = (uint64_t)-1;
 }  // namespace
 
 void StartTracing() {
