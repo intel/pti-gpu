@@ -149,12 +149,6 @@ typedef enum _pti_api_group_id {
                                                            //!< -- you will get all classes *now* and in the *future*!
  } pti_api_class;
 
-typedef void* pti_backend_queue_t; //!< Backend queue handle
-
-typedef void* pti_backend_ctx_t; //!< Backend context handle
-
-typedef void* pti_backend_evt_t; //!< Backend event handle
-
 /**
  * @brief Base View record type
  */

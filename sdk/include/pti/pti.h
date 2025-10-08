@@ -31,7 +31,9 @@ typedef enum {
                                           //!< PTI_VIEW_EXTERNAL_CORRELATION
   PTI_ERROR_BAD_TIMESTAMP = 6,            //!< error in timestamp conversion, might be related with the user
                                           //!< provided TimestampCallback
-  PTI_ERROR_BAD_API_ID = 7,               //!< invalid api_id when enable/disable runtime/driver specific api_id 
+  PTI_ERROR_BAD_API_ID = 7,               //!< invalid api_id when enable/disable runtime/driver specific api_id
+  PTI_ERROR_NO_GPU_VIEWS_ENABLED = 8,     //!< at least one GPU view must be enabled for kernel tracing
+
   PTI_ERROR_DRIVER = 50,                  //!< unknown driver error
   PTI_ERROR_TRACING_NOT_INITIALIZED = 51,  //!< installed driver requires tracing enabling with
                                            //!< setting environment variable ZE_ENABLE_TRACING_LAYER
@@ -56,6 +58,25 @@ typedef enum {
  * @return const char*
  */
 PTI_EXPORT const char* ptiResultTypeToString(pti_result result_value);
+
+
+/**
+ * @brief Abstraction for backend-specific objects.
+ *
+ * Level Zero is currently the only supported backend. However, these types will attempt to serve other backends.
+ * In case the other backend supported - the same types will serve it.
+ */
+
+typedef void* pti_device_handle_t;  //!< Device handle
+
+typedef void* pti_backend_ctx_t;    //!< Backend context handle
+
+typedef void* pti_backend_queue_t;  //!< Backend queue handle
+
+typedef void* pti_backend_evt_t;    //!< Backend event handle
+
+typedef void* pti_backend_command_list_t; //!< Backend command list handle
+
 
 #if defined(__cplusplus)
 }

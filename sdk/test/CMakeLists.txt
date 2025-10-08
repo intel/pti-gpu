@@ -493,8 +493,7 @@ target_include_directories(
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
-target_link_libraries(view_record_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
-                                              spdlog::spdlog)
+target_link_libraries(view_record_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main)
 
 add_executable(assert_exception_test assert_exception_test.cc
    "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc")
@@ -506,10 +505,21 @@ target_include_directories(
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
 target_link_libraries(assert_exception_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
-                                                   spdlog::spdlog
                                                    LevelZero::level-zero
                                                    ${CMAKE_DL_LIBS}
                                                    ${FS_LIB})
+
+add_executable(subscribers_unit_test subscribers_unit_test.cc)
+
+target_include_directories(
+  subscribers_unit_test
+  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
+
+target_link_libraries(subscribers_unit_test PUBLIC GTest::gtest_main spdlog::spdlog
+                                            PRIVATE Pti::pti_view LevelZero::headers)
+
 
 add_executable(view_gpu_local_test view_gpu_local_test.cc)
 
@@ -529,6 +539,10 @@ target_link_libraries(pti_assert_test PUBLIC GTest::gtest_main GTest::gmock)
 
 gtest_discover_tests(
   pti_assert_test
+  PROPERTIES LABELS "unit")
+
+gtest_discover_tests(
+  subscribers_unit_test
   PROPERTIES LABELS "unit")
 
 gtest_discover_tests(
@@ -582,12 +596,13 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   add_test(NAME run-vec_sqadd COMMAND vec_sqadd)
   add_test(NAME run-iso COMMAND iso3dfd 256 256 256 32 8 64 10 gpu)
   add_test(NAME run-metrics-iso COMMAND metrics_iso3dfd 256 256 256 32 8 64 10 gpu)
+  add_test(NAME run-callback COMMAND callback)
 
   set_tests_properties(
     run-metrics-iso PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS "functional;samples;hw-metrics")
 
   set_tests_properties(
     mt-awk-test mt-awk-test-immediate run-dlworkload run-dpc_gemm run-onemkl_gemm_exe run-vec_sqadd
-    run-iso PROPERTIES LABELS "functional;samples")
+    run-iso run-callback PROPERTIES LABELS "functional;samples")
 
 endif()

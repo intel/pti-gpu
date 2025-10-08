@@ -20,8 +20,6 @@ extern "C" {
                                  DEVICE
 *****************************************************************************/
 
-typedef void* pti_device_handle_t;  //!< Abstraction of device within PTI
-
 typedef struct _pti_pci_properties_t {
   uint8_t _domain;
   uint8_t _bus;

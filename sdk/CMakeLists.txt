@@ -240,6 +240,7 @@ if(BUILD_TESTING AND PTI_BUILD_SAMPLES)
   add_subdirectory(samples/onemkl_gemm)
   add_subdirectory(samples/iso3dfd_dpcpp)
   add_subdirectory(samples/metrics_iso3dfd_dpcpp)
+  add_subdirectory(samples/callback)
 endif()
 
 if(BUILD_TESTING AND PTI_BUILD_TESTING)

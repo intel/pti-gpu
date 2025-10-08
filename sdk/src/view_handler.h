@@ -282,6 +282,11 @@ struct PtiViewRecordHandler {
 
     if (!collector_) {
       CollectorOptions collector_options{};
+      // TODO: Implement this better:
+      // this line here is from the beginning,
+      // and it is wrong as for simple API tracing - no need to trace GPU ops
+      // (too much overhead)
+      // However, dealing with it requires cross-thread synchronization
       collector_options.kernel_tracing = true;
       collector_ = ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback,
                                        ZeApiCallsCallback, nullptr);
@@ -773,6 +778,75 @@ struct PtiViewRecordHandler {
       ts_shift_ = utils::ConversionFactorMonotonicRawToUnknownClock(user_provided_ts_func_ptr_);
     }
     return ts_shift_;
+  }
+
+  // Callback API
+  // Multiple subscriber support with ID-based management
+  inline pti_result CallbackSubscribe(pti_callback_subscriber_handle* subscriber,
+                                      pti_callback_function callback, void* user_data) {
+    // Limitation (hopefully temporal) Callbacks only supported when kernel tracing is ON
+    if (collector_ && collector_->IsTracingOn() &&
+        collector_->GetCollectorOptions().kernel_tracing) {
+      auto subscriber_handle = collector_->AddCallbackSubscriber(callback, user_data);
+      if (subscriber_handle == nullptr) {
+        SPDLOG_ERROR("Failed to add callback subscriber");
+        return PTI_ERROR_INTERNAL;
+      }
+      *subscriber = subscriber_handle;
+      return PTI_SUCCESS;
+    }
+    return PTI_ERROR_NO_GPU_VIEWS_ENABLED;
+  }
+
+  inline pti_result CallbackUnsubscribe(pti_callback_subscriber_handle subscriber_handle) {
+    if (collector_) {
+      auto result = collector_->RemoveCallbackSubscriber(subscriber_handle);
+      if (result != pti_result::PTI_SUCCESS) {
+        SPDLOG_ERROR("Failed to unsubscribe callback: {}", static_cast<uint32_t>(result));
+        return result;
+      }
+      return PTI_SUCCESS;
+    }
+    return PTI_ERROR_INTERNAL;
+  }
+
+  inline pti_result CallbackEnableDomain(pti_callback_subscriber_handle subscriber,
+                                         pti_callback_domain domain, uint32_t enter_cb,
+                                         uint32_t exit_cb) {
+    if (collector_) {
+      auto result = collector_->EnableCallbackDomain(subscriber, domain, enter_cb, exit_cb);
+      if (result != pti_result::PTI_SUCCESS) {
+        SPDLOG_ERROR("Failed to enable domain: {}", static_cast<uint32_t>(result));
+        return result;
+      }
+      return PTI_SUCCESS;
+    }
+    return PTI_ERROR_INTERNAL;
+  }
+
+  inline pti_result CallbackDisableDomain(pti_callback_subscriber_handle subscriber,
+                                          pti_callback_domain domain) {
+    if (collector_) {
+      auto result = collector_->DisableCallbackDomain(subscriber, domain);
+      if (result != pti_result::PTI_SUCCESS) {
+        SPDLOG_ERROR("Failed to disable domain: {}", static_cast<uint32_t>(result));
+        return result;
+      }
+      return PTI_SUCCESS;
+    }
+    return PTI_ERROR_INTERNAL;
+  }
+
+  inline pti_result CallbackDisableAllDomains(pti_callback_subscriber_handle subscriber) {
+    if (collector_) {
+      auto result = collector_->DisableAllCallbackDomains(subscriber);
+      if (result != pti_result::PTI_SUCCESS) {
+        SPDLOG_ERROR("Failed to disable all domains: {}", static_cast<uint32_t>(result));
+        return result;
+      }
+      return PTI_SUCCESS;
+    }
+    return PTI_ERROR_INTERNAL;
   }
 
  private:

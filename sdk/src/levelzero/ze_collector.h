@@ -41,6 +41,7 @@
 #include "pti_api_ids_state_maps.h"
 #include "unikernel.h"
 #include "utils.h"
+#include "ze_collector_cb_helpers.h"
 #include "ze_driver_init.h"
 #include "ze_event_cache.h"
 #include "ze_local_collection_helpers.h"
@@ -77,8 +78,6 @@ struct ZeKernelGroupSize {
   uint32_t y;
   uint32_t z;
 };
-
-enum class KernelCommandType { kInvalid = 0, kKernel = 1, kMemory = 2, kCommand = 3 };
 
 struct ZeKernelCommandProps {
   std::string name;
@@ -434,11 +433,176 @@ class ZeCollector {
 #endif
   }
 
+  const CollectorOptions& GetCollectorOptions() const { return options_; }
+  bool IsTracingOn() const { return startstop_mode_changer.IsTracingOn(); }
+  void SetKernelTracing(bool enable) { options_.kernel_tracing = enable; }
+
   void SetCollectorOptionSynchronization() { options_.lz_enabled_views.synch_enabled = true; }
   void SetCollectorOptionApiCalls() { options_.lz_enabled_views.api_calls_enabled = true; }
 
   void UnSetCollectorOptionSynchronization() { options_.lz_enabled_views.synch_enabled = false; }
   void UnSetCollectorOptionApiCalls() { options_.lz_enabled_views.api_calls_enabled = false; }
+
+  // Multiple subscribers support with handle-based management
+  pti_callback_subscriber_handle AddCallbackSubscriber(pti_callback_function callback,
+                                                       void* user_data) {
+    std::unique_lock<std::shared_mutex> lock(subscribers_mutex_);
+    auto subscriber = std::make_unique<ZeCollectorCBSubscriber>();
+    subscriber->SetUserData(user_data);
+    subscriber->SetCallback(callback);
+    return cb_subscribers_collection_.AddExternalSubscriber(std::move(subscriber));
+  }
+
+  pti_result RemoveCallbackSubscriber(pti_callback_subscriber_handle subscriber_handle) {
+    std::unique_lock<std::shared_mutex> lock(subscribers_mutex_);
+    if (cb_subscribers_collection_.RemoveExternalSubscriber(subscriber_handle)) {
+      return pti_result::PTI_SUCCESS;
+    }
+    return pti_result::PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  std::vector<pti_callback_subscriber_handle> GetAllSubscriberHandles() const {
+    std::unique_lock<std::shared_mutex> lock(subscribers_mutex_);
+    return cb_subscribers_collection_.GetAllSubscriberHandles();
+  }
+
+  pti_result EnableCallbackDomain(pti_callback_subscriber_handle handle, pti_callback_domain domain,
+                                  uint32_t enter_cb, uint32_t exit_cb) {
+    std::unique_lock<std::shared_mutex> lock(subscribers_mutex_);
+    return cb_subscribers_collection_.EnableCallbackDomain(handle, domain, enter_cb, exit_cb);
+  }
+
+  pti_result DisableCallbackDomain(pti_callback_subscriber_handle handle,
+                                   pti_callback_domain domain) {
+    std::unique_lock<std::shared_mutex> lock(subscribers_mutex_);
+    return cb_subscribers_collection_.DisableCallbackDomain(handle, domain);
+  }
+
+  pti_result DisableAllCallbackDomains(pti_callback_subscriber_handle handle) {
+    std::unique_lock<std::shared_mutex> lock(subscribers_mutex_);
+    return cb_subscribers_collection_.DisableAllCallbackDomains(handle);
+  }
+
+  // Check if any subscriber has the given domain enabled
+  bool IsCallbackDomainEnabled(pti_callback_domain domain, uint32_t cb_type) {
+    std::shared_lock<std::shared_mutex> lock(subscribers_mutex_);
+    for (auto& subscriber_handle : cb_subscribers_collection_) {
+      auto subscriber = cb_subscribers_collection_.GetSubscriber(subscriber_handle);
+      PTI_ASSERT(subscriber != nullptr);
+      if (subscriber->IsEnabled(domain, cb_type)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool IsAnyCallbackSubscriberActive() {
+    std::shared_lock<std::shared_mutex> lock(subscribers_mutex_);
+    return cb_subscribers_collection_.IsAnySubscriberActive();
+  }
+
+ private:
+  pti_gpu_op_details MakeGPUOpDetails(const ZeKernelCommand& command) {
+    return pti_gpu_op_details{
+        ._operation_kind = ZeCollectorCBSubscriber::GetGPUOperationKind(command.props.type),
+        ._operation_id = command.kernel_id,
+        ._kernel_handle = INVALID_KERNEL_HANDLE,  // temp, until modules & kernels in them supported
+        ._name = command.props.name.c_str()};
+  }
+
+  pti_callback_gpu_op_data MakeGPUOpData(const ZeKernelCommand& command, pti_callback_phase phase,
+                                         ze_result_t return_code, pti_gpu_op_details* op_details) {
+    pti_backend_command_list_type cmd_list_props = IsCommandListImmediate(command.command_list)
+                                                       ? PTI_BACKEND_COMMAND_LIST_TYPE_IMMEDIATE
+                                                       : PTI_BACKEND_COMMAND_LIST_TYPE_UNKNOWN;
+    pti_backend_queue_t queue_handle =
+        (IsCommandListImmediate(command.command_list)) ? command.command_list : nullptr;
+    return pti_callback_gpu_op_data{._domain = PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED,
+                                    ._cmd_list_properties = cmd_list_props,
+                                    ._cmd_list_handle = command.command_list,
+                                    ._queue_handle = queue_handle,
+                                    ._device_handle = command.device,
+                                    ._phase = phase,
+                                    ._return_code = return_code,
+                                    ._correlation_id = command.corr_id_,
+                                    ._operation_count = 1,
+                                    ._operation_details = op_details};
+  }
+
+  void DoCallbackOnGPUOperationCompletion(
+      const std::vector<ZeKernelCommandExecutionRecord>& kcexecrec) {
+    SPDLOG_TRACE("On {}", __func__);
+    if (IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED, 1) &&
+        kcexecrec.size() > 0) {
+      // Call the callback with the collected records for all active subscribers
+      std::shared_lock<std::shared_mutex> lock(subscribers_mutex_);
+
+      ExecRecordsMap record_map;
+      ZeCollectorCBSubscriber::MapRecordsByContextAndDevice(kcexecrec, record_map);
+
+      // For each context/device pair, make a callback
+      for (const auto& [key, records] : record_map) {
+        const auto& [context, device_handle] = key;
+        // all records in this group have same context and device
+        std::vector<pti_gpu_op_details> op_details(records.size());
+        ZeCollectorCBSubscriber::MakeGPUOpDetailsArray(records, op_details);
+
+        pti_callback_gpu_op_data callback_data = {
+            ._domain = PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED,
+            // as operations from many cmd lists and queues comes in one completion callback
+            ._cmd_list_properties = PTI_BACKEND_COMMAND_LIST_TYPE_UNKNOWN,
+            ._cmd_list_handle = nullptr,
+            ._queue_handle = nullptr,
+            ._device_handle = device_handle,
+            ._phase = PTI_CB_PHASE_API_EXIT,
+            ._return_code = 0,
+            ._correlation_id = 0,
+            ._operation_count = static_cast<uint32_t>(op_details.size()),
+            ._operation_details = op_details.data()};
+
+        for (auto& subscriber_handle : cb_subscribers_collection_) {
+          auto subscriber = cb_subscribers_collection_.GetSubscriber(subscriber_handle);
+          PTI_ASSERT(subscriber != nullptr);
+          if (subscriber->IsEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED, 1)) {
+            subscriber->GetCallback()(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED,
+                                      PTI_API_GROUP_LEVELZERO, ze_instance_data.callback_id_,
+                                      context, &callback_data, subscriber->GetUserData(),
+                                      subscriber->GetPtrForInstanceUserData());
+          }
+        }
+      }
+    }
+  }
+
+  void DoCallbackOnGPUOperationAppended(const ZeKernelCommand* command, pti_callback_phase phase,
+                                        ze_result_t return_code) {
+    SPDLOG_TRACE("On {}", __func__);
+    if (IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED, phase)) {
+      pti_gpu_op_details op_details = MakeGPUOpDetails(*command);
+      pti_callback_gpu_op_data callback_data =
+          MakeGPUOpData(*command, phase, return_code, &op_details);
+
+      // Invoke callbacks for all subscribers with this domain enabled
+      std::shared_lock<std::shared_mutex> lock(subscribers_mutex_);
+      // TODO: Make correct order for different phases:
+      // ENTER - forward, EXIT -> backward
+      for (const auto& subscriber_handle : cb_subscribers_collection_) {
+        auto subscriber = cb_subscribers_collection_.GetSubscriber(subscriber_handle);
+        PTI_ASSERT(subscriber != nullptr);
+        if (subscriber->IsEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED,
+                                  PTI_CB_PHASE_API_ENTER) &&
+            subscriber->GetCallback()) {
+          subscriber->GetCallback()(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED,
+                                    PTI_API_GROUP_LEVELZERO, ze_instance_data.callback_id_,
+                                    command->context, &callback_data, subscriber->GetUserData(),
+                                    subscriber->GetPtrForInstanceUserData());
+        }
+      }
+    }
+    SPDLOG_TRACE(
+        "\tCallback calls completed in domain: "
+        "PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED");
+  }
 
  private:  // Implementation
   ZeCollector(CollectorOptions options, OnZeKernelFinishCallback acallback,
@@ -775,6 +939,7 @@ class ZeCollector {
     if (cb_enabled_.acallback && acallback_ != nullptr) {
       acallback_(callback_data_, cmd_records);
     }
+    DoCallbackOnGPUOperationCompletion(cmd_records);
   }
 
   void ProcessCallEvent(ze_event_handle_t event, std::vector<uint64_t>* kids,
@@ -906,7 +1071,7 @@ class ZeCollector {
     //
     // - All times reported by PTI_VIEW in CPU (aka Host) timescale
     // - However GPU "commands" (kernel & memory transfers) start/end reported in GPU timescale
-    // - There is significant time drift between CPU and GPU, so to cope wth it - need to
+    // - There is significant time drift between CPU and GPU, so to cope with it, we need to
     // "sync" often calling zeDeviceGetGlobalTimestamps,
     //  where command->submit_time_device_ comes with GPU time
     //        command->submit_time         comes with CPU time
@@ -1005,6 +1170,7 @@ class ZeCollector {
         rec.implicit_scaling_ = false;
       }
 
+      rec.command_type_ = command->props.type;
       if (command->props.type == KernelCommandType::kMemory) {
         rec.device_ = command->props.src_device;
         rec.dst_device_ = command->props.dst_device;
@@ -1451,16 +1617,39 @@ class ZeCollector {
           }
         }
       }
-      rec.name_ = "zeEventHostSynchronize";
-      rec.tid_ = thread_local_pid_tid_info.tid;
-      rec.start_time_ = ze_instance_data.start_time_host;
-      rec.end_time_ = utils::GetTime();
-      rec.event_ = event_h;
-      rec.cid_ = synch_corrid;
-      rec.result_ = result;
-      rec.callback_id_ = zeEventHostSynchronize_id;
-      kcexec.push_back(std::move(rec));
-      collector->acallback_(collector->callback_data_, kcexec);
+      // Process generation of synch record even if result is not successful.
+      if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
+          collector->acallback_ != nullptr) {
+        std::vector<ZeKernelCommandExecutionRecord> kcexec1;
+        ZeKernelCommandExecutionRecord rec = {};
+        ze_event_handle_t event_h = *params->phEvent;
+        ze_event_pool_handle_t epool_h = nullptr;
+        ze_context_handle_t ctxt_h = nullptr;
+        rec.context_ = nullptr;
+        if (collector->IsIntrospectionCapable()) {
+          status = collector->l0_wrapper_.w_zeEventGetEventPool(event_h, &epool_h);
+          if (status == ZE_RESULT_SUCCESS) {
+            status = collector->l0_wrapper_.w_zeEventPoolGetContextHandle(epool_h, &ctxt_h);
+            if (status == ZE_RESULT_SUCCESS) {
+              rec.context_ = ctxt_h;
+            } else {
+              SPDLOG_WARN(
+                  "\tLevel-Zero Introspection API: zeEventPoolGetContextHandle return unsuccessful "
+                  "-- inserting null context handle in synch. record..");
+            }
+          }
+        }
+        rec.name_ = "zeEventHostSynchronize";
+        rec.tid_ = thread_local_pid_tid_info.tid;
+        rec.start_time_ = ze_instance_data.start_time_host;
+        rec.end_time_ = utils::GetTime();
+        rec.event_ = event_h;
+        rec.cid_ = synch_corrid;
+        rec.result_ = result;
+        rec.callback_id_ = zeEventHostSynchronize_id;
+        kcexec1.push_back(std::move(rec));
+        collector->acallback_(collector->callback_data_, kcexec1);
+      }
     }
   }
 
@@ -1470,18 +1659,21 @@ class ZeCollector {
       [[maybe_unused]] uint64_t synch_corrid) {
     SPDLOG_TRACE("In {}", __FUNCTION__);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    const std::lock_guard<std::mutex> lock(collector->lock_);
-    if (result == ZE_RESULT_SUCCESS) {
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      collector->ProcessCalls(kids, &kcexec);
-      if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
-        collector->acallback_(collector->callback_data_, kcexec);
+    std::vector<ZeKernelCommandExecutionRecord> kcexec;
+    {
+      const std::lock_guard<std::mutex> lock(collector->lock_);
+      if (result == ZE_RESULT_SUCCESS) {
+        collector->ProcessCalls(kids, &kcexec);
+        if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+          collector->acallback_(collector->callback_data_, kcexec);
+        }
       }
     }
+
     // Process generation of synch record even if result is not successful.
     if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
         collector->acallback_ != nullptr) {
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
+      std::vector<ZeKernelCommandExecutionRecord> kcexec1;
       ze_result_t status;
       ZeKernelCommandExecutionRecord rec = {};
       ze_command_list_handle_t clist_h = *params->phCommandList;
@@ -1506,9 +1698,11 @@ class ZeCollector {
       rec.cid_ = synch_corrid;
       rec.result_ = result;
       rec.callback_id_ = zeCommandListHostSynchronize_id;
-      kcexec.push_back(std::move(rec));
-      collector->acallback_(collector->callback_data_, kcexec);
+      kcexec1.push_back(std::move(rec));
+      collector->acallback_(collector->callback_data_, kcexec1);
     }
+
+    collector->DoCallbackOnGPUOperationCompletion(kcexec);
   }
 
   static void OnExitEventQueryStatus(ze_event_query_status_params_t* params, ze_result_t result,
@@ -1544,10 +1738,10 @@ class ZeCollector {
                                          uint64_t synch_corrid) {
     SPDLOG_TRACE("In {}, result {} ", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    const std::lock_guard<std::mutex> lock(collector->lock_);
+    std::vector<ZeKernelCommandExecutionRecord> kcexec;
     if (result == ZE_RESULT_SUCCESS) {
+      const std::lock_guard<std::mutex> lock(collector->lock_);
       PTI_ASSERT(*(params->phFence) != nullptr);
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
       collector->ProcessCallFence(*(params->phFence), kids, &kcexec);
 
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
@@ -1557,7 +1751,7 @@ class ZeCollector {
     // Process generation of synch record even if result is not successful.
     if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
         collector->acallback_ != nullptr) {
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
+      std::vector<ZeKernelCommandExecutionRecord> kcexec1;
       ZeKernelCommandExecutionRecord rec = {};
       ze_fence_handle_t fence_h = *params->phFence;
       rec.context_ = nullptr;
@@ -1578,9 +1772,10 @@ class ZeCollector {
       rec.cid_ = synch_corrid;
       rec.result_ = result;
       rec.callback_id_ = zeFenceHostSynchronize_id;
-      kcexec.push_back(std::move(rec));
-      collector->acallback_(collector->callback_data_, kcexec);
+      kcexec1.push_back(std::move(rec));
+      collector->acallback_(collector->callback_data_, kcexec1);
     }
+    collector->DoCallbackOnGPUOperationCompletion(kcexec);
   }
 
   static void OnExitImageCreate(ze_image_create_params_t* params, ze_result_t result,
@@ -1663,6 +1858,32 @@ class ZeCollector {
     command->command_list = command_list;
     command->device = device;
     command->context = context;
+    // Need kernel_id on Enter as it might be needed for Callback API
+    command->kernel_id = UniKernelId::GetKernelId();
+    if (command->props.type == KernelCommandType::kKernel) {
+      if (sycl_data_kview.cid_) {
+        command->corr_id_ = sycl_data_kview.cid_;
+      } else {
+        command->corr_id_ = UniCorrId::GetUniCorrId();
+#if defined(PTI_TRACE_SYCL)
+        if (SyclCollector::Instance().Enabled()) {
+          sycl_data_kview.cid_ = command->corr_id_;
+        }
+#endif
+      }
+    } else if (command->props.type == KernelCommandType::kMemory) {
+      if (sycl_data_mview.cid_) {
+        command->corr_id_ = sycl_data_mview.cid_;
+      } else {
+        command->corr_id_ = UniCorrId::GetUniCorrId();
+#if defined(PTI_TRACE_SYCL)
+        if (SyclCollector::Instance().Enabled()) {
+          sycl_data_mview.cid_ = command->corr_id_;
+        }
+#endif
+      }
+    }
+
     SPDLOG_TRACE("\tcontext: {}, device: {}", (void*)context, (void*)device);
 
     command->event_swap = nullptr;
@@ -1713,6 +1934,9 @@ class ZeCollector {
       }
     }
 
+    // Subscriber callback
+    collector->DoCallbackOnGPUOperationAppended(command, PTI_CB_PHASE_API_ENTER, ZE_RESULT_SUCCESS);
+
     uint64_t host_timestamp = 0;
     uint64_t device_timestamp = 0;  // in ticks
 
@@ -1724,22 +1948,20 @@ class ZeCollector {
   }
 
   void PostAppendKernelCommandCommon(ZeCollector* /*collector*/, ZeKernelCommand* command,
-                                     ZeKernelCommandProps& props, ze_event_handle_t& signal_event,
+                                     ze_event_handle_t& signal_event,
                                      ZeCommandListInfo& command_list_info,
                                      std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, command: {}, kernel name {}", __FUNCTION__,
-                 static_cast<const void*>(command), props.name.c_str());
+                 static_cast<const void*>(command), command->props.name.c_str());
     if (ZeCollectionState::Abnormal == collection_state_) {
       return;
     }
     PTI_ASSERT(command != nullptr);
-    command->props = props;
 
     PTI_ASSERT(signal_event != nullptr);
     command->tid = thread_local_pid_tid_info.tid;
     uint64_t host_timestamp = ze_instance_data.start_time_host;
     command->append_time = host_timestamp;
-    command->kernel_id = UniKernelId::GetKernelId();
     command->device_timer_frequency_ = device_descriptors_[command->device].device_timer_frequency;
     command->device_timer_mask_ = device_descriptors_[command->device].device_timer_mask;
     if (command->props.type == KernelCommandType::kKernel) {
@@ -1752,33 +1974,9 @@ class ZeCollector {
       sycl_data_kview.tid_ = command->tid;
       command->source_file_name_ = sycl_data_kview.source_file_name_;
       command->source_line_number_ = sycl_data_kview.source_line_number_;
-      if (sycl_data_kview.cid_) {
-        command->corr_id_ = sycl_data_kview.cid_;
-      } else {
-        command->corr_id_ = UniCorrId::GetUniCorrId();
-#if defined(PTI_TRACE_SYCL)
-        if (SyclCollector::Instance().Enabled()) {
-          sycl_data_kview.cid_ = command->corr_id_;
-        }
-#endif
-      }
     } else if (command->props.type == KernelCommandType::kMemory) {
-      command->props.src_device = props.src_device;
-      command->props.dst_device = props.dst_device;
-
       sycl_data_mview.kid_ = command->kernel_id;
       sycl_data_mview.tid_ = command->tid;
-      if (sycl_data_mview.cid_) {
-        command->corr_id_ = sycl_data_mview.cid_;
-      } else {
-        command->corr_id_ = UniCorrId::GetUniCorrId();
-#if defined(PTI_TRACE_SYCL)
-        if (SyclCollector::Instance().Enabled()) {
-          sycl_data_mview.cid_ = command->corr_id_;
-        }
-#endif
-      }
-
       command->sycl_node_id_ = sycl_data_mview.sycl_node_id_;
       command->sycl_queue_id_ = sycl_data_mview.sycl_queue_id_;
       command->sycl_invocation_id_ = sycl_data_mview.sycl_invocation_id_;
@@ -1847,18 +2045,18 @@ class ZeCollector {
 
   void PostAppendKernel(ZeCollector* collector, ze_kernel_handle_t kernel,
                         const ze_group_count_t* group_count, ze_event_handle_t& signal_event,
-                        ze_command_list_handle_t command_list, void** instance_data,
-                        std::vector<uint64_t>* kids) {
+                        ze_command_list_handle_t command_list, ze_result_t result,
+                        void** instance_data, std::vector<uint64_t>* kids) {
     PTI_ASSERT(command_list != nullptr);
     PTI_ASSERT(kernel != nullptr);
     SPDLOG_TRACE("In {}", __FUNCTION__);
 
-    ZeKernelCommandProps props{};
+    ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
 
-    props.name = utils::ze::GetKernelName(kernel, options_.demangle);
-    props.type = KernelCommandType::kKernel;
-    props.simd_width = utils::ze::GetKernelMaxSubgroupSize(kernel);
-    props.bytes_transferred = 0;
+    command->props.name = utils::ze::GetKernelName(kernel, options_.demangle);
+    command->props.type = KernelCommandType::kKernel;
+    command->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(kernel);
+    command->props.bytes_transferred = 0;
 
     ZeKernelGroupSize group_size{};
     {
@@ -1870,27 +2068,32 @@ class ZeCollector {
       }
     }
 
-    props.group_size[0] = group_size.x;
-    props.group_size[1] = group_size.y;
-    props.group_size[2] = group_size.z;
+    command->props.group_size[0] = group_size.x;
+    command->props.group_size[1] = group_size.y;
+    command->props.group_size[2] = group_size.z;
 
     if (group_count != nullptr) {
-      props.group_count[0] = group_count->groupCountX;
-      props.group_count[1] = group_count->groupCountY;
-      props.group_count[2] = group_count->groupCountZ;
+      command->props.group_count[0] = group_count->groupCountX;
+      command->props.group_count[1] = group_count->groupCountY;
+      command->props.group_count[2] = group_count->groupCountZ;
     }
 
     ZeCommandListInfo& command_list_info = GetCommandListInfo(command_list);
 
-    PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
-                                  signal_event, command_list_info, kids);
+    // Subscriber callback
+    collector->DoCallbackOnGPUOperationAppended(command, PTI_CB_PHASE_API_EXIT, result);
+
+    if (result == ZE_RESULT_SUCCESS) {
+      PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
+    }
   }
 
   void PostAppendMemoryCommand(ZeCollector* collector, std::string command_name,
                                size_t bytes_transferred, const void* src, const void* dst,
                                ze_event_handle_t& signal_event,
-                               ze_command_list_handle_t command_list, void** instance_data,
-                               std::vector<uint64_t>* kids, size_t pattern_size = 0) {
+                               ze_command_list_handle_t command_list, ze_result_t result,
+                               void** instance_data, std::vector<uint64_t>* kids,
+                               size_t pattern_size = 0) {
     SPDLOG_TRACE(
         "In: {}, CmdList: {}, Signal event: {}, dst: {}, src: {}, \
                  bytes_transferred: {}, pattern_size: {}",
@@ -1906,15 +2109,18 @@ class ZeCollector {
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
 
-    ZeKernelCommandProps props =
+    ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
+    command->props =
         GetTransferProps(std::move(command_name), bytes_transferred, (src ? context : nullptr), src,
                          (dst ? context : nullptr), dst, pattern_size);
 
-    PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
-                                  signal_event, command_list_info, kids);
+    // Subscriber callback
+    collector->DoCallbackOnGPUOperationAppended(command, PTI_CB_PHASE_API_EXIT, result);
+
+    PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
   }
 
-  void AppendMemoryCommandContext(ZeCollector* collector, std::string command,
+  void AppendMemoryCommandContext(ZeCollector* collector, std::string command_name,
                                   size_t bytes_transferred, ze_context_handle_t src_context,
                                   const void* src, ze_context_handle_t dst_context, const void* dst,
                                   ze_event_handle_t& signal_event,
@@ -1928,15 +2134,14 @@ class ZeCollector {
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
 
-    ZeKernelCommandProps props =
-        GetTransferProps(std::move(command), bytes_transferred, src_context, src,
-                         (dst_context ? dst_context : context), dst);
+    ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
+    command->props = GetTransferProps(std::move(command_name), bytes_transferred, src_context, src,
+                                      (dst_context ? dst_context : context), dst);
 
-    PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
-                                  signal_event, command_list_info, kids);
+    PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
   }
 
-  void AppendImageMemoryCopyCommand(ZeCollector* collector, std::string command,
+  void AppendImageMemoryCopyCommand(ZeCollector* collector, std::string command_name,
                                     ze_image_handle_t image, const void* src, const void* dst,
                                     ze_event_handle_t& signal_event,
                                     ze_command_list_handle_t command_list, void** instance_data,
@@ -1950,17 +2155,17 @@ class ZeCollector {
 
     size_t bytes_transferred = GetImageSize(image);
 
-    ZeKernelCommandProps props =
-        GetTransferProps(std::move(command), bytes_transferred, context, src, context, dst);
+    ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
+    command->props =
+        GetTransferProps(std::move(command_name), bytes_transferred, context, src, context, dst);
 
     // TODO implement image copy support in Local collection model
     if (collector->collection_mode_ != ZeCollectionMode::Local) {
-      PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
-                                    signal_event, command_list_info, kids);
+      PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
     }
   }
 
-  void PostAppendCommand(ZeCollector* collector, std::string command,
+  void PostAppendCommand(ZeCollector* collector, std::string command_name,
                          ze_event_handle_t& signal_event, ze_command_list_handle_t command_list,
                          void** instance_data, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}", __FUNCTION__);
@@ -1974,12 +2179,11 @@ class ZeCollector {
     ze_context_handle_t context = command_list_info.context;
     PTI_ASSERT(context != nullptr);
 
-    ZeKernelCommandProps props{};
-    props.name = std::move(command);
-    props.type = KernelCommandType::kCommand;
+    ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
+    command->props.name = std::move(command_name);
+    command->props.type = KernelCommandType::kCommand;
 
-    PostAppendKernelCommandCommon(collector, static_cast<ZeKernelCommand*>(*instance_data), props,
-                                  signal_event, command_list_info, kids);
+    PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
   }
 
   static ZeKernelCommandProps GetTransferProps(std::string name, size_t bytes_transferred,
@@ -2099,11 +2303,10 @@ class ZeCollector {
       void** instance_data, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      collector->PostAppendKernel(collector, *(params->phKernel), *(params->ppLaunchFuncArgs),
-                                  *(params->phSignalEvent), *(params->phCommandList), instance_data,
-                                  kids);
-    } else {
+    collector->PostAppendKernel(collector, *(params->phKernel), *(params->ppLaunchFuncArgs),
+                                *(params->phSignalEvent), *(params->phCommandList), result,
+                                instance_data, kids);
+    if (result != ZE_RESULT_SUCCESS) {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -2122,11 +2325,11 @@ class ZeCollector {
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      collector->PostAppendKernel(collector, *(params->phKernel), *(params->ppLaunchFuncArgs),
-                                  *(params->phSignalEvent), *(params->phCommandList), instance_data,
-                                  kids);
-    } else {
+
+    collector->PostAppendKernel(collector, *(params->phKernel), *(params->ppLaunchFuncArgs),
+                                *(params->phSignalEvent), *(params->phCommandList), result,
+                                instance_data, kids);
+    if (result != ZE_RESULT_SUCCESS) {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -2145,11 +2348,10 @@ class ZeCollector {
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    if (result == ZE_RESULT_SUCCESS) {
-      collector->PostAppendKernel(collector, *(params->phKernel),
-                                  *(params->ppLaunchArgumentsBuffer), *(params->phSignalEvent),
-                                  *(params->phCommandList), instance_data, kids);
-    } else {
+    collector->PostAppendKernel(collector, *(params->phKernel), *(params->ppLaunchArgumentsBuffer),
+                                *(params->phSignalEvent), *(params->phCommandList), result,
+                                instance_data, kids);
+    if (result != ZE_RESULT_SUCCESS) {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -2173,7 +2375,7 @@ class ZeCollector {
     if (result == ZE_RESULT_SUCCESS) {
       collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryCopy",
                                          *(params->psize), *(params->psrcptr), *(params->pdstptr),
-                                         *(params->phSignalEvent), *(params->phCommandList),
+                                         *(params->phSignalEvent), *(params->phCommandList), result,
                                          instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
@@ -2197,7 +2399,7 @@ class ZeCollector {
     if (result == ZE_RESULT_SUCCESS) {
       collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryFill",
                                          *(params->psize), *(params->ppattern), *(params->pptr),
-                                         *(params->phSignalEvent), *(params->phCommandList),
+                                         *(params->phSignalEvent), *(params->phCommandList), result,
                                          instance_data, kids, *(params->ppattern_size));
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
@@ -2322,7 +2524,7 @@ class ZeCollector {
 
       collector->PostAppendMemoryCommand(collector, "zeCommandListAppendMemoryCopyRegion",
                                          bytes_transferred, *(params->psrcptr), *(params->pdstptr),
-                                         *(params->phSignalEvent), *(params->phCommandList),
+                                         *(params->phSignalEvent), *(params->phCommandList), result,
                                          instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
@@ -2454,7 +2656,7 @@ class ZeCollector {
         collector->PostAppendMemoryCommand(collector, "zeCommandListAppendImageCopyFromMemory",
                                            bytes_transferred, *(params->psrcptr), nullptr,
                                            *(params->phSignalEvent), *(params->phCommandList),
-                                           instance_data, kids);
+                                           result, instance_data, kids);
       }
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
@@ -2590,38 +2792,41 @@ class ZeCollector {
       [[maybe_unused]] uint64_t synch_corrid) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    const std::lock_guard<std::mutex> lock(collector->lock_);
-    if (result == ZE_RESULT_SUCCESS) {
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      collector->ProcessCalls(kids, &kcexec);
-      if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
-        collector->acallback_(collector->callback_data_, kcexec);
+    std::vector<ZeKernelCommandExecutionRecord> kcexec;
+    {
+      const std::lock_guard<std::mutex> lock(collector->lock_);
+      if (result == ZE_RESULT_SUCCESS) {
+        collector->ProcessCalls(kids, &kcexec);
+        if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+          collector->acallback_(collector->callback_data_, kcexec);
+        }
       }
-    }
 
-    // Process generation of synch record even if result is not successful.
-    if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
-        collector->acallback_ != nullptr) {
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      ZeKernelCommandExecutionRecord rec = {};
-      auto it = collector->command_queues_.find(*params->phCommandQueue);
-      rec.context_ = nullptr;
-      if (it != collector->command_queues_.end()) {
-        rec.context_ = it->second.context_;
+      // Process generation of synch record even if result is not successful.
+      if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
+          collector->acallback_ != nullptr) {
+        std::vector<ZeKernelCommandExecutionRecord> kcexec1;
+        ZeKernelCommandExecutionRecord rec = {};
+        auto it = collector->command_queues_.find(*params->phCommandQueue);
+        rec.context_ = nullptr;
+        if (it != collector->command_queues_.end()) {
+          rec.context_ = it->second.context_;
+        }
+        rec.name_ = "zeCommandQueueSynchronize";
+        rec.tid_ = thread_local_pid_tid_info.tid;
+        rec.start_time_ = ze_instance_data.start_time_host;
+        rec.end_time_ = ze_instance_data.end_time_host;
+        rec.context_ = nullptr;
+        rec.queue_ = *params->phCommandQueue;
+        rec.event_ = nullptr;
+        rec.cid_ = synch_corrid;
+        rec.callback_id_ = zeCommandQueueSynchronize_id;
+        rec.result_ = result;
+        kcexec1.push_back(std::move(rec));
+        collector->acallback_(collector->callback_data_, kcexec1);
       }
-      rec.name_ = "zeCommandQueueSynchronize";
-      rec.tid_ = thread_local_pid_tid_info.tid;
-      rec.start_time_ = ze_instance_data.start_time_host;
-      rec.end_time_ = ze_instance_data.end_time_host;
-      rec.context_ = nullptr;
-      rec.queue_ = *params->phCommandQueue;
-      rec.event_ = nullptr;
-      rec.cid_ = synch_corrid;
-      rec.callback_id_ = zeCommandQueueSynchronize_id;
-      rec.result_ = result;
-      kcexec.push_back(std::move(rec));
-      collector->acallback_(collector->callback_data_, kcexec);
     }
+    collector->DoCallbackOnGPUOperationCompletion(kcexec);
   }
 
   static void OnExitCommandQueueCreate(ze_command_queue_create_params_t* params,
@@ -2800,6 +3005,12 @@ class ZeCollector {
 
   Level0Wrapper l0_wrapper_;
 
+  // Multiple subscribers support with subscriber handle-based access
+  // important that container is ordered, callbacks should be called in an order
+
+  SubscribersCollection cb_subscribers_collection_;
+  mutable std::shared_mutex subscribers_mutex_;
+
   std::atomic<ZeCollectionState> collection_state_ = ZeCollectionState::Normal;
 
   // pointer to state of an object that created ZeCollector
@@ -2864,6 +3075,8 @@ class ZeCollector {
         parent_collector_->options_.hybrid_mode = true;
       return ref_count;
     }
+
+    inline bool IsTracingOn() const { return (ref_count > 0); }
 
    private:
     // Track enable/disable tracing layer calls on a global basis - in order to swap apis.

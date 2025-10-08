@@ -12,6 +12,7 @@
 #include <map>
 
 #include "internal_helper.h"
+#include "pti/pti_callback.h"
 #include "tracing_cb_api.gen"
 #include "view_handler.h"
 
@@ -485,4 +486,78 @@ pti_result ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class pti_class,
     status = pti_result::PTI_ERROR_BAD_ARGUMENT;
   }
   return status;
+}
+
+pti_result ptiCallbackSubscribe(pti_callback_subscriber_handle* subscriber,
+                                pti_callback_function callback, void* user_data) {
+  try {
+    return Instance().CallbackSubscribe(subscriber, callback, user_data);
+  } catch (const std::runtime_error& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::exception& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiCallbackUnsubscribe(pti_callback_subscriber_handle subscriber) {
+  try {
+    return Instance().CallbackUnsubscribe(subscriber);
+  } catch (const std::runtime_error& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::exception& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiCallbackEnableDomain(pti_callback_subscriber_handle subscriber,
+                                   pti_callback_domain domain, uint32_t enter_cb,
+                                   uint32_t exit_cb) {
+  try {
+    return Instance().CallbackEnableDomain(subscriber, domain, enter_cb, exit_cb);
+  } catch (const std::runtime_error& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::exception& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiCallbackDisableDomain(pti_callback_subscriber_handle subscriber,
+                                    pti_callback_domain domain) {
+  try {
+    return Instance().CallbackDisableDomain(subscriber, domain);
+  } catch (const std::runtime_error& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::exception& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiCallbackDisableAllDomains(pti_callback_subscriber_handle subscriber) {
+  try {
+    return Instance().CallbackDisableAllDomains(subscriber);
+  } catch (const std::runtime_error& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (const std::exception& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
 }
