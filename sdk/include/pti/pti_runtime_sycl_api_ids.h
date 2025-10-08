@@ -246,7 +246,19 @@ typedef enum _pti_api_id_runtime_sycl {
     urUSMPoolGetInfoExp_id=262,
     urCommandBufferAppendNativeCommandExp_id=263,
     urCommandBufferGetNativeHandleExp_id=264,
+    urUSMPoolSetInfoExp_id=265,
+    urAdapterSetLoggerCallback_id=266,
+    urAdapterSetLoggerCallbackLevel_id=267,
+    urBindlessImagesGetImageUnsampledHandleSupportExp_id=268,
+    urBindlessImagesGetImageSampledHandleSupportExp_id=269,
+    urBindlessImagesGetImageMemoryHandleTypeSupportExp_id=270,
     urBindlessImagesFreeMappedLinearMemoryExp_id=271,
+    urKernelSuggestMaxCooperativeGroupCount_id=272,
+    urUSMContextMemcpyExp_id=273,
+    urMemoryExportAllocExportableMemoryExp_id=285,
+    urMemoryExportFreeExportableMemoryExp_id=286,
+    urMemoryExportExportMemoryHandleExp_id=287,
+    urBindlessImagesSupportsImportingHandleTypeExp_id=288,
  } pti_api_id_runtime_sycl;
 
 #endif
