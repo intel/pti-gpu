@@ -2002,6 +2002,34 @@ class ZeCollector {
 
     SPDLOG_TRACE("\tcorr_id: {}", command->corr_id_);
 
+    // it could be that event swap was not needed  - in this case event_swap would be 0
+    // and we can not append Bridge kernel
+    if (nullptr != command->event_swap && ZeCollectionMode::Local == collection_mode_) {
+      SPDLOG_DEBUG("\t\t Will be appending Bridge command!");
+      bool append_res = true;
+      if (command->props.type == KernelCommandType::kKernel) {
+        ze_kernel_handle_t kernel =
+            bridge_kernel_pool_.GetMarkKernel(command->context, command->device);
+        PTI_ASSERT(kernel != nullptr);
+        append_res = A2AppendBridgeKernel(kernel, command->command_list, command->event_self,
+                                          command->event_swap);
+      } else if (command->props.type == KernelCommandType::kMemory) {
+        SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
+                     static_cast<const void*>(command->props.src_device),
+                     static_cast<const void*>(command->props.dst_device));
+
+        auto buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
+        PTI_ASSERT(buffer != nullptr);
+        append_res = A2AppendBridgeMemoryCopyOrFillEx(command->command_list, command->event_self,
+                                                      command->event_swap, buffer,
+                                                      device_buffer_pool_.buffer_size_);
+      } else if (command->props.type == KernelCommandType::kCommand) {
+        append_res =
+            A2AppendBridgeBarrier(command->command_list, command->event_self, command->event_swap);
+      }
+      PTI_ASSERT(append_res);
+    }
+
     // creating unique ptr here so command will be properly deleted when removed from
     // the container it stored
     std::unique_ptr<ZeKernelCommand> p_command(command);
@@ -2016,39 +2044,13 @@ class ZeCollector {
         command->queue = reinterpret_cast<ze_command_queue_handle_t>(command->command_list);
         kernel_command_list_.push_back(std::move(p_command));
         SPDLOG_TRACE("\tImmediate CmdList, command: {} pushed to kernel_command_list_, queue: {}",
-                     static_cast<void*>(command), static_cast<void*>(command->queue));
+                     static_cast<void*>(command), static_cast<const void*>(command->queue));
         kids->push_back(command->kernel_id);
       } else {
         command_list_info.kernel_commands.push_back(std::move(p_command));
-        SPDLOG_TRACE("\tcommand: {} pushed to command_list_info", (void*)command);
+        SPDLOG_TRACE("\tcommand: {} pushed to command_list_info",
+                     static_cast<const void*>(command));
       }
-    }
-
-    // it could be that event swap was not needed  - in this case event_swap would be 0
-    // and we can not append Bridge kernel
-    if (nullptr != command->event_swap && ZeCollectionMode::Local == collection_mode_) {
-      SPDLOG_DEBUG("\t\t Will be appending Bridge command!");
-      bool append_res = true;
-      if (command->props.type == KernelCommandType::kKernel) {
-        ze_kernel_handle_t kernel =
-            bridge_kernel_pool_.GetMarkKernel(command->context, command->device);
-        PTI_ASSERT(kernel != nullptr);
-        append_res = A2AppendBridgeKernel(kernel, command->command_list, command->event_self,
-                                          command->event_swap);
-      } else if (command->props.type == KernelCommandType::kMemory) {
-        SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
-                     (void*)command->props.src_device, (void*)command->props.dst_device);
-
-        auto buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
-        PTI_ASSERT(buffer != nullptr);
-        append_res = A2AppendBridgeMemoryCopyOrFillEx(command->command_list, command->event_self,
-                                                      command->event_swap, buffer,
-                                                      device_buffer_pool_.buffer_size_);
-      } else if (command->props.type == KernelCommandType::kCommand) {
-        append_res =
-            A2AppendBridgeBarrier(command->command_list, command->event_self, command->event_swap);
-      }
-      PTI_ASSERT(append_res);
     }
   }
 
