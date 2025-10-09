@@ -9,6 +9,9 @@ inputs:
   preset:
     description: Preset used in the build to be tested.
     required: true
+  adjust-test-2025-3:
+    description: "Skip validate-sycl-ur-api-ids-test"
+    default: false
   adjust-test-bmg:
     description: "Exclude known failing test for bmg and oneAPI-2025.3"
     default: false
@@ -22,11 +25,6 @@ runs:
       working-directory: ${{ inputs.wdir }}
       shell: bash
       run: |
-        #
-        # This test is NOT CRITICAL.
-        # validate-sycl-ur-api-ids-test is known to fail at this stage
-        # of development and will be fixed in due course.
-        #
         source /opt/intel/oneapi/setvars.sh
 
         #
@@ -37,10 +35,17 @@ runs:
         # which is a workaround until we resolve PTI-297
         #
         if [[ "${{ inputs.adjust-test-2025-3 }}" == "true" && "${{ inputs.adjust-test-bmg }}" == "true" ]]; then
-          SYCL_UR_USE_LEVEL_ZERO_V2=0 ctest --preset linux-oneAPI-release -R "RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOnMainFixtureTest.NumberOfExpectedMemoryRecordsAfter"
-          ctest --preset linux-oneAPI-release -E "RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOnMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsSetOnMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|NoKernelOverlapAndGapInSubmittingTests|perf-prof-gpu-overhead|validate-sycl-ur-api-ids-test|mt-awk-test|perf*"
+          echo "BMG+2025.3 test that need SYCL_UR_USE_LEVEL_ZERO_V2-0"
+          SYCL_UR_USE_LEVEL_ZERO_V2=0 ctest --preset linux-oneAPI-release -R "RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOnMainFixtureTest.NumberOfExpectedMemoryRecordsAfter|NoKernelOverlapAndGapInSubmittingTests"
+
+          echo "BMG+2025.3 test that should pass"
+          #
+          # Added the temporary skip of MultiThreadedSubmissionFixtureTest
+          #
+          ctest --preset linux-oneAPI-release -E "RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOnMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsSetOnMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|NoKernelOverlapAndGapInSubmittingTests|mt-awk-test|perf*"
+
         else
-          ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance
+          ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance 
         fi
 
     - name: Quarantined tests # flaky tests
