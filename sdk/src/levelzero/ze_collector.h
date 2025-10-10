@@ -1948,8 +1948,7 @@ class ZeCollector {
     ze_instance_data.timestamp_device = device_timestamp;
   }
 
-  void PostAppendKernelCommandCommon(ZeCollector* /*collector*/, ZeKernelCommand* command,
-                                     ze_event_handle_t& signal_event,
+  void PostAppendKernelCommandCommon(ZeKernelCommand* command, ze_event_handle_t& signal_event,
                                      ZeCommandListInfo& command_list_info,
                                      std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, command: {}, kernel name {}", __FUNCTION__,
@@ -2095,7 +2094,7 @@ class ZeCollector {
     collector->DoCallbackOnGPUOperationAppended(command, PTI_CB_PHASE_API_EXIT, result);
 
     if (result == ZE_RESULT_SUCCESS) {
-      PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
+      PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
     }
   }
 
@@ -2128,12 +2127,12 @@ class ZeCollector {
     // Subscriber callback
     collector->DoCallbackOnGPUOperationAppended(command, PTI_CB_PHASE_API_EXIT, result);
 
-    PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
+    PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
   }
 
-  void AppendMemoryCommandContext(ZeCollector* collector, std::string command_name,
-                                  size_t bytes_transferred, ze_context_handle_t src_context,
-                                  const void* src, ze_context_handle_t dst_context, const void* dst,
+  void AppendMemoryCommandContext(std::string command_name, size_t bytes_transferred,
+                                  ze_context_handle_t src_context, const void* src,
+                                  ze_context_handle_t dst_context, const void* dst,
                                   ze_event_handle_t& signal_event,
                                   ze_command_list_handle_t command_list, void** instance_data,
                                   std::vector<uint64_t>* kids) {
@@ -2149,11 +2148,11 @@ class ZeCollector {
     command->props = GetTransferProps(std::move(command_name), bytes_transferred, src_context, src,
                                       (dst_context ? dst_context : context), dst);
 
-    PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
+    PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
   }
 
-  void AppendImageMemoryCopyCommand(ZeCollector* collector, std::string command_name,
-                                    ze_image_handle_t image, const void* src, const void* dst,
+  void AppendImageMemoryCopyCommand(std::string command_name, ze_image_handle_t image,
+                                    const void* src, const void* dst,
                                     ze_event_handle_t& signal_event,
                                     ze_command_list_handle_t command_list, void** instance_data,
                                     std::vector<uint64_t>* kids) {
@@ -2171,14 +2170,14 @@ class ZeCollector {
         GetTransferProps(std::move(command_name), bytes_transferred, context, src, context, dst);
 
     // TODO implement image copy support in Local collection model
-    if (collector->collection_mode_ != ZeCollectionMode::Local) {
-      PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
+    if (collection_mode_ != ZeCollectionMode::Local) {
+      PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
     }
   }
 
-  void PostAppendCommand(ZeCollector* collector, std::string command_name,
-                         ze_event_handle_t& signal_event, ze_command_list_handle_t command_list,
-                         void** instance_data, std::vector<uint64_t>* kids) {
+  void PostAppendCommand(std::string command_name, ze_event_handle_t& signal_event,
+                         ze_command_list_handle_t command_list, void** instance_data,
+                         std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}", __FUNCTION__);
     if (ZeCollectionState::Abnormal == collection_state_) {
       return;
@@ -2194,7 +2193,7 @@ class ZeCollector {
     command->props.name = std::move(command_name);
     command->props.type = KernelCommandType::kCommand;
 
-    PostAppendKernelCommandCommon(collector, command, signal_event, command_list_info, kids);
+    PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
   }
 
   static ZeKernelCommandProps GetTransferProps(std::string name, size_t bytes_transferred,
@@ -2437,9 +2436,8 @@ class ZeCollector {
       command->num_wait_events = *params->pnumWaitEvents;
       command->callback_id_ = zeCommandListAppendBarrier_id;
       command->result_ = result;
-      collector->PostAppendCommand(collector, "zeCommandListAppendBarrier",
-                                   *(params->phSignalEvent), *(params->phCommandList),
-                                   instance_data, kids);
+      collector->PostAppendCommand("zeCommandListAppendBarrier", *(params->phSignalEvent),
+                                   *(params->phCommandList), instance_data, kids);
     } else {
       // Process generation of synch record even if result is not successful.
       // TODO barrier sync based on api start/end times here if needed.  For now no gen if result
@@ -2467,7 +2465,7 @@ class ZeCollector {
       command->num_wait_events = *params->pnumWaitEvents;
       command->callback_id_ = zeCommandListAppendMemoryRangesBarrier_id;
       command->result_ = result;
-      collector->PostAppendCommand(collector, "zeCommandListAppendMemoryRangesBarrier",
+      collector->PostAppendCommand("zeCommandListAppendMemoryRangesBarrier",
                                    *(params->phSignalEvent), *(params->phCommandList),
                                    instance_data, kids);
     } else {
@@ -2559,7 +2557,7 @@ class ZeCollector {
     if (result == ZE_RESULT_SUCCESS) {
       ze_context_handle_t src_context = *(params->phContextSrc);
       // ze_context_handle_t dst_context = nullptr;
-      collector->AppendMemoryCommandContext(collector, "zeCommandListAppendMemoryCopyFromContext",
+      collector->AppendMemoryCommandContext("zeCommandListAppendMemoryCopyFromContext",
                                             *(params->psize), src_context, *(params->psrcptr),
                                             nullptr, *(params->pdstptr), *(params->phSignalEvent),
                                             *(params->phCommandList), instance_data, kids);
@@ -2582,9 +2580,9 @@ class ZeCollector {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendImageMemoryCopyCommand(
-          collector, "zeCommandListAppendImageCopy", *(params->phSrcImage), nullptr, nullptr,
-          *(params->phSignalEvent), *(params->phCommandList), instance_data, kids);
+      collector->AppendImageMemoryCopyCommand("zeCommandListAppendImageCopy", *(params->phSrcImage),
+                                              nullptr, nullptr, *(params->phSignalEvent),
+                                              *(params->phCommandList), instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
@@ -2606,7 +2604,7 @@ class ZeCollector {
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       collector->AppendImageMemoryCopyCommand(
-          collector, "zeCommandListAppendImageCopyRegion", *(params->phSrcImage), nullptr, nullptr,
+          "zeCommandListAppendImageCopyRegion", *(params->phSrcImage), nullptr, nullptr,
           *(params->phSignalEvent), *(params->phCommandList), instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
@@ -2628,10 +2626,9 @@ class ZeCollector {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      collector->AppendImageMemoryCopyCommand(collector, "zeCommandListAppendImageCopyRegion",
-                                              *(params->phSrcImage), nullptr, *(params->pdstptr),
-                                              *(params->phSignalEvent), *(params->phCommandList),
-                                              instance_data, kids);
+      collector->AppendImageMemoryCopyCommand(
+          "zeCommandListAppendImageCopyRegion", *(params->phSrcImage), nullptr, *(params->pdstptr),
+          *(params->phSignalEvent), *(params->phCommandList), instance_data, kids);
     } else {
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
