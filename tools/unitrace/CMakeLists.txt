@@ -269,7 +269,8 @@ target_include_directories(unitrace
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
 if(UNIX)
-  target_link_libraries(unitrace pthread dl)
+  target_link_libraries(unitrace pthread dl rt)
+  target_link_libraries(unitrace_tool rt)
 endif()
 
 GetLevelZeroHeaders(unitrace)
