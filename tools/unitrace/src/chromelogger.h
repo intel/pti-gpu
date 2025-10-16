@@ -76,6 +76,8 @@ static std::string pmi_hostname = GetHostName();
 std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, size_t size, bool detailed);
 ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device, int32_t *parent_device_id, int32_t *device_id, int32_t *subdevice_id);
 std::string GetClKernelCommandName(uint64_t id);
+std::string GetZeDeviceName(ze_device_handle_t device);
+std::string GetClDeviceName(cl_device_id device);
 
 static Logger* logger_ = nullptr;
 
@@ -191,6 +193,11 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
       }
       else {
         str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
+      }
+
+      std::string device_name = GetZeDeviceName(device);
+      if (device_name.size() > 0) {
+        str += "[" + device_name + "] ";
       }
 
       char str2[128];
@@ -333,6 +340,11 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
       }
       else {
         str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
+      }
+
+      std::string device_name = GetClDeviceName(device);
+      if (device_name.size() > 0) {
+        str += "[" + device_name + "] ";
       }
 
       char str2[128];

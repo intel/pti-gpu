@@ -144,6 +144,19 @@ using ClFunctionInfoMap = std::map<std::string, ClFunction>;
 static std::shared_mutex cl_kernel_command_properties_mutex_;
 static std::map<uint64_t, ClKernelProps> cl_kernel_command_properties_;
 
+// Keeps track of all active cl device name
+std::map<cl_device_id, std::string>& GetDevicesNameMap() {
+  static std::map<cl_device_id, std::string> devices_name;
+  return devices_name;
+}
+inline std::string GetClDeviceName(cl_device_id device) {
+  auto it = GetDevicesNameMap().find(device);
+  if (it != GetDevicesNameMap().end()) {
+    return it->second;
+  }
+  return "";
+}
+
 struct ClKernelProfileRecord {
   cl_device_id device_ = nullptr;
   uint64_t global_instance_id_ = 0;
@@ -760,12 +773,39 @@ class ClCollector {
               subcd.isroot_ = false;
               subcd.parent_ = dev;
               subcd.subdevs_ = std::vector<cl_device_id>();
+
+              // get sub-device names
+              size_t name_size = 0;
+              status = clGetDeviceInfo(subdev, CL_DEVICE_NAME, 0, NULL, &name_size);
+              if (status == CL_SUCCESS) {
+                std::string str_dev_name(name_size+1, '\0');
+                status = clGetDeviceInfo(subdev, CL_DEVICE_NAME, name_size, (void*)str_dev_name.c_str(), NULL);
+                if (status == CL_SUCCESS) {
+                  GetDevicesNameMap().insert({subdev, std::move(str_dev_name)});
+                }
+              }
               device_map_.insert({subdev, subcd});
               present_cl_devices_.insert({subdev,present_cl_devices_.size()});
             }
           }
           cd.subdevs_ = std::move(subdevs);
         }
+
+        // get device names
+        size_t name_size = 0;
+        status = clGetDeviceInfo(dev, CL_DEVICE_NAME, 0, NULL, &name_size);
+        if (status == CL_SUCCESS) {
+          std::string str_dev_name(name_size+1, '\0');
+          status = clGetDeviceInfo(dev, CL_DEVICE_NAME, name_size, (void*)str_dev_name.c_str(), NULL);
+          if (status == CL_SUCCESS) {
+            GetDevicesNameMap().insert({dev, std::move(str_dev_name)});
+          }
+        }
+
+        if (status != CL_SUCCESS) {
+          std::cerr << "[ERROR] clGetDeviceInfo failed with error "<<status<<std::endl;
+        }
+
         device_map_.insert({dev, cd});
         present_cl_devices_.insert({dev,present_cl_devices_.size()});
       }

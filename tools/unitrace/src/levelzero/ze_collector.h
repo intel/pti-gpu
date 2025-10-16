@@ -1040,6 +1040,7 @@ struct ZeDevice {
   int32_t subdevice_id_;
   int32_t num_subdevices_;
   ze_pci_ext_properties_t pci_properties_;
+  std::string device_name_;
 };
 
 // these will no go away when ZeCollector is destructed
@@ -1132,6 +1133,19 @@ inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& g
 inline std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, size_t size, bool detailed = true) {
   const ze_group_count_t& gcount = group_count;
   return GetZeKernelCommandName(id, gcount, size, detailed);
+}
+
+inline std::string GetZeDeviceName(ze_device_handle_t device) {
+  std::string device_name = "";
+  devices_mutex_.lock_shared();
+  if (devices_ != nullptr) {
+    auto it = devices_->find(device);
+    if (it != devices_->end()) {
+      device_name = it->second.device_name_;
+    }
+  }
+  devices_mutex_.unlock_shared();
+  return device_name;
 }
 
 inline ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device, int32_t *parent_device_id, int32_t *device_id, int32_t *subdevice_id){
@@ -1843,6 +1857,17 @@ class ZeCollector {
 
             desc.host_time_origin_ = host_time;
 
+            // Get device name
+            ze_device_properties_t device_properties = {};
+            device_properties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+            status = ZE_FUNC(zeDeviceGetProperties)(device, &device_properties);
+            if (status == ZE_RESULT_SUCCESS) {
+              desc.device_name_ = std::move(std::string(device_properties.name));
+            } else {
+              desc.device_name_ = "";
+              std::cerr << "[ERROR] zeDeviceGetProperties failed with error code : " << status << std::endl;
+            }
+
             devices_->insert({device, std::move(desc)});
 
             if (num_sub_devices > 0) {
@@ -1890,6 +1915,17 @@ class ZeCollector {
                 sub_desc.context_ = context;
             
                 sub_desc.metric_group_ = nullptr;
+
+                // Get sub-device name
+                ze_device_properties_t device_properties = {};
+                device_properties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+                status = ZE_FUNC(zeDeviceGetProperties)(sub_devices[j], &device_properties);
+                if (status == ZE_RESULT_SUCCESS) {
+                  sub_desc.device_name_ = std::move(std::string(device_properties.name));
+                } else {
+                  sub_desc.device_name_ = "";
+                  std::cerr << "[ERROR] zeDeviceGetProperties failed with error code : " << status << std::endl;
+                }
 
                 devices_->insert({sub_devices[j], std::move(sub_desc)});
               }
