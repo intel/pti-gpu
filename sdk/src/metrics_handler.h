@@ -893,13 +893,15 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
                                          &streamer_desc, desc->event_, &streamer);
           if (status != ZE_RESULT_SUCCESS) {
             SPDLOG_ERROR(
-                "Failed to open metric streamer. The sampling interval might be too small.");
+                "Failed to open metric streamer. The sampling interval might be too small."
+                " UMD driver returned {:x}",
+                static_cast<std::size_t>(status));
 #ifndef _WIN32
             SPDLOG_ERROR(
-                "Please also make sure: "
-                "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
-                "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
-                "is set to 0.");
+                "Set the paranoid to 0, depending on Intel GPU kernel mode driver(s): i915 or Xe\n"
+                "/proc/sys/dev/i915/perf_stream_paranoid\n"
+                "/proc/sys/dev/xe/observation_paranoid\n"
+                "(Set whichever applicable to the system)");
 #endif /* _WIN32 */
             break;
           }

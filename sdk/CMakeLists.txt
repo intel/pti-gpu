@@ -106,6 +106,7 @@ add_library(Pti::pti_all ALIAS pti_all)
 # formerly pti_view
 add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                        "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc"
+                       "${PROJECT_SOURCE_DIR}/src/pti_callbacks.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_metrics.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
 # We might want to make our own, but for now use CMake's

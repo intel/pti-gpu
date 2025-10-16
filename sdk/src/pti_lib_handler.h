@@ -105,6 +105,8 @@ class PtiLibHandler {
   decltype(&ptiCallbackEnableDomain) ptiCallbackEnableDomain_ = nullptr;                  // NOLINT
   decltype(&ptiCallbackDisableDomain) ptiCallbackDisableDomain_ = nullptr;                // NOLINT
   decltype(&ptiCallbackDisableAllDomains) ptiCallbackDisableAllDomains_ = nullptr;        // NOLINT
+  decltype(&ptiCallbackDomainTypeToString) ptiCallbackDomainTypeToString_ = nullptr;      // NOLINT
+  decltype(&ptiCallbackPhaseTypeToString) ptiCallbackPhaseTypeToString_ = nullptr;        // NOLINT
   decltype(&PtiSetXPTIEnvironmentDetails) PtiSetXPTIEnvironmentDetails_ = nullptr;        // NOLINT
 
  private:
@@ -179,6 +181,8 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiCallbackEnableDomain);
     PTI_VIEW_GET_SYMBOL(ptiCallbackDisableDomain);
     PTI_VIEW_GET_SYMBOL(ptiCallbackDisableAllDomains);
+    PTI_VIEW_GET_SYMBOL(ptiCallbackDomainTypeToString);
+    PTI_VIEW_GET_SYMBOL(ptiCallbackPhaseTypeToString);
 
     PTI_VIEW_GET_SYMBOL(PtiSetXPTIEnvironmentDetails);
 #undef PTI_VIEW_GET_SYMBOL

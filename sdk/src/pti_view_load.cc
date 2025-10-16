@@ -566,3 +566,27 @@ pti_result ptiCallbackDisableAllDomains(pti_callback_subscriber_handle subscribe
     return pti_result::PTI_ERROR_INTERNAL;
   }
 }
+
+const char* ptiCallbackDomainTypeToString(pti_callback_domain domain) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ptiCallbackDomainTypeToString_) {
+      return kInvalidString;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiCallbackDomainTypeToString_(domain);
+  } catch (...) {
+    return kInvalidString;
+  }
+}
+
+const char* ptiCallbackPhaseTypeToString(pti_callback_phase phase) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ptiCallbackPhaseTypeToString_) {
+      return kInvalidString;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiCallbackPhaseTypeToString_(phase);
+  } catch (...) {
+    return kInvalidString;
+  }
+}

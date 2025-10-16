@@ -532,7 +532,8 @@ class ZeCollector {
 
   void DoCallbackOnGPUOperationCompletion(
       const std::vector<ZeKernelCommandExecutionRecord>& kcexecrec) {
-    SPDLOG_TRACE("On {}", __func__);
+    SPDLOG_TRACE("In {} on {}", __func__,
+                 ptiCallbackDomainTypeToString(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED));
     if (IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED, 1) &&
         kcexecrec.size() > 0) {
       // Call the callback with the collected records for all active subscribers

@@ -17,6 +17,7 @@ _Choose one or multiple, leave empty if none of the other choices apply_
 - [ ] Bug fix - _change that fixes an issue_
 - [ ] New feature - _change that adds functionality_
 - [ ] Performance improvement - _change that lowers profiling overhead_
+- [ ] Code refactoring or clean up
 - [ ] Tests - _change in tests_
 - [ ] Samples - _change in samples_
 - [ ] Documentation - _documentation update_
