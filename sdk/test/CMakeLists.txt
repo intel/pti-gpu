@@ -254,6 +254,20 @@ if(HAVE_SYCL)
   target_link_libraries(multi_threaded_submission PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
                                             LevelZero::level-zero)
 
+  add_executable(callback_api_test callback_api_test.cc)
+
+  target_include_directories(
+    callback_api_test
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero")
+
+  target_compile_options(callback_api_test PUBLIC -fsycl)
+  target_link_options(callback_api_test PUBLIC -fsycl)
+
+  target_link_libraries(callback_api_test PUBLIC GTest::gtest_main spdlog::spdlog
+                                          PRIVATE Pti::pti_view LevelZero::level-zero)
+
+
   add_executable(dpc_gemm_threaded_profiled perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_baseline perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_linkonly perf_dpc_gemm_threaded.cc)
@@ -378,6 +392,10 @@ if(HAVE_SYCL)
     DISCOVERY_TIMEOUT 60
     TEST_LIST TIMESTAMPS_CORRECTNESS_LIST
     PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
+    PROPERTIES LABELS "functional")
+
+  gtest_discover_tests(
+    callback_api_test
     PROPERTIES LABELS "functional")
 
   RequirePythonInterp()

@@ -95,6 +95,15 @@ struct ZeMemoryCommandRoute {
 
     return pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2M;
   }
+  // @brief is src_device should be referred as "main" device
+  bool IsMainDeviceSrc() const {
+    if (src_type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE &&
+        dst_type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE) {
+      return false;
+    }
+    return src_type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE ||
+           src_type == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
+  }
 };
 
 enum class KernelCommandType { kInvalid = 0, kKernel = 1, kMemory = 2, kCommand = 3 };

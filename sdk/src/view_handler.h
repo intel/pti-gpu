@@ -784,6 +784,9 @@ struct PtiViewRecordHandler {
   // Multiple subscriber support with ID-based management
   inline pti_result CallbackSubscribe(pti_callback_subscriber_handle* subscriber,
                                       pti_callback_function callback, void* user_data) {
+    if (subscriber == nullptr || callback == nullptr) {
+      return PTI_ERROR_BAD_ARGUMENT;
+    }
     // Limitation (hopefully temporal) Callbacks only supported when kernel tracing is ON
     if (collector_ && collector_->IsTracingOn() &&
         collector_->GetCollectorOptions().kernel_tracing) {
@@ -799,6 +802,9 @@ struct PtiViewRecordHandler {
   }
 
   inline pti_result CallbackUnsubscribe(pti_callback_subscriber_handle subscriber_handle) {
+    if (subscriber_handle == nullptr) {
+      return PTI_ERROR_BAD_ARGUMENT;
+    }
     if (collector_) {
       auto result = collector_->RemoveCallbackSubscriber(subscriber_handle);
       if (result != pti_result::PTI_SUCCESS) {

@@ -150,40 +150,16 @@ class ZeCollectorCBSubscriber {
     return false;
   }
 
-  void InvokeCallbackGPUOperationCompletion(const ZeKernelCommandExecutionRecord& record,
-                                            uint32_t l0_api_id) {
-    if (subscriber_info_.callback_ != nullptr) {
-      pti_gpu_op_details gpu_op_details = {
-          ._operation_kind = GetGPUOperationKind(record.command_type_),
-          ._operation_id = record.kid_,
-          // temp, until modules & kernels in them supported
-          ._kernel_handle = INVALID_KERNEL_HANDLE,
-          ._name = record.name_.c_str()};
-      pti_device_handle_t device_handle = record.device_;
-      if (record.command_type_ == KernelCommandType::kMemory && device_handle == nullptr) {
-        device_handle = record.dst_device_;  // for memcpy use dst device
-      }
-      pti_callback_gpu_op_data callback_data = {
-          ._domain = PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED,
-          ._cmd_list_properties = PTI_BACKEND_COMMAND_LIST_TYPE_UNKNOWN,
-          ._cmd_list_handle = nullptr,
-          ._queue_handle = record.queue_,
-          ._device_handle = device_handle,
-          ._phase = PTI_CB_PHASE_API_EXIT,
-          ._return_code = 0,
-          ._correlation_id = record.cid_,
-          ._operation_count = 1,
-          ._operation_details = &gpu_op_details};
-      subscriber_info_.callback_(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED,
-                                 PTI_API_GROUP_LEVELZERO, l0_api_id, record.context_,
-                                 &callback_data, GetUserData(), GetPtrForInstanceUserData());
-    }
-  }
-
   static void MapRecordsByContextAndDevice(
       const std::vector<ZeKernelCommandExecutionRecord>& records, ExecRecordsMap& record_map) {
     for (const auto& record : records) {
-      auto key = std::make_pair(record.context_, record.device_);
+      // for memory ops device is tricky -- it could be source or destination,
+      // or for D2D - both source and destination - so ask route object who is "main" device
+      auto device_in_memory_op =
+          (record.route_.IsMainDeviceSrc()) ? record.device_ : record.dst_device_;
+      auto key = (record.command_type_ == KernelCommandType::kMemory)
+                     ? std::make_pair(record.context_, device_in_memory_op)
+                     : std::make_pair(record.context_, record.device_);
       record_map[key].push_back(&record);
     }
   }

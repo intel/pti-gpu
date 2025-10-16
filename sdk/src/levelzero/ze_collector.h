@@ -532,8 +532,9 @@ class ZeCollector {
 
   void DoCallbackOnGPUOperationCompletion(
       const std::vector<ZeKernelCommandExecutionRecord>& kcexecrec) {
-    SPDLOG_TRACE("In {} on {}", __func__,
-                 ptiCallbackDomainTypeToString(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED));
+    SPDLOG_TRACE("In {} on {} commands: {}", __func__,
+                 ptiCallbackDomainTypeToString(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED),
+                 kcexecrec.size());
     if (IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED, 1) &&
         kcexecrec.size() > 0) {
       // Call the callback with the collected records for all active subscribers
@@ -541,10 +542,11 @@ class ZeCollector {
 
       ExecRecordsMap record_map;
       ZeCollectorCBSubscriber::MapRecordsByContextAndDevice(kcexecrec, record_map);
-
+      SPDLOG_TRACE("\trecord map size: {}", record_map.size());
       // For each context/device pair, make a callback
       for (const auto& [key, records] : record_map) {
         const auto& [context, device_handle] = key;
+        SPDLOG_TRACE("\tGPU op records: {}", records.size());
         // all records in this group have same context and device
         std::vector<pti_gpu_op_details> op_details(records.size());
         ZeCollectorCBSubscriber::MakeGPUOpDetailsArray(records, op_details);
@@ -2751,6 +2753,7 @@ class ZeCollector {
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
         collector->acallback_(collector->callback_data_, kcexec);
       }
+      collector->DoCallbackOnGPUOperationCompletion(kcexec);
       collector->ResetCommandList(*params->phCommandList);
     }
   }
