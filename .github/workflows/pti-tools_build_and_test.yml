@@ -32,14 +32,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
             tags: '["self-hosted", "Linux", "pti", "PVC"]'
             os_id: "ubuntu-22.04.2025.1.0"
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
             tags: '["self-hosted", "Linux", "pti", "BMG"]'
             os_id: "ubuntu-22.04.2025.1.0"
 
-    container: 
+    container:
       image: ${{ matrix.container }}
       options: --device=/dev/dri --cap-add CAP_PERFMON
 

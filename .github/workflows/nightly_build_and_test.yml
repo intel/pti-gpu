@@ -158,9 +158,9 @@ jobs:
       max-parallel: 2
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_25_1_0 }}
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
 
-    container: 
+    container:
       image: ${{ matrix.container }}
       options: --device=/dev/dri --cap-add CAP_PERFMON ${{ vars.PTI_DOCKER_PROXIES }}
 
@@ -171,50 +171,51 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build-and-test-unitrace
+      - name: Build-unitrace
+        working-directory: tools/unitrace
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python3 ./tests/run.py -s unitrace
+          mkdir build
+          cd build
+          cmake -DBUILD_WITH_MPI=0 -GNinja ..
+          ninja
+
+      - name: Test-unitrace
+        working-directory: tools/unitrace/test
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          python ./test_unitrace.py
 
       - name: Build-and-test-onetrace
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python3 ./tests/run.py -s onetrace
+          python ./tests/run.py -s onetrace
 
       - name: Build-and-test-oneprof
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python3 ./tests/run.py -s oneprof
+          python ./tests/run.py -s oneprof
 
       - name: Build-and-test-sysmon
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python3 ./tests/run.py -s sysmon
+          python ./tests/run.py -s sysmon
 
       - name: Build-and-test-cl_gpu_metrics
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python3 ./tests/run.py -s cl_gpu_metrics
+          python ./tests/run.py -s cl_gpu_metrics
 
       - name: Build-and-test-cl_debug_info
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python3 ./tests/run.py -s cl_debug_info
+          python ./tests/run.py -s cl_debug_info
 
-      #
-      # Fix!!
-      # A problem with GLIBCXX_3.4.26 as noted in VASP-30704
-      #
       - name: Build-and-test-instcount
-        if: vars.PTI_DOCKER_IMAGE_ONPUSH_2025_0_1 == matrix.container
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python3 ./tests/run.py -s instcount
+          python ./tests/run.py -s instcount
 
-      #
-      # TODO:
-      # Add code to ze_debug_info to handle std::experimental::filesystem case.
-      #
       - name: Build-and-test-ze_debug_info
         run: |
           source /opt/intel/oneapi/setvars.sh
