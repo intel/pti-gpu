@@ -4,6 +4,7 @@
 #include <cstring>
 #include <sycl/sycl.hpp>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "pti/pti_view.h"
@@ -125,12 +126,12 @@ sycl::property_list GetSyclPropList(bool use_immediate_command_lists) {
     sycl::property_list prop{sycl::property::queue::in_order(),
                              sycl::property::queue::enable_profiling(),
                              sycl::ext::intel::property::queue::immediate_command_list()};
-    prop_list = prop;
+    prop_list = std::move(prop);
   } else {
     sycl::property_list prop{sycl::property::queue::in_order(),
                              sycl::property::queue::enable_profiling(),
                              sycl::ext::intel::property::queue::no_immediate_command_list()};
-    prop_list = prop;
+    prop_list = std::move(prop);
   }
 
   return prop_list;

@@ -55,6 +55,7 @@ struct _pti_callback_subscriber {
   _pti_callback_subscriber& operator=(const _pti_callback_subscriber&) = delete;
   _pti_callback_subscriber(_pti_callback_subscriber&&) = delete;
   _pti_callback_subscriber& operator=(_pti_callback_subscriber&&) = delete;
+  ~_pti_callback_subscriber() = default;
   pti_callback_function callback_ = nullptr;
   std::unordered_map<pti_callback_domain, CbDomainProperties> domains_;
   mutable void* user_data_ = nullptr;
@@ -205,7 +206,7 @@ class SubscribersCollection {
   SubscribersCollection(SubscribersCollection&&) = delete;
   SubscribersCollection& operator=(SubscribersCollection&&) = delete;
 
-  ~SubscribersCollection() = default;
+  virtual ~SubscribersCollection() = default;
 
   pti_callback_subscriber_handle AddExternalSubscriber(
       std::unique_ptr<ZeCollectorCBSubscriber> subscriber) {

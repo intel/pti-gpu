@@ -222,11 +222,6 @@ void CallbackGPUOperationAppend([[maybe_unused]] pti_callback_domain domain,
     return;
   }
   pti_callback_gpu_op_data *gpu_op_data = static_cast<pti_callback_gpu_op_data *>(cb_data);
-  if (gpu_op_data == nullptr) {
-    std::cerr << "CallbackGPUOperationAppend: pti_callback_gpu_op_data is null. Unexpected"
-              << std::endl;
-    return;
-  }
   if (gpu_op_data->_operation_details == nullptr) {
     std::cerr << "CallbackGPUOperationAppend: pti_gpu_op_details is null. Unexpected" << std::endl;
     return;

@@ -17,6 +17,7 @@
 #include <sycl/sycl.hpp>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "pti/pti_callback.h"
@@ -257,7 +258,9 @@ class CallbackApiTest : public ::testing::Test {
                                 uint32_t correlation_id, uint32_t operation_count,
                                 const pti_gpu_op_details* operation_details) {
     const char* api_name = nullptr;
-    ptiViewGetApiIdName(driver_api_group_id, driver_api_id, &api_name);
+    if (PTI_SUCCESS != ptiViewGetApiIdName(driver_api_group_id, driver_api_id, &api_name)) {
+      api_name = nullptr;
+    }
 
     std::cout << "Callback: Domain: " << domain_name
               << ", Phase: " << (phase == PTI_CB_PHASE_API_ENTER ? "ENTER" : "EXIT")
@@ -1005,7 +1008,7 @@ TEST_F(CallbackApiTest, ConcurrentQueueSubmissions) {
           queue.submit([&](sycl::handler& cgh) {
             auto src_acc = src_buf.get_access<sycl::access::mode::read>(cgh);
             auto dst_acc = dst_buf.get_access<sycl::access::mode::write>(cgh);
-            cgh.copy(src_acc, dst_acc);
+            cgh.copy(std::move(src_acc), std::move(dst_acc));
           });
         } else {
           // Kernel operation
