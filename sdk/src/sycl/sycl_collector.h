@@ -336,7 +336,7 @@ class SyclCollector {
               sycl_data_kview.sycl_node_id_ = ID;
               const auto queue_id_loc = node_q_map.find(ID);
               sycl_data_kview.sycl_queue_id_ =
-                  (queue_id_loc != std::cend(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
+                  (queue_id_loc != std::end(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
               sycl_data_kview.sycl_invocation_id_ = static_cast<uint32_t>(Instance_ID);
               sycl_data_kview.sycl_task_begin_time_ = time;
               break;  // no need to keep searching metadata
@@ -345,7 +345,7 @@ class SyclCollector {
             if (IsMemoryOperation(item.first)) {
               const auto queue_id_loc = node_q_map.find(ID);
               sycl_data_mview.sycl_queue_id_ =
-                  (queue_id_loc != std::cend(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
+                  (queue_id_loc != std::end(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
               break;  // no need to keep searching metadata
             }
           }
