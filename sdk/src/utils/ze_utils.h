@@ -14,10 +14,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <iomanip>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "demangle.h"
@@ -28,6 +30,8 @@ namespace utils {
 namespace ze {
 
 inline constexpr static uint32_t kIntelVendorId = 0x8086;
+inline constexpr static uint32_t kBmgIpVersion = 0x05004000;
+inline constexpr std::string_view kCounterEventExtensionName = ZE_EVENT_POOL_COUNTER_BASED_EXP_NAME;
 
 inline std::vector<ze_driver_handle_t> GetDriverList() {
   ze_result_t status = ZE_RESULT_SUCCESS;
@@ -49,6 +53,38 @@ inline std::vector<ze_driver_handle_t> GetDriverList() {
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return driver_list;
+}
+
+inline std::vector<ze_driver_extension_properties_t> GetDriverExtensions(
+    ze_driver_handle_t driver) {
+  PTI_ASSERT(driver != nullptr);
+  ze_result_t status = ZE_RESULT_SUCCESS;
+
+  uint32_t extension_count = 0;
+  overhead::Init();
+  status = zeDriverGetExtensionProperties(driver, &extension_count, nullptr);
+  overhead_fini(zeDriverGetExtensionProperties_id);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+  if (extension_count == 0) {
+    return std::vector<ze_driver_extension_properties_t>();
+  }
+
+  std::vector<ze_driver_extension_properties_t> extension_list(extension_count);
+
+  overhead::Init();
+  status = zeDriverGetExtensionProperties(driver, &extension_count, extension_list.data());
+  overhead_fini(zeDriverGetExtensionProperties_id);
+
+  return extension_list;
+}
+
+inline bool IsDriverExtensionSupported(ze_driver_handle_t driver, std::string_view extension_name) {
+  const auto extensions = GetDriverExtensions(driver);
+  return std::any_of(extensions.cbegin(), extensions.cend(),
+                     [&](const ze_driver_extension_properties_t& extension) {
+                       return std::string_view(extension.name) == extension_name;
+                     });
 }
 
 inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) {
@@ -497,8 +533,7 @@ inline ze_api_version_t GetVersion() {
 }
 
 inline std::optional<zel_version_t> GetLoaderVersion() {
-  constexpr auto* kLoaderComponentName = "loader";
-  constexpr auto kLoaderComponentNameLength = std::char_traits<char>::length(kLoaderComponentName);
+  constexpr std::string_view kLoaderComponentName = "loader";
   size_t number_of_components = 0;
   auto status = zelLoaderGetVersions(&number_of_components, nullptr);
   if (number_of_components == 0 || status != ZE_RESULT_SUCCESS) {
@@ -513,8 +548,8 @@ inline std::optional<zel_version_t> GetLoaderVersion() {
   }
 
   for (const auto& component_version : versions) {
-    if (!std::strncmp(component_version.component_name, kLoaderComponentName,
-                      kLoaderComponentNameLength)) {
+    if (!std::strncmp(component_version.component_name, kLoaderComponentName.data(),
+                      kLoaderComponentName.size())) {
       return component_version.component_lib_version;
     }
   }

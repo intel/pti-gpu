@@ -28,21 +28,19 @@ runs:
         source /opt/intel/oneapi/setvars.sh
 
         #
-        # PTI-297.
+        # PTI-296.
         # This test is NOT CRITICAL.
         # Tests for bmg+2025.3 are partitioned to have them pass. Notice
         # that a number of them require SYCL_UR_USE_LEVEL_ZERO_V2=0
-        # which is a workaround until we resolve PTI-297
+        # which is a workaround until we resolve PTI-296
         #
         if [[ "${{ inputs.adjust-test-2025-3 }}" == "true" && "${{ inputs.adjust-test-bmg }}" == "true" ]]; then
-          echo "BMG+2025.3 test that need SYCL_UR_USE_LEVEL_ZERO_V2-0"
-          SYCL_UR_USE_LEVEL_ZERO_V2=0 ctest --preset linux-oneAPI-release -R "RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOnMainFixtureTest.NumberOfExpectedMemoryRecordsAfter|NoKernelOverlapAndGapInSubmittingTests"
+          echo "BMG+2025.3 test that need SYCL_UR_USE_LEVEL_ZERO_V2=0"
+          SYCL_UR_USE_LEVEL_ZERO_V2=0 ctest --preset ${{ inputs.preset }} -R "NoKernelOverlapAndGapInSubmittingTests"
 
           echo "BMG+2025.3 test that should pass"
-          #
-          # Added the temporary skip of MultiThreadedSubmissionFixtureTest
-          #
-          ctest --preset linux-oneAPI-release -E "RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsUnsetMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsSetOffMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|RuntimeOpsSetOnMainFixtureTest.NumberOfExpectedMemoryRecordsAfterStopTracing|RuntimeOpsSetOnMainFixtureTest.NumberOfExpectedKernelRecordsAfterStopTracing|NoKernelOverlapAndGapInSubmittingTests|mt-awk-test|perf*"
+
+          ctest --preset ${{ inputs.preset }} -LE performance -E "NoKernelOverlapAndGapInSubmittingTests"
 
         else
           ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance 

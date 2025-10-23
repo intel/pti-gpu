@@ -155,6 +155,7 @@ struct ZeDeviceDescriptor {
   ze_context_handle_t context = nullptr;
   ze_pci_ext_properties_t pci_properties{};
   ze_device_uuid_t uuid;
+  uint32_t ip_version = 0;
 };
 
 using ZeKernelGroupSizeMap = std::map<ze_kernel_handle_t, ZeKernelGroupSize>;
@@ -620,11 +621,13 @@ class ZeCollector {
         swap_event_pool_(512),
         startstop_mode_changer(this) {
     CreateDeviceMap(drv_list);
+    DetermineIfCounterEventsPossible(drv_list);
+    UserRequestsOverrideWithBridgeCommands();
     UpdateDeviceSyncDelta();
     ze_result_t res = l0_wrapper_.InitDynamicTracingWrappers();
     if (ZE_RESULT_SUCCESS == res) {
       loader_dynamic_tracing_capable_ = true;
-      MarkIntrospection();
+      MarkIntrospection(drv_list);
     }
   }
 
@@ -678,22 +681,16 @@ class ZeCollector {
     return status;
   }
 
-  void CreateDeviceMap() {
-    SPDLOG_DEBUG("In {}", __FUNCTION__);
-    const auto drivers = utils::ze::GetDriverList();
-    CreateDeviceMap(drivers);
-  }
-
   void CreateDeviceMap(const std::vector<ze_driver_handle_t>& drivers) {
     for (auto* const driver : drivers) {
       const auto devices = utils::ze::GetDeviceList(driver);
       for (auto* const device : devices) {
         device_descriptors_[device] = GetZeDeviceDescriptor(device);
-        SPDLOG_DEBUG("\tdevice: {}", (void*)device);
+        SPDLOG_DEBUG("\tdevice: {}", static_cast<const void*>(device));
         const auto sub_devices = utils::ze::GetSubDeviceList(device);
         device_map_[device] = sub_devices;
         for (auto* const sub_device : sub_devices) {
-          SPDLOG_DEBUG("\tsub-device: {}", (void*)sub_device);
+          SPDLOG_DEBUG("\tsub-device: {}", static_cast<const void*>(sub_device));
           device_descriptors_[sub_device] = GetZeDeviceDescriptor(sub_device);
         }
       }
@@ -721,11 +718,10 @@ class ZeCollector {
     }
   }
 
-  void MarkIntrospection() {
-    const auto drivers = utils::ze::GetDriverList();
-    for (auto const driver : drivers) {
+  void MarkIntrospection(const std::vector<ze_driver_handle_t>& drivers) {
+    for (auto* const driver : drivers) {
       const auto devices = utils::ze::GetDeviceList(driver);
-      for (auto const device : devices) {
+      for (auto* const device : devices) {
         ze_device_properties_t device_properties = {};
         device_properties.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
         device_properties.pNext = nullptr;
@@ -750,6 +746,34 @@ class ZeCollector {
     }
   }
 
+  void DetermineIfCounterEventsPossible(const std::vector<ze_driver_handle_t>& drivers) {
+    driver_supports_counter_events_ =
+        std::any_of(drivers.cbegin(), drivers.cend(), [&](ze_driver_handle_t driver) {
+          return utils::ze::IsDriverExtensionSupported(driver,
+                                                       utils::ze::kCounterEventExtensionName);
+        });
+    SPDLOG_TRACE("Driver supports counter events: {}", driver_supports_counter_events_);
+  }
+
+  void UserRequestsOverrideWithBridgeCommands() {
+    constexpr static std::string_view kEnvName = "PTI_FORCE_BRIDGE_COMMANDS";
+    constexpr static std::array<std::string_view, 6> kPositiveValues = {"1", "true", "yes",
+                                                                        "y", "on",   "ON"};
+
+    std::string env_value = utils::GetEnv(kEnvName.data());
+    if (env_value.empty()) {
+      user_requested_bridge_commands_ = false;
+    }
+
+    user_requested_bridge_commands_ =
+        std::any_of(kPositiveValues.cbegin(), kPositiveValues.cend(),
+                    [&](std::string_view positive_value) { return env_value == positive_value; });
+
+    SPDLOG_TRACE("{}: {}", kEnvName, user_requested_bridge_commands_ ? "true" : "false");
+  }
+
+  constexpr bool ShouldInjectSignalEvent() const { return !user_requested_bridge_commands_; }
+
   static ZeDeviceDescriptor GetZeDeviceDescriptor(const ze_device_handle_t device) {
     ZeDeviceDescriptor desc = {};
 
@@ -771,8 +795,21 @@ class ZeCollector {
       std::memset(&pci_device_properties.address, 0, sizeof(pci_device_properties.address));
       std::memset(&pci_device_properties.maxSpeed, 0, sizeof(pci_device_properties.maxSpeed));
     }
-
     desc.pci_properties = pci_device_properties;
+
+    auto ip_version = utils::ze::GetGpuDeviceIpVersion(device);
+
+    if (!ip_version.has_value()) {
+      SPDLOG_WARN(
+          "Failed to get IP version for device {}. For newer GPUs (e.g., BMG, IP version >= "
+          "{:#x}), this may cause instability on versions of SYCL in Intel(R) oneAPI 2025.3 and "
+          "newer or Level Zero workloads using counter-based events.",
+          static_cast<const void*>(device), utils::ze::kBmgIpVersion);
+    }
+
+    desc.ip_version = ip_version.value_or(0);
+    SPDLOG_TRACE("Device IP Version: {:#x}", desc.ip_version);
+
     return desc;
   }
 
@@ -2007,27 +2044,33 @@ class ZeCollector {
     // it could be that event swap was not needed  - in this case event_swap would be 0
     // and we can not append Bridge kernel
     if (nullptr != command->event_swap && ZeCollectionMode::Local == collection_mode_) {
-      SPDLOG_DEBUG("\t\t Will be appending Bridge command!");
       bool append_res = true;
-      if (command->props.type == KernelCommandType::kKernel) {
-        ze_kernel_handle_t kernel =
-            bridge_kernel_pool_.GetMarkKernel(command->context, command->device);
-        PTI_ASSERT(kernel != nullptr);
-        append_res = A2AppendBridgeKernel(kernel, command->command_list, command->event_self,
-                                          command->event_swap);
-      } else if (command->props.type == KernelCommandType::kMemory) {
-        SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
-                     static_cast<const void*>(command->props.src_device),
-                     static_cast<const void*>(command->props.dst_device));
+      if (ShouldInjectSignalEvent()) {
+        SPDLOG_DEBUG("\t\t Will be appending WaitAndSignal command!");
+        append_res = A2AppendWaitAndSignalEvent(command->command_list, command->event_self,
+                                                command->event_swap);
+      } else {
+        SPDLOG_DEBUG("\t\t Will be appending Bridge command!");
+        if (command->props.type == KernelCommandType::kKernel) {
+          ze_kernel_handle_t kernel =
+              bridge_kernel_pool_.GetMarkKernel(command->context, command->device);
+          PTI_ASSERT(kernel != nullptr);
+          append_res = A2AppendBridgeKernel(kernel, command->command_list, command->event_self,
+                                            command->event_swap);
+        } else if (command->props.type == KernelCommandType::kMemory) {
+          SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
+                       static_cast<const void*>(command->props.src_device),
+                       static_cast<const void*>(command->props.dst_device));
 
-        auto buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
-        PTI_ASSERT(buffer != nullptr);
-        append_res = A2AppendBridgeMemoryCopyOrFillEx(command->command_list, command->event_self,
-                                                      command->event_swap, buffer,
-                                                      device_buffer_pool_.buffer_size_);
-      } else if (command->props.type == KernelCommandType::kCommand) {
-        append_res =
-            A2AppendBridgeBarrier(command->command_list, command->event_self, command->event_swap);
+          auto buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
+          PTI_ASSERT(buffer != nullptr);
+          append_res = A2AppendBridgeMemoryCopyOrFillEx(command->command_list, command->event_self,
+                                                        command->event_swap, buffer,
+                                                        device_buffer_pool_.buffer_size_);
+        } else if (command->props.type == KernelCommandType::kCommand) {
+          append_res = A2AppendBridgeBarrier(command->command_list, command->event_self,
+                                             command->event_swap);
+        }
       }
       PTI_ASSERT(append_res);
     }
@@ -2980,6 +3023,8 @@ class ZeCollector {
   zel_tracer_handle_t tracer_ = nullptr;
   CollectorOptions options_ = {};
   bool driver_introspection_capable_ = false;
+  bool driver_supports_counter_events_ = false;
+  bool user_requested_bridge_commands_ = false;
   bool loader_dynamic_tracing_capable_ = false;
   CallbacksEnabled cb_enabled_ = {};
   OnZeKernelFinishCallback acallback_ = nullptr;

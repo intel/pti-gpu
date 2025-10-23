@@ -125,7 +125,7 @@ jobs:
 
   win-lib-build-and-test:
     name: Test pti-lib on Windows
-    runs-on: [self-hosted, Windows, pti, ARC]
+    runs-on: ${{ fromJSON(matrix.tags) }}
     env:
       LEVEL_ZERO_LOADER_VERSION: 1.24.2
     defaults:
@@ -138,6 +138,7 @@ jobs:
         include:
           - preset: windows-ci-release
             build-dir: wbr
+            tags: '["self-hosted", "Windows", "pti", "client", "BMG"]'
 
     if: vars.PTI_RUN_TESTS == 1
 

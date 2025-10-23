@@ -25,7 +25,6 @@ namespace {
 // Versions prior to this one have bugs (or don't have it at all).
 // zeInitDrivers is the preferred method for initializing drivers from this point on.
 constexpr zel_version_t kProperLoaderVersionForZeInitDrivers = {1, 19, 2};
-constexpr uint32_t kBmgIpVersion = 0x05004000;
 
 // Environment variable that determines whether to call zesInit.
 //
@@ -172,7 +171,7 @@ void ZeDriverInit::InitSysmanDrivers() {
   bool call_zesinit = false;
   if (!call_zesinit_env) {
     if (pti::PtiLzTracerLoader::Instance().zesDriverGetDeviceByUuidExp_) {
-      if (utils::ze::ContainsDeviceWithAtLeastIpVersion(drivers_, kBmgIpVersion)) {
+      if (utils::ze::ContainsDeviceWithAtLeastIpVersion(drivers_, utils::ze::kBmgIpVersion)) {
         call_zesinit = true;
       }
     }

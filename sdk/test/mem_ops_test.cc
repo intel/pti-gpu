@@ -1,14 +1,13 @@
 #include <gtest/gtest.h>
 #include <level_zero/ze_api.h>
 
+#include <algorithm>
 #include <cstring>
 #include <sycl/sycl.hpp>
 #include <vector>
 
 #include "pti/pti_view.h"
 #include "utils.h"
-
-using namespace sycl;
 
 namespace {
 constexpr uint64_t kMaxQueueId = static_cast<uint64_t>(PTI_INVALID_QUEUE_ID);
@@ -91,20 +90,19 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
-        [[maybe_unused]] pti_view_record_external_correlation* aExtRec =
+        [[maybe_unused]] auto* record =
             reinterpret_cast<pti_view_record_external_correlation*>(ptr);
         break;
       }
       case pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD: {
-        [[maybe_unused]] pti_view_record_overhead* record =
-            reinterpret_cast<pti_view_record_overhead*>(ptr);
+        [[maybe_unused]] auto* record = reinterpret_cast<pti_view_record_overhead*>(ptr);
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
-        std::string memcpy_name = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_name;
+        auto* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+        std::string memcpy_name = rec->_name;
         if (memcpy_name.find("D2D)") != std::string::npos) {
           non_p2p_d2d_exists = true;
-          pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
           if (rec->_memcpy_type == pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_D2D) {
             memcopy_type_valid = true;
             memcopy_type_stringified =
@@ -124,15 +122,25 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P: {
-        std::string memcpy_name = reinterpret_cast<pti_view_record_memory_copy_p2p*>(ptr)->_name;
-        if (memcpy_name.find("D2D - P2P") != std::string::npos) p2p_d2d_record = true;
-        if (memcpy_name.find("D2S - P2P") != std::string::npos) p2p_d2s_record = true;
-        if (memcpy_name.find("S2D - P2P") != std::string::npos) p2p_s2d_record = true;
-        if (memcpy_name.find("S2S - P2P") != std::string::npos) p2p_s2s_record = true;
-        pti_view_record_memory_copy_p2p* rec =
-            reinterpret_cast<pti_view_record_memory_copy_p2p*>(ptr);
-        if (rec->_sycl_queue_id != kMaxQueueId) queue_id_memp2p_records = true;
-        if (memcmp(rec->_src_uuid, rec->_dst_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
+        auto* rec = reinterpret_cast<pti_view_record_memory_copy_p2p*>(ptr);
+        std::string memcpy_name = rec->_name;
+        if (memcpy_name.find("D2D - P2P") != std::string::npos) {
+          p2p_d2d_record = true;
+        }
+        if (memcpy_name.find("D2S - P2P") != std::string::npos) {
+          p2p_d2s_record = true;
+        }
+        if (memcpy_name.find("S2D - P2P") != std::string::npos) {
+          p2p_s2d_record = true;
+        }
+        if (memcpy_name.find("S2S - P2P") != std::string::npos) {
+          p2p_s2s_record = true;
+        }
+        if (rec->_sycl_queue_id != kMaxQueueId) {
+          queue_id_memp2p_records = true;
+        }
+        if (std::equal(std::begin(rec->_src_uuid), std::end(rec->_src_uuid),
+                       std::begin(rec->_dst_uuid))) {
           uuid_non_unique = true;
         }
         if (p2p_d2s_record) {
@@ -155,10 +163,12 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
-        pti_view_record_memory_fill* rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
+        auto* rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
         std::string tmp_str = rec->_name;
-        if (memcmp(rec->_device_uuid, zero_uuid, PTI_MAX_DEVICE_UUID_SIZE) != 0)
+        if (!std::equal(std::begin(rec->_device_uuid), std::end(rec->_device_uuid),
+                        std::begin(zero_uuid))) {
           memfill_uuid_zero = false;
+        }
         memfill_m2s = memfill_m2s || ((rec->_mem_type == PTI_VIEW_MEMORY_TYPE_SHARED) &&
                                       (tmp_str.find("M2S") != std::string::npos));
         memfill_m2d = memfill_m2d || ((rec->_mem_type == PTI_VIEW_MEMORY_TYPE_DEVICE) &&
@@ -166,12 +176,12 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_RUNTIME_API: {
-        pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
-        const char* pName = nullptr;
-        pti_result status =
-            ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id, &pName);
+        auto* rec = reinterpret_cast<pti_view_record_api*>(ptr);
+        const char* plain_function_name = nullptr;
+        pti_result status = ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id,
+                                                &plain_function_name);
         PTI_ASSERT(status == PTI_SUCCESS);
-        std::string function_name(pName);
+        std::string function_name(plain_function_name);
         if ((function_name.find("EnqueueUSMFill") != std::string::npos) ||
             (function_name.find("USMEnqueueMemset") != std::string::npos)) {
           sycl_memfill_seen = true;
@@ -201,25 +211,26 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
   ::operator delete(buf);
 }
 
-void p2pTest() {
+void P2pTest() {
   StartTracing();
 
-  platform platform(gpu_selector_v);
+  sycl::platform platform(sycl::gpu_selector_v);
 
-  std::vector<queue> gpu_queues;
+  std::vector<sycl::queue> gpu_queues;
   std::vector<float*> host_ptrs;
   std::vector<float*> gpu_device_ptrs;
   std::vector<float*> gpu_shared_ptrs;
-  std::vector<context> gpu_context;
+  std::vector<sycl::context> gpu_context;
   size_t num_root_devices;
 
   try {
-    std::vector<device> gpu_devices = platform.get_devices();
+    std::vector<sycl::device> gpu_devices = platform.get_devices();
     num_root_devices = gpu_devices.size();
     std::cout << "Number of Root Devices: " << num_root_devices << "\n";
+    sycl::property_list prop{sycl::property::queue::in_order()};
     for (uint32_t i = 0; i < num_root_devices; i++) {
-      gpu_context.push_back(context(gpu_devices[i]));
-      gpu_queues.push_back(queue(gpu_context[i], gpu_devices[i]));
+      gpu_context.push_back(sycl::context(gpu_devices[i]));
+      gpu_queues.push_back(sycl::queue(gpu_context[i], gpu_devices[i], prop));
       gpu_device_ptrs.push_back(
           static_cast<float*>(malloc_device(num_root_devices * sizeof(float), gpu_queues[i])));
       gpu_shared_ptrs.push_back(
@@ -242,20 +253,22 @@ void p2pTest() {
   if (num_root_devices > 1) {
     atleast_2_devices = true;
     ze_bool_t p2p_access = 0;
-    uint32_t connected_dev1 = 0, connected_dev2 = 1;
+    uint32_t connected_dev1 = 0;
+    uint32_t connected_dev2 = 1;
     for (uint32_t i = 0; i < num_root_devices; i++) {
-      auto hSrcDevice =
-          get_native<sycl::backend::ext_oneapi_level_zero>(gpu_queues[i].get_device());
+      auto* src_dev_backend_handle =
+          sycl::get_native<sycl::backend::ext_oneapi_level_zero>(gpu_queues[i].get_device());
       for (uint32_t j = 0; j < num_root_devices; j++) {
         if (i == j) {
           continue;
         }
-        auto hDstDevice =
-            get_native<sycl::backend::ext_oneapi_level_zero>(gpu_queues[j].get_device());
+        auto* dst_dev_backend_handle =
+            sycl::get_native<sycl::backend::ext_oneapi_level_zero>(gpu_queues[j].get_device());
 
-        ze_result_t status;
-        if (hSrcDevice && hDstDevice && (hSrcDevice != hDstDevice)) {
-          status = zeDeviceCanAccessPeer(hSrcDevice, hDstDevice, &p2p_access);
+        if (src_dev_backend_handle && dst_dev_backend_handle &&
+            (src_dev_backend_handle != dst_dev_backend_handle)) {
+          auto status =
+              zeDeviceCanAccessPeer(src_dev_backend_handle, dst_dev_backend_handle, &p2p_access);
           ASSERT_EQ(status, ZE_RESULT_SUCCESS);
           if (p2p_access) {
             p2p_device_access = true;
@@ -293,11 +306,11 @@ void p2pTest() {
         .wait();
   }
   StopTracing();
-  ptiFlushAllViews();
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   for (uint32_t i = 0; i < num_root_devices; i++) {
-    free(gpu_device_ptrs[i], gpu_context[i]);
-    free(gpu_shared_ptrs[i], gpu_context[i]);
-    free(host_ptrs[i], gpu_context[i]);
+    sycl::free(gpu_device_ptrs[i], gpu_context[i]);
+    sycl::free(gpu_shared_ptrs[i], gpu_context[i]);
+    sycl::free(host_ptrs[i], gpu_context[i]);
   }
 }
 
@@ -337,7 +350,7 @@ class MemoryOperationFixtureTest : public ::testing::Test {
 
 TEST_F(MemoryOperationFixtureTest, P2PMemoryCopyRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   if (!atleast_2_devices)
     GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
   if (!p2p_device_access)
@@ -350,7 +363,7 @@ TEST_F(MemoryOperationFixtureTest, P2PMemoryCopyRecords) {
 
 TEST_F(MemoryOperationFixtureTest, P2PuuidUniqueEachDevicePerP2P) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   if (!atleast_2_devices)
     GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
   if (!p2p_device_access)
@@ -361,14 +374,14 @@ TEST_F(MemoryOperationFixtureTest, P2PuuidUniqueEachDevicePerP2P) {
 // Detect the nonp2p -- device to same device memcpy
 TEST_F(MemoryOperationFixtureTest, NonP2PD2D) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(non_p2p_d2d_exists, true);
 }
 
 // Detect the nonp2p -- device to same device memcpy stringified types
 TEST_F(MemoryOperationFixtureTest, NonP2PD2DStringified) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memcopy_type_stringified, true);
   ASSERT_EQ(memory_src_type_stringified, true);
   ASSERT_EQ(memory_dst_type_stringified, true);
@@ -376,61 +389,61 @@ TEST_F(MemoryOperationFixtureTest, NonP2PD2DStringified) {
 
 TEST_F(MemoryOperationFixtureTest, MemFilluuidDeviceNonZero) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memfill_uuid_zero, false);
 }
 
 TEST_F(MemoryOperationFixtureTest, MemCopyTypeDevice) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memcopy_type_valid, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, MemSrcTypeDevice) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memsrc_type_valid, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, MemDstTypeDevice) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memdst_type_valid, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, MemCopyTypeP2PDevice) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memcopy_type_valid, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, MemSrcTypeShared) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memsrc_type_valid, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, MemDstTypeShared) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memdst_type_valid, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, MemFillDstTypeSharedPresent) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memfill_m2s, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, MemFillDstTypeDevicePresent) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   ASSERT_EQ(memfill_m2d, true);
 }
 
 TEST_F(MemoryOperationFixtureTest, P2PD2DStringified) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   if (!atleast_2_devices)
     GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
   ASSERT_EQ(memcopy_type_p2p_stringified, true);
@@ -440,7 +453,7 @@ TEST_F(MemoryOperationFixtureTest, P2PD2DStringified) {
 
 TEST_F(MemoryOperationFixtureTest, P2PQueueIdPresent) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   if (!atleast_2_devices)
     GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
   ASSERT_EQ(queue_id_memp2p_records, true);
@@ -448,7 +461,7 @@ TEST_F(MemoryOperationFixtureTest, P2PQueueIdPresent) {
 
 TEST_F(MemoryOperationFixtureTest, syclRuntimeRecordsDetected) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
-  p2pTest();
+  P2pTest();
   EXPECT_EQ(sycl_host_alloc_seen, true);
   EXPECT_EQ(sycl_device_alloc_seen, true);
   EXPECT_EQ(sycl_shared_alloc_seen, true);
