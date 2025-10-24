@@ -137,6 +137,50 @@ if(HAVE_SYCL)
   target_link_libraries(vecsqadd_metrics_suite PUBLIC spdlog::spdlog
     GTest::gtest_main Pti::pti_view ${FS_LIB})
 
+
+
+
+  add_executable(metrics_scope_gemm_suite metrics_scope_gemm.cc)
+  target_include_directories(
+    metrics_scope_gemm_suite
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
+
+            "${PROJECT_SOURCE_DIR}/samples/samples_utilities")
+
+  target_compile_options(
+    metrics_scope_gemm_suite
+    PUBLIC -fsycl)
+
+  target_link_options(metrics_scope_gemm_suite PUBLIC -fsycl)
+
+  target_compile_definitions(metrics_scope_gemm_suite PUBLIC PTI_LEVEL_ZERO=1)
+
+  target_link_libraries(metrics_scope_gemm_suite PUBLIC spdlog::spdlog
+    GTest::gtest_main Pti::pti_view ${FS_LIB})
+
+  add_executable(metrics_scope_parallel metrics_scope_parallel.cc)
+  target_include_directories(
+    metrics_scope_parallel
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
+
+            "${PROJECT_SOURCE_DIR}/samples/samples_utilities")
+
+  target_compile_options(
+    metrics_scope_parallel
+    PUBLIC -fsycl)
+
+  target_link_options(metrics_scope_parallel PUBLIC -fsycl)
+
+  target_compile_definitions(metrics_scope_parallel PUBLIC PTI_LEVEL_ZERO=1)
+
+  target_link_libraries(metrics_scope_parallel PUBLIC spdlog::spdlog
+    GTest::gtest_main Pti::pti_view ${FS_LIB})
+
+
   add_executable(no_kernel_overlap no_kernel_overlap.cc)
   target_include_directories(
     no_kernel_overlap
@@ -221,6 +265,7 @@ if(HAVE_SYCL)
                                             LevelZero::level-zero
                                             ${FS_LIB})
 
+    
   add_executable(init_tests init_tests.cc)
 
   target_include_directories(
@@ -356,6 +401,22 @@ if(HAVE_SYCL)
        ENVIRONMENT ZET_ENABLE_METRICS=1
        LABELS "functional"
        LABELS "hw-metrics")
+
+  gtest_discover_tests(
+    metrics_scope_gemm_suite
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES
+       ENVIRONMENT ZET_ENABLE_METRICS=1
+       LABELS "functional"
+       LABELS "hw-metrics-scope")
+  
+   gtest_discover_tests(
+    metrics_scope_parallel
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES
+       ENVIRONMENT ZET_ENABLE_METRICS=1
+       LABELS "functional"
+       LABELS "hw-metrics-scope")
 
   gtest_discover_tests(
     sycl_queue_id
@@ -615,6 +676,7 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   add_test(NAME run-iso COMMAND iso3dfd 256 256 256 32 8 64 10 gpu)
   add_test(NAME run-metrics-iso COMMAND metrics_iso3dfd 256 256 256 32 8 64 10 gpu)
   add_test(NAME run-callback COMMAND callback)
+  add_test(NAME run-metrics-scope COMMAND metrics_scope)
 
   set_tests_properties(
     run-metrics-iso PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS "functional;samples;hw-metrics")
@@ -622,5 +684,8 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   set_tests_properties(
     mt-awk-test mt-awk-test-immediate run-dlworkload run-dpc_gemm run-onemkl_gemm_exe run-vec_sqadd
     run-iso run-callback PROPERTIES LABELS "functional;samples")
+
+  set_tests_properties(
+    run-metrics-scope PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS "functional;samples;hw-metrics-scope")
 
 endif()

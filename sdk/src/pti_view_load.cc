@@ -10,6 +10,7 @@
 
 #include "pti/pti.h"
 #include "pti/pti_metrics.h"
+#include "pti/pti_metrics_scope.h"
 #include "pti/pti_view.h"
 #include "pti_lib_handler.h"
 
@@ -477,6 +478,242 @@ pti_result ptiMetricGetCalculatedData(pti_device_handle_t device_handle,
 
     return pti::PtiLibHandler::Instance().ptiMetricGetCalculatedData_(
         device_handle, metrics_group_handle, metrics_values_buffer, metrics_values_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+// Metrics Scope functions
+pti_result ptiMetricsScopeEnable(pti_scope_collection_handle_t* scope_collection_handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeEnable_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeEnable_(scope_collection_handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeConfigure(pti_scope_collection_handle_t scope_collection_handle,
+                                    pti_metrics_scope_mode_t collection_mode,
+                                    pti_device_handle_t* devices_to_profile, uint32_t device_count,
+                                    const char** metric_names, size_t metric_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeConfigure_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeConfigure_(
+        scope_collection_handle, collection_mode, devices_to_profile, device_count, metric_names,
+        metric_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeStartCollection(pti_scope_collection_handle_t scope_collection_handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeStartCollection_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeStartCollection_(scope_collection_handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeStopCollection(pti_scope_collection_handle_t scope_collection_handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeStopCollection_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeStopCollection_(scope_collection_handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeDisable(pti_scope_collection_handle_t scope_collection_handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeDisable_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeDisable_(scope_collection_handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeQueryCollectionBufferSize(
+    pti_scope_collection_handle_t scope_collection_handle, size_t scopes_number,
+    size_t* estimated_buffer_size) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeQueryCollectionBufferSize_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeQueryCollectionBufferSize_(
+        scope_collection_handle, scopes_number, estimated_buffer_size);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeSetCollectionBufferSize(
+    pti_scope_collection_handle_t scope_collection_handle, size_t buffer_size) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeSetCollectionBufferSize_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeSetCollectionBufferSize_(
+        scope_collection_handle, buffer_size);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeGetCollectionBuffersCount(
+    pti_scope_collection_handle_t scope_collection_handle, size_t* buffer_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeGetCollectionBuffersCount_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeGetCollectionBuffersCount_(
+        scope_collection_handle, buffer_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeGetCollectionBuffer(pti_scope_collection_handle_t scope_collection_handle,
+                                              size_t buffer_index, void** buffer,
+                                              size_t* buffer_size) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeGetCollectionBuffer_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeGetCollectionBuffer_(
+        scope_collection_handle, buffer_index, buffer, buffer_size);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeGetCollectionBufferProperties(
+    pti_scope_collection_handle_t scope_collection_handle, void* collection_buffer,
+    pti_metrics_scope_collection_buffer_properties_t* props) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeGetCollectionBufferProperties_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeGetCollectionBufferProperties_(
+        scope_collection_handle, collection_buffer, props);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeCalculateMetrics(pti_scope_collection_handle_t scope_collection_handle,
+                                           void* collection_buffer, void* metrics_buffer,
+                                           size_t metrics_buffer_size, size_t* records_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeCalculateMetrics_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeCalculateMetrics_(
+        scope_collection_handle, collection_buffer, metrics_buffer, metrics_buffer_size,
+        records_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeQueryMetricsBufferSize(
+    pti_scope_collection_handle_t scope_collection_handle, void* collection_buffer,
+    size_t* required_metrics_buffer_size, size_t* records_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeQueryMetricsBufferSize_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeQueryMetricsBufferSize_(
+        scope_collection_handle, collection_buffer, required_metrics_buffer_size, records_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsScopeGetMetricsMetadata(pti_scope_collection_handle_t scope_collection_handle,
+                                             pti_metrics_scope_record_metadata_t* metadata) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsScopeGetMetricsMetadata_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsScopeGetMetricsMetadata_(
+        scope_collection_handle, metadata);
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
   }

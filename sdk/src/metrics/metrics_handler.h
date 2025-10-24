@@ -13,11 +13,11 @@
 
 #include <algorithm>
 #include <atomic>
-#include <condition_variable>
 #include <iostream>
 #include <random>
 #include <thread>
 
+#include "pti/pti_callback.h"
 #include "pti/pti_metrics.h"
 #include "utils/pti_filesystem.h"
 #include "utils/utils.h"
@@ -28,6 +28,8 @@
 
 ///@brief Maximum metrics per metric group
 #define PTI_METRIC_COUNT_MAX 512
+
+#define PTI_METRIC_POOL_EVENT_COUNT 1000
 
 enum class ptiMetricProfilerState {
   PROFILER_DISABLED = 0,
@@ -58,6 +60,12 @@ struct pti_metrics_device_descriptor_t {
   std::ofstream metric_file_stream_;
   std::vector<uint8_t> metric_data_ = {};
   bool stall_sampling_ = false;
+
+  // Query-specific fields
+  zet_metric_query_pool_handle_t query_pool_ = nullptr;
+  // zet_metric_query_handle_t current_query_ = nullptr;
+  // ze_event_handle_t completion_event_ = nullptr;
+  // bool query_active_ = false;
 };
 
 class PtiMetricsProfiler {
@@ -75,10 +83,16 @@ class PtiMetricsProfiler {
   std::condition_variable cv_thread_start_;
   // condition variable for the profiling thread to wait for the profiling state to change
   std::condition_variable cv_pause_;
-  // max number of samples used for allocating local buffer and setting hw full notification
-  static uint32_t max_metric_samples_;
+
+// max number of samples used for allocating local buffer and setting hw full notification
+#ifndef _WIN32
+  inline static uint32_t max_metric_samples_ = 2048;
+#else   // Linux
+  inline static uint32_t max_metric_samples_ = 32768;
+#endif  //_WIN32
+
   // maximum number of hw buffer reads before local buffer is written to disc
-  static uint8_t max_data_capture_count_;
+  inline static uint8_t max_data_capture_count_ = 10;
 
  public:
   PtiMetricsProfiler() = delete;
@@ -268,8 +282,13 @@ class PtiMetricsProfiler {
       stall_sampling = true;
     }
 
+    static std::mutex driver_mutex;
     uint32_t num_drivers = 0;
-    status = zeDriverGet(&num_drivers, nullptr);
+    {
+      std::lock_guard<std::mutex> lock(driver_mutex);
+      status = zeDriverGet(&num_drivers, nullptr);
+    }
+
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     if (num_drivers > 0) {
       //      int32_t did = 0;
@@ -484,16 +503,11 @@ class PtiMetricsProfiler {
     }
   }
 };
-#ifndef _WIN32
-uint32_t PtiMetricsProfiler::max_metric_samples_ = 2048;
-#else   // Linux
-uint32_t PtiMetricsProfiler::max_metric_samples_ = 32768;
-#endif  //_WIN32
 
 // TODO: experiment with the max capture count to find the optimal number of hw buffer
 // to local buffer reads before writing to disc while minimizing collection overhead
 // and preventing data loss by not reading the hw buffer fast enough when data is ready
-uint8_t PtiMetricsProfiler::max_data_capture_count_ = 10;
+// uint8_t PtiMetricsProfiler::max_data_capture_count_ = 10;
 
 class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
  private:
@@ -929,31 +943,383 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
   }
 };
 
-/*
-class PtiQueryMetricsProfiler : public PtiMetricsProfiler
-{
-public:
-    PtiQueryMetricsProfiler() = delete;
-    PtiQueryMetricsProfiler(const PtiQueryMetricsProfiler &) = delete;
-    PtiQueryMetricsProfiler &operator=(const PtiQueryMetricsProfiler &) = delete;
-    PtiQueryMetricsProfiler(PtiQueryMetricsProfiler &&) = delete;
-    PtiQueryMetricsProfiler &operator=(PtiQueryMetricsProfiler &&) = delete;
+class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
+ private:
+  std::unordered_map<uint64_t, zet_metric_query_handle_t> kernel_to_query_map_;
+  std::unordered_map<zet_metric_query_handle_t, ze_event_handle_t> query_to_event_map_;
+  std::mutex query_injection_mutex_;
+  std::atomic<uint32_t> next_query_index_ = 0;
+  std::atomic<uint32_t> next_event_index_ = 0;
 
-    PtiQueryMetricsProfiler(std::string &group_name) : PtiMetricsProfiler(group_name) {}
+ public:
+  PtiQueryMetricsProfiler() = delete;
+  PtiQueryMetricsProfiler(const PtiQueryMetricsProfiler &) = delete;
+  PtiQueryMetricsProfiler &operator=(const PtiQueryMetricsProfiler &) = delete;
+  PtiQueryMetricsProfiler(PtiQueryMetricsProfiler &&) = delete;
+  PtiQueryMetricsProfiler &operator=(PtiQueryMetricsProfiler &&) = delete;
 
-    void StartProfiling(bool start_paused) {}
-    // PauseProfiling(), ResumeProfiling and StopProfiling() are same for all profiler types and are
-    // implemented in the parent class PtiMetricsProfiler
+  PtiQueryMetricsProfiler(pti_device_handle_t device_handle,
+                          pti_metrics_group_handle_t metrics_group_handle)
+      : PtiMetricsProfiler(device_handle, metrics_group_handle) {}
 
-private:
-    void ComputeMetrics() {}
-    void CaptureRawMetrics() {}
-    void
-PerDeviceQueryMetricsProfilingThread(std::shared_ptr<pti_metrics_device_descriptor_t> desc)
-{}
+  ~PtiQueryMetricsProfiler() {
+    ze_result_t status = ZE_RESULT_SUCCESS;
 
+    // Clear correlation maps
+    {
+      std::lock_guard<std::mutex> lock(query_injection_mutex_);
+      kernel_to_query_map_.clear();
+      query_to_event_map_.clear();
+    }
+
+    for (auto &[device, desc] : device_descriptors_) {
+      if (desc->parent_device_ != nullptr) {
+        continue;
+      }
+
+      // Destroy query pool if exists
+      if (desc->query_pool_ != nullptr) {
+        status = zetMetricQueryPoolDestroy(desc->query_pool_);
+        if (status != ZE_RESULT_SUCCESS) {
+          SPDLOG_WARN("~PtiQueryMetricsProfiler(): Failed to destroy query pool: ");
+        }
+        desc->query_pool_ = nullptr;
+      }
+
+      // Deactivate metric groups
+      status = zetContextActivateMetricGroups(desc->context_, device, 0, nullptr);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_WARN("~PtiQueryMetricsProfiler(): Failed to deactivate metric groups:");
+      }
+    }
+  }
+
+  pti_result StartProfiling(bool start_paused) {
+    if (start_paused == true) return PTI_ERROR_INTERNAL;
+    return InitializeQueryResources();
+  }
+
+  virtual pti_result StopProfiling() {
+    for (auto it = device_descriptors_.begin(); it != device_descriptors_.end(); ++it) {
+      if (it->second->parent_device_ != nullptr) {
+        // subdevice
+        continue;
+      }
+      // Collection should be running or paused before stop is called
+      if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_DISABLED) {
+        SPDLOG_DEBUG(
+            "StopProfiling(): Attempting to stop a metrics collection that hasn't been started");
+        return PTI_ERROR_METRICS_COLLECTION_NOT_ENABLED;
+      }
+
+      it->second->profiling_state_.store(ptiMetricProfilerState::PROFILER_DISABLED,
+                                         std::memory_order_release);
+    }
+    return PTI_SUCCESS;
+  }
+
+  zet_metric_query_handle_t GetQueryForKernel(uint64_t kernel_id) {
+    std::lock_guard<std::mutex> lock(query_injection_mutex_);
+    auto it = kernel_to_query_map_.find(kernel_id);
+    return (it != kernel_to_query_map_.end()) ? it->second : nullptr;
+  }
+
+  ze_event_handle_t GetEventForQuery(zet_metric_query_handle_t query) {
+    std::lock_guard<std::mutex> lock(query_injection_mutex_);
+    auto it = query_to_event_map_.find(query);
+    return (it != query_to_event_map_.end()) ? it->second : nullptr;
+  }
+
+  void RemoveKernelQuery(uint64_t kernel_id) {
+    std::lock_guard<std::mutex> lock(query_injection_mutex_);
+    auto query_it = kernel_to_query_map_.find(kernel_id);
+    if (query_it != kernel_to_query_map_.end()) {
+      query_to_event_map_.erase(query_it->second);
+      kernel_to_query_map_.erase(query_it);
+    }
+  }
+
+  pti_result HandleKernelAppendEnter(ze_command_list_handle_t cmd_list, ze_device_handle_t device,
+                                     uint64_t operation_id) {
+    try {
+      PTI_ASSERT(device != nullptr);
+      PTI_ASSERT(cmd_list != nullptr);
+      return InjectQueryBegin(cmd_list, device, operation_id);
+    } catch (const std::exception &e) {
+      SPDLOG_DEBUG("Exception in HandleKernelAppendEnter: {}", e.what());
+      return PTI_ERROR_INTERNAL;
+    }
+  }
+
+  pti_result HandleKernelAppendExit(ze_command_list_handle_t cmd_list, ze_device_handle_t device,
+                                    uint64_t operation_id) {
+    try {
+      PTI_ASSERT(cmd_list != nullptr);
+      return InjectQueryEnd(cmd_list, device, operation_id);
+    } catch (const std::exception &e) {
+      SPDLOG_DEBUG("Exception in HandleKernelAppendExit: {}", e.what());
+      return PTI_ERROR_INTERNAL;
+    }
+  }
+
+ private:
+  pti_result InitializeQueryResources() {
+    ze_result_t status = ZE_RESULT_SUCCESS;
+
+    for (auto &[device, desc] : device_descriptors_) {
+      if (desc->parent_device_ != nullptr) {
+        // Skip sub-devices for now
+        continue;
+      }
+
+      // Collection should be stopped before start is called
+      if (desc->profiling_state_ == ptiMetricProfilerState::PROFILER_ENABLED) {
+        SPDLOG_DEBUG(
+            "InitializeQueryResources: Attempting to start a metrics collection that isn't "
+            "stopped");
+        return PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED;
+      }
+
+      if (desc->profiling_state_ == ptiMetricProfilerState::PROFILER_PAUSED) {
+        SPDLOG_DEBUG(
+            "InitializeQueryResources: Attempting to start instead of resume a metrics collection "
+            "that is paused");
+        return PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED;
+      }
+
+      pti_result result = CreateQueryEventPool(device, desc);
+      if (result != PTI_SUCCESS) {
+        SPDLOG_DEBUG("InitializeQueryResources: Failed to create query pool for device");
+        return result;
+      }
+
+      // Activate metric groups for the device
+      status = zetContextActivateMetricGroups(desc->context_, device, 1, &desc->metrics_group_);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_DEBUG("InitializeQueryResources: Failed to activate metric groups:");
+        return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+      }
+
+      desc->profiling_state_.store(ptiMetricProfilerState::PROFILER_ENABLED,
+                                   std::memory_order_release);
+
+      SPDLOG_TRACE("InitializeQueryResources: Query resources initialized for device");
+    }
+
+    return PTI_SUCCESS;
+  }
+
+  pti_result CreateQueryEventPool(ze_device_handle_t device,
+                                  std::shared_ptr<pti_metrics_device_descriptor_t> desc) {
+    ze_result_t status = ZE_RESULT_SUCCESS;
+
+    // Add comprehensive logging
+    SPDLOG_TRACE("CreateQueryEventPool - Starting creation for device: {}",
+                 reinterpret_cast<void *>(device));
+
+    // Validate inputs before calling Level Zero
+    if (desc->context_ == nullptr) {
+      SPDLOG_DEBUG("CreateQueryEventPool - Context is null!");
+      return PTI_ERROR_BAD_ARGUMENT;
+    }
+
+    if (desc->metrics_group_ == nullptr) {
+      SPDLOG_DEBUG("CreateQueryEventPool - Metric group is null!");
+      return PTI_ERROR_BAD_ARGUMENT;
+    }
+
+    if (device == nullptr) {
+      SPDLOG_DEBUG("CreateQueryEventPool - Device is null!");
+      return PTI_ERROR_BAD_ARGUMENT;
+    }
+
+    // Check metric group properties
+    zet_metric_group_properties_t group_props = {};
+    group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
+    status = zetMetricGroupGetProperties(desc->metrics_group_, &group_props);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("CreateQueryEventPool - Failed to get metric group properties: {:#x}",
+                   static_cast<unsigned int>(status));
+      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+    }
+
+    SPDLOG_TRACE("  Metric group name: {}", static_cast<const char *>(group_props.name));
+    SPDLOG_TRACE("  Metric group sampling type: 0x{:x}", group_props.samplingType);
+    SPDLOG_TRACE("  Metric count: {}", group_props.metricCount);
+
+    // Check if this is an event-based metric group
+    if (!(group_props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED)) {
+      SPDLOG_DEBUG("CreateQueryEventPool - Metric group is not event-based! Sampling type: 0x{:x}",
+                   group_props.samplingType);
+      SPDLOG_DEBUG("  Available types: TIME_BASED=0x2, EVENT_BASED=0x1, TRACER_BASED=0x4");
+      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+    }
+
+    // Create metric query pool with detailed logging
+    zet_metric_query_pool_desc_t query_pool_desc = {};
+    query_pool_desc.stype = ZET_STRUCTURE_TYPE_METRIC_QUERY_POOL_DESC;
+    query_pool_desc.pNext = nullptr;
+    query_pool_desc.type = ZET_METRIC_QUERY_POOL_TYPE_PERFORMANCE;
+    query_pool_desc.count = PTI_METRIC_POOL_EVENT_COUNT;
+
+    status = zetMetricQueryPoolCreate(desc->context_, device, desc->metrics_group_,
+                                      &query_pool_desc, &desc->query_pool_);
+
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("CreateQueryEventPool: Failed to create metric query pool: 0x{:x}",
+                   static_cast<unsigned int>(status));
+
+      // Provide specific error guidance
+      switch (status) {
+        case ZE_RESULT_ERROR_INVALID_ARGUMENT:
+          SPDLOG_DEBUG("  -> Invalid argument: Check context, device, or metric group validity");
+          SPDLOG_DEBUG("  -> Context: {}, Device: {}, MetricGroup: {}",
+                       static_cast<void *>(desc->context_), static_cast<void *>(device),
+                       static_cast<void *>(desc->metrics_group_));
+          break;
+        case ZE_RESULT_ERROR_UNSUPPORTED_FEATURE:
+          SPDLOG_DEBUG("  -> Metric queries not supported on this device/driver combination");
+          SPDLOG_DEBUG("  -> Try updating GPU drivers or check device capabilities");
+          break;
+        case ZE_RESULT_ERROR_OUT_OF_HOST_MEMORY:
+        case ZE_RESULT_ERROR_OUT_OF_DEVICE_MEMORY:
+          SPDLOG_DEBUG("  -> Insufficient memory for query pool");
+          SPDLOG_DEBUG("  -> Try reducing query pool size or closing other GPU applications");
+          break;
+        default:
+          SPDLOG_DEBUG("  -> Unknown error (0x{:x})", static_cast<unsigned int>(status));
+          break;
+      }
+
+      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+    }
+
+    SPDLOG_TRACE("CreateQueryEventPool - Query pool created successfully: {}",
+                 reinterpret_cast<void *>(desc->query_pool_));
+
+    // Create event pool for completion events
+    if (desc->event_pool_ == nullptr) {
+      ze_event_pool_desc_t event_pool_desc = {
+          ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
+          ZE_EVENT_POOL_FLAG_HOST_VISIBLE,  // flags
+          PTI_METRIC_POOL_EVENT_COUNT       // count.
+      };
+
+      status = zeEventPoolCreate(desc->context_, &event_pool_desc, 1, &device, &desc->event_pool_);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_DEBUG("CreateQueryEventPool - Failed to create event pool: ");
+        return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+      }
+    }
+
+    return PTI_SUCCESS;
+  }
+
+  pti_result InjectQueryBegin(ze_command_list_handle_t command_list, ze_device_handle_t device,
+                              uint64_t operation_id) {
+    SPDLOG_TRACE("In {}", __func__);
+    std::lock_guard<std::mutex> lock(query_injection_mutex_);
+
+    auto it = device_descriptors_.find(device);
+    if (it == device_descriptors_.end()) {
+      SPDLOG_DEBUG("InjectQueryBegin: Device not found in descriptors for query injection");
+      return PTI_ERROR_BAD_ARGUMENT;  // should not return an error, do nothing instead
+    }
+
+    auto &desc = it->second;
+
+    if (desc->query_pool_ == nullptr) {
+      SPDLOG_DEBUG("InjectQueryBegin: Query pool not initialized for device");
+      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+    }
+
+    // Create a new query from the pool
+    zet_metric_query_handle_t query;
+    ze_result_t status =
+        zetMetricQueryCreate(desc->query_pool_, next_query_index_.fetch_add(1), &query);
+    SPDLOG_TRACE(
+        "Injecting Query Begin for command list: {}, on device: {}, query index: {},"
+        " query handle: {}",
+        static_cast<void *>(command_list), static_cast<void *>(device),
+        next_query_index_.load() - 1, static_cast<void *>(query));
+
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("InjectQueryBegin: Failed to create metric query for injection: {}",
+                   static_cast<uint32_t>(status));
+      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+    }
+
+    // Inject query begin into command list
+    status = zetCommandListAppendMetricQueryBegin(command_list, query);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("InjectQueryBegin: Failed to inject query begin: {}",
+                   static_cast<uint32_t>(status));
+      zetMetricQueryDestroy(query);
+      return PTI_ERROR_INTERNAL;
+    }
+
+    // Store query for later end injection
+    kernel_to_query_map_[operation_id] = query;
+
+    SPDLOG_TRACE("InjectQueryBegin: Successfully injected query begin for command list: {}",
+                 reinterpret_cast<void *>(command_list));
+    return PTI_SUCCESS;
+  }
+
+  pti_result InjectQueryEnd(ze_command_list_handle_t command_list, ze_device_handle_t device,
+                            uint64_t operation_id) {
+    std::lock_guard<std::mutex> lock(query_injection_mutex_);
+
+    auto query_it = kernel_to_query_map_.find(operation_id);
+    if (query_it == kernel_to_query_map_.end()) {
+      SPDLOG_DEBUG(
+          "InjectQueryEnd: No active query found for operation_id {} in query end injection",
+          operation_id);
+      return PTI_ERROR_BAD_ARGUMENT;
+    }
+    auto it = device_descriptors_.find(device);
+    if (it == device_descriptors_.end()) {
+      SPDLOG_DEBUG("InjectQueryEnd: Device not found in descriptors for query end injection");
+      return PTI_ERROR_BAD_ARGUMENT;
+    }
+
+    auto &desc = it->second;
+    zet_metric_query_handle_t query = query_it->second;
+
+    // Create completion event
+    ze_event_handle_t event;
+    ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr,
+                                  next_event_index_.fetch_add(1), ZE_EVENT_SCOPE_FLAG_HOST,
+                                  ZE_EVENT_SCOPE_FLAG_HOST};
+
+    ze_result_t status = zeEventCreate(desc->event_pool_, &event_desc, &event);
+    SPDLOG_TRACE(
+        "Injecting Query End for command list: {}, query handle: {}"
+        ", event index: {}, event handle: {}",
+        static_cast<void *>(command_list), static_cast<void *>(query), next_event_index_.load() - 1,
+        static_cast<void *>(event));
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("InjectQueryEnd: Failed to create completion event: {}",
+                   static_cast<uint32_t>(status));
+      return PTI_ERROR_INTERNAL;
+    }
+
+    // Inject query end into command list
+    status = zetCommandListAppendMetricQueryEnd(command_list, query, event, 0, nullptr);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("InjectQueryEnd: Failed to inject query end: {}", static_cast<uint32_t>(status));
+      zeEventDestroy(event);
+      return PTI_ERROR_INTERNAL;
+    }
+
+    // Store for data retrieval later
+    query_to_event_map_[query] = event;
+
+    SPDLOG_TRACE("InjectQueryEnd: Successfully injected query end for command list: {}",
+                 reinterpret_cast<void *>(command_list));
+    return PTI_SUCCESS;
+  }
 };
-*/
 
 /* Trace metrics API hooks */
 
@@ -1049,7 +1415,7 @@ struct pti_metrics_tracer_functions_t {
   importIntelMetricDecodeToBinaryBufferPtrFnt zetIntelMetricDecodeToBinaryBufferExp = nullptr;
 };
 
-pti_metrics_tracer_functions_t tf;
+inline pti_metrics_tracer_functions_t tf;
 
 class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
  private:
@@ -1554,7 +1920,7 @@ class PtiMetricsCollectorHandler {
     metric_groups_.clear();
     names_.clear();
     stream_metrics_profilers_.clear();
-    // query_metrics_profilers_.clear();
+    query_metrics_profilers_.clear();
     trace_metrics_profilers_.clear();
     utils::UnloadLibrary(loader_lib_);
   }
@@ -2001,9 +2367,9 @@ class PtiMetricsCollectorHandler {
     if (stream_metrics_profilers_.find(device_handle) != stream_metrics_profilers_.end()) {
       stream_metrics_profilers_[device_handle].reset();
     }
-    // if (query_metrics_profilers_.find(device_handle) != query_metrics_profilers_.end()) {
-    //   query_metrics_profilers_[device_handle].clear();
-    // }
+    if (query_metrics_profilers_.find(device_handle) != query_metrics_profilers_.end()) {
+      query_metrics_profilers_[device_handle].reset();
+    }
     if (trace_metrics_profilers_.find(device_handle) != trace_metrics_profilers_.end()) {
       trace_metrics_profilers_[device_handle].reset();
     }
@@ -2024,14 +2390,12 @@ class PtiMetricsCollectorHandler {
         stream_metrics_profilers_[device_handle] = std::move(stream_metrics_profiler);
         break;
       }
-      /*
-         case ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED: {
-              std::unique_ptr<PtiQuertMetricsProfiler> query_metrics_profiler =
-                std::make_unique<PtiQueryMetricsProfiler>(device_handle, group);
-              query_metrics_profilers_[device_handle].push_back(std::move(query_metrics_profiler));
-              break;
-         }
-      */
+      case ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED: {
+        std::unique_ptr<PtiQueryMetricsProfiler> query_metrics_profiler =
+            std::make_unique<PtiQueryMetricsProfiler>(device_handle, group);
+        query_metrics_profilers_[device_handle] = std::move(query_metrics_profiler);
+        break;
+      }
       case external::L0::ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EXP_TRACER_BASED: {
         // TraceMetricsProfiler relies on L0 Trace Metrics API extensions
         if (trace_api_enabled_) {
@@ -2071,8 +2435,8 @@ class PtiMetricsCollectorHandler {
     pti_result result = PTI_SUCCESS;
     pti_result status = PTI_SUCCESS;
     if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end()
-        /* && query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end() */) {
+        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
       SPDLOG_ERROR(
           "Attempted to start a metrics collection on a device that has not been configured.");
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
@@ -2081,6 +2445,14 @@ class PtiMetricsCollectorHandler {
     auto &stream_metrics_profiler = stream_metrics_profilers_[device_handle];
     if (stream_metrics_profiler) {
       status = stream_metrics_profiler->StartProfiling(start_paused);
+      if (status != PTI_SUCCESS) {
+        result = status;
+      }
+    }
+
+    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
+    if (query_metrics_profiler) {
+      status = query_metrics_profiler->StartProfiling(start_paused);
       if (status != PTI_SUCCESS) {
         result = status;
       }
@@ -2123,42 +2495,42 @@ class PtiMetricsCollectorHandler {
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
-    // TODO: implement
-    return PTI_ERROR_NOT_IMPLEMENTED;
-    /*
-        pti_result result = PTI_SUCCESS;
-        pti_result status = PTI_SUCCESS;
-        if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-            trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
-            query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
-          SPDLOG_ERROR("Attempted to pause a metrics collection on a device that has not been
-       configured for metrics collection."); return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
-        }
+    pti_result result = PTI_SUCCESS;
+    pti_result status = PTI_SUCCESS;
+    if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
+        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
+      SPDLOG_ERROR(
+          "Attempted to pause a metrics collection on a device that has not been "
+          "configured for metrics collection.");
+      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+    }
 
-        for (auto &stream_metrics_profiler : stream_metrics_profilers_[device_handle]) {
-          status = stream_metrics_profiler->PauseProfiling();
-          if (status != PTI_SUCCESS) {
-            result = status;
-          }
-        }
+    auto &stream_metrics_profiler = stream_metrics_profilers_[device_handle];
+    if (stream_metrics_profiler) {
+      status = stream_metrics_profiler->PauseProfiling();
+      if (status != PTI_SUCCESS) {
+        result = status;
+      }
+    }
 
-        // TODO: pause the Query metric profilers
-        for (auto &query_metrics_profiler : query_metrics_profilers_[device_handle]) {
-          status = query_metrics_profiler->PauseProfiling();
-          if (status != PTI_SUCCESS) {
-            result = status;
-          }
-        }
+    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
+    if (query_metrics_profiler) {
+      status = query_metrics_profiler->PauseProfiling();
+      if (status != PTI_SUCCESS) {
+        result = status;
+      }
+    }
 
-        for (auto &trace_metrics_profiler : trace_metrics_profilers_[device_handle]) {
-          status = trace_metrics_profiler->PauseProfiling();
-          if (status != PTI_SUCCESS) {
-            result = status;
-          }
-        }
+    auto &trace_metrics_profiler = trace_metrics_profilers_[device_handle];
+    if (trace_metrics_profiler) {
+      status = trace_metrics_profiler->PauseProfiling();
+      if (status != PTI_SUCCESS) {
+        result = status;
+      }
+    }
 
-        return result;
-    */
+    return result;
   }
 
   pti_result ResumeCollection(pti_device_handle_t device_handle) {
@@ -2179,8 +2551,8 @@ class PtiMetricsCollectorHandler {
     pti_result result = PTI_SUCCESS;
     pti_result status = PTI_SUCCESS;
     if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end()
-        /* && query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end() */) {
+        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
       SPDLOG_ERROR(
           "Attempted to resume a metrics collection on a device that has not been configured.");
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
@@ -2193,12 +2565,15 @@ class PtiMetricsCollectorHandler {
         result = status;
       }
     }
-    // TODO: resume the Query metric profilers
-    /*
-        for (auto &query_metrics_profiler : query_metrics_profilers_[device_handle]) {
-          query_metrics_profiler->ResumeProfiling();
-        }
-    */
+
+    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
+    if (query_metrics_profiler) {
+      status = query_metrics_profiler->ResumeProfiling();
+      if (status != PTI_SUCCESS) {
+        result = status;
+      }
+    }
+
     auto &trace_metrics_profiler = trace_metrics_profilers_[device_handle];
     if (trace_metrics_profiler) {
       status = trace_metrics_profiler->ResumeProfiling();
@@ -2228,8 +2603,8 @@ class PtiMetricsCollectorHandler {
     pti_result result = PTI_SUCCESS;
     pti_result status = PTI_SUCCESS;
     if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end()
-        /* && query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end() */) {
+        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
       SPDLOG_ERROR(
           "Attempted to stop a metrics collection on a device that has not been configured.");
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
@@ -2242,11 +2617,14 @@ class PtiMetricsCollectorHandler {
         result = status;
       }
     }
-    /*
-        for (auto &query_metrics_profiler : query_metrics_profilers_[device_handle]) {
-          query_metrics_profiler->StopProfiling();
-        }
-    */
+
+    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
+    if (query_metrics_profiler) {
+      status = query_metrics_profiler->StopProfiling();
+      if (status != PTI_SUCCESS) {
+        result = status;
+      }
+    }
     auto &trace_metrics_profiler = trace_metrics_profilers_[device_handle];
     if (trace_metrics_profiler) {
       status = trace_metrics_profiler->StopProfiling();
@@ -2283,8 +2661,8 @@ class PtiMetricsCollectorHandler {
     pti_result result = PTI_SUCCESS;
     pti_result status = PTI_SUCCESS;
     if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end()
-        /* && query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end() */) {
+        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
       SPDLOG_ERROR("Attempted to calculate metrics on a device that has not been configured.");
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
@@ -2297,11 +2675,15 @@ class PtiMetricsCollectorHandler {
         result = status;
       }
     }
-    /*
-        for (auto &query_metrics_profiler : query_metrics_profilers_[device_handle]) {
-          query_metrics_profiler->GetCalculatedData();
-        }
-    */
+
+    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
+    if (query_metrics_profiler) {
+      status = query_metrics_profiler->GetCalculatedData(
+          metrics_group_handle, metrics_values_buffer, metrics_values_count);
+      if (status != PTI_SUCCESS) {
+        result = status;
+      }
+    }
     auto &trace_metrics_profiler = trace_metrics_profilers_[device_handle];
     if (trace_metrics_profiler) {
       status = trace_metrics_profiler->GetCalculatedData(
@@ -2321,10 +2703,9 @@ class PtiMetricsCollectorHandler {
 
   std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiStreamMetricsProfiler>>
       stream_metrics_profilers_;
-  /*
-    std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiQueryMetricsProfiler> >
-    > query_metrics_profilers_;
-  */
+
+  std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiQueryMetricsProfiler>>
+      query_metrics_profilers_;
 
   std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiTraceMetricsProfiler>>
       trace_metrics_profilers_;

@@ -15,6 +15,7 @@
 #include "pti/pti.h"
 #include "pti/pti_callback.h"
 #include "pti/pti_metrics.h"
+#include "pti/pti_metrics_scope.h"
 #include "pti/pti_view.h"
 #include "utils/library_loader.h"
 #include "utils/platform_strings.h"
@@ -109,6 +110,27 @@ class PtiLibHandler {
   decltype(&ptiCallbackPhaseTypeToString) ptiCallbackPhaseTypeToString_ = nullptr;        // NOLINT
   decltype(&PtiSetXPTIEnvironmentDetails) PtiSetXPTIEnvironmentDetails_ = nullptr;        // NOLINT
 
+  decltype(&ptiMetricsScopeEnable) ptiMetricsScopeEnable_ = nullptr;                    // NOLINT
+  decltype(&ptiMetricsScopeConfigure) ptiMetricsScopeConfigure_ = nullptr;              // NOLINT
+  decltype(&ptiMetricsScopeStartCollection) ptiMetricsScopeStartCollection_ = nullptr;  // NOLINT
+  decltype(&ptiMetricsScopeStopCollection) ptiMetricsScopeStopCollection_ = nullptr;    // NOLINT
+  decltype(&ptiMetricsScopeDisable) ptiMetricsScopeDisable_ = nullptr;                  // NOLINT
+  decltype(&ptiMetricsScopeQueryCollectionBufferSize) ptiMetricsScopeQueryCollectionBufferSize_ =
+      nullptr;  // NOLINT
+  decltype(&ptiMetricsScopeSetCollectionBufferSize) ptiMetricsScopeSetCollectionBufferSize_ =
+      nullptr;  // NOLINT
+  decltype(&ptiMetricsScopeGetCollectionBuffersCount) ptiMetricsScopeGetCollectionBuffersCount_ =
+      nullptr;  // NOLINT
+  decltype(&ptiMetricsScopeGetCollectionBuffer) ptiMetricsScopeGetCollectionBuffer_ =
+      nullptr;  // NOLINT
+  decltype(&ptiMetricsScopeGetCollectionBufferProperties)
+      ptiMetricsScopeGetCollectionBufferProperties_ = nullptr;                            // NOLINT
+  decltype(&ptiMetricsScopeCalculateMetrics) ptiMetricsScopeCalculateMetrics_ = nullptr;  // NOLINT
+  decltype(&ptiMetricsScopeQueryMetricsBufferSize) ptiMetricsScopeQueryMetricsBufferSize_ =
+      nullptr;  // NOLINT
+  decltype(&ptiMetricsScopeGetMetricsMetadata) ptiMetricsScopeGetMetricsMetadata_ =
+      nullptr;  // NOLINT
+
  private:
   inline void CommunicateForeignXPTISubscriber() {
     // Passing information about XPTI subscriber to PTI Core library right after it is loaded.
@@ -185,6 +207,21 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiCallbackPhaseTypeToString);
 
     PTI_VIEW_GET_SYMBOL(PtiSetXPTIEnvironmentDetails);
+
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeEnable);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeConfigure);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeStartCollection);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeStopCollection);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeDisable);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeQueryCollectionBufferSize);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeSetCollectionBufferSize);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeGetCollectionBuffersCount);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeGetCollectionBuffer);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeGetCollectionBufferProperties);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeCalculateMetrics);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeQueryMetricsBufferSize);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsScopeGetMetricsMetadata);
+
 #undef PTI_VIEW_GET_SYMBOL
     CommunicateForeignXPTISubscriber();
   }

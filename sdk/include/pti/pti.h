@@ -49,6 +49,16 @@ typedef enum {
   PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION = 105, //!< bad metrics collection configuration
   PTI_ERROR_METRICS_NO_DATA_COLLECTED = 106, //!< Calculate called on empty collection
 
+  PTI_ERROR_METRICS_SCOPE_METRIC_NOT_FOUND = 151, //!< One or more requested metrics not found across all metrics groups
+  PTI_ERROR_METRICS_SCOPE_NOT_A_SINGLE_GROUP = 152, //!< When requested metrics cannot be collected within one metrics group
+
+  PTI_ERROR_METRICS_SCOPE_OUT_OF_MEMORY = 153, //!< Out of memory during metrics scope operation
+  PTI_ERROR_METRICS_SCOPE_COLLECTION_BUFFER_TOO_SMALL = 154, //!< Size of the buffer is not enough 
+                                                             //!< to fit even one Metrics Scope collection
+  PTI_ERROR_METRICS_SCOPE_INSUFFICIENT_BUFFER = 155, //!< Insufficient buffer for metrics scope operation
+  PTI_ERROR_METRICS_SCOPE_INVALID_COLLECTION_BUFFER = 156,  //!< Invalid collection buffer in metrics scope
+  PTI_WARN_METRICS_SCOPE_PARTIAL_BUFFER = 157,  //!< Warning: partial buffer populated in metrics scope
+
   PTI_ERROR_INTERNAL = 200  //!< internal error
 } pti_result;
 

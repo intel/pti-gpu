@@ -23,7 +23,7 @@ if(PROJECT_IS_TOP_LEVEL)
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE STRING "")
 endif()
 
-# For developer use with tools like clangd (can be used by vscode and vim
+# For developer use with tools like clangd(can be used by vscode and vim
 # plugins).
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -89,7 +89,6 @@ endif()
 
 find_package(Threads REQUIRED)
 
-
 # Build PTI libraries.
 configure_file(${PROJECT_SOURCE_DIR}/include/pti/pti_version.h.in
                ${PROJECT_BINARY_DIR}/include/pti/pti_version.h)
@@ -107,7 +106,8 @@ add_library(Pti::pti_all ALIAS pti_all)
 add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                        "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_callbacks.cc"
-                       "${PROJECT_SOURCE_DIR}/src/pti_metrics.cc"
+                       "${PROJECT_SOURCE_DIR}/src/metrics/pti_metrics.cc"
+                       "${PROJECT_SOURCE_DIR}/src/metrics/pti_metrics_scope.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
@@ -242,6 +242,7 @@ if(BUILD_TESTING AND PTI_BUILD_SAMPLES)
   add_subdirectory(samples/iso3dfd_dpcpp)
   add_subdirectory(samples/metrics_iso3dfd_dpcpp)
   add_subdirectory(samples/callback)
+  add_subdirectory(samples/metrics_scope)
 endif()
 
 if(BUILD_TESTING AND PTI_BUILD_TESTING)
