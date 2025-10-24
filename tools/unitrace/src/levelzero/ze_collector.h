@@ -1831,6 +1831,15 @@ class ZeCollector {
                     break;
                   }
                 }
+
+                if (group == nullptr) {
+                  std::cerr << "[ERROR] Unable to get metric group " << utils::GetEnv("UNITRACE_MetricGroup") << ". Please make sure the metric group is valid and supported" << std::endl;
+                  exit(-1);
+                }
+              }
+              else {
+                std::cerr << "[ERROR] Unable to get metric group " << utils::GetEnv("UNITRACE_MetricGroup") << ". Please make sure the metric group is valid and supported" << std::endl;
+                exit(-1);
               }
 
               status = ZE_FUNC(zetContextActivateMetricGroups)(context, device, 1, &group);
