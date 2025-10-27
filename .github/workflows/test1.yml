@@ -20,8 +20,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: intel/oneapi-basekit:2025.1.0-0-devel-ubuntu24.04
-            uploadname: "ubuntu-24.04.2025.1.0"
+          - container: intel/oneapi-basekit:2025.3.0-0-devel-ubuntu24.04
+            uploadname: "ubuntu-24.04.2025.3.0"
             preset: linux-icpx-release
 
 
