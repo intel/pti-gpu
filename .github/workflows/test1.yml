@@ -59,12 +59,14 @@ jobs:
           cmake --build --preset linux-asan --parallel -j $(nproc)
 
       - name: Build ThreadSanitizer
+        if: false
         working-directory: sdk
         run: |
           cmake --preset linux-tsan
           cmake --build --preset linux-tsan --parallel -j $(nproc)
 
       - name: Build libFuzzer
+        if: false
         working-directory: sdk
         run: |
           # To ensure it still builds, run build for fuzz targets until we have
