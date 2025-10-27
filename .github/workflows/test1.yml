@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - .github/workflows/test1.yml
+      - .github/actions/linuxTest/test1.yml
 
 permissions:
   contents: read
