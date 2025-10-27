@@ -25,7 +25,7 @@ runs:
       working-directory: ${{ inputs.wdir }}
       shell: bash
       run: |
-        source /opt/intel/oneapi/setvars.sh
+        #source /opt/intel/oneapi/setvars.sh
 
         #
         # PTI-296.
