@@ -71,7 +71,7 @@ jobs:
           cmake --preset linux-fuzz
           cmake --build --preset linux-fuzz --parallel -j $(nproc)
 
-        - name: Test action
+      - name: Test action
         uses: ./.github/actions/linuxTest
         with:
           wdir: sdk
