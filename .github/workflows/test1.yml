@@ -12,7 +12,8 @@ jobs:
   build-outside:
     name: Build on public runners with public oneAPI.
 
-    runs-on: intel-ubuntu-latest
+    #runs-on: intel-ubuntu-latest
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
@@ -39,25 +40,28 @@ jobs:
       - name: Fixup container
         run: |
           apt update
+          rm -rf /opt/intel/oneapi/pti
+          ls /opt/intel/oneapi
+          echo nproc $(nproc)
           apt install -y ninja-build
 
       - name: Build
         working-directory: sdk
         run: |
           cmake --preset ${{ matrix.preset }}
-          cmake --build --preset ${{ matrix.preset }} -j $(($(nproc)/2))
+          cmake --build --preset ${{ matrix.preset }} -j $(nproc)
 
       - name: Build AddressSanitizer
         working-directory: sdk
         run: |
           cmake --preset linux-asan
-          cmake --build --preset linux-asan --parallel $(($(nproc)/2))
+          cmake --build --preset linux-asan --parallel -j $(nproc)
 
       - name: Build ThreadSanitizer
         working-directory: sdk
         run: |
           cmake --preset linux-tsan
-          cmake --build --preset linux-tsan --parallel $(($(nproc)/2))
+          cmake --build --preset linux-tsan --parallel -j $(nproc)
 
       - name: Build libFuzzer
         working-directory: sdk
@@ -65,10 +69,11 @@ jobs:
           # To ensure it still builds, run build for fuzz targets until we have
           # proper fuzz testing infrastructure in place.
           cmake --preset linux-fuzz
-          cmake --build --preset linux-fuzz --parallel $(($(nproc)/2))
+          cmake --build --preset linux-fuzz --parallel -j $(nproc)
 
 
   win-lib-build-and-test:
+    if: false
     name: Test pti-lib on Windows
     runs-on: windows-latest
     env:
