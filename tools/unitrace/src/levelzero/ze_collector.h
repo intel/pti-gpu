@@ -1213,10 +1213,6 @@ class ZeCollector {
       return nullptr;
     }
 
-    collector->EnableTracing(tracer);
-
-    collector->tracer_ = tracer;
-    
     ze_driver_handle_t driver;
     uint32_t count = 1;
     if (ZE_FUNC(zeDriverGet)(&count, &driver) == ZE_RESULT_SUCCESS) {
@@ -1224,6 +1220,10 @@ class ZeCollector {
         zexKernelGetBaseAddress = nullptr;
       }
     }
+
+    collector->EnableTracing(tracer);
+
+    collector->tracer_ = tracer;
 
     return collector;
   }
