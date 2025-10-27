@@ -14,8 +14,8 @@ jobs:
     name: Build on public runners with public oneAPI.
 
     #runs-on: intel-ubuntu-latest
-    runs-on: [ self-hosted, Linux, X64, bmg ]
-    #runs-on: [ self-hosted, Linux, X64, pvc ]
+    #runs-on: [ self-hosted, Linux, X64, bmg ]
+    runs-on: [ self-hosted, Linux, X64, pvc ]
     defaults:
       run:
         shell: bash
