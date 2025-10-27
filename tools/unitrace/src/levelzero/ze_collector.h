@@ -1700,7 +1700,7 @@ class ZeCollector {
       
       desc.name_ = device_command_names[i];
       desc.id_ = UniKernelId::GetKernelId();
-      if (i <= uint32_t(ZeDeviceCommandHandle::Barrier)) {
+      if (i < uint32_t(ZeDeviceCommandHandle::Barrier)) {
         desc.type_ = KERNEL_COMMAND_TYPE_MEMORY;
       }
       else {
