@@ -77,6 +77,7 @@ std::string GetZeKernelCommandName(uint64_t id, ze_group_count_t& group_count, s
 ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device, int32_t *parent_device_id, int32_t *device_id, int32_t *subdevice_id);
 std::string GetClKernelCommandName(uint64_t id);
 std::string GetZeDeviceName(ze_device_handle_t device);
+std::string GetZeEngineName(ze_device_handle_t device, uint32_t ordinal);
 std::string GetClDeviceName(cl_device_id device);
 
 static Logger* logger_ = nullptr;
@@ -234,18 +235,17 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
     if (device_logging_no_thread_) {
       if (device_logging_no_engine_) {
         str += "L0\"}}";
+      } else {
+        str += GetZeEngineName(device, tid_key.engine_ordinal_);
+        str += "<" + std::to_string(tid_key.engine_ordinal_) + "," + std::to_string(tid_key.engine_index_) + ">\"}}";
       }
-      else {
-        str += "L0 Engine<" + std::to_string(tid_key.engine_ordinal_) + "," + std::to_string(tid_key.engine_index_) + ">\"}}"; 
-      }
-    }
-    else {
+    } else {
       if (device_logging_no_engine_) {
         str += "Thread " + std::to_string(tid_key.host_tid_) + " L0\"}}"; 
-      }
-      else {
-        str += "Thread " + std::to_string(tid_key.host_tid_) + " L0 Engine<" + std::to_string(tid_key.engine_ordinal_) +
-               "," + std::to_string(tid_key.engine_index_) + ">\"}}"; 
+      } else {
+        str += "Thread " + std::to_string(tid_key.host_tid_);
+        str += " " + GetZeEngineName(device, tid_key.engine_ordinal_);
+        str += "<" + std::to_string(tid_key.engine_ordinal_) + "," + std::to_string(tid_key.engine_index_) + ">\"}}";
       }
     }
 
