@@ -1024,6 +1024,13 @@ struct ZeModule {
 static std::shared_mutex modules_on_devices_mutex_;
 static std::map<ze_module_handle_t, ZeModule> modules_on_devices_; //module to ZeModule map
 
+enum ZeQueueEngineType {
+  ZE_QUEUE_COMPUTE_ENGINE,
+  ZE_QUEUE_COPY_ENGINE,
+  // Add any new engine type
+  ZE_QUEUE_UNKNOWN_ENGINE
+};
+
 struct ZeDevice {
   ze_device_handle_t device_;
   ze_device_handle_t parent_device_;
@@ -1041,6 +1048,7 @@ struct ZeDevice {
   int32_t num_subdevices_;
   ze_pci_ext_properties_t pci_properties_;
   std::string device_name_;
+  std::vector<ZeQueueEngineType> queue_engine_prop_;
 };
 
 // these will no go away when ZeCollector is destructed
@@ -1146,6 +1154,25 @@ inline std::string GetZeDeviceName(ze_device_handle_t device) {
   }
   devices_mutex_.unlock_shared();
   return device_name;
+}
+
+inline std::string GetZeEngineName(ze_device_handle_t device, uint32_t ordinal) {
+  std::string engine_name = "";
+  devices_mutex_.lock_shared();
+  if (devices_ != nullptr) {
+    auto it = devices_->find(device);
+    if (it != devices_->end()) {
+      if (it->second.queue_engine_prop_[ordinal] == ZE_QUEUE_COMPUTE_ENGINE) {
+        engine_name = "L0 Compute Engine";
+      } else if (it->second.queue_engine_prop_[ordinal] == ZE_QUEUE_COPY_ENGINE) {
+        engine_name = "L0 Copy Engine";
+      } else {
+        engine_name = "L0 Engine";
+      }
+    }
+  }
+  devices_mutex_.unlock_shared();
+  return engine_name;
 }
 
 inline ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device, int32_t *parent_device_id, int32_t *device_id, int32_t *subdevice_id){
@@ -1877,6 +1904,30 @@ class ZeCollector {
               std::cerr << "[ERROR] zeDeviceGetProperties failed with error code : " << status << std::endl;
             }
 
+            // query group ordinal
+            uint32_t count = 0;
+            status = ZE_FUNC(zeDeviceGetCommandQueueGroupProperties)(device, &count, nullptr);
+            if (status != ZE_RESULT_SUCCESS || count == 0) {
+              std::cerr << "[WARNING] zeDeviceGetCommandQueueGroupProperties failed with error code : " << status << std::endl;
+            } else {
+              std::vector<ze_command_queue_group_properties_t> props(count);
+              status = ZE_FUNC(zeDeviceGetCommandQueueGroupProperties)(device, &count, props.data());
+              if (status != ZE_RESULT_SUCCESS) {
+                std::cerr << "[WARNING] zeDeviceGetCommandQueueGroupProperties failed with error code : " << status << std::endl;
+              } else {
+                desc.queue_engine_prop_.resize(count);
+                for (uint32_t i = 0; i < count; ++i) {
+                  if (props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE) {
+                    desc.queue_engine_prop_[i] = ZE_QUEUE_COMPUTE_ENGINE;
+                  } else if (props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) {
+                    desc.queue_engine_prop_[i] = ZE_QUEUE_COPY_ENGINE;
+                  } else {
+                    desc.queue_engine_prop_[i] = ZE_QUEUE_UNKNOWN_ENGINE;
+                  }
+                }
+              }
+            }
+
             devices_->insert({device, std::move(desc)});
 
             if (num_sub_devices > 0) {
@@ -1934,6 +1985,30 @@ class ZeCollector {
                 } else {
                   sub_desc.device_name_ = "";
                   std::cerr << "[ERROR] zeDeviceGetProperties failed with error code : " << status << std::endl;
+                }
+
+                // query group ordinal
+                count = 0;
+                status = ZE_FUNC(zeDeviceGetCommandQueueGroupProperties)(sub_devices[j], &count, nullptr);
+                if (status != ZE_RESULT_SUCCESS || count == 0) {
+                  std::cerr << "[WARNING] zeDeviceGetCommandQueueGroupProperties failed with error code : " << status << std::endl;
+                } else {
+                  std::vector<ze_command_queue_group_properties_t> props(count);
+                  status = ZE_FUNC(zeDeviceGetCommandQueueGroupProperties)(sub_devices[j], &count, props.data());
+                  if (status != ZE_RESULT_SUCCESS) {
+                    std::cerr << "[WARNING] zeDeviceGetCommandQueueGroupProperties failed with error code : " << status << std::endl;
+                  } else {
+                    sub_desc.queue_engine_prop_.resize(count);
+                    for (uint32_t i = 0; i < count; ++i) {
+                      if (props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE) {
+                        sub_desc.queue_engine_prop_[i] = ZE_QUEUE_COMPUTE_ENGINE;
+                      } else if (props[i].flags & ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) {
+                        sub_desc.queue_engine_prop_[i] = ZE_QUEUE_COPY_ENGINE;
+                      } else {
+                        sub_desc.queue_engine_prop_[i] = ZE_QUEUE_UNKNOWN_ENGINE;
+                      }
+                    }
+                  }
                 }
 
                 devices_->insert({sub_devices[j], std::move(sub_desc)});
