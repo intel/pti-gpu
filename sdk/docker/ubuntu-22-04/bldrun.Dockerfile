@@ -23,8 +23,8 @@ RUN apt update -y && \
     libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev \
     intel-metrics-discovery intel-metrics-discovery-dev \
     intel-metrics-library intel-metrics-library-dev \
-    intel-dpcpp-cpp-compiler-2025.2 \
-    intel-oneapi-mkl-devel-2025.2 \
-    intel-oneapi-dnnl-devel-2025.2 \
-    intel-oneapi-ccl-devel-2021.16 && \
+    intel-dpcpp-cpp-compiler-2025.3 \
+    intel-oneapi-mkl-devel-2025.3 \
+    intel-oneapi-dnnl-devel-2025.3 \
+    intel-oneapi-ccl-devel-2021.17 && \
     apt-get clean -y

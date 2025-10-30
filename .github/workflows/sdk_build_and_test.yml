@@ -35,11 +35,11 @@ jobs:
       matrix:
         include:
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
-            os_id: "ubuntu-24.04.2025.2.0"
+            os_id: "ubuntu-24.04.2025.3.0"
             preset: linux-icpx-release
             tags: '["self-hosted", "Linux", "pti", "client", "BMG"]'
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
-            os_id: "ubuntu-24.04.2025.2.0"
+            os_id: "ubuntu-24.04.2025.3.0"
             preset: linux-icpx-release
             tags: '["self-hosted", "Linux", "pti", "server", "PVC"]'
 
@@ -69,6 +69,8 @@ jobs:
         with:
           wdir: sdk
           preset: ${{ matrix.preset }}
+          adjust-test-bmg: ${{ contains(matrix.tags, 'BMG') }}
+          adjust-test-2025-3: ${{ contains(matrix.os_id, '2025.3') }}
 
       - name: Build AddressSanitizer
         if: contains(fromJSON(matrix.tags), 'server')

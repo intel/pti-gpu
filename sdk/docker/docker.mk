@@ -2,35 +2,38 @@ USE_BUILDKIT := 1
 
 REL_UBUNTU_22:= ubuntu-22-04
 REL_UBUNTU_24:= ubuntu-24-04
+REL_UBUNTU_25:= ubuntu-25-04
 #
 # TODO: 5/21/2025
 # Can't build redhat-9 nor rocky-8 for PVC, there are missing
 # libraries
 #
-REL_RHEL:= redhat-9
+REL_RHEL:= redhat-10
 REL_SLES:= sles-15
 REL_ROCKY:= rocky-8
-OS_TARGETS:= ${REL_SLES} ${REL_UBUNTU_22} ${REL_UBUNTU_24} ${REL_ROCKY}
+OS_TARGETS:= ${REL_SLES} ${REL_UBUNTU_22} ${REL_UBUNTU_24} ${REL_UBUNTU_25} ${REL_ROCKY} ${REL_RHEL}
 .PHONY:${OS_TARGETS}
 
-ONEAPI_VER=2025.2.0
+ONEAPI_VER=2025.3.0
 
 targets: ${OS_TARGETS}
 	@echo BUILT ${OS_TARGETS}
 
-VER_UBUNTU_22:=03
-VER_UBUNTU_24:=03
-VER_REDHAT:=03
-VER_SLES:=03
-VER_ROCKY:=03
+VER_UBUNTU_22:=04
+VER_UBUNTU_24:=04
+VER_UBUNTU_25:=04
+VER_REDHAT:=04
+VER_SLES:=04
+VER_ROCKY:=04
 define getOsVer
 	$(if $(filter $1, ${REL_UBUNTU_22}),${VER_UBUNTU_22},\
 	$(if $(filter $1, ${REL_UBUNTU_24}),${VER_UBUNTU_24},\
+	$(if $(filter $1, ${REL_UBUNTU_25}),${VER_UBUNTU_25},\
 	$(if $(filter $1, ${REL_RHEL}),${VER_REDHAT},\
 	$(if $(filter $1, ${REL_SLES}),${VER_SLES},\
 	$(if $(filter $1, ${REL_ROCKY}),${VER_ROCKY},\
 	$(error "Undefined target $1 in getOsVer function") \
-	)))))
+	))))))
 endef
 
 define ERROR_MESSAGE_PTI_CONTAINER

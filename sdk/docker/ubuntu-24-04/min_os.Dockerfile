@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.3
+# syntax=docker/dockerfile:1.4
 
 # hadolint ignore=DL3007
 
@@ -26,7 +26,6 @@ RUN apt-get update -y && \
     g++ \
     python3 \
     python3-pip \
-    python3.12-venv \
     ca-certificates && \
     apt-get clean -y
 
@@ -47,4 +46,5 @@ RUN wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble unified" | \
     tee /etc/apt/sources.list.d/intel-gpu-noble.list
 
-RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.12 10
+RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3 10
+

@@ -2,8 +2,8 @@
 
 # hadolint ignore=DL3007
 
-# This is ubuntu:22.04 / jammy
-FROM ubuntu:jammy
+# This is ubuntu:25.04
+FROM ubuntu:plucky
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -23,17 +23,16 @@ RUN apt-get update -y && \
     vim \
     make \
     sudo \
-    python3 \
     g++ \
-    pip \
-    python3.10-venv \
+    python3 \
+    python3-pip \
     ca-certificates && \
     apt-get clean -y
 
-#
+
 # Setup the appropriate repos for oneAPI
 #
-RUN wget -O- --progress=dot:giga  https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
+RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
     gpg --dearmor | \
     tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null && \
     echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
@@ -44,8 +43,8 @@ RUN wget -O- --progress=dot:giga  https://apt.repos.intel.com/intel-gpg-keys/GPG
 #
 RUN wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
     gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | \
-    tee /etc/apt/sources.list.d/intel-gpu-jammy.list
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble unified" | \
+    tee /etc/apt/sources.list.d/intel-gpu-noble.list
 
 RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3 10
 
