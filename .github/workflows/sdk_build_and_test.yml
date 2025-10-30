@@ -72,6 +72,8 @@ jobs:
         with:
           wdir: sdk
           preset: ${{ matrix.preset }}
+          adjust-test-bmg: ${{ contains(matrix.tags, 'BMG') }}
+          adjust-test-2025-3: ${{ contains(matrix.os_id, '2025.3') }}
 
       - name: Build AddressSanitizer
         if: contains(fromJSON(matrix.tags), 'server')

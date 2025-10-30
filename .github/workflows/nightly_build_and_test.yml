@@ -42,20 +42,33 @@ jobs:
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_NMINUS1 }}
             uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
+          #
+          # Keep this as place holder for UBUNTU_25_4_ONEAPI_NMINUS1
+          # and PTI_PKG_RHEL_10_ONEAPI_NMINUS1
+          #
           - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_NMINUS1 }}
             uploadname: ${{ vars.PTI_PKG_ROCKY_8_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_NMINUS1 }}
             uploadname: ${{ vars.PTI_PKG_ROCKY_8_GXX_NMINUS1 }}
             preset: linux-gxx-release
-          - container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_N }}
-            uploadname: ${{ vars.PTI_PKG_SLES_15_ONEAPI_N }}
-            preset: linux-icpx-release
+          #
+          # Disabled until PTI-306 gets fixed.
+          #
+          #- container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_N }}
+            #uploadname: ${{ vars.PTI_PKG_SLES_15_ONEAPI_N }}
+            #preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_N }}
             uploadname: ${{ vars.PTI_PKG_UBUNTU_22_4_ONEAPI_N }}
             preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
             uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_ONEAPI_N }}
+            preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_25_4_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_UBUNTU_25_4_ONEAPI_N }}
+            preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_RHEL_10_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_RHEL_10_ONEAPI_N }}
             preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_N }}
             uploadname: ${{ vars.PTI_PKG_ROCKY_8_ONEAPI_N }}
@@ -158,7 +171,8 @@ jobs:
       max-parallel: 2
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
+          # Must fix to PTI_DOCKER_UBUNTU_24_4_ONEAPI_N
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_NMINUS1 }}
 
     container:
       image: ${{ matrix.container }}

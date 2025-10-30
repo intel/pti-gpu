@@ -32,10 +32,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
+          #
+          # Must fix PTI_DOCKER_UBUNTU_24_4_ONEAPI_N, for now
+          # point it to N-1
+          #
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_NMINUS1 }}
             tags: '["self-hosted", "Linux", "pti", "PVC"]'
             os_id: "ubuntu-22.04.2025.1.0"
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_NMINUS1 }}
             tags: '["self-hosted", "Linux", "pti", "BMG"]'
             os_id: "ubuntu-22.04.2025.1.0"
 

@@ -17,15 +17,14 @@ RUN apt update -y && \
     libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
     mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo \
     libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev \
-    intel-ocloc \
     intel-metrics-discovery intel-metrics-discovery-dev \
     intel-metrics-library intel-metrics-library-dev && \
     apt-get clean -y
 
 #
-# One coulde install intel-oneapi-base-toolkit-2025.X
+# One could install intel-oneapi-base-toolkit-2025.X
 # but there are a number of oneapi packages not needed for pti. 
-# These are the minimum
+# These are the minimum.
 #
 RUN apt update -y && \
     apt install -y intel-dpcpp-cpp-compiler-2025.3 \
@@ -33,5 +32,5 @@ RUN apt update -y && \
       intel-oneapi-dnnl-devel-2025.3 \
       intel-oneapi-ccl-devel-2021.17
 
-RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.12 10
+#RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.12 10
 

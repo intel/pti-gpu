@@ -25,14 +25,12 @@ RUN  zypper refresh && \
       which \
       git \
       vim \
-      python311 && \
+      python3 && \
      zypper clean --all
 
 RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
   rpm --import https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
-  zypper addrepo -f -r https://repositories.intel.com/gpu/sles/15sp6/unified/intel-gpu-15sp6.repo && \
+  zypper addrepo -f -r https://repositories.intel.com/gpu/sles/15sp7/lts/2523/unified/intel-gpu-15sp7.repo && \
   rpm --import https://repositories.intel.com/gpu/intel-graphics.key
 
-RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.11 10 && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-
-
+RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3 10
