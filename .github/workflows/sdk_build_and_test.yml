@@ -48,6 +48,7 @@ jobs:
       image: ${{ matrix.container }}
       options: --device=/dev/dri --cap-add CAP_PERFMON
       credentials:
+        username: "tomasrodi"
         password: ${{ secrets.PAT_GHCR_IO }}
 
     if: vars.PTI_RUN_TESTS == 1
