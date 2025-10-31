@@ -74,7 +74,7 @@ jobs:
           preset: ${{ matrix.preset }}
 
       - name: Build AddressSanitizer
-        if: contains(fromJSON(matrix.tags), 'PVC')
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -82,7 +82,7 @@ jobs:
           cmake --build --preset linux-asan --parallel $(($(nproc)/2))
 
       - name: Build ThreadSanitizer
-        if: contains(fromJSON(matrix.tags), 'PVC')
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -90,7 +90,7 @@ jobs:
           cmake --build --preset linux-tsan --parallel $(($(nproc)/2))
 
       - name: Build libFuzzer
-        if: contains(fromJSON(matrix.tags), 'PVC')
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           # To ensure it still builds, run build for fuzz targets until we have
@@ -103,7 +103,7 @@ jobs:
       # Rocky8 has a problem with this test.
       #
       - name: Test AddressSanitizer
-        if: contains(fromJSON(matrix.tags), 'PVC')
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -119,7 +119,7 @@ jobs:
           ctest --preset linux-asan --output-on-failure -L samples
 
       - name: Test ThreadSanitizer
-        if: contains(fromJSON(matrix.tags), 'PVC')
+        if: contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
