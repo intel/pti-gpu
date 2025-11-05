@@ -1194,7 +1194,7 @@ inline void CommonSynchEvent(pti_view_record_synchronization& record,
   record._api_id = rec.callback_id_;
   record._event_handle = rec.event_;
   record._number_wait_events = rec.num_wait_events_;
-  record._return_code = rec.result_;
+  record._return_code = static_cast<uint32_t>(rec.result_);
   Instance().InsertRecord(record, record._thread_id);
 }
 
@@ -1328,7 +1328,7 @@ inline void ZeDriverEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& 
   record._thread_id = rec.tid_;
   record._process_id = rec.pid_;
   record._api_id = rec.callback_id_;
-  record._return_code = rec.result_;
+  record._return_code = static_cast<uint32_t>(rec.result_);
   record._correlation_id = rec.cid_;
   Instance().InsertRecord(record, record._thread_id);
 }

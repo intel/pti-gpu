@@ -31,17 +31,47 @@ if(PROJECT_IS_TOP_LEVEL)
   AddFormatTarget()
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+else()
+  if(CMAKE_CXX_STANDARD LESS 17 OR CMAKE_CXX_STANDARD EQUAL 98)
+    message(FATAL_ERROR "CMAKE_CXX_STANDARD must be at least 17")
+  endif()
+endif()
 
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
-set(CMAKE_C_VISIBILITY_PRESET "hidden")
+if(NOT DEFINED CMAKE_CXX_STANDARD_REQUIRED)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
 
-set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+if(NOT DEFINED CMAKE_CXX_EXTENSIONS)
+  set(CMAKE_CXX_EXTENSIONS OFF)
+endif()
+
+if(NOT DEFINED CMAKE_CXX_VISIBILITY_PRESET)
+  set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
+endif()
+
+if(NOT DEFINED CMAKE_C_STANDARD)
+  # C99 for the C headers in the PTI interface (${PROJECT_SOURCE_DIR}/include).
+  # They include stdint.h.
+  set(CMAKE_C_STANDARD 99)
+endif()
+
+if(NOT DEFINED CMAKE_C_STANDARD_REQUIRED)
+  set(CMAKE_C_STANDARD_REQUIRED ON)
+endif()
+
+if(NOT DEFINED CMAKE_C_EXTENSIONS)
+  set(CMAKE_C_EXTENSIONS OFF)
+endif()
+
+if(NOT DEFINED CMAKE_C_VISIBILITY_PRESET)
+  set(CMAKE_C_VISIBILITY_PRESET "hidden")
+endif()
+
+if(NOT DEFINED CMAKE_VISIBILITY_INLINES_HIDDEN)
+  set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+endif()
 
 if(PROJECT_IS_TOP_LEVEL)
   # Add the current directory to the rpath during the build. On Linux, this
@@ -102,7 +132,7 @@ configure_file(${PROJECT_SOURCE_DIR}/src/utils/platform_config.h.in
 add_library(pti_all INTERFACE)
 add_library(Pti::pti_all ALIAS pti_all)
 
-# formerly pti_view
+# Core implementation loaded by pti_view
 add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                        "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_callbacks.cc"
@@ -120,23 +150,31 @@ set(PTI_DEFINE_SYMBOL "pti_EXPORTS")
 
 add_library(Pti::pti ALIAS pti)
 
+# Where to find headers that user will include.
+set(PTI_PUBLIC_INCLUDE_DIRS
+  "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
+  "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
+  "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
+  "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
+)
+
+set(PTI_PRIVATE_INCLUDE_DIRS
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/src/sycl"
+  "${PROJECT_SOURCE_DIR}/src/levelzero"
+  "${PROJECT_SOURCE_DIR}/src/utils"
+)
+
 target_include_directories(
   pti
-  PUBLIC "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
-         "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
-         "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
-         "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src"
-          "${PROJECT_SOURCE_DIR}/src/sycl"
-          "${PROJECT_SOURCE_DIR}/src/levelzero"
-          "${PROJECT_SOURCE_DIR}/src/utils")
+  PUBLIC ${PTI_PUBLIC_INCLUDE_DIRS}
+  PRIVATE ${PTI_PRIVATE_INCLUDE_DIRS})
 
 set_target_properties(
   pti
   PROPERTIES VERSION "${PROJECT_VERSION}"
              SOVERSION "${PTI_API_SOVERSION}"
-             POSITION_INDEPENDENT_CODE ON
-             DEFINE_SYMBOL "${PTI_DEFINE_SYMBOL}")
+             POSITION_INDEPENDENT_CODE ON)
 
 if (WIN32)
   set_target_properties(
@@ -174,6 +212,7 @@ if(PROJECT_IS_TOP_LEVEL)
   add_dependencies(generate-ids gen_tracing_header)
 endif()
 
+# Library that loads core (pti). User links to this one.
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/xpti_adapter.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
@@ -183,13 +222,8 @@ add_library(Pti::pti_view ALIAS pti_view)
 
 target_include_directories(
   pti_view
-  PUBLIC "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
-         "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>"
-         "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
-         "$<INSTALL_INTERFACE:${PTI_INSTALL_INCLUDE_DIR}>"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/sycl"
-          "${PROJECT_SOURCE_DIR}/src/levelzero"
-          "${PROJECT_SOURCE_DIR}/src/utils" "${PROJECT_SOURCE_DIR}/src/loader")
+  PUBLIC ${PTI_PUBLIC_INCLUDE_DIRS}
+  PRIVATE ${PTI_PRIVATE_INCLUDE_DIRS})
 
 set_target_properties(
   pti_view
@@ -220,7 +254,6 @@ target_compile_definitions(
 
 target_link_libraries(
   pti_view
-  PUBLIC
   PRIVATE spdlog::spdlog
           ${CMAKE_DL_LIBS}
           ${FS_LIB})

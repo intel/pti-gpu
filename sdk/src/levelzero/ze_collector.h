@@ -525,7 +525,7 @@ class ZeCollector {
                                     ._queue_handle = queue_handle,
                                     ._device_handle = command.device,
                                     ._phase = phase,
-                                    ._return_code = return_code,
+                                    ._return_code = static_cast<uint32_t>(return_code),
                                     ._correlation_id = command.corr_id_,
                                     ._operation_count = 1,
                                     ._operation_details = op_details};
