@@ -1,4 +1,5 @@
 **/build
+**/build_debug
 **/__pycache__
 venv/
 .vscode/

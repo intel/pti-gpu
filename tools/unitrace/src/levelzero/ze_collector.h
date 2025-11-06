@@ -1852,7 +1852,7 @@ class ZeCollector {
                     std::cerr << "[ERROR] Unable to get metric group properties" << std::endl;
                     exit(-1);
                   }
-                  
+
                   if ((strcmp(group_props.name, utils::GetEnv("UNITRACE_MetricGroup").c_str()) == 0) && (group_props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED)) {
                     group = groups[k];
                     break;
@@ -2096,26 +2096,28 @@ class ZeCollector {
     return names;
   }
 
-  bool QueryKernelCommandMetrics(ZeDeviceSubmissions& submissions, ZeCommandMetricQuery *command_metric_query) {
+  bool QueryKernelCommandMetrics(ZeDeviceSubmissions& submissions, ZeCommandMetricQuery *command_metric_query, bool collect_data) {
 
     ze_result_t status;
     if ((status = ZE_FUNC(zeEventQueryStatus)(command_metric_query->metric_query_event_)) == ZE_RESULT_SUCCESS) {
 
       auto it = submissions.kernel_profiles_.find(command_metric_query->instance_id_);
       if (it != submissions.kernel_profiles_.end()) {
-        size_t size = 0;
-        status = ZE_FUNC(zetMetricQueryGetData)(command_metric_query->metric_query_, &size, nullptr);
-        if ((status == ZE_RESULT_SUCCESS) && (size > 0)) {
+        if (collect_data) {
+          size_t size = 0;
+          status = ZE_FUNC(zetMetricQueryGetData)(command_metric_query->metric_query_, &size, nullptr);
+          if ((status == ZE_RESULT_SUCCESS) && (size > 0)) {
 
-          std::vector<uint8_t> *kmetrics = new std::vector<uint8_t>(size);
-          UniMemory::ExitIfOutOfMemory((void *)(kmetrics));
-          size_t size2 = size;
-          status = ZE_FUNC(zetMetricQueryGetData)(command_metric_query->metric_query_, &size2, kmetrics->data());
-          if (size2 == size) {
-            it->second.metrics_ = kmetrics;
-          }
-          else {
-            delete kmetrics;
+            std::vector<uint8_t> *kmetrics = new std::vector<uint8_t>(size);
+            UniMemory::ExitIfOutOfMemory((void *)(kmetrics));
+            size_t size2 = size;
+            status = ZE_FUNC(zetMetricQueryGetData)(command_metric_query->metric_query_, &size2, kmetrics->data());
+            if (size2 == size) {
+              it->second.metrics_ = kmetrics;
+            }
+            else {
+              delete kmetrics;
+            }
           }
         }
       } else {
@@ -2139,9 +2141,9 @@ class ZeCollector {
 
   void ProcessCommandMetricQueriesSubmitted(void) {
     for (auto it = local_device_submissions_.metric_queries_submitted_.begin(); it != local_device_submissions_.metric_queries_submitted_.end();) {
-      if (QueryKernelCommandMetrics(local_device_submissions_, *it)) {
-        local_device_submissions_.metric_queries_free_pool_.push_back(*it);
-        it = local_device_submissions_.metric_queries_submitted_.erase(it);
+      if (QueryKernelCommandMetrics(local_device_submissions_, *it, UniController::IsCollectionEnabled())) {
+          local_device_submissions_.metric_queries_free_pool_.push_back(*it);
+          it = local_device_submissions_.metric_queries_submitted_.erase(it);
       }
       else {
         it++;

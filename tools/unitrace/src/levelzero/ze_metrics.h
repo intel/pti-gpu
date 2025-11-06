@@ -31,6 +31,7 @@
 #include "utils.h"
 #include "utils_ze.h"
 #include "pti_assert.h"
+#include "unicontrol.h"
 #include <inttypes.h>
 
 constexpr static uint64_t min_dummy_instance_id = 1024 * 1024;	// min dummy instance id if idle sampling is enabled
@@ -1390,7 +1391,7 @@ class ZeMetricProfiler {
       auto size = EventBasedReadMetrics(event, streamer, raw_metrics, MAX_METRIC_BUFFER);
       if (size > 0) {
         // If we have data, dump it to the intermediate file
-        if (!dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
+        if (UniController::IsCollectionEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
           std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
           break;
         }
@@ -1400,7 +1401,7 @@ class ZeMetricProfiler {
     // Flush the remaining metrics after the profiler has stopped
     auto size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
     while (size > 0) {
-      if (!dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
+      if (UniController::IsCollectionEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
         std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
         break;
       }
