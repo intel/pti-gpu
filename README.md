@@ -105,11 +105,11 @@ You may obtain a copy of the License at https://opensource.org/license/MIT
     - one may need to allow metrics collection for non-root users
         - if using the i915 kernel module (e.g. PVC):
         ```sh
-        sudo echo 0 > /proc/sys/dev/i915/perf_stream_paranoid
+        echo "0" | sudo tee /proc/sys/dev/i915/perf_stream_paranoid
         ```
         - if using the xe kernel module (e.g. BMG):
         ```sh
-        sudo echo 0 > /proc/sys/dev/xe/observation_paranoid
+        echo "0" | sudo tee /proc/sys/dev/xe/observation_paranoid
         ```
 - [Metrics Library for Metrics Discovery API (Metrics Library for MD API)](https://github.com/intel/metrics-library)
 - [Graphics Technology Pin (GT Pin)](https://software.intel.com/content/www/us/en/develop/articles/gtpin.html)
