@@ -24,8 +24,9 @@ RUN apt-get update -y && \
     make \
     sudo \
     g++ \
-    python3 \
+    python3.12 \
     python3-pip \
+    python3.12-venv \
     ca-certificates && \
     apt-get clean -y
 

@@ -23,9 +23,9 @@ RUN apt-get update -y && \
     vim \
     make \
     sudo \
-    python3 \
+    python3.10 \
     g++ \
-    pip \
+    python3-pip \
     python3.10-venv \
     ca-certificates && \
     apt-get clean -y

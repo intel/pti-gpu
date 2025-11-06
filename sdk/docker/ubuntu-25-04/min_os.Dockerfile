@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.3
+# syntax=docker/dockerfile:1.4
 
 # hadolint ignore=DL3007
 
@@ -24,8 +24,9 @@ RUN apt-get update -y && \
     make \
     sudo \
     g++ \
-    python3 \
+    python3.13 \
     python3-pip \
+    python3.13-venv \
     ca-certificates && \
     apt-get clean -y
 

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.3
+# syntax=docker/dockerfile:1.4
 
 FROM registry.suse.com/suse/sle15
 
@@ -25,7 +25,7 @@ RUN  zypper refresh && \
       which \
       git \
       vim \
-      python3 && \
+      python311 && \
      zypper clean --all
 
 RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
@@ -33,4 +33,4 @@ RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
   zypper addrepo -f -r https://repositories.intel.com/gpu/sles/15sp7/lts/2523/unified/intel-gpu-15sp7.repo && \
   rpm --import https://repositories.intel.com/gpu/intel-graphics.key
 
-RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3 10
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
