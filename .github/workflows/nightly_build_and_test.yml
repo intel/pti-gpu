@@ -52,12 +52,9 @@ jobs:
           - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_NMINUS1 }}
             uploadname: ${{ vars.PTI_PKG_ROCKY_8_GXX_NMINUS1 }}
             preset: linux-gxx-release
-          #
-          # Disabled until PTI-306 gets fixed.
-          #
-          #- container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_N }}
-            #uploadname: ${{ vars.PTI_PKG_SLES_15_ONEAPI_N }}
-            #preset: linux-icpx-release
+          - container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_SLES_15_ONEAPI_N }}
+            preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_N }}
             uploadname: ${{ vars.PTI_PKG_UBUNTU_22_4_ONEAPI_N }}
             preset: linux-icpx-release
