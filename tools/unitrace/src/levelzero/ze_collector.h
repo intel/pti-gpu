@@ -1901,7 +1901,7 @@ class ZeCollector {
               desc.device_name_ = std::move(std::string(device_properties.name));
             } else {
               desc.device_name_ = "";
-              std::cerr << "[ERROR] zeDeviceGetProperties failed with error code : " << status << std::endl;
+              std::cerr << "[WARNING] zeDeviceGetProperties failed with error code : " << status << std::endl;
             }
 
             // query group ordinal
@@ -1984,7 +1984,7 @@ class ZeCollector {
                   sub_desc.device_name_ = std::move(std::string(device_properties.name));
                 } else {
                   sub_desc.device_name_ = "";
-                  std::cerr << "[ERROR] zeDeviceGetProperties failed with error code : " << status << std::endl;
+                  std::cerr << "[WARNING] zeDeviceGetProperties failed with error code : " << status << std::endl;
                 }
 
                 // query group ordinal
