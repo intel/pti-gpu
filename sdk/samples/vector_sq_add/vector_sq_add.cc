@@ -217,8 +217,8 @@ int main() {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
-                std::cout << "Found Sycl Runtime Record" << '\n';
-                pti_view_record_api *rec = reinterpret_cast<pti_view_record_api *>(ptr);
+                std::cout << "Found API Runtime Record" << '\n';
+                auto *rec = reinterpret_cast<pti_view_record_api *>(ptr);
                 const char *api_name = nullptr;
                 PTI_THROW(ptiViewGetApiIdName(rec->_api_group, rec->_api_id, &api_name));
                 if (strstr(api_name, "EnqueueKernel") != nullptr) {
@@ -234,8 +234,7 @@ int main() {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
-                pti_view_record_memory_copy *rec =
-                    reinterpret_cast<pti_view_record_memory_copy *>(ptr);
+                auto *rec = reinterpret_cast<pti_view_record_memory_copy *>(ptr);
                 runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
                 std::cout << "Found Memory Record" << '\n';
                 samples_utils::DumpRecord(rec);
@@ -248,8 +247,7 @@ int main() {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
-                pti_view_record_memory_fill *rec =
-                    reinterpret_cast<pti_view_record_memory_fill *>(ptr);
+                auto *rec = reinterpret_cast<pti_view_record_memory_fill *>(ptr);
                 runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
                 std::cout << "Found Memory Record" << '\n';
                 samples_utils::DumpRecord(rec);
@@ -262,7 +260,7 @@ int main() {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
-                pti_view_record_kernel *rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
+                auto *rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
                 runtime_enq_2_gpu_kernel_name_map[rec->_correlation_id] = rec->_name;
                 std::cout << "Found Kernel Record" << '\n';
                 samples_utils::DumpRecord(rec);
@@ -295,8 +293,7 @@ int main() {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
-                pti_view_record_external_correlation *rec =
-                    reinterpret_cast<pti_view_record_external_correlation *>(ptr);
+                auto *rec = reinterpret_cast<pti_view_record_external_correlation *>(ptr);
 
                 external_corr_map[std::pair{rec->_external_kind, rec->_external_id}].push_back(
                     rec->_correlation_id);

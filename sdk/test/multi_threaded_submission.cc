@@ -577,5 +577,5 @@ TEST_F(MultiThreadedSubmissionFixtureTest, ValidateDriverApiClassReturnsAppropri
   EXPECT_EQ(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer), pti_result::PTI_SUCCESS);
   pti_result status = ptiViewEnableDriverApiClass(
       1, pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE, pti_api_group_id::PTI_API_GROUP_ALL);
-  EXPECT_EQ(status, pti_result::PTI_ERROR_BAD_ARGUMENT);
+  EXPECT_EQ(status, pti_result::PTI_SUCCESS);
 }

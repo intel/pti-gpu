@@ -38,6 +38,9 @@ struct ClassTestData {
   bool ur_mem_read_rec_present = false;
   bool ur_kernel_rec_present = false;
   bool zecall_present = false;
+  bool zecall_command_list_append_memory_copy_present = false;
+  bool zecall_command_list_append_memory_fill_present = false;
+  bool zecall_command_list_append_launch_kernel_present = false;
   uint64_t zecall_count = 0;
   bool urcall_present = false;
   uint64_t urcall_count = 0;
@@ -60,6 +63,9 @@ struct ClassTestData {
     zecall_count = 0;
     urcall_present = false;
     urcall_count = 0;
+    zecall_command_list_append_memory_copy_present = false;
+    zecall_command_list_append_memory_fill_present = false;
+    zecall_command_list_append_launch_kernel_present = false;
     std::fill_n(device_uuid_test.begin(), device_uuid_test.size(), 0);
     queue_test = nullptr;
   }
@@ -197,29 +203,42 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
           break;
         }
         case pti_view_kind::PTI_VIEW_DRIVER_API: {
-          pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
-          if (rec->_api_group == pti_api_group_id::PTI_API_GROUP_LEVELZERO) {
-            ClassTestData::Get().zecall_present = true;
-            ClassTestData::Get().zecall_count++;
+          auto* rec = reinterpret_cast<pti_view_record_api*>(ptr);
+          if (rec->_api_group != pti_api_group_id::PTI_API_GROUP_LEVELZERO) {
+            std::cerr << "Unexpected API group in PTI_VIEW_DRIVER_API: "
+                         "expected PTI_API_GROUP_LEVELZERO, got "
+                      << rec->_api_group << '\n';
           }
+          ClassTestData::Get().zecall_present = true;
+          ClassTestData::Get().zecall_count++;
           const char* api_name = nullptr;
-          pti_result status = ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO,
-                                                  rec->_api_id, &api_name);
+          auto status = ptiViewGetApiIdName(rec->_api_group, rec->_api_id, &api_name);
           PTI_ASSERT(status == PTI_SUCCESS);
-          status = ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, -1, &api_name);
           std::string function_name(api_name);
           if ((function_name.find("zeEventHostSynchronize") != std::string::npos)) {
             ClassTestData::Get().event_host_synch_rec_present = true;
           }
+          if ((function_name.find("zeCommandListAppendMemoryCopy") != std::string::npos)) {
+            ClassTestData::Get().zecall_command_list_append_memory_copy_present = true;
+          }
+          if ((function_name.find("zeCommandListAppendMemoryFill") != std::string::npos)) {
+            ClassTestData::Get().zecall_command_list_append_memory_fill_present = true;
+          }
+          if ((function_name.find("zeCommandListAppendLaunchKernel") != std::string::npos)) {
+            ClassTestData::Get().zecall_command_list_append_launch_kernel_present = true;
+          }
           break;
         }
         case pti_view_kind::PTI_VIEW_RUNTIME_API: {
-          pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
+          auto* rec = reinterpret_cast<pti_view_record_api*>(ptr);
+          if (rec->_api_group != pti_api_group_id::PTI_API_GROUP_SYCL) {
+            std::cerr << "Unexpected API group in PTI_VIEW_RUNTIME_API: "
+                      << "expected PTI_API_GROUP_SYCL, got " << rec->_api_group << '\n';
+          }
           ClassTestData::Get().urcall_present = true;
           ClassTestData::Get().urcall_count++;
           const char* api_name = nullptr;
-          pti_result status =
-              ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id, &api_name);
+          auto status = ptiViewGetApiIdName(rec->_api_group, rec->_api_id, &api_name);
           PTI_ASSERT(status == PTI_SUCCESS);
           std::string function_name(api_name);
           if ((function_name.find("urEventWait") != std::string::npos)) {
@@ -316,6 +335,21 @@ void EnableClassApis(bool is_for_driver, pti_api_class pti_class, pti_api_group_
   } else {
     PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApiClass(1, pti_class, pti_group));
   }
+}
+
+TEST_F(ClassApiFixtureTest, EnableGPUCoreApisViaClassForLevelZero) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  EnableClassApis(true, pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE,
+                  pti_api_group_id::PTI_API_GROUP_LEVELZERO);
+  RunGemmNoTrace();
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  EXPECT_EQ(ClassTestData::Get().urcall_present, false);
+  EXPECT_EQ(ClassTestData::Get().zecall_present, true);
+  EXPECT_GE(ClassTestData::Get().zecall_count, 1ULL);
+  EXPECT_EQ(ClassTestData::Get().zecall_command_list_append_memory_copy_present, true);
+  EXPECT_EQ(ClassTestData::Get().zecall_command_list_append_launch_kernel_present, true);
 }
 
 TEST_F(ClassApiFixtureTest, EnableRuntimeApisViaClassSpecificGroup) {

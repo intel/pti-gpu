@@ -354,6 +354,8 @@ pti_result ptiViewGetApiIdName(pti_api_group_id type, uint32_t unique_id, const 
 // Enable/Disable driver specific API specified by api_id within the api_group_id.
 // TODO--when groups have more than 1 driver Apis (say OCL) update this to call Reset appropriately
 pti_result ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id api_group_id, uint32_t api_id) {
+  SPDLOG_DEBUG("In {}, api_group_id:  {}, api_id: {}, enable?: {}", __func__,
+               static_cast<uint32_t>(api_group_id), static_cast<uint32_t>(api_id), enable);
   try {
     // Only valid groups for driver class are all or levelzero for now.
     if (api_group_id == pti_api_group_id::PTI_API_GROUP_OPENCL) {
@@ -377,6 +379,8 @@ pti_result ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id api_group_id
 // TODO--when groups have more than 1 runtime Apis (say OV) update this to call Reset appropriately
 pti_result ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id api_group_id,
                                    uint32_t api_id) {
+  SPDLOG_DEBUG("In {}, api_group_id:  {}, api_id: {}, enable?: {}", __func__,
+               static_cast<uint32_t>(api_group_id), static_cast<uint32_t>(api_id), enable);
   try {
     // Only valid groups for runtime class are all or sycl for now.
     if ((api_group_id != pti_api_group_id::PTI_API_GROUP_SYCL) &&
@@ -398,6 +402,8 @@ pti_result ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id api_group_i
 pti_result ptiViewEnableRuntimeApiClass(uint32_t enable, pti_api_class pti_class,
                                         pti_api_group_id pti_group) {
   pti_result status = pti_result::PTI_SUCCESS;
+  SPDLOG_DEBUG("In {}, api_group_id:  {}, pti_class: {}, enable?: {}", __func__,
+               static_cast<uint32_t>(pti_group), static_cast<uint32_t>(pti_class), enable);
   // Only valid groups for runtime class are all or sycl for now.
   if ((pti_group != pti_api_group_id::PTI_API_GROUP_SYCL) &&
       (pti_group != pti_api_group_id::PTI_API_GROUP_ALL)) {
@@ -445,6 +451,8 @@ pti_result ptiViewEnableRuntimeApiClass(uint32_t enable, pti_api_class pti_class
 // Enable/Disable driver APIs tracing specified by pti_class across specified api group(s).
 pti_result ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class pti_class,
                                        pti_api_group_id pti_group) {
+  SPDLOG_DEBUG("In {}, api_group_id:  {}, pti_class: {}, enable?: {}", __func__,
+               static_cast<uint32_t>(pti_group), static_cast<uint32_t>(pti_class), enable);
   pti_result status = pti_result::PTI_SUCCESS;
   // Only valid groups for driver class are all or levelzero for now.
   if ((pti_group != pti_api_group_id::PTI_API_GROUP_LEVELZERO) &&
@@ -454,7 +462,6 @@ pti_result ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class pti_class,
   uint32_t new_value = (enable ? 1 : 0);
   try {
     switch (pti_class) {
-      case pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE:
       case pti_api_class::PTI_API_CLASS_RESERVED: {
         status = pti_result::PTI_ERROR_BAD_ARGUMENT;
         break;
@@ -465,14 +472,17 @@ pti_result ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class pti_class,
       //*
       //* Additionally: the GROUP_ALL check -- is needed for all cases to capture the all category
       // and set granularities appropriately.
-      case pti_api_class::PTI_API_CLASS_ALL:
+      case pti_api_class::PTI_API_CLASS_ALL: {
+        Instance().EnableAllDriverApisWithoutGranularity();
+        break;
+      }
+      case pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE:
       case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION: {
         if ((pti_group == pti_api_group_id::PTI_API_GROUP_ALL ||
              pti_group == pti_api_group_id::PTI_API_GROUP_LEVELZERO)) {
           // Set the class and group to be specific here.  All calls require it.
-          pti_api_class api_pti_class = pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION;
           pti_api_group_id api_group_id = pti_api_group_id::PTI_API_GROUP_LEVELZERO;
-          status = Instance().ProcessGroupForDriverPerClass(api_group_id, new_value, api_pti_class);
+          status = Instance().ProcessGroupForDriverPerClass(api_group_id, new_value, pti_class);
         }
         if (pti_class != pti_api_class::PTI_API_CLASS_ALL)
           break;

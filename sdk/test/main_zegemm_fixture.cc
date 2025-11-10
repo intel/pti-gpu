@@ -98,6 +98,11 @@ ze_command_queue_handle_t queue_test_mem_copy = nullptr;
 // a mishmash of types
 void StartTracing(bool include_sycl_runtime = false, bool include_zecalls = false,
                   bool include_gpu_kernels = true, bool include_synch = false) {
+  std::cout << "Starting Tracing with options: " << " include_sycl_runtime="
+            << (include_sycl_runtime ? "true" : "false")
+            << " include_zecalls=" << (include_zecalls ? "true" : "false")
+            << " include_gpu_kernels=" << (include_gpu_kernels ? "true" : "false")
+            << " include_synch=" << (include_synch ? "true" : "false") << std::endl;
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
@@ -557,7 +562,7 @@ void Compute(ze_device_handle_t device, ze_driver_handle_t driver, const std::ve
 
 }  // namespace
 
-class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, bool>> {
+class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, bool, bool>> {
  protected:
   void SetUp() override {  // Called right after constructor before each test
     buffer_cb_registered = true;
@@ -1040,7 +1045,13 @@ TEST_F(MainZeFixtureTest, AllSynchronizationRelated) {
   // capture_records = true;
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   EXPECT_EQ(RunGemm(), 0);
-  EXPECT_EQ(RunGemm(false, false, true, true, false, true),
+  bool with_polling = false;
+  bool sycl = false;
+  bool zecalls = true;
+  bool kernel = true;
+  bool add_sycl = false;
+  bool synch = true;
+  EXPECT_EQ(RunGemm(with_polling, sycl, zecalls, kernel, add_sycl, synch),
             0);  // with_polling, sycl, zecalls, kernel and sych enabled
 
   // FenceSynchronization
@@ -1076,8 +1087,14 @@ TEST_F(MainZeFixtureTest, AllSynchronizationRelated) {
   EXPECT_EQ(synchronization_record_fence_exec_seen, true);
   EXPECT_EQ(synchronization_record_event_seen, true);
   EXPECT_EQ(synchronization_record_cqueue_seen, true);
-
-  EXPECT_EQ(external_corrid_special_record_seen, false);
+  // Since 0.15.1+ ExternalCorrelation records generated for both Sycl and Level-Zero runtime
+  // these checks are redundant but they makes things explicit
+  if (zecalls) {
+    EXPECT_EQ(external_corrid_special_record_seen, true);
+  }
+  if (sycl && !zecalls) {
+    EXPECT_EQ(external_corrid_special_record_seen, true);
+  }
 }
 
 TEST_F(MainZeFixtureTest, SyclBasedAndZeBasedKernelLaunchesPresent) {
@@ -1094,12 +1111,14 @@ TEST_F(MainZeFixtureTest, SyclBasedAndZeBasedKernelLaunchesPresent) {
 
 // Zecalls Disabled, Sycl Enabled, no sycl api fires, gpu kernel enabled and fires
 TEST_P(MainZeFixtureTest, SpecialRecordPresent) {
-  // GetParam returns 3 valued tuple: values correspond to (from left to right)
-  //     whether we enable the viewkinds for --- sycl, zecalls, kernel.
-  auto [sycl, zecall, kernel] = GetParam();
+  // GetParam returns 4 valued tuple: values correspond to (from left to right)
+  //     whether we enable the viewkinds for --- sycl, zecalls, kernel, add_sycl.
+  auto [sycl, zecall, kernel, add_sycl] = GetParam();
+  bool with_polling = false;
+  bool synch = false;
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   // Polling, sycl, zecalls --- enabled/disabled
-  EXPECT_EQ(RunGemm(false, sycl, zecall, kernel), 0);
+  EXPECT_EQ(RunGemm(with_polling, sycl, zecall, kernel, add_sycl, synch), 0);
   if (sycl == true && zecall == false && kernel == true) {
     EXPECT_EQ(special_record_seen, true);
     EXPECT_EQ(kernel_launch_id,
@@ -1112,9 +1131,14 @@ TEST_P(MainZeFixtureTest, SpecialRecordPresent) {
   } else {
     EXPECT_EQ(special_record_seen, false);
     EXPECT_EQ(zecall_record_seen, zecall);
-    EXPECT_EQ(external_corrid_special_record_seen, false);
-    EXPECT_EQ(corrid_in_special_record, external_corrid_in_ext_rec);
-    EXPECT_EQ(corrid_in_special_record, 0UL);
+    // Since 0.15.1+ ExternalCorrelation records generated for both Sycl and Level-Zero runtime
+    if (zecall || (sycl && add_sycl)) {
+      EXPECT_EQ(external_corrid_special_record_seen, true);
+    } else {
+      EXPECT_EQ(external_corrid_special_record_seen, false);
+      EXPECT_EQ(corrid_in_special_record, external_corrid_in_ext_rec);
+      EXPECT_EQ(corrid_in_special_record, 0UL);
+    }
   }
   /*
     std::ostringstream oss;
@@ -1124,13 +1148,14 @@ TEST_P(MainZeFixtureTest, SpecialRecordPresent) {
 }
 
 // Tuple values correspond to (from left to right) whether we enable the viewkinds for --- sycl,
-// zecalls, kernel.
+// zecalls, kernel, add_sycl
 INSTANTIATE_TEST_SUITE_P(MainZeTests, MainZeFixtureTest,
-                         ::testing::Values(std::make_tuple(true, false, true),
-                                           std::make_tuple(true, false, false),
-                                           std::make_tuple(true, true, true),
-                                           std::make_tuple(false, false, true),
-                                           std::make_tuple(false, true, true)));
+                         ::testing::Values(std::make_tuple(true, false, true, true),
+                                           std::make_tuple(true, false, true, false),
+                                           std::make_tuple(true, false, false, false),
+                                           std::make_tuple(true, true, true, false),
+                                           std::make_tuple(false, false, true, false),
+                                           std::make_tuple(false, true, true, false)));
 
 using pti::test::utils::CreateFullBuffer;
 using pti::test::utils::RecordInserts;

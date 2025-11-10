@@ -103,6 +103,26 @@ inline static constexpr std::array kPtiClassLzHostSynchOpApis{
     pti_api_id_driver_levelzero::zeCommandListHostSynchronize_id,
 };
 
+inline static constexpr std::array kPtiClassLzGpuOpsCoreApis{
+    pti_api_id_driver_levelzero::zeCommandListAppendBarrier_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendMemoryRangesBarrier_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopy_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendMemoryFill_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopyRegion_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopyFromContext_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendImageCopy_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendImageCopyRegion_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendImageCopyToMemory_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendImageCopyToMemoryExt_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendImageCopyFromMemory_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendImageCopyFromMemoryExt_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernel_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendLaunchCooperativeKernel_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelIndirect_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendLaunchMultipleKernelsIndirect_id,
+    pti_api_id_driver_levelzero::zeCommandListImmediateAppendCommandListsExp_id,
+};
+
 struct ViewData {
   const char* fn_name = "";
   ViewInsert callback;
@@ -183,6 +203,7 @@ inline void DisableAllIndividualApis(M& mtx, T& map) {
 }
 
 inline void ResetTracingStateToAllDisabled(pti_api_group_id type) {
+  SPDLOG_DEBUG("In {}, pti_group:  {}", __func__, static_cast<uint32_t>(type));
   switch (type) {
     case pti_api_group_id::PTI_API_GROUP_SYCL: {
       DisableAllIndividualApis(sycl_set_granularity_map_mtx, pti_api_id_runtime_sycl_state);
@@ -699,6 +720,11 @@ struct PtiViewRecordHandler {
       case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION: {
         const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
         SetGranularApis(new_value, kPtiClassLzHostSynchOpApis, pti_api_id_driver_levelzero_state);
+        break;
+      }
+      case pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE: {
+        const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
+        SetGranularApis(new_value, kPtiClassLzGpuOpsCoreApis, pti_api_id_driver_levelzero_state);
         break;
       }
       case pti_api_class::PTI_API_CLASS_ALL:
@@ -1317,6 +1343,11 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
 }
 
 inline void ZeDriverEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, external_corr_enabled: {}, api_id: {}", __func__,
+               external_collection_enabled.load(), rec.callback_id_);
+  if (external_collection_enabled) {
+    GenerateExternalCorrelationRecords(rec);
+  }
   pti_view_record_api record;
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DRIVER_API;
 

@@ -7,6 +7,7 @@
 #define SAMPLES_UTILS_H_
 #include <iomanip>
 #include <iostream>
+#include <locale>
 #include <sstream>
 #include <stdexcept>
 
@@ -62,6 +63,25 @@ template <typename T>
 template <typename T>
 inline void AlignedDealloc(T* buf_ptr) {
   return AlignedDealloc<T>(buf_ptr, kDefaultPtiBufferAlignment);
+}
+
+// Helper class and function: formats an int with thousands separator
+// e.g. 1234567890 -> 1'234'567'890
+// when manually comparing timestamps in tests
+class ApostropheNumpunct : public std::numpunct<char> {
+ protected:
+  char do_thousands_sep() const override { return '\''; }
+  std::string do_grouping() const override { return "\3"; }
+};
+
+template <typename T>
+inline std::string AposFormat(T value) {
+  static_assert(std::is_unsigned<T>::value, "Unsigned integer type required");
+  std::ostringstream oss;
+  static std::locale apostrophe_locale(std::locale::classic(), new ApostropheNumpunct);
+  oss.imbue(apostrophe_locale);
+  oss << value;
+  return oss.str();
 }
 
 template <typename... T>
@@ -126,13 +146,14 @@ inline void DumpRecord(pti_view_record_kernel* record) {
   if (NULL == record) return;
 
   std::cout << "Kernel Name: " << record->_name << '\n';
-  std::cout << "               Ze Kernel Append Time: " << record->_append_timestamp << " ns"
-            << '\n';
-  std::cout << "               Ze Kernel Submit Time: " << record->_submit_timestamp << " ns"
-            << '\n';
-  std::cout << "                Ze Kernel Start Time: " << record->_start_timestamp << " ns"
-            << '\n';
-  std::cout << "                  Ze Kernel End Time: " << record->_end_timestamp << " ns" << '\n';
+  std::cout << "               Ze Kernel Append Time: " << AposFormat(record->_append_timestamp)
+            << " ns" << '\n';
+  std::cout << "               Ze Kernel Submit Time: " << AposFormat(record->_submit_timestamp)
+            << " ns" << '\n';
+  std::cout << "                Ze Kernel Start Time: " << AposFormat(record->_start_timestamp)
+            << " ns" << '\n';
+  std::cout << "                  Ze Kernel End Time: " << AposFormat(record->_end_timestamp)
+            << " ns" << '\n';
   std::cout << "Kernel Queue Handle: " << record->_queue_handle << '\n';
   std::cout << "Kernel Queue ID: " << record->_sycl_queue_id << '\n';
   std::cout << "Kernel CommandList Context Handle: " << record->_context_handle << '\n';
@@ -160,14 +181,14 @@ inline void DumpRecord(pti_view_record_memory_copy* record) {
   std::cout << "Memory Device: " << record->_pci_address << '\n';
   print_uuid(record->_device_uuid, "Memory Device UUID: ");
   std::cout << "Memory Op Execution Time: " << std::dec
-            << record->_end_timestamp - record->_start_timestamp << " ns" << '\n';
-  std::cout << "               Memory Op Append Time: " << std::dec << record->_append_timestamp
+            << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
+  std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
             << " ns" << '\n';
-  std::cout << "               Memory Op Submit Time: " << std::dec << record->_submit_timestamp
+  std::cout << "               Memory Op Submit Time: " << AposFormat(record->_submit_timestamp)
             << " ns" << '\n';
-  std::cout << "                Memory Op Start Time: " << std::dec << record->_start_timestamp
+  std::cout << "                Memory Op Start Time: " << AposFormat(record->_start_timestamp)
             << " ns" << '\n';
-  std::cout << "                  Memory Op End Time: " << std::dec << record->_end_timestamp
+  std::cout << "                  Memory Op End Time: " << AposFormat(record->_end_timestamp)
             << " ns" << '\n';
   std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
   std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
@@ -194,13 +215,13 @@ inline void DumpRecord(pti_view_record_memory_copy_p2p* record) {
   print_uuid(record->_dst_uuid, "Memory Destination Device UUID: ");
   std::cout << "Memory Op Execution Time: " << std::dec
             << record->_end_timestamp - record->_start_timestamp << " ns" << '\n';
-  std::cout << "               Memory Op Append Time: " << std::dec << record->_append_timestamp
+  std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
             << " ns" << '\n';
-  std::cout << "               Memory Op Submit Time: " << std::dec << record->_submit_timestamp
+  std::cout << "               Memory Op Submit Time: " << AposFormat(record->_submit_timestamp)
             << " ns" << '\n';
-  std::cout << "                Memory Op Start Time: " << std::dec << record->_start_timestamp
+  std::cout << "                Memory Op Start Time: " << AposFormat(record->_start_timestamp)
             << " ns" << '\n';
-  std::cout << "                  Memory Op End Time: " << std::dec << record->_end_timestamp
+  std::cout << "                  Memory Op End Time: " << AposFormat(record->_end_timestamp)
             << " ns" << '\n';
   std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
   std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
@@ -223,15 +244,15 @@ inline void DumpRecord(pti_view_record_memory_fill* record) {
   std::cout << "Memory Op: " << record->_name << '\n';
   std::cout << "Memory Device: " << record->_pci_address << '\n';
   print_uuid(record->_device_uuid, "Memory Device UUID: ");
-  std::cout << "Memory Op Execution Time: " << std::dec
-            << record->_end_timestamp - record->_start_timestamp << " ns" << '\n';
-  std::cout << "               Memory Op Append Time: " << std::dec << record->_append_timestamp
+  std::cout << "Memory Op Execution Time: "
+            << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
+  std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
             << " ns" << '\n';
-  std::cout << "               Memory Op Submit Time: " << std::dec << record->_submit_timestamp
+  std::cout << "               Memory Op Submit Time: " << AposFormat(record->_submit_timestamp)
             << " ns" << '\n';
-  std::cout << "                Memory Op Start Time: " << std::dec << record->_start_timestamp
+  std::cout << "               Memory Op Start Time: " << AposFormat(record->_start_timestamp)
             << " ns" << '\n';
-  std::cout << "                  Memory Op End Time: " << std::dec << record->_end_timestamp
+  std::cout << "                  Memory Op End Time: " << AposFormat(record->_end_timestamp)
             << " ns" << '\n';
   std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
   std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
@@ -250,8 +271,8 @@ inline void DumpRecord(pti_view_record_api* record) {
   PTI_THROW(ptiViewGetApiIdName(record->_api_group, record->_api_id, &api_name));
   std::cout << "Api Function Name: " << api_name << '\n';
   std::cout << "Api Function CBID: " << record->_api_id << '\n';
-  std::cout << "Api Start Time: " << record->_start_timestamp << '\n';
-  std::cout << "  Api End Time: " << record->_end_timestamp << '\n';
+  std::cout << "Api Start Time: " << AposFormat(record->_start_timestamp) << " ns" << '\n';
+  std::cout << "  Api End Time: " << AposFormat(record->_end_timestamp) << " ns" << '\n';
   std::cout << "Api Process Id: " << record->_process_id << '\n';
   std::cout << "Api Thread Id: " << record->_thread_id << '\n';
   std::cout << "Api Correlation Id: " << record->_correlation_id << '\n';
