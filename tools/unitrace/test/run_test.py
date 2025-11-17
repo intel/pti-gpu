@@ -85,6 +85,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
 
     # Prepare command here
     command = [unitrace_exe]
+    scenario_set = set(scenarios.split(" "))
     for scenario in scenarios.split(" "):
         command.append(scenario)
     command += ["-o", output_file_path, test_case] + args
@@ -120,6 +121,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 return 1  # Indicate failure due to ERROR in output
 
         if extra_test_prog != None:
+            print("[INFO] Test has custom checker, going to use it for validation.")
             # obtain list of generated files from unitrace stderr output
             full_path_output_files = []
             err_lines = result.stderr.splitlines()
@@ -139,18 +141,26 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 return 1  # extra test prog failed
             else:
                 return 0
-        elif scenarios not in ["--device-timing", "-d", "--device-timeline", "-t"]:
+        elif scenario_set.isdisjoint(set(["--device-timing", "-d", "--device-timeline", "-t"])):
+            print(f"[INFO] Nothing to compare for {scenario_set} hence exiting early.")
             # check if unidiff support validation for current scenario else return early as success
             return 0
         else:
+            print("[INFO] Going to run unidiff for comparison.")
             # Extract the relevant section from the expected output file
             # TODO: we need not create a buffer instead of file will work
-            expected_output_file = extract_test_case_output(cmake_root_path, test_case_name, scenarios)
+            scenario_d_or_t = ""
+            if not set(["-d","--device-timing"]).isdisjoint(scenario_set):
+                scenario_d_or_t = "-d"
+            elif not set(["-t","--device-timeline"]).isdisjoint(scenario_set):
+                scenario_d_or_t = "-t"
+
+            expected_output_file = extract_test_case_output(cmake_root_path, test_case_name, scenario_d_or_t)
 
             output_file_with_pid = max(output_files, key = lambda f: os.path.getmtime(os.path.join(output_dir, f)))
 
             # Call unidiff comparison
-            comparison_result = call_unidiff(scenarios, output_dir, output_file_with_pid, expected_output_file)
+            comparison_result = call_unidiff(scenario_d_or_t, output_dir, output_file_with_pid, expected_output_file)
             if comparison_result != 0:
                 print(f"[ERROR] Unidiff comparison failed.", file = sys.stderr)
                 return 1
