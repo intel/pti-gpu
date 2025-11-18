@@ -279,7 +279,7 @@ class ZeMetricProfiler {
                 return;
               }
 
-    	      uint32_t k;
+              uint32_t k;
               for (k = 0; k < num_groups; ++k) {
                 zet_metric_group_properties_t group_props{};
                 group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
@@ -294,17 +294,17 @@ class ZeMetricProfiler {
                   break;
                 }
               }
-    	      if (k == num_groups) {
+              if (k == num_groups) {
                 // no metric group found
-    	        // should not get here
+                // should not get here
                 groups.push_back(nullptr);
-    	      }
+              }
             }
-    	    else {
+            else {
               // unable to get metric groups
-    	      // should get here
+              // should get here
               groups.push_back(nullptr);
-    	    }
+            }
           }
         }
       }
@@ -435,7 +435,7 @@ class ZeMetricProfiler {
             const zet_typed_value_t *value = computed_metrics.data() + i * size;
             for (int j = 0; j < size; ++j) {
               str += ",";
-  	    str += PrintTypedValue(value[j]);
+              str += PrintTypedValue(value[j]);
             }
             str += "\n";
           }
@@ -776,20 +776,6 @@ class ZeMetricProfiler {
           continue;
         }
 
-        struct EuStalls {
-          uint64_t active_;
-          uint64_t control_;
-          uint64_t pipe_;
-          uint64_t send_;
-          uint64_t dist_;
-          uint64_t sbid_;
-          uint64_t sync_;
-          uint64_t insfetch_;
-          uint64_t other_;
-        };
-
-        std::map<uint64_t, EuStalls> eustalls;
-
         std::vector<std::string> metric_list;
         metric_list = GetMetricList(device->metric_group_);
         PTI_ASSERT(!metric_list.empty());
@@ -800,10 +786,19 @@ class ZeMetricProfiler {
           continue;
         }
 
+        constexpr uint32_t max_num_of_stall_types = 16;	// should be enough for all current platforms
+
+        if ((metric_list.size() - 1) > max_num_of_stall_types) { // metric_list.size() includes IP
+          std::cerr << "[ERROR] Number of stall types exceeds supported limit of " << max_num_of_stall_types << std::endl;
+          return;
+        }
+
         std::ifstream inf = std::ifstream(device->metric_file_name_, std::ios::in | std::ios::binary);
         if (!inf.is_open()) {
           continue;
         }
+
+        std::map<uint64_t, std::array<uint64_t, max_num_of_stall_types>> eustalls;
 
         while (!inf.eof()) {
           // Read metric data in two stages, first actual size (in bytes), followed by actual metrics
@@ -863,26 +858,17 @@ class ZeMetricProfiler {
                 if (ip == 0) {
                   continue;
                 }
-                EuStalls stall;
-                stall.active_ = value[j + 1].value.ui64;
-                stall.control_ = value[j + 2].value.ui64;
-                stall.pipe_ = value[j + 3].value.ui64;
-                stall.send_ = value[j + 4].value.ui64;
-                stall.dist_ = value[j + 5].value.ui64;
-                stall.sbid_ = value[j + 6].value.ui64;
-                stall.sync_ = value[j + 7].value.ui64;
-                stall.insfetch_ = value[j + 8].value.ui64;
-                stall.other_ = value[j + 9].value.ui64;
+
+                std::array<uint64_t, max_num_of_stall_types> stall;
+
+                // IP address is already processed. (metric_list.size() - 1) is the number of types of stall
+                for (uint32_t k = 0; k <  (metric_list.size() - 1); k++) {
+                  stall[k] = value[j + k + 1].value.ui64;
+                }
                 if (auto eit = eustalls.find(ip); eit != eustalls.end()) {
-                  eit->second.active_ += stall.active_;
-                  eit->second.control_ += stall.control_;
-                  eit->second.pipe_ += stall.pipe_;
-                  eit->second.send_ += stall.send_;
-                  eit->second.dist_ += stall.dist_;
-                  eit->second.sbid_ += stall.sbid_;
-                  eit->second.sync_ += stall.sync_;
-                  eit->second.insfetch_ += stall.insfetch_;
-                  eit->second.other_ += stall.other_;
+                  for (uint32_t k = 0; k <  (metric_list.size() - 1); k++) {
+                    eit->second[k] += stall[k];
+                  }
                 }
                 else {
                   eustalls.insert({ip, std::move(stall)});
@@ -926,25 +912,15 @@ class ZeMetricProfiler {
                      rit->second.first + ", ";
               logger_->Log(line);
               line = std::string(std::max(int(field_sizes[1] - std::string(offset).length()), 0), ' ') +
-                     std::string(offset) + ", " +
-                     std::string(std::max(int(field_sizes[2] - std::to_string(stall.active_).length()), 0), ' ') +
-                     std::to_string(stall.active_) + ", " +
-                     std::string(std::max(int(field_sizes[3] - std::to_string(stall.control_).length()), 0), ' ') +
-                     std::to_string(stall.control_) + ", " +
-                     std::string(std::max(int(field_sizes[4] - std::to_string(stall.pipe_).length()), 0), ' ') +
-                     std::to_string(stall.pipe_) + ", " +
-                     std::string(std::max(int(field_sizes[5] - std::to_string(stall.send_).length()), 0), ' ') +
-                     std::to_string(stall.send_) + ", " +
-                     std::string(std::max(int(field_sizes[6] - std::to_string(stall.dist_).length()), 0), ' ') +
-                     std::to_string(stall.dist_) + ", " +
-                     std::string(std::max(int(field_sizes[7] - std::to_string(stall.sbid_).length()), 0), ' ') +
-                     std::to_string(stall.sbid_) + ", " +
-                     std::string(std::max(int(field_sizes[8] - std::to_string(stall.sync_).length()), 0), ' ') +
-                     std::to_string(stall.sync_) + ", " +
-                     std::string(std::max(int(field_sizes[9] - std::to_string(stall.insfetch_).length()), 0), ' ') +
-                     std::to_string(stall.insfetch_) + ", " +
-                     std::string(std::max(int(field_sizes[10] - std::to_string(stall.other_).length()), 0), ' ') +
-                     std::to_string(stall.other_) + "\n";
+                     std::string(offset) + ", ";
+              // the last stall type is processed after this loop
+              for (uint32_t k = 0; k < (metric_list.size() - 2); k++) {
+                line += std::string(std::max(int(field_sizes[k + 2] - std::to_string(stall[k]).length()), 0), ' ') +
+                        std::to_string(stall[k]) + ", ";
+              }
+              // do not forget the last stall type
+              line += std::string(std::max(int(field_sizes[metric_list.size() - 2] - std::to_string(stall[metric_list.size() - 2]).length()), 0), ' ') +
+                      std::to_string(stall[metric_list.size() - 2]) + "\n";
               logger_->Log(line);
               break;
             }
