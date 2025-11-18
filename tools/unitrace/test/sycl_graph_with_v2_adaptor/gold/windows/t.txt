@@ -1,0 +1,4 @@
+Thread 39224 Device 65891704 : "zeCommandListAppendMemoryFill(D)[1024]" [ns] 79214258842135 (append) 79214258842135 (submit) 79214259240855 (start) 79214259246935 (end)
+Thread 39224 Device 65891704 : "run_kernels(sycl::_V1::queue*, int*, int)::{lambda(sycl::_V1::nd_item<1>)#1}[SIMD32 {4; 1; 1} {64; 1; 1}]" [ns] 79214263167449 (append) 79214263479657 (submit) 79214263576857 (start) 79214263583257 (end)
+Thread 39224 Device 65891704 : "run_kernels(sycl::_V1::queue*, int*, int)::{lambda(sycl::_V1::nd_item<1>)#2}[SIMD32 {4; 1; 1} {64; 1; 1}]" [ns] 79214263269089 (append) 79214263479657 (submit) 79214263586937 (start) 79214263591097 (end)
+Thread 39224 Device 65891704 : "zeCommandListAppendMemoryCopy(D2M)[1024]" [ns] 79214263670766 (append) 79214263670766 (submit) 79214263683566 (start) 79214263699006 (end)

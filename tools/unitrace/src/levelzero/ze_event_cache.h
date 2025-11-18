@@ -125,20 +125,14 @@ class ZeEventCache {
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
         PTI_ASSERT(event_info_map_.count(event) == 0);
-        event_info_map_[event] = context;
-	result->second.push_back(event);
+        event_info_map_.insert({event, std::make_pair(context, i)});
+        result->second.push_back(event);
       }
-    } 
+    }
 
     event = result->second.back();
     result->second.pop_back();
 
-    // TODO: Removing the below assert for now. Reason is that we see
-    //       a behavior that if an event has signaled from an immediate
-    //       command list, it stays at signaled state even after zeEventHostReset.
-    //       This is not causing a real issue since once a new command is appended
-    //       using the same event as the signal event, the event state becomes
-    //       not ready.
     //PTI_ASSERT(ZE_FUNC(zeEventQueryStatus)(event) == ZE_RESULT_NOT_READY);
 
     return event;
@@ -170,12 +164,39 @@ class ZeEventCache {
       return;
     }
 
-    auto result = event_map_.find(info->second);
+    auto result = event_map_.find(info->second.first);
     PTI_ASSERT(result != event_map_.end());
     if (result != event_map_.end()) {
-      ze_result_t status = ZE_FUNC(zeEventHostReset)(event);
+      // Workaround to cover L0 bug related to V2 adaptor. Tracking ID: https://github.com/intel-innersource/applications.analyzers.profilingtoolsinterfaces.sdk/issues/700
+      // Idea is to create new event from same event pool at same index. Destroy the old event and update the map.
+
+      // Find event pool and index where old event was create
+      uint32_t event_pool_index = info->second.second;
+      auto context = info->second.first;
+
+      ze_event_pool_handle_t pool;
+      auto status = ZE_FUNC(zeEventGetEventPool)(event, &pool);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      result->second.push_back(event);
+
+      // destroy old event
+      status = ZE_FUNC(zeEventDestroy)(event);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+      // create new event
+      ze_event_handle_t new_event;
+      ze_event_desc_t event_desc = {
+          ZE_STRUCTURE_TYPE_EVENT_DESC,
+          nullptr,
+          event_pool_index,
+          ZE_EVENT_SCOPE_FLAG_HOST,
+          ZE_EVENT_SCOPE_FLAG_HOST};
+      status = ZE_FUNC(zeEventCreate)(pool, &event_desc, &new_event);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+      // Update event info map
+      event_info_map_.erase(event);
+      event_info_map_.insert({new_event,std::make_pair(context, event_pool_index)});
+      result->second.push_back(new_event);
     }
   }
 
@@ -216,7 +237,7 @@ class ZeEventCache {
  private:
   ze_event_pool_flags_t flags_ = 0;
   std::map<ze_context_handle_t, std::vector<ze_event_handle_t> > event_map_;
-  std::map<ze_event_handle_t, ze_context_handle_t> event_info_map_;
+  std::map<ze_event_handle_t, std::pair<ze_context_handle_t, uint32_t>> event_info_map_;
   std::map<ze_context_handle_t, std::vector<ze_event_pool_handle_t> > event_pools_;
   std::shared_mutex lock_;
 };

@@ -1,0 +1,19 @@
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):            148321936
+    Total Device Time for L0 backend (ns):                32000
+
+== L0 Backend ==
+
+                                                                        Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+                                          "zeCommandListAppendMemoryCopy(D2M)",            1,                15520,    48.500000,                15520,                15520,                15520
+"run_kernels(sycl::_V1::queue*, int*, int)::{lambda(sycl::_V1::nd_item<1>)#1}",            1,                 6400,    20.000000,                 6400,                 6400,                 6400
+                                            "zeCommandListAppendMemoryFill(D)",            1,                 5760,    18.000000,                 5760,                 5760,                 5760
+"run_kernels(sycl::_V1::queue*, int*, int)::{lambda(sycl::_V1::nd_item<1>)#2}",            1,                 4320,    13.500000,                 4320,                 4320,                 4320
+
+
+=== Kernel Properties ===
+
+                                                                        Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+"run_kernels(sycl::_V1::queue*, int*, int)::{lambda(sycl::_V1::nd_item<1>)#1}",      JIT,   32,                   2,                  0,                         0,                       0,                           128
+"run_kernels(sycl::_V1::queue*, int*, int)::{lambda(sycl::_V1::nd_item<1>)#2}",      JIT,   32,                   2,                  0,                         0,                       0,                           128
