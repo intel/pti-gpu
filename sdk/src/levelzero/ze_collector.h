@@ -569,10 +569,12 @@ class ZeCollector {
           auto subscriber = cb_subscribers_collection_.GetSubscriber(subscriber_handle);
           PTI_ASSERT(subscriber != nullptr);
           if (subscriber->IsEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED, 1)) {
+            thread_local_is_within_subscriber_callback = true;
             subscriber->GetCallback()(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED,
                                       PTI_API_GROUP_LEVELZERO, ze_instance_data.callback_id_,
                                       context, &callback_data, subscriber->GetUserData(),
                                       subscriber->GetPtrForInstanceUserData());
+            thread_local_is_within_subscriber_callback = false;
           }
         }
       }
@@ -597,10 +599,12 @@ class ZeCollector {
         if (subscriber->IsEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED,
                                   PTI_CB_PHASE_API_ENTER) &&
             subscriber->GetCallback()) {
+          thread_local_is_within_subscriber_callback = true;
           subscriber->GetCallback()(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED,
                                     PTI_API_GROUP_LEVELZERO, ze_instance_data.callback_id_,
                                     command->context, &callback_data, subscriber->GetUserData(),
                                     subscriber->GetPtrForInstanceUserData());
+          thread_local_is_within_subscriber_callback = false;
         }
       }
     }

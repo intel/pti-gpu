@@ -628,21 +628,16 @@ struct PtiViewRecordHandler {
     pti_view_record_external_correlation ext_corr_rec = pti_view_record_external_correlation();
     ext_corr_rec._external_id = external_id;
     ext_corr_rec._external_kind = external_kind;
-    auto it = map_ext_corrid_vectors.find({external_kind});
-    if (it != map_ext_corrid_vectors.cend()) {
-      it->second.push(ext_corr_rec);
-    } else {
-      map_ext_corrid_vectors[{external_kind}].push(ext_corr_rec);
-    }
+    thread_local_map_ext_corrid_vectors[{external_kind}].push(ext_corr_rec);
 
     return result;
   }
 
   inline pti_result PopExternalKindId(pti_view_external_kind external_kind,
                                       uint64_t* p_external_id) {
-    pti_result result = pti_result::PTI_SUCCESS;
-    auto it = map_ext_corrid_vectors.find({external_kind});
-    if (it != map_ext_corrid_vectors.cend()) {
+    auto result = pti_result::PTI_SUCCESS;
+    auto it = thread_local_map_ext_corrid_vectors.find({external_kind});
+    if (it != thread_local_map_ext_corrid_vectors.cend()) {
       pti_view_record_external_correlation ext_record = it->second.top();
       SPDLOG_TRACE("In {}, ext_id: {} ext_kind: {}", __FUNCTION__, ext_record._external_id,
                    static_cast<uint32_t>(external_kind));
@@ -651,7 +646,12 @@ struct PtiViewRecordHandler {
       }
       it->second.pop();
       if (!it->second.size()) {
-        map_ext_corrid_vectors.erase(it);
+        if (thread_local_is_within_subscriber_callback) {
+          SPDLOG_TRACE("In {}, Deferring erase of External Kind: {}, id: {}", __func__,
+                       static_cast<uint32_t>(external_kind), ext_record._external_id);
+          thread_local_map_ext_corrid_vectors_deferred_erase[{external_kind}].push(ext_record);
+        }
+        thread_local_map_ext_corrid_vectors.erase(it);
       }
     } else {
       SPDLOG_TRACE("In {}, External ID Queue is empty", __FUNCTION__);
@@ -1009,7 +1009,8 @@ inline void GetDeviceId(char* buf, const ze_pci_ext_properties_t& pci_prop_) {
 }
 
 inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRecord& rec) {
-  for (auto it = map_ext_corrid_vectors.cbegin(); it != map_ext_corrid_vectors.cend(); it++) {
+  for (auto it = thread_local_map_ext_corrid_vectors.cbegin();
+       it != thread_local_map_ext_corrid_vectors.cend(); it++) {
     pti_view_record_external_correlation ext_record = it->second.top();
     ext_record._correlation_id = rec.cid_;
     ext_record._view_kind._view_kind = pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION;
@@ -1018,6 +1019,20 @@ inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRec
                  ext_record._correlation_id);
     Instance().InsertRecord(ext_record, rec.tid_);
   }
+
+  for (auto it = thread_local_map_ext_corrid_vectors_deferred_erase.cbegin();
+       it != thread_local_map_ext_corrid_vectors_deferred_erase.cend(); it++) {
+    if (it->second.empty()) {
+      continue;
+    }
+    auto ext_record = it->second.top();
+    ext_record._correlation_id = rec.cid_;
+    ext_record._view_kind._view_kind = pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION;
+    SPDLOG_TRACE("In {}, processing deferred ext records pop - External Kind: {}, id: {}", __func__,
+                 static_cast<uint32_t>(ext_record._external_kind), ext_record._external_id);
+    Instance().InsertRecord(ext_record, rec.tid_);
+  }
+  thread_local_map_ext_corrid_vectors_deferred_erase.clear();
 }
 
 inline uint64_t ApplyTimeShift(uint64_t timestamp, int64_t time_shift) {

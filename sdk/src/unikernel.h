@@ -216,9 +216,16 @@ struct OverheadKeyCompare {
 
 inline thread_local ZeKernelCommandExecutionRecord sycl_data_mview;
 inline thread_local ZeKernelCommandExecutionRecord sycl_data_kview;
-inline thread_local std::map<ExternalCorrIdKey, std::stack<pti_view_record_external_correlation>,
-                             ExternalKeyCompare>
-    map_ext_corrid_vectors;
+
+typedef std::map<ExternalCorrIdKey, std::stack<pti_view_record_external_correlation>,
+                 ExternalKeyCompare>
+    ExternalCorrelationIdMapType;
+
+inline thread_local ExternalCorrelationIdMapType thread_local_map_ext_corrid_vectors;
+inline thread_local ExternalCorrelationIdMapType thread_local_map_ext_corrid_vectors_deferred_erase;
+
+inline thread_local bool thread_local_is_within_subscriber_callback = false;
+
 inline thread_local std::map<OverheadKindKey, pti_view_record_overhead, OverheadKeyCompare>
     map_overhead_per_kind;
 

@@ -270,12 +270,12 @@ inline void DumpRecord(pti_view_record_api* record) {
   const char* api_name = nullptr;
   PTI_THROW(ptiViewGetApiIdName(record->_api_group, record->_api_id, &api_name));
   std::cout << "Api Function Name: " << api_name << '\n';
-  std::cout << "Api Function CBID: " << record->_api_id << '\n';
+  std::cout << "Api Function Id:   " << record->_api_id << '\n';
+  std::cout << "Correlation Id:    " << record->_correlation_id << '\n';
   std::cout << "Api Start Time: " << AposFormat(record->_start_timestamp) << " ns" << '\n';
   std::cout << "  Api End Time: " << AposFormat(record->_end_timestamp) << " ns" << '\n';
-  std::cout << "Api Process Id: " << record->_process_id << '\n';
-  std::cout << "Api Thread Id: " << record->_thread_id << '\n';
-  std::cout << "Api Correlation Id: " << record->_correlation_id << '\n';
+  std::cout << "Process Id:     " << record->_process_id << '\n';
+  std::cout << "Thread Id:      " << record->_thread_id << '\n';
 }
 
 inline void DumpRecord(pti_view_record_synchronization* record) {
@@ -311,8 +311,8 @@ inline void DumpRecord(pti_view_record_synchronization* record) {
   std::cout << "Synch BE Context Handle: " << record->_context_handle << '\n';
   std::cout << "Synch BE Event Handle: " << record->_event_handle << '\n';
   std::cout << "Synch BE Number Wait Events: " << record->_number_wait_events << '\n';
-  std::cout << "Synch Api Function CBID: " << record->_api_id << '\n';
-  std::cout << "Synch Api Group ID: " << record->_api_group << '\n';
+  std::cout << "Synch Api Function Id: " << record->_api_id << '\n';
+  std::cout << "Synch Api Group Id:    " << record->_api_group << '\n';
   std::cout << "Synch Api Return Code: " << record->_return_code << '\n';
   const char* api_name = nullptr;
   PTI_THROW(
@@ -334,7 +334,7 @@ inline void DumpRecord(pti_view_record_overhead* record) {
 
 inline void DumpRecord(pti_view_record_external_correlation* record) {
   if (NULL == record) return;
-  std::cout << "External Correlation Kind : " << record->_external_kind << '\n';
+  std::cout << "External Correlation Kind: " << record->_external_kind << '\n';
   std::cout << "Correlation Id: " << record->_correlation_id << '\n';
   std::cout << "External Id: " << record->_external_id << '\n';
 }
@@ -399,10 +399,10 @@ inline void DumpCallbackData(pti_callback_domain domain, pti_api_group_id driver
 
   const char* api_name = nullptr;
   if (PTI_SUCCESS == ptiViewGetApiIdName(driver_api_group_id, driver_api_id, &api_name)) {
-    std::cout << "Driver API Group ID/API ID/Name: " << driver_api_group_id << "/" << driver_api_id
+    std::cout << "Driver API Group Id/API Id/Name: " << driver_api_group_id << "/" << driver_api_id
               << "/" << api_name << std::endl;
   } else {
-    std::cout << "Driver API Group ID/API ID/Name: " << driver_api_group_id << "/" << driver_api_id
+    std::cout << "Driver API Group Id/API Id/Name: " << driver_api_group_id << "/" << driver_api_id
               << "/Unknown" << std::endl;
   }
   if (cb_data != nullptr) {
@@ -413,23 +413,25 @@ inline void DumpCallbackData(pti_callback_domain domain, pti_api_group_id driver
         pti_callback_gpu_op_data* gpu_op_data = static_cast<pti_callback_gpu_op_data*>(cb_data);
         std::cout << "GPU Operation Data:" << std::endl;
         std::cout << "  Phase: " << ptiCallbackPhaseTypeToString(gpu_op_data->_phase) << std::endl;
-        std::cout << "  Command List Type: "
-                  << GetCommandListTypeString(gpu_op_data->_cmd_list_properties) << std::endl;
-        std::cout << "  Cmd List Handle: " << gpu_op_data->_cmd_list_handle << std::endl;
-        std::cout << "  Queue Handle: " << gpu_op_data->_queue_handle << std::endl;
+        if (domain != PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED) {
+          std::cout << "  Command List Handle: " << gpu_op_data->_cmd_list_handle << std::endl;
+          std::cout << "  Command List Type:   "
+                    << GetCommandListTypeString(gpu_op_data->_cmd_list_properties) << std::endl;
+          std::cout << "  Queue Handle:        " << gpu_op_data->_queue_handle << std::endl;
+          std::cout << "  Correlation Id:      " << gpu_op_data->_correlation_id << std::endl;
+        }
         std::cout << "  Device Handle: " << gpu_op_data->_device_handle << std::endl;
         std::cout << "  Return Code: " << gpu_op_data->_return_code << std::endl;
-        std::cout << "  Correlation ID: " << gpu_op_data->_correlation_id << std::endl;
         std::cout << "  Operation Count: " << gpu_op_data->_operation_count << std::endl;
 
         if (gpu_op_data->_operation_details != nullptr) {
           pti_gpu_op_details* op_details =
               static_cast<pti_gpu_op_details*>(gpu_op_data->_operation_details);
-          std::cout << "  Operation Details:" << std::endl;
+          std::cout << "  GPU Operations Details:" << std::endl;
           for (uint32_t i = 0; i < gpu_op_data->_operation_count; ++i, ++op_details) {
             std::cout << " -- Operation Kind: "
                       << GetOperationTypeString(op_details->_operation_kind) << std::endl;
-            std::cout << "    Operation ID: " << op_details->_operation_id << std::endl;
+            std::cout << "    Operation Id: " << op_details->_operation_id << std::endl;
             std::cout << "    Kernel Handle: " << op_details->_kernel_handle << std::endl;
             if (op_details->_name != nullptr) {
               std::cout << "    Name: " << op_details->_name << std::endl;
