@@ -10,6 +10,8 @@ import os
 import platform
 import unidiff
 import argparse
+import shutil
+import glob
 
 def extract_test_case_output(cmake_root_path, test_case_name, scenario):
     # Construct the path to the expected output file within the "gold" folder
@@ -38,7 +40,8 @@ def call_unidiff(scenario, output_dir, output_file_with_pid, expected_output_fil
         device_timeline_ref = unidiff.DeviceTimeline(ref_path)
         result = device_timeline_cur.compare(device_timeline_ref)
         print(f"[INFO] return code : {result}")
-        device_timeline_cur.save_to_csv(device_timeline_ref, filename="device-timeline_results.csv")
+        output_filename = os.path.join(output_dir, "device-timeline_results.csv")
+        device_timeline_cur.save_to_csv(device_timeline_ref, filename = output_filename)
         print(f"[INFO] Device timeline comparison complete. Result: {'Passed' if result == 0 else 'Failed'}")
         return result
 
@@ -48,7 +51,8 @@ def call_unidiff(scenario, output_dir, output_file_with_pid, expected_output_fil
         device_timing_ref = unidiff.DeviceTiming(ref_path)
         result = device_timing_cur.compare(device_timing_ref)
         print(f"[INFO] return code : {result}")
-        device_timing_cur.save_to_csv(device_timing_ref, filename="device_timing_results.csv")
+        output_filename = os.path.join(output_dir, "device_timing_results.csv")
+        device_timing_cur.save_to_csv(device_timing_ref, filename = output_filename)
         print(f"[INFO] Device timing comparison complete. Result: {'Passed' if result == 0 else 'Failed'}")
         return result
 
@@ -88,22 +92,78 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
     scenario_set = set(scenarios.split(" "))
     for scenario in scenarios.split(" "):
         command.append(scenario)
-    command += ["-o", output_file_path, test_case] + args
+
+    is_chrome_logging_present = False
+    if scenario.startswith("--chrome"):
+        is_chrome_logging_present = True
+
+    need_output_directory = False
+    if scenario in ["--chrome-call-logging", "--chrome-device-logging","--chrome-kernel-logging", "--chrome-sycl-logging", "--chrome-itt-logging"]:
+        need_output_directory = True
+
+    if need_output_directory:
+        command += ["--output-dir-path", output_dir]
+    elif scenario in ["-k", "-q"]:
+        command += ["-o", "metric"]
+    else:
+        command += ["-o", output_file_path]
+
+    command += [test_case] + args
 
     print(f"[INFO] Executing command: {' '.join(command)}")
 
     try:
+        before_list_of_files = set(os.listdir(output_dir))
         result = subprocess.run(command, text=True, capture_output=True) # executing Unitrace command
         if result.returncode != 0:
             print(f"[ERROR] Unitrace execution failed with return code {result.returncode}.", file = sys.stderr)
             return 1  # Indicate failure due to Unitrace ERROR
 
+        # Metric logs need to be moved to result folder
+        if scenario in ["-k", "-q"]:
+            test_case_path = os.path.join(cmake_root_path, "build", test_case_name)
+            # Find all files starting with "metric" in source directory
+            pattern = os.path.join(test_case_path, "metric*")
+            metric_files = glob.glob(pattern)
+
+            # Move each file to destination
+            for file_path in metric_files:
+                filename = os.path.basename(file_path)
+                destination_path = os.path.join(output_dir, filename)
+                shutil.move(file_path, destination_path)
+                os.rename(destination_path, output_dir + "/" + filename + "_" + output_file)
+
+        after_list_of_files = set(os.listdir(output_dir))
+        new_files = list(after_list_of_files - before_list_of_files)
+        # check if scenario is "chrome" logging
+        # then test needs to modify the file name to reflect right test case.
+        if is_chrome_logging_present:
+            for idx, new_file in enumerate(new_files):
+                new_file = os.path.join(output_dir, new_file)
+                new_file_name = ""
+
+                new_file_name += "_" +os.path.basename(new_file)
+                new_name = os.path.join(output_dir, "output") + scenarios.replace(" ","").replace("--", "_").replace("-", "_").replace(" ","") + new_file_name
+                try:
+                    os.rename(new_file, new_name)
+                except Exception as e:
+                    print(f"[ERROR] Occurred while renaming the output file: {e}", file = sys.stderr)
+                    return 1
+                new_files[idx] = os.path.basename(new_name)
+
         # Check if the output file is generated
         output_files = []
-        for f in os.listdir(output_dir):
+        for f in new_files:
             result_file_pattern = f.split(".")
-            if output_file.startswith(result_file_pattern[0]):
+            if (is_chrome_logging_present and "chrome" in result_file_pattern[0]
+                and test_case_name.replace("/","_").split(".")[0] in result_file_pattern[0]
+               ):
                 output_files.append(f)
+            elif scenario in ["-k", "-q"] and f.endswith(output_file):
+                output_files.append(f)
+            elif output_file.startswith(result_file_pattern[0]):
+                output_files.append(f)
+            if len(output_files) > 0:
                 break
         if output_files:
             print(f"[INFO] Output file '{output_files[0]}' generated successfully.")
@@ -141,6 +201,14 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 return 1  # extra test prog failed
             else:
                 return 0
+        elif not scenario_set.isdisjoint(set(["-k", "-q"])):
+            min_no_of_lines = 4 # Metric files has initial few lines for headers etc..
+            for output_file in output_files:
+                with open(os.path.join(output_dir, output_file), 'r') as outfile:
+                    # Check to make sure file has counter values generated.
+                    if len(outfile.readlines()) <= min_no_of_lines:
+                        print(f"[ERROR] Metric file '{output_file}' is not having counters present.")
+                        return 1 # Metric file should have more than 4 line present.
         elif scenario_set.isdisjoint(set(["--device-timing", "-d", "--device-timeline", "-t"])):
             print(f"[INFO] Nothing to compare for {scenario_set} hence exiting early.")
             # check if unidiff support validation for current scenario else return early as success

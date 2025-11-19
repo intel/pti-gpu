@@ -3,7 +3,7 @@
         {
             "name": "default",
             "platform": ["Windows", "Linux"],
-            "scenarios": ["-c", "-h", "-d", "-t", "-s", "--chrome-call-logging --chrome-kernel-logging", "--chrome-device-logging"]
+            "scenarios": ["-c", "-h", "-d", "-t", "-s", "--chrome-call-logging --chrome-kernel-logging", "--chrome-device-logging", "-q"]
         },
     "test_configuration": [
         {
