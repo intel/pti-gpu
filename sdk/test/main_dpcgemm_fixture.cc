@@ -1,9 +1,11 @@
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <array>
 #include <cmath>
 #include <cstdlib>
 #include <mutex>
+#include <ostream>
 #include <sycl/sycl.hpp>
 #include <tuple>
 
@@ -1148,9 +1150,11 @@ class GemmLaunchTest
         auto range = GemmLaunchTestData::Instance().range;
         if (range.has_value()) {
           auto within_range = WithinRange(*range, kernel->_start_timestamp);
-          EXPECT_TRUE(within_range) << "Range Start: " << range->start
-                                    << " Kernel Start Timestamp: " << kernel->_start_timestamp
-                                    << " Range End: " << range->end << '\n';
+          EXPECT_TRUE(within_range)
+              << "Range Start: " << range->start << " Range End: " << range->end
+              << " Kernel Start Timestamp: " << kernel->_start_timestamp
+              << " Kernel End Timestamp: " << kernel->_end_timestamp
+              << "Kernel Duration: " << kernel->_end_timestamp - kernel->_start_timestamp << '\n';
           if (within_range) {
             ++GemmLaunchTestData::Instance().kernels;
           }
@@ -1233,6 +1237,22 @@ class GemmLaunchTest
   sycl::queue queue_;
 };
 
+auto format_as(QueueType queue_enum) {
+  switch (queue_enum) {
+    case QueueType::kImmediate:
+      return "ImmediateQueue";
+    case QueueType::kNonImmediate:
+      return "NonImmediateQueue";
+    default:
+      return "UnknownQueue";
+  }
+}
+
+std::ostream& operator<<(std::ostream& out, QueueType queue_enum) {
+  out << format_as(queue_enum);
+  return out;
+}
+
 TEST_P(GemmLaunchTest, CheckWhetherAllLaunchedKernelDeviceTimestampsFitWithinAGivenTimeRange) {
   const auto [iterations, mat_size, queue_type] = GetParam();
   TimestampRange range;
@@ -1257,4 +1277,10 @@ TEST_P(GemmLaunchTest, CheckWhetherAllLaunchedKernelDeviceTimestampsFitWithinAGi
 
 INSTANTIATE_TEST_SUITE_P(GranularGemmLaunchTest, GemmLaunchTest,
                          testing::Values(std::make_tuple(100, 8, QueueType::kImmediate),
-                                         std::make_tuple(100, 8, QueueType::kNonImmediate)));
+                                         std::make_tuple(100, 8, QueueType::kNonImmediate)),
+
+                         [](const testing::TestParamInfo<GemmLaunchTest::ParamType>& info) {
+                           return fmt::format("Kernel_Launches_{}_GEMM_SIZE_{}_Queue_Type_{}",
+                                              std::get<0>(info.param), std::get<1>(info.param),
+                                              std::get<2>(info.param));
+                         });

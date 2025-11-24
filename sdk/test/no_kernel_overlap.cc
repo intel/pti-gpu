@@ -1,9 +1,11 @@
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 #include <stdarg.h>
 
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <ostream>
 #include <sstream>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
@@ -125,7 +127,25 @@ float TestCore(bool do_immediate) {
   return time_sec;
 }
 
-enum CollectionMode { kModeFull = 0, kModeHybrid = 1, kModeLocal = 2 };
+enum class CollectionMode { kModeFull = 0, kModeHybrid = 1, kModeLocal = 2 };
+
+auto format_as(CollectionMode collection_mode) {
+  switch (collection_mode) {
+    case CollectionMode::kModeFull:
+      return "Full";
+    case CollectionMode::kModeHybrid:
+      return "Hybrid";
+    case CollectionMode::kModeLocal:
+      return "Local";
+    default:
+      return "Unknown";
+  }
+}
+
+std::ostream& operator<<(std::ostream& out, CollectionMode collection_mode) {
+  out << format_as(collection_mode);
+  return out;
+}
 
 }  // namespace
 
@@ -162,7 +182,8 @@ class NoKernelOverlapParametrizedTestFixture
     // while passed ModeLocal local it is expected it will be selected automatically of course
     // in case introspection API is available
     if (collection_mode != CollectionMode::kModeLocal) {
-      utils::SetEnv("PTI_COLLECTION_MODE", std::to_string(collection_mode).c_str());
+      utils::SetEnv("PTI_COLLECTION_MODE",
+                    std::to_string(static_cast<std::size_t>(collection_mode)).c_str());
     }
   }
 
@@ -375,11 +396,19 @@ TEST_P(NoKernelOverlapParametrizedTestFixture, NoKernelOverlapImmediate) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(NoKernelOverlapAndGapInSubmittingTests,
-                         NoKernelOverlapParametrizedTestFixture,
-                         ::testing::Values(std::make_tuple(true, CollectionMode::kModeFull),
-                                           std::make_tuple(false, CollectionMode::kModeFull),
-                                           std::make_tuple(true, CollectionMode::kModeHybrid),
-                                           std::make_tuple(false, CollectionMode::kModeHybrid),
-                                           std::make_tuple(true, CollectionMode::kModeLocal),
-                                           std::make_tuple(false, CollectionMode::kModeLocal)));
+INSTANTIATE_TEST_SUITE_P(
+    NoKernelOverlapAndGapInSubmittingTests, NoKernelOverlapParametrizedTestFixture,
+    ::testing::Values(std::make_tuple(true, CollectionMode::kModeFull),
+                      std::make_tuple(false, CollectionMode::kModeFull),
+                      std::make_tuple(true, CollectionMode::kModeHybrid),
+                      std::make_tuple(false, CollectionMode::kModeHybrid),
+                      std::make_tuple(true, CollectionMode::kModeLocal),
+                      std::make_tuple(false, CollectionMode::kModeLocal)),
+
+    [](const testing::TestParamInfo<NoKernelOverlapParametrizedTestFixture::ParamType>& info) {
+      return fmt::format("Queue_Type_{}_PTI_COLLECTION_MODE_{}",
+                         (std::get<0>(info.param) ? "ImmediateQueue" : "NonImmediateQueue"),
+                         std::get<1>(info.param));
+    }
+
+);

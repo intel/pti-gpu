@@ -8,6 +8,14 @@ enable_testing()
 
 include(GoogleTest)
 
+if (NOT TARGET fmt::fmt)
+  find_package(fmt REQUIRED)
+endif()
+
+if (NOT TARGET spdlog::spdlog)
+  find_package(spdlog REQUIRED)
+endif()
+
 if (NOT TARGET LevelZero::level-zero)
   find_package(LevelZero REQUIRED)
 endif()
@@ -83,7 +91,8 @@ if(HAVE_SYCL)
   target_compile_options(dpcgemm_suite PUBLIC -fsycl)
   target_link_options(dpcgemm_suite PUBLIC -fsycl)
   target_compile_definitions(dpcgemm_suite PUBLIC PTI_LEVEL_ZERO=1)
-  target_link_libraries(dpcgemm_suite PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main LevelZero::level-zero)
+  target_link_libraries(dpcgemm_suite PUBLIC spdlog::spdlog Pti::pti_view
+    GTest::gtest_main LevelZero::level-zero fmt::fmt)
 
   add_executable(classapi_suite main_classapi_fixture.cc)
   target_include_directories(
@@ -196,7 +205,7 @@ if(HAVE_SYCL)
   target_compile_definitions(no_kernel_overlap PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(no_kernel_overlap PUBLIC spdlog::spdlog Pti::pti_view
-	  GTest::gtest_main)
+	  GTest::gtest_main fmt::fmt)
 
   add_executable(startstop_suite main_startstop_fixture.cc)
   target_include_directories(
@@ -265,7 +274,6 @@ if(HAVE_SYCL)
                                             LevelZero::level-zero
                                             ${FS_LIB})
 
-    
   add_executable(init_tests init_tests.cc)
 
   target_include_directories(
@@ -400,6 +408,7 @@ if(HAVE_SYCL)
     PROPERTIES
        ENVIRONMENT ZET_ENABLE_METRICS=1
        LABELS "functional"
+       LABELS "metrics"
        LABELS "hw-metrics")
 
   gtest_discover_tests(
@@ -408,14 +417,16 @@ if(HAVE_SYCL)
     PROPERTIES
        ENVIRONMENT ZET_ENABLE_METRICS=1
        LABELS "functional"
+       LABELS "metrics"
        LABELS "hw-metrics-scope")
-  
-   gtest_discover_tests(
+
+  gtest_discover_tests(
     metrics_scope_parallel
     DISCOVERY_TIMEOUT 60
     PROPERTIES
        ENVIRONMENT ZET_ENABLE_METRICS=1
        LABELS "functional"
+       LABELS "metrics"
        LABELS "hw-metrics-scope")
 
   gtest_discover_tests(
@@ -679,13 +690,15 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   add_test(NAME run-metrics-scope COMMAND metrics_scope)
 
   set_tests_properties(
-    run-metrics-iso PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS "functional;samples;hw-metrics")
+    run-metrics-iso PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
+    "functional;samples;metrics;hw-metrics")
 
   set_tests_properties(
     mt-awk-test mt-awk-test-immediate run-dlworkload run-dpc_gemm run-onemkl_gemm_exe run-vec_sqadd
     run-iso run-callback PROPERTIES LABELS "functional;samples")
 
   set_tests_properties(
-    run-metrics-scope PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS "functional;samples;hw-metrics-scope")
+    run-metrics-scope PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
+    "functional;samples;metrics;hw-metrics-scope")
 
 endif()
