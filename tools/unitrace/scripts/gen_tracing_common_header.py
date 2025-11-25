@@ -22,15 +22,18 @@ def add_func_list(f, func_list):
 
 def get_l0_api_list(l0_path):
   l0_file_path = os.path.join(l0_path, "ze_api.h")
-  l0_file = open(l0_file_path, "rt")
-  func_list = []
-  add_func_list(l0_file, func_list)
-  l0_file.close()
-
+  try:
+    l0_file = open(l0_file_path, "rt")
+    func_list = []
+    add_func_list(l0_file, func_list)
+  finally:
+    l0_file.close()
   l0_exp_path = os.path.join(l0_path, "layers", "zel_tracing_register_cb.h")
-  l0_exp_file = open(l0_exp_path, "rt")
-  add_func_list(l0_exp_file, func_list)
-  l0_exp_file.close()
+  try:
+    l0_exp_file = open(l0_exp_path, "rt")
+    add_func_list(l0_exp_file, func_list)
+  finally:
+    l0_exp_file.close()
   return func_list
 
 def get_ocl_api_list(ocl_path):
@@ -84,14 +87,14 @@ def gen_enums(out_file, l0_func_list, ocl_func_list):
 
   #opencl enum
   get_ocl_enums(out_file, ocl_func_list)
-  out_file.write("  ClKernelTracingId,\n");
-  out_file.write("  OpenClTracingId,\n");
+  out_file.write("  ClKernelTracingId,\n")
+  out_file.write("  OpenClTracingId,\n")
 
   #xpti api id
-  out_file.write("  XptiTracingId,\n");
+  out_file.write("  XptiTracingId,\n")
 
   #itt api id
-  out_file.write("  IttTracingId,\n");
+  out_file.write("  IttTracingId,\n")
 
   #footer
   out_file.write("} API_TRACING_ID;")
@@ -133,9 +136,9 @@ def gen_symbol_func(file_handle):
   file_handle.write("  }\n")
 
 def main():
-  if len(sys.argv) < 3:
-    print("Usage: python gen_tracing_common_header.py <output_include_path> <include_path>")
-    return
+  if len(sys.argv) < 4:
+    print("Usage: python gen_tracing_common_header.py <output_include_path> <include_path> <ocl_path>")
+    sys.exit(1) # Non-zero indicates error
 
   dst_path = sys.argv[1]
   if (not os.path.exists(dst_path)):
@@ -148,9 +151,15 @@ def main():
   dst_file = open(dst_file_path, "wt")
 
   l0_path = sys.argv[2]
+  if not os.path.exists(l0_path):
+    print(f"Error: Level Zero include path does not exist: {l0_path}")
+    sys.exit(1)
   l0_api_list = get_l0_api_list(l0_path)
 
   ocl_path = sys.argv[3]
+  if ocl_path and not os.path.exists(ocl_path):
+    print(f"Warning: OpenCL include path does not exist: {ocl_path}")
+    sys.exit(1)
   ocl_api_list = get_ocl_api_list(ocl_path)
 
   dst_file.write("#ifndef PTI_TOOLS_COMMON_H_\n")

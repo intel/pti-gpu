@@ -179,7 +179,7 @@ if (BUILD_WITH_OPENCL)
   GetOpenCLTracingHeaders(unitrace_tool)
 endif()
 
-set (LEVEL_ZERO_COMMIT_ID "v1.21.6")
+set (LEVEL_ZERO_COMMIT_ID "v1.24.3")
 GetLevelZeroHeaders(unitrace_tool)
 
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_common_header.py" "common_header.gen" gen_common_header)
