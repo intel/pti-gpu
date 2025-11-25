@@ -41,6 +41,8 @@
 #include "version.h"
 #include "unitrace_commit_hash.h"
 #include "unicontrol.h"
+#include "unitimer.h"
+#include "utils_host.h"
 
 static ZeMetricProfiler* metric_profiler = nullptr;
 static bool idle_sampling = false;
@@ -242,6 +244,10 @@ void Usage(char * progname) {
   std::cout <<
     "--stop <session>               " <<
     "Stop session <session>. The argument <session> must be the same session named with --session option" <<
+    std::endl;
+  std::cout <<
+    "--chrome-kmd-logging <script>  " <<
+    "Trace OS/KMD activitives. The argument <script> file defines the OS kernel or device driver activies to trace" <<
     std::endl;
 #endif /* _WIN32 */
   std::cout <<
@@ -528,7 +534,7 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_ResetEventOnDevice", argv[i]);
       app_index += 2;
 #ifndef _WIN32
-    } else if (strcmp(argv[i], "--session") == 0) { // internal option
+    } else if (strcmp(argv[i], "--session") == 0) {
       ++i;
       if ((i >= argc) || !IsAlphanumericString(argv[i])) {
         std::cout << "[ERROR] Option --session takes an argument of an alphanumeric string" << std::endl;
@@ -536,27 +542,38 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_Session", argv[i]);
       app_index += 2;
-    } else if (strcmp(argv[i], "--pause") == 0) { // internal option
+    } else if (strcmp(argv[i], "--pause") == 0) {
       ++i;
       if ((i >= argc) || !IsAlphanumericString(argv[i])) {
         std::cout << "[ERROR] Option --pause takes an argument of an alphanumeric string" << std::endl;
         return -1;
       }
       utils::SetEnv("UNITRACE_PauseSession", argv[i]);
-    } else if (strcmp(argv[i], "--resume") == 0) { // internal option
+      app_index += 2;
+    } else if (strcmp(argv[i], "--resume") == 0) {
       ++i;
       if ((i >= argc) || !IsAlphanumericString(argv[i])) {
         std::cout << "[ERROR] Option --resume takes an argument of an alphanumeric string" << std::endl;
         return -1;
       }
       utils::SetEnv("UNITRACE_ResumeSession", argv[i]);
-    } else if (strcmp(argv[i], "--stop") == 0) { // internal option
+      app_index += 2;
+    } else if (strcmp(argv[i], "--stop") == 0) {
       ++i;
       if ((i >= argc) || !IsAlphanumericString(argv[i])) {
         std::cout << "[ERROR] Option --stop takes an argument of an alphanumeric string" << std::endl;
         return -1;
       }
       utils::SetEnv("UNITRACE_StopSession", argv[i]);
+      app_index += 2;
+    } else if (strcmp(argv[i], "--chrome-kmd-logging") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] OS kernel probes are missing" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_ChromeKmdLogging", argv[i]);
+      app_index += 2;
 #endif /* _WIN32 */
     } else if (strcmp(argv[i], "--version") == 0) {
       std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
@@ -566,6 +583,14 @@ int ParseArgs(int argc, char* argv[]) {
       return 0;
     } else {
       break;
+    }
+  }
+
+#ifndef _WIN32
+  if (!utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
+    if (geteuid() != 0) {
+      std::cout << "[ERROR] OS kernel tracing requires root prividge" << std::endl;
+      return -1;
     }
   }
 
@@ -583,6 +608,7 @@ int ParseArgs(int argc, char* argv[]) {
     UniController::TemporalStop(utils::GetEnv("UNITRACE_StopSession").c_str());
     return 0;
   }
+#endif /* _WIN32 */
 
   if (utils::GetEnv("UNITRACE_FollowChildProcess").empty()) {
     utils::SetEnv("UNITRACE_FollowChildProcess", "1");	// default is to follow child processes
@@ -755,6 +781,107 @@ void CleanUp(int /* sig */) {
   _Exit(-1);
 }
 
+#define KMD_TRACE_FILE_BASE_NAME "oskmd"
+
+static void DumpKmdTraceData(std::string& raw_data_file) {
+  std::ifstream inf = std::ifstream(raw_data_file);
+  if (!inf.is_open()) {
+    std::cerr << "[ERROR] Failed to open raw kernel/kmd tracing date file" << std::endl;
+    return; 
+  }
+
+  UniTimer::StartUniTimer();	// need the timer to get the epoch time of system boot and diffeence betweeen boot time and montonic time
+
+  std::string out_trace_file_name(KMD_TRACE_FILE_BASE_NAME);
+
+  std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+  if (!rank.empty()) {
+    out_trace_file_name += ".0." + rank + ".json";
+  }
+  else {
+    out_trace_file_name += ".0.json";
+  }
+
+  auto oskmd_logger = new Logger(out_trace_file_name, true, true);
+  if (oskmd_logger == nullptr) {
+    std::cerr << "[ERROR] Failed to create kernel/kmd trace file" << std::endl;
+    return;
+  }
+
+  oskmd_logger->Log("{ \"traceEvents\":[\n");
+
+  std::string str("{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": 0,");	// 0 as dummy process id
+
+  str += "\"args\": {\"name\": \"";
+
+  std::string host = GetHostName();
+
+  if (rank.empty()) {
+    str += "HOST-OS-KMD<" + host + ">\"}}";
+  }
+  else {
+    str += "RANK " + rank + " HOST-OS-KMD<" + host + ">\"}}";
+  }
+
+  oskmd_logger->Log(str);
+
+  while (!inf.eof()) {
+    std::string tid;
+    std::string kfunc;
+    std::string ts;
+    std::string dur;
+    uint64_t t;
+    uint64_t d;
+
+    std::getline(inf, tid, ',');
+    if (inf.eof()) {
+      break;
+    }
+    std::getline(inf, kfunc, ',');
+    if (inf.eof()) {
+      break;
+    }
+    std::getline(inf, ts, ',');
+    if (inf.eof()) {
+      break;
+    }
+    std::getline(inf, dur);
+    if (inf.eof()) {
+      break;
+    }
+
+    try {
+      t = std::stol(ts);
+      d = std::stol(dur);
+    }
+    catch (...) {
+      break;
+    }
+
+    str = ",\n{";
+    str += "\"ph\": \"X\"";
+    str += ", \"tid\": " + tid;
+    str += ", \"pid\": 0";
+    if (!kfunc.empty()) {
+      str += ", \"name\": \"" + kfunc + "\"";
+    }
+
+    str += ", \"cat\": \"os_op\"";
+    str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestampFromBootTimestamp(t)));
+    str += ", \"dur\": " + std::to_string(UniTimer::GetTimeInUs(d));
+    str += "}";
+
+    oskmd_logger->Log(str);
+  }
+
+  oskmd_logger->Log("\n]}");
+  oskmd_logger->Flush();
+
+  delete oskmd_logger;
+
+  std::cerr << "[INFO] KMD profiling data are stored in " << out_trace_file_name << std::endl;
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     Usage(argv[0]);
@@ -887,7 +1014,7 @@ int main(int argc, char *argv[]) {
     //       before/after ITT annotation.
     utils::SetEnv("CCL_MPI_LIBRARY_PATH", mpi_interceptor_path.c_str());
   }
-#endif
+#endif /* BUILD_WITH_MPI */
 
   std::string logfile;
   if (utils::GetEnv("UNITRACE_LogToFile") == "1") {
@@ -906,10 +1033,8 @@ int main(int argc, char *argv[]) {
 #ifndef _WIN32
   utils::SetEnv("LD_PRELOAD", preload.c_str());
 
-  if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+  if (utils::GetEnv("UNITRACE_KernelMetrics") == "1" || !utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
 
-    // UNITRACE_MetricQuery is not set
-    SetProfilingEnvironment();
     char pattern[] = "/tmp/tmpdir.XXXXXX";
 
     data_dir = mkdtemp(pattern);
@@ -926,46 +1051,73 @@ int main(int argc, char *argv[]) {
     std::signal(SIGTERM, CleanUp);
 
     std::string latch_file_name = std::string(data_dir) + "/latch.tmp";
+    std::string oskmd_data_file_name = std::string(data_dir) + "/.oskmd.csv";
+
+    if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+      // UNITRACE_MetricQuery is not set
+      SetProfilingEnvironment();
+    }
+
     int child;
 
     child = fork();
 
     if (child == 0) {
-      // child process
-      // wait for the profiler to be ready
-      std::ifstream inf;
+      if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+        // child process
+        // wait for the profiler to be ready
+        std::ifstream inf;
       
-      inf.open(latch_file_name, std::ios_base::in);
-      uint32_t t = 0;
-      while (!inf.is_open() && (t < 10)) {	// wait for no more than 10s
-        sleep(1);
-        t += 1;
         inf.open(latch_file_name, std::ios_base::in);
-      }
-      if (inf.is_open()) {
-        inf.close();
+        uint32_t t = 0;
+        while (!inf.is_open() && (t < 10)) {	// wait for no more than 10s
+          sleep(1);
+          t += 1;
+          inf.open(latch_file_name, std::ios_base::in);
+        }
+        if (inf.is_open()) {
+          inf.close();
+        }
       }
 
       // ready to go
       utils::SetEnv("UNITRACE_DataDir", data_dir);
-      if (execvp(app_args[0], app_args.data())) {
+
+      int ret = 0;
+
+      if (!utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
+        std::string cmdline(app_args[0]);
+
+        for (int i = 1; i < app_args.size() - 1; ++i) {
+          cmdline += " ";
+          cmdline += app_args[i];
+        }
+	
+        ret = execlp("bpftrace", "bpftrace", "-q", "-o", oskmd_data_file_name.c_str(), "-c", cmdline.c_str(), utils::GetEnv("UNITRACE_ChromeKmdLogging").c_str(), nullptr);
+      }
+      else {
+        ret = execvp(app_args[0], app_args.data());
+      }
+
+      if (ret) {
         std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
         Usage(argv[0]);
         std::_Exit(-1);
       }
     } else if (child > 0) {
       // parent process
+      if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
 
-      metric_profiler = EnableProfiling(child, data_dir, logfile, idle_sampling);
-
+        metric_profiler = EnableProfiling(child, data_dir, logfile, idle_sampling);
     
-      // create a latch file to notify the application process to proceed
-      std::ofstream outf(latch_file_name, std::ios_base::out);
-      if (!outf.is_open()) {
-        std::cerr << "[ERROR] Failed to create profiler latch file: " << app_args[0] << std::endl;
-      }
-      else {
-        outf.close();
+        // create a latch file to notify the application process to proceed
+        std::ofstream outf(latch_file_name, std::ios_base::out);
+        if (!outf.is_open()) {
+          std::cerr << "[ERROR] Failed to create profiler latch file: " << app_args[0] << std::endl;
+        }
+        else {
+          outf.close();
+        }
       }
 
       // wait for child process to complete
@@ -973,6 +1125,10 @@ int main(int argc, char *argv[]) {
 
       if (metric_profiler != nullptr) {
         DisableProfiling();
+      }
+
+      if (!utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
+        DumpKmdTraceData(oskmd_data_file_name);
       }
 
       if (CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {

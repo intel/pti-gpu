@@ -22,20 +22,9 @@
 #include "unikernel.h"
 #include "unievent.h"
 #include "unimemory.h"
+#include "utils_host.h"
 
 #include "common_header.gen"
-
-static inline std::string GetHostName(void) {
-  char hname[256];
-#ifdef _WIN32
-  DWORD size = sizeof(hname);
-  GetComputerNameA(hname, &size);
-#else  /* _WIN32 */
-  gethostname(hname, sizeof(hname));
-#endif /* _WIN32 */
-  hname[255] = 0;
-  return hname;
-}
 
 #ifdef _WIN32
 #define strdup _strdup
@@ -1398,7 +1387,7 @@ class ChromeLogger {
     std::string process_name_;
     std::string chrome_trace_file_name_;
     std::iostream::pos_type data_start_pos_;
-    uint64_t process_start_time_;
+    double process_start_time_;
 
     ChromeLogger(const TraceOptions& options, const char* filename) : options_(options) {
       process_start_time_ = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());

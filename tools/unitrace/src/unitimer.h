@@ -22,9 +22,9 @@ public:
           }
         }
 #endif /* _WIN32 */
+        uint64_t smallest_delta = uint64_t(-1);
         if ((utils::GetEnv("UNITRACE_SystemTime") != "1") && (epoch_start_time_ == 0)) {
             // loop multiple times to mitigate context switch impact
-            uint64_t smallest_delta = uint64_t(-1);
             for (int i = 0; i < 200; i++) {
                 const std::chrono::time_point<std::chrono::system_clock> t0 = std::chrono::system_clock::now();
                 uint64_t t1 = GetHostBootTimestamp();
@@ -38,6 +38,30 @@ public:
                     epoch_start_time_ = std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count() + (t2 - t1) - t1;
                     smallest_delta = delta;
                 }
+            }
+        }
+        smallest_delta = uint64_t(-1);
+        for (int i = 0; i < 200; i++) {
+            uint64_t t0 = GetHostTimestamp();
+            uint64_t t1 = GetHostBootTimestamp();
+            uint64_t t2 = GetHostBootTimestamp();
+            uint64_t t3 = GetHostTimestamp();
+            uint64_t delta = t3 - t0;
+            if (delta < smallest_delta) {
+                boot_monotonic_raw_time_diff_  = t0 + (t2 - t1) - t1;
+                smallest_delta = delta;
+            }
+        }
+        smallest_delta = uint64_t(-1);
+        for (int i = 0; i < 200; i++) {
+            uint64_t t0 = GetHostTimestamp();
+            uint64_t t1 = GetHostTaiTimestamp();
+            uint64_t t2 = GetHostTaiTimestamp();
+            uint64_t t3 = GetHostTimestamp();
+            uint64_t delta = t3 - t0;
+            if (delta < smallest_delta) {
+                tai_monotonic_raw_time_diff_  = t0 + (t2 - t1) - t1;
+                smallest_delta = delta;
             }
         }
     }
@@ -60,6 +84,32 @@ public:
         return double(us) + (double(ns) * 0.001);
     }
         
+    static uint64_t GetHostTimestampFromBootTimestamp(uint64_t ts) {
+        return ts + boot_monotonic_raw_time_diff_;
+    }
+
+    static uint64_t GetHostTimestampFromTaiTimestamp(uint64_t ts) {
+        return ts + tai_monotonic_raw_time_diff_;
+    }
+
+    static uint64_t GetHostTaiTimestamp() {
+#if defined(_WIN32)
+        LARGE_INTEGER ticks;
+        if (!QueryPerformanceCounter(&ticks)) {
+          std::cerr << "[ERROR] Failed to query performance counter" << std::endl;
+          exit(-1);
+        }
+        return ticks.QuadPart * (NSEC_IN_SEC / frequency_.QuadPart);
+#else /* _WIN32 */
+        timespec ts;
+        if (clock_gettime(CLOCK_TAI, &ts)) {
+          std::cerr << "[ERROR] Failed to get timestamp" << std::endl;
+          exit(-1);
+        }
+        return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
+#endif /* _WIN32 */
+    }
+
     static uint64_t GetHostBootTimestamp() {
 #if defined(_WIN32)
         LARGE_INTEGER ticks;
@@ -97,6 +147,8 @@ public:
     }
 private:
     inline static uint64_t epoch_start_time_ = 0;
+    inline static int64_t boot_monotonic_raw_time_diff_ = 0;
+    inline static int64_t tai_monotonic_raw_time_diff_ = 0;
 #if defined(_WIN32)
     inline static LARGE_INTEGER frequency_{{0}};
 #endif /* _WIN32 */

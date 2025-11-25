@@ -193,6 +193,7 @@ The options can be one or more of the following:
 --pause <session>              Pause session <session>. The argument <session> must be the same session named with --session option
 --resume <session>             Resume session <session>. The argument <session> must be the same session named with --session option
 --stop <session>               Stop session <session>. The argument <session> must be the same session named with --session option
+--chrome-kmd-logging <script>  Trace OS/KMD activitives. The argument <script> file defines the OS kernel or device driver activies to trace
 --version                      Print version
 --help                         Show this help message and exit. Please refer to the README.md file for further details.
 ```
@@ -408,6 +409,36 @@ The **--ccl-summary-report  [-r]** option outputs CCL call timing summary:
 ![CCL Call Timing!](/tools/unitrace/doc/images/ccl_summary_report.png)
 
 If the application is a PyTorch workload, one or more options from **--chrome-mpi-logging**, **--chrome-ccl-logging** and **--chrome-dnn-logging** also enables PyTorch profiling(see [Profile PyTorch](#profile-pytorch) for more information).
+
+### Trace Operating System Kernel and/or Device Driver Activities (Linux)
+
+To trace operating system kernel and/or device driver activities, yon must have root access and a [bpftrace](https://bpftrace.org) script as the argument to option **--chrome-kmd-logging**. The [script](/tools/unitrace/examples/kmdprobes/probes.bt) is a simple exmaple.
+
+The trace data for each operating system and/or GPU device driver event or function collected using the utility bpftrace should be in the format of
+
+**tid,event,timestamp,duration**
+
+The **tid** is the kernel thread identifier; the **event** is the name of the event or function; the **timestamp** is the starting time of the event or function and the **duration** is the time duration of the event or function.
+
+The trace is stored in file **oskmd.0.json**.
+
+The **--chrome-kmd-logging** can be used together with other options, for example, **--chrome-kernel-logging**, to trace user space and kernel space event at the same time, for example:
+
+    ```sh
+     $ unitrace --chrome-kmd-logging probes.bt --chrome-kernel-logging ./testapp
+     ... ...
+
+     [INFO] Timeline is stored in testapp.1092793.json
+     [INFO] KMD profiling data are stored in oskmd.0.json
+    ```
+
+To view events in both the user space and kernel space, you need to merge them into a single trace: 
+
+    ```sh
+     python mergetrace.py -o output.json testapp.1092793.json oskmd.0.json
+    ```
+ 
+![KMD Logging!](/tools/unitrace/doc/images/kmd-logging.png)
 
 ### Location of Output
 
