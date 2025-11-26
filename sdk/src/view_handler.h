@@ -1129,7 +1129,7 @@ inline auto DoCommonMemCopy(bool p2p, const ZeKernelCommandExecutionRecord& rec)
   // We're storing it in a kernel map so this shouldn't go out of scope
   record._name = Instance().InsertKernel(rec.name_);
   record._thread_id = rec.tid_;
-  record._mem_op_id = rec.cid_;
+  record._mem_op_id = rec.kid_;
   record._correlation_id = rec.cid_;
 
   return record;
@@ -1174,7 +1174,7 @@ inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
   // We're storing it in a kernel map so this shouldn't go out of scope
   record._name = Instance().InsertKernel(rec.name_);
   record._thread_id = rec.tid_;
-  record._mem_op_id = rec.cid_;
+  record._mem_op_id = rec.kid_;
   record._correlation_id = rec.cid_;
   Instance().InsertRecord(record, record._thread_id);
 }

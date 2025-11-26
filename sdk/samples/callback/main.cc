@@ -18,6 +18,9 @@
 #define B_VALUE 0.256f
 #define MAX_EPS 1.0e-4f
 
+constexpr unsigned kMaxSize = 8192;
+constexpr unsigned kMinSize = 32;
+
 static float Check(const std::vector<float> &a, float value) {
   assert(value > MAX_EPS);
 
@@ -39,59 +42,53 @@ void GEMM(const float *a, const float *b, float *c, unsigned size, sycl::id<2> i
   c[i * size + j] = sum;
 }
 
-static float RunAndCheck(sycl::queue queue, const std::vector<float> &a,
-                         const std::vector<float> &b, std::vector<float> &c, unsigned size,
-                         float expected_result) {
+static void Run(sycl::queue queue, const std::vector<float> &a, const std::vector<float> &b,
+                std::vector<float> &c, unsigned size) {
   assert(size > 0);
   assert(a.size() == size * size);
   assert(b.size() == size * size);
   assert(c.size() == size * size);
 
-  try {
-    sycl::buffer<float, 1> a_buf(a.data(), a.size());
-    sycl::buffer<float, 1> b_buf(b.data(), b.size());
-    sycl::buffer<float, 1> c_buf(c.data(), c.size());
+  sycl::buffer<float, 1> a_buf(a.data(), a.size());
+  sycl::buffer<float, 1> b_buf(b.data(), b.size());
+  sycl::buffer<float, 1> c_buf(c.data(), c.size());
 
-    [[maybe_unused]] sycl::event event = queue.submit([&](sycl::handler &cgh) {
-      auto a_acc = a_buf.get_access<sycl::access::mode::read>(cgh);
-      auto b_acc = b_buf.get_access<sycl::access::mode::read>(cgh);
-      auto c_acc = c_buf.get_access<sycl::access::mode::write>(cgh);
+  [[maybe_unused]] sycl::event event = queue.submit([&](sycl::handler &cgh) {
+    auto a_acc = a_buf.get_access<sycl::access::mode::read>(cgh);
+    auto b_acc = b_buf.get_access<sycl::access::mode::read>(cgh);
+    auto c_acc = c_buf.get_access<sycl::access::mode::write>(cgh);
 
-      cgh.parallel_for<class __GEMM>(sycl::range<2>(size, size), [=](sycl::id<2> id) {
-        auto a_acc_ptr = a_acc.get_multi_ptr<sycl::access::decorated::no>();
-        auto b_acc_ptr = b_acc.get_multi_ptr<sycl::access::decorated::no>();
-        auto c_acc_ptr = c_acc.get_multi_ptr<sycl::access::decorated::no>();
-        GEMM(a_acc_ptr.get(), b_acc_ptr.get(), c_acc_ptr.get(), size, id);
-      });
+    cgh.parallel_for<class __GEMM>(sycl::range<2>(size, size), [=](sycl::id<2> id) {
+      auto a_acc_ptr = a_acc.get_multi_ptr<sycl::access::decorated::no>();
+      auto b_acc_ptr = b_acc.get_multi_ptr<sycl::access::decorated::no>();
+      auto c_acc_ptr = c_acc.get_multi_ptr<sycl::access::decorated::no>();
+      GEMM(a_acc_ptr.get(), b_acc_ptr.get(), c_acc_ptr.get(), size, id);
     });
-    queue.wait_and_throw();
-  } catch (const sycl::exception &e) {
-    std::cout << "[ERROR] " << e.what() << std::endl;
-    throw;
-  }
-
-  std::cout << "Matrix multiplication done. Checking result.." << std::endl;
-
-  return Check(c, expected_result);
+  });
 }
 
 static void Compute(sycl::queue queue, const std::vector<float> &a, const std::vector<float> &b,
                     std::vector<float> &c, unsigned size, unsigned repeat_count,
                     float expected_result) {
-  for (unsigned i = 0; i < repeat_count; ++i) {
-    float eps = RunAndCheck(queue, a, b, c, size, expected_result);
+  try {
+    for (unsigned i = 0; i < repeat_count; ++i) {
+      Run(queue, a, b, c, size);
+    }
+    queue.wait_and_throw();
+    float eps = Check(c, expected_result);
+    std::cout << "Matrix multiplication done. Checking result.." << std::endl;
     std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN") << "CORRECT with accuracy: " << eps
               << std::endl;
+  } catch (const sycl::exception &e) {
+    std::cerr << "[ERROR] Exception during Compute: " << e.what() << std::endl;
+    throw;
   }
 }
-
-const unsigned max_size = 8192;
-const unsigned min_size = 32;
 
 void Usage(const char *name) {
   std::cout << " Calculating floating point matrix multiply on gpu. Usage:\n";
   std::cout << name << " [matrix size] [repetition count]\n"
-            << "\t - matrix size, default=1024, max=" << max_size << "\n"
+            << "\t - matrix size, default=1024, max=" << kMaxSize << "\n"
             << "\t - repetition count, default=1 \n";
 }
 
@@ -100,15 +97,11 @@ int main(int argc, char *argv[]) {
   StartProfiling();
   unsigned repeat_count = 1;
   unsigned size = 1024;
-  sycl::device dev;
   try {
-    dev = sycl::device(sycl::gpu_selector_v);
-
     if (argc > 1) {
       unsigned temp = std::stoul(argv[1]);
-      size = (temp < min_size) ? min_size : (temp > max_size) ? max_size : temp;
+      size = (temp < kMinSize) ? kMinSize : (temp > kMaxSize) ? kMaxSize : temp;
     }
-
     if (argc > 2) {
       repeat_count = std::stoul(argv[2]);
     }
@@ -126,8 +119,8 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  sycl::property_list prop_list{sycl::property::queue::in_order()};
-  sycl::queue queue(dev, sycl::async_handler{}, prop_list);
+  sycl::device dev(sycl::gpu_selector_v);
+  sycl::queue queue(dev, sycl::async_handler{}, {sycl::property::queue::in_order()});
 
   // Main run and check kernel
 

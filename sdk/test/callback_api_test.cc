@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -162,6 +163,48 @@ struct CallbackData {
 
   bool do_external_correlation_test{false};
   ExternalCorrTestData ext_correlation_data{};
+
+  // ============================================================================
+  // Operation ID tracking fields
+  // ============================================================================
+
+  // Uniqueness tracking - separate by operation kind
+  std::mutex operation_id_mutex;
+  std::set<uint64_t> seen_kernel_operation_ids;  // Track uniqueness for kernels
+  std::set<uint64_t> seen_memory_operation_ids;  // Track uniqueness for memory ops
+
+  // Track operation_id to correlation_id mapping to detect true duplicates
+  // (same operation_id used for different operations/correlation_ids)
+  std::map<uint64_t, uint32_t>
+      kernel_id_to_first_corr_id;  // kernel_id -> first correlation_id seen
+  std::map<uint64_t, uint32_t>
+      memory_id_to_first_corr_id;  // mem_op_id -> first correlation_id seen
+
+  // API ID consistency tracking (driver_api_id is stable, name might be empty in ENTER phase)
+  std::map<uint64_t, uint32_t> kernel_id_to_api_id;  // kernel_id -> driver_api_id
+  std::map<uint64_t, uint32_t> memory_id_to_api_id;  // mem_op_id -> driver_api_id
+
+  // Cross-reference between Callback domains (APPENDED vs COMPLETED)
+  std::map<uint64_t, uint32_t> appended_kernel_id_to_corr_id;   // kernel_id -> correlation_id
+  std::map<uint64_t, uint32_t> appended_memory_id_to_corr_id;   // mem_op_id -> correlation_id
+  std::map<uint64_t, uint32_t> completed_kernel_id_to_corr_id;  // kernel_id -> correlation_id
+  std::map<uint64_t, uint32_t> completed_memory_id_to_corr_id;  // mem_op_id -> correlation_id
+
+  // View API tracking (for cross-validation between Callback and View APIs)
+  std::map<uint64_t, uint32_t> view_kernel_id_to_corr_id;  // kernel_id -> correlation_id
+  std::map<uint64_t, uint32_t> view_memop_id_to_corr_id;   // mem_op_id -> correlation_id
+
+  // Validation error counters
+  std::atomic<int> duplicate_kernel_ids{0};
+  std::atomic<int> duplicate_memory_ids{0};
+  std::atomic<int> zero_operation_ids{0};
+  std::atomic<int> kernel_api_id_mismatch{0};
+  std::atomic<int> memory_api_id_mismatch{0};
+  std::atomic<int> view_callback_id_mismatch{0};
+
+  // Lifecycle validation error counters
+  std::atomic<int> completed_without_appended{0};  // Operations completed but never appended
+  std::atomic<int> appended_without_completed{0};  // Operations appended but never completed
 };
 
 // ============================================================================
@@ -185,31 +228,34 @@ void GEMM(const float* a, const float* b, float* c, unsigned size, sycl::id<2> i
   c[i * size + j] = sum;
 }
 
-void LaunchSimpleKernel(sycl::queue& queue, const std::vector<float>& a_vector,
-                        const std::vector<float>& b_vector, std::vector<float>& result,
-                        unsigned size) {
+void LaunchMultipleGEMMKernels(sycl::queue& queue, const std::vector<float>& a_vector,
+                               const std::vector<float>& b_vector, std::vector<float>& result,
+                               unsigned size, int repeat_count) {
   ASSERT_GT(size, 0U);
   ASSERT_EQ(a_vector.size(), size * size);
   ASSERT_EQ(b_vector.size(), size * size);
   ASSERT_EQ(result.size(), size * size);
 
   try {
-    sycl::buffer<float, 1> a_buf(a_vector.data(), a_vector.size());
-    sycl::buffer<float, 1> b_buf(b_vector.data(), b_vector.size());
-    sycl::buffer<float, 1> c_buf(result.data(), result.size());
+    for (int iter = 0; iter < repeat_count; ++iter) {
+      sycl::buffer<float, 1> a_buf(a_vector.data(), a_vector.size());
+      sycl::buffer<float, 1> b_buf(b_vector.data(), b_vector.size());
+      sycl::buffer<float, 1> c_buf(result.data(), result.size());
 
-    queue.submit([&](sycl::handler& cgh) {
-      auto a_acc = a_buf.get_access<sycl::access::mode::read>(cgh);
-      auto b_acc = b_buf.get_access<sycl::access::mode::read>(cgh);
-      auto c_acc = c_buf.get_access<sycl::access::mode::write>(cgh);
+      queue.submit([&](sycl::handler& cgh) {
+        auto a_acc = a_buf.get_access<sycl::access::mode::read>(cgh);
+        auto b_acc = b_buf.get_access<sycl::access::mode::read>(cgh);
+        auto c_acc = c_buf.get_access<sycl::access::mode::write>(cgh);
 
-      cgh.parallel_for<class __TestGEMM>(sycl::range<2>(size, size), [=](sycl::id<2> id) {
-        auto a_acc_ptr = a_acc.get_multi_ptr<sycl::access::decorated::no>();
-        auto b_acc_ptr = b_acc.get_multi_ptr<sycl::access::decorated::no>();
-        auto c_acc_ptr = c_acc.get_multi_ptr<sycl::access::decorated::no>();
-        GEMM(a_acc_ptr.get(), b_acc_ptr.get(), c_acc_ptr.get(), size, id);
+        cgh.parallel_for<class __TestGEMM>(sycl::range<2>(size, size), [=](sycl::id<2> id) {
+          auto a_acc_ptr = a_acc.get_multi_ptr<sycl::access::decorated::no>();
+          auto b_acc_ptr = b_acc.get_multi_ptr<sycl::access::decorated::no>();
+          auto c_acc_ptr = c_acc.get_multi_ptr<sycl::access::decorated::no>();
+          GEMM(a_acc_ptr.get(), b_acc_ptr.get(), c_acc_ptr.get(), size, id);
+        });
       });
-    });
+    }
+    // Important that wait is outside of the loop to avoid serializing kernel launches
     queue.wait_and_throw();
   } catch (const sycl::exception& e) {
     FAIL() << "[ERROR] Launching kernel: " << e.what();
@@ -260,30 +306,63 @@ void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_bytes) {
 
     switch (ptr->_view_kind) {
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
+        auto* kernel_rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
         if (g_callback_data) {
           g_callback_data->view_kernel_count++;
+          // Track kernel operation ID from view records and check for duplicates
+          std::lock_guard<std::mutex> lock(g_callback_data->operation_id_mutex);
+          auto [it, inserted] = g_callback_data->view_kernel_id_to_corr_id.insert(
+              {kernel_rec->_kernel_id, kernel_rec->_correlation_id});
+          if (!inserted) {
+            // Duplicate kernel_id in view records - this is an error!
+            g_callback_data->duplicate_kernel_ids++;
+            std::cerr << "ERROR: Duplicate kernel_id " << kernel_rec->_kernel_id
+                      << " in View records (correlation_ids: " << it->second << " vs "
+                      << kernel_rec->_correlation_id << ")" << std::endl;
+          }
         }
-        auto* kernel_rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
         std::cout << "View: Kernel " << kernel_rec->_name
                   << " (corr_id: " << kernel_rec->_correlation_id
                   << ", op_id: " << kernel_rec->_kernel_id << ")" << std::endl;
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
+        auto* mem_rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
         if (g_callback_data) {
           g_callback_data->view_memcopy_count++;
+          // Track memory operation ID from view records and check for duplicates
+          std::lock_guard<std::mutex> lock(g_callback_data->operation_id_mutex);
+          auto [it, inserted] = g_callback_data->view_memop_id_to_corr_id.insert(
+              {mem_rec->_mem_op_id, mem_rec->_correlation_id});
+          if (!inserted) {
+            // Duplicate mem_op_id in view records - this is an error!
+            g_callback_data->duplicate_memory_ids++;
+            std::cerr << "ERROR: Duplicate mem_op_id " << mem_rec->_mem_op_id
+                      << " in View records (correlation_ids: " << it->second << " vs "
+                      << mem_rec->_correlation_id << ")" << std::endl;
+          }
         }
-        auto* mem_rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
         std::cout << "View: MemCopy " << mem_rec->_bytes << " bytes"
                   << " (corr_id: " << mem_rec->_correlation_id << ", op_id: " << mem_rec->_mem_op_id
                   << ")" << std::endl;
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
+        auto* fill_rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
         if (g_callback_data) {
           g_callback_data->view_memfill_count++;
+          // Track memory operation ID from view records and check for duplicates
+          std::lock_guard<std::mutex> lock(g_callback_data->operation_id_mutex);
+          auto [it, inserted] = g_callback_data->view_memop_id_to_corr_id.insert(
+              {fill_rec->_mem_op_id, fill_rec->_correlation_id});
+          if (!inserted) {
+            // Duplicate mem_op_id in view records - this is an error!
+            g_callback_data->duplicate_memory_ids++;
+            std::cerr << "ERROR: Duplicate mem_op_id " << fill_rec->_mem_op_id
+                      << " in View records (correlation_ids: " << it->second << " vs "
+                      << fill_rec->_correlation_id << ")" << std::endl;
+          }
         }
-        auto* fill_rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
         std::cout << "View: MemFill " << fill_rec->_bytes << " bytes"
                   << " (corr_id: " << fill_rec->_correlation_id
                   << ", op_id: " << fill_rec->_mem_op_id << ")" << std::endl;
@@ -359,7 +438,8 @@ void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_bytes) {
 // ============================================================================
 // Test fixture for Callback API tests
 // ============================================================================
-class CallbackApiTest : public ::testing::Test {
+// class CallbackApiTest : public ::testing::Test {
+class CallbackApiTest : public ::testing::TestWithParam<bool> {
  protected:
   static void CheckConsistencyAppendedEnterToExit(pti_backend_ctx_t backend_context,
                                                   const pti_callback_gpu_op_data* gpu_op_data,
@@ -447,6 +527,161 @@ class CallbackApiTest : public ::testing::Test {
                        << ", device: " << gpu_op_data->_device_handle;
   }
 
+  static void VerifyOperationIdUniqueness(uint64_t operation_id, pti_gpu_operation_kind kind,
+                                          uint32_t correlation_id, CallbackData* data) {
+    if (operation_id == 0) {
+      data->zero_operation_ids++;
+      std::cerr << "WARNING: Operation ID is zero" << std::endl;
+      return;
+    }
+
+    std::lock_guard<std::mutex> lock(data->operation_id_mutex);
+
+    // Track uniqueness within operation kind space
+    // NOTE: The same operation_id will appear in multiple callbacks:
+    //   - APPENDED ENTER (correlation_id Y)
+    //   - APPENDED EXIT (correlation_id Y)
+    //   - COMPLETED (correlation_id Z - different!)
+    // This is expected. We just track that we've seen this operation_id.
+    // The correlation_id changes between APPENDED and COMPLETED domains.
+    if (kind == PTI_GPU_OPERATION_KIND_KERNEL) {
+      auto [it, inserted] = data->seen_kernel_operation_ids.insert(operation_id);
+      if (inserted) {
+        // First time seeing this kernel operation_id - record its first correlation_id
+        data->kernel_id_to_first_corr_id[operation_id] = correlation_id;
+      }
+      // If not inserted, we've seen this operation_id before - this is OK (subsequent phases)
+    } else if (kind == PTI_GPU_OPERATION_KIND_MEMORY) {
+      auto [it, inserted] = data->seen_memory_operation_ids.insert(operation_id);
+      if (inserted) {
+        // First time seeing this memory operation_id - record its first correlation_id
+        data->memory_id_to_first_corr_id[operation_id] = correlation_id;
+      }
+      // If not inserted, we've seen this operation_id before - this is OK (subsequent phases)
+    }
+  }
+
+  static void VerifyOperationIdConsistency(uint64_t operation_id, pti_gpu_operation_kind kind,
+                                           uint32_t driver_api_id, CallbackData* data) {
+    std::lock_guard<std::mutex> lock(data->operation_id_mutex);
+
+    // Check driver_api_id consistency within operation kind space
+    // NOTE: We use driver_api_id instead of name because name might be empty in ENTER phase
+    if (kind == PTI_GPU_OPERATION_KIND_KERNEL) {
+      auto api_it = data->kernel_id_to_api_id.find(operation_id);
+      if (api_it != data->kernel_id_to_api_id.end()) {
+        if (api_it->second != driver_api_id) {
+          data->kernel_api_id_mismatch++;
+          std::cerr << "ERROR: Kernel driver_api_id mismatch for kernel_id " << operation_id << ": "
+                    << api_it->second << " vs " << driver_api_id << std::endl;
+        }
+      } else {
+        data->kernel_id_to_api_id[operation_id] = driver_api_id;
+      }
+    } else if (kind == PTI_GPU_OPERATION_KIND_MEMORY) {
+      auto api_it = data->memory_id_to_api_id.find(operation_id);
+      if (api_it != data->memory_id_to_api_id.end()) {
+        if (api_it->second != driver_api_id) {
+          data->memory_api_id_mismatch++;
+          std::cerr << "ERROR: Memory operation driver_api_id mismatch for mem_op_id "
+                    << operation_id << ": " << api_it->second << " vs " << driver_api_id
+                    << std::endl;
+        }
+      } else {
+        data->memory_id_to_api_id[operation_id] = driver_api_id;
+      }
+    }
+  }
+
+  static void TrackOperationIdMapping(uint64_t operation_id, pti_gpu_operation_kind kind,
+                                      uint32_t correlation_id, bool is_appended,
+                                      CallbackData* data) {
+    std::lock_guard<std::mutex> lock(data->operation_id_mutex);
+
+    if (kind == PTI_GPU_OPERATION_KIND_KERNEL) {
+      if (is_appended) {
+        data->appended_kernel_id_to_corr_id[operation_id] = correlation_id;
+      } else {
+        data->completed_kernel_id_to_corr_id[operation_id] = correlation_id;
+      }
+    } else if (kind == PTI_GPU_OPERATION_KIND_MEMORY) {
+      if (is_appended) {
+        data->appended_memory_id_to_corr_id[operation_id] = correlation_id;
+      } else {
+        data->completed_memory_id_to_corr_id[operation_id] = correlation_id;
+      }
+    }
+  }
+
+  static void VerifyCompletedWasAppended(uint64_t operation_id, pti_gpu_operation_kind kind,
+                                         CallbackData* data) {
+    std::lock_guard<std::mutex> lock(data->operation_id_mutex);
+
+    if (kind == PTI_GPU_OPERATION_KIND_KERNEL) {
+      if (data->appended_kernel_id_to_corr_id.find(operation_id) ==
+          data->appended_kernel_id_to_corr_id.end()) {
+        data->completed_without_appended++;
+        std::cerr << "ERROR: Completed kernel_id " << operation_id
+                  << " was never seen in APPENDED domain" << std::endl;
+      }
+    } else if (kind == PTI_GPU_OPERATION_KIND_MEMORY) {
+      if (data->appended_memory_id_to_corr_id.find(operation_id) ==
+          data->appended_memory_id_to_corr_id.end()) {
+        data->completed_without_appended++;
+        std::cerr << "ERROR: Completed mem_op_id " << operation_id
+                  << " was never seen in APPENDED domain" << std::endl;
+      }
+    }
+  }
+
+  static void VerifyAllAppendedCompleted(CallbackData* data) {
+    // Check kernels
+    for (const auto& [kernel_id, corr_id] : data->appended_kernel_id_to_corr_id) {
+      if (data->completed_kernel_id_to_corr_id.find(kernel_id) ==
+          data->completed_kernel_id_to_corr_id.end()) {
+        data->appended_without_completed++;
+        std::cerr << "ERROR: Appended kernel_id " << kernel_id << " (correlation_id " << corr_id
+                  << ") was never COMPLETED" << std::endl;
+      }
+    }
+
+    // Check memory operations
+    for (const auto& [mem_id, corr_id] : data->appended_memory_id_to_corr_id) {
+      if (data->completed_memory_id_to_corr_id.find(mem_id) ==
+          data->completed_memory_id_to_corr_id.end()) {
+        data->appended_without_completed++;
+        std::cerr << "ERROR: Appended mem_op_id " << mem_id << " (correlation_id " << corr_id
+                  << ") was never COMPLETED" << std::endl;
+      }
+    }
+  }
+
+  static void PrintOperationIdStats(CallbackData* data, const std::string& context) {
+    std::cout << "\n=== Operation ID Stats (" << context << ") ===" << std::endl;
+    std::cout << "  Unique kernel IDs (Callback): " << data->seen_kernel_operation_ids.size()
+              << std::endl;
+    std::cout << "  Unique memory IDs (Callback): " << data->seen_memory_operation_ids.size()
+              << std::endl;
+    std::cout << "  Unique kernel IDs (View): " << data->view_kernel_id_to_corr_id.size()
+              << std::endl;
+    std::cout << "  Unique memory IDs (View): " << data->view_memop_id_to_corr_id.size()
+              << std::endl;
+    std::cout << "  Duplicate kernel IDs in View: " << data->duplicate_kernel_ids.load()
+              << std::endl;
+    std::cout << "  Duplicate memory IDs in View: " << data->duplicate_memory_ids.load()
+              << std::endl;
+    std::cout << "  Zero operation IDs: " << data->zero_operation_ids.load() << std::endl;
+    std::cout << "  Kernel API ID mismatches (APPENDED): " << data->kernel_api_id_mismatch.load()
+              << std::endl;
+    std::cout << "  Memory API ID mismatches (APPENDED): " << data->memory_api_id_mismatch.load()
+              << std::endl;
+    std::cout << "  Completed without appended: " << data->completed_without_appended.load()
+              << std::endl;
+    std::cout << "  Appended without completed: " << data->appended_without_completed.load()
+              << std::endl;
+    std::cout << "========================================\n" << std::endl;
+  }
+
   static void PushOrPopExternalCorrelation(bool is_push, CallbackData* data,
                                            uint32_t correlation_id) {
     if (is_push) {
@@ -490,135 +725,235 @@ class CallbackApiTest : public ::testing::Test {
     }
   }
 
+  static void CheckCommandListProperties(uint32_t cmd_list_properties) {
+    if (command_list_immediate_) {
+      EXPECT_TRUE(cmd_list_properties &
+                  pti_backend_command_list_type::PTI_BACKEND_COMMAND_LIST_TYPE_IMMEDIATE)
+          << "Expected IMMEDIATE command list property in ENTER callback";
+    } else {
+      EXPECT_FALSE(cmd_list_properties &
+                   pti_backend_command_list_type::PTI_BACKEND_COMMAND_LIST_TYPE_IMMEDIATE)
+          << "Did not expect IMMEDIATE command list property in ENTER callback";
+    }
+  }
+
   // ============================================================================
-  // Callback function that updates CallbackData where test statistics are stored
-  // and also verifies consistency of expected parameters and behavior
+  // Helper functions for TestCallback
+  // ============================================================================
+
+  // Validates basic callback parameters common to all domains
+  static void ValidateCallbackParams(CallbackData* data, pti_callback_domain domain,
+                                     pti_api_group_id api_group_id, uint32_t driver_api_id,
+                                     pti_backend_ctx_t context) {
+    if (api_group_id != PTI_API_GROUP_LEVELZERO) {
+      data->all_callbacks_levelzero = false;
+      data->non_levelzero_count++;
+      std::cerr << "WARNING: Non-Level Zero API group: " << api_group_id << " (expected "
+                << PTI_API_GROUP_LEVELZERO << ", domain: " << domain << ")" << std::endl;
+    }
+
+    constexpr uint32_t RESERVED_DRIVER_LEVELZERO_ID = 0;
+    if (driver_api_id == RESERVED_DRIVER_LEVELZERO_ID) {
+      data->reserved_api_id_count++;
+      std::cerr << "WARNING: Reserved driver_api_id: " << driver_api_id << " (domain: " << domain
+                << ")" << std::endl;
+    }
+
+    if (context == nullptr) {
+      data->null_context_count++;
+      std::cerr << "WARNING: Null backend_context (domain: " << domain << ")" << std::endl;
+    }
+  }
+
+  // Validates GPU operation data
+  static void ValidateGpuOpData(CallbackData* data, pti_callback_gpu_op_data* gpu_op_data,
+                                const char* domain_name) {
+    if (gpu_op_data->_device_handle == nullptr) {
+      data->null_device_handle_count++;
+      std::cerr << "WARNING: " << domain_name << " callback with null device_handle" << std::endl;
+    }
+  }
+
+  // Handles phase-specific logic for APPENDED domain
+  static void HandlePhaseAppended(CallbackData* data, pti_callback_gpu_op_data* gpu_op_data) {
+    if (gpu_op_data->_phase == PTI_CB_PHASE_API_ENTER) {
+      data->enter_count++;
+      data->appended_enter_count++;
+      CheckCommandListProperties(gpu_op_data->_cmd_list_properties);
+
+      if (data->do_external_correlation_test) {
+        PushOrPopExternalCorrelation(true, data, gpu_op_data->_correlation_id);
+      }
+    } else if (gpu_op_data->_phase == PTI_CB_PHASE_API_EXIT) {
+      data->exit_count++;
+      data->appended_exit_count++;
+      CheckCommandListProperties(gpu_op_data->_cmd_list_properties);
+
+      if (data->do_external_correlation_test) {
+        PushOrPopExternalCorrelation(false, data, gpu_op_data->_correlation_id);
+      }
+    }
+  }
+
+  // Processes a single operation in APPENDED domain
+  static void ProcessSingleOperationAppended(CallbackData* data, const pti_gpu_op_details& op,
+                                             pti_callback_gpu_op_data* gpu_op_data,
+                                             uint32_t driver_api_id, pti_backend_ctx_t context) {
+    // Mark operation type as seen
+    if (op._operation_kind == PTI_GPU_OPERATION_KIND_KERNEL) {
+      data->kernel_seen = true;
+    } else if (op._operation_kind == PTI_GPU_OPERATION_KIND_MEMORY) {
+      data->memory_op_seen = true;
+    }
+
+    // Verify operation ID uniqueness and consistency
+    VerifyOperationIdUniqueness(op._operation_id, op._operation_kind, gpu_op_data->_correlation_id,
+                                data);
+    VerifyOperationIdConsistency(op._operation_id, op._operation_kind, driver_api_id, data);
+
+    // Track operation ID mapping
+    TrackOperationIdMapping(op._operation_id, op._operation_kind, gpu_op_data->_correlation_id,
+                            true, data);
+
+    // Check consistency if enabled
+    if (data->append_complete_all_phases && gpu_op_data->_operation_count == 1) {
+      CheckConsistencyAppendedEnterToExit(context, gpu_op_data, op, data);
+    }
+  }
+
+  // Processes a single operation in COMPLETED domain
+  static void ProcessSingleOperationCompleted(CallbackData* data, const pti_gpu_op_details& op,
+                                              pti_callback_gpu_op_data* gpu_op_data,
+                                              uint32_t index) {
+    std::cout << "\t ops: i: " << index << ", name: " << op._name
+              << " (kind: " << op._operation_kind << ", op id: " << op._operation_id << ")"
+              << std::endl;
+
+    // Verify this operation was previously appended
+    VerifyCompletedWasAppended(op._operation_id, op._operation_kind, data);
+
+    // Track operation ID mapping
+    TrackOperationIdMapping(op._operation_id, op._operation_kind, gpu_op_data->_correlation_id,
+                            false, data);
+
+    // Count by operation type
+    if (op._operation_kind == PTI_GPU_OPERATION_KIND_KERNEL) {
+      data->completed_kernel_count++;
+      data->RecordThreadKernel();
+    } else if (op._operation_kind == PTI_GPU_OPERATION_KIND_MEMORY) {
+      data->completed_memcopy_count++;
+    }
+  }
+
+  // Processes all operation details for APPENDED domain
+  static void ProcessOperationDetailsAppended(CallbackData* data,
+                                              pti_callback_gpu_op_data* gpu_op_data,
+                                              uint32_t driver_api_id, pti_backend_ctx_t context) {
+    if (gpu_op_data->_operation_count == 0 || !gpu_op_data->_operation_details) {
+      return;
+    }
+
+    for (uint32_t i = 0; i < gpu_op_data->_operation_count; ++i) {
+      ProcessSingleOperationAppended(data, gpu_op_data->_operation_details[i], gpu_op_data,
+                                     driver_api_id, context);
+    }
+  }
+
+  // Processes all operation details for COMPLETED domain
+  static void ProcessOperationDetailsCompleted(CallbackData* data,
+                                               pti_callback_gpu_op_data* gpu_op_data,
+                                               pti_backend_ctx_t context) {
+    if (gpu_op_data->_operation_count == 0 || !gpu_op_data->_operation_details) {
+      return;
+    }
+
+    for (uint32_t i = 0; i < gpu_op_data->_operation_count; ++i) {
+      ProcessSingleOperationCompleted(data, gpu_op_data->_operation_details[i], gpu_op_data, i);
+    }
+
+    if (data->append_complete_all_phases) {
+      CheckConsistencyCompletedToAppended(context, gpu_op_data, data);
+    }
+  }
+
+  // Handles APPENDED domain callback
+  static void HandleAppendedCallback(CallbackData* data, pti_callback_gpu_op_data* gpu_op_data,
+                                     uint32_t driver_api_id, pti_api_group_id api_group_id,
+                                     pti_backend_ctx_t context) {
+    data->appended_count++;
+    data->last_phase = gpu_op_data->_phase;
+
+    ValidateGpuOpData(data, gpu_op_data, "APPENDED");
+
+    PrintCallBackInfo("APPENDED", gpu_op_data->_phase, context, gpu_op_data->_device_handle,
+                      api_group_id, driver_api_id, gpu_op_data->_correlation_id,
+                      gpu_op_data->_operation_count, gpu_op_data->_operation_details);
+
+    HandlePhaseAppended(data, gpu_op_data);
+    ProcessOperationDetailsAppended(data, gpu_op_data, driver_api_id, context);
+  }
+
+  // Handles COMPLETED domain callback
+  static void HandleCompletedCallback(CallbackData* data, pti_callback_gpu_op_data* gpu_op_data,
+                                      uint32_t driver_api_id, pti_api_group_id api_group_id,
+                                      pti_backend_ctx_t context) {
+    data->completed_count++;
+    data->last_phase = gpu_op_data->_phase;
+
+    ValidateGpuOpData(data, gpu_op_data, "COMPLETED");
+
+    EXPECT_TRUE(gpu_op_data->_phase == PTI_CB_PHASE_API_EXIT)
+        << "COMPLETED domain should only have EXIT phase callbacks";
+
+    data->exit_count++;
+    data->completed_exit_count++;
+
+    PrintCallBackInfo("COMPLETED", gpu_op_data->_phase, context, gpu_op_data->_device_handle,
+                      api_group_id, driver_api_id, gpu_op_data->_correlation_id,
+                      gpu_op_data->_operation_count, gpu_op_data->_operation_details);
+
+    ProcessOperationDetailsCompleted(data, gpu_op_data, context);
+  }
+
+  // ============================================================================
+  // Main callback function - simplified with helper functions above
   // ============================================================================
   static void TestCallback(pti_callback_domain domain, pti_api_group_id driver_api_group_id,
                            uint32_t driver_api_id, pti_backend_ctx_t backend_context, void* cb_data,
                            void* global_user_data, [[maybe_unused]] void** instance_user_data) {
+    // Basic setup
     auto* data = static_cast<CallbackData*>(global_user_data);
     EXPECT_TRUE(data != nullptr) << "Global user data is null";
+
+    // Update global state
     data->total_count++;
     data->last_domain = domain;
     data->last_api_group = driver_api_group_id;
     data->user_data_received = global_user_data;
-    data->RecordThreadCallback();  // Record thread-specific callback
+    data->RecordThreadCallback();
 
-    // Check that driver_api_group_id is always PTI_API_GROUP_LEVELZERO
-    if (driver_api_group_id != PTI_API_GROUP_LEVELZERO) {
-      data->all_callbacks_levelzero = false;
-      data->non_levelzero_count++;
-      std::cerr << "WARNING: Callback received with non-Level Zero API group: "
-                << driver_api_group_id << " (expected " << PTI_API_GROUP_LEVELZERO << ")"
-                << " for domain: " << domain << std::endl;
-    }
+    // Validate common parameters
+    ValidateCallbackParams(data, domain, driver_api_group_id, driver_api_id, backend_context);
 
-    // Check that driver_api_id is not a reserved value
-    // The reserved value for Level Zero is typically 0 or a specific reserved constant
-    const uint32_t RESERVED_DRIVER_LEVELZERO_ID = 0;  // Reserved/invalid API ID
-    if (driver_api_id == RESERVED_DRIVER_LEVELZERO_ID) {
-      data->reserved_api_id_count++;
-      std::cerr << "WARNING: Callback received with reserved driver_api_id: " << driver_api_id
-                << " for domain: " << domain << std::endl;
-    }
-
-    // Check that backend_context is not null
-    if (backend_context == nullptr) {
-      data->null_context_count++;
-      std::cerr << "WARNING: Callback received with null backend_context for domain: " << domain
-                << std::endl;
-    }
-
+    // Validate callback data exists
     EXPECT_TRUE(cb_data != nullptr) << "cb_data is null for domain: " << domain;
-    if (domain == PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED) {
-      data->appended_count++;
-      auto* gpu_op_data = static_cast<pti_callback_gpu_op_data*>(cb_data);
-      data->last_phase = gpu_op_data->_phase;
 
-      // Check that device_handle is not null
-      if (gpu_op_data->_device_handle == nullptr) {
-        data->null_device_handle_count++;
-        std::cerr << "WARNING: APPENDED callback received with null _device_handle" << std::endl;
-      }
-      PrintCallBackInfo("APPENDED", gpu_op_data->_phase, backend_context,
-                        gpu_op_data->_device_handle, driver_api_group_id, driver_api_id,
-                        gpu_op_data->_correlation_id, gpu_op_data->_operation_count,
-                        gpu_op_data->_operation_details);
+    // Dispatch to domain-specific handler
+    auto* gpu_op_data = static_cast<pti_callback_gpu_op_data*>(cb_data);
 
-      // Count ENTER/EXIT phases separately for APPENDED domain
-      if (gpu_op_data->_phase == PTI_CB_PHASE_API_ENTER) {
-        data->enter_count++;
-        data->appended_enter_count++;
-        if (data->do_external_correlation_test) {
-          PushOrPopExternalCorrelation(true, data, gpu_op_data->_correlation_id);
-        }
-      } else if (gpu_op_data->_phase == PTI_CB_PHASE_API_EXIT) {
-        data->exit_count++;
-        data->appended_exit_count++;
-        if (data->do_external_correlation_test) {
-          PushOrPopExternalCorrelation(false, data, gpu_op_data->_correlation_id);
-        }
-      }
+    switch (domain) {
+      case PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED:
+        HandleAppendedCallback(data, gpu_op_data, driver_api_id, driver_api_group_id,
+                               backend_context);
+        break;
 
-      // Check operation kind
-      if (gpu_op_data->_operation_count > 0 && gpu_op_data->_operation_details) {
-        for (uint32_t i = 0; i < gpu_op_data->_operation_count; ++i) {
-          const auto& op_details = gpu_op_data->_operation_details[i];
-          if (op_details._operation_kind == PTI_GPU_OPERATION_KIND_KERNEL) {
-            data->kernel_seen = true;
-          } else if (op_details._operation_kind == PTI_GPU_OPERATION_KIND_MEMORY) {
-            data->memory_op_seen = true;
-          }
+      case PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED:
+        HandleCompletedCallback(data, gpu_op_data, driver_api_id, driver_api_group_id,
+                                backend_context);
+        break;
 
-          if (data->append_complete_all_phases && gpu_op_data->_operation_count == 1) {
-            CheckConsistencyAppendedEnterToExit(backend_context, gpu_op_data, op_details, data);
-          }
-        }
-      }
-    } else if (domain == PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED) {
-      data->completed_count++;
-      auto* gpu_op_data = static_cast<pti_callback_gpu_op_data*>(cb_data);
-      data->last_phase = gpu_op_data->_phase;
-
-      // Check that device_handle is not null
-      if (gpu_op_data->_device_handle == nullptr) {
-        data->null_device_handle_count++;
-        std::cerr << "WARNING: COMPLETED callback received with null _device_handle" << std::endl;
-      }
-
-      // Count ENTER/EXIT phases separately for COMPLETED domain
-      EXPECT_TRUE(gpu_op_data->_phase == PTI_CB_PHASE_API_EXIT)
-          << "COMPLETED domain should only have EXIT phase callbacks";
-      data->exit_count++;
-      data->completed_exit_count++;
-
-      PrintCallBackInfo("COMPLETED", gpu_op_data->_phase, backend_context,
-                        gpu_op_data->_device_handle, driver_api_group_id, driver_api_id,
-                        gpu_op_data->_correlation_id, gpu_op_data->_operation_count,
-                        gpu_op_data->_operation_details);
-
-      // Count completed operations by type
-      if (gpu_op_data->_operation_count > 0 && gpu_op_data->_operation_details) {
-        for (uint32_t i = 0; i < gpu_op_data->_operation_count; ++i) {
-          auto& op_detail = gpu_op_data->_operation_details[i];
-          std::cout << "\t ops: i: " << i << ", name: " << op_detail._name
-                    << " (kind: " << op_detail._operation_kind
-                    << ", op id: " << op_detail._operation_id << ")" << std::endl;
-
-          if (op_detail._operation_kind == PTI_GPU_OPERATION_KIND_KERNEL) {
-            data->completed_kernel_count++;
-            data->RecordThreadKernel();  // Record thread-specific kernel
-          } else if (op_detail._operation_kind == PTI_GPU_OPERATION_KIND_MEMORY) {
-            // Memory operations could be copy or fill
-            data->completed_memcopy_count++;
-          }
-        }
-      }
-      if (data->append_complete_all_phases) {
-        // Verify that for the Complete domain we have a matching Append Enter
-        CheckConsistencyCompletedToAppended(backend_context, gpu_op_data, data);
-      }
+      default:
+        FAIL() << "Unexpected callback domain: " << domain;
     }
   }
 
@@ -651,8 +986,23 @@ class CallbackApiTest : public ::testing::Test {
   }
 
   CallbackData callback_data_;
+  inline static bool command_list_immediate_{true};
   std::vector<pti_callback_subscriber_handle> subscribers_;
 };
+
+bool SkipNonImmediateTestIfBMG(sycl::device& dev, bool& test_command_list_immediate) {
+  // Check Device name to know if it is BMG, and if it is - skip Non-immediate test as by
+  // https://intel.github.io/llvm/EnvironmentVariables.html#controlling-dpc-level-zero-adapter
+  // only immediate supported in 2025.3 on BMG
+  // It is expected to change in 2026.0
+  // and by the way: immediate /non-immediate is only a hint - so we can not 100% count on it
+  auto platform = dev.get_platform();
+  std::string device_name = dev.get_info<sycl::info::device::name>();
+  std::cout << "Device name: " << device_name << std::endl;
+  return (device_name.find("B580 Graphics") != std::string::npos ||
+          device_name.find("B570 Graphics") != std::string::npos) &&
+         (!test_command_list_immediate);
+}
 
 // ============================================================================
 //  TESTS START HERE
@@ -661,7 +1011,9 @@ class CallbackApiTest : public ::testing::Test {
 //
 // Test basic subscription with GPU kernel invocation
 //
-TEST_F(CallbackApiTest, BasicSubscription) {
+TEST_P(CallbackApiTest, BasicSubscription) {
+  std::cout << "\n=== Test: BasicSubscription ===" << std::endl;
+
   EXPECT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), PTI_SUCCESS);
   EXPECT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), PTI_SUCCESS);
 
@@ -688,8 +1040,23 @@ TEST_F(CallbackApiTest, BasicSubscription) {
 
   // Launch a GPU kernel
   try {
+    command_list_immediate_ = GetParam();
+
     sycl::device dev(sycl::gpu_selector_v);
-    sycl::property_list prop{sycl::property::queue::in_order()};
+    if (SkipNonImmediateTestIfBMG(dev, command_list_immediate_)) {
+      GTEST_SKIP() << "Skipping Non-immediate command list test on BMG";
+    }
+    // Important that queue is in order
+    sycl::property_list prop;
+    if (command_list_immediate_) {
+      std::cout << " ** Immediate command list mode" << std::endl;
+      prop = sycl::property_list{sycl::property::queue::in_order(),
+                                 sycl::ext::intel::property::queue::immediate_command_list()};
+    } else {
+      std::cout << " ** Non-immediate command list mode" << std::endl;
+      prop = sycl::property_list{sycl::property::queue::in_order(),
+                                 sycl::ext::intel::property::queue::no_immediate_command_list()};
+    }
     sycl::queue queue(dev, sycl::async_handler{}, prop);
 
     unsigned size = kDefaultMatrixSize;
@@ -697,9 +1064,9 @@ TEST_F(CallbackApiTest, BasicSubscription) {
     std::vector<float> b(size * size, B_VALUE);
     std::vector<float> c(size * size, 0.0f);
 
-    LaunchSimpleKernel(queue, a, b, c, size);
+    LaunchMultipleGEMMKernels(queue, a, b, c, size, kDefaultKernelCount);
 
-    // Verify result
+    // Verify last result
     float expected_result = A_VALUE * B_VALUE * size;
     float eps = Check(c, expected_result);
     EXPECT_LE(eps, MAX_EPS);
@@ -790,12 +1157,75 @@ TEST_F(CallbackApiTest, BasicSubscription) {
   EXPECT_EQ(callback_data_.last_api_group, PTI_API_GROUP_LEVELZERO)
       << "Last callback should have Level Zero API group";
 
+  // ============================================================================
+  // NEW: Verify operation ID tracking
+  // ============================================================================
+  std::cout << "\n=== Operation ID Verification ===" << std::endl;
+
+  EXPECT_EQ(callback_data_.zero_operation_ids.load(), 0) << "No operation IDs should be zero";
+
+  EXPECT_EQ(callback_data_.duplicate_kernel_ids.load(), 0)
+      << "All kernel operation IDs should be unique in View records";
+
+  EXPECT_EQ(callback_data_.duplicate_memory_ids.load(), 0)
+      << "All memory operation IDs should be unique in View records";
+
+  EXPECT_EQ(callback_data_.kernel_api_id_mismatch.load(), 0)
+      << "Kernel driver_api_id should be consistent within APPENDED domain for each kernel "
+         "operation ID";
+
+  EXPECT_EQ(callback_data_.memory_api_id_mismatch.load(), 0)
+      << "Memory driver_api_id should be consistent within APPENDED domain for each memory "
+         "operation ID";
+
+  // Verify operation lifecycle
+  EXPECT_EQ(callback_data_.completed_without_appended.load(), 0)
+      << "All completed operations should have been previously appended";
+
+  // Verify all appended operations were eventually completed
+  VerifyAllAppendedCompleted(&callback_data_);
+  EXPECT_EQ(callback_data_.appended_without_completed.load(), 0)
+      << "All appended operations should eventually be completed";
+
+  // Cross-verify between Callback and View APIs
+  EXPECT_EQ(callback_data_.seen_kernel_operation_ids.size(),
+            callback_data_.view_kernel_id_to_corr_id.size())
+      << "Kernel ID count mismatch between callback and view records";
+
+  for (const auto& kernel_id : callback_data_.seen_kernel_operation_ids) {
+    EXPECT_TRUE(callback_data_.view_kernel_id_to_corr_id.find(kernel_id) !=
+                callback_data_.view_kernel_id_to_corr_id.end())
+        << "Kernel operation_id " << kernel_id << " from callback not found in view records";
+  }
+
+  for (const auto& mem_id : callback_data_.seen_memory_operation_ids) {
+    EXPECT_TRUE(callback_data_.view_memop_id_to_corr_id.find(mem_id) !=
+                callback_data_.view_memop_id_to_corr_id.end())
+        << "Memory operation_id " << mem_id << " from callback not found in view records";
+  }
+
+  std::cout << "  Unique kernel operation IDs: " << callback_data_.seen_kernel_operation_ids.size()
+            << std::endl;
+  std::cout << "  Unique memory operation IDs: " << callback_data_.seen_memory_operation_ids.size()
+            << std::endl;
+  std::cout << "  View kernel records matched: " << callback_data_.view_kernel_id_to_corr_id.size()
+            << std::endl;
+  std::cout << "  View memory records matched: " << callback_data_.view_memop_id_to_corr_id.size()
+            << std::endl;
+
+  std::cout << "====================================\n" << std::endl;
+
+  // Print operation ID statistics
+  PrintOperationIdStats(&callback_data_, "BasicSubscription");
+
   // Clean up
   EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), PTI_SUCCESS);
   EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), PTI_SUCCESS);
 }
 
+//
 // Test subscription with null parameters
+//
 TEST_F(CallbackApiTest, SubscriptionWithNullParams) {
   pti_callback_subscriber_handle subscriber = nullptr;
 
@@ -1056,7 +1486,7 @@ TEST_F(CallbackApiTest, MultiThreadedKernelExecution) {
           std::vector<float> b(size * size, B_VALUE);
           std::vector<float> c(size * size, 0.0f);
 
-          LaunchSimpleKernel(queue, a, b, c, size);
+          LaunchMultipleGEMMKernels(queue, a, b, c, size, kDefaultKernelCount);
           thread_kernel_launches[tid]++;
 
           // Verify result
@@ -1130,6 +1560,31 @@ TEST_F(CallbackApiTest, MultiThreadedKernelExecution) {
       << "All callbacks should have non-null backend_context";
   EXPECT_EQ(callback_data_.null_device_handle_count.load(), 0)
       << "All GPU operation callbacks should have non-null _device_handle";
+
+  // ============================================================================
+  // NEW: Verify operation ID tracking in multi-threaded context
+  // ============================================================================
+  std::cout << "\n=== Multi-threaded Operation ID Verification ===" << std::endl;
+
+  EXPECT_EQ(callback_data_.duplicate_kernel_ids.load(), 0)
+      << "All kernel operation IDs should be unique in View records (multi-threaded)";
+
+  EXPECT_EQ(callback_data_.duplicate_memory_ids.load(), 0)
+      << "All memory operation IDs should be unique in View records (multi-threaded)";
+
+  EXPECT_EQ(callback_data_.completed_without_appended.load(), 0)
+      << "All completed operations should have been previously appended (multi-threaded)";
+
+  VerifyAllAppendedCompleted(&callback_data_);
+  EXPECT_EQ(callback_data_.appended_without_completed.load(), 0)
+      << "All appended operations should eventually be completed (multi-threaded)";
+
+  std::cout << "  Unique kernel IDs (multi-threaded): "
+            << callback_data_.seen_kernel_operation_ids.size() << std::endl;
+  std::cout << "  Unique memory IDs (multi-threaded): "
+            << callback_data_.seen_memory_operation_ids.size() << std::endl;
+
+  PrintOperationIdStats(&callback_data_, "MultiThreadedKernelExecution");
 }
 
 //
@@ -1206,7 +1661,7 @@ TEST_F(CallbackApiTest, ConcurrentQueueSubmissions) {
           });
         } else {
           // Kernel operation
-          LaunchSimpleKernel(queue, a, b, c, size);
+          LaunchMultipleGEMMKernels(queue, a, b, c, size, kDefaultKernelCount);
         }
 
         thread_submission_counts[tid]++;
@@ -1279,6 +1734,29 @@ TEST_F(CallbackApiTest, ConcurrentQueueSubmissions) {
               << std::endl;
   }
   std::cout << "========================================\n" << std::endl;
+
+  // ============================================================================
+  // NEW: Verify operation ID uniqueness under concurrent submissions
+  // ============================================================================
+  EXPECT_EQ(callback_data_.duplicate_kernel_ids.load(), 0)
+      << "All kernel operation IDs should be unique in View records (concurrent)";
+
+  EXPECT_EQ(callback_data_.duplicate_memory_ids.load(), 0)
+      << "All memory operation IDs should be unique in View records (concurrent)";
+
+  EXPECT_EQ(callback_data_.completed_without_appended.load(), 0)
+      << "All completed operations should have been previously appended (concurrent)";
+
+  VerifyAllAppendedCompleted(&callback_data_);
+  EXPECT_EQ(callback_data_.appended_without_completed.load(), 0)
+      << "All appended operations should eventually be completed (concurrent)";
+
+  std::cout << "Unique kernel operation IDs (concurrent): "
+            << callback_data_.seen_kernel_operation_ids.size() << std::endl;
+  std::cout << "Unique memory operation IDs (concurrent): "
+            << callback_data_.seen_memory_operation_ids.size() << std::endl;
+
+  PrintOperationIdStats(&callback_data_, "ConcurrentQueueSubmissions");
 }
 
 //
@@ -1345,7 +1823,7 @@ TEST_F(CallbackApiTest, CallbackThreadSafety) {
           std::vector<float> c(size * size, 0.0f);
 
           // Use the shared queue
-          LaunchSimpleKernel(shared_queue, a, b, c, size);
+          LaunchMultipleGEMMKernels(shared_queue, a, b, c, size, kDefaultKernelCount);
 
           // Small delay to interleave operations
           std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -1414,8 +1892,8 @@ TEST_F(CallbackApiTest, CallbackThreadSafety) {
 //
 // Test external correlation API when called from Append Enter/Exit callbacks
 //
-TEST_F(CallbackApiTest, ExternalCorrelationInAppendCallbacks) {
-  sycl::device dev(sycl::gpu_selector_v);
+TEST_P(CallbackApiTest, ExternalCorrelationInAppendCallbacks) {
+  std::cout << "\n=== Test: ExternalCorrelationInAppendCallbacks ===" << std::endl;
 
   callback_data_.do_external_correlation_test = true;
   pti_callback_subscriber_handle subscriber = nullptr;
@@ -1443,24 +1921,35 @@ TEST_F(CallbackApiTest, ExternalCorrelationInAppendCallbacks) {
 
   // Launch GPU kernels (single-threaded)
   try {
+    command_list_immediate_ = GetParam();
     sycl::device dev(sycl::gpu_selector_v);
-    sycl::property_list prop{sycl::property::queue::in_order()};
+    if (SkipNonImmediateTestIfBMG(dev, command_list_immediate_)) {
+      GTEST_SKIP() << "Skipping Non-immediate command list test on BMG";
+    }
+    // Important that queue is in order
+    sycl::property_list prop;
+    if (command_list_immediate_) {
+      std::cout << " ** Immediate command list mode" << std::endl;
+      prop = sycl::property_list{sycl::property::queue::in_order(),
+                                 sycl::ext::intel::property::queue::immediate_command_list()};
+    } else {
+      std::cout << " ** Non-immediate command list mode" << std::endl;
+      prop = sycl::property_list{sycl::property::queue::in_order(),
+                                 sycl::ext::intel::property::queue::no_immediate_command_list()};
+    }
     sycl::queue queue(dev, sycl::async_handler{}, prop);
 
-    const int num_kernels = kDefaultKernelCount;
-    for (int i = 0; i < num_kernels; ++i) {
-      unsigned size = kDefaultMatrixSize;
-      std::vector<float> a(size * size, A_VALUE);
-      std::vector<float> b(size * size, B_VALUE);
-      std::vector<float> c(size * size, 0.0f);
+    unsigned size = kDefaultMatrixSize;
+    std::vector<float> a(size * size, A_VALUE);
+    std::vector<float> b(size * size, B_VALUE);
+    std::vector<float> c(size * size, 0.0f);
 
-      LaunchSimpleKernel(queue, a, b, c, size);
+    LaunchMultipleGEMMKernels(queue, a, b, c, size, kDefaultKernelCount);
 
-      // Verify result
-      float expected_result = A_VALUE * B_VALUE * size;
-      float eps = Check(c, expected_result);
-      EXPECT_LE(eps, MAX_EPS) << "Kernel " << i << " computation failed";
-    }
+    // Verify the last result
+    float expected_result = A_VALUE * B_VALUE * size;
+    float eps = Check(c, expected_result);
+    EXPECT_LE(eps, MAX_EPS) << "GEMM kernel " << kDefaultKernelCount - 1 << " verification failed";
 
   } catch (const sycl::exception& e) {
     FAIL() << "SYCL exception during kernel execution: " << e.what();
@@ -1553,4 +2042,38 @@ TEST_F(CallbackApiTest, ExternalCorrelationInAppendCallbacks) {
   std::cout << "Runtime API records: " << external_corr_test_data_.view_runtime_api_records.size()
             << std::endl;
   std::cout << "========================================\n" << std::endl;
+
+  // ============================================================================
+  // NEW: Verify operation IDs with external correlation enabled
+  // ============================================================================
+  EXPECT_EQ(callback_data_.duplicate_kernel_ids.load(), 0)
+      << "All kernel operation IDs should be unique in View records (external correlation)";
+
+  EXPECT_EQ(callback_data_.duplicate_memory_ids.load(), 0)
+      << "All memory operation IDs should be unique in View records (external correlation)";
+
+  EXPECT_EQ(callback_data_.completed_without_appended.load(), 0)
+      << "All completed operations should have been previously appended (external correlation)";
+
+  VerifyAllAppendedCompleted(&callback_data_);
+  EXPECT_EQ(callback_data_.appended_without_completed.load(), 0)
+      << "All appended operations should eventually be completed (external correlation)";
+
+  std::cout << "  Kernel IDs seen in APPENDED: "
+            << callback_data_.appended_kernel_id_to_corr_id.size() << std::endl;
+  std::cout << "  Kernel IDs seen in COMPLETED: "
+            << callback_data_.completed_kernel_id_to_corr_id.size() << std::endl;
+  std::cout << "  Memory IDs seen in APPENDED: "
+            << callback_data_.appended_memory_id_to_corr_id.size() << std::endl;
+  std::cout << "  Memory IDs seen in COMPLETED: "
+            << callback_data_.completed_memory_id_to_corr_id.size() << std::endl;
+
+  PrintOperationIdStats(&callback_data_, "ExternalCorrelationInAppendCallbacks");
 }
+
+INSTANTIATE_TEST_SUITE_P(Parametrized, CallbackApiTest, ::testing::Values(false, true),
+                         [](const testing::TestParamInfo<bool>& info) {
+                           return fmt::format("Queue_Type_{}", info.param
+                                                                   ? "ImmediateCommandList"
+                                                                   : "NonImmediateCommandList");
+                         });

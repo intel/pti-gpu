@@ -49,6 +49,8 @@ void StartProfiling() {
   // need to enable at least one ptiView for GPU operations
   PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
 
   // Demonstrating here how to use External Correlation in Subscriber Callbacks
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DRIVER_API));
@@ -73,6 +75,8 @@ void StopProfiling() {
 
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DRIVER_API));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION));
 
   PTI_CHECK_SUCCESS(ptiFlushAllViews());
@@ -206,6 +210,26 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
         std::cout << "---------------------------------------------------"
                      "-----------------------------\n";
         std::cout << "Found Kernel Record" << '\n';
+        samples_utils::DumpRecord(rec);
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------\n";
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
+        auto *rec = reinterpret_cast<pti_view_record_memory_copy *>(ptr);
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------\n";
+        std::cout << "Found Memory Copy Record" << '\n';
+        samples_utils::DumpRecord(rec);
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------\n";
+        break;
+      }
+      case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
+        auto *rec = reinterpret_cast<pti_view_record_memory_fill *>(ptr);
+        std::cout << "---------------------------------------------------"
+                     "-----------------------------\n";
+        std::cout << "Found Memory Fill Record" << '\n';
         samples_utils::DumpRecord(rec);
         std::cout << "---------------------------------------------------"
                      "-----------------------------\n";
