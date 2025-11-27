@@ -40,10 +40,10 @@ runs:
 
           echo "BMG+2025.3 test that should pass"
 
-          ctest --preset ${{ inputs.preset }} -LE performance -E "NoKernelOverlapAndGapInSubmittingTests"
+          ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance -E "NoKernelOverlapAndGapInSubmittingTests"
 
         else
-          ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance 
+          ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance
         fi
 
     - name: Quarantined tests # flaky tests
