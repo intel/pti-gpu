@@ -850,6 +850,14 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
       break;
     }
 
+    // check if optional data is present afer duration
+    std::string args;
+    auto n = dur.find(',');
+    if (n != dur.npos) {
+      args = dur.substr(n + 1);	// optional data
+      dur = dur.substr(0, n);
+    }
+
     try {
       t = std::stol(ts);
       d = std::stol(dur);
@@ -869,6 +877,9 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
     str += ", \"cat\": \"os_op\"";
     str += ", \"ts\": " + std::to_string(UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestampFromBootTimestamp(t)));
     str += ", \"dur\": " + std::to_string(UniTimer::GetTimeInUs(d));
+    if (!args.empty()) {
+      str += ", \"args\": {\"data\": \"" + args + "\"}";
+    }
     str += "}";
 
     oskmd_logger->Log(str);

@@ -414,11 +414,13 @@ If the application is a PyTorch workload, one or more options from **--chrome-mp
 
 To trace operating system kernel and/or device driver activities, yon must have root access and a [bpftrace](https://bpftrace.org) script as the argument to option **--chrome-kmd-logging**. The [script](/tools/unitrace/examples/kmdprobes/probes.bt) is a simple exmaple.
 
-The trace data for each operating system and/or GPU device driver event or function collected using the utility bpftrace should be in the format of
+The trace data for each operating system and/or GPU device driver event or function collected using bpftrace should be in the format of
 
-**tid,event,timestamp,duration**
+**tid,event,timestamp,duration[,data]**
 
 The **tid** is the kernel thread identifier; the **event** is the name of the event or function; the **timestamp** is the starting time of the event or function and the **duration** is the time duration of the event or function.
+
+The **data** is optional. If it is present, it will be treated as a string argument of the **event** in the trace file. As an example, the [script](/tools/unitrace/examples/kmdprobes/probes_extra.bt) shows extra timestamp data of a probe.
 
 The trace is stored in file **oskmd.0.json**.
 

@@ -1,0 +1,21 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+kprobe:xe_exec_ioctl {
+    @xe_exec_ioctl_start[tid] = nsecs;
+}
+
+kretprobe:xe_exec_ioctl {
+    $start = @xe_exec_ioctl_start[tid];
+    if ($start) {
+        $dur = nsecs - $start;
+        delete(@xe_exec_ioctl_start[tid]);
+        // output format is
+        // <tid>,<event>,<start-time>,<duration>[,<data>]
+        // the data is "end,<nsecs>" 
+        printf("%d,%s,%llu,%llu,%s,%llu\n", tid, "xe_exec_ioctl", $start, $dur, "end", nsecs);
+    }
+}
