@@ -408,14 +408,14 @@ pti_result PTI_EXPORT ptiViewDisable(pti_view_kind view_kind);
  *
  * @return pti_result
 */
-pti_result PTI_EXPORT ptiViewGPULocalAvailable();
+pti_result PTI_EXPORT ptiViewGPULocalAvailable(void);
 
 /**
  * @brief Flushes all view records by calling bufferCompleted callback
  *
  * @return pti_result
  */
-pti_result PTI_EXPORT ptiFlushAllViews();
+pti_result PTI_EXPORT ptiFlushAllViews(void);
 
 /**
  * @brief Gets next view record in buffer.
@@ -480,7 +480,7 @@ ptiViewMemcpyTypeToString( pti_view_memcpy_type type );
  * @return uint64_t
  */
 PTI_EXPORT uint64_t
-ptiViewGetTimestamp();
+ptiViewGetTimestamp(void);
 
 
 /**

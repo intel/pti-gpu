@@ -35,14 +35,14 @@ typedef struct pti_version {
  *
  * @return c-string with compiled version of Intel(R) PTI
  */
-PTI_EXPORT const char* ptiVersionString();
+PTI_EXPORT const char* ptiVersionString(void);
 
 /**
  * @brief Returns the compiled version of Intel(R) PTI
  *
  * @return pti_version struct with compiled version of Intel(R) PTI
  */
-pti_version PTI_EXPORT ptiVersion();
+pti_version PTI_EXPORT ptiVersion(void);
 
 #if defined(__cplusplus)
 }

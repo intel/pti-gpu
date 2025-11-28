@@ -688,6 +688,7 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   add_test(NAME run-metrics-iso COMMAND metrics_iso3dfd 256 256 256 32 8 64 10 gpu)
   add_test(NAME run-callback COMMAND callback)
   add_test(NAME run-metrics-scope COMMAND metrics_scope)
+  add_test(NAME run-omp_vec_add COMMAND omp_vec_add)
 
   set_tests_properties(
     run-metrics-iso PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
@@ -701,4 +702,6 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
     run-metrics-scope PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
     "functional;samples;metrics;hw-metrics-scope")
 
+  # It is enabled only for functional test as there is an issue observed with Intel OpenMP with Address Sanitizer.
+  set_tests_properties(run-omp_vec_add PROPERTIES LABELS "functional;samples")
 endif()

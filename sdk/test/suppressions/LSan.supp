@@ -27,3 +27,5 @@ leak:libze_intel_gpu.so.1*
 leak:libigdmd.so.1*
 
 leak:libdrm.so.2*
+
+leak:ze*

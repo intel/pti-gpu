@@ -276,6 +276,7 @@ if(BUILD_TESTING AND PTI_BUILD_SAMPLES)
   add_subdirectory(samples/metrics_iso3dfd_dpcpp)
   add_subdirectory(samples/callback)
   add_subdirectory(samples/metrics_scope)
+  add_subdirectory(samples/omp_vec_add)
 endif()
 
 if(BUILD_TESTING AND PTI_BUILD_TESTING)

@@ -8,3 +8,5 @@
 
 # This does not seem to work. However, in spirit, we want it.
 interceptor_via_lib:libigc.so
+interceptor_via_fun:SourceInfo::initStr
+interceptor_via_fun:llvm::omp::target::plugin::KernelPropertiesTy::reuseGroupParams
