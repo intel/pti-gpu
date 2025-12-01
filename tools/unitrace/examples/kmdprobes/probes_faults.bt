@@ -1,0 +1,33 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
+kprobe:xe_svm_handle_pagefault {
+  @start_gpu_page_fault_handler[tid] = nsecs;
+  @addr_gpu_page_fault_handler[tid] = arg3;
+}
+
+kretprobe:xe_svm_handle_pagefault {
+  $start = @start_gpu_page_fault_handler[tid];
+  if ($start) {
+    $dur = nsecs - $start;
+    delete(@start_gpu_page_fault_handler[tid]);
+    printf("%d,GPU_page_fault,%llu,%llu,addr=0x%llx\n", tid, $start, $dur, @addr_gpu_page_fault_handler[tid]);
+    delete(@addr_gpu_page_fault_handler[tid]);
+  }
+}
+
+kprobe:drm_pagemap_migrate_to_ram {
+  @start_cpu_page_fault_handler[tid] = nsecs;
+}
+
+kretprobe:drm_pagemap_migrate_to_ram {
+  $start = @start_cpu_page_fault_handler[tid];
+  if ($start) {
+    $dur = nsecs - $start;
+    delete(@start_cpu_page_fault_handler[tid]);
+    printf("%d,CPU_page_fault,%llu,%llu\n", tid, $start, $dur);
+  }
+}
