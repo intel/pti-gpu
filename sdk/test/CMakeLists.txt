@@ -194,6 +194,7 @@ if(HAVE_SYCL)
   target_include_directories(
     no_kernel_overlap
     PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
   target_compile_options(

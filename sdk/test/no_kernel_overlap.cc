@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "pti/pti_view.h"
+#include "samples_utils.h"
 #include "utils.h"
 #include "utils/test_helpers.h"
 
@@ -62,10 +63,10 @@ float TestCore(bool do_immediate) {
     auto second_stamp = utils::GetTime();
     auto third_stamp = utils::GetTime();
     auto forth_stamp = utils::GetTime();
-    std::cout << "Time stamp (ns):" << first_stamp << std::endl;
-    std::cout << "Time stamp (ns):" << second_stamp << std::endl;
-    std::cout << "Time stamp (ns):" << third_stamp << std::endl;
-    std::cout << "Time stamp (ns):" << forth_stamp << std::endl;
+    std::cout << "Time stamp (ns):" << samples_utils::AposFormat(first_stamp) << std::endl;
+    std::cout << "Time stamp (ns):" << samples_utils::AposFormat(second_stamp) << std::endl;
+    std::cout << "Time stamp (ns):" << samples_utils::AposFormat(third_stamp) << std::endl;
+    std::cout << "Time stamp (ns):" << samples_utils::AposFormat(forth_stamp) << std::endl;
 
     auto dev = sycl::device(sycl::gpu_selector_v);
     // Important that queue is in order
@@ -201,20 +202,25 @@ class NoKernelOverlapParametrizedTestFixture
       auto kernel = kernel_records[kidx];
       if (kernel._append_timestamp != kernel._submit_timestamp) {
         FAIL() << "--->  ERROR: Append and Submit timestamps not equal at i: " << kidx
-               << " \t append: " << kernel._append_timestamp
-               << ", submit: " << kernel._submit_timestamp << std::endl;
+               << " \t append: " << samples_utils::AposFormat(kernel._append_timestamp)
+               << ", submit: " << samples_utils::AposFormat(kernel._submit_timestamp) << std::endl;
       }
     }
   }
 
   std::stringstream PrintKernelTimeStamps(const pti_view_record_kernel& kernel) {
     std::stringstream ss;
-    ss << "Sycl Task Begin Time:        " << kernel._sycl_task_begin_timestamp << "\n"
-       << "Sycl Enq Launch Kernel Time: " << kernel._sycl_enqk_begin_timestamp << "\n"
-       << "Append Time:                 " << kernel._append_timestamp << "\n"
-       << "Submit Time:                 " << kernel._submit_timestamp << "\n"
-       << "Start Time:                  " << kernel._start_timestamp << "\n"
-       << "End Time:                    " << kernel._end_timestamp;
+    ss << "Sycl Task Begin Time:        "
+       << samples_utils::AposFormat(kernel._sycl_task_begin_timestamp) << "\n"
+       << "Sycl Enq Launch Kernel Time: "
+       << samples_utils::AposFormat(kernel._sycl_enqk_begin_timestamp) << "\n"
+       << "Append Time:                 " << samples_utils::AposFormat(kernel._append_timestamp)
+       << "\n"
+       << "Submit Time:                 " << samples_utils::AposFormat(kernel._submit_timestamp)
+       << "\n"
+       << "Start Time:                  " << samples_utils::AposFormat(kernel._start_timestamp)
+       << "\n"
+       << "End Time:                    " << samples_utils::AposFormat(kernel._end_timestamp);
     return ss;
   }
 
@@ -239,8 +245,8 @@ class NoKernelOverlapParametrizedTestFixture
       auto k1 = kernel_records[kidx];
       if (k1._start_timestamp <= k0._end_timestamp) {
         FAIL() << "--->  ERROR: Device kernel timestamps overlap end_of_i < start_of_i-1, at i: "
-               << kidx << ", end_of_i-1: " << k0._end_timestamp
-               << ", start_of_i: " << k1._start_timestamp << "\n"
+               << kidx << ", end_of_i-1: " << samples_utils::AposFormat(k0._end_timestamp)
+               << ", start_of_i: " << samples_utils::AposFormat(k1._start_timestamp) << "\n"
                << "...Kernel  Details: i-1:" << kidx - 1 << "\n"
                << PrintKernelTimeStamps(k0).str() << "\n"
                << "...                   i:" << kidx << "\n"

@@ -146,6 +146,8 @@ inline void DumpRecord(pti_view_record_kernel* record) {
   if (NULL == record) return;
 
   std::cout << "Kernel Name: " << record->_name << '\n';
+  std::cout << "Kernel Execution Time: "
+            << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
   std::cout << "               Ze Kernel Append Time: " << AposFormat(record->_append_timestamp)
             << " ns" << '\n';
   std::cout << "               Ze Kernel Submit Time: " << AposFormat(record->_submit_timestamp)
@@ -164,8 +166,6 @@ inline void DumpRecord(pti_view_record_kernel* record) {
             << record->_sycl_task_begin_timestamp << " ns" << '\n';
   std::cout << "Sycl Kernel EnqueueKernel Begin Time: " << std::dec
             << record->_sycl_enqk_begin_timestamp << " ns" << '\n';
-  std::cout << "Kernel Execution Time: " << std::dec
-            << record->_end_timestamp - record->_start_timestamp << " ns" << '\n';
   std::cout << "Kernel File Name: " << record->_source_file_name << ":"
             << record->_source_line_number << '\n';
   std::cout << "Kernel Device: " << record->_pci_address << '\n';
@@ -180,7 +180,7 @@ inline void DumpRecord(pti_view_record_memory_copy* record) {
   std::cout << "Memory Op: " << record->_name << '\n';
   std::cout << "Memory Device: " << record->_pci_address << '\n';
   print_uuid(record->_device_uuid, "Memory Device UUID: ");
-  std::cout << "Memory Op Execution Time: " << std::dec
+  std::cout << "Memory Op Execution Time: "
             << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
   std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
             << " ns" << '\n';
@@ -213,8 +213,8 @@ inline void DumpRecord(pti_view_record_memory_copy_p2p* record) {
   std::cout << "Memory Destination Device: " << record->_dst_pci_address << '\n';
   print_uuid(record->_src_uuid, "Memory Source Device UUID: ");
   print_uuid(record->_dst_uuid, "Memory Destination Device UUID: ");
-  std::cout << "Memory Op Execution Time: " << std::dec
-            << record->_end_timestamp - record->_start_timestamp << " ns" << '\n';
+  std::cout << "Memory Op Execution Time: " << record->_end_timestamp - record->_start_timestamp
+            << " ns" << '\n';
   std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
             << " ns" << '\n';
   std::cout << "               Memory Op Submit Time: " << AposFormat(record->_submit_timestamp)
@@ -272,8 +272,10 @@ inline void DumpRecord(pti_view_record_api* record) {
   std::cout << "Api Function Name: " << api_name << '\n';
   std::cout << "Api Function Id:   " << record->_api_id << '\n';
   std::cout << "Correlation Id:    " << record->_correlation_id << '\n';
-  std::cout << "Api Start Time: " << AposFormat(record->_start_timestamp) << " ns" << '\n';
-  std::cout << "  Api End Time: " << AposFormat(record->_end_timestamp) << " ns" << '\n';
+  std::cout << "Api Execution Time: "
+            << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
+  std::cout << "Api Start Time:     " << AposFormat(record->_start_timestamp) << " ns" << '\n';
+  std::cout << "Api End Time:       " << AposFormat(record->_end_timestamp) << " ns" << '\n';
   std::cout << "Process Id:     " << record->_process_id << '\n';
   std::cout << "Thread Id:      " << record->_thread_id << '\n';
 }
