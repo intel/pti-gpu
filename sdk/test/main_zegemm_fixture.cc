@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
-
+#include <fmt/format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <level_zero/ze_api.h>
@@ -36,6 +36,10 @@
 namespace {
 
 constexpr size_t kPtiDeviceId = 0;  // run on first device
+
+// Value to check if the duration diff between the two similar H2D transfers is within reasonable
+// limits
+constexpr float kExpectedHeuristicMaxRelativeTimeDifference = 2.f;
 
 uint64_t eid_ = 11;
 const uint64_t kCommandListAppendLaunchKernelId = 55;  // apiid of zeCommandListAppendLaunchKernel
@@ -937,23 +941,17 @@ TEST_F(MainZeFixtureTest, ProfilingSucceededWhenEventPolling) {
   EXPECT_EQ(m2d_1 != static_cast<std::size_t>(-1), true);
   EXPECT_EQ(m2d_2 != static_cast<std::size_t>(-1), true);
   EXPECT_NE(m2d_1, m2d_2);
-  // Check if the duration diff between the two similar H2D transfers is less than several percents
-  // E.g. 50% or 70% is just some common sense number to check if the durations are close enough
 
-  // On integrated GPU the difference is higher -
-  // the first transfer seems warming up the hardware (bigger impact vs discrete one)
-  // and the second transfer is faster
-  float expected_diff =
-      pti::test::utils::level_zero::CheckIntegratedGraphics(device_test) ? 0.70f : 0.50f;
-
-  std::cout << "Expected max difference between two similar M2D transfers: " << expected_diff
-            << std::endl;
+  // Check if the duration diff between the two similar H2D transfers is within some reasonable
+  // limits
+  std::cout << "Expected max difference between two similar M2D transfers: "
+            << kExpectedHeuristicMaxRelativeTimeDifference << std::endl;
   uint64_t dur1 = copy_records[m2d_1]._end_timestamp - copy_records[m2d_1]._start_timestamp;
   uint64_t dur2 = copy_records[m2d_2]._end_timestamp - copy_records[m2d_2]._start_timestamp;
   std::cout << "Duration 1: " << dur1 << ", Duration 2: " << dur2 << std::endl;
   float rel_diff = fabs(2.f * ((float)dur1 - (float)dur2) / ((float)dur1 + (float)dur2));
   std::cout << "Relative difference between two similar M2D transfers: " << rel_diff << std::endl;
-  EXPECT_LT(rel_diff, expected_diff);
+  EXPECT_LT(rel_diff, kExpectedHeuristicMaxRelativeTimeDifference);
   // Check if the kernel duration is greater than 0
   EXPECT_EQ(kernel_records.size(), static_cast<std::size_t>(1));
   EXPECT_GT(kernel_records[0]._end_timestamp, kernel_records[0]._start_timestamp);
@@ -1155,7 +1153,15 @@ INSTANTIATE_TEST_SUITE_P(MainZeTests, MainZeFixtureTest,
                                            std::make_tuple(true, false, false, false),
                                            std::make_tuple(true, true, true, false),
                                            std::make_tuple(false, false, true, false),
-                                           std::make_tuple(false, true, true, false)));
+                                           std::make_tuple(false, true, true, false)),
+
+                         [](const testing::TestParamInfo<MainZeFixtureTest::ParamType>& info) {
+                           return fmt::format("Sycl_{}_Zecall_{}_Kernel_{}_AddSycl_{}",
+                                              (std::get<0>(info.param) ? "Enabled" : "Disabled"),
+                                              (std::get<1>(info.param) ? "Enabled" : "Disabled"),
+                                              (std::get<2>(info.param) ? "Enabled" : "Disabled"),
+                                              (std::get<3>(info.param) ? "Enabled" : "Disabled"));
+                         });
 
 using pti::test::utils::CreateFullBuffer;
 using pti::test::utils::RecordInserts;

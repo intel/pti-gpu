@@ -1,3 +1,4 @@
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <array>
@@ -382,6 +383,7 @@ int RunSyclQueueIdMtTests(bool use_immediate_command_list, bool stacked_q = fals
     SyclQueueIdMtTestsRouted<float>(use_immediate_command_list, mt_queues, stacked_q);
   }
 
+  StopTracing();
   return exit_code;
 }
 
@@ -624,7 +626,11 @@ TEST_P(SyclQueueIdFixtureTest, MTQueueIDsUniqueInAllThreadsStackedQ) {
 }
 #endif
 
-INSTANTIATE_TEST_SUITE_P(SyclQueueIdTests, SyclQueueIdFixtureTest, ::testing::Values(false, true));
+INSTANTIATE_TEST_SUITE_P(SyclQueueIdTests, SyclQueueIdFixtureTest, ::testing::Values(false, true),
+                         [](const testing::TestParamInfo<SyclQueueIdFixtureTest::ParamType> &info) {
+                           return fmt::format("Queue_Type_{}", (info.param ? "ImmediateQueue"
+                                                                           : "NonImmediateQueue"));
+                         });
 
 TEST(SyclInvalidQueueIdTest, InvalidQueueIdIsCorrect) {
   constexpr uint64_t kValueFromDocComment = static_cast<uint64_t>(UINT64_MAX - 1);
