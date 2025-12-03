@@ -5,6 +5,7 @@
 // =============================================================
 #ifndef SAMPLES_C_UTILS_H_
 #define SAMPLES_C_UTILS_H_
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,22 +34,26 @@ void DumpRecordKernel(pti_view_record_kernel* record, bool with_sycl_rec) {
   if (NULL == record) return;
 
   printf("Kernel Name: %s\n", record->_name);
-  printf("               Ze Kernel Append Time: %llu ns\n", record->_append_timestamp);
-  printf("               Ze Kernel Submit Time: %llu ns\n", record->_submit_timestamp);
-  printf("                Ze Kernel Start Time: %llu ns\n", record->_start_timestamp);
-  printf("                  Ze Kernel End Time: %llu ns\n", record->_end_timestamp);
+  printf("               Ze Kernel Append Time: %" PRIu64 " ns\n", record->_append_timestamp);
+  printf("               Ze Kernel Submit Time: %" PRIu64 " ns\n", record->_submit_timestamp);
+  printf("                Ze Kernel Start Time: %" PRIu64 " ns\n", record->_start_timestamp);
+  printf("                  Ze Kernel End Time: %" PRIu64 " ns\n", record->_end_timestamp);
   printf("Kernel Queue Handle: %p\n", record->_queue_handle);
-  printf("Kernel Queue ID: %llu\n", record->_sycl_queue_id);
+  printf("Kernel Queue ID: %" PRIu64 "\n", record->_sycl_queue_id);
   printf("Kernel CommandList Context Handle: %p\n", record->_context_handle);
-  printf("Kernel Id: %llu\n", record->_kernel_id);
+  printf("Kernel Id: %" PRIu64 "\n", record->_kernel_id);
   printf("Correlation Id: %u\n", record->_correlation_id);
   printf("Kernel Thread Id: %u\n", record->_thread_id);
   if (with_sycl_rec) {
-    printf("         Sycl Kernel Task Begin Time: %llu ns\n", record->_sycl_task_begin_timestamp);
-    printf("Sycl Kernel EnqueueKernel Begin Time: %llu ns\n", record->_sycl_enqk_begin_timestamp);
+    printf("         Sycl Kernel Task Begin Time: %" PRIu64 " ns\n",
+           record->_sycl_task_begin_timestamp);
+    printf("Sycl Kernel EnqueueKernel Begin Time: %" PRIu64 " ns\n",
+           record->_sycl_enqk_begin_timestamp);
   }
-  printf("Kernel Execution Time: %llu ns\n", record->_end_timestamp - record->_start_timestamp);
-  printf("Kernel File Name: %s:%llu\n", record->_source_file_name, record->_source_line_number);
+  printf("Kernel Execution Time: %" PRIu64 " ns\n",
+         record->_end_timestamp - record->_start_timestamp);
+  printf("Kernel File Name: %s:%" PRIu64 "\n", record->_source_file_name,
+         record->_source_line_number);
   printf("Kernel Device: %s\n", record->_pci_address);
 
   // Print UUID
@@ -60,7 +65,7 @@ void DumpRecordKernel(pti_view_record_kernel* record, bool with_sycl_rec) {
   printf("\n");
 
   if (with_sycl_rec) {
-    printf("Kernel NodeID:InvocationID %llu:%u\n", record->_sycl_node_id,
+    printf("Kernel NodeID:InvocationID %" PRIu64 ":%u\n", record->_sycl_node_id,
            record->_sycl_invocation_id);
   }
 }
@@ -79,16 +84,17 @@ void DumpRecordMemoryCopy(pti_view_record_memory_copy* record) {
   }
   printf("\n");
 
-  printf("Memory Op Execution Time: %llu ns\n", record->_end_timestamp - record->_start_timestamp);
-  printf("               Memory Op Append Time: %llu ns\n", record->_append_timestamp);
-  printf("               Memory Op Submit Time: %llu ns\n", record->_submit_timestamp);
-  printf("                Memory Op Start Time: %llu ns\n", record->_start_timestamp);
-  printf("                  Memory Op End Time: %llu ns\n", record->_end_timestamp);
+  printf("Memory Op Execution Time: %" PRIu64 " ns\n",
+         record->_end_timestamp - record->_start_timestamp);
+  printf("               Memory Op Append Time: %" PRIu64 " ns\n", record->_append_timestamp);
+  printf("               Memory Op Submit Time: %" PRIu64 " ns\n", record->_submit_timestamp);
+  printf("                Memory Op Start Time: %" PRIu64 " ns\n", record->_start_timestamp);
+  printf("                  Memory Op End Time: %" PRIu64 " ns\n", record->_end_timestamp);
   printf("Memory Op Queue Handle: %p\n", record->_queue_handle);
-  printf("Memory Op Queue ID: %llu\n", record->_sycl_queue_id);
+  printf("Memory Op Queue ID: %" PRIu64 "\n", record->_sycl_queue_id);
   printf("Memory Op CommandList Context Handle: %p\n", record->_context_handle);
-  printf("Memory Op Id: %llu\n", record->_mem_op_id);
-  printf("Memory Bytes Copied: %llu\n", record->_bytes);
+  printf("Memory Op Id: %" PRIu64 "\n", record->_mem_op_id);
+  printf("Memory Bytes Copied: %" PRIu64 "\n", record->_bytes);
   printf("Memory Op Thread Id: %u\n", record->_thread_id);
   printf("Correlation Id: %u\n", record->_correlation_id);
   printf("Memory Copy Type: %s\n", ptiViewMemcpyTypeToString(record->_memcpy_type));
@@ -119,16 +125,17 @@ void DumpRecordMemoryCopyP2p(pti_view_record_memory_copy_p2p* record) {
   }
   printf("\n");
 
-  printf("Memory Op Execution Time: %llu ns\n", record->_end_timestamp - record->_start_timestamp);
-  printf("               Memory Op Append Time: %llu ns\n", record->_append_timestamp);
-  printf("               Memory Op Submit Time: %llu ns\n", record->_submit_timestamp);
-  printf("                Memory Op Start Time: %llu ns\n", record->_start_timestamp);
-  printf("                  Memory Op End Time: %llu ns\n", record->_end_timestamp);
+  printf("Memory Op Execution Time: %" PRIu64 " ns\n",
+         record->_end_timestamp - record->_start_timestamp);
+  printf("               Memory Op Append Time: %" PRIu64 " ns\n", record->_append_timestamp);
+  printf("               Memory Op Submit Time: %" PRIu64 " ns\n", record->_submit_timestamp);
+  printf("                Memory Op Start Time: %" PRIu64 " ns\n", record->_start_timestamp);
+  printf("                  Memory Op End Time: %" PRIu64 " ns\n", record->_end_timestamp);
   printf("Memory Op Queue Handle: %p\n", record->_queue_handle);
-  printf("Memory Op Queue ID: %llu\n", record->_sycl_queue_id);
+  printf("Memory Op Queue ID: %" PRIu64 "\n", record->_sycl_queue_id);
   printf("Memory Op CommandList Context Handle: %p\n", record->_context_handle);
-  printf("Memory Op Id: %llu\n", record->_mem_op_id);
-  printf("Memory Bytes Copied: %llu\n", record->_bytes);
+  printf("Memory Op Id: %" PRIu64 "\n", record->_mem_op_id);
+  printf("Memory Bytes Copied: %" PRIu64 "\n", record->_bytes);
   printf("Memory Op Thread Id: %u\n", record->_thread_id);
   printf("Correlation Id: %u\n", record->_correlation_id);
   printf("Memory Copy Type: %s\n", ptiViewMemcpyTypeToString(record->_memcpy_type));
@@ -150,18 +157,19 @@ void DumpRecordMemoryFill(pti_view_record_memory_fill* record) {
   }
   printf("\n");
 
-  printf("Memory Op Execution Time: %llu ns\n", record->_end_timestamp - record->_start_timestamp);
-  printf("               Memory Op Append Time: %llu ns\n", record->_append_timestamp);
-  printf("               Memory Op Submit Time: %llu ns\n", record->_submit_timestamp);
-  printf("               Memory Op Start Time: %llu ns\n", record->_start_timestamp);
-  printf("                  Memory Op End Time: %llu ns\n", record->_end_timestamp);
+  printf("Memory Op Execution Time: %" PRIu64 " ns\n",
+         record->_end_timestamp - record->_start_timestamp);
+  printf("               Memory Op Append Time: %" PRIu64 " ns\n", record->_append_timestamp);
+  printf("               Memory Op Submit Time: %" PRIu64 " ns\n", record->_submit_timestamp);
+  printf("               Memory Op Start Time: %" PRIu64 " ns\n", record->_start_timestamp);
+  printf("                  Memory Op End Time: %" PRIu64 " ns\n", record->_end_timestamp);
   printf("Memory Op Queue Handle: %p\n", record->_queue_handle);
-  printf("Memory Op Queue ID: %llu\n", record->_sycl_queue_id);
+  printf("Memory Op Queue ID: %" PRIu64 "\n", record->_sycl_queue_id);
   printf("Memory Op CommandList Context Handle: %p\n", record->_context_handle);
-  printf("Memory Op Id: %llu\n", record->_mem_op_id);
+  printf("Memory Op Id: %" PRIu64 "\n", record->_mem_op_id);
   printf("Memory Op Thread Id: %u\n", record->_thread_id);
-  printf("Memory Bytes Transfered: %llu\n", record->_bytes);
-  printf("Memory Value for Set: %llu\n", record->_value_for_set);
+  printf("Memory Bytes Transfered: %" PRIu64 "\n", record->_bytes);
+  printf("Memory Value for Set: %" PRIu64 "\n", record->_value_for_set);
   printf("Correlation Id: %u\n", record->_correlation_id);
   printf("Memory Fill Type: %u\n", record->_mem_type);
 }
@@ -178,8 +186,8 @@ void DumpRecordApi(pti_view_record_api* record) {
 
   printf("Api Function Name: %s\n", api_name);
   printf("Api Function CBID: %u\n", record->_api_id);
-  printf("Api Start Time: %llu ns\n", record->_start_timestamp);
-  printf("  Api End Time: %llu ns\n", record->_end_timestamp);
+  printf("Api Start Time: %" PRIu64 " ns\n", record->_start_timestamp);
+  printf("  Api End Time: %" PRIu64 " ns\n", record->_end_timestamp);
   printf("Api Process Id: %u\n", record->_process_id);
   printf("Api Thread Id: %u\n", record->_thread_id);
   printf("Api Correlation Id: %u\n", record->_correlation_id);
@@ -211,9 +219,9 @@ void DumpRecordSynchronization(pti_view_record_synchronization* record) {
       break;
   }
 
-  printf("Synch Start Time: %llu\n", record->_start_timestamp);
-  printf("  Synch End Time: %llu\n", record->_end_timestamp);
-  printf("  Synch Duration: %llu ns\n", record->_end_timestamp - record->_start_timestamp);
+  printf("Synch Start Time: %" PRIu64 "\n", record->_start_timestamp);
+  printf("  Synch End Time: %" PRIu64 "\n", record->_end_timestamp);
+  printf("  Synch Duration: %" PRIu64 " ns\n", record->_end_timestamp - record->_start_timestamp);
   printf("Synch Thread Id: %u\n", record->_thread_id);
   printf("Synch Correlation Id: %u\n", record->_correlation_id);
   printf("Synch BE Queue Handle: %p\n", record->_queue_handle);
@@ -235,10 +243,10 @@ void DumpRecordOverhead(pti_view_record_overhead* record) {
   if (NULL == record) return;
 
   printf("Overhead Kind : %s\n", ptiViewOverheadKindToString(record->_overhead_kind));
-  printf("Overhead Time Duration(ns): %llu\n", record->_overhead_duration_ns);
-  printf("Overhead Count: %llu\n", record->_overhead_count);
-  printf("Overhead Start Timestamp(ns): %llu\n", record->_overhead_start_timestamp_ns);
-  printf("Overhead End Timestamp(ns): %llu\n", record->_overhead_end_timestamp_ns);
+  printf("Overhead Time Duration(ns): %" PRIu64 "\n", record->_overhead_duration_ns);
+  printf("Overhead Count: %" PRIu64 "\n", record->_overhead_count);
+  printf("Overhead Start Timestamp(ns): %" PRIu64 "\n", record->_overhead_start_timestamp_ns);
+  printf("Overhead End Timestamp(ns): %" PRIu64 "\n", record->_overhead_end_timestamp_ns);
   printf("Overhead ThreadId: %u\n", record->_overhead_thread_id);
 }
 
@@ -247,7 +255,7 @@ void DumpRecordExternalCorrelation(pti_view_record_external_correlation* record)
 
   printf("External Correlation Kind : %u\n", record->_external_kind);
   printf("Correlation Id: %u\n", record->_correlation_id);
-  printf("External Id: %llu\n", record->_external_id);
+  printf("External Id: %" PRIu64 "\n", record->_external_id);
 }
 
 bool IsMonotonicUint64(const uint64_t* array, size_t count) {

@@ -415,6 +415,4 @@ INSTANTIATE_TEST_SUITE_P(
       return fmt::format("Queue_Type_{}_PTI_COLLECTION_MODE_{}",
                          (std::get<0>(info.param) ? "ImmediateQueue" : "NonImmediateQueue"),
                          std::get<1>(info.param));
-    }
-
-);
+    });

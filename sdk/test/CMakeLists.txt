@@ -206,7 +206,7 @@ if(HAVE_SYCL)
   target_compile_definitions(no_kernel_overlap PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(no_kernel_overlap PUBLIC spdlog::spdlog Pti::pti_view
-	  GTest::gtest_main fmt::fmt)
+      GTest::gtest_main fmt::fmt)
 
   add_executable(startstop_suite main_startstop_fixture.cc)
   target_include_directories(
@@ -224,7 +224,7 @@ if(HAVE_SYCL)
   target_compile_definitions(startstop_suite PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(startstop_suite PUBLIC spdlog::spdlog Pti::pti_view
-	  GTest::gtest_main)
+      GTest::gtest_main)
 
   add_executable(mem_ops_test mem_ops_test.cc)
 
