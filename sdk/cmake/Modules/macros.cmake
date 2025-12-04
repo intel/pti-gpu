@@ -99,7 +99,7 @@ set(SPDLOG_GABIME_URL "https://github.com/gabime/spdlog/archive/refs/tags/v1.15.
 set(SPDLOG_GABIME_SHA256 "9962648c9b4f1a7bbc76fd8d9172555bad1871fdb14ff4f842ef87949682caa5")
 macro(GetSpdlog)
   if(NOT TARGET spdlog::spdlog)
-    find_package(spdlog 1.6.0 QUIET)
+    find_package(spdlog 1.15.0 QUIET)
   endif()
 
   if(NOT TARGET spdlog::spdlog)

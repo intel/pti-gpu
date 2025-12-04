@@ -9,7 +9,7 @@ enable_testing()
 include(GoogleTest)
 
 if (NOT TARGET fmt::fmt)
-  find_package(fmt REQUIRED)
+  message(FATAL_ERROR "fmt::fmt target not found. GetSpdlog() should have been called in the main CMakeLists.txt")
 endif()
 
 if (NOT TARGET spdlog::spdlog)
