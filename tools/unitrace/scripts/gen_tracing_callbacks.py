@@ -224,7 +224,7 @@ def get_enum_map(include_path):
 def gen_register(f, func_list):
   for func in func_list:
     reg_fname = "ZeLoader::get().zelTracer" + func[2:] + "RegisterCallback_"
-    f.write("    if (" + reg_fname + " != nullptr) {\n");
+    f.write("    if (" + reg_fname + " != nullptr) {\n")
     f.write("      status = " + reg_fname + "(tracer, ZEL_REGISTER_PROLOGUE, " + func + "OnEnter);\n")
     f.write("      PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
     f.write("      status = " + reg_fname + "(tracer, ZEL_REGISTER_EPILOGUE, " + func + "OnExit);\n")
@@ -305,7 +305,7 @@ def get_kernel_tracing_callback(func):
     fp.close()
     return cb
 
-def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list, synchronize_func_list, params, enum_map):
+def gen_enter_callback(f, func, synchronize_func_list, params):
   f.write("  ZeCollector* collector =\n")
   f.write("    reinterpret_cast<ZeCollector*>(global_user_data);\n")
 
@@ -370,7 +370,8 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
           f.write("    }\n")
       else:
         f.write("    str += \" " + name + " = \" ;\n")
-        f.write("    TO_HEX_STRING(str, *(params->p" + name + "));\n")
+        if not (name == "groupCounts" or name == "groupSizes"):
+          f.write("    TO_HEX_STRING(str, *(params->p" + name + "));\n")
         if name == "pArgValue" and func == "zeKernelSetArgumentValue":
           f.write("    void* argValuePtr = const_cast<void*>(*(params->ppArgValue));\n")
           f.write("    if (!argValuePtr) {\n")
@@ -433,6 +434,14 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
           f.write("      str += std::to_string((*(params->p" + name + "))->groupCountY) + \", \";\n")
           f.write("      str += std::to_string((*(params->p" + name + "))->groupCountZ) + \"}\";\n")
           f.write("    }\n")
+        elif type.find("ze_group_count_t") >=0:
+          f.write("      str += \" {\" + std::to_string(((params->p" + name + "))->groupCountX) + \", \";\n")
+          f.write("      str += std::to_string(((params->p" + name + "))->groupCountY) + \", \";\n")
+          f.write("      str += std::to_string(((params->p" + name + "))->groupCountZ) + \"}\";\n")
+        elif type.find("ze_group_size_t") >=0:
+          f.write("      str += \" {\" + std::to_string(((params->p" + name + "))->groupSizeX) + \", \";\n")
+          f.write("      str += std::to_string(((params->p" + name + "))->groupSizeY) + \", \";\n")
+          f.write("      str += std::to_string(((params->p" + name + "))->groupSizeZ) + \"}\";\n")
         elif type.find("ze_event_pool_desc_t*") >= 0:
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
           f.write("      str += \" {\";\n")
@@ -633,7 +642,7 @@ def gen_enter_callback(f, func, command_list_func_list, command_queue_func_list,
 
   f.write("  ze_instance_data.start_time_host = start_time_host;\n")
 
-def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, params, enum_map):
+def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, params):
   f.write("  ZeCollector* collector =\n")
   f.write("    reinterpret_cast<ZeCollector*>(global_user_data);\n")
 
@@ -688,59 +697,60 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
   f.write("    }\n")
   f.write("    str +=\""+ func + "\";\n")
   f.write("    str += \" [\" + std::to_string(time) + \" ns]\";\n")
-  f.write("    if (result == ZE_RESULT_SUCCESS) {\n")
-  for name, type in params:
-    if name.find("ph") == 0:
-      if func == "zeDeviceGet" or func == "zeDeviceGetSubDevices":
-        f.write("      if (*(params->p" + name + ") != nullptr &&\n")
-        f.write("          *(params->ppCount) != nullptr) {\n")
-        f.write("        for (uint32_t i = 0; i < **(params->ppCount); ++i) {\n")
-        f.write("          str += \" " + name[1:] + "[\";\n")
-        f.write("          str += std::to_string(i);\n")
-        f.write("          str += \"] = \";\n")
-        f.write("          TO_HEX_STRING(str, (*(params->p" + name + "))[i]);\n")
-        f.write("        }\n")
-        f.write("      }\n")
-      else:
+  if not func == "zeDriverGetDefaultContext":
+    f.write("    if (result == ZE_RESULT_SUCCESS) {\n")
+    for name, type in params:
+      if name.find("ph") == 0:
+        if func == "zeDeviceGet" or func == "zeDeviceGetSubDevices":
+          f.write("      if (*(params->p" + name + ") != nullptr &&\n")
+          f.write("          *(params->ppCount) != nullptr) {\n")
+          f.write("        for (uint32_t i = 0; i < **(params->ppCount); ++i) {\n")
+          f.write("          str += \" " + name[1:] + "[\";\n")
+          f.write("          str += std::to_string(i);\n")
+          f.write("          str += \"] = \";\n")
+          f.write("          TO_HEX_STRING(str, (*(params->p" + name + "))[i]);\n")
+          f.write("        }\n")
+          f.write("      }\n")
+        else:
+          f.write("      if (*(params->p" + name + ") != nullptr) {\n")
+          if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
+            f.write("        str += \" " + name[1:] + " = \";\n")
+            f.write("        str += (*(params->p" + name + "))->data;\n")
+
+          else:
+            f.write("        str += \" " + name[1:] + " = \";\n")
+            f.write("        TO_HEX_STRING(str, **(params->p" + name + "));\n")
+
+          f.write("      }\n")
+      elif name.find("pptr") == 0 or name == "pCount" or name == "pSize":
         f.write("      if (*(params->p" + name + ") != nullptr) {\n")
         if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
           f.write("        str += \" " + name[1:] + " = \";\n")
-          f.write("        str += (*(params->p" + name + "))->data;\n")
+          f.write("        TO_HEX_STRING(str, (*(params->p" + name + "))->data);\n")
 
         else:
-          f.write("        str += \" " + name[1:] + " = \";\n")
+          f.write("        str += \" " + name[1:] + " = \" ;\n")
           f.write("        TO_HEX_STRING(str, **(params->p" + name + "));\n")
-
         f.write("      }\n")
-    elif name.find("pptr") == 0 or name == "pCount" or name == "pSize":
-      f.write("      if (*(params->p" + name + ") != nullptr) {\n")
-      if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
-        f.write("        str += \" " + name[1:] + " = \";\n")
-        f.write("        TO_HEX_STRING(str, (*(params->p" + name + "))->data);\n")
-
-      else:
-        f.write("        str += \" " + name[1:] + " = \" ;\n")
+      elif name.find("groupSize") == 0 and type.find("uint32_t*") == 0:
+        f.write("      if (*(params->p" + name + ") != nullptr) {\n")
+        f.write("        str += \" " + name + " = \" ;\n")
         f.write("        TO_HEX_STRING(str, **(params->p" + name + "));\n")
-      f.write("      }\n")
-    elif name.find("groupSize") == 0 and type.find("uint32_t*") == 0:
-      f.write("      if (*(params->p" + name + ") != nullptr) {\n")
-      f.write("        str += \" " + name + " = \" ;\n")
-      f.write("        TO_HEX_STRING(str, **(params->p" + name + "));\n")
-      f.write("      }\n")
-    elif name == "pName":
-      f.write("      if (*(params->p" + name + ") != nullptr) {\n")
-      f.write("        if (strlen(*(params->p" + name +")) == 0) {\n")
-      f.write("          str += \" " + name[1:] + " = \\\"\\\"\";\n")
-      f.write("        } else {\n")
-      f.write("          str += \" " + name[1:] + " = \\\"\";\n")
-      f.write("          TO_HEX_STRING(str, *(params->p" + name + "));\n")
-      f.write("          str += \"\\\"\";\n")
-      f.write("        }\n")
-      f.write("      }\n")
-  f.write("    }\n")
-  f.write("    str += \" -> \";\n")
-  f.write("    str +=  GetResultString(result);\n")
-  f.write("    str += \"(0x\" + std::to_string(result) + \")\\n\";\n")
+        f.write("      }\n")
+      elif name == "pName":
+        f.write("      if (*(params->p" + name + ") != nullptr) {\n")
+        f.write("        if (strlen(*(params->p" + name +")) == 0) {\n")
+        f.write("          str += \" " + name[1:] + " = \\\"\\\"\";\n")
+        f.write("        } else {\n")
+        f.write("          str += \" " + name[1:] + " = \\\"\";\n")
+        f.write("          TO_HEX_STRING(str, *(params->p" + name + "));\n")
+        f.write("          str += \"\\\"\";\n")
+        f.write("        }\n")
+        f.write("      }\n")
+    f.write("    }\n")
+    f.write("    str += \" -> \";\n")
+    f.write("    str +=  GetResultString(result);\n")
+    f.write("    str += \"(0x\" + std::to_string(result) + \")\\n\";\n")
 
 
   if func == "zeModuleCreate":
@@ -801,23 +811,29 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
     f.write("          start_time_host, end_time_host);\n")
   f.write("  }\n")
 
-def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map, enum_map):
+def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map):
   for func in func_list:
     assert func in param_map
     f.write("static void " + func + "OnEnter(\n")
     f.write("    " + get_param_struct_name(func) + "* params,\n")
-    f.write("    ze_result_t /* result */,\n")
+    if func == "zeDriverGetDefaultContext":
+      f.write("    ze_context_handle_t result,\n")
+    else:
+      f.write("    ze_result_t /* result */,\n")
     f.write("    void* global_user_data,\n")
     f.write("    [[maybe_unused]] void** instance_user_data) {\n")
-    gen_enter_callback(f, func, command_list_func_list, command_queue_func_list, synchronize_func_list_on_enter, param_map[func], enum_map)
+    gen_enter_callback(f, func, synchronize_func_list_on_enter, param_map[func])
     f.write("}\n")
     f.write("\n")
     f.write("static void " + func + "OnExit(\n")
     f.write("    [[maybe_unused]] " + get_param_struct_name(func) + "* params,\n")
-    f.write("    ze_result_t result,\n")
+    if func == "zeDriverGetDefaultContext":
+      f.write("    ze_context_handle_t result,\n")
+    else:
+      f.write("    ze_result_t result,\n")
     f.write("    void* global_user_data,\n")
     f.write("    [[maybe_unused]] void** instance_user_data) {\n")
-    gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map[func], enum_map)
+    gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map[func])
     f.write("}\n")
     f.write("\n")
 
@@ -877,6 +893,8 @@ def main():
       "zeCommandListAppendLaunchKernel",
       "zeCommandListAppendLaunchCooperativeKernel",
       "zeCommandListAppendLaunchKernelIndirect",
+      "zeCommandListAppendLaunchKernelWithArguments",
+      "zeCommandListAppendLaunchKernelWithParameters",
       "zeCommandListAppendMemoryCopy",
       "zeCommandListAppendMemoryFill",
       "zeCommandListAppendBarrier",
@@ -915,6 +933,8 @@ def main():
       "zeCommandListAppendLaunchKernel",
       "zeCommandListAppendLaunchCooperativeKernel",
       "zeCommandListAppendLaunchKernelIndirect",
+      "zeCommandListAppendLaunchKernelWithArguments",
+      "zeCommandListAppendLaunchKernelWithParameters",
       "zeCommandListAppendMemoryCopy",
       "zeCommandListAppendMemoryFill",
       "zeCommandListAppendBarrier",
@@ -951,7 +971,7 @@ def main():
 
   gen_result_converter(dst_file, enum_map)
   gen_structure_type_converter(dst_file, enum_map)
-  gen_callbacks(dst_file, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map, enum_map)
+  gen_callbacks(dst_file, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map)
   gen_api(dst_file, func_list, kfunc_list)
 
   l0_exp_file.close()
