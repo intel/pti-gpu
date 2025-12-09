@@ -64,6 +64,25 @@ if(TARGET LevelZero::level-zero OR TARGET unified-runtime::loader)
 endif()
 
 if (TARGET LevelZero::level-zero)
+  add_executable(ze_event_manager_tests ze_event_manager_tests.cc)
+  target_include_directories(
+    ze_event_manager_tests
+    PUBLIC "${PROJECT_SOURCE_DIR}/src/levelzero"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src"
+            "${PROJECT_SOURCE_DIR}/src/utils"
+            "${PROJECT_SOURCE_DIR}/include"
+            ${PROJECT_BINARY_DIR}
+            "${PROJECT_BINARY_DIR}/include"
+  )
+
+   target_link_libraries(ze_event_manager_tests PUBLIC GTest::gmock
+     GTest::gtest_main LevelZero::level-zero spdlog::spdlog fmt::fmt)
+
+   gtest_discover_tests(
+      ze_event_manager_tests
+      DISCOVERY_TIMEOUT 60
+      PROPERTIES LABELS "unit")
+
   add_executable(local_ze_collection_suite local_ze_collection_fixture.cc)
   target_include_directories(
     local_ze_collection_suite

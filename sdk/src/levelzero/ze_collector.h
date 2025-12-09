@@ -45,6 +45,7 @@
 #include "ze_collector_cb_helpers.h"
 #include "ze_driver_init.h"
 #include "ze_event_cache.h"
+#include "ze_event_managers.h"
 #include "ze_local_collection_helpers.h"
 #include "ze_timer_helper.h"
 #include "ze_utils.h"
@@ -101,7 +102,7 @@ struct ZeKernelCommand {
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
   ze_event_handle_t event_self = nullptr;  // in Local mode this event goes to the Bridge kernel
-  ze_event_handle_t event_swap = nullptr;  // event created in Local collection mode
+  ZeEventView<ZeEventPool> event_swap;     // event created in Local collection mode
   ze_device_handle_t device =
       nullptr;  // Device where the operation is submitted, associated with command list
   uint64_t kernel_id = 0;
@@ -310,11 +311,13 @@ class ZeCollector {
       anchor_device_time = helper->gpu_timestamp_;
     }
     current_host_time = utils::GetTime();
+
     uint64_t current_device_time = anchor_device_time + ((current_host_time - anchor_host_time) /
                                                          timer_helpers[device]->coeff_);
 
     *host_time = current_host_time;
     *device_time = current_device_time;
+
     return ZE_RESULT_SUCCESS;
   }
 
@@ -422,7 +425,6 @@ class ZeCollector {
     SPDLOG_CRITICAL("In {}, Cannot stop L0 Tracing, tid: {}", __FUNCTION__,
                     thread_local_pid_tid_info.tid);
     PTI_ASSERT(false);
-    return;
   }
 
   void DisableTracer() {
@@ -622,7 +624,6 @@ class ZeCollector {
         fcallback_(fcallback),
         callback_data_(callback_data),
         event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP),
-        swap_event_pool_(512),
         startstop_mode_changer(this) {
     CreateDeviceMap(drv_list);
     DetermineIfCounterEventsPossible(drv_list);
@@ -937,23 +938,6 @@ class ZeCollector {
 
   /**
    *  \internal
-   *  \warning To be called only after the corresponding Command is processed
-   *  \warning lock to be acquired in caller chain
-   */
-  void CleanDestroyedEvent(bool destroyed, ze_event_handle_t event) {
-    if (destroyed) {
-      destroyed_events_.erase(event);
-      ze_event_handle_t swap_event = swap_event_pool_.RemoveKeyEventFromShadowCache(event);
-      SPDLOG_TRACE("--- RemoveKeyEventFromShadowCache returned: {}",
-                   static_cast<const void*>(swap_event));
-      if (swap_event != nullptr) {
-        swap_event_pool_.ReturnSwapEvent(swap_event);
-      }
-    }
-  }
-
-  /**
-   *  \internal
    *  \warning lock to be acquired in caller chain
    */
   bool QueryEventStatusUnlessDestroyed(ze_event_handle_t event, ze_result_t& status) {
@@ -1028,7 +1012,6 @@ class ZeCollector {
 
           SPDLOG_TRACE("\tEvent SIGNALED or destroyed!");
           ProcessCallCommand(command, kids, kcexecrec);
-          CleanDestroyedEvent(destroyed, command->event_self);
           it = kernel_command_list_.erase(it);
         } else {  // command not ready yet
           it++;
@@ -1069,7 +1052,6 @@ class ZeCollector {
         SPDLOG_TRACE("\tFence Query2 {} - {}.", (void*)command, (void*)fence);
         ProcessCallCommand(command, kids, kcexecrec);
         // TODO - check if we need to clean up the fence event
-        // CleanDestroyedEvent(destroyed, command->event_self);
         it = kernel_command_list_.erase(it);
         done = true;
       } else if (command->event_self != nullptr) {
@@ -1077,7 +1059,6 @@ class ZeCollector {
         bool destroyed = QueryEventStatusUnlessDestroyed(command->event_self, status);
         if (destroyed || status == ZE_RESULT_SUCCESS) {
           ProcessCallCommand(command, nullptr, kcexecrec);
-          CleanDestroyedEvent(destroyed, command->event_self);
           it = kernel_command_list_.erase(it);
         } else {  // command not ready yet
           it++;
@@ -1278,8 +1259,8 @@ class ZeCollector {
     ze_kernel_timestamp_result_t timestamp{};
 
     ze_event_handle_t event_to_query = command->event_self;
-    if (ZeCollectionMode::Local == collection_mode_ && command->event_swap != nullptr) {
-      event_to_query = command->event_swap;
+    if (ZeCollectionMode::Local == collection_mode_ && command->event_swap.Get() != nullptr) {
+      event_to_query = command->event_swap.Get();
     }
     SPDLOG_TRACE("\tQuery KernelTimestamp on event: {}", static_cast<const void*>(event_to_query));
     overhead::Init();
@@ -1382,9 +1363,6 @@ class ZeCollector {
     for (auto& cmd : commands) {
       if (collection_mode_ != ZeCollectionMode::Local) {
         event_cache_.ReleaseEvent(cmd->event_self);
-      } else {
-        CleanDestroyedEvent(destroyed_events_.find(cmd->event_self) != destroyed_events_.end(),
-                            cmd->event_self);
       }
     }
   }
@@ -1613,20 +1591,6 @@ class ZeCollector {
     if (*(params->phEvent) != nullptr) {
       ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*(params->phEvent), kids);
-
-      if (ZeCollectionMode::Local == collector->collection_mode_) {
-        ze_event_handle_t swap_event =
-            collector->swap_event_pool_.GetSwapEventFromShadowCache(*(params->phEvent));
-        SPDLOG_TRACE("--- In {} , self_event: {}, swap_event: {}", __FUNCTION__,
-                     static_cast<const void*>((*(params->phEvent))),
-                     static_cast<const void*>(swap_event));
-        if (nullptr != swap_event) {
-          ze_result_t status = zeEventHostReset(swap_event);
-          if (status != ZE_RESULT_SUCCESS) {
-            SPDLOG_WARN("\tIn {} zeEventHostReset returned: {}, ", __FUNCTION__, (uint32_t)status);
-          }
-        }
-      }
     }
   }
 
@@ -1931,7 +1895,6 @@ class ZeCollector {
 
     SPDLOG_TRACE("\tcontext: {}, device: {}", (void*)context, (void*)device);
 
-    command->event_swap = nullptr;
     if (ZeCollectionMode::Local != collector->collection_mode_) {
       if (signal_event == nullptr) {
         signal_event = collector->event_cache_.GetEvent(context);
@@ -1946,29 +1909,13 @@ class ZeCollector {
       // Target kernel will signal the new ("swap") event with Timestamp enabled
       // Bridge Kernel will signal the Target Kernel initial event
       if (signal_event != nullptr) {
-        ze_event_handle_t swap_event =
-            collector->swap_event_pool_.GetSwapEventFromShadowCache(signal_event);
-        SPDLOG_TRACE("\t\tContext: {}, Device: {}, self_event: {}, swap_event: {}", (void*)context,
-                     (void*)device, (void*)(signal_event), (void*)(swap_event));
-        command->event_self = signal_event;
-        if (nullptr == swap_event) {
-          swap_event = collector->swap_event_pool_.GetEvent(context);
-          PTI_ASSERT(swap_event != nullptr);
-          collector->swap_event_pool_.StoreEventsToShadowCache(command->event_self, swap_event);
-          SPDLOG_TRACE("\t\tCreated swap_event: {}", static_cast<const void*>(swap_event));
+        command->event_self = signal_event;  // save signal event
+        if (command->event_swap.Empty()) {
+          command->event_swap = collector->event_pool_manager_.AcquireEvent(context);
         }
-        // both should not be signalled.
-        // this verifies that EventReset handled properly, as a lot of events might re-used
-        //
-        // However with UR the behaviour changed - events come signalled
-        // TODO: clarify it with UR
-        // PTI_ASSERT(ZE_RESULT_NOT_READY == zeEventQueryStatus(signal_event));
-        // PTI_ASSERT(ZE_RESULT_NOT_READY == zeEventQueryStatus(swap_event));
-
-        command->event_swap = swap_event;
-        signal_event = command->event_swap;
+        signal_event = command->event_swap.Get();
         SPDLOG_TRACE("\t\t swap event: {}, self_event: {}",
-                     static_cast<const void*>(command->event_swap),
+                     static_cast<const void*>(command->event_swap.Get()),
                      static_cast<const void*>(command->event_self));
       } else {
         signal_event = collector->event_cache_.GetEvent(context);
@@ -2047,12 +1994,12 @@ class ZeCollector {
 
     // it could be that event swap was not needed  - in this case event_swap would be 0
     // and we can not append Bridge kernel
-    if (nullptr != command->event_swap && ZeCollectionMode::Local == collection_mode_) {
+    if (command->event_swap.Get() != nullptr && ZeCollectionMode::Local == collection_mode_) {
       bool append_res = true;
       if (ShouldInjectSignalEvent()) {
         SPDLOG_DEBUG("\t\t Will be appending WaitAndSignal command!");
         append_res = A2AppendWaitAndSignalEvent(command->command_list, command->event_self,
-                                                command->event_swap);
+                                                command->event_swap.Get());
       } else {
         SPDLOG_DEBUG("\t\t Will be appending Bridge command!");
         if (command->props.type == KernelCommandType::kKernel) {
@@ -2060,7 +2007,7 @@ class ZeCollector {
               bridge_kernel_pool_.GetMarkKernel(command->context, command->device);
           PTI_ASSERT(kernel != nullptr);
           append_res = A2AppendBridgeKernel(kernel, command->command_list, command->event_self,
-                                            command->event_swap);
+                                            command->event_swap.Get());
         } else if (command->props.type == KernelCommandType::kMemory) {
           SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
                        static_cast<const void*>(command->props.src_device),
@@ -2069,11 +2016,11 @@ class ZeCollector {
           auto buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
           PTI_ASSERT(buffer != nullptr);
           append_res = A2AppendBridgeMemoryCopyOrFillEx(command->command_list, command->event_self,
-                                                        command->event_swap, buffer,
+                                                        command->event_swap.Get(), buffer,
                                                         device_buffer_pool_.buffer_size_);
         } else if (command->props.type == KernelCommandType::kCommand) {
           append_res = A2AppendBridgeBarrier(command->command_list, command->event_self,
-                                             command->event_swap);
+                                             command->event_swap.Get());
         }
       }
       PTI_ASSERT(append_res);
@@ -2974,9 +2921,7 @@ class ZeCollector {
         collector->ProcessCalls(nullptr, nullptr);
       }
       collector->event_cache_.ReleaseContext(*(params->phContext));
-      if (collector->collection_mode_ == ZeCollectionMode::Local) {
-        collector->swap_event_pool_.Clean(*(params->phContext));
-      }
+      collector->event_pool_manager_.Clear(*(params->phContext));
     }
   }
 
@@ -3062,7 +3007,7 @@ class ZeCollector {
 
   A2BridgeKernelPool bridge_kernel_pool_;
   A2DeviceBufferPool device_buffer_pool_;
-  A2EventPool swap_event_pool_;
+  ZeEventPoolManager event_pool_manager_;
 
   Level0Wrapper l0_wrapper_;
 

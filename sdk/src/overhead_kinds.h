@@ -13,9 +13,9 @@
  * overhead captured is trickled into the buffer stream via buffer callback -
  * ocallback.
  */
-#include <pti/pti_driver_levelzero_api_ids.h>
-// #include <pti/pti_driver_opencl_api_ids.h>
+#include <type_traits>
 
+#include "pti/pti_driver_levelzero_api_ids.h"
 #include "unikernel.h"
 #include "utils.h"
 
@@ -28,8 +28,8 @@ inline constexpr auto kOhThreshold =
     1.00;  // 1ns threshhold by default -- TODO -- make this setAttributable
 
 enum class OverheadRuntimeType {
-  OVERHEAD_RUNTIME_TYPE_SYCL = 0,
-  OVERHEAD_RUNTIME_TYPE_L0,
+  kSycl = 0,
+  kL0,
 };
 
 typedef void (*OnZeOverheadFinishCallback)(void* data, ZeKernelCommandExecutionRecord& kcexec);
@@ -117,10 +117,10 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
   if (overhead_it != map_overhead_per_kind.cend()) {
     uint64_t duration = end_time_ns - overhead_it->second._overhead_start_timestamp_ns;
     overhead_it->second._overhead_duration_ns += duration;
-    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_SYCL) {
+    if (runtime_type == OverheadRuntimeType::kSycl) {
       overhead_it->second._overhead_count += 1;
     }
-    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0) {
+    if (runtime_type == OverheadRuntimeType::kL0) {
       overhead_it->second._overhead_count += 1;
     }
     if ((overhead_it->second._overhead_duration_ns / kOhThreshold) > 1) {
@@ -128,8 +128,7 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
       overhead_it->second._overhead_thread_id = thread_local_pid_tid_info.tid;
       overhead_it->second._api_id = api_id;  // Turn this
       // back on if we need to propagate api_name to user.
-      if ((runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0) &&
-          (ocallback_ != nullptr)) {
+      if ((runtime_type == OverheadRuntimeType::kL0) && (ocallback_ != nullptr)) {
         ocallback_(&overhead_it->second, overhead_data);
       }
       ResetRecord();
@@ -150,17 +149,16 @@ inline void FiniSycl(OverheadRuntimeType runtime_type) {
   if (overhead_it != map_overhead_per_kind.cend()) {
     uint64_t duration = end_time_ns - overhead_it->second._overhead_start_timestamp_ns;
     overhead_it->second._overhead_duration_ns += duration;
-    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_SYCL) {
+    if (runtime_type == OverheadRuntimeType::kSycl) {
       overhead_it->second._overhead_count += 1;
     }
-    if (runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0) {
+    if (runtime_type == OverheadRuntimeType::kL0) {
       overhead_it->second._overhead_count += 1;
     }
     if ((overhead_it->second._overhead_duration_ns / kOhThreshold) > 1) {
       overhead_it->second._overhead_end_timestamp_ns = end_time_ns;
       overhead_it->second._overhead_thread_id = utils::GetTid();
-      if ((runtime_type == OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_SYCL) &&
-          (ocallback_ != nullptr)) {
+      if ((runtime_type == OverheadRuntimeType::kSycl) && (ocallback_ != nullptr)) {
         ocallback_(&overhead_it->second, overhead_data);
       }
       ResetRecord();
@@ -168,11 +166,36 @@ inline void FiniSycl(OverheadRuntimeType runtime_type) {
   }
 }
 
+template <typename E>
+class ScopedOverheadCollector {
+ public:
+  constexpr explicit ScopedOverheadCollector(E api_id) : identifier_(api_id) {
+    static_assert(std::is_enum_v<E>, "Must be overhead enum type");
+    Init();
+  }
+
+  ScopedOverheadCollector(const ScopedOverheadCollector&) = delete;
+  ScopedOverheadCollector& operator=(const ScopedOverheadCollector&) = delete;
+  ScopedOverheadCollector(ScopedOverheadCollector&&) = delete;
+  ScopedOverheadCollector& operator=(ScopedOverheadCollector&&) = delete;
+
+  ~ScopedOverheadCollector() noexcept {
+    if constexpr (std::is_same_v<E, pti_api_id_driver_levelzero>) {
+      FiniLevel0(OverheadRuntimeType::kL0, identifier_);
+    }
+    // Remove and add SYCL/other runtimes here as needed.
+    static_assert(std::is_same_v<E, pti_api_id_driver_levelzero>, "Unsupported overhead enum type");
+  }
+
+ private:
+  E identifier_;
+};
+
 }  // namespace overhead
 
 static inline void overhead_fini(pti_api_id_driver_levelzero api_id) {
   // std::string o_api_string = l0_api;
-  overhead::FiniLevel0(overhead::OverheadRuntimeType::OVERHEAD_RUNTIME_TYPE_L0, api_id);
+  overhead::FiniLevel0(overhead::OverheadRuntimeType::kL0, api_id);
 }
 
 #endif  // PTI_TOOLS_OVERHEAD_H_
