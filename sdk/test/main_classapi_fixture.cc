@@ -4,7 +4,7 @@
 // Copyright © Intel Corporation
 // SPDX-License-Identifier: MIT
 // =============================================================
-
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -69,6 +69,10 @@ struct ClassTestData {
     std::fill_n(device_uuid_test.begin(), device_uuid_test.size(), 0);
     queue_test = nullptr;
   }
+
+ private:
+  ClassTestData() = default;
+  ~ClassTestData() = default;
 };
 
 float Check(const std::vector<float>& a, float value) {
@@ -135,7 +139,7 @@ void Compute(sycl::queue queue, const std::vector<float>& a, const std::vector<f
 class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, bool>> {
  protected:
   void SetUp() override {  // Called right after constructor before each test
-    ClassTestData().Reset();
+    ClassTestData::Get().Reset();
     try {
       dev_ = sycl::device(sycl::gpu_selector_v);
       auto* device_l0_test = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(dev_);
@@ -414,6 +418,7 @@ TEST_P(ClassApiFixtureTest, ClassApiCallsCoarseGranularity) {
     EnableClassApis(true, pti_api_class::PTI_API_CLASS_ALL, pti_api_group_id::PTI_API_GROUP_ALL);
     RunGemmNoTrace();
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
     ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
     EXPECT_EQ(ClassTestData::Get().zecall_present, true);
     EXPECT_EQ(ClassTestData::Get().urcall_present, false);
@@ -1389,4 +1394,11 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(std::make_tuple(true, true, true), std::make_tuple(true, true, false),
                       std::make_tuple(false, true, true), std::make_tuple(false, true, false),
                       std::make_tuple(true, false, true), std::make_tuple(true, false, false),
-                      std::make_tuple(false, false, true), std::make_tuple(false, false, false)));
+                      std::make_tuple(false, false, true), std::make_tuple(false, false, false)),
+
+    [](const testing::TestParamInfo<ClassApiFixtureTest::ParamType>& info) {
+      return fmt::format("Use_ClassAPI_{}_Use_All_Classes_{}_Use_All_Groups_{}",
+                         std::get<0>(info.param) ? "On" : "Off",
+                         std::get<1>(info.param) ? "On" : "Off",
+                         std::get<2>(info.param) ? "On" : "Off");
+    });
