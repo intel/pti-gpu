@@ -25,6 +25,26 @@
             "name": "temporal",
             "platform": ["Linux"],
             "scenarios": ["-d --session test --start-paused", "--session test --start-paused --chrome-call-logging --chrome-kernel-logging", "-h --session test --start-paused", "-t --session test --start-paused"]
+        },
+        {
+            "name": "event_reset_immediate_cl",
+            "platform": ["Windows","Linux"],
+            "scenarios": ["-h"]
+        },
+        {
+            "name": "event_reset_cl_with_fence",
+            "platform": ["Windows","Linux"],
+            "scenarios": ["-h"]
+        },
+        {
+            "name": "event_reset_cl_with_barrier",
+            "platform": ["Windows","Linux"],
+            "scenarios": ["-h"]
+        },
+        {
+            "name": "event_reset_cl_with_queue_sync",
+            "platform": ["Windows","Linux"],
+            "scenarios": ["-h"]
         }
     ]
 }

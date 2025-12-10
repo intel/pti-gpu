@@ -905,6 +905,30 @@ struct ZeDeviceSubmissions {
     metric_queries_staged_.clear();
   }
 
+  inline void RevertStagedKernelCommandAndMetricQueriesForEvent(ze_event_handle_t event) {
+    auto cit = commands_staged_.begin();
+    auto mit = metric_queries_staged_.begin();
+    while (cit != commands_staged_.end()) {
+      ZeCommand *cmd = *cit;
+      ZeCommandMetricQuery *cmd_query = *mit;
+
+      if (cmd->event_ != event) {
+        cit++;
+        mit++;
+        continue;
+      }
+
+      // remove from staged lists
+      cit = commands_staged_.erase(cit);
+      mit = metric_queries_staged_.erase(mit);
+
+      commands_free_pool_.push_back(cmd);
+      if (cmd_query != nullptr) {
+        metric_queries_free_pool_.push_back(cmd_query);
+      }
+    }
+  }
+
   inline ZeCommandMetricQuery *GetCommandMetricQuery(void) {
     ZeCommandMetricQuery *query;
 
@@ -2663,10 +2687,12 @@ class ZeCollector {
       }
     }
     else {
-      ze_result_t status = ZE_FUNC(zeEventQueryKernelTimestamp)(command->event_, &timestamp);
-      if (status != ZE_RESULT_SUCCESS) {
-        std::cerr << "[ERROR] Unable to query event for timestamps" << std::endl;
-        return;
+      if (command->event_ != nullptr) {
+        ze_result_t status = ZE_FUNC(zeEventQueryKernelTimestamp)(command->event_, &timestamp);
+        if (status != ZE_RESULT_SUCCESS) {
+          std::cerr << "[ERROR] Unable to query event for timestamps" << std::endl;
+          return;
+        }
       }
     }
 
@@ -3149,6 +3175,42 @@ class ZeCollector {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       if (ZE_FUNC(zeEventQueryStatus)(*(params->phEvent)) == ZE_RESULT_SUCCESS) {
         collector->ProcessCommandsSubmittedOnSignaledEvent(*(params->phEvent), kids);
+      }
+      else {
+        // Event is not signaled on destroy, removing associated commands
+        global_device_submissions_mutex_.lock_shared();
+        // discard event associated staged commands
+        local_device_submissions_.RevertStagedKernelCommandAndMetricQueriesForEvent(*(params->phEvent));
+        // discard event associated submitted commands
+        auto it_cmd = local_device_submissions_.commands_submitted_.begin();
+        while (it_cmd != local_device_submissions_.commands_submitted_.end()) {
+          ZeCommand *command = *it_cmd;
+          if (command->event_ == *(params->phEvent)) {
+            std::cerr << "[INFO] Remove command from submitted commands on event destroy" << std::endl;
+            local_device_submissions_.commands_free_pool_.push_back(command);
+            it_cmd = local_device_submissions_.commands_submitted_.erase(it_cmd);
+            continue;
+          }
+          ++it_cmd;
+        }
+        global_device_submissions_mutex_.unlock_shared();
+        // Non immediate command list
+        collector->command_lists_mutex_.lock();
+        auto it = collector->command_lists_.begin();
+        while (it != collector->command_lists_.end()) {
+          auto cmd_it = it->second->commands_.begin();
+          while (cmd_it != it->second->commands_.end()) {
+            ZeCommand *command = *cmd_it;
+            if (command->event_ == *(params->phEvent)) {
+              std::cerr << "[INFO] Remove command from command list on event destroy" << std::endl;
+              cmd_it = it->second->commands_.erase(cmd_it);
+              continue;
+            }
+            ++cmd_it;
+          }
+          ++it;
+        }
+        collector->command_lists_mutex_.unlock();
       }
     }
   }
@@ -4570,8 +4632,42 @@ class ZeCollector {
 
     collector->command_lists_mutex_.lock();
     auto it = collector->command_lists_.find(*(params->phCommandList));
+    if (it != collector->command_lists_.end()) {
+      if (it->second->immediate_) {
+        if (!it->second->in_order_) {
+          std::cerr << "[WARNING] Event reset in out-of-order immediate command list" << std::endl;
+        }
+        // handle immediate command list
+        global_device_submissions_mutex_.lock_shared();
+        auto it_cmd = local_device_submissions_.commands_submitted_.begin();
+        bool process_commands = false;
+        while (it_cmd != local_device_submissions_.commands_submitted_.end()) {
+          ZeCommand *command = *it_cmd;
+          if (command->command_list_ == *(params->phCommandList)) {
+            // check if reset event is associated with any command
+            if (command->event_ == *(params->phEvent)) {
+                // found a command associated with this event
+                // wait for the event to be signaled before processing commands
+                auto status = ZE_FUNC(zeEventHostSynchronize)(command->event_, UINT64_MAX);
+                if (status != ZE_RESULT_SUCCESS) {
+                  process_commands = false;
+                  std::cerr << "[ERROR] Failed to synchronize event when tracing event reset on device" << std::endl;
+                  break;
+                }
+                process_commands = true;
+            }
+          }
+          ++it_cmd;
+        }
+        if (process_commands) {
+          // Associated commands found for immediate command list, process them
+          collector->ProcessCommandsSubmitted(nullptr);
+        }
+        global_device_submissions_mutex_.unlock_shared();
+      }
+    }
+
     if ((it != collector->command_lists_.end()) && !(it->second->immediate_)) {
-      // TODO: handle immediate command list?
       auto it2 = it->second->event_to_timestamp_seq_.find(*(params->phEvent));
       if (it2 != it->second->event_to_timestamp_seq_.end()) {
         int slot = it->second->num_timestamps_on_event_reset_++;
