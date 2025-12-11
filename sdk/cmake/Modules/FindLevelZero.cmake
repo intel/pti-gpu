@@ -95,6 +95,17 @@ if(LevelZero_PkgConfig_DIR)
   set(LevelZero_VERSION ${LEVEL_ZERO_VER_FOUND})
 endif()
 
+# On Windows, the driver installs a version of the loader sdk without pc file.
+# However, the version can be found in the path to the .lib. The pc file is
+# present when downloading the sdk from GitHub releases:
+# https://github.com/oneapi-src/level-zero/releases
+if(NOT DEFINED LevelZero_VERSION AND WIN32)
+  string(REGEX MATCH "[0-9]+\.[0-9]+\.[0-9]+" LEVEL_ZERO_VER_FOUND "${LevelZero_LIBRARY_DIR}")
+  if (DEFINED LEVEL_ZERO_VER_FOUND AND NOT LEVEL_ZERO_VER_FOUND STREQUAL "")
+    set(LevelZero_VERSION ${LEVEL_ZERO_VER_FOUND})
+  endif()
+endif()
+
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(
   LevelZero
