@@ -18,31 +18,3 @@ def copy(src_path, dst_path, file_list):
     assert os.path.isfile(src_file)
 
     shutil.copy(src_file, dst_file)
-
-def download(url, download_path):
-  if not os.path.exists(download_path):
-    os.mkdir(download_path)
-
-  url_items = url.split('/')
-  file_name = os.path.join(download_path, url_items[len(url_items) - 1])
-  command = "curl " + url + " --output " + file_name
-  shell = True
-  if sys.platform != 'win32':
-    shell = False
-    command = command.split(" ")
-
-  if not os.path.isfile(file_name):
-    subprocess.call(command, shell = shell)
-
-  return file_name
-
-def unpack(arch_file, target_path):
-  if (not os.path.exists(target_path)):
-    os.mkdir(target_path)
-  subprocess.call(["tar", "-xf", arch_file, "-C", target_path])
-
-def get_root(build_path):
-  sample_path, build_dir = os.path.split(build_path)
-  samples_path, sample_dir = os.path.split(sample_path)
-  root_path, samples_dir = os.path.split(samples_path)
-  return root_path

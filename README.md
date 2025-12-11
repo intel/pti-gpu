@@ -75,8 +75,6 @@ You may obtain a copy of the License at https://opensource.org/license/MIT
     - [ze_metric_streamer](samples/ze_metric_streamer) - provides a list of hottest Level Zero GPU kernels along with percent of cycles it was active, stall and idle (metrics are collected in *streamer* mode);
 - tools for OpenMP*:
     - [omp_hot_regions](samples/omp_hot_regions) - provides a list of hottest parallel (for CPU) and target (for GPU) OpenMP* regions;
-- tools for binary instrumentation:
-    - [gpu_perfmon_read](samples/gpu_perfmon_read) - prints GPU kernel assembly (GEN ISA) annotated by specific HW metric, which is accumulated in EU PerfMon register;
 - utilities:
     - [dpc_info](samples/dpc_info) - prints information on available platforms and devices in DPC++;
     - [ze_info](samples/ze_info) - prints information on available platforms and devices in Level Zero;
