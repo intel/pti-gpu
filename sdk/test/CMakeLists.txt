@@ -725,3 +725,7 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   # It is enabled only for functional test as there is an issue observed with Intel OpenMP with Address Sanitizer.
   set_tests_properties(run-omp_vec_add PROPERTIES LABELS "functional;samples")
 endif()
+
+if(PTI_FUZZ)
+  add_subdirectory(fuzz)
+endif()

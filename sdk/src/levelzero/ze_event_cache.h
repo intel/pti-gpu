@@ -7,6 +7,9 @@
 #ifndef PTI_TOOLS_ZE_TRACER_ZE_EVENT_CACHE_H_
 #define PTI_TOOLS_ZE_TRACER_ZE_EVENT_CACHE_H_
 
+#include <level_zero/ze_api.h>
+#include <spdlog/spdlog.h>
+
 #include <map>
 #include <mutex>
 #include <vector>
@@ -38,7 +41,9 @@ class ZeEventCache {
         overhead::Init();
         status = zeEventDestroy(event);
         overhead_fini(zeEventDestroy_id);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        if (status != ZE_RESULT_SUCCESS) {
+          SPDLOG_INFO("zeEventDestroy failed with status: {:x}", static_cast<uint32_t>(status));
+        }
       }
     }
     for (auto& value : event_pools_) {
@@ -46,7 +51,9 @@ class ZeEventCache {
         overhead::Init();
         ze_result_t status = zeEventPoolDestroy(pool);
         overhead_fini(zeEventPoolDestroy_id);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        if (status != ZE_RESULT_SUCCESS) {
+          SPDLOG_INFO("zeEventPoolDestroy failed with status: {:x}", static_cast<uint32_t>(status));
+        }
       }
     }
   }

@@ -283,10 +283,6 @@ if(BUILD_TESTING AND PTI_BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
-if(BUILD_TESTING AND PTI_FUZZ)
-  add_subdirectory(fuzz)
-endif()
-
 if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
   include(cmake/coverage.cmake)
 endif()

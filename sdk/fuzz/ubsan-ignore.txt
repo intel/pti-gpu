@@ -1,4 +1,0 @@
-# Library functions that exculded from undefined behaviour sanitizer analysis 
-# very few high level ones could  here
-fun:ptiViewEnable
-fun:ptiViewDisable

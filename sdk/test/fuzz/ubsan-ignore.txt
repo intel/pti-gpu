@@ -1,0 +1,4 @@
+# Functions excluded from Undefined Behavior Sanitizer (UBSan) analysis.
+# Only a few high-level functions should be listed here.
+fun:ptiViewEnable
+fun:ptiViewDisable

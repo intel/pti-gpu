@@ -8,5 +8,5 @@ if (WIN32)
   set(CMAKE_CXX_COMPILER icx)
 endif()
 
-set(CMAKE_CXX_FLAGS_DEBUG_INIT "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls")
-set(CMAKE_C_FLAGS_DEBUG_INIT "-fsanitize=address,undefined")
+set(CMAKE_CXX_FLAGS_DEBUG_INIT "-fsanitize=address -Xarch_host -fsanitize=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+set(CMAKE_C_FLAGS_DEBUG_INIT "-fsanitize=address -Xarch_host -fsanitize=undefined")

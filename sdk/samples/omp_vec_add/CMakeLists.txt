@@ -18,10 +18,13 @@ add_executable(omp_vec_add main.c)
 
 target_include_directories(omp_vec_add PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities")
 
-target_compile_options(omp_vec_add PUBLIC -fiopenmp -fopenmp-targets=spir64
-  $<$<CONFIG:Debug>:-Xopenmp-target=spir64 -fno-sanitize=all>)
-target_link_options(omp_vec_add PUBLIC -fiopenmp -fopenmp-targets=spir64
-  $<$<CONFIG:Debug>:-Xopenmp-target=spir64 -fno-sanitize=all>)
+set(OPENMP_FLAGS
+  $<$<PLATFORM_ID:Linux>:-fiopenmp -fopenmp-targets=spir64>
+  $<$<PLATFORM_ID:Windows>:-Qiopenmp -Qopenmp-targets=spir64>
+)
+
+target_compile_options(omp_vec_add PUBLIC ${OPENMP_FLAGS})
+target_link_options(omp_vec_add PUBLIC ${OPENMP_FLAGS})
 
 # Allow building in-source and out-of-source
 if (NOT TARGET Pti::pti_view)
