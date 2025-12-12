@@ -11,7 +11,7 @@ if(WIN32)
 endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG_INIT
-    "-fsanitize=address -Xarch_host -fsanitize=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize-ignorelist=${PROJECT_SOURCE_DIR}/test/fuzz/ubsan-ignore.txt"
+    "-Xarch_host -fsanitize=address -Xarch_host -fsanitize=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize-ignorelist=${PROJECT_SOURCE_DIR}/test/fuzz/ubsan-ignore.txt"
 )
 set(CMAKE_C_FLAGS_DEBUG_INIT
-    "-fsanitize=address -Xarch_host -fsanitize=undefined")
+    "-Xarch_host -fsanitize=address -Xarch_host -fsanitize=undefined")
