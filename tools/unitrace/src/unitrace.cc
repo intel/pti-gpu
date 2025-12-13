@@ -983,7 +983,7 @@ int main(int argc, char *argv[]) {
       std::cerr << "[ERROR] Invalid command line" << std::endl;
       Usage(argv[0]);
     }
-    return 0;
+    return 1;
   }
 
   if (!utils::GetEnv("UNITRACE_Session").empty()) {
@@ -1170,6 +1170,7 @@ int main(int argc, char *argv[]) {
     if (execvp(app_args[0], app_args.data())) {
       std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
       Usage(argv[0]);
+      return 1;
     }
   }
 
@@ -1295,6 +1296,7 @@ int main(int argc, char *argv[]) {
   else {
     std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
     Usage(argv[0]);
+    return 1;
   }
 
   if (metrics_sampling_enabled || metrics_query_enabled) {
