@@ -219,9 +219,6 @@ class UniTracer {
       }
 #endif /* BUILD_WITH_OPENCL */
       ze_collector = ZeCollector::Create(&tracer->logger_, collector_options, ze_kcallback, ze_fcallback, tracer);
-      if (ze_collector == nullptr) {
-        std::cerr << "[WARNING] Unable to create kernel collector for L0 backend" << std::endl;
-      }
       tracer->ze_collector_ = ze_collector;
     }
 
@@ -427,11 +424,11 @@ class UniTracer {
       const ClCollector* cl_cpu_collector,
       const ClCollector* cl_gpu_collector,
       const char* type) {
-    PTI_ASSERT(
-        ze_collector != nullptr ||
-        cl_cpu_collector != nullptr ||
-        cl_gpu_collector != nullptr);
 
+    if ((ze_collector == nullptr) && (cl_cpu_collector == nullptr) && (cl_gpu_collector == nullptr)) {
+        return;
+    }
+    
     std::string stype = std::string(type);
 
     std::string ze_title =
@@ -536,11 +533,11 @@ class UniTracer {
       const ClCollector* cl_cpu_collector,
       const ClCollector* cl_gpu_collector,
       const char* type) {
-    PTI_ASSERT(
-        ze_collector != nullptr ||
-        cl_cpu_collector != nullptr ||
-        cl_gpu_collector != nullptr);
 
+    if ((ze_collector == nullptr) && (cl_cpu_collector == nullptr) && (cl_gpu_collector == nullptr)) {
+      return;
+    }
+    
     std::string ze_title =
       std::string("Total ") + std::string(type) +
       " Time for L0 backend (ns): ";

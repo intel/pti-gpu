@@ -495,14 +495,7 @@ class ZeMetricProfiler {
 
     logger_ = new Logger(log_name_, true, true);
     
-    if (devices_to_sample.length() > 0) {
-      auto list_devices_str = utils::SplitString (devices_to_sample, ',');
-      for (const auto &s : list_devices_str) {
-        if (!s.empty()) {
-          devices_to_sample_.insert (std::stoi(s.c_str()));
-        }
-      }
-    }
+    GetZeDevicesStringToSet(devices_to_sample_, devices_to_sample);
 
     EnumerateDevices(app_pid, dir);
   }
@@ -790,6 +783,7 @@ class ZeMetricProfiler {
 
         if ((metric_list.size() - 1) > max_num_of_stall_types) { // metric_list.size() includes IP
           std::cerr << "[ERROR] Number of stall types exceeds supported limit of " << max_num_of_stall_types << std::endl;
+          free (raw_metrics);          
           return;
         }
 

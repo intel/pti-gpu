@@ -424,38 +424,17 @@ int ParseArgs(int argc, char* argv[]) {
         std::cout << "[ERROR] Missing MPI ranks to sample" << std::endl;
         return -1;
       }
-      auto my_MPI_size = (utils::GetEnv("PMI_SIZE").empty()) ? utils::GetEnv("PMIX_SIZE") : utils::GetEnv("PMI_SIZE");
-      if (my_MPI_size.empty()) {
-        std::cout << "[ERROR] Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
-        return -1;
+      std::string ranks_to_sample_str = utils::GetEnv("UNITRACE_RanksToSample");
+      if (ranks_to_sample_str.empty()) {
+        utils::SetEnv("UNITRACE_RanksToSample", argv[i]);
+      } else {
+        ranks_to_sample_str += "," + std::string(argv[i]);
+        utils::SetEnv("UNITRACE_RanksToSample", ranks_to_sample_str.c_str());
       }
-      int32_t my_MPI_size_ = std::stoi(my_MPI_size);
-      auto my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-      if (my_MPI_rank.empty()) {
-        std::cout << "[ERROR] Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
+      ranks_to_sample.clear();
+      if (GetZeRanksToSample(ranks_to_sample) != 0) {
+        std::cerr << "[ERROR] Invalid MPI ranks to sample" << std::endl;
         return -1;
-      }
-      int32_t my_MPI_rank_ = std::stoi(my_MPI_rank);
-      auto list_mpi_ranks_str = utils::SplitString (argv[i], ',');
-      for (const auto &s : list_mpi_ranks_str) {
-        if (!s.empty()) {
-          bool is_number = std::find_if(s.begin(), s.end(), [] (unsigned char c) { return !std::isdigit(c); }) == s.end();
-          if (is_number) {
-            auto rank_to_sample = std::stoi(s.c_str());
-            if ((0 <= rank_to_sample) && (rank_to_sample < my_MPI_size_)) {
-              ranks_to_sample.insert (rank_to_sample);
-            } else {
-              if (my_MPI_rank_ == 0) {
-                std::cout << "[WARNING] Given MPI rank to sample (" << s << ") is out of bounds for given execution. Ignoring." << std::endl;
-              }
-            }
-          } else {
-            if (my_MPI_rank_ == 0) {
-              std::cout << "[ERROR] Given MPI rank to sample (" << s << ") is invalid" << std::endl;
-              return -1;
-            }
-          }
-        }
       }
       app_index += 2;
     } else if (strcmp(argv[i], "--devices-to-sample") == 0) {
@@ -465,18 +444,17 @@ int ParseArgs(int argc, char* argv[]) {
         return -1;
       }
       devices_to_sample_present = true;
-      auto list_devices_str = utils::SplitString (argv[i], ',');
-      for (const auto &s : list_devices_str) {
-        if (!s.empty()) {
-          bool is_number = std::find_if(s.begin(), s.end(), [] (unsigned char c) { return !std::isdigit(c); }) == s.end();
-          if (is_number) {
-            auto device_no = std::stoi(s.c_str());
-            devices_to_sample.insert (device_no);
-          } else {
-            std::cout << "[ERROR] Given device to sample (" << s << ") is invalid" << std::endl;
-            return -1;
-          }
-        }
+      std::string devices_to_sample_str = utils::GetEnv("UNITRACE_DevicesToSampleArg");
+      if (devices_to_sample_str.empty()) {
+        utils::SetEnv("UNITRACE_DevicesToSampleArg", argv[i]);
+      } else {
+        devices_to_sample_str += "," + std::string(argv[i]);
+        utils::SetEnv("UNITRACE_DevicesToSampleArg", devices_to_sample_str.c_str());
+      }
+      devices_to_sample.clear();
+      if (GetZeDevicesToSample(devices_to_sample) != 0) {
+        std::cout << "[ERROR] Invalid devices to sample" << std::endl;
+        return -1;
       }
       app_index += 2;
     } else if (strcmp(argv[i], "--metric-sampling") == 0 || strcmp(argv[i], "-k") == 0) {

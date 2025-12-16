@@ -1226,6 +1226,48 @@ inline ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t
 }
 
 class ZeCollector {
+ private:
+    // Helpers
+    static bool SampleThisRank() {
+      std::set<int> ranks_to_sample;
+      GetZeRanksToSample(ranks_to_sample);
+
+      // Check if rank is specified for tracing in MPI environment
+      if (ranks_to_sample.size() > 0) {
+        auto my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+        if (!my_MPI_rank.empty()) {
+            auto my_rank = std::stoi(my_MPI_rank);
+            if (ranks_to_sample.find(my_rank) == ranks_to_sample.end()) {
+              std::cout << "[INFO] MPI rank " << my_rank << " is not enabled for tracing or profiling" << std::endl;
+              return false;
+            }
+        }
+      }
+      return true;
+    }
+
+    static bool SampleThisDevice(ze_driver_handle_t driver) {
+      std::set<int> devices_to_sample;
+      GetZeDevicesToSample(devices_to_sample);
+
+      if (devices_to_sample.size() != 0) {
+        int global_dev_cnt = 0;
+        auto devices = GetDeviceList(driver);
+        for (auto device : devices) {
+          if (!devices_to_sample.empty()) {
+            if (devices_to_sample.find(global_dev_cnt) != devices_to_sample.end()) {
+              break;
+            }
+          }
+          global_dev_cnt++;
+        }
+        if (global_dev_cnt == static_cast<int>(devices.size())) {
+          std::cout << "[INFO] Device or devices visible to process " << utils::GetPid() << " are not enabled for tracing or profiling" << std::endl;
+          return false;
+        }
+      }
+      return true;
+    }
  public: // Interface
 
   static ZeCollector* Create(
@@ -1240,6 +1282,25 @@ class ZeCollector {
         ZE_MINOR_VERSION(version) >= 2);
 
     PTI_ASSERT(logger != nullptr);
+
+    if (!SampleThisRank()) {
+      return nullptr;
+    }
+	  
+    ze_driver_handle_t driver;
+    uint32_t count = 1;
+    if (ZE_FUNC(zeDriverGet)(&count, &driver) == ZE_RESULT_SUCCESS) {
+      if (!SampleThisDevice(driver)) {
+        return nullptr;
+      }
+      if (ZE_FUNC(zeDriverGetExtensionFunctionAddress)(driver, "zexKernelGetBaseAddress", (void **)&zexKernelGetBaseAddress) != ZE_RESULT_SUCCESS) {
+        zexKernelGetBaseAddress = nullptr;
+      }
+    }
+    else {
+      std::cerr << "[ERROR] Unable to get Level Zero driver" << std::endl;
+      return nullptr;
+	}
 
     std::string data_dir_name = utils::GetEnv("UNITRACE_DataDir");
     bool reset_event_on_device = true;
@@ -1262,14 +1323,6 @@ class ZeCollector {
       std::cerr << "[WARNING] Unable to create Level Zero tracer" << std::endl;
       delete collector;
       return nullptr;
-    }
-
-    ze_driver_handle_t driver;
-    uint32_t count = 1;
-    if (ZE_FUNC(zeDriverGet)(&count, &driver) == ZE_RESULT_SUCCESS) {
-      if (ZE_FUNC(zeDriverGetExtensionFunctionAddress)(driver, "zexKernelGetBaseAddress", (void **)&zexKernelGetBaseAddress) != ZE_RESULT_SUCCESS) {
-        zexKernelGetBaseAddress = nullptr;
-      }
     }
 
     collector->EnableTracing(tracer);

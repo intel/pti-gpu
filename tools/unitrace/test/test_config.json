@@ -45,6 +45,21 @@
             "name": "event_reset_cl_with_queue_sync",
             "platform": ["Windows","Linux"],
             "scenarios": ["-h"]
+	    },
+        {
+            "name": "mpi_test_4_ranks_filter_0_2",
+            "platform": ["Linux"],
+            "scenarios": ["-d --ranks-to-sample 0,2"]
+        },
+        {
+            "name": "mpi_test_1_rank_sample_device_0",
+            "platform": ["Linux"],
+            "scenarios": ["-d --devices-to-sample 0"]
+        },
+        {
+            "name": "mpi_test_1_rank_sample_device_256",
+            "platform": ["Linux"],
+            "scenarios": ["-d --devices-to-sample 256"]
         }
     ]
 }

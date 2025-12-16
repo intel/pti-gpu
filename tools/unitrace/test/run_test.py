@@ -60,7 +60,11 @@ def call_unidiff(scenario, output_dir, output_file_with_pid, expected_output_fil
         print(f"[ERROR] Unknown scenario: {scenario}")
         return 1
 
-def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_prog):
+def contains_non_whitespace(path):
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        return any(not ch.isspace() for ch in f.read())
+
+def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_prog, use_mpiexec=False, num_ranks=1, specific_test_case=None):
     output_dir = cmake_root_path + "/build/results"
     if platform.system() == "Windows":
         unitrace_exe = cmake_root_path + "/../build/unitrace.exe"
@@ -74,7 +78,8 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
     os.makedirs(output_dir, exist_ok = True)
 
     # Generate a unique output file name
-    output_file = f"output{scenarios}_{os.path.basename(test_case)}.txt".replace("--", "_").replace("-", "_").replace(" ","")
+    test_output_name = specific_test_case if specific_test_case else os.path.basename(test_case)
+    output_file = f"output{scenarios}_{test_output_name}.txt".replace("--", "_").replace("-", "_").replace(" ","")
     output_file_path = os.path.join(output_dir, output_file).replace("\\", "/")
 
     # Check if Unitrace executable exists
@@ -88,7 +93,13 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
         return 1
 
     # Prepare command here
-    command = [unitrace_exe]
+    command = []
+    
+    # Add mpiexec if requested
+    if use_mpiexec:
+        command.extend(["mpiexec", "-n", str(num_ranks)])
+    
+    command.append(unitrace_exe)
     scenario_set = set(scenarios.split(" "))
     for scenario in scenarios.split(" "):
         command.append(scenario)
@@ -163,10 +174,13 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 output_files.append(f)
             elif output_file.startswith(result_file_pattern[0]):
                 output_files.append(f)
-            if len(output_files) > 0:
+            if len(output_files) > 0 and not use_mpiexec:
                 break
         if output_files:
-            print(f"[INFO] Output file '{output_files[0]}' generated successfully.")
+            if use_mpiexec:
+                print(f"[INFO] MPI Output files generated: {output_files}")
+            else:
+                print(f"[INFO] Output file '{output_files[0]}' generated successfully.")
         else:
             print(f"[ERROR] Output file matching pattern '{output_file}' not found.", file = sys.stderr)
             return 1  # Returning non-zero indicates failure
@@ -223,17 +237,96 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
             elif not set(["-t","--device-timeline"]).isdisjoint(scenario_set):
                 scenario_d_or_t = "-t"
 
-            expected_output_file = extract_test_case_output(cmake_root_path, test_case_name, scenario_d_or_t)
+            if use_mpiexec:
+                # For MPI tests, the output file may have rank information
+                # We will pick the latest modified file for comparison
+                print(f"[INFO] MPI test detected, selecting latest output file for comparison.")
+                # Parse ranks from scenarios string if --ranks-to-sample is present
+                scenario_args = scenarios.split()
+                device_sampled = True
+                ranks_sampled = []
+                if "--ranks-to-sample" in scenario_args:
+                    ranks_arg_index = scenario_args.index("--ranks-to-sample")
+                    if ranks_arg_index + 1 < len(scenario_args):
+                        ranks_str = scenario_args[ranks_arg_index + 1]
+                        ranks_sampled = [int(rank.strip()) for rank in ranks_str.split(',') if int(rank.strip()) < num_ranks]
+                        print(f"[INFO] Sampled ranks detected: {ranks_sampled}")
+                elif "--devices-to-sample" in scenario_args:
+                    devices_arg_index = scenario_args.index("--devices-to-sample")
+                    if devices_arg_index + 1 < len(scenario_args):
+                        devices_str = scenario_args[devices_arg_index + 1]
+                        sampled_devices = [int(device.strip()) for device in devices_str.split(',')]
+                        print(f"[INFO] Sampled devices detected: {sampled_devices}")
+                        if len(sampled_devices) > 1:
+                            print(f"[ERROR] test don't support more then 1 device sampling for MPI tests.", file = sys.stderr)
+                            return 1
+                        if sampled_devices[0] != 0:
+                            device_sampled = False
+                        else:
+                            ranks_sampled = [0]
+                # Create ranks list from number of ranks
+                ranks_list = []
+                for rank in range(num_ranks):
+                    ranks_list.append(rank)
+                
+                expected_output_file = extract_test_case_output(cmake_root_path, test_case_name, scenario_d_or_t)
+                # Compare each sampled rank output
+                all_passed = True
+                for rank in ranks_list:
+                    rank_output_file = None
+                    for of in output_files:
+                        # Extract rank from filename before .txt extension
+                        if of.endswith('.txt'):
+                            # Get the part before .txt
+                            filename_without_ext = of[:-4]
+                            # Split by '.' and get the last part which should be the rank
+                            parts = filename_without_ext.split('.')
+                            if parts and parts[-1].isdigit() and int(parts[-1]) == rank:
+                                rank_output_file = of
+                                break
+                    if rank_output_file is None:
+                        print(f"[ERROR] Output file for rank {rank} not found among generated files.", file = sys.stderr)
+                        all_passed = False
+                        continue
 
-            output_file_with_pid = max(output_files, key = lambda f: os.path.getmtime(os.path.join(output_dir, f)))
-
-            # Call unidiff comparison
-            comparison_result = call_unidiff(scenario_d_or_t, output_dir, output_file_with_pid, expected_output_file)
-            if comparison_result != 0:
-                print(f"[ERROR] Unidiff comparison failed.", file = sys.stderr)
-                return 1
+                    if rank in ranks_sampled and device_sampled:
+                        # Call unidiff comparison
+                        comparison_result = call_unidiff(scenario_d_or_t, output_dir, rank_output_file, expected_output_file)
+                        if comparison_result != 0:
+                            print(f"[ERROR] Unidiff comparison failed for rank {rank}.", file = sys.stderr)
+                            all_passed = False
+                            break
+                    else:
+                        # check if rank_output_file is empty file or not
+                        output_file_with_path = os.path.join(output_dir, rank_output_file)
+                         # check if file has any character in it (not space)
+                        if contains_non_whitespace(output_file_with_path) == False:
+                            print(f"[INFO] Output file for rank {rank} is empty as expected since it is not sampled.")
+                        else:
+                            print(f"[ERROR] Output file for rank {rank} is not empty but it was not sampled.", file = sys.stderr)
+                            print("====Begin File Contents====")
+                            with open(output_file_with_path, 'r') as fp:
+                                contents = fp.read()
+                                print(contents)
+                            print("====End File Contents====")
+                            all_passed = False
+                            break
+                if all_passed:
+                    return 0
+                else:
+                    return 1
             else:
-                return 0
+                expected_output_file = extract_test_case_output(cmake_root_path, test_case_name, scenario_d_or_t)
+
+                output_file_with_pid = max(output_files, key = lambda f: os.path.getmtime(os.path.join(output_dir, f)))
+
+                # Call unidiff comparison
+                comparison_result = call_unidiff(scenario_d_or_t, output_dir, output_file_with_pid, expected_output_file)
+                if comparison_result != 0:
+                    print(f"[ERROR] Unidiff comparison failed.", file = sys.stderr)
+                    return 1
+                else:
+                    return 0
     except Exception as e:
           print(f"[ERROR] Occurred while running unitrace: {e}", file = sys.stderr)
           return 1
@@ -243,11 +336,14 @@ def main():
     parser.add_argument('-e', '--extra_test_prog', type=str)
     parser.add_argument('cmake_root_path')
     parser.add_argument('args', nargs='+')
+    parser.add_argument('--mpiexec', action='store_true', help='Run unitrace with mpiexec')
+    parser.add_argument('-n', '--num_ranks', type=int, default=1, help='Number of MPI ranks (default: 1)')
+    parser.add_argument('-t','--test_case', type=str, default=None, help='Specific test case name (not the test executable name)')
     args = parser.parse_args()
-
     scenario = os.environ["UNITRACE_OPTION"]
 
-    return run_unitrace(args.cmake_root_path, scenario, args.args[0], args.args[1:], args.extra_test_prog)
+    return run_unitrace(args.cmake_root_path, scenario, args.args[0], args.args[1:], 
+                       args.extra_test_prog, args.mpiexec, args.num_ranks, args.test_case)
 
 if __name__ == "__main__":
     sys.exit(main())

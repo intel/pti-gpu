@@ -13,6 +13,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <algorithm>
 
 #include <level_zero/ze_api.h>
 #include <level_zero/zet_api.h>
@@ -408,4 +409,77 @@ inline ze_api_version_t GetZeVersion() {
   return GetDriverVersion(driver_list.front());
 }
 
+inline int GetZeDevicesToSample(std::set<int>& devices_to_sample) {
+  std::string devices_to_sample_str = utils::GetEnv("UNITRACE_DevicesToSampleArg");
+  if (devices_to_sample_str.empty()) {
+    return -1;
+  }
+
+  auto list_devices_str = utils::SplitString (devices_to_sample_str, ',');
+  for (const auto &s : list_devices_str) {
+    if (!s.empty()) {
+      bool is_number = std::find_if(s.begin(), s.end(), [] (unsigned char c) { return !std::isdigit(c); }) == s.end();
+      if (is_number) {
+        auto device_to_sample = std::stoi(s.c_str());
+        devices_to_sample.insert (device_to_sample);
+      } else {
+          std::cerr << "[ERROR] Given device to sample (" << s << ") is invalid" << std::endl;
+          return -1;
+      }
+    }
+  }
+  return 0;
+}
+
+inline int GetZeRanksToSample(std::set<int>& ranks_to_sample) {
+  std::string ranks_to_sample_str = utils::GetEnv("UNITRACE_RanksToSample");
+  if (ranks_to_sample_str.empty()) {
+    return -1;
+  }
+
+  auto my_MPI_size = (utils::GetEnv("PMI_SIZE").empty()) ? utils::GetEnv("PMIX_SIZE") : utils::GetEnv("PMI_SIZE");
+  if (my_MPI_size.empty()) {
+    my_MPI_size = (utils::GetEnv("OMPI_COMM_WORLD_SIZE").empty()) ? utils::GetEnv("OMPI_UNIVERSE_SIZE") : utils::GetEnv("OMPI_COMM_WORLD_SIZE");
+  }
+  if (my_MPI_size.empty()) {
+    std::cerr << "[ERROR] PMI_SIZE or PMIX_SIZE or OMPI_COMM_WORLD_SIZE or OMPI_UNIVERSE_SIZE not set. Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
+    return -1;
+  }
+  int32_t my_size = std::stoi(my_MPI_size);
+  auto my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+  if (my_MPI_rank.empty()) {
+    std::cerr << "[ERROR] Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
+    return -1;
+  }
+  int32_t my_rank = std::stoi(my_MPI_rank);
+  auto list_mpi_ranks_str = utils::SplitString (ranks_to_sample_str, ',');
+  for (const auto &s : list_mpi_ranks_str) {
+    if (!s.empty()) {
+      bool is_number = std::find_if(s.begin(), s.end(), [] (unsigned char c) { return !std::isdigit(c); }) == s.end();
+      if (is_number) {
+        auto rank_to_sample = std::stoi(s.c_str());
+        if ((0 <= rank_to_sample) && (rank_to_sample < my_size)) {
+          ranks_to_sample.insert (rank_to_sample);
+        } else if (my_rank == 0) {
+            std::cerr << "[WARNING] Given MPI rank to sample (" << s << ") is out of bounds for given execution. Ignoring." << std::endl;
+        }
+      } else if (my_rank == 0) {
+          std::cerr << "[ERROR] Given MPI rank to sample (" << s << ") is invalid" << std::endl;
+          return -1;
+      }
+    }
+  }
+  return 0;
+}
+
+inline void GetZeDevicesStringToSet(std::set<int>& device_ids_to_sample, std::string& devices_to_sample) {
+  if (devices_to_sample.length() > 0) {
+      auto list_devices_str = utils::SplitString (devices_to_sample, ',');
+      for (const auto &s : list_devices_str) {
+        if (!s.empty()) {
+          device_ids_to_sample.insert (std::stoi(s.c_str()));
+        }
+      }
+  }
+}
 #endif // PTI_UTILS_ZE_UTILS_H_
