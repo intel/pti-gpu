@@ -181,7 +181,9 @@ void ZeDriverInit::InitSysmanDrivers() {
   if (call_zesinit) {
     constexpr zes_init_flags_t kZesInitFlags = 0;
     if (zesInit(kZesInitFlags) != ZE_RESULT_SUCCESS) {
-      SPDLOG_WARN(
+      // If this fails, likely zesInit is not supported by the platform. However, logging it is
+      // useful for debugging (exploring the scenario mentioned).
+      SPDLOG_INFO(
           "zesInit failed, tracing state might be disabled after another call to a oneAPI "
           "component or driver");
     }

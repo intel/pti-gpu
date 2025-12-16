@@ -287,6 +287,12 @@ class ZeCollector {
    */
   ze_result_t GetDeviceTimestamps(ze_device_handle_t device, uint64_t* host_time,
                                   uint64_t* device_time) {
+    ze_result_t res = utils::ze::GetDeviceTimestamps(device, host_time, device_time);
+    return res;
+
+    // TODO(PTI-336): Temporarily disabled optimization due to observed
+    // instability on some platforms. Restore later.
+#if 0  // NOLINT
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(host_time != nullptr);
     PTI_ASSERT(device_time != nullptr);
@@ -319,6 +325,7 @@ class ZeCollector {
     *device_time = current_device_time;
 
     return ZE_RESULT_SUCCESS;
+#endif
   }
 
   static ZeCollectionMode SelectZeCollectionMode(bool introspection_capable, bool& disabled_mode,
@@ -795,7 +802,9 @@ class ZeCollector {
     overhead_fini(zeDevicePciGetPropertiesExt_id);
 
     if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_WARN("Unable to get PCI properties for device {} driver returned 0x{:x}",
+      // Not critical to have PCI properties. User might have an idea about the device topology,
+      // so just log the info and continue. This is not 'core' functionality.
+      SPDLOG_INFO("Unable to get PCI properties for device {} driver returned 0x{:x}",
                   static_cast<const void*>(device), static_cast<std::size_t>(status));
       std::memset(&pci_device_properties.address, 0, sizeof(pci_device_properties.address));
       std::memset(&pci_device_properties.maxSpeed, 0, sizeof(pci_device_properties.maxSpeed));
@@ -805,7 +814,7 @@ class ZeCollector {
     auto ip_version = utils::ze::GetGpuDeviceIpVersion(device);
 
     if (!ip_version.has_value()) {
-      SPDLOG_WARN(
+      SPDLOG_INFO(
           "Failed to get IP version for device {}. For newer GPUs (e.g., BMG, IP version >= "
           "{:#x}), this may cause instability on versions of SYCL in Intel(R) oneAPI 2025.3 and "
           "newer or Level Zero workloads using counter-based events.",
