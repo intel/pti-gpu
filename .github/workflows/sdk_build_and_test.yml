@@ -131,7 +131,7 @@ jobs:
     name: Test pti-lib on Windows
     runs-on: ${{ fromJSON(matrix.tags) }}
     env:
-      LEVEL_ZERO_LOADER_VERSION: 1.24.2
+      LEVEL_ZERO_LOADER_VERSION: 1.26.1
     defaults:
       run:
         shell: cmd

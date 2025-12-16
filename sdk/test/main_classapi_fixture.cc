@@ -1373,6 +1373,38 @@ TEST_F(ClassApiFixtureTest, ValidateApiIdsNotChanged) {
   EXPECT_EQ((std::strcmp(api_name, "zelTracerSetEnabled") == 0), true);
   PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 194, &api_name));
   EXPECT_EQ((std::strcmp(api_name, "zelTracerCreate") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 195, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeRTASBuilderCreateExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 196, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeRTASBuilderGetBuildPropertiesExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 197, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeRTASBuilderBuildExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 198, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeRTASBuilderCommandListAppendCopyExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 199, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeRTASBuilderDestroyExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 200, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeRTASParallelOperationCreateExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 201, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeRTASParallelOperationGetPropertiesExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 202, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeRTASParallelOperationJoinExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 203, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeRTASParallelOperationDestroyExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 204, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeDriverRTASFormatCompatibilityCheckExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 205, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeDeviceGetVectorWidthPropertiesExt") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 206, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeDeviceSynchronize") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 207, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeDriverGetDefaultContext") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 208, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeCommandListAppendLaunchKernelWithParameters") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 209, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeCommandListAppendLaunchKernelWithArguments") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 210, &api_name));
+  EXPECT_EQ((std::strcmp(api_name, "zeKernelGetAllocationPropertiesExp") == 0), true);
 }
 
 // Force failure of granular api with incorrect api_ids and ensure error code returned.

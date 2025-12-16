@@ -161,7 +161,7 @@ def gen_func_param_dict(api_files):
                     assert items[1].find("Cb_t") != -1
                     items = items[1].split("Cb_t")
                     assert len(items) == 2
-                    func_dict["ze" + items[0].strip()] = next(f).strip()
+                    func_dict["ze" + items[0].strip()] = [next(f).strip(), next(f).strip()]
                     # func_list.append("ze" + items[0].strip())
                     # print("FUNC_LIST -- next line: ",next(f).split("* params,")[0])
     return (func_dict, L0_api_version)
@@ -541,24 +541,25 @@ def gen_api(
         #            + func
         #            + "OnExit);\n"
         #        )
+        offset = 2
         dst_api_dlsym_private_file.write(
-            "LEVEL_ZERO_LOADER_GET_SYMBOL(zelTracer" + func[2:] + "RegisterCallback);\n"
+            "LEVEL_ZERO_LOADER_GET_SYMBOL(zelTracer" + func[offset:] + "RegisterCallback);\n"
         )
         dst_api_dlsym_public_file.write(
             "decltype(&zelTracer"
-            + func[2:]
+            + func[offset:]
             + "RegisterCallback) zelTracer"
-            + func[2:]
+            + func[offset:]
             + "RegisterCallback_ = nullptr;  // NOLINT\n"
         )
         f.write(
             "    if (pti::PtiLzTracerLoader::Instance().zelTracer"
-            + func[2:]
+            + func[offset:]
             + "RegisterCallback_) {\n"
         )
         f.write(
             "        pti::PtiLzTracerLoader::Instance().zelTracer"
-            + func[2:]
+            + func[offset:]
             + "RegisterCallback_("
             + "tracer, ZEL_REGISTER_PROLOGUE, "
             + func
@@ -566,7 +567,7 @@ def gen_api(
         )
         f.write(
             "        pti::PtiLzTracerLoader::Instance().zelTracer"
-            + func[2:]
+            + func[offset:]
             + "RegisterCallback_("
             + "tracer, ZEL_REGISTER_EPILOGUE, "
             + func
@@ -576,6 +577,7 @@ def gen_api(
     f.write("  }\n")
 
     f.write("  else if (options_.kernel_tracing || IsAnyCallbackSubscriberActive() ) {\n")
+    offset = 2
     for func in kfunc_list:
         # if func not in exclude_from_prologue_list:
         #    f.write(
@@ -597,13 +599,13 @@ def gen_api(
         #    )
         f.write(
             "    if (pti::PtiLzTracerLoader::Instance().zelTracer"
-            + func[2:]
+            + func[offset:]
             + "RegisterCallback_) {\n"
         )
         if func not in exclude_from_prologue_list:
             f.write(
                 "        pti::PtiLzTracerLoader::Instance().zelTracer"
-                + func[2:]
+                + func[offset:]
                 + "RegisterCallback_("
                 + "tracer, ZEL_REGISTER_PROLOGUE, "
                 + func
@@ -612,7 +614,7 @@ def gen_api(
         if func not in exclude_from_epilogue_list:
             f.write(
                 "        pti::PtiLzTracerLoader::Instance().zelTracer"
-                + func[2:]
+                + func[offset:]
                 + "RegisterCallback_("
                 + "tracer, ZEL_REGISTER_EPILOGUE, "
                 + func
@@ -696,9 +698,9 @@ def gen_enter_callback(f, func, synchronize_func_list_on_enter, hybrid_mode_func
     if func in synchronize_func_list_on_enter:
         f.write("  std::vector<uint64_t> kids;\n")
 
-    f.write("\n")
     cb = get_kernel_tracing_callback("OnEnter" + func[2:])
     if cb != "":
+        f.write("\n")
         f.write("  if (collector->options_.kernel_tracing || collector->IsAnyCallbackSubscriberActive() ) { \n")
         if func in synchronize_func_list_on_enter:
             f.write(
@@ -727,6 +729,7 @@ def gen_enter_callback(f, func, synchronize_func_list_on_enter, hybrid_mode_func
 def gen_exit_callback(
     f,
     func,
+    return_value,
     submission_func_list,
     synchronize_func_list_on_enter,
     synchronize_func_list_on_exit,
@@ -739,6 +742,7 @@ def gen_exit_callback(
 ):
     cat_key = ("driver", "levelzero")
     existing_apiids = existing_apiid_dict.get(cat_key, {})
+
     f.write("  [[maybe_unused]] ZeCollector* collector =\n")
     f.write("    static_cast<ZeCollector*>(global_data);\n")
     if func not in hybrid_mode_func_list:
@@ -872,12 +876,22 @@ def gen_exit_callback(
         # f.write("    sycl_data_mview.cid_ = 0;\n")
         f.write("       rec.pid_ = thread_local_pid_tid_info.pid;\n")
         f.write("       rec.tid_ = thread_local_pid_tid_info.tid;\n")
-        f.write("       rec.result_ = result;\n")
+
+        if return_value.startswith("ze_result_t"):
+            f.write("       rec.result_ = result;\n")
+        else:
+            f.write("       rec.result_ = " + func + "ReturnStatus(result);\n")
         f.write("       collector->fcallback_(collector->callback_data_, rec);\n")
         f.write("    }\n")
         f.write("  }\n")
         f.write("\n")
 
+def gen_return_func(f, func):
+    if func in ["zeDriverGetDefaultContext"]:
+        f.write("static ze_result_t " + func + "ReturnStatus(\n")
+        f.write("    [[maybe_unused]]" + "ze_context_handle_t result) {\n")
+        f.write("  return (result != nullptr ? ZE_RESULT_SUCCESS : ZE_RESULT_ERROR_UNKNOWN);\n")
+        f.write("}\n")
 
 # Generate OnEnter and OnExit callbacks.
 def gen_callbacks(
@@ -892,12 +906,14 @@ def gen_callbacks(
     existing_apiid_dict,
     regen_api_files,
     synchronization_viewkind_api_list,
+    l0_apis_with_diff_return_status
 ):
     for func in func_param_dict.keys():
         # print ("+++ Function : ", func)
         f.write("static void " + func + "OnEnter(\n")
-        f.write("    [[maybe_unused]]" + func_param_dict[func] + "\n")
-        f.write("    [[maybe_unused]]ze_result_t result,\n")
+        f.write("    [[maybe_unused]]" + func_param_dict[func][0] + "\n")
+        f.write("    [[maybe_unused]]" + func_param_dict[func][1] + "\n")
+
         f.write("    [[maybe_unused]]void* global_data,\n")
         f.write("    [[maybe_unused]]void** instance_user_data) {\n")
         gen_enter_callback(
@@ -905,14 +921,19 @@ def gen_callbacks(
         )
         f.write("}\n")
         f.write("\n")
+        if func in l0_apis_with_diff_return_status:
+            gen_return_func(f, func)
+            f.write("\n")
         f.write("static void " + func + "OnExit(\n")
-        f.write("    " + "[[maybe_unused]]" + func_param_dict[func] + "\n")
-        f.write("    [[maybe_unused]]ze_result_t result,\n")
+        f.write("    [[maybe_unused]]" + func_param_dict[func][0] + "\n")
+        f.write("    [[maybe_unused]]" + func_param_dict[func][1] + "\n")
+
         f.write("    [[maybe_unused]]void* global_data,\n")
         f.write("    [[maybe_unused]]void** instance_user_data) {\n")
         gen_exit_callback(
             f,
             func,
+            func_param_dict[func][1], # func return type
             submission_func_list,
             synchronize_func_list_on_enter,
             synchronize_func_list_on_exit,
@@ -978,6 +999,7 @@ def main():
         sys.argv[6],
         sys.argv[7],
     )
+
     # TODO -- change the regen to take in a target L0 version to regenerate the api ids to.
     dst_path = sys.argv[1]
     if not os.path.exists(dst_path):
@@ -1158,6 +1180,10 @@ def main():
         "zeCommandListHostSynchronize",
     ]
 
+#   There are few level zero APIs which do not return ze_result_t hence need special handling
+    l0_apis_with_diff_return_status = [
+        "zeDriverGetDefaultContext",
+    ]
     exclude_from_epilogue_list = []
 
     exclude_from_prologue_list = ["zeCommandListHostSynchronize"]
@@ -1200,6 +1226,7 @@ def main():
         ),
     }
 
+    # append runtime apis aa well
     existing_apiid_dict = get_apiids_per_category(pti_inc_path, category_dict)
     gen_callbacks(
         dst_file,
@@ -1213,6 +1240,7 @@ def main():
         existing_apiid_dict,
         regen_api_files,
         synchronization_viewkind_api_list,
+        l0_apis_with_diff_return_status,
     )
     gen_api(
         dst_file,
