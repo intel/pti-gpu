@@ -84,6 +84,7 @@ if (TARGET LevelZero::level-zero)
       PROPERTIES LABELS "unit")
 
   add_executable(local_ze_collection_suite local_ze_collection_fixture.cc)
+
   target_include_directories(
     local_ze_collection_suite
     PUBLIC  "${PROJECT_SOURCE_DIR}/include"
@@ -91,6 +92,7 @@ if (TARGET LevelZero::level-zero)
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
    target_link_libraries(local_ze_collection_suite PUBLIC GTest::gmock
      GTest::gtest_main LevelZero::level-zero spdlog::spdlog Pti::pti_view)
+
    add_dependencies(local_ze_collection_suite copy_test_spv)
    gtest_discover_tests(
       local_ze_collection_suite

@@ -117,6 +117,8 @@ inline static constexpr std::array kPtiClassLzGpuOpsCoreApis{
     pti_api_id_driver_levelzero::zeCommandListAppendImageCopyFromMemory_id,
     pti_api_id_driver_levelzero::zeCommandListAppendImageCopyFromMemoryExt_id,
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernel_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelWithArguments_id,
+    pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelWithParameters_id,
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchCooperativeKernel_id,
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelIndirect_id,
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchMultipleKernelsIndirect_id,

@@ -374,7 +374,6 @@ class LocalModeZeGemmTest : public testing::Test {
 
   static void ParseBuffer(unsigned char* buf, size_t buf_size, size_t used_bytes) {
     if (!buf || !used_bytes || !buf_size) {
-      std::cerr << "Received empty buffer" << '\n';
       if (used_bytes) {
         pti::test::utils::AlignedDealloc(buf);
       }
@@ -558,6 +557,121 @@ TEST_F(LocalModeZeGemmTest, TestAsynchInorderQueueImplementationWithImmediateCom
   EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_mem_copies, static_cast<size_t>(3));
 
   ValidateGemmKernel();
+}
+
+TEST_F(
+    LocalModeZeGemmTest,
+    TestAsynchInorderQueueImplementationWithImmediateCommandListsAndZeCommandListAppendLaunchKernelWithParameters) {
+#if !defined(_WIN32)
+  constexpr auto kNumberOfEventsRequired = 4;
+  InitializeDrivers();
+  InitializeEvents(kNumberOfEventsRequired);
+  InitializeLists(false);
+  CreateKernel();
+  SetKernelGroupSize();
+  SetKernelArguments();
+  SetKernelGroupCount();
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  EnableView(PTI_VIEW_DEVICE_GPU_MEM_COPY);
+
+  auto* memcpy_signal_1 = evts_[0];
+  auto* memcpy_signal_2 = evts_[1];
+  auto* kernel_signal = evts_[2];
+  auto* memcpy_signal_3 = evts_[3];
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, a_buf_, std::data(a_vector_),
+                                          std::size(a_vector_) * sizeof(float), memcpy_signal_1, 0,
+                                          nullptr),
+            ZE_RESULT_SUCCESS);
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, b_buf_, std::data(b_vector_),
+                                          std::size(b_vector_) * sizeof(float), memcpy_signal_2, 1,
+                                          &memcpy_signal_1),
+            ZE_RESULT_SUCCESS);
+
+  ze_command_list_append_launch_kernel_param_cooperative_desc_t launch_params = {
+      ZE_STRUCTURE_TYPE_COMMAND_LIST_APPEND_PARAM_COOPERATIVE_DESC,
+      nullptr,
+      static_cast<ze_bool_t>(0),
+  };
+
+  ZE_ASSERT_SUCCESS_BUT_SKIP_UNSUPPORTED(zeCommandListAppendLaunchKernelWithParameters(
+      compute_cmd_list_, knl_, &dim_, static_cast<const void*>(&launch_params), kernel_signal, 2,
+      evts_.data()));
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, std::data(result_vector_), result_buf_,
+                                          std::size(result_vector_) * sizeof(float),
+                                          memcpy_signal_3, 1, &kernel_signal),
+            ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(zeEventHostSynchronize(memcpy_signal_3, ((std::numeric_limits<uint64_t>::max)() - 1)),
+            ZE_RESULT_SUCCESS);
+
+  DisableAndFlushAllViews();
+
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_mem_copies, static_cast<size_t>(3));
+
+  ValidateGemmKernel();
+#else
+  GTEST_SKIP() << "zeCommandListAppendLaunchKernelWithParameters is not supported";
+#endif
+}
+
+TEST_F(
+    LocalModeZeGemmTest,
+    TestAsynchInorderQueueImplementationWithImmediateCommandListsAndZeCommandListAppendLaunchKernelWithArguments) {
+#if !defined(_WIN32)
+  constexpr auto kNumberOfEventsRequired = 4;
+  InitializeDrivers();
+  InitializeEvents(kNumberOfEventsRequired);
+  InitializeLists(false);
+  AllocateGemmDeviceBuffers();
+  CreateKernel();
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  EnableView(PTI_VIEW_DEVICE_GPU_MEM_COPY);
+
+  auto* memcpy_signal_1 = evts_[0];
+  auto* memcpy_signal_2 = evts_[1];
+  auto* kernel_signal = evts_[2];
+  auto* memcpy_signal_3 = evts_[3];
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, a_buf_, std::data(a_vector_),
+                                          std::size(a_vector_) * sizeof(float), memcpy_signal_1, 0,
+                                          nullptr),
+            ZE_RESULT_SUCCESS);
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, b_buf_, std::data(b_vector_),
+                                          std::size(b_vector_) * sizeof(float), memcpy_signal_2, 1,
+                                          &memcpy_signal_1),
+            ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(zeKernelSuggestGroupSize(knl_, size_, size_, 1, std::data(group_size_),
+                                     std::data(group_size_) + 1, std::data(group_size_) + 2),
+            ZE_RESULT_SUCCESS);
+
+  std::array<void*, 4> kernel_args = {&a_buf_, &b_buf_, &result_buf_, &size_};
+  ze_group_size_t suggested_group_size = {group_size_[0], group_size_[1], group_size_[2]};
+  SetKernelGroupCount();
+  ZE_ASSERT_SUCCESS_BUT_SKIP_UNSUPPORTED(zeCommandListAppendLaunchKernelWithArguments(
+      compute_cmd_list_, knl_, dim_, suggested_group_size, kernel_args.data(), nullptr,
+      kernel_signal, 2, evts_.data()));
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, std::data(result_vector_), result_buf_,
+                                          std::size(result_vector_) * sizeof(float),
+                                          memcpy_signal_3, 1, &kernel_signal),
+            ZE_RESULT_SUCCESS);
+
+  ASSERT_EQ(zeEventHostSynchronize(memcpy_signal_3, ((std::numeric_limits<uint64_t>::max)() - 1)),
+            ZE_RESULT_SUCCESS);
+
+  DisableAndFlushAllViews();
+
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_mem_copies, static_cast<size_t>(3));
+
+  ValidateGemmKernel();
+#else
+  GTEST_SKIP() << "zeCommandListAppendLaunchKernelWithArguments is not supported";
+#endif
 }
 
 TEST_F(LocalModeZeGemmTest, TestAsynchInorderQueueImplementationWithImmediateCommandListsAndReset) {

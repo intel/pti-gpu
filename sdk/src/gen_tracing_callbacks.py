@@ -1090,6 +1090,8 @@ def main():
         "zeEventHostReset",
         "zeEventPoolCreate",
         "zeCommandListAppendLaunchKernel",
+        "zeCommandListAppendLaunchKernelWithArguments",
+        "zeCommandListAppendLaunchKernelWithParameters",
         "zeCommandListAppendLaunchCooperativeKernel",
         "zeCommandListAppendLaunchKernelIndirect",
         "zeCommandListAppendMemoryCopy",
@@ -1125,10 +1127,14 @@ def main():
 
     ze_gen_func_list = [
         "zeCommandListAppendLaunchKernel",
+        "zeCommandListAppendLaunchKernelWithArguments",
+        "zeCommandListAppendLaunchKernelWithParameters",
     ]
 
     km_rt_func_list = [
         "zeCommandListAppendLaunchKernel",
+        "zeCommandListAppendLaunchKernelWithArguments",
+        "zeCommandListAppendLaunchKernelWithParameters",
         "zeCommandListAppendLaunchCooperativeKernel",
         "zeCommandListAppendLaunchKernelIndirect",
         "zeCommandListAppendMemoryCopy",
@@ -1146,6 +1152,8 @@ def main():
     submission_func_list = [
         "zeCommandQueueExecuteCommandLists",
         "zeCommandListAppendLaunchKernel",
+        "zeCommandListAppendLaunchKernelWithArguments",
+        "zeCommandListAppendLaunchKernelWithParameters",
         "zeCommandListAppendLaunchCooperativeKernel",
         "zeCommandListAppendLaunchKernelIndirect",
         "zeCommandListAppendMemoryCopy",
@@ -1195,6 +1203,8 @@ def main():
 
     runtime_list = [
         "zeCommandListAppendLaunchKernel",
+        "zeCommandListAppendLaunchKernelWithArguments",
+        "zeCommandListAppendLaunchKernelWithParameters",
     ]
 
     resource_list = []
