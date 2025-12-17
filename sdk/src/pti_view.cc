@@ -28,7 +28,7 @@ void LogException([[maybe_unused]] const std::exception& excep) {
 // different error code.
 //
 pti_result ptiViewEnable(pti_view_kind view_kind) {
-  SPDLOG_DEBUG("In {}, view_kind:  {}", __FUNCTION__, static_cast<uint32_t>(view_kind));
+  SPDLOG_DEBUG("In {}, view_kind: {}", __FUNCTION__, static_cast<uint32_t>(view_kind));
   try {
     pti_result pti_state = Instance().GetState();
     if (Instance().GetState() != pti_result::PTI_SUCCESS) {
@@ -57,7 +57,7 @@ pti_result ptiViewEnable(pti_view_kind view_kind) {
 // different error code.
 //
 pti_result ptiViewDisable(pti_view_kind view_kind) {
-  SPDLOG_DEBUG("In {}", __FUNCTION__);
+  SPDLOG_DEBUG("In {}, view_kind: {}", __FUNCTION__, static_cast<uint32_t>(view_kind));
   try {
     pti_result pti_state = Instance().GetState();
     if (Instance().GetState() != pti_result::PTI_SUCCESS) {

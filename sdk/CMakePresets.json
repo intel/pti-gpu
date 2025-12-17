@@ -176,7 +176,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
-        "CMAKE_CXX_FLAGS": "/W4 /MDd /EHcs /fp:precise -Qstd:c++17 /sdl /GS /Gy /DYNAMICBASE /guard:cf /RTCsu",
+        "CMAKE_CXX_FLAGS": "/W4 /MDd /EHcs /fp:precise -Qstd:c++17 /sdl /GS /Gy /DYNAMICBASE /guard:cf /RTCsu -Wno-error=character-conversion",
         "CMAKE_SHARED_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /guard:cf",
         "CMAKE_EXE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /guard:cf",
         "PTI_ENABLE_LOGGING": "ON"

@@ -4,6 +4,7 @@
 // Copyright © Intel Corporation
 // SPDX-License-Identifier: MIT
 // =============================================================
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -39,18 +40,21 @@ enum class TestType {
 };
 
 constexpr uint32_t kArbStartStopCounter =
-    4;  // keep this a even number if changed -- test requires it.
+    4;  // keep this an even number if changed -- test requires it.
+constexpr size_t kVectorSize = 5000;
+constexpr size_t kThreadCount = 3;
+constexpr size_t kNumElementsForCorrIds = 3;
+constexpr uint64_t kMinKernelDurationNs = 100;
+constexpr uint64_t kExternalCorrelationIdBase = 11;
 
 bool matched_sq_corr_ids = false;
 bool matched_add_corr_ids = false;
 bool timestamps_nonzero_duration = true;
 bool kernel_timestamps_monotonic = false;
-constexpr size_t kVectorSize = 5000;
-constexpr size_t kThreadCount = 3;
-uint64_t sycl_kernel_corr_id[3];
-uint64_t sycl_kernel_start_time[3];
-uint64_t kernel_corr_id[3];
-uint64_t kernel_append_time[3];
+uint64_t sycl_kernel_corr_id[kNumElementsForCorrIds];
+uint64_t sycl_kernel_start_time[kNumElementsForCorrIds];
+uint64_t kernel_corr_id[kNumElementsForCorrIds];
+uint64_t kernel_append_time[kNumElementsForCorrIds];
 uint64_t sycl_idx = 0;
 uint64_t kernel_idx = 0;
 uint64_t kernel_start_ts = 0;
@@ -58,13 +62,14 @@ uint64_t kernel_stop_ts = 0;
 uint64_t number_of_kernel_recs = 0;
 uint64_t number_of_sycl_recs = 0;
 uint64_t expected_sycl_recs = 0;
-uint64_t eid = 11;                  // external correlation id base.
-constexpr uint64_t kEpsilon = 100;  // min in kernel duration in nanoseconds
+uint64_t eid = kExternalCorrelationIdBase;
 
 // sync variables
 std::mutex common_m;
 std::condition_variable main_cv;
 std::atomic<size_t> shared_thread_count[kArbStartStopCounter] = {0};
+
+std::mutex g_test_result_mutex;
 
 //************************************
 // Vector square in SYCL on device: modifies each input vector
@@ -119,7 +124,7 @@ template <typename T>
 }
 
 [[maybe_unused]] void StopTracingNonL0() {
-  ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION);  // TODO: check return
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
 }
@@ -140,13 +145,27 @@ void StartTracingL0([[maybe_unused]] TestType type) {
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
 }
 
-void StopTracingL0([[maybe_unused]] TestType type) {
+void StopTracingL0([[maybe_unused]] TestType type, bool force = false) {
   if (type != TestType::kArbStartStopNoKernelStop) {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   }
   if (type == TestType::kArbStartStopDupDisables) {
     ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   }
+  if (force) {
+    ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  }
+}
+
+// This function is needed to:
+// - avoid tests affecting each other when running in the same process
+// - enforce that in Local mode (which is default)
+//    - all profiling is disabled prior to process completion
+void GlobalPTIDisable() {
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
 }
 
 static void BufferRequested(unsigned char **buf, size_t *buf_size) {
@@ -170,6 +189,8 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
   }
   pti_view_record_base *ptr = nullptr;
   while (true) {
+    const std::lock_guard<std::mutex> lock(g_test_result_mutex);
+
     auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
     if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
       break;
@@ -230,9 +251,9 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
         }
         // std::cout << "KernelTimestamp for VecAdd: " << a_kernel_rec->_append_timestamp << ":"
         //           << a_kernel_rec->_thread_id << "\n";
-        timestamps_nonzero_duration =
-            timestamps_nonzero_duration &&
-            ((a_kernel_rec->_end_timestamp - a_kernel_rec->_start_timestamp) > kEpsilon);
+        timestamps_nonzero_duration = timestamps_nonzero_duration &&
+                                      ((a_kernel_rec->_end_timestamp -
+                                        a_kernel_rec->_start_timestamp) > kMinKernelDurationNs);
 
         kernel_timestamps_monotonic = samples_utils::isMonotonic(
             {a_kernel_rec->_sycl_task_begin_timestamp, a_kernel_rec->_sycl_enqk_begin_timestamp,
@@ -278,11 +299,6 @@ template <typename T>
 void RunArbStartStopTestMultiThreaded(sycl::queue &q, const std::vector<T> &a,
                                       const std::vector<T> &b, TestType a_test_type) {
   auto thread_function = [&q](const auto &a, const auto &b, TestType a_test_type) {
-    auto start = std::chrono::steady_clock::now();
-
-    auto end = std::chrono::steady_clock::now();
-    std::chrono::duration<float> time = end - start;
-
     for (unsigned int i = 0; i < kArbStartStopCounter; i++) {
       if (i % 2) {
         if (a_test_type != TestType::kArbStartStopMtSycl)
@@ -301,7 +317,10 @@ void RunArbStartStopTestMultiThreaded(sycl::queue &q, const std::vector<T> &a,
         ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
       }
     }
-    std::cout << "\t-- Total execution time: " << time.count() << " sec" << std::endl;
+
+    // Ensure L0 tracing is stopped at the end of each thread
+    // TODO: ptiViewEnable/Disable should make effects process-wide not per-thread
+    StopTracingL0(a_test_type, true);
   };
 
   std::vector<std::thread> the_threads;
@@ -441,18 +460,28 @@ class StartStopFixtureTest : public ::testing::TestWithParam<bool> {
     matched_add_corr_ids = false;
     timestamps_nonzero_duration = true;
     kernel_timestamps_monotonic = false;
+    sycl_idx = 0;
+    kernel_idx = 0;
     kernel_start_ts = 0;
     kernel_stop_ts = 0;
     number_of_kernel_recs = 0;
     number_of_sycl_recs = 0;
     expected_sycl_recs = 0;
+    eid = kExternalCorrelationIdBase;
     for (unsigned int i = 0; i < kArbStartStopCounter; i++) {
       shared_thread_count[i] = 0;
+    }
+    for (size_t i = 0; i < kNumElementsForCorrIds; i++) {
+      sycl_kernel_corr_id[i] = 0;
+      sycl_kernel_start_time[i] = 0;
+      kernel_corr_id[i] = 0;
+      kernel_append_time[i] = 0;
     }
   }
 
   void TearDown() override {
     // Called right before destructor after each test
+    GlobalPTIDisable();
   }
 };
 
@@ -521,10 +550,7 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountMultiThreadedNoStopKernelWithStart
   utils::SetEnv("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", do_immediate ? "1" : "0");
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunVecsqadd(TestType::kArbStartStopMtNoKernelStop);
-  if (do_immediate)
-    EXPECT_EQ(number_of_kernel_recs, (kArbStartStopCounter - 1) * kThreadCount);
-  else
-    EXPECT_EQ(number_of_kernel_recs, (kArbStartStopCounter - 1) * kThreadCount);
+  EXPECT_EQ(number_of_kernel_recs, (kArbStartStopCounter - 1) * kThreadCount);
 }
 
 // Enable gpu_kernels once when we start / stop disables it multiple times.   Should have no effect
@@ -594,4 +620,8 @@ TEST_P(StartStopFixtureTest, ArbStartStopCountNoStopKernelWithStartKernel) {
   EXPECT_EQ(number_of_kernel_recs, kArbStartStopCounter);
 }
 
-INSTANTIATE_TEST_SUITE_P(StartStopTests, StartStopFixtureTest, ::testing::Values(false, true));
+INSTANTIATE_TEST_SUITE_P(StartStopTests, StartStopFixtureTest, ::testing::Values(false, true),
+                         [](const testing::TestParamInfo<StartStopFixtureTest::ParamType> &info) {
+                           return fmt::format("Queue_Type_{}",
+                                              info.param ? "ImmediateQueue" : "NonImmediateQueue");
+                         });
