@@ -3039,6 +3039,11 @@ class ZeCollector {
   // mode=0 implies full apis; mode=1 implies hybrid apis only (eventpool); mode=2 is Local
   ZeCollectionMode collection_mode_ = ZeCollectionMode::Full;
 
+  // Owns swap events. To ensure proper destruction order, event_pool_manager_ should be declared
+  // before other members that may use it, so they can release the events
+  // event_pool_manager_ owns.
+  ZeEventPoolManager event_pool_manager_;
+
   std::list<std::unique_ptr<ZeKernelCommand>> kernel_command_list_;
   // keep track of destroyed events, not request their status
   // CCL workloads often destroy events
@@ -3060,7 +3065,6 @@ class ZeCollector {
 
   A2BridgeKernelPool bridge_kernel_pool_;
   A2DeviceBufferPool device_buffer_pool_;
-  ZeEventPoolManager event_pool_manager_;
 
   Level0Wrapper l0_wrapper_;
 
