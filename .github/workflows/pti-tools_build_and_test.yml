@@ -25,6 +25,8 @@ jobs:
   pti-tools-build-and-test:
     name: Test PTI Tools ${{ matrix.os_id }} ${{ matrix.tags }}
 
+    timeout-minutes: 20
+
     if: vars.PTI_RUN_TESTS == 1
 
     runs-on: ${{ fromJSON(matrix.tags) }}
@@ -114,6 +116,8 @@ jobs:
   pti-tools-build-and-test-windows:
 
     name: Test unitrace on Windows
+
+    timeout-minutes: 20
 
     if: vars.PTI_RUN_TESTS == 1
 

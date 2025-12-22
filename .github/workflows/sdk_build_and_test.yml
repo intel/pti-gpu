@@ -26,6 +26,8 @@ jobs:
   sdk-build-and-test:
     name: Test PTI ${{ matrix.os_id }} ${{ matrix.tags }}
 
+    timeout-minutes: 30
+
     runs-on: ${{ fromJSON(matrix.tags) }}
     defaults:
       run:
@@ -130,6 +132,9 @@ jobs:
   win-lib-build-and-test:
     name: Test pti-lib on Windows
     runs-on: ${{ fromJSON(matrix.tags) }}
+
+    timeout-minutes: 30
+
     env:
       LEVEL_ZERO_LOADER_VERSION: 1.26.1
     defaults:
