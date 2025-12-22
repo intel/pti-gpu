@@ -1,6 +1,7 @@
-import sys
+
 import os
 import json
+import argparse
 
 class Range:
   def __init__(self, start, dur):
@@ -71,14 +72,24 @@ def parse_timeline_stats(filename):
         stats.append(calc_stats(thread_names[k], threads[k]))
     return stats
 
-for i in range(1,len(sys.argv)):
-  if sys.argv[i].endswith(".json") and os.path.exists(sys.argv[i]):
-    stats = parse_timeline_stats(sys.argv[i])
-    if len(stats) < 1:
-      print("[ERROR] No timelines found in: {}".format(sys.argv[i]))
-      exit(-1)
-    for stat in stats:
-      if stat["min_gap"] < 0 or stat["overlaps"] > 0:
-         print("[ERROR] overlapping execution found in {}:\n {}\n".format(sys.argv[i], stat))
-         exit(-1)
-exit(0)
+
+def main():
+  parser = argparse.ArgumentParser(description="Check timeline stats in JSON trace files.")
+  parser.add_argument('output_files', nargs='+', help='output files')
+  parser.add_argument('--cmd', type=str, nargs=argparse.REMAINDER, help='command argument') 
+  args = parser.parse_args()
+
+  for filename in args.output_files:
+    if filename.endswith(".json") and os.path.exists(filename):
+      stats = parse_timeline_stats(filename)
+      if len(stats) < 1:
+        print(f"[ERROR] No timelines found in: {filename}")
+        exit(-1)
+      for stat in stats:
+        if stat["min_gap"] < 0 or stat["overlaps"] > 0:
+          print(f"[ERROR] overlapping execution found in {filename}:\n {stat}\n")
+          exit(-1)
+  exit(0)
+
+if __name__ == "__main__":
+  main()

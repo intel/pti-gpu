@@ -203,13 +203,16 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 i = line.find("is stored in")
                 if i > 0:
                     full_path_output_files.append(line[i+13:].strip())
-
+            
             # execute provided test with list of files as arguments
             if extra_test_prog.endswith(".py"):
-                cmd = [sys.executable, extra_test_prog] + full_path_output_files
+                cmd = [sys.executable, extra_test_prog]
             else:
-                cmd = [extra_test_prog] + full_path_output_files
-
+                cmd = [extra_test_prog]
+            cmd += full_path_output_files
+            if len(command) > 1:
+                cmd += ['--cmd'] + command[1:]
+            
             rc = subprocess.run(cmd, text=True)
             if rc.returncode != 0:
                 return 1  # extra test prog failed

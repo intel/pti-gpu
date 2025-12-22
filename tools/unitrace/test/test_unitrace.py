@@ -35,11 +35,13 @@ def clean_up_testing_folder(test_dir):
     # Construct the path to the 'Testing' folder
     testing_folder = os.path.join(test_dir, 'build', 'Testing')
     result_folder = os.path.join(test_dir, 'build', 'results')
-
+    
     # Check if the folder exists
     if os.path.exists(testing_folder):
+        print("Removing folder " + testing_folder)
         shutil.rmtree(testing_folder, ignore_errors=False)
     if os.path.exists(result_folder):
+        print("Removing folder " + result_folder)
         shutil.rmtree(result_folder, ignore_errors=False)
 
     cleanup_status = True
@@ -75,8 +77,10 @@ def build(test_dir):
     # Change to the build directory
     os.chdir(build_dir)
     try:
+        print("Build started ... ")
         subprocess.run(['cmake', '..', '-G', 'Ninja'], check = True)
         subprocess.run(['ninja'], check = True)
+        print("Build completed ...")
         return 0
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] during build: {e}")
@@ -133,6 +137,7 @@ def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
     ctest_output_dir = os.path.join(test_dir, 'build', 'Testing', 'Temporary')  # Path to the CTest output directory
     failed_options = []
     sub_tests = 0
+
     for cmd in scenarios:
         os.environ['UNITRACE_OPTION'] = cmd
         #total_tests += 1
@@ -180,7 +185,6 @@ def run_ctest(test_dir, scenarios):
     tests = get_tests_in_ctest(test_dir)
     tests_configs = scenarios.get("test_configuration") # some tests need special handling
     filter_tests = get_filter_tests(tests_configs, default_scenarios)
-
     for test in tests:
         total_sub_tests = 0
         tests_status = []
@@ -291,12 +295,14 @@ def main():
         print("[ERROR] No config file is present")
         return 1
 
+    print("Cleaning up test folder ...")
     status = clean_up_testing_folder(args.test_dir)
     if status == 0:
         if args.run == False:
             status = build(args.test_dir)
             if status != 0: #build error check and return
                 return status
+        print("Start testing...")        
         status = run_ctest(args.test_dir, scenarios)
     return(status)
 

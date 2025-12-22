@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <fstream>
 
 #if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
 #include <dlfcn.h>
@@ -1031,6 +1032,7 @@ struct ZeKernelCommandProperties {
   uint32_t regsize_;	// GRF size per thread
   bool aot_;		// AOT or JIT
   std::string name_;	// kernel or command name
+  bool skip_;  // skip this kernel in the trace
 };
 
 // these will not go away when ZeCollector is destructed
@@ -1309,8 +1311,17 @@ class ZeCollector {
       reset_event_on_device = false;
     }
 
+    std::vector<std::string> include_kernels_vec = ParseFilterList(
+        utils::GetEnv("UNITRACE_IncludeKernelsFile"),
+        utils::GetEnv("UNITRACE_IncludeKernels")
+    );
+    std::vector<std::string> exclude_kernels_vec = ParseFilterList(
+        utils::GetEnv("UNITRACE_ExcludeKernelsFile"),
+        utils::GetEnv("UNITRACE_ExcludeKernels")
+    );
+
     ZeCollector* collector = new ZeCollector(
-        logger, options, kcallback, fcallback, callback_data, data_dir_name, reset_event_on_device);
+        logger, options, kcallback, fcallback, callback_data, data_dir_name, reset_event_on_device, include_kernels_vec, exclude_kernels_vec);
 
     UniMemory::ExitIfOutOfMemory((void *)(collector));
 
@@ -1772,13 +1783,17 @@ class ZeCollector {
       OnZeFunctionFinishCallback fcallback,
       void* /* callback_data */,
       std::string& data_dir_name,
-      bool reset_event_on_device)
+      bool reset_event_on_device,
+      const std::vector<std::string>& include_kernels = {},
+      const std::vector<std::string>& exclude_kernels = {})
       : logger_(logger),
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
         reset_event_on_device_(reset_event_on_device),
-        event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP) {
+        event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP),
+        include_kernels_(include_kernels),
+        exclude_kernels_(exclude_kernels) {
     data_dir_name_ = data_dir_name;
     EnumerateAndSetupDevices();
     InitializeKernelCommandProperties();
@@ -3379,7 +3394,8 @@ class ZeCollector {
     ZeCollector* collector,
     ze_event_handle_t& signal_event,
     ze_command_list_handle_t command_list,
-    bool iskernel) {
+    bool iskernel,
+    ze_kernel_handle_t kernel = nullptr) {
 
     ze_context_handle_t context = nullptr;
     ze_device_handle_t device = nullptr;
@@ -3388,6 +3404,24 @@ class ZeCollector {
     ze_instance_data.query_ = nullptr;
     ze_instance_data.in_order_counter_event_ = nullptr;
     ze_instance_data.instrument_ = true;
+
+    if (iskernel) {
+      if (kernel == nullptr) {
+        std::cerr << "[ERROR] Kernel handle is null for kernel command." << std::endl;
+        ze_instance_data.instrument_ = false;
+        return;
+      }
+      kernel_command_properties_mutex_.lock_shared();
+      auto kit = active_kernel_properties_->find(kernel);
+      if (kit != active_kernel_properties_->end()) {
+          if (kit->second.skip_) {
+            ze_instance_data.instrument_ = false;
+            kernel_command_properties_mutex_.unlock_shared();
+            return;
+          }
+      }
+      kernel_command_properties_mutex_.unlock_shared();
+    }
 
     collector->command_lists_mutex_.lock_shared();
 
@@ -4183,7 +4217,7 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
     }
     else {
       *instance_data = nullptr;
@@ -4277,7 +4311,7 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
     }
   }
 
@@ -4305,7 +4339,7 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
     }
   }
 
@@ -5194,6 +5228,32 @@ typedef struct _zex_kernel_register_file_size_exp_t {
       desc.base_addr_ = base_addr;
       desc.size_ = binary_size;
 
+      // First, check include_kernels_ to see if the kernel should be included (if any match, skip=false).
+      // Then, check exclude_kernels_ to see if the kernel should be excluded (if any match, skip=true).
+      desc.skip_ = false;
+      if (!collector->include_kernels_.empty() || !collector->exclude_kernels_.empty()) {
+        std::string demangled_name = utils::Demangle(desc.name_.c_str());
+        if (!collector->include_kernels_.empty()) {
+          desc.skip_ = true;
+          for (const auto& filter : collector->include_kernels_) {
+            if (!filter.empty() && demangled_name.find(filter) != std::string::npos) {
+              desc.skip_ = false;
+              break;
+            }
+          }
+        } 
+
+        if (!collector->exclude_kernels_.empty() && desc.skip_ == false) {
+          for (const auto& filter : collector->exclude_kernels_) {
+            if (!filter.empty() && demangled_name.find(filter) != std::string::npos) {
+              desc.skip_ = true;
+              break;
+            }
+          }
+        }
+      }
+
+
       ZeKernelCommandProperties desc2 = desc;
       active_kernel_properties_->insert({kernel, std::move(desc)});
       kernel_command_properties_->insert({desc2.id_, std::move(desc2)});
@@ -5304,6 +5364,40 @@ typedef struct _zex_kernel_register_file_size_exp_t {
     }
   }
 
+  static std::vector<std::string> ParseFilterList(const std::string& file, const std::string& filter) {
+    std::vector<std::string> result;
+
+    // Helper lambda to split a line by comma without stringstream
+    auto split_by_comma = [](const std::string& line, std::vector<std::string>& out) {
+        size_t start = 0;
+        while (start < line.size()) {
+            size_t end = line.find(',', start);
+            std::string item = (end == std::string::npos) ? line.substr(start) : line.substr(start, end - start);
+            if (!item.empty()) out.push_back(item);
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+    };
+    
+    // First, gather from file if provided
+    if (!file.empty()) {
+        std::ifstream fin(file);
+        if (fin.good()) {
+            std::string line;
+            while (std::getline(fin, line)) {
+                split_by_comma(line, result);
+            }
+        }
+    }
+
+    // Then, gather from string if provided
+    if (!filter.empty()) {
+      split_by_comma(filter, result);
+    }
+
+    return result;
+  }
+
  private: // Data
   Logger *logger_ = nullptr;
   CollectorOptions options_;
@@ -5338,6 +5432,9 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   constexpr static size_t kTimeLength = 20;
 
   std::string data_dir_name_;
+  std::vector<std::string> include_kernels_;
+  std::vector<std::string> exclude_kernels_;
+  
 };
 
 #endif // PTI_TOOLS_UNITRACE_LEVEL_ZERO_COLLECTOR_H_

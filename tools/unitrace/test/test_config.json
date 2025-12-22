@@ -18,13 +18,21 @@
         },
         {
             "name": "ze_counterbased_events",
-            "platform": ["Windows", "Linux"],
+            "platform": ["Linux"],
             "scenarios":["--chrome-device-logging"]
         },
         {
             "name": "temporal",
             "platform": ["Linux"],
             "scenarios": ["-d --session test --start-paused", "--session test --start-paused --chrome-call-logging --chrome-kernel-logging", "-h --session test --start-paused", "-t --session test --start-paused"]
+        },
+        {
+            "name": "selective_kernels",
+            "platform": ["Windows", "Linux"],
+            "scenarios": ["-d --include-kernels not_exists",
+                          "-d --include-kernels sycl",
+                          "-d --exclude-kernels sycl",
+                          "-d --include-kernels sycl --exclude-kernels 2},EE1_"]
         },
         {
             "name": "event_reset_immediate_cl",

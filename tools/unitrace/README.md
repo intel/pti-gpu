@@ -145,57 +145,62 @@ unitrace [options] <application> [args]
 The options can be one or more of the following:
 
 ```
---call-logging [-c]            Trace host API calls
---host-timing  [-h]            Report host API execution time
---device-timing [-d]           Report kernels execution time
---ccl-summary-report [-r]      Report CCL execution time summary
---kernel-submission [-s]       Report append (queued), submit and execute intervals for kernels
---device-timeline [-t]         Report device timeline
---opencl                       Trace OpenCL
---chrome-mpi-logging           Trace MPI
---chrome-sycl-logging          Trace SYCL runtime and plugin
---chrome-ccl-logging           Trace oneCCL
---chrome-dnn-logging           Trace oneDNN
---chrome-call-logging          Trace Level Zero and/or OpenCL host calls
---chrome-kernel-logging        Trace device and host kernel activities
---chrome-device-logging        Trace device activities
---chrome-itt-logging           Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs
---chrome-no-thread-on-device   Trace device activities without per-thread info
-                               Device activities are traced per thread if this option is not present
---chrome-no-engine-on-device   Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info.
-                               Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present
---chrome-event-buffer-size <number-of-events>    Size of event buffer on host per host thread(default is -1 or unlimited)
---verbose [-v]                 Enable verbose mode to show kernel shapes
-                               Kernel shapes are always enabled in timelines for Level Zero backend
---demangle                     Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend
---separate-tiles               Trace each tile separately in case of implicit scaling
---tid                          Output TID in host API trace
---pid                          Output PID in host API and device activity trace
---output [-o] <filename>       Output profiling result to file
---conditional-collection       Enable conditional collection. This options is deprecated. Use --start-paused instead
---start-paused                 Start the tool with tracing and profiling paused
---output-dir-path <path>       Output directory path for result files
---metric-query [-q]            Query hardware metrics for each kernel instance is enabled for level-zero
---metric-sampling [-k]         Sample hardware performance metrics for each kernel instance in time-based mode
---group [-g] <metric-group>    Hardware metric group (ComputeBasic by default)
---sampling-interval [-i] <interval> Hardware performance metric sampling interval in us (default is 50 us) in time-based mode
---device-list                  Print available devices
---metric-list                  Print available metric groups and metrics
---stall-sampling               Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs
---ranks-to-sample <ranks>      MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks
---devices-to-sample <devices>  Devices ID to sample. The argument <devices> is a list of comma separated devices as reported
-                               by --device-list
---follow-child-process <0/1>   0: Do not follow or profile child processes on Linux
-                               1: Follow and profile child processes on Linux (default)
---teardown-on-signal <signum>  Try to gracefully shut down in case the application crashes or is terminated or <signum> is raised
-                               This option may change the application behavior so please use it carefully
---session <session>            Name this session <session> for dynamic control. The argument <session> is an alphanumeric string
---pause <session>              Pause session <session>. The argument <session> must be the same session named with --session option
---resume <session>             Resume session <session>. The argument <session> must be the same session named with --session option
---stop <session>               Stop session <session>. The argument <session> must be the same session named with --session option
---chrome-kmd-logging <script>  Trace OS/KMD activitives. The argument <script> file defines the OS kernel or device driver activies to trace
---version                      Print version
---help                         Show this help message and exit. Please refer to the README.md file for further details.
+--call-logging [-c]                           Trace host API calls
+--host-timing  [-h]                           Report host API execution time
+--device-timing [-d]                          Report kernels execution time
+--ccl-summary-report [-r]                     Report CCL execution time summary
+--kernel-submission [-s]                      Report append (queued), submit and execute intervals for kernels
+--device-timeline [-t]                        Report device timeline
+--opencl                                      Trace OpenCL
+--chrome-mpi-logging                          Trace MPI
+--chrome-sycl-logging                         Trace SYCL runtime and plugin
+--chrome-ccl-logging                          Trace oneCCL
+--chrome-dnn-logging                          Trace oneDNN
+--chrome-call-logging                         Trace Level Zero and/or OpenCL host calls
+--chrome-kernel-logging                       Trace device and host kernel activities
+--chrome-device-logging                       Trace device activities
+--chrome-itt-logging                          Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs
+--chrome-no-thread-on-device                  Trace device activities without per-thread info
+                                              Device activities are traced per thread if this option is not present
+--chrome-no-engine-on-device                  Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info.
+                                              Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present
+--chrome-event-buffer-size <number-of-events> Size of event buffer on host per host thread(default is -1 or unlimited)
+--verbose [-v]                                Enable verbose mode to show kernel shapes
+                                              Kernel shapes are always enabled in timelines for Level Zero backend
+--demangle                                    Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend
+--separate-tiles                              Trace each tile separately in case of implicit scaling
+--tid                                         Output TID in host API trace
+--pid                                         Output PID in host API and device activity trace
+--output [-o] <filename>                      Output profiling result to file
+--conditional-collection                      Enable conditional collection. This options is deprecated. Use --start-paused instead
+--start-paused                                Start the tool with tracing and profiling paused
+--output-dir-path <path>                      Output directory path for result files
+--metric-query [-q]                           Query hardware metrics for each kernel instance is enabled for level-zero
+--metric-sampling [-k]                        Sample hardware performance metrics for each kernel instance in time-based mode
+--group [-g] <metric-group>                   Hardware metric group (ComputeBasic by default)
+--sampling-interval [-i] <interval>           Hardware performance metric sampling interval in us (default is 50 us) in time-based mode
+--device-list                                 Print available devices
+--metric-list                                 Print available metric groups and metrics
+--stall-sampling                              Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs
+--ranks-to-sample <ranks>                     MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks
+--devices-to-sample <devices>                 Devices ID to sample. The argument <devices> is a list of comma separated devices as reported
+                                              by --device-list
+--follow-child-process <0/1>                  0: Do not follow or profile child processes on Linux
+                                              1: Follow and profile child processes on Linux (default)
+--teardown-on-signal <signum>                 Try to gracefully shut down in case the application crashes or is terminated or <signum> is raised
+                                              This option may change the application behavior so please use it carefully
+--session <session>                           Name this session <session> for dynamic control. The argument <session> is an alphanumeric string
+--pause <session>                             Pause session <session>. The argument <session> must be the same session named with --session option
+--resume <session>                            Resume session <session>. The argument <session> must be the same session named with --session option
+--stop <session>                              Stop session <session>. The argument <session> must be the same session named with --session option
+--chrome-kmd-logging <script>                 Trace OS/KMD activitives. The argument <script> file defines the OS kernel or device driver activies to trace
+--include-kernels <kernel-filters>            Include kernels with name containing any of kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings.
+--include-kernels-file <kernel-filter-file>   Include kernels with name containing any of kernel filter strings in the <kernel-filter-file>.
+--exclude-kernels<kernel-filters>             Exclude kernels with name containing any of kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings.
+--exclude-kernels-file <kernel-filter-file>   Exclude kernels with name containing any of kernel filter strings in the <kernel-filter-file>.
+--chrome-kmd-logging <script>                 Trace OS/KMD activitives. The argument <script> file defines the OS kernel or device driver activies to trace
+--version                                     Print version
+--help                                        Show this help message and exit. Please refer to the README.md file for further details.
 ```
 
 By default, only Level Zero tracing/profiling is enabled. To enable OpenCL tracing and profiling, please use --opencl option.
@@ -355,6 +360,24 @@ Device Logging:
 ![Device Logging!](/tools/unitrace/doc/images/device-logging.png)
 
 In case both **--chrome-kernel-logging** and **--chrome-device-logging** are present, **--chrome-kernel-logging** takes precedence.
+### Include and Exlcude Kernels
+
+If you care about the performance of just a subset of kernels in an application, for example, kernels you are currently developing or optimizing, you can use the kernel inclusion and/or exclusion options **--include-kernels**, **--exclude-kernels**, **--include-kernels-file** and **--exclude-kernels-file** to instruct unitrace to profile and trace only the kernels of interest, reducing performance overhead and improving analysis efficiency.
+
+**Examples:**
+
+- include only kernels with names containing `matmul` or `conv`:
+  ```
+  --include-kernels matmul,conv
+  ```
+- exclude all kernels with names containing `test` or `debug`:
+  ```
+  --exclude-kernels test,debug
+  ```
+
+If both **--include-kernels** and **--exclude-kernels** are specified, **--include-kernels** takes precedence, in other words, the kernels excluded are excluded from the kernels included.
+
+If a kernel is excluded from tracing, its execution time is not counted in the total device time.
 
 ### Toggling Device Thread, Level-Zero Engine and OpenCL Queue Collection On/Off
 

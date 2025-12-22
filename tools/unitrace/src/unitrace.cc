@@ -60,137 +60,137 @@ void Usage(char * progname) {
     std::endl;
   std::cout << "Options:" << std::endl;
   std::cout <<
-    "--call-logging [-c]            " <<
+    "--call-logging [-c]              " <<
     "Trace host API calls" <<
     std::endl;
   std::cout <<
-    "--host-timing  [-h]            " <<
+    "--host-timing  [-h]              " <<
     "Report host API execution time" <<
     std::endl;
   std::cout <<
-    "--device-timing [-d]           " <<
+    "--device-timing [-d]             " <<
     "Report kernels execution time" <<
     std::endl;
 #if BUILD_WITH_ITT
   std::cout <<
-    "--ccl-summary-report [-r]      " <<
+    "--ccl-summary-report [-r]        " <<
     "Report CCL execution time summary" <<
     std::endl;
 #endif /* BUILD_WITH_ITT */
   std::cout <<
-    "--kernel-submission [-s]       " <<
+    "--kernel-submission [-s]         " <<
     "Report append (queued), submit and execute intervals for kernels" <<
     std::endl;
   std::cout <<
-    "--device-timeline [-t]         " <<
+    "--device-timeline [-t]           " <<
     "Report device timeline" <<
     std::endl;
 #if BUILD_WITH_OPENCL
   std::cout <<
-    "--opencl                       " <<
+    "--opencl                         " <<
     "Trace OpenCL" <<
     std::endl;
 #endif /* BUILD_WITH_OPENCL */
 #if BUILD_WITH_MPI
   std::cout <<
-    "--chrome-mpi-logging           " <<
+    "--chrome-mpi-logging             " <<
     "Trace MPI" <<
     std::endl;
 #endif /* BUILD_WITH_MPI */
 #if BUILD_WITH_XPTI
   std::cout <<
-    "--chrome-sycl-logging          " <<
+    "--chrome-sycl-logging            " <<
     "Trace SYCL runtime and plugin" <<
     std::endl;
 #endif /* BUILD_WITH_XPTI */
 #if BUILD_WITH_ITT
   std::cout <<
-    "--chrome-ccl-logging           " <<
+    "--chrome-ccl-logging             " <<
     "Trace oneCCL" <<
     std::endl;
   std::cout <<
-    "--chrome-dnn-logging           " <<
+    "--chrome-dnn-logging             " <<
     "Trace oneDNN" <<
     std::endl;
 #endif /* BUILD_WITH_ITT */
   std::cout <<
-    "--chrome-call-logging          " <<
+    "--chrome-call-logging            " <<
     "Trace Level Zero and/or OpenCL host calls" <<
     std::endl;
   std::cout <<
-    "--chrome-kernel-logging        " <<
+    "--chrome-kernel-logging          " <<
     "Trace device and host kernel activities" <<
     std::endl;
   std::cout <<
-    "--chrome-device-logging        " <<
+    "--chrome-device-logging          " <<
     "Trace device activities" <<
     std::endl;
   std::cout <<
-    "--chrome-itt-logging           " <<
+    "--chrome-itt-logging             " <<
     "Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs" <<
     std::endl;
   std::cout <<
-    "--chrome-no-thread-on-device   " <<
+    "--chrome-no-thread-on-device     " <<
     "Trace device activities without per-thread info" << std::endl << 
-    "                               Device activities are traced per thread if this option is not present" <<
+    "                                 Device activities are traced per thread if this option is not present" <<
     std::endl;
   std::cout <<
-    "--chrome-no-engine-on-device   " <<
+    "--chrome-no-engine-on-device     " <<
     "Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info." << std::endl << 
-    "                               Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present" <<
+    "                                 Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present" <<
     std::endl;
   std::cout <<
-    "--chrome-event-buffer-size <number-of-events>    " <<
+    "--chrome-event-buffer-size <number-of-events>      " <<
     "Size of event buffer on host per host thread(default is -1 or unlimited)" <<
     std::endl;
   std::cout <<
-    "--verbose [-v]                 " <<
+    "--verbose [-v]                   " <<
     "Enable verbose mode to show kernel shapes" << std::endl <<
-    "                               Kernel shapes are always enabled in timelines for Level Zero backend" <<
+    "                                 Kernel shapes are always enabled in timelines for Level Zero backend" <<
     std::endl;
   std::cout <<
-    "--demangle                     " <<
+    "--demangle                       " <<
     "Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend" <<
     std::endl;
   std::cout <<
-    "--separate-tiles               " <<
+    "--separate-tiles                 " <<
     "Trace each tile separately in case of implicit scaling" <<
     std::endl;
   std::cout <<
-    "--tid                          " <<
+    "--tid                            " <<
     "Output TID in host API trace" <<
     std::endl;
   std::cout <<
-    "--pid                          " <<
+    "--pid                            " <<
     "Output PID in host API and device activity trace" <<
     std::endl;
   std::cout <<
-    "--output [-o] <filename>       " <<
+    "--output [-o] <filename>         " <<
     "Output profiling result to file" <<
     std::endl;
   std::cout <<
-    "--conditional-collection       " <<
+    "--conditional-collection         " <<
     "Enable conditional collection. " <<
     "This options is deprecated. Use --start-paused instead" <<
     std::endl;
   std::cout <<
-    "--start-paused                 " <<
+    "--start-paused                   " <<
     "Start the tool with tracing and profiling paused" <<
     std::endl;
   std::cout <<
-    "--output-dir-path <path>       " <<
+    "--output-dir-path <path>         " <<
     "Output directory path for result files" <<
     std::endl;
   std::cout <<
-    "--metric-query [-q]            " <<
+    "--metric-query [-q]              " <<
     "Query hardware metrics for each kernel instance is enabled for level-zero" <<
     std::endl;
   std::cout <<
-    "--metric-sampling [-k]         " <<
+    "--metric-sampling [-k]           " <<
     "Sample hardware performance metrics for each kernel instance in time-based mode" <<
     std::endl;
   std::cout <<
-    "--group [-g] <metric-group>    " <<
+    "--group [-g] <metric-group>      " <<
     "Hardware metric group (ComputeBasic by default)" <<
     std::endl;
   std::cout <<
@@ -198,65 +198,81 @@ void Usage(char * progname) {
     "Hardware performance metric sampling interval in us (default is 50 us) in time-based mode" <<
     std::endl;
   std::cout <<
-    "--device-list                  " <<
+    "--device-list                    " <<
     "Print available devices" <<
     std::endl;
   std::cout <<
-    "--metric-list                  " <<
+    "--metric-list                    " <<
     "Print available metric groups and metrics" <<
     std::endl;
   std::cout <<
-    "--stall-sampling               " <<
+    "--stall-sampling                 " <<
     "Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs" <<
     std::endl;
   std::cout <<
-    "--ranks-to-sample <ranks>      " <<
+    "--ranks-to-sample <ranks>        " <<
     "MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks" <<
     std::endl;
   std::cout <<
-    "--devices-to-sample <devices>  " <<
+    "--devices-to-sample <devices>    " <<
     "Devices ID to sample. The argument <devices> is a list of comma separated devices as reported" << std::endl <<
-    "                               by --device-list" <<
+    "                                 by --device-list" <<
     std::endl;
   std::cout <<
-    "--follow-child-process <0/1>   " <<
+    "--follow-child-process <0/1>     " <<
     "0: Do not follow or profile child processes on Linux" << std::endl <<
-    "                               1: Follow and profile child processes on Linux (default)" <<
+    "                                 1: Follow and profile child processes on Linux (default)" <<
     std::endl;
   std::cout <<
-    "--teardown-on-signal <signum>  " <<
+    "--teardown-on-signal <signum>    " <<
     "Try to gracefully shut down in case the application crashes or is terminated or <signum> is raised" << std::endl <<
-    "                               This option may change the application behavior so please use it carefully" <<
+    "                                 This option may change the application behavior so please use it carefully" <<
     std::endl;
 #ifndef _WIN32
   std::cout <<
-    "--session <session>            " <<
+    "--session <session>              " <<
     "Name this session <session> for dynamic control. The argument <session> is an alphanumeric string" <<
     std::endl;
   std::cout <<
-    "--pause <session>              " <<
+    "--pause <session>                " <<
     "Pause session <session>. The argument <session> must be the same session named with --session option" <<
     std::endl;
   std::cout <<
-    "--resume <session>             " <<
+    "--resume <session>               " <<
     "Resume session <session>. The argument <session> must be the same session named with --session option" <<
     std::endl;
   std::cout <<
-    "--stop <session>               " <<
+    "--stop <session>                 " <<
     "Stop session <session>. The argument <session> must be the same session named with --session option" <<
     std::endl;
   std::cout <<
-    "--chrome-kmd-logging <script>  " <<
+    "--chrome-kmd-logging <script>    " <<
     "Trace OS/KMD activitives. The argument <script> file defines the OS kernel or device driver activies to trace" <<
     std::endl;
 #endif /* _WIN32 */
   std::cout <<
-    "--version                      " <<
-    "Print version" <<
+    "--include-kernels <kernel-names> " <<
+    "Trace kernels, the names of which contain substrings in the comma-separated <kernel-names>(Level Zero only)" <<
     std::endl;
   std::cout <<
-    "--help                         " <<
-    "Show this help message and exit. Please refer to the README.md file for further details." <<
+    "--exclude-kernels <kernel-names> " <<
+    "Trace kernels, the names of which do not contain any substrings in the comma-separated <kernel-names>(Level Zero only)" <<
+    std::endl;
+  std::cout <<
+    "--include-kernels-file <file>    " <<
+    "Same as --include-kernels, except that the kernel name substrings are in <file>" <<
+    std::endl;
+  std::cout <<
+    "--exclude-kernels-file <file>    " <<
+    "Same as --exclude-kernels, except that the kernel name substrings are in <file>" <<
+    std::endl;
+  std::cout <<
+    "--version                        " <<
+    "Print version                    " <<
+    std::endl;
+  std::cout <<
+    "--help                           " <<
+    "Show this help message and exit. Please refer to the README.md file for further details" <<
     std::endl;
 }
 
@@ -461,6 +477,38 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_KernelMetrics", "1");
       metric_sampling = true;
       ++app_index;
+    } else if (strcmp(argv[i], "--include-kernels") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] Missing kernel names to include" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_IncludeKernels", argv[i]);
+      app_index += 2;
+    } else if (strcmp(argv[i], "--exclude-kernels") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] Missing kernel names to exclude " << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_ExcludeKernels", argv[i]);
+      app_index += 2;
+    } else if (strcmp(argv[i], "--include-kernels-file") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] Missing file of kernel name to include" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_IncludeKernelsFile", argv[i]);
+      app_index += 2;
+    } else if (strcmp(argv[i], "--exclude-kernels-file") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cout << "[ERROR] Missing file of kernel name to exclude" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_ExcludeKernelsFile", argv[i]);
+      app_index += 2;
     } else if (strcmp(argv[i], "--idle-sampling") == 0) {
       idle_sampling = true;
       ++app_index;
@@ -694,27 +742,20 @@ int ParseArgs(int argc, char* argv[]) {
   if (utils::GetEnv("UNITRACE_ChromeEventBufferSize").empty()) {
     utils::SetEnv("UNITRACE_ChromeEventBufferSize", "-1");	// does not hurt to set to default even if chrome logging is not enabled
   }
-
-#if 0
-  if (utils::GetEnv("UNITRACE_TraceKernelFilterIn") == "1" &&
-      utils::GetEnv("UNITRACE_TraceKernelFilterOut") == "1") {
-    std::cerr << "[ERROR] Options --filter-in and --filter-out can't be used together, choose one of them" << std::endl;
-    return -1;
-  }
-  if (utils::GetEnv("UNITRACE_TraceKernelFilterIn") == "1" || utils::GetEnv("UNITRACE_TraceKernelFilterOut") == "1") {
-      if (utils::GetEnv("UNITRACE_TraceKernelFilterFile") != "1" && utils::GetEnv("UNITRACE_TraceKernelFilter") != "1") {
-        std::cerr << "[ERROR] Options --filter-in or --filter-out require kernelname via --filter-file or --filter" << std::endl;
-        return -1;
+  std::string include_kernels_file = utils::GetEnv("git addFile");
+  if (!include_kernels_file.empty()) {
+      if (!CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(include_kernels_file))) {
+          std::cerr << "[ERROR] Include kernels file does not exist: " << include_kernels_file << std::endl;
+          return -1;
       }
   }
-  if (utils::GetEnv("UNITRACE_TraceKernelFilterFile") == "1" || utils::GetEnv("UNITRACE_TraceKernelFilter") == "1") {
-      if (utils::GetEnv("UNITRACE_TraceKernelFilterIn") != "1" && utils::GetEnv("UNITRACE_TraceKernelFilterOut") != "1") {
-        std::cerr << "[ERROR] Options --filter or --filter-file require include/exclude via --filter-in or --filter-out" << std::endl;
-        return -1;
+  std::string exclude_kernels_file = utils::GetEnv("UNITRACE_ExcludeKernelsFile");
+  if (!exclude_kernels_file.empty()) {
+      if (!CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(exclude_kernels_file))) {
+          std::cerr << "[ERROR] Filter-out file does not exist: " << exclude_kernels_file << std::endl;
+          return -1;
       }
   }
-#endif /* 0 */
-
   if (show_metric_list) {
     SetProfilingEnvironment(); // enable ZET_ENABLE_METRICS
     std::string value = utils::GetEnv("UNITRACE_DeviceId");
