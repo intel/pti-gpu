@@ -136,7 +136,7 @@ jobs:
     timeout-minutes: 30
 
     env:
-      LEVEL_ZERO_LOADER_VERSION: 1.26.1
+      LEVEL_ZERO_LOADER_VERSION: 1.26.3
     defaults:
       run:
         shell: cmd
