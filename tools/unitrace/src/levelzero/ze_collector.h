@@ -4249,7 +4249,7 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
     }
     else {
       *instance_data = nullptr;
@@ -4280,7 +4280,7 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
     }
     else {
       *instance_data = nullptr;
