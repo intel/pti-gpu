@@ -51,6 +51,13 @@
 #endif
 #endif
 
+// This corrects for future patch releases prior to 2025.3. We will assume a patch won't be issued
+// for the open-source version of the compiler (which relies on __SYCL_COMPILER_VERSION). We still
+// need the __SYCL_COMPILER_VERSION check above.
+#if defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER < 20250300)
+#undef PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3
+#endif
+
 // Static asserts to ensure PTI and UR API ids match.
 // These are critical for PyTorch framework. We have to tolerate some breakages between oneAPI
 // versions due to a bug but not these.
