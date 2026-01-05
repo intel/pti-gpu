@@ -435,13 +435,14 @@ class ZeCollector {
   }
 
   void DisableTracer() {
-    // PTI_ASSERT(tracer_ != nullptr);
-#if !defined(_WIN32)
+    // In the past: pre- oneAPI 2025.2 and old L0, on Windows due to not specified DLLs unload order
+    // we had issues here.
+    // Now this works and prevents from receiving L0 Callbacks when the process is winding down.
     overhead::Init();
-    ze_result_t status = zelTracerSetEnabled(tracer_, false);
+    [[maybe_unused]] ze_result_t status = zelTracerSetEnabled(tracer_, false);
     overhead_fini(zelTracerSetEnabled_id);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-#endif
+    SPDLOG_DEBUG("In {}, zelTracerSetEnabled(.., false) returns: {:x}", __func__,
+                 static_cast<uint32_t>(status));
   }
 
   const CollectorOptions& GetCollectorOptions() const { return options_; }
