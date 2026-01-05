@@ -6,6 +6,7 @@
 #ifndef INCLUDE_PTI_METRICS_H_
 #define INCLUDE_PTI_METRICS_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -98,9 +99,9 @@ typedef struct _pti_metric_properties_t {
 typedef void* pti_metrics_group_handle_t; //!< Abstraction of a metric group handle within PTI
 
 typedef enum _pti_metrics_group_type {
-  PTI_METRIC_GROUP_TYPE_EVENT_BASED = 0b0001,    //!< Event based sampling (Query)
-  PTI_METRIC_GROUP_TYPE_TIME_BASED = 0b0010,     //!< Time based sampling (Stream)
-  PTI_METRIC_GROUP_TYPE_TRACE_BASED = 0b0100,    //!< Trace based sampling (Trace)
+  PTI_METRIC_GROUP_TYPE_EVENT_BASED = 0x01,    //!< Event based sampling (Query)
+  PTI_METRIC_GROUP_TYPE_TIME_BASED = 0x02,     //!< Time based sampling (Stream)
+  PTI_METRIC_GROUP_TYPE_TRACE_BASED = 0x04,    //!< Trace based sampling (Trace)
 
   PTI_METRIC_GROUP_TYPE_FORCE_UINT32 = 0x7fffffff
 } pti_metrics_group_type;

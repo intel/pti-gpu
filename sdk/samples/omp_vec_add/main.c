@@ -11,7 +11,7 @@
 const unsigned long long kRequestedRecordCount = 64ULL;
 const unsigned long long kRequestedBufferSize = kRequestedRecordCount * sizeof(pti_view_record_kernel);
 
-void StartTracing() {
+void StartTracing(void) {
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
@@ -20,7 +20,7 @@ void StartTracing() {
                                                 PTI_API_GROUP_LEVELZERO));
 }
 
-void StopTracing() {
+void StopTracing(void) {
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL));
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY));
@@ -112,18 +112,18 @@ const unsigned min_size = 32;
 
 void Usage(const char *name) {
   printf(" Calculating floating point matrix multiply on gpu\n");
-  printf("%s [ [gpu|cpu|host, default=gpu],  [matrix size, default=1024, max=%u], [repetition count, default=4]] \n", 
+  printf("%s [ [gpu|cpu|host, default=gpu],  [matrix size, default=1024, max=%u], [repetition count, default=4]] \n",
          name, max_size);
 }
 
 void Compute(unsigned int size) {
   const unsigned int N = (size > 0) ? size : 2048;
-  
+
   // Allocate arrays using standard C malloc
   int* a = (int*)malloc(N * sizeof(int));
   int* b = (int*)malloc(N * sizeof(int));
   int* c = (int*)malloc(N * sizeof(int));
-  
+
   if (!a || !b || !c) {
     fprintf(stderr, "Memory allocation failed\n");
     free(a);
