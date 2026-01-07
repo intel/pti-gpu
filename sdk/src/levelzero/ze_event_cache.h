@@ -118,10 +118,12 @@ class ZeEventCache {
 
     event = result->second.back();
     result->second.pop_back();
+    /* on Windows with oneAPI 2025.3.1 zeEventQueryStatus returned ZE_SUCCESS - not sure why,
+    // although this check is redundant and could be omitted
     overhead::Init();
     PTI_ASSERT(zeEventQueryStatus(event) == ZE_RESULT_NOT_READY);
     overhead_fini(zeEventQueryStatus_id);
-
+    */
     return event;
   }
 

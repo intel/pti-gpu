@@ -632,6 +632,17 @@ target_include_directories(
 target_link_libraries(subscribers_unit_test PUBLIC GTest::gtest_main spdlog::spdlog
                                             PRIVATE Pti::pti_view LevelZero::headers)
 
+add_executable(ze_events_pools_observer_test ze_events_pools_observer_test.cc)
+
+target_include_directories(ze_events_pools_observer_test
+  PUBLIC "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
+
+target_link_libraries(ze_events_pools_observer_test PUBLIC spdlog::spdlog
+                                                    GTest::gtest_main
+                                                   LevelZero::level-zero
+                                                   ${CMAKE_DL_LIBS})
 
 add_executable(view_gpu_local_test view_gpu_local_test.cc)
 
@@ -655,6 +666,11 @@ gtest_discover_tests(
 
 gtest_discover_tests(
   subscribers_unit_test
+  PROPERTIES LABELS "unit")
+
+gtest_discover_tests(
+  ze_events_pools_observer_test
+  DISCOVERY_TIMEOUT 60
   PROPERTIES LABELS "unit")
 
 gtest_discover_tests(

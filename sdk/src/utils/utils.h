@@ -42,7 +42,9 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <locale>
 #include <random>
+#include <sstream>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -489,6 +491,28 @@ inline void SetGlobalSpdLogPattern() {
   // https://github.com/gabime/spdlog/wiki/3.-Custom-formatting
   spdlog::set_pattern("PTI:[%H:%M][%^-%l-%$]%P:%t %s:%# %v");
 }
+
+// Copied from samples_utilities - useful for logging
+//
+// Helper class and function: formats an int with thousands separator
+// e.g. 1234567890 -> 1'234'567'890
+// when manually comparing timestamps in tests
+class ApostropheNumpunct : public std::numpunct<char> {
+ protected:
+  char do_thousands_sep() const override { return '\''; }
+  std::string do_grouping() const override { return "\3"; }
+};
+
+template <typename T>
+inline std::string AposFormat(T value) {
+  static_assert(std::is_unsigned<T>::value, "Unsigned integer type required");
+  std::ostringstream oss;
+  static std::locale apostrophe_locale(std::locale::classic(), new ApostropheNumpunct);
+  oss.imbue(apostrophe_locale);
+  oss << value;
+  return oss.str();
+}
+
 }  // namespace utils
 
 #endif  // PTI_UTILS_UTILS_H_

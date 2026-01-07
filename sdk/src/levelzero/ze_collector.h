@@ -46,6 +46,7 @@
 #include "ze_driver_init.h"
 #include "ze_event_cache.h"
 #include "ze_event_managers.h"
+#include "ze_events_and_pools_observer.h"
 #include "ze_local_collection_helpers.h"
 #include "ze_timer_helper.h"
 #include "ze_utils.h"
@@ -632,6 +633,8 @@ class ZeCollector {
         fcallback_(fcallback),
         callback_data_(callback_data),
         event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP),
+        l0_wrapper_(),
+        event_pools_observer_(l0_wrapper_),
         startstop_mode_changer(this) {
     CreateDeviceMap(drv_list);
     DetermineIfCounterEventsPossible(drv_list);
@@ -1102,6 +1105,13 @@ class ZeCollector {
 
     uint64_t device_start = ts.global.kernelStart & device_mask;
     uint64_t device_end = ts.global.kernelEnd & device_mask;
+    SPDLOG_TRACE(
+        "In {}\nBefore applying mask.\nGPU op device time start: {}\n"
+        "                     end: {}\n"
+        "After applying mask.\nGPU op device time start: {}\n"
+        "                     end: {}",
+        __func__, utils::AposFormat(ts.global.kernelStart), utils::AposFormat(ts.global.kernelEnd),
+        utils::AposFormat(device_start), utils::AposFormat(device_end));
 
     // Why submit_time_device_ and time_shift ?
     //
@@ -1269,7 +1279,10 @@ class ZeCollector {
     ze_kernel_timestamp_result_t timestamp{};
 
     ze_event_handle_t event_to_query = command->event_self;
-    if (ZeCollectionMode::Local == collection_mode_ && command->event_swap.Get() != nullptr) {
+    // In most cases event_swap present for Local collection,
+    // but since introduction UR V2, where UR uses counter-based events by default
+    // - for all modes PTI uses the same event_swap flow
+    if (command->event_swap.Get() != nullptr) {
       event_to_query = command->event_swap.Get();
     }
     SPDLOG_TRACE("\tQuery KernelTimestamp on event: {}", static_cast<const void*>(event_to_query));
@@ -1293,7 +1306,13 @@ class ZeCollector {
 
     ProcessCallTimestamp(command, timestamp, -1, true, kcexecrec);
 
-    if (ZeCollectionMode::Local != collection_mode_) {
+    if (command->event_swap.Get() == nullptr) {
+      // Only release to cache if no event swap was needed
+      //   - Regular events in Full/Hybrid/Local mode for V1 or V2 where PTI used an event
+      //     from its event_cache because signal_event was null; or
+      //   - User-provided / pool-modified timestamped events (non counter-based)
+      //     where event came from a modified pool rather than the cache
+      //     (in this case event_cache_.ReleaseEvent() is effectively a NOP).
       event_cache_.ReleaseEvent(command->event_self);
       command->event_self = nullptr;
     }
@@ -1538,46 +1557,74 @@ class ZeCollector {
   }
 
   // Callbacks
-  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t* params, void* global_data,
+  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t* params, void* /*global_data*/,
                                      void** instance_data) {
     const ze_event_pool_desc_t* desc = *(params->pdesc);
     if (desc == nullptr) {
       return;
     }
     if (desc->flags & ZE_EVENT_POOL_FLAG_IPC) {
+      // TODO Might need special processing of such pool
+      SPDLOG_DEBUG("In {} skipping IPC event pool", __func__);
       return;
     }
 
-    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    if (ZeCollectionMode::Local == collector->collection_mode_) {
-      return;
+    ze_event_pool_desc_t* profiling_desc = nullptr;
+
+    // Creating timestamp enabled description only for non-counter-based event pool
+    // where pNext == nullptr
+    if (desc->pNext == nullptr) {
+      profiling_desc = new ze_event_pool_desc_t;
+      PTI_ASSERT(profiling_desc != nullptr);
+      profiling_desc->stype = desc->stype;
+      // PTI_ASSERT(profiling_desc->stype == ZE_STRUCTURE_TYPE_EVENT_POOL_DESC);
+      profiling_desc->pNext = desc->pNext;
+      profiling_desc->flags = desc->flags;
+
+      profiling_desc->flags |= ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP;
+      profiling_desc->flags |= ZE_EVENT_POOL_FLAG_HOST_VISIBLE;
+      profiling_desc->count = desc->count;
+      *(params->pdesc) = profiling_desc;
+      SPDLOG_DEBUG("In {} overwrote pool description", __func__);
     }
 
-    ze_event_pool_desc_t* profiling_desc = new ze_event_pool_desc_t;
-    PTI_ASSERT(profiling_desc != nullptr);
-    profiling_desc->stype = desc->stype;
-    // PTI_ASSERT(profiling_desc->stype == ZE_STRUCTURE_TYPE_EVENT_POOL_DESC);
-    profiling_desc->pNext = desc->pNext;
-    profiling_desc->flags = desc->flags;
-    profiling_desc->flags |= ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP;
-    profiling_desc->flags |= ZE_EVENT_POOL_FLAG_HOST_VISIBLE;
-    profiling_desc->count = desc->count;
-
-    *(params->pdesc) = profiling_desc;
     *instance_data = profiling_desc;
-    SPDLOG_DEBUG("In {} over-wrote profiling_desc -- onenter", __FUNCTION__);
   }
 
-  static void OnExitEventPoolCreate(ze_event_pool_create_params_t* /*params*/,
-                                    ze_result_t /*result*/, void* global_data,
-                                    void** instance_data) {
+  static void OnExitEventPoolCreate(ze_event_pool_create_params_t* params, ze_result_t /*result*/,
+                                    void* global_data, void** instance_data) {
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    if (ZeCollectionMode::Local == collector->collection_mode_) {
-      return;
-    }
+
+    // this might be original desc or desc that we created
+    const ze_event_pool_desc_t* passed_desc = *(params->pdesc);
+
     ze_event_pool_desc_t* desc = static_cast<ze_event_pool_desc_t*>(*instance_data);
-    SPDLOG_DEBUG("In {} cleaned up profiling_desc -- onexit", __FUNCTION__);
-    delete desc;
+
+    const ze_event_pool_handle_t pool = **(params->pphEventPool);
+    SPDLOG_DEBUG("In {} pool: {}\n\tcleaned up the profiling_desc", __func__,
+                 static_cast<const void*>(pool));
+
+    // A non-null pNext indicates that this event pool uses an extension
+    // structure for counter-based profiling (implementation-specific
+    // convention used as a proxy here).
+    collector->event_pools_observer_.Add(
+        pool, *(params->phContext), passed_desc->flags,
+        (passed_desc->pNext != nullptr) ? EventPoolType::kCounterBased : EventPoolType::kRegular);
+
+    if (desc != nullptr) {
+      delete desc;
+    }
+  }
+
+  static void OnExitEventPoolDestroy(ze_event_pool_destroy_params_t* params, ze_result_t /*result*/,
+                                     void* global_data, void** /*instance_data*/) {
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+
+    const ze_event_pool_handle_t pool = *(params->phEventPool);
+    SPDLOG_DEBUG("In {} pool: {}\n\tcleaned up the profiling_desc", __func__,
+                 static_cast<const void*>(pool));
+
+    collector->event_pools_observer_.ClearPool(pool);
   }
 
   static void OnEnterEventDestroy(ze_event_destroy_params_t* params, void* global_data,
@@ -1902,37 +1949,47 @@ class ZeCollector {
 #endif
       }
     }
-
     SPDLOG_TRACE("\tcontext: {}, device: {}", (void*)context, (void*)device);
 
-    if (ZeCollectionMode::Local != collector->collection_mode_) {
-      if (signal_event == nullptr) {
-        signal_event = collector->event_cache_.GetEvent(context);
-        PTI_ASSERT(signal_event != nullptr);
-        SPDLOG_DEBUG("\tIn {} created Signal event from event_cache", __FUNCTION__);
-      }
+    if (signal_event == nullptr) {
+      signal_event = collector->event_cache_.GetEvent(context);
+      PTI_ASSERT(signal_event != nullptr);
+      SPDLOG_DEBUG("\tIn {} No incoming Signal event, creating Signal event from Event_cache",
+                   __func__);
       command->event_self = signal_event;
     } else {
-      // Setting up data for later submission Bridge Kernel (or Memory Op)
-      // the Bridge kernel will be submitted after the Target Kernel
-      // Swapping the events:
-      // Target kernel will signal the new ("swap") event with Timestamp enabled
-      // Bridge Kernel will signal the Target Kernel initial event
-      if (signal_event != nullptr) {
+      auto properties_opt = collector->event_pools_observer_.GetEventProperties(signal_event);
+
+      bool event_regular =
+          properties_opt.has_value() && properties_opt->type == EventPoolType::kRegular;
+      bool event_timestamped =
+          properties_opt && (properties_opt->flags & ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP);
+      bool event_host_visible =
+          properties_opt && (properties_opt->flags & ZE_EVENT_POOL_FLAG_HOST_VISIBLE);
+      SPDLOG_DEBUG(
+          "\tIncoming Event properties: properties found: {}, regular: {},"
+          " timestamped: {}, host_visible: {}",
+          properties_opt.has_value(), event_regular ? "true" : "false (counter-based or unknown)",
+          event_timestamped, event_host_visible);
+
+      if (!event_regular || !event_timestamped || !event_host_visible) {
+        // Make a swap event that takes the role of initial signal event.
+        // While for the signal event - create regular event with Timestamped property,
+        // so it can be requested on the GPU operation timing
         command->event_self = signal_event;  // save signal event
         if (command->event_swap.Empty()) {
           command->event_swap = collector->event_pool_manager_.AcquireEvent(context);
         }
         signal_event = command->event_swap.Get();
-        SPDLOG_TRACE("\t\t swap event: {}, self_event: {}",
-                     static_cast<const void*>(command->event_swap.Get()),
-                     static_cast<const void*>(command->event_self));
+
+        SPDLOG_DEBUG(
+            "\tIn {} Created Swap event from Event_pool_manager"
+            " swap event: {}, self_event: {}",
+            __func__, static_cast<const void*>(command->event_swap.Get()),
+            static_cast<const void*>(command->event_self));
       } else {
-        signal_event = collector->event_cache_.GetEvent(context);
-        PTI_ASSERT(signal_event != nullptr);
-        SPDLOG_DEBUG("\tLocal collection mode, created Signal event from event_cache: {}",
-                     static_cast<const void*>(signal_event));
         command->event_self = signal_event;
+        SPDLOG_DEBUG("\tIn {} using Incoming Signal event as is", __func__);
       }
     }
 
@@ -2002,9 +2059,10 @@ class ZeCollector {
 
     SPDLOG_TRACE("\tcorr_id: {}", command->corr_id_);
 
-    // it could be that event swap was not needed  - in this case event_swap would be 0
-    // and we can not append Bridge kernel
-    if (command->event_swap.Get() != nullptr && ZeCollectionMode::Local == collection_mode_) {
+    // In most cases event_swap present for Local collection,
+    // but with UR V2 in presence of counter-based events
+    // - for Full and Hybrid modes the same event_swap mechanism is used
+    if (command->event_swap.Get() != nullptr) {
       bool append_res = true;
       if (ShouldInjectSignalEvent()) {
         SPDLOG_DEBUG("\t\t Will be appending WaitAndSignal command!");
@@ -2976,6 +3034,7 @@ class ZeCollector {
       }
       collector->event_cache_.ReleaseContext(*(params->phContext));
       collector->event_pool_manager_.Clear(*(params->phContext));
+      collector->event_pools_observer_.ClearContext(*(params->phContext));
     }
   }
 
@@ -3069,6 +3128,12 @@ class ZeCollector {
 
   Level0Wrapper l0_wrapper_;
 
+  // Keeps track of EventPools in Full & Hybrid collection modes,
+  // queries event pools in Local mode -
+  // all is to find out if GPU operation event is regular or counter-based, and
+  // if regular - may be already has timestamp property
+  ZeEventPoolsObserver event_pools_observer_;
+
   // Multiple subscribers support with subscriber handle-based access
   // important that container is ordered, callbacks should be called in an order
 
@@ -3127,6 +3192,10 @@ class ZeCollector {
         // no any collector ProcessCalls or similar here -
         // all finsihed tasks data should be captured and handled by proper callbacks by this point
         ze_result_t status = parent_collector_->l0_wrapper_.w_zelDisableTracingLayer();
+        // Clear observed event pools info as tracing is being disabled
+        // even it will be further enabled - collector is blind to what happen in-between
+        parent_collector_->event_pools_observer_.ClearAll();
+
         if (ZE_RESULT_SUCCESS == status) {
           global_ref_count--;
           PTI_ASSERT(global_ref_count == 0);

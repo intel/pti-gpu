@@ -27,23 +27,7 @@ runs:
       run: |
         source /opt/intel/oneapi/setvars.sh
 
-        #
-        # PTI-330.
-        # Tests for BMG+2025.3 are partitioned to have them pass. Notice
-        # that `NoKernelOverlap` tests in Full and Hybrid modes require `SYCL_UR_USE_LEVEL_ZERO_V2=0`
-        # Local mode does not need this workaround.
-        #
-        if [[ "${{ inputs.adjust-test-2025-3 }}" == "true" && "${{ inputs.adjust-test-bmg }}" == "true" ]]; then
-          echo "BMG+2025.3 NoKernelOverlap test that need SYCL_UR_USE_LEVEL_ZERO_V2=0 (Full and Hybrid modes)"
-          SYCL_UR_USE_LEVEL_ZERO_V2=0 ctest --output-on-failure --preset ${{ inputs.preset }} -R "NoKernelOverlapAndGapInSubmittingTests.*PTI_COLLECTION_MODE_(Full|Hybrid)"
-
-          echo "BMG+2025.3 tests that should pass (including NoKernelOverlap Local mode)"
-
-          ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance -E "NoKernelOverlapAndGapInSubmittingTests.*PTI_COLLECTION_MODE_(Full|Hybrid)"
-
-        else
-          ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance
-        fi
+        ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance
 
     - name: Quarantined tests # flaky tests
       continue-on-error: true

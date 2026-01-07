@@ -1089,6 +1089,7 @@ def main():
         "zeEventDestroy",
         "zeEventHostReset",
         "zeEventPoolCreate",
+        "zeEventPoolDestroy",
         "zeCommandListAppendLaunchKernel",
         "zeCommandListAppendLaunchKernelWithArguments",
         "zeCommandListAppendLaunchKernelWithParameters",
