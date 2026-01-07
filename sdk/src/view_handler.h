@@ -87,6 +87,7 @@ inline static constexpr std::array kPtiClassSyclGpuOpsCoreApis{
     pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id,
     pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id,
     pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id,
+    pti_api_id_runtime_sycl::urEnqueueKernelLaunchWithArgsExp_id,
     pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id,
     pti_api_id_runtime_sycl::urEnqueueMemBufferRead_id,
     pti_api_id_runtime_sycl::urEnqueueMemBufferWrite_id,

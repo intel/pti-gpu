@@ -13,7 +13,7 @@
 // ApiVersion: * @version v1.14-r1.14.33
 
 //             https://github.com/oneapi-src/level-zero.git
-//             commit: 5172a585947b6fdd4bcd7be236d4a88232821900 - v1.26.1
+//             commit: 354190cd2e7aa485b55a39c91d108413a94cc5e1 - v1.26.3
 
 
 typedef enum _pti_api_id_driver_levelzero {
