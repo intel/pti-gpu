@@ -725,18 +725,6 @@ class CallbackApiTest : public ::testing::TestWithParam<bool> {
     }
   }
 
-  static void CheckCommandListProperties(uint32_t cmd_list_properties) {
-    if (command_list_immediate_) {
-      EXPECT_TRUE(cmd_list_properties &
-                  pti_backend_command_list_type::PTI_BACKEND_COMMAND_LIST_TYPE_IMMEDIATE)
-          << "Expected IMMEDIATE command list property in ENTER callback";
-    } else {
-      EXPECT_FALSE(cmd_list_properties &
-                   pti_backend_command_list_type::PTI_BACKEND_COMMAND_LIST_TYPE_IMMEDIATE)
-          << "Did not expect IMMEDIATE command list property in ENTER callback";
-    }
-  }
-
   // ============================================================================
   // Helper functions for TestCallback
   // ============================================================================
@@ -776,10 +764,13 @@ class CallbackApiTest : public ::testing::TestWithParam<bool> {
 
   // Handles phase-specific logic for APPENDED domain
   static void HandlePhaseAppended(CallbackData* data, pti_callback_gpu_op_data* gpu_op_data) {
+    // removed from below CheckCommandListProperties(gpu_op_data->_cmd_list_properties)
+    // as immediate passed to queue creation per spec is just a hint
+    // and runtime might decide to ignore it
+
     if (gpu_op_data->_phase == PTI_CB_PHASE_API_ENTER) {
       data->enter_count++;
       data->appended_enter_count++;
-      CheckCommandListProperties(gpu_op_data->_cmd_list_properties);
 
       if (data->do_external_correlation_test) {
         PushOrPopExternalCorrelation(true, data, gpu_op_data->_correlation_id);
@@ -787,7 +778,6 @@ class CallbackApiTest : public ::testing::TestWithParam<bool> {
     } else if (gpu_op_data->_phase == PTI_CB_PHASE_API_EXIT) {
       data->exit_count++;
       data->appended_exit_count++;
-      CheckCommandListProperties(gpu_op_data->_cmd_list_properties);
 
       if (data->do_external_correlation_test) {
         PushOrPopExternalCorrelation(false, data, gpu_op_data->_correlation_id);
