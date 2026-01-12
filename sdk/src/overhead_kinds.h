@@ -24,9 +24,6 @@ namespace overhead {
 // TODO: redo this approach to enable/disable state tracking.
 inline static std::atomic<bool> overhead_collection_enabled = false;
 
-inline constexpr auto kOhThreshold =
-    1.00;  // 1ns threshhold by default -- TODO -- make this setAttributable
-
 enum class OverheadRuntimeType {
   kSycl = 0,
   kL0,
@@ -115,6 +112,9 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
       map_overhead_per_kind.find({pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME});
 
   if (overhead_it != map_overhead_per_kind.cend()) {
+    // Note: it could be surprising that duration is zero - but this can happen,
+    // especially on Windows where PTI at the moment uses QueryPerformanceCounter
+    // which has a coarse granularity of ~ 100ns.
     uint64_t duration = end_time_ns - overhead_it->second._overhead_start_timestamp_ns;
     overhead_it->second._overhead_duration_ns += duration;
     if (runtime_type == OverheadRuntimeType::kSycl) {
@@ -123,16 +123,14 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
     if (runtime_type == OverheadRuntimeType::kL0) {
       overhead_it->second._overhead_count += 1;
     }
-    if ((overhead_it->second._overhead_duration_ns / kOhThreshold) > 1) {
-      overhead_it->second._overhead_end_timestamp_ns = end_time_ns;
-      overhead_it->second._overhead_thread_id = thread_local_pid_tid_info.tid;
-      overhead_it->second._api_id = api_id;  // Turn this
-      // back on if we need to propagate api_name to user.
-      if ((runtime_type == OverheadRuntimeType::kL0) && (ocallback_ != nullptr)) {
-        ocallback_(&overhead_it->second, overhead_data);
-      }
-      ResetRecord();
+    overhead_it->second._overhead_end_timestamp_ns = end_time_ns;
+    overhead_it->second._overhead_thread_id = thread_local_pid_tid_info.tid;
+    overhead_it->second._api_id = api_id;  // Turn this
+    // back on if we need to propagate api_name to user.
+    if ((runtime_type == OverheadRuntimeType::kL0) && (ocallback_ != nullptr)) {
+      ocallback_(&overhead_it->second, overhead_data);
     }
+    ResetRecord();
   }
 }
 
@@ -155,14 +153,12 @@ inline void FiniSycl(OverheadRuntimeType runtime_type) {
     if (runtime_type == OverheadRuntimeType::kL0) {
       overhead_it->second._overhead_count += 1;
     }
-    if ((overhead_it->second._overhead_duration_ns / kOhThreshold) > 1) {
-      overhead_it->second._overhead_end_timestamp_ns = end_time_ns;
-      overhead_it->second._overhead_thread_id = utils::GetTid();
-      if ((runtime_type == OverheadRuntimeType::kSycl) && (ocallback_ != nullptr)) {
-        ocallback_(&overhead_it->second, overhead_data);
-      }
-      ResetRecord();
+    overhead_it->second._overhead_end_timestamp_ns = end_time_ns;
+    overhead_it->second._overhead_thread_id = utils::GetTid();
+    if ((runtime_type == OverheadRuntimeType::kSycl) && (ocallback_ != nullptr)) {
+      ocallback_(&overhead_it->second, overhead_data);
     }
+    ResetRecord();
   }
 }
 
