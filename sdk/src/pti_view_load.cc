@@ -463,20 +463,20 @@ pti_result ptiMetricsStopCollection(pti_device_handle_t device_handle) {
   }
 }
 
-pti_result ptiMetricGetCalculatedData(pti_device_handle_t device_handle,
-                                      pti_metrics_group_handle_t metrics_group_handle,
-                                      pti_value_t* metrics_values_buffer,
-                                      uint32_t* metrics_values_count) {
+pti_result ptiMetricsGetCalculatedData(pti_device_handle_t device_handle,
+                                       pti_metrics_group_handle_t metrics_group_handle,
+                                       pti_value_t* metrics_values_buffer,
+                                       uint32_t* metrics_values_count) {
   try {
     if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
       return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
     }
 
-    if (!pti::PtiLibHandler::Instance().ptiMetricGetCalculatedData_) {
+    if (!pti::PtiLibHandler::Instance().ptiMetricsGetCalculatedData_) {
       return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
     }
 
-    return pti::PtiLibHandler::Instance().ptiMetricGetCalculatedData_(
+    return pti::PtiLibHandler::Instance().ptiMetricsGetCalculatedData_(
         device_handle, metrics_group_handle, metrics_values_buffer, metrics_values_count);
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;

@@ -487,7 +487,7 @@ class MetricsProfiler {
       return false;
     }
     uint32_t total_values_count = 0;
-    pti_result result = ptiMetricGetCalculatedData(
+    pti_result result = ptiMetricsGetCalculatedData(
         configured_device_handle_, configured_group_handle_, nullptr, &total_values_count);
     if (result != PTI_SUCCESS || total_values_count == 0) {
       std::cerr << "Failed to get required buffer size to dump collected data on specified device"
@@ -497,8 +497,8 @@ class MetricsProfiler {
 
     std::vector<pti_value_t> metrics_values_buffer(total_values_count);
 
-    result = ptiMetricGetCalculatedData(configured_device_handle_, configured_group_handle_,
-                                        metrics_values_buffer.data(), &total_values_count);
+    result = ptiMetricsGetCalculatedData(configured_device_handle_, configured_group_handle_,
+                                         metrics_values_buffer.data(), &total_values_count);
 
     if (result != PTI_SUCCESS || total_values_count == 0 || metrics_values_buffer.empty()) {
       std::cerr << "Failed to capture collected data" << std::endl;

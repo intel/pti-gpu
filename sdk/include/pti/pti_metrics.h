@@ -263,13 +263,13 @@ ptiMetricsStopCollection(pti_device_handle_t device_handle);
 /**
  * @brief process and dump collected data on specified device
  * Note: ptiMetricsStopCollection must be called first to process collected data
- * ptiMetricGetCalculatedData can only be called once after the collection is stopped and cannot be called between pause and resume
+ * ptiMetricsGetCalculatedData can only be called once after the collection is stopped and cannot be called between pause and resume
  *
- * usage: 1- Call ptiMetricGetCalculatedData(device_handle, metrics_group_handle, NULL, metrics_values_count) to discover the required buffer size for
+ * usage: 1- Call ptiMetricsGetCalculatedData(device_handle, metrics_group_handle, NULL, metrics_values_count) to discover the required buffer size for
  *           data collected for the specified metric group on on the specified device ;
  *           the required buffer size will be written to value_count in multiples of pti_value_t.
  *        2- Allocate metrics_values_buffer for holding  metrics_values_count values
- *        3- Call ptiMetricGetCalculatedData(device_handle, metrics_group_handle, metrics_values_buffer, metrics_values_count) to get the values written to buffer
+ *        3- Call ptiMetricsGetCalculatedData(device_handle, metrics_group_handle, metrics_values_buffer, metrics_values_count) to get the values written to buffer
  * A sample contains a 64bit value container for each metric in the metric group.
  * based on the metric's value type, the 64bit value container should be converted appropriately.
  *
@@ -282,7 +282,7 @@ ptiMetricsStopCollection(pti_device_handle_t device_handle);
  * @return pti_result
  */
 pti_result PTI_EXPORT
-ptiMetricGetCalculatedData(pti_device_handle_t device_handle,
+ptiMetricsGetCalculatedData(pti_device_handle_t device_handle,
                           pti_metrics_group_handle_t metrics_group_handle,
                           pti_value_t* metrics_values_buffer,
                           uint32_t* metrics_values_count);

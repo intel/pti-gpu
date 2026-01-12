@@ -624,7 +624,7 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateNotStartedCollection) {
   // test calculate on not started collection
   uint32_t metrics_values_count;
 
-  EXPECT_EQ(ptiMetricGetCalculatedData(device, group, nullptr, &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(device, group, nullptr, &metrics_values_count),
             PTI_ERROR_METRICS_NO_DATA_COLLECTED);
 }
 
@@ -639,8 +639,8 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateWith0BufferSize) {
   pti_value_t dummy = pti_value_t();
   std::vector<pti_value_t> metrics_values_buffer = {dummy};
 
-  EXPECT_EQ(ptiMetricGetCalculatedData(device, group, metrics_values_buffer.data(),
-                                       &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(device, group, metrics_values_buffer.data(),
+                                        &metrics_values_count),
             PTI_ERROR_BAD_ARGUMENT);
 }
 
@@ -650,7 +650,7 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateWithNullDevice) {
   pti_metrics_group_handle_t group =
       metrics_utils::MetricsProfiler::MetricsProfilerInstance().GetConfiguredMetricGroupHandle();
 
-  EXPECT_EQ(ptiMetricGetCalculatedData(nullptr, group, nullptr, &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(nullptr, group, nullptr, &metrics_values_count),
             PTI_ERROR_BAD_ARGUMENT);
 }
 
@@ -660,8 +660,8 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateWithInvalidDevice) {
   pti_metrics_group_handle_t group =
       metrics_utils::MetricsProfiler::MetricsProfilerInstance().GetConfiguredMetricGroupHandle();
 
-  EXPECT_EQ(ptiMetricGetCalculatedData(static_cast<pti_device_handle_t>(group), group, nullptr,
-                                       &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(static_cast<pti_device_handle_t>(group), group, nullptr,
+                                        &metrics_values_count),
             PTI_ERROR_BAD_ARGUMENT);
 }
 
@@ -671,7 +671,7 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateWithNullMetricGroup) {
 
   // test calculate on not started collection
   uint32_t metrics_values_count;
-  EXPECT_EQ(ptiMetricGetCalculatedData(device, nullptr, nullptr, &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(device, nullptr, nullptr, &metrics_values_count),
             PTI_ERROR_BAD_ARGUMENT);
 }
 
@@ -681,8 +681,8 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateWithInvalidMetricGroup) {
 
   // test calculate with invalid metric group, use device handle instad of metric group handle
   uint32_t metrics_values_count;
-  EXPECT_EQ(ptiMetricGetCalculatedData(device, static_cast<pti_metrics_group_handle_t>(device),
-                                       nullptr, &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(device, static_cast<pti_metrics_group_handle_t>(device),
+                                        nullptr, &metrics_values_count),
             PTI_ERROR_BAD_ARGUMENT);
 }
 
@@ -697,7 +697,7 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateEnabledCollection) {
   uint32_t metrics_values_count;
   pti_metrics_group_handle_t group =
       metrics_utils::MetricsProfiler::MetricsProfilerInstance().GetConfiguredMetricGroupHandle();
-  EXPECT_EQ(ptiMetricGetCalculatedData(device, group, nullptr, &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(device, group, nullptr, &metrics_values_count),
             PTI_ERROR_METRICS_COLLECTION_NOT_DISABLED);
 }
 
@@ -712,7 +712,7 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculatePausedCollection) {
   uint32_t metrics_values_count;
   pti_metrics_group_handle_t group =
       metrics_utils::MetricsProfiler::MetricsProfilerInstance().GetConfiguredMetricGroupHandle();
-  EXPECT_EQ(ptiMetricGetCalculatedData(device, group, nullptr, &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(device, group, nullptr, &metrics_values_count),
             PTI_ERROR_METRICS_COLLECTION_NOT_DISABLED);
 }
 
@@ -730,7 +730,7 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateEmptyCollection) {
   uint32_t metrics_values_count;
   pti_metrics_group_handle_t group =
       metrics_utils::MetricsProfiler::MetricsProfilerInstance().GetConfiguredMetricGroupHandle();
-  EXPECT_EQ(ptiMetricGetCalculatedData(device, group, nullptr, &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(device, group, nullptr, &metrics_values_count),
             PTI_ERROR_METRICS_NO_DATA_COLLECTED);
 
   // test empty calculate on no data collected
@@ -751,7 +751,7 @@ TEST_F(VecsqaddMetricsFixtureTest, StartCollectionPausedAndResumeAndCalculateBef
   uint32_t metrics_values_count;
   pti_metrics_group_handle_t group =
       metrics_utils::MetricsProfiler::MetricsProfilerInstance().GetConfiguredMetricGroupHandle();
-  EXPECT_EQ(ptiMetricGetCalculatedData(device, group, nullptr, &metrics_values_count),
+  EXPECT_EQ(ptiMetricsGetCalculatedData(device, group, nullptr, &metrics_values_count),
             PTI_ERROR_METRICS_COLLECTION_NOT_DISABLED);
 
   // stop collection
