@@ -1683,39 +1683,16 @@ class ZeCollector {
           }
         }
       }
-      // Process generation of synch record even if result is not successful.
-      if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
-          collector->acallback_ != nullptr) {
-        std::vector<ZeKernelCommandExecutionRecord> kcexec1;
-        ZeKernelCommandExecutionRecord rec = {};
-        ze_event_handle_t event_h = *params->phEvent;
-        ze_event_pool_handle_t epool_h = nullptr;
-        ze_context_handle_t ctxt_h = nullptr;
-        rec.context_ = nullptr;
-        if (collector->IsIntrospectionCapable()) {
-          status = collector->l0_wrapper_.w_zeEventGetEventPool(event_h, &epool_h);
-          if (status == ZE_RESULT_SUCCESS) {
-            status = collector->l0_wrapper_.w_zeEventPoolGetContextHandle(epool_h, &ctxt_h);
-            if (status == ZE_RESULT_SUCCESS) {
-              rec.context_ = ctxt_h;
-            } else {
-              SPDLOG_WARN(
-                  "\tLevel-Zero Introspection API: zeEventPoolGetContextHandle return unsuccessful "
-                  "-- inserting null context handle in synch. record..");
-            }
-          }
-        }
-        rec.name_ = "zeEventHostSynchronize";
-        rec.tid_ = thread_local_pid_tid_info.tid;
-        rec.start_time_ = ze_instance_data.start_time_host;
-        rec.end_time_ = utils::GetTime();
-        rec.event_ = event_h;
-        rec.cid_ = synch_corrid;
-        rec.result_ = result;
-        rec.callback_id_ = zeEventHostSynchronize_id;
-        kcexec1.push_back(std::move(rec));
-        collector->acallback_(collector->callback_data_, kcexec1);
-      }
+      rec.name_ = "zeEventHostSynchronize";
+      rec.tid_ = thread_local_pid_tid_info.tid;
+      rec.start_time_ = ze_instance_data.start_time_host;
+      rec.end_time_ = utils::GetTime();
+      rec.event_ = event_h;
+      rec.cid_ = synch_corrid;
+      rec.result_ = result;
+      rec.callback_id_ = zeEventHostSynchronize_id;
+      kcexec.push_back(std::move(rec));
+      collector->acallback_(collector->callback_data_, kcexec);
     }
   }
 
