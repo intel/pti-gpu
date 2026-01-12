@@ -5367,32 +5367,60 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   static std::vector<std::string> ParseFilterList(const std::string& file, const std::string& filter) {
     std::vector<std::string> result;
 
-    // Helper lambda to split a line by comma without stringstream
-    auto split_by_comma = [](const std::string& line, std::vector<std::string>& out) {
-        size_t start = 0;
-        while (start < line.size()) {
-            size_t end = line.find(',', start);
-            std::string item = (end == std::string::npos) ? line.substr(start) : line.substr(start, end - start);
-            if (!item.empty()) out.push_back(item);
-            if (end == std::string::npos) break;
-            start = end + 1;
+    // Helper lambda to split a line by comma, supporting double quotes
+    auto split_by_comma_with_quotes = [](const std::string& line, std::vector<std::string>& out) {
+      size_t i = 0;
+      while (i < line.size()) {
+        // Skip leading whitespace
+        while (i < line.size() && isspace(line[i])) ++i;
+        if (i >= line.size()) break;
+        std::string item;
+        if (line[i] == '"') {
+          // Quoted item
+          ++i;
+          while (i < line.size()) {
+            if (line[i] == '"') {
+              ++i;
+              break;
+            }
+            // Support escaped quotes
+            if (line[i] == '\\' && i + 1 < line.size() && line[i+1] == '"') {
+              item += '"';
+              i += 2;
+              continue;
+            }
+            item += line[i++];
+          }
+        } else {
+          // Unquoted item
+          while (i < line.size() && line[i] != ',') {
+            item += line[i++];
+          }
         }
+        // Skip trailing whitespace
+        size_t start = 0, end = item.size();
+        while (start < end && isspace(item[start])) ++start;
+        while (end > start && isspace(item[end-1])) --end;
+        if (start < end) out.push_back(item.substr(start, end-start));
+        // Skip comma
+        if (i < line.size() && line[i] == ',') ++i;
+      }
     };
-    
+      
     // First, gather from file if provided
     if (!file.empty()) {
-        std::ifstream fin(file);
-        if (fin.good()) {
-            std::string line;
-            while (std::getline(fin, line)) {
-                split_by_comma(line, result);
-            }
+      std::ifstream fin(file);
+      if (fin.good()) {
+        std::string line;
+        while (std::getline(fin, line)) {
+          split_by_comma_with_quotes(line, result);
         }
+      }
     }
 
     // Then, gather from string if provided
     if (!filter.empty()) {
-      split_by_comma(filter, result);
+      split_by_comma_with_quotes(filter, result);
     }
 
     return result;

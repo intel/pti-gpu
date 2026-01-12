@@ -379,6 +379,18 @@ If both **--include-kernels** and **--exclude-kernels** are specified, **--inclu
 
 If a kernel is excluded from tracing, its execution time is not counted in the total device time.
 
+### Specifying Kernel Names Containing Commas
+
+If a kernel name contains a comma, wrap the name in double quotes to prevent the comma from being treated as a separator. This applies to both `--include-kernels` and `--exclude-kernels` options.
+
+**Example:**
+```
+--exclude-kernels "foo,\"bar,with,comma\",baz"
+```
+This will exclude kernels with names containing `foo`, `bar,with,comma`, and `baz`.
+
+You can also use this syntax in files passed to `--include-kernels-file` or `--exclude-kernels-file`.
+
 ### Toggling Device Thread, Level-Zero Engine and OpenCL Queue Collection On/Off
 
 By default, device activities are profiled per thread, per Level-Zero engine and per OpenCL queue (if OpenCL profiling is enabled):
@@ -934,7 +946,7 @@ With Intel® MPI version 2021.15 and above, extra information can be profiled th
 
 ![MPI Application Imbalance!](/tools/unitrace/doc/images/mpi-imbalance.png)
 
-and the device-initiated communications that are executued on host:
+and the device-initiated communications that are executed on host:
 
 ![MPI Device-initiated Communications!](/tools/unitrace/doc/images/mpi-device-initiated.png)
 
