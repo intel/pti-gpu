@@ -2976,6 +2976,7 @@ class ZeCollector {
       if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
         collector->acallback_(collector->callback_data_, kcexec);
       }
+      collector->DoCallbackOnGPUOperationCompletion(kcexec);
     }
   }
 
