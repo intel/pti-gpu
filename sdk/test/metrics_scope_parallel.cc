@@ -510,9 +510,11 @@ class DeviceMetricsCollector {
     SafePrint("[Device ", result_.device_id, "] Buffer ", buffer_index,
               " - Required size: ", required_size, ", Records: ", records_count);
 
-    // Allocate user buffer using smart pointer
-    auto user_buffer = std::make_unique<uint8_t[]>(required_size);
-    if (!user_buffer) {
+    std::vector<uint8_t> user_buffer;
+
+    try {
+      user_buffer.resize(required_size);
+    } catch (const std::exception&) {
       SafePrint("[Device ", result_.device_id, "] Failed to allocate user buffer for buffer ",
                 buffer_index);
       return;
@@ -520,7 +522,7 @@ class DeviceMetricsCollector {
 
     // Calculate metrics
     size_t actual_records = 0;
-    res = ptiMetricsScopeCalculateMetrics(scope_handle_, buffer_data, user_buffer.get(),
+    res = ptiMetricsScopeCalculateMetrics(scope_handle_, buffer_data, user_buffer.data(),
                                           required_size, &actual_records);
     if (res != PTI_SUCCESS) {
       SafePrint("[Device ", result_.device_id, "] Failed to calculate metrics for buffer ",
@@ -529,7 +531,7 @@ class DeviceMetricsCollector {
     }
 
     // Process records
-    auto records = reinterpret_cast<pti_metrics_scope_record_t*>(user_buffer.get());
+    auto records = reinterpret_cast<pti_metrics_scope_record_t*>(user_buffer.data());
     for (size_t r = 0; r < actual_records; r++) {
       if (records[r]._kernel_name) {
         std::string kernel_name(records[r]._kernel_name);

@@ -652,8 +652,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       } else {  // not stall sampling
 
         // Get metric list for metric group collected
-        std::vector<std::string> metric_list;
-        metric_list = utils::ze::GetMetricList(it->second->metrics_group_);
+        auto metric_list = utils::ze::GetMetricList(it->second->metrics_group_);
         PTI_ASSERT(!metric_list.empty());
 
         // get group name for metric group
@@ -860,8 +859,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       max_metric_samples_ = streamer_desc.notifyEveryNReports;
     }
 
-    std::vector<std::string> metrics_list;
-    metrics_list = utils::ze::GetMetricList(desc->metrics_group_);
+    auto metrics_list = utils::ze::GetMetricList(desc->metrics_group_);
     PTI_ASSERT(!metrics_list.empty());
 
     std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());
@@ -1766,8 +1764,7 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
       max_metric_samples_ = tracer_desc.notifyEveryNBytes;
     }
 
-    std::vector<std::string> metrics_list;
-    metrics_list = utils::ze::GetMetricList(desc->metrics_group_);
+    auto metrics_list = utils::ze::GetMetricList(desc->metrics_group_);
     PTI_ASSERT(!metrics_list.empty());
 
     std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());

@@ -125,7 +125,7 @@ void GEMM(const float* a, const float* b, float* c, unsigned size, sycl::id<2> i
   c[i * size + j] = sum;
 }
 
-void LaunchGemm(sycl::queue queue, const std::vector<float>& a_vector,
+void LaunchGemm(sycl::queue& queue, const std::vector<float>& a_vector,
                 const std::vector<float>& b_vector, std::vector<float>& result, unsigned size) {
   ASSERT_GT(size, 0U);
   ASSERT_EQ(a_vector.size(), size * size);
@@ -160,13 +160,13 @@ void ValidateGemm(const std::vector<float>& result, float a_value, float b_value
   ASSERT_LE(eps, MAX_EPS);
 }
 
-float RunAndCheck(sycl::queue queue, const std::vector<float>& a, const std::vector<float>& b,
+float RunAndCheck(sycl::queue& queue, const std::vector<float>& a, const std::vector<float>& b,
                   std::vector<float>& c, unsigned size, float expected_result) {
   LaunchGemm(queue, a, b, c, size);
   return Check(c, expected_result);
 }
 
-void Compute(sycl::queue queue, const std::vector<float>& a, const std::vector<float>& b,
+void Compute(sycl::queue& queue, const std::vector<float>& a, const std::vector<float>& b,
              std::vector<float>& c, unsigned size, unsigned repeat_count, float expected_result) {
   for (unsigned i = 0; i < repeat_count; ++i) {
     [[maybe_unused]] volatile float eps = RunAndCheck(queue, a, b, c, size, expected_result);
@@ -480,12 +480,12 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
       sycl::property_list prop{sycl::property::queue::in_order(),
                                sycl::property::queue::enable_profiling(),
                                sycl::ext::intel::property::queue::immediate_command_list()};
-      prop_list = prop;
+      prop_list = std::move(prop);
     } else {
       sycl::property_list prop{sycl::property::queue::in_order(),
                                sycl::property::queue::enable_profiling(),
                                sycl::ext::intel::property::queue::no_immediate_command_list()};
-      prop_list = prop;
+      prop_list = std::move(prop);
     }
 
     sycl::queue queue(dev_, sycl::async_handler{}, prop_list);
@@ -521,7 +521,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     last_pop_eid = eid_;
     auto start = std::chrono::steady_clock::now();
     float expected_result = A_VALUE * B_VALUE * size_;
-    Compute(std::move(queue), a, b, c, size_, repeat_count_, expected_result);
+    Compute(queue, a, b, c, size_, repeat_count_, expected_result);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
 
@@ -1214,11 +1214,11 @@ class GemmLaunchTest
       if (queue_type == QueueType::kImmediate) {
         sycl::property_list prop{sycl::property::queue::in_order(),
                                  sycl::ext::intel::property::queue::immediate_command_list()};
-        prop_list = prop;
+        prop_list = std::move(prop);
       } else {
         sycl::property_list prop{sycl::property::queue::in_order(),
                                  sycl::ext::intel::property::queue::no_immediate_command_list()};
-        prop_list = prop;
+        prop_list = std::move(prop);
       }
 
       queue_ = sycl::queue(dev_, prop_list);

@@ -60,7 +60,7 @@ void GEMM(const float* a, const float* b, float* c, unsigned size, sycl::id<2> i
   c[i * size + j] = sum;
 }
 
-static float RunAndCheck(sycl::queue queue, const std::vector<float>& a,
+static float RunAndCheck(sycl::queue& queue, const std::vector<float>& a,
                          const std::vector<float>& b, std::vector<float>& c, unsigned size,
                          float expected_result) {
   assert(size > 0);
@@ -96,7 +96,7 @@ static float RunAndCheck(sycl::queue queue, const std::vector<float>& a,
   return Check(c, expected_result);
 }
 
-static void Compute(sycl::queue queue, const std::vector<float>& a, const std::vector<float>& b,
+static void Compute(sycl::queue& queue, const std::vector<float>& a, const std::vector<float>& b,
                     std::vector<float>& c, unsigned size, unsigned repeat_count,
                     float expected_result) {
   for (unsigned i = 0; i < repeat_count; ++i) {

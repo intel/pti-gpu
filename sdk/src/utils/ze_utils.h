@@ -313,20 +313,21 @@ inline std::vector<std::string> GetMetricList(zet_metric_group_handle_t group) {
   PTI_ASSERT(metric_count == metric_list.size());
 
   std::vector<std::string> name_list;
+  name_list.reserve(metric_list.size());
   for (auto metric : metric_list) {
-    zet_metric_properties_t metric_props;
-    std::memset(&metric_props, 0, sizeof(metric_props));
+    zet_metric_properties_t metric_props{};
     metric_props.stype = ZET_STRUCTURE_TYPE_METRIC_PROPERTIES;
+    metric_props.pNext = nullptr;
 
     status = zetMetricGetProperties(metric, &metric_props);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
-    std::string units = GetMetricUnits(metric_props.resultUnits);
-    std::string name = metric_props.name;
+    std::string name = static_cast<const char*>(metric_props.name);
+    std::string units = GetMetricUnits(static_cast<const char*>(metric_props.resultUnits));
     if (!units.empty()) {
       name += "[" + units + "]";
     }
-    name_list.push_back(name);
+    name_list.emplace_back(std::move(name));
   }
 
   return name_list;

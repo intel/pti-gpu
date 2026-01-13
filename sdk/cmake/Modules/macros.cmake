@@ -423,10 +423,7 @@ macro(AddFormatTarget)
                                   "${PROJECT_SOURCE_DIR}/samples/*.h"
                                   "${PROJECT_SOURCE_DIR}/samples/**/*.h"
                                   "${PROJECT_SOURCE_DIR}/samples/**/*.cc"
-                                  "${PROJECT_SOURCE_DIR}/fuzz/*.cc"
-                                  "${PROJECT_SOURCE_DIR}/fuzz/*.h"
-                                  "${PROJECT_SOURCE_DIR}/fuzz/**/*.h"
-                                  "${PROJECT_SOURCE_DIR}/fuzz/**/*.cc")
+                                  "${PROJECT_SOURCE_DIR}/samples/**/*.c")
   list(FILTER cf_src_files EXCLUDE REGEX
                                   "^${PROJECT_SOURCE_DIR}/samples/dlworkload*")
   list(FILTER cf_src_files EXCLUDE REGEX

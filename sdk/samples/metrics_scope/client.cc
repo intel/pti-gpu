@@ -222,8 +222,11 @@ void StopProfiling() {
 
       if (records_count > 0) {
         // User allocates the metrics buffer
-        auto metrics_buffer = std::make_unique<uint8_t[]>(required_metrics_buffer_size);
-        if (!metrics_buffer) {
+        std::vector<uint8_t> metrics_buffer;
+
+        try {
+          metrics_buffer.resize(required_metrics_buffer_size);
+        } catch (const std::exception&) {
           std::cerr << "Failed to allocate metrics buffer\n";
           continue;
         }
@@ -234,7 +237,7 @@ void StopProfiling() {
         // Calculate metrics from collection buffer into user metrics buffer
         size_t actual_records_count = 0;
         result =
-            ptiMetricsScopeCalculateMetrics(scope_handle, collection_buffer, metrics_buffer.get(),
+            ptiMetricsScopeCalculateMetrics(scope_handle, collection_buffer, metrics_buffer.data(),
                                             required_metrics_buffer_size, &actual_records_count);
 
         if (result == PTI_SUCCESS) {
@@ -245,7 +248,7 @@ void StopProfiling() {
                     << "\n";
 
           // Access records directly from the metrics buffer
-          auto records = reinterpret_cast<pti_metrics_scope_record_t*>(metrics_buffer.get());
+          auto records = reinterpret_cast<pti_metrics_scope_record_t*>(metrics_buffer.data());
 
           // Display calculated metrics for each kernel in this buffer
           for (size_t r = 0; r < actual_records_count; r++) {

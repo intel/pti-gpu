@@ -456,6 +456,7 @@ void RunVecsqadd(TestType a_test_type) {
 class StartStopFixtureTest : public ::testing::TestWithParam<bool> {
  protected:
   void SetUp() override {
+    const std::lock_guard<std::mutex> lock(g_test_result_mutex);
     matched_sq_corr_ids = false;
     matched_add_corr_ids = false;
     timestamps_nonzero_duration = true;
