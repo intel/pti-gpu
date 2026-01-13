@@ -100,6 +100,11 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
     return;
   }
 
+  // Init not called, nothing to do.
+  if (init_ref_count == 0) {
+    return;
+  }
+
   if (init_ref_count > 1) {  // we are not done if there is more than 1 ref
     init_ref_count--;        // count for this object per thread basis.
     return;
@@ -135,6 +140,11 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
 }
 
 inline void FiniSycl(OverheadRuntimeType runtime_type) {
+  // Init not called, nothing to do.
+  if (init_ref_count == 0) {
+    return;
+  }
+
   if (init_ref_count > 1) {
     init_ref_count--;
     return;
