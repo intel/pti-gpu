@@ -1125,7 +1125,7 @@ typedef void (*OnZeFunctionFinishCallback)(std::vector<uint64_t> *kids, FLOW_DIR
 
 typedef void (*OnZeKernelFinishCallback)(uint64_t kid, uint64_t tid, uint64_t start, uint64_t end, uint32_t ordinal, uint32_t index, int32_t tile, const ze_device_handle_t device, const uint64_t kernel_command_id, bool implicit_scaling, const ze_group_count_t& group_count, size_t mem_size);
 
-ze_result_t (*zexKernelGetBaseAddress)(ze_kernel_handle_t hKernel, uint64_t *baseAddress) = nullptr;
+ze_result_t (*ZexKernelGetBaseAddress)(ze_kernel_handle_t hKernel, uint64_t *baseAddress) = nullptr;
 
 inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& group_count, size_t size, bool detailed = true) {
   std::string str;
@@ -1295,8 +1295,8 @@ class ZeCollector {
       if (!SampleThisDevice(driver)) {
         return nullptr;
       }
-      if (ZE_FUNC(zeDriverGetExtensionFunctionAddress)(driver, "zexKernelGetBaseAddress", (void **)&zexKernelGetBaseAddress) != ZE_RESULT_SUCCESS) {
-        zexKernelGetBaseAddress = nullptr;
+      if (ZE_FUNC(zeDriverGetExtensionFunctionAddress)(driver, "zexKernelGetBaseAddress", (void **)&ZexKernelGetBaseAddress) != ZE_RESULT_SUCCESS) {
+        ZexKernelGetBaseAddress = nullptr;
       }
     }
     else {
@@ -5220,7 +5220,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
       // for stall sampling
       uint64_t base_addr = 0;
       uint64_t binary_size = 0;
-      if (collector->options_.stall_sampling && (zexKernelGetBaseAddress != nullptr) && (zexKernelGetBaseAddress(kernel, &base_addr) == ZE_RESULT_SUCCESS)) {
+      if (collector->options_.stall_sampling && (ZexKernelGetBaseAddress != nullptr) && (ZexKernelGetBaseAddress(kernel, &base_addr) == ZE_RESULT_SUCCESS)) {
         base_addr &= 0xFFFFFFFF;
         binary_size = module_binary_size;	// store module binary size. only an upper bound is needed
       }

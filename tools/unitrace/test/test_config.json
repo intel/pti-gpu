@@ -17,6 +17,11 @@
             "skip_scenarios":["-t"]
         },
         {
+            "name": "grf",
+            "platform": ["Linux"],
+            "scenarios": ["-c", "-h", "-d", "-t", "-s", "--chrome-call-logging --chrome-kernel-logging", "--chrome-device-logging", "-q"]
+        },
+        {
             "name": "ze_counterbased_events",
             "platform": ["Linux"],
             "scenarios":["--chrome-device-logging"]
