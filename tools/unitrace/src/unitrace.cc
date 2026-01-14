@@ -247,7 +247,7 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--chrome-kmd-logging <script>    " <<
-    "Trace OS/KMD activitives. The argument <script> file defines the OS kernel or device driver activies to trace" <<
+    "Trace OS/KMD activities. The argument <script> file defines the OS kernel or device driver activities to trace" <<
     std::endl;
 #endif /* _WIN32 */
   std::cout <<
@@ -409,7 +409,7 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_LogFilename", argv[i]);
       app_index += 2;
-    } else if (strcmp(argv[i], "--conditional-collection") == 0) { // deptrcate this option
+    } else if (strcmp(argv[i], "--conditional-collection") == 0) { // deprecate this option
       utils::SetEnv("UNITRACE_StartPaused", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--start-paused") == 0) {
@@ -546,7 +546,7 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--teardown-on-signal") == 0) {
       ++i;
       if ((i >= argc) || !IsNumericString(argv[i])) {
-        std::cout << "[ERROR] --teardown-on-signal takes a sigal number argument" << std::endl;
+        std::cout << "[ERROR] --teardown-on-signal takes a signal number argument" << std::endl;
         return -1;
       }
       utils::SetEnv("UNITRACE_TeardownOnSignal", argv[i]);
@@ -615,7 +615,7 @@ int ParseArgs(int argc, char* argv[]) {
 #ifndef _WIN32
   if (!utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
     if (geteuid() != 0) {
-      std::cout << "[ERROR] OS kernel tracing requires root prividge" << std::endl;
+      std::cout << "[ERROR] OS kernel tracing requires root privilege" << std::endl;
       return -1;
     }
   }
@@ -809,7 +809,7 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
     return; 
   }
 
-  UniTimer::StartUniTimer();	// need the timer to get the epoch time of system boot and diffeence betweeen boot time and montonic time
+  UniTimer::StartUniTimer();	// need the timer to get the epoch time of system boot and difference between boot time and monotonic time
 
   std::string out_trace_file_name(KMD_TRACE_FILE_BASE_NAME);
 
@@ -869,7 +869,7 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
       break;
     }
 
-    // check if optional data is present afer duration
+    // check if optional data is present after duration
     std::string args;
     auto n = dur.find(',');
     if (n != dur.npos) {

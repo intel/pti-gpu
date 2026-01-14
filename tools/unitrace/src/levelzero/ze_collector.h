@@ -1016,7 +1016,7 @@ struct ZeDeviceSubmissions {
 thread_local ZeDeviceSubmissions local_device_submissions_;
 
 struct ZeKernelCommandProperties {
-  uint64_t id_;		// unique identidier
+  uint64_t id_;		// unique identifier
   uint64_t size_;	// kernel binary size
   uint64_t base_addr_;	// kernel base address
   ze_device_handle_t device_;
@@ -1156,7 +1156,7 @@ inline std::string GetZeKernelCommandName(uint64_t id, const ze_group_count_t& g
         str = str + "[" + std::to_string(size) + "]";
       }
     }
-    str += "\"";	// quoate kernel name
+    str += "\"";	// quote kernel name
   }
 
   kernel_command_properties_mutex_.unlock_shared();
@@ -4186,9 +4186,9 @@ class ZeCollector {
       desc->index_timestamps_on_commands_completion_ = nullptr;
       desc->index_timestamps_on_event_reset_ = nullptr;
 
-      // dts points to end timestmap but we need start timestamp too which is immediately followed by end timestamp
+      // dts points to end timestamp but we need start timestamp too which is immediately followed by end timestamp
       // hence dts - 1
-      desc->device_global_timestamps_ = dts - 1;	// dts points to end timestmap but start timestamp is needed also which immediately 
+      desc->device_global_timestamps_ = dts - 1;	// dts points to end timestamp but start timestamp is needed also which immediately 
       desc->timestamp_event_ = cl->timestamp_event_to_signal_;
       
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
@@ -4946,7 +4946,7 @@ class ZeCollector {
         // signal event if events were reset earlier
         auto status = ZE_FUNC(zeCommandListAppendSignalEvent)(*(params->phCommandList), it->second->timestamp_event_to_signal_);
         if (status != ZE_RESULT_SUCCESS){
-          std::cerr << "[ERROR] Failed to signal command list timstamps event (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
+          std::cerr << "[ERROR] Failed to signal command list timestamps event (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
         }
       }
 

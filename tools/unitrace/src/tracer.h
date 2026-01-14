@@ -246,7 +246,7 @@ class UniTracer {
 #if BUILD_WITH_ITT
     if (itt_collector != nullptr){
       // Print CCL summary before deleting the object
-      // If CCL summary is not enbled summary string will be empty
+      // If CCL summary is not enabled summary string will be empty
       std::string summary = itt_collector->CclSummaryReport();
       if (summary.size() > 0){
         logger_.Log(summary);

@@ -274,7 +274,7 @@ void CONSTRUCTOR Init(void) {
       siguser_handler = handler;
     }
     else {
-      std::cerr << "[ERROR] Invlid signal specified for teardown" << std::endl;
+      std::cerr << "[ERROR] Invalid signal specified for teardown" << std::endl;
     }
   }
 
