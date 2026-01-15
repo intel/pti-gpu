@@ -5,15 +5,17 @@
 // =============================================================
 #include "pti/pti_metrics.h"
 
+#include <mutex>
+
 #include "metrics_handler.h"
 
 namespace {
+
 // TODO: maybe_unused because SPDLOG_ERROR not guarenteed to be there on release builds
 void LogException([[maybe_unused]] const std::exception& excep) {
   SPDLOG_ERROR("Caught exception before return: {}", excep.what());
 }
 }  // namespace
-
 /**
  * @brief Get the properties of all devices on the system on which metric collection can be done
  * usage: 1- Call ptiMetricsGetDevices(nullptr, device_count) to discover the required buffer

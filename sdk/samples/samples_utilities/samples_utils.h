@@ -474,5 +474,27 @@ inline void DumpCallbackData(pti_callback_domain domain, pti_api_group_id driver
   std::cout << "=========================" << std::endl;
 }
 
+inline std::string GetEnv(const char* name) {
+  if (name == nullptr) {
+    return std::string();
+  }
+#if defined(_WIN32)
+  char* value = nullptr;
+  errno_t status = _dupenv_s(&value, nullptr, name);
+  if (status != 0 || value == nullptr) {
+    return std::string();
+  }
+  std::string result(value);
+  free(value);
+  return result;
+#else
+  const char* value = getenv(name);
+  if (value == nullptr) {
+    return std::string();
+  }
+  return std::string(value);
+#endif
+}
+
 }  // namespace samples_utils
 #endif

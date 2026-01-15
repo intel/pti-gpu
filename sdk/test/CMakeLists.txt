@@ -211,6 +211,28 @@ if(HAVE_SYCL)
     GTest::gtest_main Pti::pti_view ${FS_LIB})
 
 
+  # Add the multi-threaded test
+  add_executable(
+    multi_thread_metrics_suite
+    metrics_multi_thread.cc)
+  target_include_directories(
+    multi_thread_metrics_suite
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
+            "${PROJECT_SOURCE_DIR}/samples/samples_utilities")
+
+  target_compile_options(
+    multi_thread_metrics_suite
+    PUBLIC -fsycl)
+
+  target_link_options(multi_thread_metrics_suite PUBLIC -fsycl)
+
+  target_compile_definitions(multi_thread_metrics_suite PUBLIC PTI_LEVEL_ZERO=1)
+
+  target_link_libraries(multi_thread_metrics_suite PUBLIC spdlog::spdlog 
+    Threads::Threads GTest::gtest_main Pti::pti_view ${FS_LIB})
+
   add_executable(no_kernel_overlap no_kernel_overlap.cc)
   target_include_directories(
     no_kernel_overlap
@@ -432,6 +454,16 @@ if(HAVE_SYCL)
        LABELS "functional"
        LABELS "metrics"
        LABELS "hw-metrics")
+
+  # Add the multi-threaded metrics vecsqadd test     
+  gtest_discover_tests(
+    multi_thread_metrics_suite
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES
+        ENVIRONMENT ZET_ENABLE_METRICS=1
+        LABELS "functional"
+        LABELS "metrics"
+        LABELS "hw-metrics-multi-thread")
 
   gtest_discover_tests(
     metrics_scope_gemm_suite
@@ -727,6 +759,7 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   add_test(NAME run-callback COMMAND callback)
   add_test(NAME run-metrics-scope COMMAND metrics_scope)
   add_test(NAME run-omp_vec_add COMMAND omp_vec_add)
+  add_test(NAME run-metrics-perf COMMAND metrics_perf)
 
   set_tests_properties(
     run-metrics-iso PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
@@ -739,6 +772,10 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   set_tests_properties(
     run-metrics-scope PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
     "functional;samples;metrics;hw-metrics-scope")
+
+  set_tests_properties(
+    run-metrics-perf PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
+    "functional;samples;metrics;hw-metrics-multi-thread")
 
   # It is enabled only for functional test as there is an issue observed with Intel OpenMP with Address Sanitizer.
   set_tests_properties(run-omp_vec_add PROPERTIES LABELS "functional;samples")

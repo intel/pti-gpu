@@ -10,26 +10,60 @@
 #include <level_zero/zet_api.h>
 #include <spdlog/cfg/env.h>
 #include <spdlog/spdlog.h>
+#include <stdbool.h>
 
 #include <algorithm>
 #include <atomic>
 #include <iostream>
+#include <mutex>
 #include <random>
+#include <shared_mutex>
 #include <thread>
 
-#include "pti/pti_callback.h"
 #include "pti/pti_metrics.h"
 #include "utils/pti_filesystem.h"
+#include "utils/pti_string_pool.h"
 #include "utils/utils.h"
 #include "utils/ze_utils.h"
 
 // Not needed once trace API symbols and structures are available externally
 #include "trace_metrics.h"
 
-///@brief Maximum metrics per metric group
-#define PTI_METRIC_COUNT_MAX 512
+namespace {
+// Metrics collection constants
+constexpr uint32_t kMaxMetricCountPerGroup = 512;
+constexpr uint32_t kMetricPoolEventCount = 1000;
 
-#define PTI_METRIC_POOL_EVENT_COUNT 1000
+// Platform-specific buffer sizes
+#ifndef _WIN32
+constexpr uint32_t kMaxMetricSamples = 2048;
+#else
+constexpr uint32_t kMaxMetricSamples = 32768;
+#endif
+
+// Buffer management constants
+constexpr uint8_t kMaxDataCaptureCount = 10;
+constexpr uint32_t kDefaultSamplingIntervalNs = 1000000U;  // 1 millisecond
+constexpr uint32_t kDefaultTimeAggrWindowUs = 10000U;      // 10 milliseconds
+constexpr size_t kMaxBufferSizePadding = 512;
+constexpr uint32_t kTileCountPadding = 2;  // For systems with 2 tiles
+
+// File and library names
+#ifdef _WIN32
+constexpr const char *kLoaderLibraryName = "libze_loader.dll";
+#else
+constexpr const char *kLoaderLibraryName = "libze_loader.so.1";
+#endif
+
+// Buffer size calculations
+constexpr size_t kMaxMetricBufferSize =
+    kMaxMetricSamples * kMaxMetricCountPerGroup * kTileCountPadding + kMaxBufferSizePadding;
+
+}  // namespace
+
+// Global mutex to serialize ALL zetContextActivateMetricGroups calls
+// This protects Level Zero driver's global state
+inline std::mutex g_context_activation_mutex;
 
 enum class ptiMetricProfilerState {
   PROFILER_DISABLED = 0,
@@ -55,27 +89,35 @@ struct pti_metrics_device_descriptor_t {
   zet_metric_group_handle_t metrics_group_ = nullptr;
   ze_pci_ext_properties_t pci_properties_;
   std::unique_ptr<std::thread> profiling_thread_ = nullptr;
-  std::atomic<ptiMetricProfilerState> profiling_state_ = ptiMetricProfilerState::PROFILER_DISABLED;
+
   std::string metric_file_name_ = "";
   std::ofstream metric_file_stream_;
-  std::vector<uint8_t> metric_data_ = {};
   bool stall_sampling_ = false;
+
+  // Per-device data
+  std::vector<uint8_t> metric_data_ = {};
+  uint8_t capture_count_ = 0;
+
+  mutable std::mutex file_access_mutex_;  // Protects file operations during GetCalculatedData
+
+  // Atomic state - no mutex needed
+  std::atomic<ptiMetricProfilerState> profiling_state_ = ptiMetricProfilerState::PROFILER_DISABLED;
 
   // Query-specific fields
   zet_metric_query_pool_handle_t query_pool_ = nullptr;
-  // zet_metric_query_handle_t current_query_ = nullptr;
-  // ze_event_handle_t completion_event_ = nullptr;
-  // bool query_active_ = false;
 };
 
 class PtiMetricsProfiler {
  protected:
   // per driver metric contexts
   std::vector<ze_context_handle_t> metric_contexts_;
+
   // descriptors where device and sub device profiling information is saved
   std::unordered_map<ze_device_handle_t, std::shared_ptr<pti_metrics_device_descriptor_t>>
       device_descriptors_;
-  // temportary directory name where raw data is saved to disc
+  mutable std::once_flag device_descriptors_initialized_;
+
+  // temporary directory name where raw data is saved to disc
   std::string data_dir_name_;
   // spdlogger for user specific log file
   std::shared_ptr<spdlog::logger> user_logger_;
@@ -84,15 +126,11 @@ class PtiMetricsProfiler {
   // condition variable for the profiling thread to wait for the profiling state to change
   std::condition_variable cv_pause_;
 
-// max number of samples used for allocating local buffer and setting hw full notification
-#ifndef _WIN32
-  inline static uint32_t max_metric_samples_ = 2048;
-#else   // Linux
-  inline static uint32_t max_metric_samples_ = 32768;
-#endif  //_WIN32
+  // max number of samples used for allocating local buffer and setting hw full notification
+  inline static std::atomic<uint32_t> max_metric_samples_ = kMaxMetricSamples;
 
   // maximum number of hw buffer reads before local buffer is written to disc
-  inline static uint8_t max_data_capture_count_ = 10;
+  inline static uint8_t max_data_capture_count_ = kMaxDataCaptureCount;
 
  public:
   PtiMetricsProfiler() = delete;
@@ -115,14 +153,19 @@ class PtiMetricsProfiler {
 
     user_logger_ = utils::GetLogStream(enable_logging, std::move(log_filename));
 
-    EnumerateDevices(device_handle, metrics_group_handle);
+    // Ensure thread-safe one-time initialization
+    std::call_once(device_descriptors_initialized_, [this, device_handle, metrics_group_handle]() {
+      EnumerateDevices(device_handle, metrics_group_handle);
+    });
   }
 
   static uint64_t GetMaxMetricBufferSize() {
-    // 2 is for systems with 2 tiles
-    // 512 is for extra padding
+    // kTileCountPadding is for systems with multiple tiles
+    // kMaxBufferSizePadding is for extra padding
     // TODO: may need to be adjusted per specific target
-    return static_cast<uint64_t>(max_metric_samples_) * PTI_METRIC_COUNT_MAX * 2 + 512;
+    return static_cast<uint64_t>(max_metric_samples_) * kMaxMetricCountPerGroup *
+               kTileCountPadding +
+           kMaxBufferSizePadding;
   }
 
   virtual ~PtiMetricsProfiler() {
@@ -138,7 +181,7 @@ class PtiMetricsProfiler {
         continue;
       }
       if (it->second->profiling_state_ != ptiMetricProfilerState::PROFILER_DISABLED) {
-        SPDLOG_ERROR("Stopping runaway metrics collection");
+        SPDLOG_DEBUG("Stopping runaway metrics collection");
         it->second->profiling_state_.store(ptiMetricProfilerState::PROFILER_DISABLED,
                                            std::memory_order_release);
 
@@ -153,7 +196,7 @@ class PtiMetricsProfiler {
     try {
       pti::utils::filesystem::remove_all(data_dir_name_);
     } catch (...) {
-      SPDLOG_ERROR("Failed to delete temporary data directory: {:s} ", data_dir_name_);
+      SPDLOG_DEBUG("Failed to delete temporary data directory: {:s} ", data_dir_name_);
     }
   }
 
@@ -171,10 +214,10 @@ class PtiMetricsProfiler {
                                            std::memory_order_release);
       } else {
         if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_DISABLED) {
-          SPDLOG_ERROR("Attempted to pause a disabled metrics profiling session");
+          SPDLOG_DEBUG("Attempted to pause a disabled metrics profiling session");
           return PTI_ERROR_METRICS_COLLECTION_NOT_ENABLED;
         } else if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_PAUSED) {
-          SPDLOG_ERROR("Attempted to pause an already pause metrics profiling session");
+          SPDLOG_DEBUG("Attempted to pause an already pause metrics profiling session");
           return PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED;
         }
       }
@@ -195,10 +238,10 @@ class PtiMetricsProfiler {
         cv_pause_.notify_one();
       } else {
         if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_DISABLED) {
-          SPDLOG_ERROR("Attempted to resume a disabled metrics profiling session");
+          SPDLOG_DEBUG("Attempted to resume a disabled metrics profiling session");
           return PTI_ERROR_METRICS_COLLECTION_NOT_PAUSED;
         } else if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_ENABLED) {
-          SPDLOG_ERROR("Attempted to resume an already running metrics profiling session");
+          SPDLOG_DEBUG("Attempted to resume an already running metrics profiling session");
           return PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED;
         }
       }
@@ -215,7 +258,7 @@ class PtiMetricsProfiler {
       // Collection should be running or paused before stop is called
       if (it->second->profiling_thread_ == nullptr ||
           it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_DISABLED) {
-        SPDLOG_ERROR("Attempting to stop a metrics collection that hasn't been started");
+        SPDLOG_DEBUG("Attempting to stop a metrics collection that hasn't been started");
         return PTI_ERROR_METRICS_COLLECTION_NOT_ENABLED;
       }
 
@@ -246,7 +289,7 @@ class PtiMetricsProfiler {
       }
       // Collection should be stopped before dump is called
       if (it->second->profiling_state_ != ptiMetricProfilerState::PROFILER_DISABLED) {
-        SPDLOG_ERROR(
+        SPDLOG_DEBUG(
             "Attempting to calculate data from a metrics collection that hasn't been stopped");
         result = PTI_ERROR_METRICS_COLLECTION_NOT_DISABLED;
       }
@@ -255,7 +298,7 @@ class PtiMetricsProfiler {
     // Stopping runaway collection if stop is not called before dump is called
     if (result != PTI_SUCCESS) {
       // Don't capture result from Stop and return previous error
-      SPDLOG_WARN("Stopping runaway collection");
+      SPDLOG_DEBUG("Stopping runaway collection");
       StopProfiling();
     }
     return result;
@@ -428,10 +471,14 @@ class PtiMetricsProfiler {
  protected:
   pti_result CollectionInitialize(std::shared_ptr<pti_metrics_device_descriptor_t> desc) {
     PTI_ASSERT(desc != nullptr);
+    ze_result_t status;
 
-    // Activate the metric groups
-    ze_result_t status =
-        zetContextActivateMetricGroups(desc->context_, desc->device_, 1, &(desc->metrics_group_));
+    // Serialize access to zetContextActivateMetricGroups
+    {
+      std::lock_guard<std::mutex> lock(g_context_activation_mutex);
+      status =
+          zetContextActivateMetricGroups(desc->context_, desc->device_, 1, &(desc->metrics_group_));
+    }
     if (status != ZE_RESULT_SUCCESS) {
       return PTI_ERROR_DRIVER;
     }
@@ -471,11 +518,16 @@ class PtiMetricsProfiler {
       return PTI_ERROR_DRIVER;
     }
 
-    // Disactivate the metric groups
-    status =
-        zetContextActivateMetricGroups(desc->context_, desc->device_, 0, &(desc->metrics_group_));
-    if (status != ZE_RESULT_SUCCESS) {
-      return PTI_ERROR_DRIVER;
+    // Serialize access to zetContextActivateMetricGroups
+    {
+      std::lock_guard<std::mutex> lock(g_context_activation_mutex);
+
+      // Disactivate the metric groups
+      status =
+          zetContextActivateMetricGroups(desc->context_, desc->device_, 0, &(desc->metrics_group_));
+      if (status != ZE_RESULT_SUCCESS) {
+        return PTI_ERROR_DRIVER;
+      }
     }
 
     return PTI_SUCCESS;
@@ -483,11 +535,10 @@ class PtiMetricsProfiler {
 
   void SaveRawData(std::shared_ptr<pti_metrics_device_descriptor_t> desc, uint8_t *storage,
                    size_t data_size, bool immediate_save_to_disc) {
-    static uint8_t capture_count = 0;
     if (data_size != 0) {
       // Save the date to local memory
       desc->metric_data_.insert(desc->metric_data_.end(), storage, storage + data_size);
-      capture_count++;
+      desc->capture_count_++;  // per-device
     }
 
     // Save local memory to cache file if there is something to write and
@@ -495,11 +546,17 @@ class PtiMetricsProfiler {
     // the local buffer is getting too big after a few captures or
     // no data was captured from the hw buffer
     if (!desc->metric_data_.empty() &&
-        (immediate_save_to_disc || capture_count > 10 || data_size == 0)) {
-      desc->metric_file_stream_.write(reinterpret_cast<char *>(desc->metric_data_.data()),
-                                      desc->metric_data_.size());
+        (immediate_save_to_disc || desc->capture_count_ > kMaxDataCaptureCount || data_size == 0)) {
+      if (desc->metric_file_stream_.is_open()) {
+        desc->metric_file_stream_.write(reinterpret_cast<char *>(desc->metric_data_.data()),
+                                        desc->metric_data_.size());
+        if (immediate_save_to_disc) {
+          desc->metric_file_stream_
+              .flush();  // Explicit flush only when immediate save is requested
+        }
+      }
       desc->metric_data_.clear();
-      capture_count = 0;
+      desc->capture_count_ = 0;
     }
   }
 };
@@ -536,18 +593,18 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
         continue;
       }
       if (it->second->stall_sampling_) {
-        SPDLOG_WARN("EU stall sampling is not supported");
+        SPDLOG_TRACE("EU stall sampling is not supported");
         continue;
       }
 
       // Collection should be stopped before start is called
       if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_ENABLED) {
-        SPDLOG_ERROR("Attempting to start a metrics collection that isn't stopped");
+        SPDLOG_DEBUG("Attempting to start a metrics collection that isn't stopped");
         return PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED;
       }
 
       if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_PAUSED) {
-        SPDLOG_ERROR("Attempting to start instead of resume a metrics collection that is paused");
+        SPDLOG_DEBUG("Attempting to start instead of resume a metrics collection that is paused");
         return PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED;
       }
 
@@ -593,10 +650,15 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       }
 
       if (it == device_descriptors_.end() || it->second->metrics_group_ != metrics_group_handle) {
-        SPDLOG_WARN("Could not find device and metric group");
-        SPDLOG_WARN("Unable to calculate required data buffer size");
+        SPDLOG_TRACE("Could not find device and metric group");
+        SPDLOG_TRACE("Unable to calculate required data buffer size");
         return;
       }
+
+      // Synchronize access to the per-device metric file stream to prevent races
+      // when GetCalculatedData is invoked concurrently from multiple threads that
+      // read metrics for the same device.
+      std::lock_guard<std::mutex> file_lock(it->second->file_access_mutex_);
 
       std::ifstream inf =
           std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
@@ -619,7 +681,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
             raw_metrics.data(), &num_reports, &total_values_count, nullptr, nullptr);
 
         if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
-          SPDLOG_WARN("Unable to calculate required data buffer size");
+          SPDLOG_DEBUG("Unable to calculate required data buffer size");
         }
 
         *metrics_values_count = total_values_count;
@@ -640,14 +702,14 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       }
 
       if (it->second->metrics_group_ != metrics_group_handle) {
-        SPDLOG_WARN("Could not find device and metric group");
-        SPDLOG_WARN("Unable to calculate process collected data");
+        SPDLOG_DEBUG("Could not find device and metric group");
+        SPDLOG_DEBUG("Unable to calculate process collected data");
         return;
       }
 
       // Note: EU Stall sampling data is not logged in json format
       if (it->second->stall_sampling_) {
-        SPDLOG_WARN("EU stall sampling is not supported");
+        SPDLOG_TRACE("EU stall sampling is not supported");
         continue;
       } else {  // not stall sampling
 
@@ -673,6 +735,8 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
         uint64_t time_span_between_clock_resets = (it->second->metric_timer_mask_ + 1ull) *
                                                   static_cast<uint64_t>(NSEC_IN_SEC) /
                                                   it->second->metric_timer_frequency_;
+
+        std::lock_guard<std::mutex> file_lock(it->second->file_access_mutex_);
 
         // open input file stream where metrics data is saved
         std::ifstream inf =
@@ -705,7 +769,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
                 it->second->metrics_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
                 raw_size, raw_metrics.data(), &num_reports, &total_values_count, nullptr, nullptr);
             if ((status != ZE_RESULT_SUCCESS) || (num_reports == 0) || (total_values_count == 0)) {
-              SPDLOG_WARN("Unable to calculate metrics");
+              SPDLOG_DEBUG("Unable to calculate metrics");
               continue;
             }
 
@@ -719,7 +783,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
                 raw_size, raw_metrics.data(), &num_reports, &total_values_count, reports.data(),
                 values.data());
             if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
-              SPDLOG_WARN("Unable to calculate metrics");
+              SPDLOG_DEBUG("Unable to calculate metrics");
               continue;
             }
             // Note: There is a bug in L0 where the total value count returned from the second call
@@ -804,9 +868,9 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
     size_t data_size = ssize;
     status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, storage);
     if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
-      SPDLOG_WARN("Metric samples dropped.");
+      SPDLOG_DEBUG("Metric samples dropped.");
     } else if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_ERROR("zetMetricStreamerReadData failed with error code {:x}",
+      SPDLOG_DEBUG("zetMetricStreamerReadData failed with error code {:x}",
                    static_cast<std::size_t>(status));
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
@@ -821,7 +885,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
 
     ze_result_t status = zeEventQueryStatus(desc->event_);
     if (!(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY)) {
-      SPDLOG_ERROR("zeEventQueryStatus failed with error code: 0x{:x}",
+      SPDLOG_DEBUG("zeEventQueryStatus failed with error code: 0x{:x}",
                    static_cast<std::size_t>(status));
     }
     PTI_ASSERT(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY);
@@ -847,9 +911,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
 
     zet_metric_streamer_handle_t streamer = nullptr;
 
-    constexpr auto kDefaultSamplingInterval = 1000000U;  // 1 millisecond
-
-    uint32_t interval = (sampling_interval == 0) ? kDefaultSamplingInterval : sampling_interval;
+    uint32_t interval = (sampling_interval == 0) ? kDefaultSamplingIntervalNs : sampling_interval;
     // TODO: Should there be a min and/or max?
 
     zet_metric_streamer_desc_t streamer_desc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr,
@@ -904,12 +966,12 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
           status = zetMetricStreamerOpen(desc->context_, desc->device_, desc->metrics_group_,
                                          &streamer_desc, desc->event_, &streamer);
           if (status != ZE_RESULT_SUCCESS) {
-            SPDLOG_ERROR(
+            SPDLOG_DEBUG(
                 "Failed to open metric streamer. The sampling interval might be too small."
                 " UMD driver returned {:x}",
                 static_cast<std::size_t>(status));
 #ifndef _WIN32
-            SPDLOG_ERROR(
+            SPDLOG_DEBUG(
                 "Set the paranoid to 0, depending on Intel GPU kernel mode driver(s): i915 or Xe\n"
                 "/proc/sys/dev/i915/perf_stream_paranoid\n"
                 "/proc/sys/dev/xe/observation_paranoid\n"
@@ -979,7 +1041,7 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
       if (desc->query_pool_ != nullptr) {
         status = zetMetricQueryPoolDestroy(desc->query_pool_);
         if (status != ZE_RESULT_SUCCESS) {
-          SPDLOG_WARN("~PtiQueryMetricsProfiler(): Failed to destroy query pool: ");
+          SPDLOG_DEBUG("~PtiQueryMetricsProfiler(): Failed to destroy query pool: ");
         }
         desc->query_pool_ = nullptr;
       }
@@ -987,7 +1049,7 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
       // Deactivate metric groups
       status = zetContextActivateMetricGroups(desc->context_, device, 0, nullptr);
       if (status != ZE_RESULT_SUCCESS) {
-        SPDLOG_WARN("~PtiQueryMetricsProfiler(): Failed to deactivate metric groups:");
+        SPDLOG_DEBUG("~PtiQueryMetricsProfiler(): Failed to deactivate metric groups:");
       }
     }
   }
@@ -1158,7 +1220,7 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
     query_pool_desc.stype = ZET_STRUCTURE_TYPE_METRIC_QUERY_POOL_DESC;
     query_pool_desc.pNext = nullptr;
     query_pool_desc.type = ZET_METRIC_QUERY_POOL_TYPE_PERFORMANCE;
-    query_pool_desc.count = PTI_METRIC_POOL_EVENT_COUNT;
+    query_pool_desc.count = kMetricPoolEventCount;
 
     status = zetMetricQueryPoolCreate(desc->context_, device, desc->metrics_group_,
                                       &query_pool_desc, &desc->query_pool_);
@@ -1200,13 +1262,19 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
       ze_event_pool_desc_t event_pool_desc = {
           ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
           ZE_EVENT_POOL_FLAG_HOST_VISIBLE,  // flags
-          PTI_METRIC_POOL_EVENT_COUNT       // count.
+          kMetricPoolEventCount             // count.
       };
 
       status = zeEventPoolCreate(desc->context_, &event_pool_desc, 1, &device, &desc->event_pool_);
       if (status != ZE_RESULT_SUCCESS) {
         SPDLOG_DEBUG("CreateQueryEventPool - Failed to create event pool: ");
-        return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+        status = zetMetricQueryPoolDestroy(desc->query_pool_);
+        if (status != ZE_RESULT_SUCCESS) {
+          SPDLOG_DEBUG("CreateQueryEventPool: Failed to destroy query pool: ");
+        }
+        desc->query_pool_ = nullptr;
+        desc->event_pool_ = nullptr;
+        return PTI_ERROR_DRIVER;
       }
     }
 
@@ -1446,12 +1514,12 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
 
       // Collection should be stopped before start is called
       if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_ENABLED) {
-        SPDLOG_ERROR("Attempting to start a metrics collection that isn't stopped");
+        SPDLOG_DEBUG("Attempting to start a metrics collection that isn't stopped");
         return PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED;
       }
 
       if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_PAUSED) {
-        SPDLOG_ERROR("Attempting to start instead of resume a metrics collection that is paused");
+        SPDLOG_DEBUG("Attempting to start instead of resume a metrics collection that is paused");
         return PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED;
       }
 
@@ -1497,8 +1565,8 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     }
 
     if (it == device_descriptors_.end() || it->second->metrics_group_ != metrics_group_handle) {
-      SPDLOG_WARN("Could not find device and metric group");
-      SPDLOG_WARN("Unable to calculate required data buffer size");
+      SPDLOG_DEBUG("Could not find device and metric group");
+      SPDLOG_DEBUG("Unable to calculate required data buffer size");
       return;
     }
 
@@ -1506,12 +1574,11 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
         std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
     PTI_ASSERT(inf.is_open());
 
-    constexpr auto kDefaultTimeAggrWindow = 10000U;
     uint32_t time_aggr_window = time_aggr_window_ / 1000;  // ns to us
     if (time_aggr_window_ == 0) {
       // TODO: Should there be a min and/or max?
       // TODO: Log message saying that default is used
-      time_aggr_window = kDefaultTimeAggrWindow;
+      time_aggr_window = kDefaultTimeAggrWindowUs;
     }
 
     // calculate operation description
@@ -1710,9 +1777,9 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     size_t data_size = ssize;
     status = tf.zetMetricTracerReadDataExp(tracer, &data_size, storage);
     if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
-      SPDLOG_WARN("Metric samples dropped.");
+      SPDLOG_DEBUG("Metric samples dropped.");
     } else if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_ERROR("zetMetricTracerReadData failed with error code {:x}",
+      SPDLOG_DEBUG("zetMetricTracerReadData failed with error code {:x}",
                    static_cast<std::size_t>(status));
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
@@ -1807,9 +1874,9 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
         if (tracer_enabled == false) {
           status = tf.zetMetricTracerEnableExp(tracer, true);
           if (status != ZE_RESULT_SUCCESS) {
-            SPDLOG_ERROR("Failed to open metric tracer.");
+            SPDLOG_DEBUG("Failed to open metric tracer.");
 #ifndef _WIN32
-            SPDLOG_ERROR(
+            SPDLOG_DEBUG(
                 "Please also make sure: "
                 "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
                 "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
@@ -1873,9 +1940,9 @@ class PtiMetricsCollectorHandler {
     ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     bool l0_initialized, metrics_enabled;
     if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_ERROR("Failed to initialize Level Zero runtime");
+      SPDLOG_DEBUG("Failed to initialize Level Zero runtime");
 #ifndef _WIN32
-      SPDLOG_ERROR(
+      SPDLOG_DEBUG(
           "Please also make sure: "
           "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
           "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
@@ -1889,18 +1956,44 @@ class PtiMetricsCollectorHandler {
     if (utils::GetEnv("ZET_ENABLE_METRICS") == "1") {
       metrics_enabled = true;
     } else {
-      SPDLOG_ERROR(
+      SPDLOG_DEBUG(
           "Metrics collection is not enabled on this system. Please make sure environment variable "
           "ZET_ENABLE_METRICS is set to 1.");
       metrics_enabled = false;
     }
+
+    // Initialize devices during construction
+    if (l0_initialized && metrics_enabled) {
+      devices_ = utils::ze::GetDeviceList();
+
+      // Pre-populate device mutexes and metric groups for all devices
+      for (auto device : devices_) {
+        pti_device_handle_t device_handle = static_cast<pti_device_handle_t>(device);
+        device_mutexes_[device_handle];  // Creates mutex
+        device_collection_active_[device_handle] = CollectionState::DISABLED;
+
+        // Get device properties and register device name
+        ze_device_properties_t device_props;
+        std::memset(&device_props, 0, sizeof(device_props));
+        device_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+        if (zeDeviceGetProperties(device, &device_props) == ZE_RESULT_SUCCESS) {
+          string_pool_.Get(device_props.name);
+        }
+
+        // Find metric groups for this device
+        utils::ze::FindMetricGroups(device, metric_groups_[device]);
+
+        // Register all metric group names and descriptions
+        for (auto group : metric_groups_[device]) {
+          RegisterMetricGroupStrings(group);
+        }
+      }
+    }
+
     metrics_enabled_ = (l0_initialized && metrics_enabled);
 
-#ifdef _WIN32
-    std::string loader_lib_name = "libze_loader.dll";  // TODO check???
-#else
-    std::string loader_lib_name = "libze_loader.so.1";
-#endif
+    std::string loader_lib_name = kLoaderLibraryName;
+
     // get loader handle to verify trace metric API exists in the loader
     loader_lib_ = utils::LoadLibrary(loader_lib_name.c_str());
 
@@ -1915,10 +2008,10 @@ class PtiMetricsCollectorHandler {
       it.second.clear();
     }
     metric_groups_.clear();
-    names_.clear();
     stream_metrics_profilers_.clear();
     query_metrics_profilers_.clear();
     trace_metrics_profilers_.clear();
+    device_collection_active_.clear();
     utils::UnloadLibrary(loader_lib_);
   }
 
@@ -2067,22 +2160,8 @@ class PtiMetricsCollectorHandler {
     return PTI_SUCCESS;
   }
 
-  inline const char *GetStringPtr(char *input_name) {
-    std::string name(input_name);
-    if (names_.find(name) == names_.end()) {
-      names_[name] = nullptr;
-      auto it = names_.find(name);
-      names_[name] = reinterpret_cast<const char *>(&it->first[0]);
-    }
-    return names_[name];
-  }
-
-  inline bool IsDeviceHandleValid(ze_device_handle_t device_handle) {
-    if (devices_.empty()) {
-      devices_ = utils::ze::GetDeviceList();
-    }
-
-    for (auto *device : devices_) {
+  inline bool IsDeviceHandleValid(ze_device_handle_t device_handle) const {
+    for (const auto *device : devices_) {
       if (device_handle == device) {
         return true;
       }
@@ -2090,7 +2169,7 @@ class PtiMetricsCollectorHandler {
     return false;
   }
 
-  inline pti_result GetDeviceCount(uint32_t *device_count) {
+  inline pti_result GetDeviceCount(uint32_t *device_count) const {
     if (metrics_enabled_ == false) {
       return PTI_ERROR_DRIVER;
     }
@@ -2099,15 +2178,12 @@ class PtiMetricsCollectorHandler {
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
-    if (devices_.empty()) {
-      devices_ = utils::ze::GetDeviceList();
-    }
-
     *device_count = devices_.size();
+
     return PTI_SUCCESS;
   }
 
-  inline pti_result GetDevices(pti_device_properties_t *pDevices, uint32_t *device_count) {
+  inline pti_result GetDevices(pti_device_properties_t *pDevices, uint32_t *device_count) const {
     if (metrics_enabled_ == false) {
       return PTI_ERROR_DRIVER;
     }
@@ -2116,12 +2192,9 @@ class PtiMetricsCollectorHandler {
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
-    if (devices_.empty()) {
-      devices_ = utils::ze::GetDeviceList();
-    }
     uint32_t num_devices = devices_.size();
     if (num_devices < *device_count) {
-      SPDLOG_WARN("Device buffer size too small. Device count is {}", num_devices);
+      SPDLOG_DEBUG("Device buffer size too small. Device count is {}", num_devices);
       *device_count = num_devices;
       return PTI_ERROR_BAD_ARGUMENT;
     }
@@ -2151,7 +2224,7 @@ class PtiMetricsCollectorHandler {
       pDevices[i]._address._device = pci_props.address.device;
       pDevices[i]._address._function = pci_props.address.function;
 
-      pDevices[i]._model_name = GetStringPtr(device_properties.name);
+      pDevices[i]._model_name = string_pool_.Get(device_properties.name);
 
       std::copy_n(device_properties.uuid.id, PTI_MAX_DEVICE_UUID_SIZE, pDevices[i]._uuid);
     }
@@ -2159,34 +2232,32 @@ class PtiMetricsCollectorHandler {
   }
 
   // Check metric group handle in all available devices
-  inline bool IsMetricGroupHandleValid(zet_metric_group_handle_t metric_group_handle) {
-    if (devices_.empty()) {
-      devices_ = utils::ze::GetDeviceList();
-    }
-
-    for (auto device : devices_) {
-      if (IsMetricGroupHandleValid(device, metric_group_handle)) {
-        return true;
+  inline bool IsMetricGroupHandleValid(zet_metric_group_handle_t metric_group_handle) const {
+    for (const auto &[device, groups] : metric_groups_) {
+      for (const auto *group : groups) {
+        if (metric_group_handle == group) {
+          return true;
+        }
       }
     }
-
     return false;
   }
 
   // check metric group handle for specified device
   inline bool IsMetricGroupHandleValid(pti_device_handle_t device_handle,
-                                       zet_metric_group_handle_t metric_group_handle) {
+                                       zet_metric_group_handle_t metric_group_handle) const {
     // Fist make sure the device handle is valid
     ze_device_handle_t device = static_cast<ze_device_handle_t>(device_handle);
     if (IsDeviceHandleValid(device) != true) {
       return false;
     }
 
-    if (metric_groups_.find(device) == metric_groups_.end()) {
-      utils::ze::FindMetricGroups(device, metric_groups_[device]);
+    auto it = metric_groups_.find(device);
+    if (it == metric_groups_.end()) {
+      return false;
     }
 
-    for (auto *group : metric_groups_[device]) {
+    for (const auto *group : it->second) {
       if (metric_group_handle == group) {
         return true;
       }
@@ -2196,7 +2267,7 @@ class PtiMetricsCollectorHandler {
   }
 
   inline pti_result GetMetricGroupCount(pti_device_handle_t device_handle,
-                                        uint32_t *metrics_group_count) {
+                                        uint32_t *metrics_group_count) const {
     if (metrics_enabled_ == false) {
       return PTI_ERROR_DRIVER;
     }
@@ -2208,23 +2279,19 @@ class PtiMetricsCollectorHandler {
     ze_device_handle_t device = static_cast<ze_device_handle_t>(device_handle);
 
     if (IsDeviceHandleValid(device) != true) {
-      SPDLOG_ERROR("Invalid device handle used");
+      SPDLOG_DEBUG("Invalid device handle used");
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
-    if (metric_groups_.find(device) == metric_groups_.end()) {
-      // Find all metric groups for given device regardless of type
-      utils::ze::FindMetricGroups(device, metric_groups_[device]);
-    }
-
-    *metrics_group_count = metric_groups_[device].size();
+    auto it = metric_groups_.find(device);
+    *metrics_group_count = (it != metric_groups_.end()) ? it->second.size() : 0;
 
     return PTI_SUCCESS;
   }
 
   inline pti_result GetMetricGroups(pti_device_handle_t device_handle,
                                     pti_metrics_group_properties_t *metrics_groups,
-                                    uint32_t *metrics_group_count) {
+                                    uint32_t *metrics_group_count) const {
     if (metrics_enabled_ == false) {
       return PTI_ERROR_DRIVER;
     }
@@ -2236,18 +2303,21 @@ class PtiMetricsCollectorHandler {
     ze_device_handle_t device = static_cast<ze_device_handle_t>(device_handle);
 
     if (IsDeviceHandleValid(device) != true) {
-      SPDLOG_ERROR("Invalid device handle used");
+      SPDLOG_DEBUG("Invalid device handle used");
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
-    if (metric_groups_.find(device) == metric_groups_.end()) {
-      // Find all metric groups for given device regardless of type
-      utils::ze::FindMetricGroups(device, metric_groups_[device]);
+    auto it = metric_groups_.find(device);
+    if (it == metric_groups_.end()) {
+      *metrics_group_count = 0;
+      return PTI_SUCCESS;  // No groups for this device
     }
 
-    uint32_t group_count = metric_groups_[device].size();
+    const auto &device_metric_groups = it->second;
+    uint32_t group_count = device_metric_groups.size();
+
     if (group_count < *metrics_group_count) {
-      SPDLOG_WARN("Metric Group buffer size too small. Group count is {}", group_count);
+      SPDLOG_DEBUG("Metric Group buffer size too small. Group count is {}", group_count);
       *metrics_group_count = group_count;
       return PTI_ERROR_BAD_ARGUMENT;
     }
@@ -2257,27 +2327,29 @@ class PtiMetricsCollectorHandler {
       zet_metric_group_properties_t group_props;
       std::memset(&group_props, 0, sizeof(group_props));
       group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
-      ze_result_t status = zetMetricGroupGetProperties(metric_groups_[device][i], &group_props);
+
+      ze_result_t status = zetMetricGroupGetProperties(device_metric_groups[i], &group_props);
       if (status != ZE_RESULT_SUCCESS) {
         return PTI_ERROR_DRIVER;
       }
 
-      metrics_groups[i]._handle = metric_groups_[device][i];
+      metrics_groups[i]._handle = device_metric_groups[i];
       // PTI sampling types for performance metrics should match L0 sampling types
       metrics_groups[i]._type = static_cast<pti_metrics_group_type>(group_props.samplingType);
       metrics_groups[i]._domain = group_props.domain;
       metrics_groups[i]._metric_count = group_props.metricCount;
       // User must allocate metric properties buffer and get it populated as a separate step.
       metrics_groups[i]._metric_properties = nullptr;
-      metrics_groups[i]._name = GetStringPtr(group_props.name);
-      metrics_groups[i]._description = GetStringPtr(group_props.description);
+      metrics_groups[i]._name = string_pool_.Get(group_props.name);
+      metrics_groups[i]._description = string_pool_.Get(group_props.description);
     }
 
+    *metrics_group_count = group_count;
     return PTI_SUCCESS;
   }
 
   inline pti_result GetMetrics(pti_metrics_group_handle_t metrics_group_handle,
-                               pti_metric_properties_t *metrics) {
+                               pti_metric_properties_t *metrics) const {
     if (metrics_enabled_ == false) {
       return PTI_ERROR_DRIVER;
     }
@@ -2289,7 +2361,7 @@ class PtiMetricsCollectorHandler {
     zet_metric_group_handle_t group = static_cast<zet_metric_group_handle_t>(metrics_group_handle);
 
     if (IsMetricGroupHandleValid(group) != true) {
-      SPDLOG_ERROR("Invalid metric group handle used");
+      SPDLOG_DEBUG("Invalid metric group handle used");
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
@@ -2319,9 +2391,9 @@ class PtiMetricsCollectorHandler {
       metrics[i]._handle = static_cast<pti_metric_handle_t>(metric_list[i]);
       metrics[i]._metric_type = static_cast<pti_metric_type>(metric_props.metricType);
       metrics[i]._value_type = static_cast<pti_metric_value_type>(metric_props.resultType);
-      metrics[i]._name = GetStringPtr(metric_props.name);
-      metrics[i]._description = GetStringPtr(metric_props.description);
-      metrics[i]._units = GetStringPtr(metric_props.resultUnits);
+      metrics[i]._name = string_pool_.Get(metric_props.name);
+      metrics[i]._description = string_pool_.Get(metric_props.description);
+      metrics[i]._units = string_pool_.Get(metric_props.resultUnits);
     }
     return PTI_SUCCESS;
   }
@@ -2340,9 +2412,23 @@ class PtiMetricsCollectorHandler {
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
+    std::mutex *per_device_mutex = nullptr;
+    {
+      // Protect access to the device_mutexes_ map to avoid races during mutex initialization
+      std::lock_guard<std::mutex> device_map_lock(device_mutexes_mutex_);
+      per_device_mutex = &device_mutexes_[device_handle];
+    }
+    std::lock_guard<std::mutex> device_lock(*per_device_mutex);
+
+    // Check collection state under device lock
+    if (device_collection_active_[device_handle] == CollectionState::ENABLED) {
+      SPDLOG_DEBUG("Cannot configure while collection is active");
+      return PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED;
+    }
+
     zet_device_handle_t device = static_cast<zet_device_handle_t>(device_handle);
     if (IsDeviceHandleValid(device) != true) {
-      SPDLOG_ERROR("Invalid device handle used");
+      SPDLOG_DEBUG("Invalid device handle used");
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
@@ -2350,25 +2436,33 @@ class PtiMetricsCollectorHandler {
         static_cast<zet_metric_group_handle_t>(metric_config_params->_group_handle);
 
     if (IsMetricGroupHandleValid(device, group) != true) {
-      SPDLOG_ERROR("Invalid metric group handle configured");
+      SPDLOG_DEBUG("Invalid metric group handle configured");
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
     // TODO: Add support for more than 1 metric group per device at the time
     if (metrics_group_count > 1) {
+      SPDLOG_DEBUG("Multiple metric groups not yet supported");
       return PTI_ERROR_NOT_IMPLEMENTED;
     }
 
     // If Configure is called more than once on the same device, the new call would overwrite the
     // previous configuration
-    if (stream_metrics_profilers_.find(device_handle) != stream_metrics_profilers_.end()) {
-      stream_metrics_profilers_[device_handle].reset();
-    }
-    if (query_metrics_profilers_.find(device_handle) != query_metrics_profilers_.end()) {
-      query_metrics_profilers_[device_handle].reset();
-    }
-    if (trace_metrics_profilers_.find(device_handle) != trace_metrics_profilers_.end()) {
-      trace_metrics_profilers_[device_handle].reset();
+    // Clean up existing profilers with proper synchronization
+    {
+      std::lock_guard<std::shared_mutex> profiler_lock(profilers_mutex_);
+      if (stream_metrics_profilers_.find(device_handle) != stream_metrics_profilers_.end()) {
+        stream_metrics_profilers_[device_handle].reset();
+        stream_metrics_profilers_.erase(device_handle);
+      }
+      if (query_metrics_profilers_.find(device_handle) != query_metrics_profilers_.end()) {
+        query_metrics_profilers_[device_handle].reset();
+        query_metrics_profilers_.erase(device_handle);
+      }
+      if (trace_metrics_profilers_.find(device_handle) != trace_metrics_profilers_.end()) {
+        trace_metrics_profilers_[device_handle].reset();
+        trace_metrics_profilers_.erase(device_handle);
+      }
     }
 
     zet_metric_group_properties_t group_props;
@@ -2379,35 +2473,39 @@ class PtiMetricsCollectorHandler {
       return PTI_ERROR_DRIVER;
     }
 
-    switch (group_props.samplingType) {
-      case ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED: {
-        uint32_t sampling_interval = metric_config_params->_sampling_interval;
-        std::unique_ptr<PtiStreamMetricsProfiler> stream_metrics_profiler =
-            std::make_unique<PtiStreamMetricsProfiler>(device_handle, group, sampling_interval);
-        stream_metrics_profilers_[device_handle] = std::move(stream_metrics_profiler);
-        break;
-      }
-      case ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED: {
-        std::unique_ptr<PtiQueryMetricsProfiler> query_metrics_profiler =
-            std::make_unique<PtiQueryMetricsProfiler>(device_handle, group);
-        query_metrics_profilers_[device_handle] = std::move(query_metrics_profiler);
-        break;
-      }
-      case external::L0::ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EXP_TRACER_BASED: {
-        // TraceMetricsProfiler relies on L0 Trace Metrics API extensions
-        if (trace_api_enabled_) {
-          uint32_t time_aggr_window = metric_config_params->_time_aggr_window;
-          std::unique_ptr<PtiTraceMetricsProfiler> trace_metrics_profiler =
-              std::make_unique<PtiTraceMetricsProfiler>(device_handle, group, time_aggr_window);
-          trace_metrics_profilers_[device_handle] = std::move(trace_metrics_profiler);
-        } else {
-          SPDLOG_ERROR("Trace metrics cannot be collected on this system");
-          return PTI_ERROR_DRIVER;
+    // Create new profiler with proper synchronization
+    {
+      std::lock_guard<std::shared_mutex> profiler_lock(profilers_mutex_);
+
+      switch (group_props.samplingType) {
+        case ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED: {
+          uint32_t sampling_interval = metric_config_params->_sampling_interval;
+          std::unique_ptr<PtiStreamMetricsProfiler> stream_metrics_profiler =
+              std::make_unique<PtiStreamMetricsProfiler>(device_handle, group, sampling_interval);
+          stream_metrics_profilers_[device_handle] = std::move(stream_metrics_profiler);
+          break;
         }
-        break;
-      }
-      default: {
-        return PTI_ERROR_NOT_IMPLEMENTED;
+        case ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED: {
+          std::unique_ptr<PtiQueryMetricsProfiler> query_metrics_profiler =
+              std::make_unique<PtiQueryMetricsProfiler>(device_handle, group);
+          query_metrics_profilers_[device_handle] = std::move(query_metrics_profiler);
+          break;
+        }
+        case external::L0::ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EXP_TRACER_BASED: {
+          if (trace_api_enabled_) {
+            uint32_t time_aggr_window = metric_config_params->_time_aggr_window;
+            std::unique_ptr<PtiTraceMetricsProfiler> trace_metrics_profiler =
+                std::make_unique<PtiTraceMetricsProfiler>(device_handle, group, time_aggr_window);
+            trace_metrics_profilers_[device_handle] = std::move(trace_metrics_profiler);
+          } else {
+            SPDLOG_DEBUG("Trace metrics cannot be collected on this system");
+            return PTI_ERROR_DRIVER;
+          }
+          break;
+        }
+        default: {
+          return PTI_ERROR_NOT_IMPLEMENTED;
+        }
       }
     }
 
@@ -2425,50 +2523,82 @@ class PtiMetricsCollectorHandler {
 
     zet_device_handle_t device = static_cast<zet_device_handle_t>(device_handle);
     if (IsDeviceHandleValid(device) != true) {
-      SPDLOG_ERROR("Invalid device handle used");
+      SPDLOG_DEBUG("Invalid device handle used");
       return PTI_ERROR_BAD_ARGUMENT;
+    }
+
+    std::mutex *per_device_mutex = nullptr;
+    {
+      // Protect access to the device_mutexes_ map to avoid races during mutex initialization
+      std::lock_guard<std::mutex> device_map_lock(device_mutexes_mutex_);
+      per_device_mutex = &device_mutexes_[device_handle];
+    }
+    std::lock_guard<std::mutex> device_lock(*per_device_mutex);
+
+    // Check current state
+    auto current_state = device_collection_active_[device_handle];
+    if (current_state == CollectionState::ENABLED) {
+      SPDLOG_DEBUG("Collection already enabled for device");
+      return PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED;
+    }
+
+    if (current_state == CollectionState::PAUSED) {
+      SPDLOG_DEBUG("Collection already paused for device");
+      return PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED;
     }
 
     pti_result result = PTI_SUCCESS;
     pti_result status = PTI_SUCCESS;
-    if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
-        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
-      SPDLOG_ERROR(
-          "Attempted to start a metrics collection on a device that has not been configured.");
-      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
-    }
 
-    auto &stream_metrics_profiler = stream_metrics_profilers_[device_handle];
-    if (stream_metrics_profiler) {
-      status = stream_metrics_profiler->StartProfiling(start_paused);
-      if (status != PTI_SUCCESS) {
-        result = status;
+    // Check if any profiler is configured for this device
+    {
+      std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
+      if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
+          trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+          query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
+        SPDLOG_DEBUG(
+            "Attempted to start a metrics collection on a device that has not been configured.");
+        return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
       }
     }
 
-    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
-    if (query_metrics_profiler) {
-      status = query_metrics_profiler->StartProfiling(start_paused);
-      if (status != PTI_SUCCESS) {
-        result = status;
-      }
-    }
-
-    // TODO: start the Query metric profilers
-    /*
-        for (auto &query_metrics_profiler : query_metrics_profilers_[device_handle]) {
-          query_metrics_profiler->StartProfiling(start_paused);
+    // Start profilers with proper synchronization
+    {
+      std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
+      auto stream_it = stream_metrics_profilers_.find(device_handle);
+      if (stream_it != stream_metrics_profilers_.end() && stream_it->second) {
+        status = stream_it->second->StartProfiling(start_paused);
+        if (status != PTI_SUCCESS) {
+          SPDLOG_DEBUG("Failed to start stream profiler");
+          result = status;
         }
-    */
-    auto &trace_metrics_profiler = trace_metrics_profilers_[device_handle];
-    if (trace_metrics_profiler) {
-      status = trace_metrics_profiler->StartProfiling(start_paused);
-      if (status != PTI_SUCCESS) {
-        result = status;
+      }
+
+      auto query_it = query_metrics_profilers_.find(device_handle);
+      if (query_it != query_metrics_profilers_.end() && query_it->second) {
+        status = query_it->second->StartProfiling(start_paused);
+        if (status != PTI_SUCCESS) {
+          SPDLOG_DEBUG("Failed to start query profiler");
+          result = status;
+        }
+      }
+
+      auto trace_it = trace_metrics_profilers_.find(device_handle);
+      if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
+        status = trace_it->second->StartProfiling(start_paused);
+        if (status != PTI_SUCCESS) {
+          SPDLOG_DEBUG("Failed to start trace profiler");
+          result = status;
+        }
       }
     }
 
+    // Update state on success
+    if (result == PTI_SUCCESS) {
+      device_collection_active_[device_handle] =
+          start_paused ? CollectionState::PAUSED : CollectionState::ENABLED;
+      SPDLOG_TRACE("Collection started successfully for device");
+    }
     return result;
   }
 
@@ -2488,43 +2618,58 @@ class PtiMetricsCollectorHandler {
 
     zet_device_handle_t device = static_cast<zet_device_handle_t>(device_handle);
     if (IsDeviceHandleValid(device) != true) {
-      SPDLOG_ERROR("Invalid device handle used");
+      SPDLOG_DEBUG("Invalid device handle used");
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
+    std::mutex *per_device_mutex = nullptr;
+    {
+      std::lock_guard<std::mutex> device_map_lock(device_mutexes_mutex_);
+      per_device_mutex = &device_mutexes_[device_handle];
+    }
+    std::lock_guard<std::mutex> device_lock(*per_device_mutex);
+
     pti_result result = PTI_SUCCESS;
     pti_result status = PTI_SUCCESS;
-    if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
-        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
-      SPDLOG_ERROR(
-          "Attempted to pause a metrics collection on a device that has not been "
-          "configured for metrics collection.");
-      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
-    }
+    {
+      std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
 
-    auto &stream_metrics_profiler = stream_metrics_profilers_[device_handle];
-    if (stream_metrics_profiler) {
-      status = stream_metrics_profiler->PauseProfiling();
-      if (status != PTI_SUCCESS) {
-        result = status;
+      if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
+          trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+          query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
+        SPDLOG_DEBUG(
+            "Attempted to pause a metrics collection on a device that has not been "
+            "configured for metrics collection.");
+        return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+      }
+
+      auto stream_it = stream_metrics_profilers_.find(device_handle);
+      if (stream_it != stream_metrics_profilers_.end() && stream_it->second) {
+        status = stream_it->second->PauseProfiling();
+        if (status != PTI_SUCCESS) {
+          result = status;
+        }
+      }
+
+      auto query_it = query_metrics_profilers_.find(device_handle);
+      if (query_it != query_metrics_profilers_.end() && query_it->second) {
+        status = query_it->second->PauseProfiling();
+        if (status != PTI_SUCCESS) {
+          result = status;
+        }
+      }
+
+      auto trace_it = trace_metrics_profilers_.find(device_handle);
+      if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
+        status = trace_it->second->PauseProfiling();
+        if (status != PTI_SUCCESS) {
+          result = status;
+        }
       }
     }
-
-    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
-    if (query_metrics_profiler) {
-      status = query_metrics_profiler->PauseProfiling();
-      if (status != PTI_SUCCESS) {
-        result = status;
-      }
-    }
-
-    auto &trace_metrics_profiler = trace_metrics_profilers_[device_handle];
-    if (trace_metrics_profiler) {
-      status = trace_metrics_profiler->PauseProfiling();
-      if (status != PTI_SUCCESS) {
-        result = status;
-      }
+    if (result == PTI_SUCCESS) {
+      device_collection_active_[device_handle] = CollectionState::PAUSED;
+      SPDLOG_TRACE("Collection paused successfully for device");
     }
 
     return result;
@@ -2541,42 +2686,59 @@ class PtiMetricsCollectorHandler {
 
     zet_device_handle_t device = static_cast<zet_device_handle_t>(device_handle);
     if (IsDeviceHandleValid(device) != true) {
-      SPDLOG_ERROR("Invalid device handle used");
+      SPDLOG_DEBUG("Invalid device handle used");
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
+    std::mutex *per_device_mutex = nullptr;
+    {
+      std::lock_guard<std::mutex> device_map_lock(device_mutexes_mutex_);
+      per_device_mutex = &device_mutexes_[device_handle];
+    }
+    std::lock_guard<std::mutex> device_lock(*per_device_mutex);
+
     pti_result result = PTI_SUCCESS;
     pti_result status = PTI_SUCCESS;
-    if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
-        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
-      SPDLOG_ERROR(
-          "Attempted to resume a metrics collection on a device that has not been configured.");
-      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
-    }
 
-    auto &stream_metrics_profiler = stream_metrics_profilers_[device_handle];
-    if (stream_metrics_profiler) {
-      status = stream_metrics_profiler->ResumeProfiling();
-      if (status != PTI_SUCCESS) {
-        result = status;
+    {
+      std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
+
+      if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
+          trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+          query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
+        SPDLOG_DEBUG(
+            "Attempted to resume a metrics collection on a device that has not been configured.");
+        return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+      }
+
+      auto stream_it = stream_metrics_profilers_.find(device_handle);
+      if (stream_it != stream_metrics_profilers_.end() && stream_it->second) {
+        status = stream_it->second->ResumeProfiling();
+        if (status != PTI_SUCCESS) {
+          result = status;
+        }
+      }
+
+      auto query_it = query_metrics_profilers_.find(device_handle);
+      if (query_it != query_metrics_profilers_.end() && query_it->second) {
+        status = query_it->second->ResumeProfiling();
+        if (status != PTI_SUCCESS) {
+          result = status;
+        }
+      }
+
+      auto trace_it = trace_metrics_profilers_.find(device_handle);
+      if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
+        status = trace_it->second->ResumeProfiling();
+        if (status != PTI_SUCCESS) {
+          result = status;
+        }
       }
     }
 
-    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
-    if (query_metrics_profiler) {
-      status = query_metrics_profiler->ResumeProfiling();
-      if (status != PTI_SUCCESS) {
-        result = status;
-      }
-    }
-
-    auto &trace_metrics_profiler = trace_metrics_profilers_[device_handle];
-    if (trace_metrics_profiler) {
-      status = trace_metrics_profiler->ResumeProfiling();
-      if (status != PTI_SUCCESS) {
-        result = status;
-      }
+    if (result == PTI_SUCCESS) {
+      device_collection_active_[device_handle] = CollectionState::ENABLED;
+      SPDLOG_TRACE("Collection resumed successfully for device");
     }
 
     return result;
@@ -2593,42 +2755,66 @@ class PtiMetricsCollectorHandler {
 
     zet_device_handle_t device = static_cast<zet_device_handle_t>(device_handle);
     if (IsDeviceHandleValid(device) != true) {
-      SPDLOG_ERROR("Invalid device handle used");
+      SPDLOG_DEBUG("Invalid device handle used");
       return PTI_ERROR_BAD_ARGUMENT;
+    }
+
+    std::mutex *per_device_mutex = nullptr;
+    {
+      // Protect access to the device_mutexes_ map to avoid races during mutex initialization
+      std::lock_guard<std::mutex> device_map_lock(device_mutexes_mutex_);
+      per_device_mutex = &device_mutexes_[device_handle];
+    }
+    std::lock_guard<std::mutex> device_lock(*per_device_mutex);
+
+    if (device_collection_active_[device_handle] == CollectionState::DISABLED) {
+      return PTI_ERROR_METRICS_COLLECTION_NOT_ENABLED;
     }
 
     pti_result result = PTI_SUCCESS;
     pti_result status = PTI_SUCCESS;
-    if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
-        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
-      SPDLOG_ERROR(
-          "Attempted to stop a metrics collection on a device that has not been configured.");
-      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
-    }
 
-    auto &stream_metrics_profiler = stream_metrics_profilers_[device_handle];
-    if (stream_metrics_profiler) {
-      status = stream_metrics_profiler->StopProfiling();
-      if (status != PTI_SUCCESS) {
-        result = status;
-      }
-    }
+    {
+      std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
 
-    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
-    if (query_metrics_profiler) {
-      status = query_metrics_profiler->StopProfiling();
-      if (status != PTI_SUCCESS) {
-        result = status;
+      if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
+          trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+          query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
+        SPDLOG_DEBUG(
+            "Attempted to stop a metrics collection on a device that has not been configured.");
+        return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+      }
+
+      auto stream_it = stream_metrics_profilers_.find(device_handle);
+      if (stream_it != stream_metrics_profilers_.end() && stream_it->second) {
+        status = stream_it->second->StopProfiling();
+        if (status != PTI_SUCCESS) {
+          SPDLOG_DEBUG("Failed to stop stream profiler");
+          result = status;
+        }
+      }
+
+      auto query_it = query_metrics_profilers_.find(device_handle);
+      if (query_it != query_metrics_profilers_.end() && query_it->second) {
+        status = query_it->second->StopProfiling();
+        if (status != PTI_SUCCESS) {
+          SPDLOG_DEBUG("Failed to stop query profiler");
+          result = status;
+        }
+      }
+
+      auto trace_it = trace_metrics_profilers_.find(device_handle);
+      if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
+        status = trace_it->second->StopProfiling();
+        if (status != PTI_SUCCESS) {
+          SPDLOG_DEBUG("Failed to stop trace profiler");
+          result = status;
+        }
       }
     }
-    auto &trace_metrics_profiler = trace_metrics_profilers_[device_handle];
-    if (trace_metrics_profiler) {
-      status = trace_metrics_profiler->StopProfiling();
-      if (status != PTI_SUCCESS) {
-        result = status;
-      }
-    }
+    // Update state only after attempting to stop all profilers
+    device_collection_active_[device_handle] = CollectionState::DISABLED;
+    SPDLOG_TRACE("Collection stopped successfully for device");
 
     return result;
   }
@@ -2643,48 +2829,60 @@ class PtiMetricsCollectorHandler {
     if (device_handle == nullptr) {
       return PTI_ERROR_BAD_ARGUMENT;
     }
+
+    std::mutex *per_device_mutex = nullptr;
+    {
+      // Protect access to the device_mutexes_ map to avoid races during mutex initialization
+      std::lock_guard<std::mutex> device_map_lock(device_mutexes_mutex_);
+      per_device_mutex = &device_mutexes_[device_handle];
+    }
+    std::lock_guard<std::mutex> device_lock(*per_device_mutex);
+
     zet_device_handle_t device = static_cast<zet_device_handle_t>(device_handle);
     if (IsDeviceHandleValid(device) != true) {
-      SPDLOG_ERROR("Invalid device handle used");
+      SPDLOG_DEBUG("Invalid device handle used");
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
     zet_metric_group_handle_t group = static_cast<zet_metric_group_handle_t>(metrics_group_handle);
     if (IsMetricGroupHandleValid(device, group) != true) {
-      SPDLOG_ERROR("Invalid metric group handle used");
+      SPDLOG_DEBUG("Invalid metric group handle used");
       return PTI_ERROR_BAD_ARGUMENT;
+    }
+    // For reading profilers
+    std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
+
+    if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
+        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
+        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
+      SPDLOG_DEBUG("Attempted to calculate metrics on a device that has not been configured.");
+      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
 
     pti_result result = PTI_SUCCESS;
     pti_result status = PTI_SUCCESS;
-    if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
-        query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
-      SPDLOG_ERROR("Attempted to calculate metrics on a device that has not been configured.");
-      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
-    }
 
-    auto &stream_metrics_profiler = stream_metrics_profilers_[device_handle];
-    if (stream_metrics_profiler) {
-      status = stream_metrics_profiler->GetCalculatedData(
-          metrics_group_handle, metrics_values_buffer, metrics_values_count);
+    auto stream_it = stream_metrics_profilers_.find(device_handle);
+    if (stream_it != stream_metrics_profilers_.end() && stream_it->second) {
+      status = stream_it->second->GetCalculatedData(metrics_group_handle, metrics_values_buffer,
+                                                    metrics_values_count);
       if (status != PTI_SUCCESS) {
         result = status;
       }
     }
 
-    auto &query_metrics_profiler = query_metrics_profilers_[device_handle];
-    if (query_metrics_profiler) {
-      status = query_metrics_profiler->GetCalculatedData(
-          metrics_group_handle, metrics_values_buffer, metrics_values_count);
+    auto query_it = query_metrics_profilers_.find(device_handle);
+    if (query_it != query_metrics_profilers_.end() && query_it->second) {
+      status = query_it->second->GetCalculatedData(metrics_group_handle, metrics_values_buffer,
+                                                   metrics_values_count);
       if (status != PTI_SUCCESS) {
         result = status;
       }
     }
-    auto &trace_metrics_profiler = trace_metrics_profilers_[device_handle];
-    if (trace_metrics_profiler) {
-      status = trace_metrics_profiler->GetCalculatedData(
-          metrics_group_handle, metrics_values_buffer, metrics_values_count);
+    auto trace_it = trace_metrics_profilers_.find(device_handle);
+    if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
+      status = trace_it->second->GetCalculatedData(metrics_group_handle, metrics_values_buffer,
+                                                   metrics_values_count);
       if (status != PTI_SUCCESS) {
         result = status;
       }
@@ -2694,21 +2892,59 @@ class PtiMetricsCollectorHandler {
   }
 
  private:
-  std::unordered_map<std::string, const char *> names_;
+  mutable StringPool string_pool_;
   std::vector<ze_device_handle_t> devices_;
   std::map<ze_device_handle_t, std::vector<zet_metric_group_handle_t>> metric_groups_;
 
   std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiStreamMetricsProfiler>>
       stream_metrics_profilers_;
-
   std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiQueryMetricsProfiler>>
       query_metrics_profilers_;
-
   std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiTraceMetricsProfiler>>
       trace_metrics_profilers_;
+  mutable std::shared_mutex profilers_mutex_;  // Protects: all profiler maps
+
+  std::unordered_map<pti_device_handle_t, std::mutex> device_mutexes_;
+  mutable std::mutex device_mutexes_mutex_;  // Protects: device_mutexes_ map
+
+  // Collection state tracking
+  enum class CollectionState { DISABLED, ENABLED, PAUSED };
+  std::unordered_map<pti_device_handle_t, CollectionState> device_collection_active_;
+
   bool metrics_enabled_;
   bool trace_api_enabled_;
   HMODULE loader_lib_;
+
+  void RegisterMetricGroupStrings(zet_metric_group_handle_t group) {
+    zet_metric_group_properties_t group_props;
+    std::memset(&group_props, 0, sizeof(group_props));
+    group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
+    if (zetMetricGroupGetProperties(group, &group_props) == ZE_RESULT_SUCCESS) {
+      string_pool_.Get(group_props.name);
+      string_pool_.Get(group_props.description);
+
+      RegisterMetricStrings(group, group_props.metricCount);
+    }
+  }
+
+  void RegisterMetricStrings(zet_metric_group_handle_t group, uint32_t metric_count) {
+    std::vector<zet_metric_handle_t> metrics(metric_count);
+    ze_result_t status = zetMetricGet(group, &metric_count, metrics.data());
+    if (status != ZE_RESULT_SUCCESS) {
+      return;
+    }
+
+    for (auto metric : metrics) {
+      zet_metric_properties_t metric_props;
+      std::memset(&metric_props, 0, sizeof(metric_props));
+      metric_props.stype = ZET_STRUCTURE_TYPE_METRIC_PROPERTIES;
+      if (zetMetricGetProperties(metric, &metric_props) == ZE_RESULT_SUCCESS) {
+        string_pool_.Get(metric_props.name);
+        string_pool_.Get(metric_props.description);
+        string_pool_.Get(metric_props.resultUnits);
+      }
+    }
+  }
 };
 
 // Required to access from ze_collector callbacks

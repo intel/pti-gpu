@@ -277,6 +277,7 @@ if(BUILD_TESTING AND PTI_BUILD_SAMPLES)
   add_subdirectory(samples/callback)
   add_subdirectory(samples/metrics_scope)
   add_subdirectory(samples/omp_vec_add)
+  add_subdirectory(samples/metrics_perf)
 endif()
 
 if(BUILD_TESTING AND PTI_BUILD_TESTING)
