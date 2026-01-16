@@ -102,14 +102,14 @@ CheckExperimentalFilesystem()
 # Check and Get Dependencies
 GetSpdlog()
 
-find_package(Xpti)
+if(NOT TARGET Xpti::xpti)
+  find_package(Xpti)
+endif()
 
 set(PTI_L0_LOADER 1.26.3)
 set(PTI_L0_LOADER_COMMIT_HASH "354190cd2e7aa485b55a39c91d108413a94cc5e1")
 
-if(NOT PROJECT_IS_TOP_LEVEL)
-  find_package(LevelZero ${PTI_L0_LOADER} REQUIRED)
-else()
+if(NOT TARGET LevelZero::level-zero)
   find_package(LevelZero ${PTI_L0_LOADER})
 endif()
 

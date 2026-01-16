@@ -21,9 +21,13 @@ target_compile_options(metrics_perf PUBLIC -fsycl)
 target_include_directories(metrics_perf
                            PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities")
 
+if (NOT TARGET Threads::Threads)
+  find_package(Threads REQUIRED)
+endif()
+
 if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-target_link_libraries(metrics_perf PUBLIC Pti::pti_view LevelZero::level-zero)
+target_link_libraries(metrics_perf PUBLIC Pti::pti_view Threads::Threads)
 

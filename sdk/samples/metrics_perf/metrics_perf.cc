@@ -11,7 +11,6 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
-#include <future>
 #include <iomanip>
 #include <iostream>
 #include <sycl/sycl.hpp>
@@ -328,7 +327,7 @@ std::chrono::duration<double> RunMultiThreadedTest(const std::vector<sycl::queue
   auto start_time = std::chrono::high_resolution_clock::now();
 
   std::vector<std::thread> threads;
-  size_t thread_count = (std::min)(queues.size(), size_t(2));
+  size_t thread_count = (std::min)(queues.size(), static_cast<size_t>(2));
 
   for (size_t i = 0; i < thread_count; ++i) {
     std::string thread_name = "NoProfile-Thread-" + std::to_string(i);
@@ -355,7 +354,7 @@ std::chrono::duration<double> RunMultiThreadedProfilingTest(
   auto start_time = std::chrono::high_resolution_clock::now();
 
   std::vector<std::thread> threads;
-  size_t thread_count = (std::min)({device_handles.size(), queues.size(), size_t(2)});
+  size_t thread_count = (std::min)({device_handles.size(), queues.size(), static_cast<size_t>(2)});
 
   for (size_t i = 0; i < thread_count; ++i) {
     std::string thread_name = "Thread-" + std::to_string(i);
@@ -461,7 +460,7 @@ int main(int argc, char* argv[]) {
       return EXIT_FAILURE;
     }
 
-    size_t num_queues = (std::min)({all_devices.size(), g_devices.size(), size_t(2)});
+    size_t num_queues = (std::min)({all_devices.size(), g_devices.size(), static_cast<size_t>(2)});
     sycl::property_list prop_list{sycl::property::queue::in_order()};
 
     for (size_t i = 0; i < num_queues; ++i) {
@@ -494,9 +493,10 @@ int main(int argc, char* argv[]) {
       std::cout << "g_devices[" << i << "]._handle: " << g_devices[i]._handle << std::endl;
       std::cout << "g_devices[" << i << "] UUID: ";
       for (size_t j = 0; j < PTI_MAX_DEVICE_UUID_SIZE; ++j) {
-        printf("%02x", g_devices[i]._uuid[j]);
+        std::cout << std::hex << std::setw(2) << std::setfill('0')
+                  << static_cast<unsigned int>(g_devices[i]._uuid[j]);
       }
-      std::cout << std::endl;
+      std::cout << std::dec << std::setfill(' ') << std::endl;
     }
 
     std::cout << std::endl;
@@ -535,7 +535,8 @@ int main(int argc, char* argv[]) {
     double multi_baseline_throughput = 0.0;
     double multi_profiling_throughput = 0.0;
     double multi_overhead_pct = 0.0;
-    std::chrono::duration<double> multi_baseline_time, multi_profiling_time;
+    std::chrono::duration<double> multi_baseline_time{};
+    std::chrono::duration<double> multi_profiling_time{};
 
     // Only run multi-threaded tests if we have multiple devices/queues
     if (queues.size() >= 2 && g_devices.size() >= 2) {
