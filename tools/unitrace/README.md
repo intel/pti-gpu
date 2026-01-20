@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This a performance tool for Intel(R) oneAPI applications. It traces and profiles host/device activities, interactions and hardware utilizations for
+This is a performance tool for Intel(R) oneAPI applications. It traces and profiles host/device activities, interactions, and hardware utilization for
 Intel(R) GPU applications.
 
 ## Supported Platforms
@@ -98,7 +98,7 @@ cd test
 python test_unitrace.py
 ```
 
-By default, command **python test_unitrace.py** builds and runs all the tests. If the tests are already built and rebuilding the tests is not needed, you can use **--run** to skip buidling the tests:
+By default, command **python test_unitrace.py** builds and runs all the tests. If the tests are already built and rebuilding the tests is not needed, you can use **--run** to skip building the tests:
 
 ```sh
 cd test
@@ -147,7 +147,7 @@ The options can be one or more of the following:
 ```
 --call-logging [-c]                           Trace host API calls
 --host-timing  [-h]                           Report host API execution time
---device-timing [-d]                          Report kernels execution time
+--device-timing [-d]                          Report kernel execution time
 --ccl-summary-report [-r]                     Report CCL execution time summary
 --kernel-submission [-s]                      Report append (queued), submit and execute intervals for kernels
 --device-timeline [-t]                        Report device timeline
@@ -164,7 +164,7 @@ The options can be one or more of the following:
                                               Device activities are traced per thread if this option is not present
 --chrome-no-engine-on-device                  Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info.
                                               Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present
---chrome-event-buffer-size <number-of-events> Size of event buffer on host per host thread(default is -1 or unlimited)
+--chrome-event-buffer-size <number-of-events> Size of event buffer on host per host thread (default is -1 or unlimited)
 --verbose [-v]                                Enable verbose mode to show kernel shapes
                                               Kernel shapes are always enabled in timelines for Level Zero backend
 --demangle                                    Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend
@@ -172,10 +172,10 @@ The options can be one or more of the following:
 --tid                                         Output TID in host API trace
 --pid                                         Output PID in host API and device activity trace
 --output [-o] <filename>                      Output profiling result to file
---conditional-collection                      Enable conditional collection. This options is deprecated. Use --start-paused instead
+--conditional-collection                      Enable conditional collection. This option is deprecated. Use --start-paused instead
 --start-paused                                Start the tool with tracing and profiling paused
 --output-dir-path <path>                      Output directory path for result files
---metric-query [-q]                           Query hardware metrics for each kernel instance is enabled for level-zero
+--metric-query [-q]                           Query hardware metrics for each kernel instance (Level Zero only)
 --metric-sampling [-k]                        Sample hardware performance metrics for each kernel instance in time-based mode
 --group [-g] <metric-group>                   Hardware metric group (ComputeBasic by default)
 --sampling-interval [-i] <interval>           Hardware performance metric sampling interval in us (default is 50 us) in time-based mode
@@ -193,12 +193,12 @@ The options can be one or more of the following:
 --pause <session>                             Pause session <session>. The argument <session> must be the same session named with --session option
 --resume <session>                            Resume session <session>. The argument <session> must be the same session named with --session option
 --stop <session>                              Stop session <session>. The argument <session> must be the same session named with --session option
---chrome-kmd-logging <script>                 Trace OS/KMD activitives. The argument <script> file defines the OS kernel or device driver activies to trace
---include-kernels <kernel-filters>            Include kernels with name containing any of kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings.
---include-kernels-file <kernel-filter-file>   Include kernels with name containing any of kernel filter strings in the <kernel-filter-file>.
---exclude-kernels<kernel-filters>             Exclude kernels with name containing any of kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings.
---exclude-kernels-file <kernel-filter-file>   Exclude kernels with name containing any of kernel filter strings in the <kernel-filter-file>.
---chrome-kmd-logging <script>                 Trace OS/KMD activitives. The argument <script> file defines the OS kernel or device driver activies to trace
+--chrome-kmd-logging <script>                 Trace OS/KMD activities. The argument <script> file defines the OS kernel or device driver activities to trace
+--include-kernels <kernel-filters>            Include kernels with names containing any of the kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings.
+--include-kernels-file <kernel-filter-file>   Include kernels with names containing any of the kernel filter strings in the <kernel-filter-file>.
+--exclude-kernels <kernel-filters>            Exclude kernels with names containing any of the kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings.
+--exclude-kernels-file <kernel-filter-file>   Exclude kernels with names containing any of the kernel filter strings in the <kernel-filter-file>.
+--chrome-kmd-logging <script>                 Trace OS/KMD activities. The argument <script> file defines the OS kernel or device driver activities to trace
 --version                                     Print version
 --help                                        Show this help message and exit. Please refer to the README.md file for further details.
 ```
@@ -302,7 +302,7 @@ The **--call-logging [-c]** option traces Level Zero and/or OpenCL calls on the 
 The **--host-timing  [-h]** option outputs a Level Zero and/or OpenCL host call timing summary:
 ![Host Call Timing!](/tools/unitrace/doc/images/host-timing.png)
 
-The **--chrome-call-logging** option generates a Level Zero and/or OpenCL host .json event trace that can be viewd in **https://ui.perfetto.dev/**:
+The **--chrome-call-logging** option generates a Level Zero and/or OpenCL host .json event trace that can be viewed in **https://ui.perfetto.dev/**:
 ![Host Event Trace!](/tools/unitrace/doc/images/call-logging.png)
 
 
@@ -360,7 +360,7 @@ Device Logging:
 ![Device Logging!](/tools/unitrace/doc/images/device-logging.png)
 
 In case both **--chrome-kernel-logging** and **--chrome-device-logging** are present, **--chrome-kernel-logging** takes precedence.
-### Include and Exlcude Kernels
+### Include and Exclude Kernels
 
 If you care about the performance of just a subset of kernels in an application, for example, kernels you are currently developing or optimizing, you can use the kernel inclusion and/or exclusion options **--include-kernels**, **--exclude-kernels**, **--include-kernels-file** and **--exclude-kernels-file** to instruct unitrace to profile and trace only the kernels of interest, reducing performance overhead and improving analysis efficiency.
 
@@ -443,11 +443,11 @@ The **--chrome-itt-logging** traces activities in applications instrumented usin
 The **--ccl-summary-report  [-r]** option outputs CCL call timing summary:
 ![CCL Call Timing!](/tools/unitrace/doc/images/ccl_summary_report.png)
 
-If the application is a PyTorch workload, one or more options from **--chrome-mpi-logging**, **--chrome-ccl-logging** and **--chrome-dnn-logging** also enables PyTorch profiling(see [Profile PyTorch](#profile-pytorch) for more information).
+If the application is a PyTorch workload, one or more options from **--chrome-mpi-logging**, **--chrome-ccl-logging** and **--chrome-dnn-logging** also enable PyTorch profiling (see [Profile PyTorch](#profile-pytorch) for more information).
 
 ### Trace Operating System Kernel and/or Device Driver Activities (Linux)
 
-To trace operating system kernel and/or device driver activities, yon must have root access and a [bpftrace](https://bpftrace.org) script as the argument to option **--chrome-kmd-logging**. The [script](/tools/unitrace/examples/kmdprobes/probes.bt) is a simple exmaple.
+To trace operating system kernel and/or device driver activities, you must have root access and a [bpftrace](https://bpftrace.org) script as the argument to option **--chrome-kmd-logging**. The [script](/tools/unitrace/examples/kmdprobes/probes.bt) is a simple example.
 
 The trace data for each operating system and/or GPU device driver event or function collected using bpftrace should be in the format of
 
@@ -459,7 +459,7 @@ The **data** is optional. If it is present, it will be treated as a string argum
 
 The trace is stored in file **oskmd.0.json**.
 
-The **--chrome-kmd-logging** can be used together with other options, for example, **--chrome-kernel-logging**, to trace user space and kernel space event at the same time, for example:
+The **--chrome-kmd-logging** can be used together with other options, for example, **--chrome-kernel-logging**, to trace user space and kernel space events at the same time, for example:
 
     ```sh
      $ unitrace --chrome-kmd-logging probes.bt --chrome-kernel-logging ./testapp
@@ -487,7 +487,7 @@ unitrace --chrome-kernel-logging --output-dir-path /tmp/unitrace-result myapp
 
 The output profile data are written to files in **/tmp/unitrace-result**.
 
-This option is especially useful when the application is distributed workload.
+This option is especially useful when the application is a distributed workload.
 
 ### Hardware Performance Metrics
 
@@ -504,7 +504,7 @@ The **--metric-query [-q]** option enables metric query for each kernel instance
    ```sh
    unitrace -q -o perfquery.csv myapp
    ```
-Performance metrics data are stored in **perfquery.<pid>.csv** file.
+Performance metrics data are stored in **perfquery.pid.csv** file.
 
 ![Metric Query!](/tools/unitrace/doc/images/metric-query.png)
 
@@ -512,16 +512,16 @@ By default, counters in **ComputeBasic** metric group are profiled. You can use 
 
 #### Sample Metrics in Time-based Mode
 
-Different from **--metric-query [-q]** option, the **--metric-sampling [-k]** option profile hardware metrics in time-based sampling mode.
+Different from the **--metric-query [-q]** option, the **--metric-sampling [-k]** option profiles hardware metrics in time-based sampling mode.
 
    ```sh
    unitrace -k -o perfmetrics.csv myapp
    ```
-Performance metrics data are stored in **perfmetrics.<pid>.csv** file.
+Performance metrics data are stored in **perfmetrics.pid.csv** file.
 
 ![Metric Sampling!](/tools/unitrace/doc/images/metric-sampling.png)
 
-To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option, for example:
+For kernels that take a short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option, for example:
 
    ```sh
    unitrace -k -i 20 -o perfmetrics.csv myapp
@@ -529,15 +529,15 @@ To kernels that take short time, you may find that the default sampling rate is 
 
 By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
 
-The **--metric-sampling [-k]** option alone samples all devices. but it can be used together with the **--devices-to-sample** option to sample only specific devices. The devices are given in a comma-separated list of integer identifiers as reported by **--device-list**. Those identifiers that do not match actual devices will be ignored. In the event that no valid or existent device is specified, no sampling will be performed at all.
+The **--metric-sampling [-k]** option alone samples all devices, but it can be used together with the **--devices-to-sample** option to sample only specific devices. The devices are given in a comma-separated list of integer identifiers as reported by **--device-list**. Those identifiers that do not match actual devices will be ignored. In the event that no valid or existent device is specified, no sampling will be performed at all.
 
 #### Sample Stalls at Instruction Level
 
-The **--stall-sampling** works on Intel(R) Data Center GPU Max Series and later products.
+The **--stall-sampling** option works on Intel(R) Data Center GPU Max Series and later products.
 
 ![Metric Query!](/tools/unitrace/doc/images/stall-sampling.png)
 
-To kernels that take short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option.
+For kernels that take a short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option.
 
 #### Sample Metrics of MPI Ranks
 
@@ -610,9 +610,9 @@ Device 0
         "main::{lambda(auto:1)#7}[SIMD32 {2048; 1; 1} {512; 1; 1}]", 5
 ```
 
-The **Device** is the device on which the metrics are sampled. In this example output, the decice is 0. If multiple devices are used and sampled, multiple sections of **Device** will be present.
+The **Device** is the device on which the metrics are sampled. In this example output, the device is 0. If multiple devices are used and sampled, multiple sections of **Device** will be present.
 
-The **Metric** section shows the metrics collected on the device and the **Kernel, Number of Instances** shows the kernels and number of instances for each kernel are profiled. An instance is one kernel execution sampled on the device. For example, The kernel "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" having 5 instances means the 5 exeuctions of the kernel are sampled. Please note that the number of instances of a kernel here may be less than the total number of exeuctions or submissions of the kernel in the application, especially when the kernel is short and/or sampling interval is large. 
+The **Metric** section shows the metrics collected on the device, and the **Kernel, Number of Instances** section lists each kernel with its number of sampled instances. An instance is one kernel execution sampled on the device. For example, the kernel "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" having 5 instances means the 5 executions of the kernel are sampled. Please note that the number of instances of a kernel here may be less than the total number of executions or submissions of the kernel in the application, especially when the kernel is short and/or sampling interval is large.
 
 The number of instances is not applicable to stall sampling metric data:
 
@@ -656,7 +656,7 @@ This command plots a chart of XVE stall and function unit utilizations for the *
 
 ![Analyze Kernel Performance Metrics!](/tools/unitrace/doc/images/perfchart.png)
 
-If instance is 0, all 5 instances of the kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** are analyzed.
+If the instance is 0, all 5 instances of the kernel **"main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]"** are analyzed.
 
    ```sh
    python analyzeperfmetrics.py -d 0 -k "main::{lambda(auto:1)#4}[SIMD32 {4096; 1; 1} {256; 1; 1}]" -i 0 -m "XVE_STALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Utilization and Stall (%)" -t "Utilization and Stall" -o perfchart.pdf perfmetrics.12345.csv
@@ -800,7 +800,7 @@ Now load the event trace .json file into https://ui.perfetto.dev:
     
 Once you click the link next to **metrics:** in the **"Arguments"**, another browser window is opened:
 
-![Performance Metrics Browswe Window!](/tools/unitrace/doc/images/perfmetricsbrowser.png)
+![Performance Metrics Browser Window!](/tools/unitrace/doc/images/perfmetricsbrowser.png)
 
 The metrics shown in the browser are the metrics passed to the **-m** option when you start **analyzeperfmetrics.py**. If you stop and restart **analyzeperfmetrics.py** with a different set of metrics passed to **-m** option, for example:
 
@@ -810,7 +810,7 @@ The metrics shown in the browser are the metrics passed to the **-m** option whe
 
 Refreshing the same link will show the new metrics:
 
-![Performance Metrics Browswe Window #2!](/tools/unitrace/doc/images/perfmetricsbrowser2.png)
+![Performance Metrics Browser Window #2!](/tools/unitrace/doc/images/perfmetricsbrowser2.png)
 
 In case of stall sampling, for example:
 
@@ -824,7 +824,7 @@ The **-m** option is not required for **analyzeperfmetrics.py**:
     python analyzeperfmetrics.py -s ./dump.1 -p ./perfstall.metrics.564289.csv -t "XVE Stall Statistics and Report"
     ```
 
-Rereshing the same link will show stall statistics by type and instruction address:
+Refreshing the same link will show stall statistics by type and instruction address:
 
 ![Stall Statistics!](/tools/unitrace/doc/images/stallstatistics.png)
 
@@ -843,7 +843,7 @@ If both temporal or out-of-application control and spatial or in-application con
 
 ### Temporal or Out-of-Application Control (Linux Only)
 
-The temporal or out-of-application control runs control commands in a sperate process to pause/resume/stop tracing/profiling. It does not require any application code change.
+The temporal or out-of-application control runs control commands in a separate process to pause/resume/stop tracing/profiling. It does not require any application code change.
 
 By default, a unitrace session is unnamed. To use temporal or out-of-application control, you have to name the unitrace session using the **--session** option. The name must be an alphanumeric string.
 
@@ -851,7 +851,7 @@ By default, a unitrace session is unnamed. To use temporal or out-of-application
 unitrace --chrome-call-logging --chrome-kernel-logging --session mysession1 --start-paused <application> [args]
 ```
 
-The optional **--start-paused** flag paues tracing/profiling of the application when it starts. Later, when it is the time to trace/profile the execution, you can run the following commnad in a different terminal:
+The optional **--start-paused** flag pauses tracing/profiling of the application when it starts. Later, when it is time to trace/profile the execution, you can run the following command in a different terminal:
 
 ```sh
 unitrace --resume mysession1
@@ -867,7 +867,7 @@ unitrace --pause mysession1
 
 to pause tracing/profiling.
 
-You can pause and resume multiple time. When all the executions of interest are traced/profiled, you can run command
+You can pause and resume multiple times. When all the executions of interest are traced/profiled, you can run command
 
 ```sh
 unitrace --stop mysession1
