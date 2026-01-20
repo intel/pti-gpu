@@ -1995,7 +1995,7 @@ class ZeCollector {
 
     PTI_ASSERT(signal_event != nullptr);
     command->tid = thread_local_pid_tid_info.tid;
-    uint64_t host_timestamp = ze_instance_data.start_time_host;
+    uint64_t host_timestamp = ze_instance_data.timestamp_host;
     command->append_time = host_timestamp;
     command->device_timer_frequency_ = device_descriptors_[command->device].device_timer_frequency;
     command->device_timer_mask_ = device_descriptors_[command->device].device_timer_mask;
