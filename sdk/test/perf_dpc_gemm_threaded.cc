@@ -98,9 +98,8 @@ static void Compute(sycl::queue queue, const std::vector<float>& a, const std::v
   for (unsigned i = 0; i < repeat_count; ++i) {
     float eps = RunAndCheck(queue, a, b, c, size, expected_result);
     if (eps > MAX_EPS) {
-      std::cerr << "[ERROR] Results are "
-                << "INCORRECT with accuracy: " << eps << "while expected less than " << MAX_EPS
-                << std::endl;
+      std::cerr << "[ERROR] Results are " << "INCORRECT with accuracy: " << eps
+                << "while expected less than " << MAX_EPS << std::endl;
     }
     if (verbose) {
       std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN")
@@ -362,8 +361,8 @@ void Usage(const char* name) {
             << "  Usage " << name << "  [ options ]" << std::endl;
   std::cout << "--threads [-t]  integer        "
             << "Threads number, default: " << default_thread_count << std::endl;
-  std::cout << "--size [-s]     integer        "
-            << "Matrix size, default: " << default_size << std::endl;
+  std::cout << "--size [-s]     integer        " << "Matrix size, default: " << default_size
+            << std::endl;
   std::cout << "--repeat [-r]   integer        "
             << "Repetition number per thread, default: " << default_repetition_per_thread
             << std::endl;
@@ -438,15 +437,6 @@ int main(int argc, char* argv[]) {
     dev = sycl::device(sycl::gpu_selector_v);
     sycl::property_list prop_list{sycl::property::queue::in_order()};
     sycl::queue queue(dev, sycl::async_handler{}, prop_list);
-    if (argc > 1 && strcmp(argv[1], "cpu") == 0) {
-      dev = sycl::device(sycl::cpu_selector_v);
-      std::cerr << "PTI doesn't support cpu profiling yet" << '\n';
-      std::exit(EXIT_FAILURE);
-    } else if (argc > 1 && strcmp(argv[1], "host") == 0) {
-      dev = sycl::device(sycl::default_selector_v);
-      std::cerr << "PTI doesn't support host profiling yet" << '\n';
-      std::exit(EXIT_FAILURE);
-    }
 
     float expected_result = A_VALUE * B_VALUE * size;
 
@@ -467,7 +457,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "DPC++ Matrix Multiplication (CPU threads: " << thread_count
               << ", matrix size: " << size << " x " << size << ", repeats: " << repeat_count
-              << " times)" << std::endl;
+              << " times, preceded by one warm-up iteration)" << std::endl;
     std::cout << "Target device: "
               << queue.get_info<sycl::info::queue::device>().get_info<sycl::info::device::name>()
               << std::endl
@@ -477,9 +467,11 @@ int main(int argc, char* argv[]) {
 
     if (thread_count > 1) {
       std::vector<std::thread> the_threads;
+
+      // Warm-up phase: 1 iteration per thread - to warm up caches and JIT
+      the_threads.reserve(thread_count);
       for (unsigned i = 0; i < thread_count; i++) {
-        std::thread t = std::thread(threadFunction, size, repeat_count, expected_result);
-        the_threads.push_back(std::move(t));
+        the_threads.emplace_back(threadFunction, size, 1, expected_result);
       }
 
       for (auto& th : the_threads) {
@@ -487,7 +479,29 @@ int main(int argc, char* argv[]) {
           th.join();
         }
       }
+
+      // Clear threads from warm-up phase
+      the_threads.clear();
+
+      the_threads.reserve(thread_count);
+      // Measurement phase: actual repeat_count iterations per thread
+      start = std::chrono::steady_clock::now();
+      for (unsigned i = 0; i < thread_count; i++) {
+        the_threads.emplace_back(threadFunction, size, repeat_count, expected_result);
+      }
+
+      for (auto& th : the_threads) {
+        if (th.joinable()) {
+          th.join();
+        }
+      }
+
     } else {
+      // Warm-up for single-threaded case
+      threadFunction(size, 1, expected_result);
+
+      // Measurement phase
+      start = std::chrono::steady_clock::now();
       threadFunction(size, repeat_count, expected_result);
     }
 

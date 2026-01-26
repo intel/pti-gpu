@@ -279,16 +279,17 @@ def perform_behavioral_checks(ret1, ret2, stdout_analysis, stderr_analysis):
     kernel_count_clean = stdout_analysis['record_counts_1']['Found Kernel Record']
     kernel_count_foreign = stdout_analysis['record_counts_2']['Found Kernel Record']
 
-    if kernel_count_clean == REPETITIONS:
-        print(f"PASS: Clean run has correct number of kernel records ({kernel_count_clean} == {REPETITIONS})")
+    REAL_REPETITIONS = REPETITIONS + 1 # Number of actual kernel launches expected, additional run is always added - it is warmup
+    if kernel_count_clean == REAL_REPETITIONS:
+        print(f"PASS: Clean run has correct number of kernel records ({kernel_count_clean} == {REAL_REPETITIONS})")
     else:
-        print(f"FAIL: Clean run kernel records mismatch - Expected:{REPETITIONS}, Got:{kernel_count_clean}")
+        print(f"FAIL: Clean run kernel records mismatch - Expected:{REAL_REPETITIONS}, Got:{kernel_count_clean}")
         test_passed = False
 
-    if kernel_count_foreign == REPETITIONS:
-        print(f"PASS: Foreign run has correct number of kernel records ({kernel_count_foreign} == {REPETITIONS})")
+    if kernel_count_foreign == REAL_REPETITIONS:
+        print(f"PASS: Foreign run has correct number of kernel records ({kernel_count_foreign} == {REAL_REPETITIONS})")
     else:
-        print(f"FAIL: Foreign run kernel records mismatch - Expected:{REPETITIONS}, Got:{kernel_count_foreign}")
+        print(f"FAIL: Foreign run kernel records mismatch - Expected:{REAL_REPETITIONS}, Got:{kernel_count_foreign}")
         test_passed = False
 
     # Check 7: Foreign subscriber run should have a warning message

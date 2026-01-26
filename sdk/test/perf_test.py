@@ -3,6 +3,11 @@ import re
 import sys
 import subprocess
 import traceback
+import statistics
+
+# reconfigure stdout/stderr to utf-8 to support unicode characters in output
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
 
 # Strings that could be dumped to stderr due to different Level-Zero driver versions behavior
 expected_stderr_strings = [
@@ -71,7 +76,7 @@ def run_process(command, path, environ=None):
     return stdout, stderr
 
 
-def run_test(path, test_type="profiled", repetitions=11):
+def run_test(path, test_type="profiled", repetitions=15, warm_up_runs=1):
     command_baseline = test_baseline[0]
     command_test = test_profiled[0]
     if test_type == "profiled":
@@ -84,6 +89,7 @@ def run_test(path, test_type="profiled", repetitions=11):
         command_test = test_overhead[0]
         command_baseline = test_baseline_t_1[0]
         repetitions = 1
+        warm_up_runs = 0  # No warm-up for overhead test
     else:
         print("Invalid test type")
         return False, None, None, None, None, None
@@ -91,17 +97,30 @@ def run_test(path, test_type="profiled", repetitions=11):
     print("Test baseline command:    ", command_baseline)
     print("Test type " + test_type + " command: ", command_test)
     print("Repetitions: " + str(repetitions))
+    print("Warm-up runs: " + str(warm_up_runs))
+
+    # Warm-up phase to stabilize CPU frequency and thermal state
+    if warm_up_runs > 0:
+        print("\nWarm-up phase:")
+        for i in range(warm_up_runs):
+            print("  Warm-up run " + str(i + 1) + "...", end=" ", flush=True)
+            run_process(command_baseline, path)
+            run_process(command_test, path)
+            print("✓")
+
+    print("\nMeasurement phase - runs: ")
     throughput_test = []
     throughput_baseline = []
     elapsed_test = []
     elapsed_baseline = []
     captured_overhead = None
     for i in range(repetitions):
-        command = path
-        print("Running test: " + str(i))
-        (stdout_t, stderr_t) = run_process(command_test, path)
+        print(str(i + 1) + "/" + str(repetitions) + ", ", end="", flush=True)
+        # Interleaved: baseline first, then test (keeps CPU state similar)
         (stdout_b, stderr_b) = run_process(command_baseline, path)
+        (stdout_t, stderr_t) = run_process(command_test, path)
         if stderr_t or stderr_b:
+            print("WARNING (Detected stderr output)")
             print(stderr_t)
             print(stderr_b)
             # If something not expected detected in stderr - fail the test
@@ -110,19 +129,29 @@ def run_test(path, test_type="profiled", repetitions=11):
                 print("Test failed due to unexpected stderr content (see above)")
                 return False, None, None, None, None, None
 
-        print(stdout_t)
-        print(stdout_b)
-        throughput_test.append(get_value("Throughput", stdout_t))
-        throughput_baseline.append(get_value("Throughput", stdout_b))
-        elapsed_test.append(get_value("Total execution time", stdout_t))
-        elapsed_baseline.append(get_value("Total execution time", stdout_b))
+            print("stderr content was expected - proceeding with the test...")
+
+        tp_t = get_value("Throughput", stdout_t)
+        tp_b = get_value("Throughput", stdout_b)
+        el_t = get_value("Total execution time", stdout_t)
+        el_b = get_value("Total execution time", stdout_b)
+
+        if tp_t is None or tp_b is None or el_t is None or el_b is None:
+            print("FAILED (no data)")
+            continue
+
+        throughput_test.append(tp_t)
+        throughput_baseline.append(tp_b)
+        elapsed_test.append(el_t)
+        elapsed_baseline.append(el_b)
+
         if test_type == "overhead":
             captured_overhead = get_value("Overhead time", stdout_t)
             print(
                 "Overhead due to profiling reported by PTI Overhead View (sec): "
                 + str(captured_overhead)
             )
-
+    print()
     return (
         True,
         throughput_baseline,
@@ -131,6 +160,26 @@ def run_test(path, test_type="profiled", repetitions=11):
         elapsed_test,
         captured_overhead,
     )
+
+
+def remove_extreme_outliers(values):
+    """
+    Remove top and bottom 2.5% extreme outliers.
+    This handles occasional context switches, thermal spikes, etc.
+
+    With fewer than 4 values, percentile-based trimming is not meaningful:
+    we would either remove too much data or skew the results, so in that
+    case the input is returned unchanged.
+    """
+    if len(values) < 4:
+        return values
+
+    sorted_vals = sorted(values)
+    cutoff = max(1, len(sorted_vals) // 40)  # ~2.5% on each end
+    removed = 2 * cutoff
+    if removed > 0:
+        print(f"removed {removed} extreme outliers")
+    return sorted_vals[cutoff:-cutoff]
 
 
 def process_data(values):
@@ -156,16 +205,25 @@ def process_data(values):
         print(
             f"Too many runs failed, count of runs: {count}, valid of them: {valid_count}"
         )
-        return None, None, None, None
+        return None, None, None, None, None
     elif valid_count < count:
         print(
             f"Warning: some runs failed, count of runs: {count}, valid of them: {valid_count}"
         )
 
-    avg_v /= valid_count
-    med_v = sorted(valid_values)[valid_count // 2]
+    # Remove extreme outliers to get more robust statistics
+    valid_values = remove_extreme_outliers(valid_values)
 
-    return min_v, avg_v, med_v, max_v
+    avg_v = sum(valid_values) / len(valid_values)
+    med_v = statistics.median(valid_values)
+
+    # Calculate standard deviation
+    if len(valid_values) > 1:
+        std_v = statistics.stdev(valid_values)
+    else:
+        std_v = 0.0
+
+    return min_v, avg_v, med_v, max_v, std_v
 
 
 def main():
@@ -185,8 +243,10 @@ def main():
         print("Test failed")
         return 1
     else:
-        min_base, avg_base, med_base, max_base = process_data(throughput_baseline)
-        min_test, avg_test, med_test, max_test = process_data(throughput_test)
+        print("Processing baseline results: ", end="")
+        min_base, avg_base, med_base, max_base, std_base = process_data(throughput_baseline)
+        print("Processing test results: ", end="")
+        min_test, avg_test, med_test, max_test, std_test = process_data(throughput_test)
 
         if (
             min_base is None
@@ -204,8 +264,7 @@ def main():
         if test_type != "overhead":
             print("\nThreshold Overhead to pass: " + str(threshold_overhead) + "% =>")
             print(
-                " Throughput of the test workload is less not more"
-                " than Threshold Overhead\n"
+                " Measured overhead should not exceed Threshold Overhead\n"
             )
         else:
             print(
@@ -221,16 +280,20 @@ def main():
             + format(min_base, ".2f")
             + " avg: "
             + format(avg_base, ".2f")
+            + " ± "
+            + format(std_base, ".2f")
             + " med: "
             + format(med_base, ".2f")
             + " max: "
             + format(max_base, ".2f")
         )
         print(
-            "Test (sec): min "
+            "Test (sec):     min "
             + format(min_test, ".2f")
             + " avg: "
             + format(avg_test, ".2f")
+            + " ± "
+            + format(std_test, ".2f")
             + " med: "
             + format(med_test, ".2f")
             + " max: "
@@ -241,13 +304,14 @@ def main():
         diff_min = 100.0 * (float)(min_base - min_test) / (float(min_base))
         diff_max = 100.0 * (float)(max_base - max_test) / (float(max_base))
         diff_avg = 100.0 * (float)(avg_base - avg_test) / (float(avg_base))
+
         print(
-            "Overhead: min "
-            + format(diff_min, ".2f")
-            + " avg: "
-            + format(diff_avg, ".2f")
-            + " med: "
+            "\nOverhead (%): med: "
             + format(diff_med, ".2f")
+            + " (PRIMARY) avg: "
+            + format(diff_avg, ".2f")
+            + " min: "
+            + format(diff_min, ".2f")
             + " max: "
             + format(diff_max, ".2f")
         )
@@ -288,10 +352,10 @@ def main():
                 return 0
 
         if test_type != "overhead" and diff_med > threshold_overhead:
-            print(f"Measured overhead {diff_med}, Threshold {threshold_overhead}")
-            print("Test failed")
+            print(f"\nTest failed - Measured overhead {diff_med:.2f}% exceeds threshold {threshold_overhead}%")
             return 1
 
+        print(f"\nTest passed - Measured overhead {diff_med:.2f}% is within threshold {threshold_overhead}%")
         return 0
 
 
