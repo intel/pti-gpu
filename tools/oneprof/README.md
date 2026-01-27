@@ -1,3 +1,9 @@
+# ⛔️ DEPRECATED: This project is no longer maintained
+
+> **Warning**: This repository is obsolete. We will not be providing updates or support.
+
+Please use [Unitrace](https://github.com/intel-innersource/applications.analyzers.profilingtoolsinterfaces.sdk/tree/master/tools/unitrace) instead. Unitrace has support of all the options. Report in case of any issue found. We will be happy to help.
+
 # GPU Metrics Collection Tool for Data Parallel C++ (DPC++)
 ## Overview
 This tool provides GPU hardware metrics collection capabilities for the compute applications based on Intel runtimes for OpenCL(TM) and Level Zero, like DPC++, Intel(R) Implicit SPMD Program Compiler (Intel(R) ISPC) and OpenMP* GPU offload programs.

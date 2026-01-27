@@ -1,3 +1,9 @@
+# ⛔️ DEPRECATED: This project is no longer maintained
+
+> **Warning**: This repository is obsolete. We will not be providing updates or support.
+
+Please use [Unitrace](https://github.com/intel-innersource/applications.analyzers.profilingtoolsinterfaces.sdk/tree/master/tools/unitrace) instead. Unitrace has support of all the options. Report in case of any issue found. We will be happy to help.
+
 # OpenCL(TM) Tracer
 ## Overview
 This tool is an analogue of [Intercept Layer for OpenCL(TM) Applications](https://github.com/intel/opencl-intercept-layer) designed based on internal [tracing mechanism](../../chapters/runtime_api_tracing/OpenCL.md) implemented in Intel runtimes for OpenCL(TM).

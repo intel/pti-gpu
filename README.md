@@ -52,10 +52,6 @@ You may obtain a copy of the License at https://opensource.org/license/MIT
 
 ## Profiling & Debug Tools
  - [unitrace](tools/unitrace) - unified tracing and profiling tool. In addition to Level Zero and/or OpenCL, this tool is capable of profiling software layers in the software stack, for example, SYCL and plugins, oneCCL, MPI etc., for scale-up and scale-out applications. It also supports profiling hardware metrics (including instruction-level EU stalls) and software events at the same time.
- - [onetrace](tools/onetrace) - host and device tracing tool for OpenCL(TM) and Level Zero backends with support of DPC++ (both for CPU and GPU) and OpenMP* GPU offload;
- - [oneprof](tools/oneprof) - GPU HW metrics collection tool for OpenCL(TM) and Level Zero backends with support of DPC++ and OpenMP* GPU offload;
- - [ze_tracer](tools/ze_tracer) - "Swiss army knife" for Level Zero API call tracing and profiling (former ze_intercept);
- - [cl_tracer](tools/cl_tracer) - "Swiss army knife" for OpenCL(TM) API call tracing and profiling;
  - [gpuinfo](tools/gpuinfo) - provides basic information about the GPUs installed in a system, and the list of HW metrics one can collect for it;
  - [instcount](tools/instcount) - prints GPU kernel assembly (GEN ISA) annotated by instruction execution count;
  - [sysmon](tools/sysmon) - Linux "top" like utility to monitor GPUs installed on a system;
