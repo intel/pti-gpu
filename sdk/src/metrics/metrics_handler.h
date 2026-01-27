@@ -25,6 +25,7 @@
 #include "utils/pti_string_pool.h"
 #include "utils/utils.h"
 #include "utils/ze_utils.h"
+#include "ze_driver_init.h"
 
 // Not needed once trace API symbols and structures are available externally
 #include "trace_metrics.h"
@@ -1936,35 +1937,32 @@ class PtiMetricsCollectorHandler {
     }
     utils::SetGlobalSpdLogPattern();
 
-    // Initialize L0
-    ze_result_t status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
-    bool l0_initialized, metrics_enabled;
-    if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_DEBUG("Failed to initialize Level Zero runtime");
+    ZeDriverInit init_drivers{};
+    auto l0_initialized = init_drivers.Success();
+    bool metrics_enabled = (utils::GetEnv("ZET_ENABLE_METRICS") == "1");
+
+    if (!l0_initialized) {
+      SPDLOG_DEBUG("Level Zero driver initialization failed");
 #ifndef _WIN32
-      SPDLOG_DEBUG(
-          "Please also make sure: "
-          "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
-          "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
-          "is set to 0.");
+      if (metrics_enabled) {
+        SPDLOG_DEBUG(
+            "Please also make sure: "
+            "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
+            "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
+            "is set to 0.");
+      }
 #endif /* _WIN32 */
-      l0_initialized = false;
-    } else {
-      l0_initialized = true;
     }
 
-    if (utils::GetEnv("ZET_ENABLE_METRICS") == "1") {
-      metrics_enabled = true;
-    } else {
+    if (!metrics_enabled) {
       SPDLOG_DEBUG(
           "Metrics collection is not enabled on this system. Please make sure environment variable "
           "ZET_ENABLE_METRICS is set to 1.");
-      metrics_enabled = false;
     }
 
     // Initialize devices during construction
     if (l0_initialized && metrics_enabled) {
-      devices_ = utils::ze::GetDeviceList();
+      devices_ = utils::ze::GetDeviceList(init_drivers.Drivers());
 
       // Pre-populate device mutexes and metric groups for all devices
       for (auto device : devices_) {
