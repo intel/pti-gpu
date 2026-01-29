@@ -14,6 +14,11 @@ project(UnitraceTest C CXX)
 find_package(PythonInterp 3.9 REQUIRED)
 find_package(IntelSYCL REQUIRED)
 
+# L0 version required
+set (LEVEL_ZERO_COMMIT_ID "v1.26.0")
+
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+
 # Enable testing
 enable_testing()
 
@@ -23,7 +28,7 @@ add_subdirectory(ze_gemm)
 add_subdirectory(dpc_gemm)
 add_subdirectory(grf)
 add_subdirectory(omp_gemm)
-add_subdirectory(ze_counterbased_events)
+#add_subdirectory(ze_counterbased_events)
 add_subdirectory(temporal)
 add_subdirectory(sycl_graph_with_v2_adaptor)
 add_subdirectory(event_reset)

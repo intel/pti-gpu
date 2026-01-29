@@ -30,7 +30,7 @@ def main():
 
   src_path = os.path.join(clone_path, "include")
   build_utils.copy(src_path, dst_path,\
-    ["ze_api.h", "zes_api.h", "zet_api.h"])
+    ["ze_api.h", "zes_api.h", "zet_api.h", "zer_api.h"])
 
   if (not os.path.exists(os.path.join(dst_path, "layers"))):
     os.mkdir(os.path.join(dst_path, "layers"))

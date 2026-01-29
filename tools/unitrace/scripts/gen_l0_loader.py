@@ -11,13 +11,21 @@ import re
 def get_func_list(file_path, func_list):
   f = open(file_path, "rt")
   for line in f.readlines():
-    if line.find("ZE_APICALL") != -1 and line.find("ze_pfn") != -1:
-      items = line.split("ze_pfn")
-      assert len(items) == 2
-      assert items[1].find("Cb_t") != -1
-      items = items[1].split("Cb_t")
-      assert len(items) == 2
-      func_list.append("ze" + items[0].strip())
+    if line.find("ZE_APICALL") != -1:
+      items = []
+      is_rt_func = False
+      if line.find("ze_pfn") != -1:
+        items = line.split("ze_pfn")
+      elif line.find("zer_pfn") != -1:
+        is_rt_func = True
+        items = line.split("zer_pfn")
+      if len(items) == 2 and items[1].find("Cb_t") != -1:
+        items = items[1].split("Cb_t")
+        if len(items) == 2:
+          if is_rt_func:
+            func_list.append("zer" + items[0].strip())
+          else:
+            func_list.append("ze" + items[0].strip())
   f.close()
 
 def get_api_func_list(file_path, func_list):
@@ -34,23 +42,29 @@ def get_api_func_list(file_path, func_list):
   f.close()
 
 def gen_loader(f, register_func_list, api_func_list):
-  f.write("public:\n");
+  f.write("public:\n")
   for func in register_func_list:
-    reg_fname = "zelTracer" + func[2:] + "RegisterCallback"
-    f.write("  decltype(&" + reg_fname + ") " + reg_fname + "_ = nullptr;\n");
-    f.write("  decltype(&" + func + ") " + func + "_ = nullptr;\n");
+    offset = 2
+    if func.find("zer") == 0:
+      offset = 3
+    reg_fname = "zelTracer" + func[offset:] + "RegisterCallback"
+    f.write("  decltype(&" + reg_fname + ") " + reg_fname + "_ = nullptr;\n")
+    f.write("  decltype(&" + func + ") " + func + "_ = nullptr;\n")
   for func in api_func_list:
-    f.write("  decltype(&" + func + ") " + func + "_ = nullptr;\n");
+    f.write("  decltype(&" + func + ") " + func + "_ = nullptr;\n")
 
-  f.write("private:\n");
-  f.write("  void init() {\n");
+  f.write("private:\n")
+  f.write("  void init() {\n")
   for func in register_func_list:
-    reg_fname = "zelTracer" + func[2:] + "RegisterCallback"
-    f.write("  LEVEL_ZERO_LOADER_GET_SYMBOL(" + reg_fname + ");\n");
-    f.write("  LEVEL_ZERO_LOADER_GET_SYMBOL(" + func + ");\n");
+    offset = 2
+    if func.find("zer") == 0:
+      offset = 3
+    reg_fname = "zelTracer" + func[offset:] + "RegisterCallback"
+    f.write("  LEVEL_ZERO_LOADER_GET_SYMBOL(" + reg_fname + ");\n")
+    f.write("  LEVEL_ZERO_LOADER_GET_SYMBOL(" + func + ");\n")
   for func in api_func_list:
-    f.write("  LEVEL_ZERO_LOADER_GET_SYMBOL(" + func + ");\n");
-  f.write("}\n");
+    f.write("  LEVEL_ZERO_LOADER_GET_SYMBOL(" + func + ");\n")
+  f.write("}\n")
 
 def main():
   if len(sys.argv) < 3:

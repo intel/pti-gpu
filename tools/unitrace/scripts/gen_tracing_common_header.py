@@ -10,31 +10,44 @@ import re
 
 # Function scans ze_api.h file from given path (l0_path) and 
 # generates list of l0 API of interest
-def add_func_list(f, func_list):
-  for line in f.readlines():
-    if line.find("ZE_APICALL") != -1 and line.find("ze_pfn") != -1:
-      items = line.split("ze_pfn")
-      assert len(items) == 2
-      assert items[1].find("Cb_t") != -1
-      items = items[1].split("Cb_t")
-      assert len(items) == 2
-      func_list.append(items[0].strip())
+def get_func_list(file_list):
+  l0_func_list = []
+  l0_rt_func_list = []
+  for f in file_list:
+    for line in f.readlines():
+      if line.find("ZE_APICALL") != -1:
+        items = []
+        is_rt_func = False
+        if line.find("ze_pfn") != -1:
+          items = line.split("ze_pfn")
+        elif line.find("zer_pfn") != -1:
+          items = line.split("zer_pfn")
+          is_rt_func = True
+        if len(items) == 2 and items[1].find("Cb_t") != -1:
+          items = items[1].split("Cb_t")
+          if len(items) == 2:
+            if is_rt_func:
+              l0_rt_func_list.append(items[0].strip())
+            else:
+              l0_func_list.append(items[0].strip())
+  return l0_func_list, l0_rt_func_list
 
 def get_l0_api_list(l0_path):
+  file_list = []
   l0_file_path = os.path.join(l0_path, "ze_api.h")
-  try:
-    l0_file = open(l0_file_path, "rt")
-    func_list = []
-    add_func_list(l0_file, func_list)
-  finally:
-    l0_file.close()
   l0_exp_path = os.path.join(l0_path, "layers", "zel_tracing_register_cb.h")
   try:
+    l0_file = open(l0_file_path, "rt")
+    file_list.append(l0_file)
     l0_exp_file = open(l0_exp_path, "rt")
-    add_func_list(l0_exp_file, func_list)
+    file_list.append(l0_exp_file)
+    l0_func_list = []
+    l0_rt_func_list = []
+    l0_func_list, l0_rt_func_list = get_func_list(file_list)
   finally:
+    l0_file.close()
     l0_exp_file.close()
-  return func_list
+  return l0_func_list, l0_rt_func_list
 
 def get_ocl_api_list(ocl_path):
   if (not os.path.exists(ocl_path)):
@@ -100,13 +113,17 @@ def gen_enums(out_file, l0_func_list, ocl_func_list):
   out_file.write("} API_TRACING_ID;")
 
 # Generates list of supported API names 
-def gen_api_name_list(out_file, l0_func_list, ocl_func_list):
+def gen_api_name_list(out_file, l0_func_list, l0_rt_func_list, ocl_func_list):
   #header
   out_file.write("\n\n static std::string tracing_api_name [ ] = {\n")
   
   #generate l0 names first
   for func in l0_func_list:
     out_file.write("  \"ze"+func+"\",\n")
+
+  #generate l0 runtime names first
+  for func in l0_rt_func_list:
+    out_file.write("  \"zer"+func+"\",\n")
 
   #generate ocl names
   for func in ocl_func_list:
@@ -154,7 +171,7 @@ def main():
   if not os.path.exists(l0_path):
     print(f"Error: Level Zero include path does not exist: {l0_path}")
     sys.exit(1)
-  l0_api_list = get_l0_api_list(l0_path)
+  l0_api_list, rt_l0_api_list = get_l0_api_list(l0_path)
 
   ocl_path = sys.argv[3]
   if ocl_path and not os.path.exists(ocl_path):
@@ -165,8 +182,8 @@ def main():
   dst_file.write("#ifndef PTI_TOOLS_COMMON_H_\n")
   dst_file.write("#define PTI_TOOLS_COMMON_H_\n\n")
 
-  gen_enums(dst_file, l0_api_list, ocl_api_list)
-  gen_api_name_list(dst_file, l0_api_list, ocl_api_list)
+  gen_enums(dst_file, l0_api_list + rt_l0_api_list, ocl_api_list)
+  gen_api_name_list(dst_file, l0_api_list, rt_l0_api_list, ocl_api_list)
   gen_symbol_func(dst_file)
 
   dst_file.write("#endif //PTI_TOOLS_COMMON_H_\n")

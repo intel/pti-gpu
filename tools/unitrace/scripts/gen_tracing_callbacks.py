@@ -189,6 +189,22 @@ def get_param_struct_name(func_name):
   struct_name += "params_t"
   return struct_name
 
+def get_func_dict(f):
+  func_dict = {}
+  f.seek(0)
+  for line in f:
+    if line.find("ZE_APICALL") != -1 :
+      initial = "ze"
+      items = []
+      if line.find("ze_pfn") != -1:
+        items = line.split("ze_pfn")
+      elif line.find("zer_pfn") != -1:
+        initial += 'r'
+        items = line.split("zer_pfn")
+      if len(items) == 2 and items[1].find("Cb_t") != -1:
+        func_dict[initial + items[1].split("Cb_t")[0].strip()] = [next(f).strip(), next(f).strip()]
+  return func_dict
+
 def get_func_list(f, func_list):
   f.seek(0)
   for line in f.readlines():
@@ -223,7 +239,10 @@ def get_enum_map(include_path):
 
 def gen_register(f, func_list):
   for func in func_list:
-    reg_fname = "ZeLoader::get().zelTracer" + func[2:] + "RegisterCallback_"
+    offset = 2
+    if func.find("zer") == 0:
+      offset = 3
+    reg_fname = "ZeLoader::get().zelTracer" + func[offset:] + "RegisterCallback_"
     f.write("    if (" + reg_fname + " != nullptr) {\n")
     f.write("      status = " + reg_fname + "(tracer, ZEL_REGISTER_PROLOGUE, " + func + "OnEnter);\n")
     f.write("      PTI_ASSERT(status == ZE_RESULT_SUCCESS);\n")
@@ -312,9 +331,9 @@ def gen_enter_callback(f, func, synchronize_func_list, params):
   if (func in synchronize_func_list):
     f.write("  std::vector<uint64_t> kids;\n")
 
-  f.write("\n")
   cb = get_kernel_tracing_callback('OnEnter' + func[2:])
   if (cb != ""):
+    f.write("\n")
     f.write("  if (collector->options_.kernel_tracing) {\n")
     if (func in synchronize_func_list):
       f.write("    " + cb + "(params, global_user_data, instance_user_data, &kids);\n")
@@ -323,16 +342,13 @@ def gen_enter_callback(f, func, synchronize_func_list, params):
       f.write("    }\n")
       f.write("    else {\n")
       f.write("        ze_instance_data.kid = (uint64_t)(-1);\n")
-      f.write("    }\n")     
+      f.write("    }\n")
     else:
       f.write("    " + cb + "(params, global_user_data, instance_user_data);\n")
     f.write("  }\n")
-    f.write("\n")
+
   f.write("\n")
   f.write("  if (!UniController::IsCollectionEnabled()) {\n")
-  #f.write("    (((ZeInstanceData *)(*instance_user_data))->api_instance_data) = 0;\n")
-  #f.write("    *reinterpret_cast<uint64_t*>(instance_user_data) = 0;\n")
-  #f.write("    *reinterpret_cast<uint64_t*>(&ze_api_instance_data) = 0;\n")
   f.write("    ze_instance_data.start_time_host = 0;\n")
   f.write("    return;\n")
   f.write("  }\n")
@@ -391,7 +407,9 @@ def gen_enter_callback(f, func, synchronize_func_list, params):
           f.write("    } else {\n")
           f.write("      // do nothing\n")
           f.write("    }\n")
-        if name.find("Kernel") >= 0 and func == "zeCommandListAppendLaunchKernel":
+        if name.find("Kernel") >= 0 and func in ["zeCommandListAppendLaunchKernel", "zeCommandListAppendLaunchKernelIndirect",
+                                                "zeCommandListAppendLaunchCooperativeKernel", "zeCommandListAppendLaunchKernelWithParameters",
+                                                "zeCommandListAppendLaunchKernelWithArguments"]:
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
           f.write("      bool demangle = collector->options_.demangle;\n")
           f.write("      std::string kernel_name =\n")
@@ -642,7 +660,10 @@ def gen_enter_callback(f, func, synchronize_func_list, params):
 
   f.write("  ze_instance_data.start_time_host = start_time_host;\n")
 
-def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, params):
+def gen_exit_callback(f, func, return_type, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, params):
+  func_name_offset = 2
+  if func.startswith("zer"):
+    func_name_offset = 3
   f.write("  ZeCollector* collector =\n")
   f.write("    reinterpret_cast<ZeCollector*>(global_user_data);\n")
 
@@ -650,7 +671,7 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
 
   f.write("  end_time_host = UniTimer::GetHostTimestamp();\n")
 
-  cb = get_kernel_tracing_callback('OnExit' + func[2:])
+  cb = get_kernel_tracing_callback('OnExit' + func[func_name_offset:])
 
   if ((func in submission_func_list) or (func in synchronize_func_list_on_enter) or (func in synchronize_func_list_on_exit)):
     f.write("  std::vector<uint64_t> kids;\n")
@@ -661,14 +682,13 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
     f.write("  }\n")
 
   if (cb != ""):
+    f.write("\n")
     f.write("  if (collector->options_.kernel_tracing) {\n")
     if ((func in submission_func_list) or (func in synchronize_func_list_on_exit)):
       f.write("    " + cb + "(params, result, global_user_data, instance_user_data, &kids);\n")
     else:
       f.write("    " + cb + "(params, result, global_user_data, instance_user_data);\n")
     f.write("  }\n")
-    
-    f.write("\n")
 
   f.write("\n")
   f.write("  if (!UniController::IsCollectionEnabled()) {\n")
@@ -684,7 +704,7 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
   f.write("  uint64_t time;\n")
   f.write("  time = end_time_host - start_time_host;\n")
   f.write("  if (collector->options_.host_timing) {\n")
-  f.write("    collector->CollectHostFunctionTimeStats(" + func[2:] + "TracingId, time);\n")
+  f.write("    collector->CollectHostFunctionTimeStats(" + func[func_name_offset:] + "TracingId, time);\n")
   f.write("  }\n")
   f.write("  if (collector->options_.call_logging) {\n")
   f.write("    std::string str;\n")
@@ -697,10 +717,13 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
   f.write("    }\n")
   f.write("    str +=\""+ func + "\";\n")
   f.write("    str += \" [\" + std::to_string(time) + \" ns]\";\n")
-  if not func == "zeDriverGetDefaultContext":
-    f.write("    if (result == ZE_RESULT_SUCCESS) {\n")
+  if return_type.startswith("ze_result_t"):
+    result_block_present = False
     for name, type in params:
       if name.find("ph") == 0:
+        if not result_block_present:
+          f.write("    if (result == ZE_RESULT_SUCCESS) {\n")
+          result_block_present = True
         if func == "zeDeviceGet" or func == "zeDeviceGetSubDevices":
           f.write("      if (*(params->p" + name + ") != nullptr &&\n")
           f.write("          *(params->ppCount) != nullptr) {\n")
@@ -723,6 +746,9 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
 
           f.write("      }\n")
       elif name.find("pptr") == 0 or name == "pCount" or name == "pSize":
+        if not result_block_present:
+          f.write("    if (result == ZE_RESULT_SUCCESS) {\n")
+          result_block_present = True
         f.write("      if (*(params->p" + name + ") != nullptr) {\n")
         if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
           f.write("        str += \" " + name[1:] + " = \";\n")
@@ -733,11 +759,17 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
           f.write("        TO_HEX_STRING(str, **(params->p" + name + "));\n")
         f.write("      }\n")
       elif name.find("groupSize") == 0 and type.find("uint32_t*") == 0:
+        if not result_block_present:
+          f.write("    if (result == ZE_RESULT_SUCCESS) {\n")
+          result_block_present = True
         f.write("      if (*(params->p" + name + ") != nullptr) {\n")
         f.write("        str += \" " + name + " = \" ;\n")
         f.write("        TO_HEX_STRING(str, **(params->p" + name + "));\n")
         f.write("      }\n")
       elif name == "pName":
+        if not result_block_present:
+          f.write("    if (result == ZE_RESULT_SUCCESS) {\n")
+          result_block_present = True
         f.write("      if (*(params->p" + name + ") != nullptr) {\n")
         f.write("        if (strlen(*(params->p" + name +")) == 0) {\n")
         f.write("          str += \" " + name[1:] + " = \\\"\\\"\";\n")
@@ -747,7 +779,8 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
         f.write("          str += \"\\\"\";\n")
         f.write("        }\n")
         f.write("      }\n")
-    f.write("    }\n")
+    if result_block_present:
+      f.write("    }\n")
     f.write("    str += \" -> \";\n")
     f.write("    str +=  GetResultString(result);\n")
     f.write("    str += \"(0x\" + std::to_string(result) + \")\\n\";\n")
@@ -789,51 +822,44 @@ def gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_en
     f.write("    if (kids.size() == 0) {\n")
     f.write("      collector->fcallback_(\n")
     f.write("          nullptr, FLOW_NUL,\n")
-    f.write("          "+func[2:]+"TracingId,\n")
+    f.write("          "+func[func_name_offset:]+"TracingId,\n")
     f.write("          start_time_host, end_time_host);\n")
     f.write("    }\n")
     f.write("    else {\n")
     if (func in submission_func_list):
       f.write("      collector->fcallback_(\n")
       f.write("          &kids, FLOW_H2D,\n")
-      f.write("          "+func[2:]+"TracingId,\n")
+      f.write("          "+func[func_name_offset:]+"TracingId,\n")
       f.write("          start_time_host, end_time_host);\n")
     else:
       f.write("      collector->fcallback_(\n")
       f.write("          &kids, FLOW_D2H,\n")
-      f.write("          "+func[2:]+"TracingId,\n")
+      f.write("          "+func[func_name_offset:]+"TracingId,\n")
       f.write("          start_time_host, end_time_host);\n")
     f.write("    }\n")
   else:
     f.write("      collector->fcallback_(\n")
     f.write("          nullptr, FLOW_NUL,\n")
-    f.write("          "+func[2:]+"TracingId,\n")
+    f.write("          "+func[func_name_offset:]+"TracingId,\n")
     f.write("          start_time_host, end_time_host);\n")
   f.write("  }\n")
 
-def gen_callbacks(f, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map):
-  for func in func_list:
-    assert func in param_map
+def gen_callbacks(f, func_dict, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map):
+  for func in func_dict:
     f.write("static void " + func + "OnEnter(\n")
-    f.write("    " + get_param_struct_name(func) + "* params,\n")
-    if func == "zeDriverGetDefaultContext":
-      f.write("    ze_context_handle_t result,\n")
-    else:
-      f.write("    ze_result_t /* result */,\n")
+    f.write("    [[maybe_unused]] " + func_dict[func][0] + "\n")
+    f.write("    [[maybe_unused]] "+ func_dict[func][1] +"\n")
     f.write("    void* global_user_data,\n")
     f.write("    [[maybe_unused]] void** instance_user_data) {\n")
     gen_enter_callback(f, func, synchronize_func_list_on_enter, param_map[func])
     f.write("}\n")
     f.write("\n")
     f.write("static void " + func + "OnExit(\n")
-    f.write("    [[maybe_unused]] " + get_param_struct_name(func) + "* params,\n")
-    if func == "zeDriverGetDefaultContext":
-      f.write("    ze_context_handle_t result,\n")
-    else:
-      f.write("    ze_result_t result,\n")
+    f.write("    [[maybe_unused]] " + func_dict[func][0] + "\n")
+    f.write("    [[maybe_unused]] " + func_dict[func][1] +"\n")
     f.write("    void* global_user_data,\n")
     f.write("    [[maybe_unused]] void** instance_user_data) {\n")
-    gen_exit_callback(f, func, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map[func])
+    gen_exit_callback(f, func, func_dict[func][1], submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map[func])
     f.write("}\n")
     f.write("\n")
 
@@ -872,16 +898,20 @@ def main():
   func_list = []
   param_map = {}
 
+  func_dict = {}
   l0_file = open(l0_file_path, "rt")
-  get_func_list(l0_file, func_list)
+  func_dict = get_func_dict(l0_file)
+  func_list = list(func_dict.keys())
   add_param_map(l0_file, func_list, param_map)
 
   l0_exp_path = os.path.join(l0_path, "layers", "zel_tracing_register_cb.h")
   l0_exp_file = open(l0_exp_path, "rt")
   exp_func_list = []
-  get_func_list(l0_exp_file, exp_func_list)
+  exp_func_dict = get_func_dict(l0_exp_file)
+  exp_func_list = list(exp_func_dict.keys())
   add_param_map(l0_exp_file, exp_func_list, param_map)
 
+  func_dict.update(exp_func_dict)
   func_list += exp_func_list
 
   kfunc_list = [
@@ -950,10 +980,7 @@ def main():
   command_queue_func_list = [
       "zeCommandQueueExecuteCommandLists"]
     
-  submission_func_list = []
-  for func in command_list_func_list:
-    submission_func_list.append(func)
-
+  submission_func_list = command_list_func_list.copy()
   submission_func_list.append("zeCommandQueueExecuteCommandLists")
 
   synchronize_func_list_on_enter = [
@@ -971,7 +998,7 @@ def main():
 
   gen_result_converter(dst_file, enum_map)
   gen_structure_type_converter(dst_file, enum_map)
-  gen_callbacks(dst_file, func_list, command_list_func_list, command_queue_func_list, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map)
+  gen_callbacks(dst_file, func_dict, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map)
   gen_api(dst_file, func_list, kfunc_list)
 
   l0_exp_file.close()
