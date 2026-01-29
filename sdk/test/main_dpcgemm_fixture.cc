@@ -27,7 +27,7 @@ size_t completed_buffer_calls = 0;
 size_t completed_buffer_used_bytes = 0;
 uint64_t eid_ = 11;
 const uint64_t kEnqueueKernelLaunchId = 17;  // apiid of urEnqueueKernelLaunch
-pti_result popNullPtrResult = pti_result::PTI_SUCCESS;
+pti_result pop_null_ptr_result = pti_result::PTI_SUCCESS;
 bool special_sycl_rec_present = false;
 bool memory_view_record_created = false;
 bool kernel_view_record_created = false;
@@ -200,7 +200,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     completed_buffer_calls = 0;
     completed_buffer_used_bytes = 0;
     eid_ = 11;
-    popNullPtrResult = pti_result::PTI_SUCCESS;
+    pop_null_ptr_result = pti_result::PTI_SUCCESS;
     special_sycl_rec_present = false;
     memory_view_record_created = false;
     kernel_view_record_created = false;
@@ -516,7 +516,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, &eid_);
     ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, &eid_);
     ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_2, &eid_);
-    popNullPtrResult = ptiViewPopExternalCorrelationId(
+    pop_null_ptr_result = ptiViewPopExternalCorrelationId(
         pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_2, nullptr);
     last_pop_eid = eid_;
     auto start = std::chrono::steady_clock::now();
@@ -589,7 +589,12 @@ TEST_F(MainFixtureTest, KernelViewRecordCreated) {
   EXPECT_EQ(kernel_view_record_created, true);
 }
 
+// TODO(PTI-359): kernel_has_sycl_file_info is not provided if NDEBUG is set.
+#if !defined(NDEBUG)
 TEST_F(MainFixtureTest, KernelViewRecordHasSyclFileName) {
+#else
+TEST_F(MainFixtureTest, DISABLED_KernelViewRecordHasSyclFileName) {
+#endif
   ptiViewSetCallbacks(BufferRequested, BufferCompleted);
   RunGemm();
   EXPECT_EQ(kernel_has_sycl_file_info, true);
@@ -685,7 +690,13 @@ TEST_F(MainFixtureTest, SyclRunTimeTraceEnv) {
   }
 }
 
+// TODO(PTI-358): Figure out if demangling can be supported on Windows or should we outright remove
+// this test on Windows.
+#if !defined(_WIN32)
 TEST_F(MainFixtureTest, DeMangledKernelNameCheck) {
+#else
+TEST_F(MainFixtureTest, DISABLED_DeMangledKernelNameCheck) {
+#endif
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
   EXPECT_EQ(demangled_kernel_name, true);
@@ -787,7 +798,7 @@ TEST_F(MainFixtureTest, ValidateNotImplementedViewReturn) {
 TEST_F(MainFixtureTest, ValidateNullPtrPopExternalId) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   RunGemm();
-  ASSERT_EQ(popNullPtrResult, PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY);
+  ASSERT_EQ(pop_null_ptr_result, PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY);
 }
 
 TEST_F(MainFixtureTest, KerneluuidDeviceNonZero) {

@@ -9,13 +9,6 @@ inputs:
   preset:
     description: Preset used in the build to be tested.
     required: true
-  adjust-test-2025-3:
-    description: "Skip validate-sycl-ur-api-ids-test"
-    default: false
-  adjust-test-bmg:
-    description: "Exclude known failing test for bmg and oneAPI-2025.3"
-    default: false
-    type: boolean
 
 runs:
   using: "composite"
@@ -27,7 +20,8 @@ runs:
       run: |
         source /opt/intel/oneapi/setvars.sh
 
-        ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance
+        # TODO(PTI-353)
+        ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance -E "MetricsMultiThreadingTest.ConcurrentStartCollectionDifferentDevices|MetricsMultiThreadingTest.ConcurrentCollectionManagement"
 
     - name: Quarantined tests # flaky tests
       continue-on-error: true
@@ -38,9 +32,18 @@ runs:
 
         if ctest --output-on-failure --preset ${{ inputs.preset }} -L performance; then
           echo "Test status: 0"
-          echo "Quarantine tests all pass."
+          echo "Performance tests pass"
         else
           echo "Test status: 1"
-          echo "::warning::Quarantine tests presented failures."
+          echo "::warning::Performance tests failed"
+        fi
+
+        # TODO(PTI-353)
+        if ctest --output-on-failure --preset ${{ inputs.preset }} -R "MetricsMultiThreadingTest.ConcurrentStartCollectionDifferentDevices|MetricsMultiThreadingTest.ConcurrentCollectionManagement"; then
+          echo "Test status: 0"
+          echo "Quarantined tests pass"
+        else
+          echo "Test status: 1"
+          echo "::warning::Quarantined tests failed"
         fi
         exit 0

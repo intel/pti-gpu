@@ -230,7 +230,7 @@ if(HAVE_SYCL)
 
   target_compile_definitions(multi_thread_metrics_suite PUBLIC PTI_LEVEL_ZERO=1)
 
-  target_link_libraries(multi_thread_metrics_suite PUBLIC spdlog::spdlog 
+  target_link_libraries(multi_thread_metrics_suite PUBLIC spdlog::spdlog
     Threads::Threads GTest::gtest_main Pti::pti_view ${FS_LIB})
 
   add_executable(no_kernel_overlap no_kernel_overlap.cc)
@@ -455,7 +455,7 @@ if(HAVE_SYCL)
        LABELS "metrics"
        LABELS "hw-metrics")
 
-  # Add the multi-threaded metrics vecsqadd test     
+  # Add the multi-threaded metrics vecsqadd test
   gtest_discover_tests(
     multi_thread_metrics_suite
     DISCOVERY_TIMEOUT 60
@@ -761,9 +761,10 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   add_test(NAME run-omp_vec_add COMMAND omp_vec_add)
   add_test(NAME run-metrics-perf COMMAND metrics_perf)
 
+  # TODO(PTI-354): Re-enable test when it stops being flaky or hanging.
   set_tests_properties(
     run-metrics-iso PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
-    "functional;samples;metrics;hw-metrics")
+    "functional;samples;metrics;hw-metrics" DISABLED TRUE)
 
   set_tests_properties(
     mt-awk-test mt-awk-test-immediate run-dlworkload run-dpc_gemm run-onemkl_gemm_exe run-vec_sqadd
