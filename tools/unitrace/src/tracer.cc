@@ -54,11 +54,6 @@ static TraceOptions ReadArgs() {
     flags |= (1 << TRACE_KERNEL_SUBMITTING);
   }
 
-  value = utils::GetEnv("UNITRACE_DeviceTimeline");
-  if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_DEVICE_TIMELINE);
-  }
-
   value = utils::GetEnv("UNITRACE_OpenCLTracing");
   if (!value.empty() && value == "1") {
     flags |= (1 << TRACE_OPENCL);

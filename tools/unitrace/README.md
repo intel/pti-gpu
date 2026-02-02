@@ -504,7 +504,7 @@ The **--metric-query [-q]** option enables metric query for each kernel instance
    ```sh
    unitrace -q -o perfquery.csv myapp
    ```
-Performance metrics data are stored in **perfquery.pid.csv** file.
+Performance metrics data are stored in **perfquery.\<pid\>.csv** file.
 
 ![Metric Query!](/tools/unitrace/doc/images/metric-query.png)
 
@@ -517,7 +517,7 @@ Different from the **--metric-query [-q]** option, the **--metric-sampling [-k]*
    ```sh
    unitrace -k -o perfmetrics.csv myapp
    ```
-Performance metrics data are stored in **perfmetrics.pid.csv** file.
+Performance metrics data are stored in **perfmetrics.\<pid\>.csv** file.
 
 ![Metric Sampling!](/tools/unitrace/doc/images/metric-sampling.png)
 
