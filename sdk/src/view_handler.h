@@ -1184,11 +1184,12 @@ inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
 
 inline void OverheadCollectionEvent(void* data, const ZeKernelCommandExecutionRecord& /*rec*/) {
   int64_t ts_shift = Instance().GetTimeShift();
-  pti_view_record_overhead* ohRec = reinterpret_cast<pti_view_record_overhead*>(data);
-  ohRec->_overhead_start_timestamp_ns =
-      ApplyTimeShift(ohRec->_overhead_start_timestamp_ns, ts_shift);
-  ohRec->_overhead_end_timestamp_ns = ApplyTimeShift(ohRec->_overhead_end_timestamp_ns, ts_shift);
-  Instance().InsertRecord(*ohRec, ohRec->_overhead_thread_id);
+  auto* overhead_record = static_cast<pti_view_record_overhead*>(data);
+  overhead_record->_overhead_start_timestamp_ns =
+      ApplyTimeShift(overhead_record->_overhead_start_timestamp_ns, ts_shift);
+  overhead_record->_overhead_end_timestamp_ns =
+      ApplyTimeShift(overhead_record->_overhead_end_timestamp_ns, ts_shift);
+  Instance().InsertRecord(*overhead_record, overhead_record->_overhead_thread_id);
 }
 
 inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {

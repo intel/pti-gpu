@@ -500,7 +500,7 @@ inline bool GetDeviceTimerFrequency_TimestampMask_UUID(ze_device_handle_t device
   return true;
 }
 
-inline bool GetDeviceUUID(ze_device_handle_t device, uint8_t* uuid, bool measure_overhead = false) {
+inline bool GetDeviceUuid(ze_device_handle_t device, uint8_t* uuid, bool measure_overhead = false) {
   PTI_ASSERT(device != nullptr);
 
   ze_device_properties_t props;

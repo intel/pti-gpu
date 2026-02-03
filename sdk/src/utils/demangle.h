@@ -29,10 +29,11 @@ static inline std::string Demangle(const char* name) {
     return name;
   }
 
-  constexpr const char* const prefix_to_skip = "typeinfo name for ";
-  const size_t prefix_to_skip_len = strlen(prefix_to_skip);
+  // TODO(PTI): string_view might be more appropriate here
+  constexpr const char* const kPrefixToSkip = "typeinfo name for ";
+  const size_t prefix_to_skip_len = strlen(kPrefixToSkip);
   const size_t shift =
-      (std::strncmp(demangled, prefix_to_skip, prefix_to_skip_len) == 0) ? prefix_to_skip_len : 0;
+      (std::strncmp(demangled, kPrefixToSkip, prefix_to_skip_len) == 0) ? prefix_to_skip_len : 0;
 
   std::string result(demangled + shift);
   free(demangled);

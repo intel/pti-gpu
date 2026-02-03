@@ -184,8 +184,8 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
       }
       auto device_l0_test = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(dev_);
       if (device_l0_test) {
-        ASSERT_TRUE(utils::ze::GetDeviceUUID(device_l0_test, device_uuid_test));
-        samples_utils::print_uuid(device_uuid_test, "Test Device UUID: ");
+        ASSERT_TRUE(utils::ze::GetDeviceUuid(device_l0_test, device_uuid_test));
+        samples_utils::PrintUuid(device_uuid_test, "Test Device UUID: ");
       } else {
         FAIL() << "PTI doesn't support this backend yet. Backend is not Level Zero";
       }
@@ -415,7 +415,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
           }
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
-          kernel_timestamps_monotonic = samples_utils::isMonotonic(
+          kernel_timestamps_monotonic = samples_utils::IsMonotonic(
               {rec->_sycl_task_begin_timestamp, rec->_sycl_enqk_begin_timestamp,
                rec->_append_timestamp, rec->_submit_timestamp, rec->_start_timestamp,
                rec->_end_timestamp});
@@ -436,10 +436,10 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
                                    " ,found at GPU Kernel record , is not unique across GPU ops "
                                    "and seen before");
 
-          if (samples_utils::stringify_uuid(rec->_device_uuid, "") !=
+          if (samples_utils::StringifyUuid(rec->_device_uuid, "") !=
               "00000000-0000-0000-0000-000000000000") {
             kernel_uuid_zero = false;
-            samples_utils::print_uuid(rec->_device_uuid, "Kernel Device UUID: ");
+            samples_utils::PrintUuid(rec->_device_uuid, "Kernel Device UUID: ");
             ASSERT_EQ(std::memcmp(rec->_device_uuid, device_uuid_test, PTI_MAX_DEVICE_UUID_SIZE),
                       0);
           }

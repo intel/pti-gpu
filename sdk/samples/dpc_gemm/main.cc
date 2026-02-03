@@ -147,7 +147,7 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
-        if (samples_utils::isMonotonic({rec->_sycl_task_begin_timestamp,
+        if (samples_utils::IsMonotonic({rec->_sycl_task_begin_timestamp,
                                         rec->_sycl_enqk_begin_timestamp, rec->_append_timestamp,
                                         rec->_submit_timestamp, rec->_start_timestamp,
                                         rec->_end_timestamp})) {

@@ -145,9 +145,9 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
       auto* device_l0_test = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(dev_);
       if (device_l0_test) {
         ASSERT_TRUE(
-            utils::ze::GetDeviceUUID(device_l0_test, ClassTestData::Get().device_uuid_test.data()));
-        samples_utils::print_uuid(ClassTestData::Get().device_uuid_test.data(),
-                                  "Test Device UUID: ");
+            utils::ze::GetDeviceUuid(device_l0_test, ClassTestData::Get().device_uuid_test.data()));
+        samples_utils::PrintUuid(ClassTestData::Get().device_uuid_test.data(),
+                                 "Test Device UUID: ");
       } else {
         FAIL() << "PTI doesn't support this backend yet. Backend is not Level Zero";
       }

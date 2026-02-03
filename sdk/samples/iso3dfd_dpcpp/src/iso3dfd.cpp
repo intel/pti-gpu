@@ -272,7 +272,7 @@ int main(int argc, char* argv[]) {
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
-              if (samples_utils::isMonotonic(
+              if (samples_utils::IsMonotonic(
                                   {
                                     rec->_sycl_task_begin_timestamp ,
                                     rec->_sycl_enqk_begin_timestamp ,

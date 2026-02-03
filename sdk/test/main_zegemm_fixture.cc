@@ -845,8 +845,8 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
   int RunGemm(bool with_polling = false, bool include_sycl_runtime = false,
               bool include_zecalls = false, bool include_gpu_kernels = true, bool add_sycl = false,
               bool include_synch = false) {
-    ze_result_t status = ZE_RESULT_SUCCESS;
-    status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+    // TODO(PTI): Switch to zeInitDrivers
+    auto status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     ze_initialization_succeeded = (status == ZE_RESULT_SUCCESS);
 
     ze_device_handle_t device = utils::ze::GetGpuDevice(kPtiDeviceId);
@@ -858,7 +858,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
       return 0;
     }
 
-    if (!utils::ze::GetDeviceUUID(device, device_uuid.id)) {
+    if (!utils::ze::GetDeviceUuid(device, device_uuid.id)) {
       std::cout << "Unable to get device UUID" << std::endl;
       return 1;
     }

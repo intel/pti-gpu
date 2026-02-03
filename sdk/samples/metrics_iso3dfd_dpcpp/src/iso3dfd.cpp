@@ -399,7 +399,7 @@ int main(int argc, char* argv[]) {
 
   // Check if the metrics collection was run on the same device as the compute device
   if (sycl_device_has_uuid) {
-    MetricsProfiler::MetricsProfilerInstance().ValidateDeviceUUID(uuid);
+    MetricsProfiler::MetricsProfilerInstance().ValidateDeviceUuid(uuid);
   }
 
   // Check for data validity

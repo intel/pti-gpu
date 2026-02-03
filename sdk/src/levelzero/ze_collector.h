@@ -902,7 +902,7 @@ class ZeCollector {
     return command_list_map_.find(clist_handle);
   }
 
-  void CopyDeviceUUIDTo(ze_device_handle_t device_handle, uint8_t* ptr) {
+  void CopyDeviceUuid(ze_device_handle_t device_handle, uint8_t* ptr) {
     SPDLOG_TRACE("In {} device_handle: {}", __FUNCTION__, (void*)device_handle);
     if (device_descriptors_.find(device_handle) != device_descriptors_.end()) {
       std::copy_n(device_descriptors_[device_handle].uuid.id, ZE_MAX_DEVICE_UUID_SIZE, ptr);
@@ -1203,10 +1203,10 @@ class ZeCollector {
       rec.num_wait_events_ = command->num_wait_events;
       rec.result_ = command->result_;
       if (command->props.src_device != nullptr) {
-        CopyDeviceUUIDTo(command->props.src_device, static_cast<uint8_t*>(rec.src_device_uuid));
+        CopyDeviceUuid(command->props.src_device, static_cast<uint8_t*>(rec.src_device_uuid));
       }
       if (command->props.dst_device != nullptr) {
-        CopyDeviceUUIDTo(command->props.dst_device, static_cast<uint8_t*>(rec.dst_device_uuid));
+        CopyDeviceUuid(command->props.dst_device, static_cast<uint8_t*>(rec.dst_device_uuid));
       }
 
       if ((tile >= 0) && (device_map_.count(command->device) == 1) &&
@@ -1252,7 +1252,7 @@ class ZeCollector {
         rec.source_file_name_ = command->source_file_name_;
         rec.source_line_number_ = command->source_line_number_;
         if (command->device != nullptr) {
-          CopyDeviceUUIDTo(command->device, static_cast<uint8_t*>(rec.src_device_uuid));
+          CopyDeviceUuid(command->device, static_cast<uint8_t*>(rec.src_device_uuid));
         }
       }
       if (command->props.type == KernelCommandType::kMemory) {
@@ -2246,15 +2246,15 @@ class ZeCollector {
     PTI_ASSERT(!name.empty());
 
     ZeMemoryCommandRoute route;
-    ze_device_handle_t hSrcDevice = nullptr;
-    ze_device_handle_t hDstDevice = nullptr;
+    ze_device_handle_t src_dev = nullptr;
+    ze_device_handle_t dst_dev = nullptr;
 
     if (src_context != nullptr && src != nullptr) {
       ze_memory_allocation_properties_t props;
       props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
       props.pNext = nullptr;
       overhead::Init();
-      ze_result_t status = zeMemGetAllocProperties(src_context, src, &props, &hSrcDevice);
+      ze_result_t status = zeMemGetAllocProperties(src_context, src, &props, &src_dev);
       overhead_fini(zeMemGetAllocProperties_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
@@ -2287,7 +2287,7 @@ class ZeCollector {
       props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
       props.pNext = nullptr;
       overhead::Init();
-      ze_result_t status = zeMemGetAllocProperties(dst_context, dst, &props, &hDstDevice);
+      ze_result_t status = zeMemGetAllocProperties(dst_context, dst, &props, &dst_dev);
       overhead_fini(zeMemGetAllocProperties_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
@@ -2318,8 +2318,8 @@ class ZeCollector {
     //
     name += "(" + route.StringifyTypesCompact();
     ze_bool_t p2p_access = 0;
-    if (route.peer_2_peer && hSrcDevice && hDstDevice && (hSrcDevice != hDstDevice)) {
-      auto status = zeDeviceCanAccessPeer(hSrcDevice, hDstDevice, &p2p_access);
+    if (route.peer_2_peer && src_dev && dst_dev && (src_dev != dst_dev)) {
+      auto status = zeDeviceCanAccessPeer(src_dev, dst_dev, &p2p_access);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       if (p2p_access) {
         name += route.StringifyPeer2PeerCompact();
@@ -2334,8 +2334,8 @@ class ZeCollector {
     props.bytes_transferred = bytes_transferred;
     props.value_size = pattern_size;
     props.type = KernelCommandType::kMemory;
-    props.src_device = hSrcDevice;
-    props.dst_device = hDstDevice;
+    props.src_device = src_dev;
+    props.dst_device = dst_dev;
     props.dst = const_cast<void*>(dst);
     props.src = const_cast<void*>(src);
     return props;

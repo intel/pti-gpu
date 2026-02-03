@@ -27,7 +27,7 @@ void StopTracing() {
 }
 
 template <typename T>
-void oneMKLGemm(void) {
+void MklGemm(void) {
   // Create a sycl device of type GPU
   sycl::device my_device;
   try {
@@ -228,7 +228,7 @@ int main() {
                 std::cout << "---------------------------------------------------"
                              "-----------------------------"
                           << '\n';
-                if (samples_utils::isMonotonic({rec->_sycl_task_begin_timestamp,
+                if (samples_utils::IsMonotonic({rec->_sycl_task_begin_timestamp,
                                                 rec->_sycl_enqk_begin_timestamp,
                                                 rec->_append_timestamp, rec->_submit_timestamp,
                                                 rec->_start_timestamp, rec->_end_timestamp})) {
@@ -257,28 +257,28 @@ int main() {
     // Initate PTI Tracing
     StartTracing();
     // Invoke SGEMM
-    oneMKLGemm<float>();
+    MklGemm<float>();
     // Stop PTI tracing
     StopTracing();
 
     // Initate PTI Tracing
     StartTracing();
     // Invoke DGEMM
-    oneMKLGemm<double>();
+    MklGemm<double>();
     // Stop PTI tracing
     StopTracing();
 
     // Initate PTI Tracing
     StartTracing();
     // Invoke CGEMM
-    oneMKLGemm<std::complex<float>>();
+    MklGemm<std::complex<float>>();
     // Stop PTI tracing
     StopTracing();
 
     // Initate PTI Tracing
     StartTracing();
     // Invoke ZGEMM
-    oneMKLGemm<std::complex<double>>();
+    MklGemm<std::complex<double>>();
 
     StopTracing();
 

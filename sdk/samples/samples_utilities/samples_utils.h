@@ -5,6 +5,7 @@
 // =============================================================
 #ifndef SAMPLES_UTILS_H_
 #define SAMPLES_UTILS_H_
+#include <cstddef>
 #include <iomanip>
 #include <iostream>
 #include <locale>
@@ -114,7 +115,7 @@ constexpr std::size_t ValidateTimestamps(T... args) {
 // Assumption: Operator <= is well defined for this type already.
 //
 template <typename T>
-inline bool isMonotonic(std::initializer_list<T> a_list) {
+inline bool IsMonotonic(std::initializer_list<T> a_list) {
   bool current_state = true;
   T previous = a_list.begin()[0];
   for (auto item : a_list) {
@@ -125,7 +126,7 @@ inline bool isMonotonic(std::initializer_list<T> a_list) {
   return true;
 }
 
-inline std::string stringify_uuid(uint8_t* uuid, std::string additional_string) {
+inline std::string StringifyUuid(uint8_t* uuid, std::string additional_string) {
   std::stringstream sstream;
   sstream << additional_string;
   sstream << std::hex << std::setfill('0');
@@ -138,12 +139,12 @@ inline std::string stringify_uuid(uint8_t* uuid, std::string additional_string) 
   return sstream.str();
 }
 
-inline void print_uuid(uint8_t* uuid, std::string additional_string) {
-  std::cout << stringify_uuid(uuid, std::move(additional_string)) << std::endl;
+inline void PrintUuid(uint8_t* uuid, std::string additional_string) {
+  std::cout << StringifyUuid(uuid, std::move(additional_string)) << std::endl;
 }
 
 inline void DumpRecord(pti_view_record_kernel* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
 
   std::cout << "Kernel Name: " << record->_name << '\n';
   std::cout << "Kernel Execution Time: "
@@ -169,17 +170,17 @@ inline void DumpRecord(pti_view_record_kernel* record) {
   std::cout << "Kernel File Name: " << record->_source_file_name << ":"
             << record->_source_line_number << '\n';
   std::cout << "Kernel Device: " << record->_pci_address << '\n';
-  print_uuid(record->_device_uuid, "Kernel Device UUID: ");
+  PrintUuid(record->_device_uuid, "Kernel Device UUID: ");
   std::cout << "Kernel NodeID:InvocationID " << record->_sycl_node_id << ':'
             << record->_sycl_invocation_id << '\n';
 }
 
 inline void DumpRecord(pti_view_record_memory_copy* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
 
   std::cout << "Memory Op: " << record->_name << '\n';
   std::cout << "Memory Device: " << record->_pci_address << '\n';
-  print_uuid(record->_device_uuid, "Memory Device UUID: ");
+  PrintUuid(record->_device_uuid, "Memory Device UUID: ");
   std::cout << "Memory Op Execution Time: "
             << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
   std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
@@ -206,13 +207,13 @@ inline void DumpRecord(pti_view_record_memory_copy* record) {
 }
 
 inline void DumpRecord(pti_view_record_memory_copy_p2p* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
 
   std::cout << "Memory Op: " << record->_name << '\n';
   std::cout << "Memory Source Device: " << record->_src_pci_address << '\n';
   std::cout << "Memory Destination Device: " << record->_dst_pci_address << '\n';
-  print_uuid(record->_src_uuid, "Memory Source Device UUID: ");
-  print_uuid(record->_dst_uuid, "Memory Destination Device UUID: ");
+  PrintUuid(record->_src_uuid, "Memory Source Device UUID: ");
+  PrintUuid(record->_dst_uuid, "Memory Destination Device UUID: ");
   std::cout << "Memory Op Execution Time: " << record->_end_timestamp - record->_start_timestamp
             << " ns" << '\n';
   std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
@@ -239,11 +240,11 @@ inline void DumpRecord(pti_view_record_memory_copy_p2p* record) {
 }
 
 inline void DumpRecord(pti_view_record_memory_fill* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
 
   std::cout << "Memory Op: " << record->_name << '\n';
   std::cout << "Memory Device: " << record->_pci_address << '\n';
-  print_uuid(record->_device_uuid, "Memory Device UUID: ");
+  PrintUuid(record->_device_uuid, "Memory Device UUID: ");
   std::cout << "Memory Op Execution Time: "
             << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
   std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
@@ -266,7 +267,7 @@ inline void DumpRecord(pti_view_record_memory_fill* record) {
 }
 
 inline void DumpRecord(pti_view_record_api* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
   const char* api_name = nullptr;
   PTI_THROW(ptiViewGetApiIdName(record->_api_group, record->_api_id, &api_name));
   std::cout << "Api Function Name: " << api_name << '\n';
@@ -281,7 +282,7 @@ inline void DumpRecord(pti_view_record_api* record) {
 }
 
 inline void DumpRecord(pti_view_record_synchronization* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
   switch (record->_synch_type) {
     case pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_EXECUTION: {
       std::cout << "Barrier Synch Type: Execution Barrier\n";
@@ -323,7 +324,7 @@ inline void DumpRecord(pti_view_record_synchronization* record) {
 }
 
 inline void DumpRecord(pti_view_record_overhead* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
   std::cout << "Overhead Kind : " << ptiViewOverheadKindToString(record->_overhead_kind) << '\n';
   std::cout << "Overhead Time Duration(ns): " << record->_overhead_duration_ns << '\n';
   std::cout << "Overhead Count: " << record->_overhead_count << '\n';
@@ -335,7 +336,7 @@ inline void DumpRecord(pti_view_record_overhead* record) {
 }
 
 inline void DumpRecord(pti_view_record_external_correlation* record) {
-  if (NULL == record) return;
+  if (nullptr == record) return;
   std::cout << "External Correlation Kind: " << record->_external_kind << '\n';
   std::cout << "Correlation Id: " << record->_correlation_id << '\n';
   std::cout << "External Id: " << record->_external_id << '\n';

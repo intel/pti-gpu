@@ -283,7 +283,7 @@ class MetricsProfiler {
           << +device_buffer[i]._address._device << ":" << +device_buffer[i]._address._function
           << "]";
 
-      std::string uuid = samples_utils::stringify_uuid(device_buffer[i]._uuid, " | UUID: ");
+      std::string uuid = samples_utils::StringifyUuid(device_buffer[i]._uuid, " | UUID: ");
 
       out << uuid << std::endl;
 
@@ -652,7 +652,7 @@ class MetricsProfiler {
     return data_checked_ ? data_valid_ : true;
   }
 
-  bool ValidateDeviceUUID(uint8_t *uuid) {
+  bool ValidateDeviceUuid(uint8_t *uuid) {
     if (devices_.find(configured_device_handle_) == devices_.end()) {
       std::cout << "ERROR: can't find configured device" << std::endl;
       return false;
@@ -663,15 +663,15 @@ class MetricsProfiler {
       if (device_uuid[i] != uuid[i]) {
         std::cout
             << "Device used for metric data collection and the compute device are not equivalent"
-            << "Metric device: " << samples_utils::stringify_uuid(device_uuid, " | UUID: ")
-            << "Compute device: " << samples_utils::stringify_uuid(uuid, " | UUID: ") << " : Fail"
+            << "Metric device: " << samples_utils::StringifyUuid(device_uuid, " | UUID: ")
+            << "Compute device: " << samples_utils::StringifyUuid(uuid, " | UUID: ") << " : Fail"
             << std::endl
             << "--------------------------------------" << std::endl;
         return false;
       }
     }
     std::cout << "Device used for metric data collection and the compute device are equivalent"
-              << samples_utils::stringify_uuid(uuid, " | UUID: ") << " : Success" << std::endl
+              << samples_utils::StringifyUuid(uuid, " | UUID: ") << " : Success" << std::endl
               << "--------------------------------------" << std::endl;
     return true;
   }

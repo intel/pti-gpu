@@ -255,7 +255,7 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
                                       ((a_kernel_rec->_end_timestamp -
                                         a_kernel_rec->_start_timestamp) > kMinKernelDurationNs);
 
-        kernel_timestamps_monotonic = samples_utils::isMonotonic(
+        kernel_timestamps_monotonic = samples_utils::IsMonotonic(
             {a_kernel_rec->_sycl_task_begin_timestamp, a_kernel_rec->_sycl_enqk_begin_timestamp,
              a_kernel_rec->_append_timestamp, a_kernel_rec->_submit_timestamp,
              a_kernel_rec->_start_timestamp, a_kernel_rec->_end_timestamp});

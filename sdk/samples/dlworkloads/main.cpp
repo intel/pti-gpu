@@ -219,7 +219,7 @@ int main()
                         << '\n';
               std::cout << "Found Kernel Record" << '\n';
               samples_utils::DumpRecord(rec);
-              if (samples_utils::isMonotonic(
+              if (samples_utils::IsMonotonic(
                                   {
                                     rec->_sycl_task_begin_timestamp ,
                                     rec->_sycl_enqk_begin_timestamp ,
