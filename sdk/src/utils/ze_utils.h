@@ -14,8 +14,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cstring>
 #include <iomanip>
+#include <memory>
+#include <new>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -32,6 +35,9 @@ namespace ze {
 inline constexpr static uint32_t kIntelVendorId = 0x8086;
 inline constexpr static uint32_t kBmgIpVersion = 0x05004000;
 inline constexpr std::string_view kCounterEventExtensionName = ZE_EVENT_POOL_COUNTER_BASED_EXP_NAME;
+
+struct MemDeleter;
+using TimestampBuffer = std::unique_ptr<_ze_kernel_timestamp_result_t, MemDeleter>;
 
 inline std::vector<ze_driver_handle_t> GetDriverList() {
   ze_result_t status = ZE_RESULT_SUCCESS;
@@ -584,6 +590,44 @@ inline bool ContainsDeviceWithAtLeastIpVersion(const std::vector<ze_driver_handl
                        const auto dev_ip_version = GetGpuDeviceIpVersion(device);
                        return dev_ip_version && *dev_ip_version >= ip_version;
                      });
+}
+
+struct MemDeleter {
+  ze_context_handle_t ctx = nullptr;
+  void operator()(void* ptr) const {
+    if (ctx && ptr) {
+      overhead::ScopedOverheadCollector overhead_collector(zeMemFree_id);
+      zeMemFree(ctx, ptr);
+    }
+  }
+};
+
+inline TimestampBuffer MakeTimestampBuffer(ze_context_handle_t ctx, size_t count) {
+  assert(ctx != nullptr);
+  assert(count != 0);
+  void* timestamps = nullptr;
+
+  // Align to cache line. It must also be multiple of `ze_kernel_timestamp_result_t` size, according
+  // to Level Zero specification
+#if defined(__cpp_lib_hardware_interference_size)
+  constexpr size_t kAlignment = std::hardware_destructive_interference_size;
+#else
+  constexpr size_t kAlignment = 64;
+#endif
+  static_assert(kAlignment % sizeof(ze_kernel_timestamp_result_t) == 0);
+
+  const ze_host_mem_alloc_desc_t alloc_desc{ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};
+  ze_result_t result = ZE_RESULT_SUCCESS;
+
+  {
+    overhead::ScopedOverheadCollector overhead_collector(zeMemAllocHost_id);
+    result = zeMemAllocHost(ctx, &alloc_desc, count * sizeof(ze_kernel_timestamp_result_t),
+                            kAlignment, &timestamps);
+  }
+  if (result == ZE_RESULT_SUCCESS) {
+    return TimestampBuffer{static_cast<ze_kernel_timestamp_result_t*>(timestamps), MemDeleter{ctx}};
+  }
+  return TimestampBuffer{nullptr};
 }
 
 }  // namespace ze

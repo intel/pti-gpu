@@ -1,0 +1,5 @@
+# Functions excluded from ThreadSanitizer (TSan) instrumentation.
+# Exclude ZeCollector methods that access GPU memory/timestamps
+fun:*ZeCollector*ProcessCallTimestamp*
+fun:*ZeCollector*ProcessCallCommand*
+fun:*ZeCollector*ProcessCalls*

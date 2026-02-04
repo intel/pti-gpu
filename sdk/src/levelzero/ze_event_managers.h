@@ -53,7 +53,7 @@ class ZeEventView {
   constexpr bool Empty() const { return event_ == nullptr; }
 
   bool Ready() const {
-    if (!event_) {
+    if (Empty()) {
       return false;
     }
     overhead::ScopedOverheadCollector overhead(zeEventQueryStatus_id);

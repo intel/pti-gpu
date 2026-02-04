@@ -31,7 +31,6 @@ endif()
 if (NOT TARGET unified-runtime::loader)
   message(STATUS "The Unified Runtime could not be found. Unified Runtime"
                  " specific tests will not be built.")
-
 endif()
 
 if (NOT TARGET Xpti::xpti)
@@ -566,7 +565,7 @@ if(HAVE_SYCL)
   set_tests_properties(
     perf-profiling-overhead perf-link-overhead PROPERTIES LABELS "performance")
 
-    set_tests_properties(
+  set_tests_properties(
     perf-prof-gpu-overhead perf-link-overhead PROPERTIES LABELS "performance")
 
   set_tests_properties(
@@ -581,6 +580,8 @@ if(HAVE_SYCL)
     xpti_interop_test PROPERTIES LABELS "interop;functional")
 
 endif()
+
+add_subdirectory(graph)
 
 if (HAVE_SYCL AND TARGET unified-runtime::loader)
 
