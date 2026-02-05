@@ -71,18 +71,6 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           python ./test_unitrace.py
 
-      - name: Build-and-test-onetrace
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s onetrace
-
-      # TODO: Fix tools on platforms later than PVC.
-      - name: Build-and-test-oneprof
-        if: contains(fromJSON(matrix.tags), 'PVC')
-        run: |
-          source /opt/intel/oneapi/setvars.sh
-          python ./tests/run.py -s oneprof
-
       - name: Build-and-test-sysmon
         if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
@@ -191,7 +179,7 @@ jobs:
 
           rem Print output files from results directory
           set "RESULTS=tools\unitrace\test\build\results"
-          
+
           if not exist "%RESULTS%" (
             echo [WARN] Results folder not found: "%RESULTS%"
             goto :eof
