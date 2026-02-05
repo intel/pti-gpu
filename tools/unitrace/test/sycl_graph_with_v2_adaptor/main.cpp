@@ -52,4 +52,5 @@ int main() {
         }
     }
     std::cerr << "Test passed" << std::endl;
+    return 0;
 }

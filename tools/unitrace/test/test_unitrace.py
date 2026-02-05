@@ -31,33 +31,64 @@ def load_config(config_file):
         print(f"[ERROR] Failed to read test scenario config file: {e}")
         return None
 
-def clean_up_testing_folder(test_dir):
+def clean_up_testing_folder(test_dir, test_name=None):
     # Construct the path to the 'Testing' folder
     testing_folder = os.path.join(test_dir, 'build', 'Testing')
     result_folder = os.path.join(test_dir, 'build', 'results')
     
-    # Check if the folder exists
-    if os.path.exists(testing_folder):
-        print("Removing folder " + testing_folder)
-        shutil.rmtree(testing_folder, ignore_errors=False)
-    if os.path.exists(result_folder):
-        print("Removing folder " + result_folder)
-        shutil.rmtree(result_folder, ignore_errors=False)
-
     cleanup_status = True
-    # Verify if the folder was successfully removed
-    if not os.path.exists(testing_folder):
-        print(f"[INFO] Successfully removed testing folder : {testing_folder}")
+    
+    if test_name is not None:
+        # Clean up only the specific test folders
+        test_testing_folder = os.path.join(test_dir, 'build', 'Testing', 'Temporary')
+        test_result_folder = os.path.join(test_dir, 'build', 'results', test_name)
+        
+        # Remove test-specific Testing/Temporary folder if it exists
+        if os.path.exists(test_testing_folder):
+            # Clean up temporary folders related to this test
+            for item in os.listdir(test_testing_folder):
+                if item.startswith(test_name):
+                    item_path = os.path.join(test_testing_folder, item)
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)
+                        print(f"Removed file: {item_path}")
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path, ignore_errors=False)
+                        print(f"Removed folder: {item_path}")
+        
+        # Remove test-specific results folder if it exists
+        if os.path.exists(test_result_folder):
+            print(f"Removing folder {test_result_folder}")
+            shutil.rmtree(test_result_folder, ignore_errors=False)
+            if not os.path.exists(test_result_folder):
+                print(f"[INFO] Successfully removed test results folder: {test_result_folder}")
+            else:
+                print(f"[ERROR] Unable to delete the test results folder '{test_result_folder}'.")
+                cleanup_status = False
+        
+        print(f"[INFO] Cleaned up folders for test: {test_name}")
     else:
-        print(f"[ERROR] Unable to delete the testing folder '{testing_folder}'.")
-        cleanup_status = False
+        # Clean up all Testing and results folders
+        if os.path.exists(testing_folder):
+            print("Removing folder " + testing_folder)
+            shutil.rmtree(testing_folder, ignore_errors=False)
+        if os.path.exists(result_folder):
+            print("Removing folder " + result_folder)
+            shutil.rmtree(result_folder, ignore_errors=False)
 
-    # Verify if the folder was successfully removed
-    if not os.path.exists(result_folder):
-        print(f"[INFO] Successfully removed results folder : {result_folder}")
-    else:
-        print(f"[ERROR] Unable to delete the results folder '{result_folder}'.")
-        cleanup_status = False
+        # Verify if the folder was successfully removed
+        if not os.path.exists(testing_folder):
+            print(f"[INFO] Successfully removed testing folder : {testing_folder}")
+        else:
+            print(f"[ERROR] Unable to delete the testing folder '{testing_folder}'.")
+            cleanup_status = False
+
+        # Verify if the folder was successfully removed
+        if not os.path.exists(result_folder):
+            print(f"[INFO] Successfully removed results folder : {result_folder}")
+        else:
+            print(f"[ERROR] Unable to delete the results folder '{result_folder}'.")
+            cleanup_status = False
 
     if cleanup_status == False:
         return 1
@@ -65,8 +96,8 @@ def clean_up_testing_folder(test_dir):
         return 0
 
 
-def build(test_dir):
-    # Create the build directory
+def build(test_dir, test_name=None):
+    """Build the test project. If test_name is provided, build only that test."""
     if not os.path.exists(test_dir):
         raise FileNotFoundError(f"[ERROR] Test directory does not exist: {test_dir}")
 
@@ -79,7 +110,14 @@ def build(test_dir):
     try:
         print("Build started ... ")
         subprocess.run(['cmake', '..', '-G', 'Ninja'], check = True)
-        subprocess.run(['ninja'], check = True)
+        
+        # Build only the specific test if test_name is provided, otherwise build all
+        if test_name:
+            print(f"Building test: {test_name}")
+            subprocess.run(['ninja', test_name], check = True)
+        else:
+            subprocess.run(['ninja'], check = True)
+            
         print("Build completed ...")
         return 0
     except subprocess.CalledProcessError as e:
@@ -168,7 +206,7 @@ def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
             print(f"[ERROR] CTest output directory not found for option {cmd}. Skipping move operation.")
     return sub_tests, failed_options
 
-def run_ctest(test_dir, scenarios):
+def run_ctest(test_dir, scenarios, test_name=None):
     failed_test_flag = 0
     failed_options = []
     total_tests = 0
@@ -186,6 +224,9 @@ def run_ctest(test_dir, scenarios):
     tests_configs = scenarios.get("test_configuration") # some tests need special handling
     filter_tests = get_filter_tests(tests_configs, default_scenarios)
     for test in tests:
+        if test_name is not None:
+            if test != test_name:
+                continue
         total_sub_tests = 0
         tests_status = []
         if test in filter_tests:
@@ -279,6 +320,13 @@ def parse_arguments():
         default= os.path.join(os.getcwd(), "test_config.json"),
         help="Path to the config file. If no path is defined it will take 'test_config.json' present in the test_dir"
     )
+
+    parser.add_argument(
+        "--test-name",
+        type=str,
+        default=None,
+        help="Name of the test to run."
+    )
     return parser.parse_args()
 
 def main():
@@ -296,14 +344,15 @@ def main():
         return 1
 
     print("Cleaning up test folder ...")
-    status = clean_up_testing_folder(args.test_dir)
+    status = clean_up_testing_folder(args.test_dir, args.test_name)
     if status == 0:
         if args.run == False:
-            status = build(args.test_dir)
+            status = build(args.test_dir, args.test_name)
             if status != 0: #build error check and return
                 return status
-        print("Start testing...")        
-        status = run_ctest(args.test_dir, scenarios)
+                
+    print("Start testing...")        
+    status = run_ctest(args.test_dir, scenarios, args.test_name)
     return(status)
 
 if __name__ == "__main__":

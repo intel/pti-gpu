@@ -1347,8 +1347,8 @@ class ClCollector {
       collector->CalculateKernelGlobalSize(params, &instance->props);
       collector->CalculateKernelLocalSize(params, &instance->props);
 
-      uint64_t base_addr = 0;
-      uint64_t size = 0;
+      size_t base_addr = 0;
+      size_t size = 0;
 
       status = clGetKernelInfo(kernel, CL_KERNEL_BINARY_GPU_ADDRESS_INTEL, 0, nullptr, &size);
       status = clGetKernelInfo(kernel, CL_KERNEL_BINARY_GPU_ADDRESS_INTEL, size, &base_addr, &size);

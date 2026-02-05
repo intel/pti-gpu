@@ -5,22 +5,21 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-#ifndef PTI_TOOLS_UNITRACE_UNICONTROL_H
-#define PTI_TOOLS_UNITRACE_UNICONTROL_H
+#ifndef PTI_TOOLS_UNITRACE_UNICONTROL_H_
+#define PTI_TOOLS_UNITRACE_UNICONTROL_H_
 
+#include "shared_memory.h"
 #ifndef _WIN32
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #endif /* _WIN32 */
-
 #include <iostream>
 
 extern char **environ;
 
-#define TEMPORAL_CONTROL_SESSION_NAME_MAX 256
-#define TEMPORAL_CONTROL_SESSION_PREFIX "/uctrl"
+#define UNITRACE_METRIC_SAMPLING_CONTROL "unitrace_metric_sampling_control"
 
 enum TemporalControlState {
   TEMPORAL_RESUMED = 0,
@@ -36,146 +35,95 @@ struct TemporalControl {
 
 class UniController{
   public:
-    static void CreateTemporalControl(const char *session) {
-#ifndef _WIN32
-      // create shared memory object
-      if (strlen(session) > (TEMPORAL_CONTROL_SESSION_NAME_MAX - strlen(TEMPORAL_CONTROL_SESSION_PREFIX) - 1)) {
-        std::cerr << "[ERROR] Session identifier is too long (maximum " << TEMPORAL_CONTROL_SESSION_NAME_MAX - strlen(TEMPORAL_CONTROL_SESSION_PREFIX) - 1 << " }" << std::endl;
+    static void CreateTemporalControl(const char* session) {
+      if (session_shm_.Create(session, sizeof(TemporalControl)) == SHM_FAILED) {
         exit(-1);
       }
-
-      strcpy(temporal_control_name_, TEMPORAL_CONTROL_SESSION_PREFIX);
-      strcat(temporal_control_name_, session);
-
-      temporal_control_handle_ = shm_open(temporal_control_name_, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-      if (temporal_control_handle_ == -1) {
-        temporal_control_handle_ = shm_open(temporal_control_name_, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-        if (temporal_control_handle_ == -1) {
-          std::cerr << "[ERROR] Failed to create shared memory for session " << session << " (" << strerror(errno) << ")" << std::endl;
-          exit(-1);
-        }
-        else {
-          std::cerr << "[WARNING] Session " << session << " was not stopped before reusing" << std::endl;
-        }
-      }
-
-      // set size of shared memory
-      if (ftruncate(temporal_control_handle_, sizeof(TemporalControl)) == -1) {
-        std::cerr << "[ERROR] Failed to set temporal control size" << std::endl;
-        exit(-1);
-      }
-
-      // map shared memory
-      temporal_control_ptr_ = (TemporalControl *)mmap(0, sizeof(TemporalControl), PROT_READ | PROT_WRITE, MAP_SHARED, temporal_control_handle_, 0);
-      if (temporal_control_ptr_ == MAP_FAILED) {
-        std::cerr << "[ERROR] Failed to map shared memory (" << strerror(errno) << ")" << std::endl;
-        exit(-1);
-      }
-
-      temporal_control_ptr_->state_ = TEMPORAL_RESUMED; // default is TEMPORAL_RESUMED
-#endif /* _WIN32 */
+      ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_RESUMED;
     }
 
     static void AttachTemporalControlWrite(const char *session) {
-#ifndef _WIN32
-      if (temporal_control_ptr_ == nullptr) {
-        // open shared memory object
-        if (strlen(session) > (TEMPORAL_CONTROL_SESSION_NAME_MAX - strlen(TEMPORAL_CONTROL_SESSION_PREFIX) - 1)) {
-          std::cerr << "[ERROR] Session identifier is too long (maximum " << TEMPORAL_CONTROL_SESSION_NAME_MAX - strlen(TEMPORAL_CONTROL_SESSION_PREFIX) - 1 << " }" << std::endl;
-          exit(-1);
-        }
-
-        strcpy(temporal_control_name_, TEMPORAL_CONTROL_SESSION_PREFIX);
-        strcat(temporal_control_name_, session);
-        temporal_control_handle_ = shm_open(temporal_control_name_, O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-        if (temporal_control_handle_ == -1) {
-          std::cerr << "[ERROR] Session " << session << " does not exist or cannot be opened (" << strerror(errno) << ")" << std::endl;
-          exit(-1);
-        }
-
-        // map shared memory
-        temporal_control_ptr_ = (TemporalControl *)mmap(0, sizeof(TemporalControl), PROT_READ | PROT_WRITE, MAP_SHARED, temporal_control_handle_, 0);
-        if (temporal_control_ptr_ == MAP_FAILED) {
-          std::cerr << "[ERROR] Failed to map shared memory (" << strerror(errno) << ")" << std::endl;
-          exit(-1);
-        }
+      if (session_shm_.AttachWrite(session, sizeof(TemporalControl)) == SHM_FAILED) {
+        exit(-1);
       }
-#endif /* _WIN32 */
     }
 
     static void AttachTemporalControlRead(const char *session) {
-#ifndef _WIN32
-      if (temporal_control_ptr_ == nullptr) {
-        // open shared memory object
-        if (strlen(session) > (TEMPORAL_CONTROL_SESSION_NAME_MAX - strlen(TEMPORAL_CONTROL_SESSION_PREFIX) - 1)) {
-          std::cerr << "[ERROR] Session identifier is too long (maximum " << TEMPORAL_CONTROL_SESSION_NAME_MAX - strlen(TEMPORAL_CONTROL_SESSION_PREFIX) - 1 << " }" << std::endl;
-          exit(-1);
-        }
-
-        strcpy(temporal_control_name_, TEMPORAL_CONTROL_SESSION_PREFIX);
-        strcat(temporal_control_name_, session);
-        temporal_control_handle_ = shm_open(temporal_control_name_, O_RDONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-        if (temporal_control_handle_ == -1) {
-          std::cerr << "[WARNING] Session " << session << " is already stopped" << std::endl;
-          temporal_control_stopped_ = true;
-          return;
-        }
-
-        // map shared memory
-        temporal_control_ptr_ = (TemporalControl *)mmap(0, sizeof(TemporalControl), PROT_READ, MAP_SHARED, temporal_control_handle_, 0);
-        if (temporal_control_ptr_ == MAP_FAILED) {
-          std::cerr << "[ERROR] Failed to map shared memory (" << strerror(errno) << ")" << std::endl;
-          exit(-1);
-        }
+      SharedMemoryReturnStatus ret = session_shm_.AttachRead(session, sizeof(TemporalControl));
+      if (ret == SHM_FAILED) {
+        exit(-1);
       }
-#endif /* _WIN32 */
+      if (ret == SHM_STOPPED) {
+        temporal_control_stopped_ = true;
+        return;
+      }
     }
 
     static void ReleaseTemporalControl(void) {
-#ifndef _WIN32
-      if (temporal_control_ptr_ != nullptr) {
-        // unmap shared memory
-        if (munmap((void *)temporal_control_ptr_, sizeof(TemporalControl)) != 0) {
-          std::cerr << "[ERROR] Failed to unmap shared memory (" << strerror(errno) << ")" << std::endl;
-          exit(-1);
-        }
-        if (close(temporal_control_handle_) != 0) {
-          std::cerr << "[ERROR] Failed to close shared memory descriptor (" << strerror(errno) << ")" << std::endl;
-          exit(-1);
-        }
-
-        // unlink the shared memory
-        if (shm_unlink(temporal_control_name_) != 0) {
-          std::cerr << "[ERROR] Failed to unlink shared memory (" << strerror(errno) << ")" << std::endl;
-          exit(-1);
-        }
+      if (session_shm_.Release() == SHM_FAILED) {
+        std::cerr << "[WARNING] ReleaseTemporalControl Failed" << std::endl;
       }
-#endif /* _WIN32 */
     }
 
     static void TemporalPause(const char *session) {
       AttachTemporalControlWrite(session);
-      if (temporal_control_ptr_ != nullptr) {
-        temporal_control_ptr_->state_ = TEMPORAL_PAUSED;
+      if (session_shm_.GetPtr() != nullptr) {
+        if (((TemporalControl*)session_shm_.GetPtr())->state_ == TEMPORAL_STOPPED) {
+          return;
+        }
+        ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_PAUSED;
         std::cerr << "[INFO] Session " << session << " is paused" << std::endl;
       }	
     }
 
     static void TemporalResume(const char *session) {
       AttachTemporalControlWrite(session);
-      if (temporal_control_ptr_ != nullptr) {
-        temporal_control_ptr_->state_ = TEMPORAL_RESUMED;
+      if (session_shm_.GetPtr() != nullptr) {
+        if (((TemporalControl*)session_shm_.GetPtr())->state_ == TEMPORAL_STOPPED) {
+          return;
+        }
+        ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_RESUMED;
         std::cerr << "[INFO] Session " << session << " is resumed" << std::endl;
       }	
     }
 
     static void TemporalStop(const char *session) {
       AttachTemporalControlWrite(session);
-      if (temporal_control_ptr_ != nullptr) {
-        temporal_control_ptr_->state_ = TEMPORAL_STOPPED;
-        ReleaseTemporalControl();
+      if (session_shm_.GetPtr() != nullptr) {
+        ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_STOPPED;
         std::cerr << "[INFO] Session " << session << " is stopped and can no longer be paused or resumed" << std::endl;
       }	
+    }
+
+    static void CreateMetricSamplingControl() {
+      if (metric_sample_shm_.Create(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl)) == SHM_FAILED) {
+        exit(-1);
+      }
+
+      if (!utils::GetEnv("UNITRACE_StartPaused").empty()) {
+        ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_PAUSED;
+      } else {
+        ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_RESUMED;
+      }
+    }
+
+    static void ReleaseMetricSamplingControl() {
+      if (metric_sample_shm_.GetPtr() != nullptr) {
+        metric_sample_shm_.Release();
+      }
+    }
+
+    static bool IsMetricSamplingEnabled(void) {
+      if (session_shm_.GetPtr() != nullptr) {
+        return (((TemporalControl*)session_shm_.GetPtr())->state_ == TEMPORAL_RESUMED);
+      }
+
+      if (conditional_collection_) {
+        if (metric_sample_shm_.GetPtr() != nullptr) {
+          return (((TemporalControl*)metric_sample_shm_.GetPtr())->state_ == TEMPORAL_RESUMED);
+        }
+      }
+      return true;
     }
 
     static bool IsCollectionEnabled(void) {
@@ -184,11 +132,15 @@ class UniController{
         return false;
       }
 
-      if (temporal_control_ptr_ != nullptr) {
-        return (temporal_control_ptr_->state_ == TEMPORAL_RESUMED);
+      if (session_shm_.GetPtr() != nullptr) {
+        return (((TemporalControl*)session_shm_.GetPtr())->state_ == TEMPORAL_RESUMED);
       }
 
       if (conditional_collection_) {
+        if (metric_sample_shm_.GetPtr() != nullptr) {
+          return (((TemporalControl*)metric_sample_shm_.GetPtr())->state_ == TEMPORAL_RESUMED);
+        }
+
         if (itt_paused_) {
           return false;
         }
@@ -211,7 +163,7 @@ class UniController{
           }
 
           if ((value == nullptr) || (*value == '0')) {
-            return false;
+             return false;
           }
         }
       }
@@ -221,23 +173,45 @@ class UniController{
     static void IttPause(void) {
       itt_paused_ = true;
       utils::SetEnv("PTI_ENABLE_COLLECTION", "0");
+      // shared memory for metric sampling created by parent process
+      // we always need to check in child process if it still exist
+      if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+        if (metric_sample_shm_.AttachWrite(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl)) == SHM_SUCCESS) {
+          ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_PAUSED;
+        }
+      }
     }
+
     static void IttResume(void) {
       itt_paused_ = false;
       utils::SetEnv("PTI_ENABLE_COLLECTION", "1");
+      // shared memory for metric sampling created by parent process
+      // we always need to check in child process if it still exist
+      if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+        if (metric_sample_shm_.AttachWrite(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl)) == SHM_SUCCESS) {
+          ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_RESUMED;
+        }
+      }
     }
+    
   private:
     inline static bool conditional_collection_ = (utils::GetEnv("UNITRACE_StartPaused") == "1") ? true : false;
     inline static bool itt_paused_ = false;
-    inline static TemporalControl *temporal_control_ptr_ = nullptr;
-    inline static int temporal_control_handle_ = -1;
-    inline static char temporal_control_name_[TEMPORAL_CONTROL_SESSION_NAME_MAX] = {0};
     // when the session is stopped, the shared memory will be removed so processes started afterwards
-    // gets null value for temporal_control_ptr_ 
-    // but temporal_control_ptr_ can also be null if the session is unnamed
-    // this flag is true when temporal_control_ptr_ is null but the named session is stopped
+    // gets null value for session_shm_.GetPtr() 
+    // but session_shm_.GetPtr() can also be null if the session is unnamed
+    // this flag is true when session_shm_.GetPtr() is null but the named session is stopped
     // so subsequent processes are not profiled 
     inline static bool temporal_control_stopped_ = false;
+    
+    inline static SharedMemory session_shm_;
+    // shared memory to interact between child and parent process for metric sampling.
+    // In application control can't be done using enviroment variable for metric sampling.
+    // the sampling thread is owned by the parent process.
+    inline static SharedMemory metric_sample_shm_;
 };
     
-#endif // PTI_TOOLS_UNITRACE_UNICONTROL_H
+#endif // PTI_TOOLS_UNITRACE_UNICONTROL_H_
+
+
+

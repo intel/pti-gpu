@@ -28,7 +28,7 @@
         },
         {
             "name": "temporal",
-            "platform": ["Linux"],
+            "platform": [ "Windows", "Linux" ],
             "scenarios": ["-d --session test --start-paused", "--session test --start-paused --chrome-call-logging --chrome-kernel-logging", "-h --session test --start-paused", "-t --session test --start-paused"]
         },
         {

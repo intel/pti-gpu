@@ -6,27 +6,42 @@
 
 #include <sycl/sycl.hpp>
 #include <iostream>
+#ifdef _WIN32
+#include <windows.h>
+#endif /* _WIN32 */
 
 using namespace sycl;
 int main(int argc, char *argv[]) {
-    auto preload_env = std::getenv("LD_PRELOAD");
-    auto session_env = std::getenv("UNITRACE_Session");
     std::string session;
+    std::string unitrace_path;
+    auto session_env = std::getenv("UNITRACE_Session");
     if (session_env != nullptr) {
         session = session_env;
     }
-    std::string unitrace_path;
+#ifndef _WIN32
+    auto preload_env = std::getenv("LD_PRELOAD");
     if (preload_env != nullptr) {
         unitrace_path = preload_env;
         auto pos = unitrace_path.find("libunitrace_tool");
         if (pos != std::string::npos) {
             unitrace_path.replace(pos, sizeof("libunitrace_tool.so"), "unitrace"); 
-#ifndef _WIN32
             unsetenv("LD_PRELOAD");
-#endif /* _WIN32 */
         }
     }
-
+#else /* _WIN32 */
+    HMODULE hModule = GetModuleHandleW(L"unitrace_tool.dll");
+    if (hModule != nullptr) {
+        wchar_t module_path[MAX_PATH];
+        if (GetModuleFileNameW(hModule, module_path, MAX_PATH) > 0) {
+            std::wstring wide_path(module_path);
+            std::string path(wide_path.begin(), wide_path.end());
+            auto pos = path.find_last_of("\\/");
+            if (pos != std::string::npos) {
+                unitrace_path = path.substr(0, pos + 1) + "unitrace.exe";
+            }
+        }
+    }
+#endif /* _WIN32 */
     int GLOBAL_SIZE = 64 * 512;
     queue q{gpu_selector(), {property::queue::in_order()}};
     float *a = (float *)malloc_shared(sizeof(float)*GLOBAL_SIZE,q);
@@ -55,7 +70,9 @@ int main(int argc, char *argv[]) {
 
     if (!unitrace_path.empty() && !session.empty()) {
         auto command = unitrace_path + " --resume " + session;
-        system(command.c_str());
+        if (system(command.c_str()) != 0) {
+            std::cerr << "[ERROR] Failed to resume session " << session << std::endl;
+        }
     }
 
     WORKGROUP_SIZE = WORKGROUP_SIZE * 2;
@@ -83,7 +100,9 @@ int main(int argc, char *argv[]) {
 
     if (!unitrace_path.empty() && !session.empty()) {
         auto command = unitrace_path + " --pause " + session;
-        system(command.c_str());
+        if (system(command.c_str()) != 0) {
+            std::cerr << "[ERROR] Failed to pause session " << session << std::endl;
+		}
     }
 
     q.wait();
@@ -94,7 +113,9 @@ int main(int argc, char *argv[]) {
 
     if (!unitrace_path.empty() && !session.empty()) {
         auto command = unitrace_path + " --stop " + session;
-        system(command.c_str());
+        if (system(command.c_str()) != 0) {
+            std::cerr << "[ERROR] Failed to stop session " << session << std::endl;
+        }
     }
 
     return 0;

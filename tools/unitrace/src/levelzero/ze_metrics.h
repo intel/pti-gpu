@@ -1361,7 +1361,7 @@ class ZeMetricProfiler {
       auto size = EventBasedReadMetrics(event, streamer, raw_metrics, MAX_METRIC_BUFFER);
       if (size > 0) {
         // If we have data, dump it to the intermediate file
-        if (UniController::IsCollectionEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
+        if (UniController::IsMetricSamplingEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
           std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
           break;
         }
@@ -1371,7 +1371,7 @@ class ZeMetricProfiler {
     // Flush the remaining metrics after the profiler has stopped
     auto size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
     while (size > 0) {
-      if (UniController::IsCollectionEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
+      if (UniController::IsMetricSamplingEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
         std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
         break;
       }

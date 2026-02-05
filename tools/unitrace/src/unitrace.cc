@@ -228,7 +228,6 @@ void Usage(char * progname) {
     "Try to gracefully shut down in case the application crashes or is terminated or <signum> is raised" << std::endl <<
     "                                 This option may change the application behavior so please use it carefully" <<
     std::endl;
-#ifndef _WIN32
   std::cout <<
     "--session <session>              " <<
     "Name this session <session> for dynamic control. The argument <session> is an alphanumeric string" <<
@@ -245,6 +244,7 @@ void Usage(char * progname) {
     "--stop <session>                 " <<
     "Stop session <session>. The argument <session> must be the same session named with --session option" <<
     std::endl;
+#ifndef _WIN32
   std::cout <<
     "--chrome-kmd-logging <script>    " <<
     "Trace OS/KMD activities. The argument <script> file defines the OS kernel or device driver activities to trace" <<
@@ -559,7 +559,6 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_ResetEventOnDevice", argv[i]);
       app_index += 2;
-#ifndef _WIN32
     } else if (strcmp(argv[i], "--session") == 0) {
       ++i;
       if ((i >= argc) || !IsAlphanumericString(argv[i])) {
@@ -592,6 +591,7 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_StopSession", argv[i]);
       app_index += 2;
+  #ifndef _WIN32
     } else if (strcmp(argv[i], "--chrome-kmd-logging") == 0) {
       ++i;
       if (i >= argc) {
@@ -600,7 +600,7 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_ChromeKmdLogging", argv[i]);
       app_index += 2;
-#endif /* _WIN32 */
+  #endif /* _WIN32 */
     } else if (strcmp(argv[i], "--version") == 0) {
       std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
       return 0;
@@ -619,7 +619,7 @@ int ParseArgs(int argc, char* argv[]) {
       return -1;
     }
   }
-
+#endif /* _WIN32 */
   if (!utils::GetEnv("UNITRACE_PauseSession").empty()) {
     UniController::TemporalPause(utils::GetEnv("UNITRACE_PauseSession").c_str());
     return 0;
@@ -634,7 +634,6 @@ int ParseArgs(int argc, char* argv[]) {
     UniController::TemporalStop(utils::GetEnv("UNITRACE_StopSession").c_str());
     return 0;
   }
-#endif /* _WIN32 */
 
   if (utils::GetEnv("UNITRACE_FollowChildProcess").empty()) {
     utils::SetEnv("UNITRACE_FollowChildProcess", "1");	// default is to follow child processes
@@ -797,6 +796,9 @@ void CleanUp(int /* sig */) {
   if (CXX_STD_FILESYSTEM_NAMESPACE::remove(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
     std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
   }
+
+  UniController::ReleaseTemporalControl();
+  UniController::ReleaseMetricSamplingControl();
   _Exit(-1);
 }
 
@@ -933,7 +935,7 @@ int main(int argc, char *argv[]) {
 #endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
   std::string executable_path = utils::GetExecutablePath();
-
+  
   bool use_ld_lib_path = false;
   std::string lib_path = executable_path + LIB_UNITRACE_TOOL_NAME;
   FILE *fp;
@@ -1002,7 +1004,7 @@ int main(int argc, char *argv[]) {
       std::cerr << "[ERROR] Invalid command line" << std::endl;
       Usage(argv[0]);
     }
-    return 1;
+    return app_index? 1 : 0;
   }
 
   if (!utils::GetEnv("UNITRACE_Session").empty()) {
@@ -1058,6 +1060,10 @@ int main(int argc, char *argv[]) {
   if (utils::GetEnv("UNITRACE_MetricQuery") == "1" || utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
     // UNITRACE_KernelMetrics is not set
     SetProfilingEnvironment();
+    if ((utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
+        // create shared memory for metric sampling control between the profiler and the application
+        UniController::CreateMetricSamplingControl();
+    }
   }
 
 #ifndef _WIN32
@@ -1333,6 +1339,9 @@ int main(int argc, char *argv[]) {
     free(data_dir);
   }
 #endif /* _WIN32 */
+
+  UniController::ReleaseTemporalControl();
+  UniController::ReleaseMetricSamplingControl();
 
   return 0;
 }

@@ -147,7 +147,65 @@ jobs:
 
       - name: Test-unitrace
         working-directory: tools/unitrace/test
+        env:
+          SYCL_UR_USE_LEVEL_ZERO_V2: 0
         run: |
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
           python ./test_unitrace.py
+
+      - name: Print output files on failure
+        if: failure()
+        run: |
+          @echo off
+          setlocal enabledelayedexpansion
+
+          set "ROOT=tools\unitrace\test\build\Testing"
+
+          if not exist "%ROOT%" (
+            echo [WARN] Testing folder not found: "%ROOT%"
+            goto :eof
+          )
+
+          echo.
+          echo ===== Enumerating LastTest.log under "%ROOT%" =====
+
+          rem Loop over test subdirectories
+          for /d %%D in ("%ROOT%\*") do (
+            set "TESTDIR=%%~fD"
+            set "LOGFILE=%%~fD\LastTest.log"
+            echo.
+            echo ---------- [Test: %%~nxD] ----------
+            if exist "!LOGFILE!" (
+              echo [INFO] Found: "!LOGFILE!"
+              type "!LOGFILE!"
+            ) else (
+              echo [WARN] No LastTest.log in "%%~fD"
+              rem Optionally list directory contents to help debug
+              dir /b "%%~fD"
+            )
+          )
+
+          echo.
+          echo ===== Done printing LastTest.log files =====
+
+          rem Print output files from results directory
+          set "RESULTS=tools\unitrace\test\build\results"
+          
+          if not exist "%RESULTS%" (
+            echo [WARN] Results folder not found: "%RESULTS%"
+            goto :eof
+          )
+
+          echo.
+          echo ===== Enumerating output files under "%RESULTS%" =====
+
+          for %%F in ("%RESULTS%\*.txt") do (
+            echo.
+            echo ---------- [Output File: %%~nxF] ----------
+            echo [INFO] Found: "%%~fF"
+            type "%%~fF"
+          )
+
+          echo.
+          echo ===== Done printing output files =====

@@ -1,0 +1,18 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):            983061100
+    Total Device Time for L0 backend (ns):            167994062
+
+== L0 Backend ==
+
+              Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+"_ZTSZ4mainEUlT_E2_",            1,            167994062,   100.000000,            167994062,            167994062,            167994062
+
+
+=== Kernel Properties ===
+
+              Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+"_ZTSZ4mainEUlT_E2_",      JIT,    8,                   3,                  0,                      7744,                  131072,                           128
+
+
