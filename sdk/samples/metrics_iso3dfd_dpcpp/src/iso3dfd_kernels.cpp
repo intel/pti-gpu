@@ -48,8 +48,8 @@ using namespace metrics_utils;
 
 inline uint64_t GetTime() {
 #if defined(_WIN32)
-  LARGE_INTEGER ticks{ {0, 0} };
-  LARGE_INTEGER frequency{ {0, 0} };
+  LARGE_INTEGER ticks{{0, 0}};
+  LARGE_INTEGER frequency{{0, 0}};
   BOOL status = QueryPerformanceFrequency(&frequency);
 
   if (!status) {
@@ -66,15 +66,15 @@ inline uint64_t GetTime() {
 
   return ticks.QuadPart * (NSEC_IN_SEC / frequency.QuadPart);
 #else
- timespec ts{0, 0};
- int status = clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
- if(status) {
-   std::cerr << "Error while getting time: " << std::strerror(errno) << '\n';
-   std::abort();
- }
- return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
-#endif
+  timespec ts{0, 0};
+  int status = clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+  if (status) {
+    std::cerr << "Error while getting time: " << std::strerror(errno) << '\n';
+    std::abort();
   }
+  return ts.tv_sec * NSEC_IN_SEC + ts.tv_nsec;
+#endif
+}
 /*
  * Device-Code - Optimized for GPU
  * SYCL implementation for single iteration of iso3dfd kernel
@@ -89,10 +89,9 @@ inline uint64_t GetTime() {
  * SLM Padding can be used to eliminate SLM bank conflicts if
  * there are any
  */
-void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
-                         float *vel, const float *coeff, float *tab, size_t nx,
-                         size_t nxy, size_t bx, size_t by, size_t z_offset,
-                         size_t full_end_z) {
+void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev, float *vel,
+                         const float *coeff, float *tab, size_t nx, size_t nxy, size_t bx,
+                         size_t by, size_t z_offset, size_t full_end_z) {
   // Compute local-id for each work-item
   auto id0 = it.get_local_id(2);
   auto id1 = it.get_local_id(1);
@@ -114,8 +113,7 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
   auto end_z = begin_z + z_offset;
   if (end_z > full_end_z) end_z = full_end_z;
 
-  auto gid = (it.get_global_id(2) + bx) + ((it.get_global_id(1) + by) * nx) +
-             (begin_z * nxy);
+  auto gid = (it.get_global_id(2) + bx) + ((it.get_global_id(1) + by) * nx) + (begin_z * nxy);
 
   // front and back temporary arrays are used to ensure
   // the grid values in z-dimension are read once, shifted in
@@ -185,9 +183,8 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
 #pragma unroll(kHalfLength)
     for (unsigned int iter = 1; iter <= kHalfLength; iter++) {
       value += c[iter] *
-               (front[iter] + back[iter - 1] + tab[identifiant + iter] +
-                tab[identifiant - iter] + tab[identifiant + iter * stride] +
-                tab[identifiant - iter * stride]);
+               (front[iter] + back[iter - 1] + tab[identifiant + iter] + tab[identifiant - iter] +
+                tab[identifiant + iter * stride] + tab[identifiant - iter * stride]);
     }
     next[gid] = 2.0f * front[0] - next[gid] + value * vel[gid];
 
@@ -227,9 +224,9 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev,
  * global work-items.
  *
  */
-void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
-                            const float *vel, const float *coeff, int nx, int nxy,
-                            int bx, int by, int z_offset, size_t full_end_z) {
+void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev, const float *vel,
+                            const float *coeff, int nx, int nxy, int bx, int by, int z_offset,
+                            size_t full_end_z) {
   // We compute the start and the end position in the grid
   // for each work-item.
   // Each work-items local value gid is updated to track the
@@ -241,8 +238,7 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
   auto end_z = begin_z + z_offset;
   if (end_z > full_end_z) end_z = full_end_z;
 
-  auto gid = (it.get_global_id(2) + bx) + ((it.get_global_id(1) + by) * nx) +
-             (begin_z * nxy);
+  auto gid = (it.get_global_id(2) + bx) + ((it.get_global_id(1) + by) * nx) + (begin_z * nxy);
 
   // front and back temporary arrays are used to ensure
   // the grid values in z-dimension are read once, shifted in
@@ -272,9 +268,8 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
   float value = c[0] * front[0];
 #pragma unroll(kHalfLength)
   for (unsigned int iter = 1; iter <= kHalfLength; iter++) {
-    value += c[iter] *
-             (front[iter] + back[iter - 1] + prev[gid + iter] +
-              prev[gid - iter] + prev[gid + iter * nx] + prev[gid - iter * nx]);
+    value += c[iter] * (front[iter] + back[iter - 1] + prev[gid + iter] + prev[gid - iter] +
+                        prev[gid + iter * nx] + prev[gid - iter * nx]);
   }
   next[gid] = 2.0f * front[0] - next[gid] + value * vel[gid];
 
@@ -303,9 +298,8 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
     float value = c[0] * front[0];
 #pragma unroll(kHalfLength)
     for (unsigned int iter = 1; iter <= kHalfLength; iter++) {
-      value += c[iter] * (front[iter] + back[iter - 1] + prev[gid + iter] +
-                          prev[gid - iter] + prev[gid + iter * nx] +
-                          prev[gid - iter * nx]);
+      value += c[iter] * (front[iter] + back[iter - 1] + prev[gid + iter] + prev[gid - iter] +
+                          prev[gid + iter * nx] + prev[gid - iter * nx]);
     }
 
     next[gid] = 2.0f * front[0] - next[gid] + value * vel[gid];
@@ -327,10 +321,9 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev,
  *
  */
 
-bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
-                   float *ptr_vel, float *ptr_coeff, size_t n1, size_t n2,
-                   size_t n3, size_t n1_block, size_t n2_block, size_t n3_block,
-                   size_t end_z, unsigned int nIterations) {
+bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev, float *ptr_vel,
+                   float *ptr_coeff, size_t n1, size_t n2, size_t n3, size_t n1_block,
+                   size_t n2_block, size_t n3_block, size_t end_z, unsigned int nIterations) {
   auto nx = n1;
   auto nxy = n1 * n2;
 
@@ -350,8 +343,11 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
     buffer b_ptr_coeff(ptr_coeff, range(kHalfLength + 1));
 
     // Log available metrics and metrics groups per device
-    std::string discovery_filename = "available_metrics_" + std::to_string(utils::GetPid()) + ".txt";
-    if (MetricsProfiler::MetricsProfilerInstance().InitializeMetricsCollection()/*true, discovery_filename)*/ != true) {
+    std::string discovery_filename =
+        "available_metrics_" + std::to_string(utils::GetPid()) + ".txt";
+    if (MetricsProfiler::MetricsProfilerInstance()
+            .InitializeMetricsCollection() /*true, discovery_filename)*/
+        != true) {
       exit(-1);
     }
 
@@ -364,43 +360,55 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
     // Iterate over time steps
     for (unsigned int i = 0; i < nIterations; i += 1) {
       if (i == 0 || i == (nIterations / 2)) {
-        if (i == 0) { // Collect a different group for the first half of the iterations
+        if (i == 0) {  // Collect a different group for the first half of the iterations
           // TIME metric groups
-          group_name = "ComputeBasic"; //"GpuOffload" "ComputeBasic" "MemProfile" "DataportProfile" "L1ProfileReads"  "L1ProfileSlmBankConflicts" "L1ProfileWrites"
+          group_name =
+              "ComputeBasic";  //"GpuOffload" "ComputeBasic" "MemProfile" "DataportProfile"
+                               //"L1ProfileReads"  "L1ProfileSlmBankConflicts" "L1ProfileWrites"
 
           // TRACE metric groups
-          //group_name = "tpcs_utilization_and_bw" /* "nic_stms" "dcore0_bmons_bw"*/;
+          // group_name = "tpcs_utilization_and_bw" /* "nic_stms" "dcore0_bmons_bw"*/;
           group_type = /*PTI_METRIC_GROUP_TYPE_TRACE_BASED*/ PTI_METRIC_GROUP_TYPE_TIME_BASED;
-        } else { // collect a different metric group for the second half of the iterations
+        } else {  // collect a different metric group for the second half of the iterations
           // Stop the collection for the first half of the iterations
           if (MetricsProfiler::MetricsProfilerInstance().StopCollection() != true) {
             exit(-1);
           }
 
-          sample_filename = group_name +  "_iso3dfd_pti_metric_sample_log_" + std::to_string(utils::GetPid()) + ".json";
+          sample_filename = group_name + "_iso3dfd_pti_metric_sample_log_" +
+                            std::to_string(utils::GetPid()) + ".json";
           // calculate metrics for the first half of the iterations
-          if (MetricsProfiler::MetricsProfilerInstance().GetCalculatedData(true, sample_filename) != true) {
+          std::cout << "Calculating metrics for the first " << (nIterations / 2)
+                    << " iterations for group ***" << group_name << "***"
+                    << ". Will write to file: " << sample_filename << std::endl;
+          if (MetricsProfiler::MetricsProfilerInstance().GetCalculatedData(true, sample_filename) !=
+              true) {
             exit(-1);
           }
 
-          // Compare the result file generated by the sample to the result file generated by the metric library
+          // Compare the result file generated by the sample to the result file generated by the
+          // metric library
           CompareFiles(lib_filename, sample_filename);
 
           DeleteFile(lib_filename);
           DeleteFile(sample_filename);
 
-          // TIME metric groups for second half -- this needs to be *named* same across other architectures!
-          // Choose same group to ensure we do not fail on other architectures.
-          //group_name = "TestOa";
-          group_name = "ComputeBasic"; //"GpuOffload" "ComputeBasic" "MemProfile" "DataportProfile" "L1ProfileReads"  "L1ProfileSlmBankConflicts" "L1ProfileWrites"
+          // TIME metric groups for second half -- this needs to be *named* same across other
+          // architectures! Choose same group to ensure we do not fail on other architectures.
+          // group_name = "TestOa";
+          group_name =
+              "ComputeBasic";  //"GpuOffload" "ComputeBasic" "MemProfile" "DataportProfile"
+                               //"L1ProfileReads"  "L1ProfileSlmBankConflicts" "L1ProfileWrites"
 
           // TRACE metric groups
-          //group_name = "tpcs_utilization_and_bw" /* "nic_stms" "dcore0_bmons_bw"*/;
+          // group_name = "tpcs_utilization_and_bw" /* "nic_stms" "dcore0_bmons_bw"*/;
           group_type = /*PTI_METRIC_GROUP_TYPE_TRACE_BASED*/ PTI_METRIC_GROUP_TYPE_TIME_BASED;
         }
-        std::cout <<"M Collecting metrics group ***" << group_name << "***" << std::endl;
-        lib_filename = group_name + "_iso3dfd_pti_metric_lib_log_" + std::to_string(utils::GetPid()) + ".json";
-        if (MetricsProfiler::MetricsProfilerInstance().ConfigureMetricGroups(group_name, group_type, true, lib_filename) != true) {
+        std::cout << "Collecting metrics group ***" << group_name << "***" << std::endl;
+        lib_filename =
+            group_name + "_iso3dfd_pti_metric_lib_log_" + std::to_string(utils::GetPid()) + ".json";
+        if (MetricsProfiler::MetricsProfilerInstance().ConfigureMetricGroups(
+                group_name, group_type, true, lib_filename) != true) {
           exit(-1);
         }
         if (MetricsProfiler::MetricsProfilerInstance().StartCollectionPaused() != true) {
@@ -441,16 +449,14 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
         // to allow auto-scaling of the total number of work-items
         // spawned to achieve full occupancy for small or larger accelerator
         // devices
-        auto global_nd_range =
-            range((n3 - 2 * kHalfLength) / n3_block, (n2 - 2 * kHalfLength),
-                  (n1 - 2 * kHalfLength));
+        auto global_nd_range = range((n3 - 2 * kHalfLength) / n3_block, (n2 - 2 * kHalfLength),
+                                     (n1 - 2 * kHalfLength));
 
         if (i == 0 || i == (nIterations / 2)) {
           // metrics collection started in paused mode, resume
           if (MetricsProfiler::MetricsProfilerInstance().ResumeCollection() != true) {
             exit(-1);
           }
-
         }
         // Add small sleep to separate metrics data stream from each iteration
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -468,12 +474,11 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
         // Define a range for SLM Buffer
         // Padding can be used to avoid SLM bank conflicts
         // By default padding is disabled in the sample code
-        auto local_range = range((n1_block + (2 * kHalfLength) + kPad) *
-                                 (n2_block + (2 * kHalfLength)));
+        auto local_range =
+            range((n1_block + (2 * kHalfLength) + kPad) * (n2_block + (2 * kHalfLength)));
 
         //  Create an accessor for SLM buffer
-        accessor<float, 1, access::mode::read_write, access::target::local> tab(
-            local_range, h);
+        accessor<float, 1, access::mode::read_write, access::target::local> tab(local_range, h);
 
         // Send a SYCL kernel (lambda) for parallel execution
         // The function that executes a single iteration is called
@@ -481,21 +486,15 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
         // alternating the 'next' and 'prev' parameters which effectively
         // swaps their content at every iteration.
         if (i % 2 == 0)
-          h.parallel_for(
-              nd_range(global_nd_range, local_nd_range), [=](auto it) {
-                Iso3dfdIterationSLM(it, next.get(), prev.get(),
-                                    vel.get(), coeff.get(),
-                                    tab.get(), nx, nxy, bx, by,
-                                    n3_block, end_z);
-              });
+          h.parallel_for(nd_range(global_nd_range, local_nd_range), [=](auto it) {
+            Iso3dfdIterationSLM(it, next.get(), prev.get(), vel.get(), coeff.get(), tab.get(), nx,
+                                nxy, bx, by, n3_block, end_z);
+          });
         else
-          h.parallel_for(
-              nd_range(global_nd_range, local_nd_range), [=](auto it) {
-                Iso3dfdIterationSLM(it, prev.get(), next.get(),
-                                    vel.get(), coeff.get(),
-                                    tab.get(), nx, nxy, bx, by,
-                                    n3_block, end_z);
-              });
+          h.parallel_for(nd_range(global_nd_range, local_nd_range), [=](auto it) {
+            Iso3dfdIterationSLM(it, prev.get(), next.get(), vel.get(), coeff.get(), tab.get(), nx,
+                                nxy, bx, by, n3_block, end_z);
+          });
 
 #else
 
@@ -508,29 +507,23 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
         // alternating the 'next' and 'prev' parameters which effectively
         // swaps their content at every iteration.
         if (i % 2 == 0)
-          h.parallel_for(
-              nd_range(global_nd_range, local_nd_range), [=](auto it) {
-                auto next_ptr = next.template get_multi_ptr<sycl::access::decorated::no>();
-                auto prev_ptr = prev.template get_multi_ptr<sycl::access::decorated::no>();
-                auto vel_ptr = vel.template get_multi_ptr<sycl::access::decorated::no>();
-                auto coeff_ptr = coeff.template get_multi_ptr<sycl::access::decorated::no>();
-                Iso3dfdIterationGlobal(it, next_ptr.get(),
-                                       prev_ptr.get(), vel_ptr.get(),
-                                       coeff_ptr.get(), nx, nxy, bx, by,
-                                       n3_block, end_z);
-              });
+          h.parallel_for(nd_range(global_nd_range, local_nd_range), [=](auto it) {
+            auto next_ptr = next.template get_multi_ptr<sycl::access::decorated::no>();
+            auto prev_ptr = prev.template get_multi_ptr<sycl::access::decorated::no>();
+            auto vel_ptr = vel.template get_multi_ptr<sycl::access::decorated::no>();
+            auto coeff_ptr = coeff.template get_multi_ptr<sycl::access::decorated::no>();
+            Iso3dfdIterationGlobal(it, next_ptr.get(), prev_ptr.get(), vel_ptr.get(),
+                                   coeff_ptr.get(), nx, nxy, bx, by, n3_block, end_z);
+          });
         else
-          h.parallel_for(
-              nd_range(global_nd_range, local_nd_range), [=](auto it) {
-                auto next_ptr = next.template get_multi_ptr<sycl::access::decorated::no>();
-                auto prev_ptr = prev.template get_multi_ptr<sycl::access::decorated::no>();
-                auto vel_ptr = vel.template get_multi_ptr<sycl::access::decorated::no>();
-                auto coeff_ptr = coeff.template get_multi_ptr<sycl::access::decorated::no>();
-                Iso3dfdIterationGlobal(it, prev_ptr.get(),
-                                       next_ptr.get(), vel_ptr.get(),
-                                       coeff_ptr.get(), nx, nxy, bx, by,
-                                       n3_block, end_z);
-              });
+          h.parallel_for(nd_range(global_nd_range, local_nd_range), [=](auto it) {
+            auto next_ptr = next.template get_multi_ptr<sycl::access::decorated::no>();
+            auto prev_ptr = prev.template get_multi_ptr<sycl::access::decorated::no>();
+            auto vel_ptr = vel.template get_multi_ptr<sycl::access::decorated::no>();
+            auto coeff_ptr = coeff.template get_multi_ptr<sycl::access::decorated::no>();
+            Iso3dfdIterationGlobal(it, prev_ptr.get(), next_ptr.get(), vel_ptr.get(),
+                                   coeff_ptr.get(), nx, nxy, bx, by, n3_block, end_z);
+          });
 #endif
       });
       // Add small sleep to separate metrics data stream from each iteration
@@ -541,19 +534,24 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev,
       exit(-1);
     }
 
-
-    sample_filename = group_name +  "_iso3dfd_pti_metric_sample_log_" + std::to_string(utils::GetPid()) + ".json";
+    sample_filename =
+        group_name + "_iso3dfd_pti_metric_sample_log_" + std::to_string(utils::GetPid()) + ".json";
     // calculate metrics
-    if (MetricsProfiler::MetricsProfilerInstance().GetCalculatedData(true, sample_filename) != true) {
+    std::cout << "Calculating metrics for the second " << (nIterations / 2)
+              << " iterations for group ***" << group_name << "***"
+              << ". Will write to file: " << sample_filename << std::endl;
+    if (MetricsProfiler::MetricsProfilerInstance().GetCalculatedData(true, sample_filename) !=
+        true) {
       exit(-1);
     }
 
-    // Compare the result file generated by the sample to the result file generated by the metric library then delete them
+    // Compare the result file generated by the sample to the result file generated by the metric
+    // library then delete them
     CompareFiles(lib_filename, sample_filename);
 
     DeleteFile(lib_filename);
     DeleteFile(sample_filename);
- 
+
   }  // end buffer scope
   return true;
 }

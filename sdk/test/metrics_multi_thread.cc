@@ -14,6 +14,7 @@
 #include <future>
 #include <iostream>
 #include <mutex>
+#include <random>
 #include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
 #include <thread>
@@ -21,6 +22,7 @@
 
 #include "metrics_utils.h"
 #include "pti/pti_metrics.h"
+#include "samples_utils.h"
 #include "utils.h"
 
 namespace {
@@ -32,6 +34,13 @@ std::vector<pti_device_properties_t> g_devices;
 std::vector<std::vector<pti_metrics_group_properties_t>> g_metric_groups;
 std::mutex g_setup_mutex;
 std::atomic<bool> g_setup_complete{false};
+
+int GetRandomInt(int min, int max) {
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+  std::uniform_int_distribution<> dist(min, max);
+  return dist(gen);
+}
 
 // Thread-safe device discovery
 bool DiscoverDevicesThreadSafe(std::vector<pti_device_properties_t>& devices) {
@@ -97,21 +106,17 @@ static uint32_t GetMetricsSampleCount(pti_device_handle_t device_handle,
 void SubmitMinimalGpuWork(const sycl::device& device) {
   try {
     sycl::queue queue(device);
-    constexpr size_t work_size = 1024;
-    std::vector<int> host_data(work_size, 1);
+    constexpr size_t work_size = 10 * 1024;
+    // add randomness otherwise smart compiler might calculate it at compile time
+    std::vector<int> host_data(work_size, GetRandomInt(1, 1000));
+    sycl::buffer<int, 1> buffer(host_data.data(), sycl::range<1>(work_size));
 
-    {
-      sycl::buffer<int, 1> buffer(host_data.data(), sycl::range<1>(work_size));
-
-      queue.submit([&](sycl::handler& h) {
-        auto accessor = buffer.get_access<sycl::access::mode::read_write>(h);
-        h.parallel_for(sycl::range<1>(work_size),
-                       [=](sycl::id<1> idx) { accessor[idx] = accessor[idx] * 2 + 1; });
-      });
-    }
-
-    queue.wait();
-
+    queue.submit([&](sycl::handler& h) {
+      auto accessor = buffer.get_access<sycl::access::mode::read_write>(h);
+      h.parallel_for(sycl::range<1>(work_size),
+                     [=](sycl::id<1> idx) { accessor[idx] = accessor[idx] * 2 + 1; });
+    });
+    queue.wait_and_throw();
   } catch (const std::exception& e) {
     std::cerr << "Warning: Failed to submit GPU work: " << e.what() << std::endl;
   }
@@ -255,15 +260,32 @@ TEST_F(MetricsMultiThreadingTest, ConcurrentMetricPropertiesRetrieval) {
 }
 
 // Test concurrent ptiMetricsStartCollection calls on different devices
-TEST_F(MetricsMultiThreadingTest, ConcurrentStartCollectionDifferentDevices) {
+TEST_F(MetricsMultiThreadingTest, ConcurrentCollectionDifferentDevices) {
   if (g_devices.size() < 2) {
     GTEST_SKIP() << "Need at least 2 devices for this test";
   }
 
   ASSERT_FALSE(g_metric_groups.empty()) << "No metric groups available for testing";
 
+  std::cout << "Found " << sycl_devices.size() << " sycl devices\n";
+  std::cout << "Found " << g_devices.size() << " PTI metrics devices\n";
+
   int num_devices_to_test = (std::min)(static_cast<int>(g_devices.size()), kNumThreads);
-  std::vector<std::future<bool>> futures;
+
+  // The test failed in the strange way when all (StartCollection, Compute, StopCollection)
+  // was submitted in one async future per device:
+  // It failed 1 out of 10+ with symptoms of either zero samples for some device or hanged.
+  // Hang debugging showed that the thread deadlocked on ReadMetricDataFromBuffer call inside
+  // ptiMetricsStopCollection.
+  // It could be some bug (in L0 or still in PTI) related to "simultaneous" finishing the compute
+  // work and reading the collection data from the L0/driver buffer. After debugging and comparing
+  // behaviour of this test with similar VTune and unitrace flows, we found the current scenario
+  // that mimic VTune and unitrace collections. It proves working stably and this is the current
+  // state of this test.
+
+  std::vector<std::future<bool>> futures_start;
+  std::vector<std::future<bool>> futures_stop;
+  std::vector<std::future<bool>> futures_compute;
   std::atomic<int> success_count{0};
   std::atomic<int> start_stop_errors{0};
   std::atomic<int> no_samples_count{0};
@@ -300,38 +322,72 @@ TEST_F(MetricsMultiThreadingTest, ConcurrentStartCollectionDifferentDevices) {
               << std::endl;
   }
 
-  // Configure collection for each device with its own metric group
+  // Configure collection for each device with the same metric group
   for (int i = 0; i < num_devices_to_test; ++i) {
+    // Print device UUID to manually validate that PTI and SYCL UUIDs devices match
+    // - so the collection run on the same device where compute is submitted
+    std::cout << "Device idx: " << i << ", handle: " << g_devices[i]._handle << ",\n";
+    samples_utils::PrintUuid(g_devices[i]._uuid, "PTI  UUID: ");
+
+    const sycl::device& device = GetDevice(i);
+    if (device.has(sycl::aspect::ext_intel_device_info_uuid)) {
+      auto sycl_uuid = device.get_info<sycl::ext::intel::info::device::uuid>();
+      samples_utils::PrintUuid(sycl_uuid.data(), "Sycl UUID: ");
+    }
+
     pti_device_handle_t device_handle = g_devices[i]._handle;
     pti_metrics_group_handle_t group_handle = device_metric_groups[i];
 
     pti_metrics_group_collection_params_t config_params;
     config_params._struct_size = sizeof(pti_metrics_group_collection_params_t);
     config_params._group_handle = group_handle;
-    config_params._sampling_interval = 100000;   // 100μs
-    config_params._time_aggr_window = 10000000;  // 10ms
+    config_params._sampling_interval = 1'000'000;  // 1 ms
+    // time aggregation window is not applicable for time-based metrics groups
+    config_params._time_aggr_window = 0;
 
     pti_result config_result = ptiMetricsConfigureCollection(device_handle, &config_params, 1);
     ASSERT_EQ(config_result, PTI_SUCCESS)
-        << "Failed to configure device " << i << " with its own metric group";
+        << "Failed to configure device " << i << " with the metric group";
   }
 
   // Launch threads to start collection on different devices simultaneously
   for (int i = 0; i < num_devices_to_test; ++i) {
-    futures.push_back(std::async(std::launch::async, [&, i]() -> bool {
-      const sycl::device& device = GetDevice(i);
-
+    futures_start.push_back(std::async(std::launch::async, [&, i]() -> bool {
       pti_device_handle_t device_handle = g_devices[i]._handle;
-      pti_metrics_group_handle_t group_handle = device_metric_groups[i];
 
       pti_result start_result = ptiMetricsStartCollection(device_handle);
       if (start_result != PTI_SUCCESS) {
         start_stop_errors++;
-        std::cout << "Device " << i << " start failed: " << start_result << std::endl;
+        std::cerr << "Device " << i << ", handle: " << g_devices[i]._handle
+                  << " start failed: " << start_result << std::endl;
         return false;
       }
+      return true;
+    }));
+  }
+
+  for (auto& future : futures_start) {
+    future.get();
+  }
+
+  for (int i = 0; i < num_devices_to_test; ++i) {
+    futures_compute.push_back(std::async(std::launch::async, [&, i]() -> bool {
+      const sycl::device& device = GetDevice(i);
 
       SubmitMinimalGpuWork(device);
+      return true;
+    }));
+  }
+
+  for (auto& future : futures_compute) {
+    future.get();
+  }
+
+  std::mutex print_mutex;
+  for (int i = 0; i < num_devices_to_test; ++i) {
+    futures_stop.push_back(std::async(std::launch::async, [&, i]() -> bool {
+      pti_device_handle_t device_handle = g_devices[i]._handle;
+      pti_metrics_group_handle_t group_handle = device_metric_groups[i];
 
       pti_result stop_result = ptiMetricsStopCollection(device_handle);
       if (stop_result != PTI_SUCCESS) {
@@ -341,20 +397,25 @@ TEST_F(MetricsMultiThreadingTest, ConcurrentStartCollectionDifferentDevices) {
       }
 
       uint32_t sample_count = GetMetricsSampleCount(device_handle, group_handle);
-      std::cout << "Device " << i << " collected " << sample_count << " samples" << std::endl;
+      bool result = true;
+      {
+        std::lock_guard<std::mutex> lock(print_mutex);
+        std::cout << "Device " << i << " collected " << sample_count << " samples" << std::endl
+                  << std::flush;
 
-      if (sample_count == 0) {
-        no_samples_count++;
-        std::cout << "Device " << i << " collected no samples" << std::endl;
-        return false;
+        if (sample_count == 0) {
+          no_samples_count++;
+          std::cout << "Device " << i << " collected no samples" << std::endl << std::flush;
+          result = false;
+        } else {
+          success_count++;
+        }
       }
-
-      success_count++;
-      return true;
+      return result;
     }));
   }
 
-  for (auto& future : futures) {
+  for (auto& future : futures_stop) {
     future.get();
   }
 

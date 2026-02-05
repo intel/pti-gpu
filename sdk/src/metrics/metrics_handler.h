@@ -19,6 +19,7 @@
 #include <random>
 #include <shared_mutex>
 #include <thread>
+#include <unordered_set>
 
 #include "pti/pti_metrics.h"
 #include "utils/pti_filesystem.h"
@@ -44,10 +45,15 @@ constexpr uint32_t kMaxMetricSamples = 32768;
 
 // Buffer management constants
 constexpr uint8_t kMaxDataCaptureCount = 10;
-constexpr uint32_t kDefaultSamplingIntervalNs = 1000000U;  // 1 millisecond
-constexpr uint32_t kDefaultTimeAggrWindowUs = 10000U;      // 10 milliseconds
 constexpr size_t kMaxBufferSizePadding = 512;
 constexpr uint32_t kTileCountPadding = 2;  // For systems with 2 tiles
+// Buffer size calculations
+constexpr size_t kMaxMetricBufferSize =
+    kMaxMetricSamples * kMaxMetricCountPerGroup * kTileCountPadding + kMaxBufferSizePadding;
+
+// Sampling and aggregation defaults
+constexpr uint32_t kDefaultSamplingIntervalNs = 1'000'000U;  // 1 millisecond
+constexpr uint32_t kDefaultTimeAggrWindowUs = 10'000U;  // 10 milliseconds, only for Trace metrics
 
 // File and library names
 #ifdef _WIN32
@@ -56,15 +62,7 @@ constexpr const char *kLoaderLibraryName = "libze_loader.dll";
 constexpr const char *kLoaderLibraryName = "libze_loader.so.1";
 #endif
 
-// Buffer size calculations
-constexpr size_t kMaxMetricBufferSize =
-    kMaxMetricSamples * kMaxMetricCountPerGroup * kTileCountPadding + kMaxBufferSizePadding;
-
 }  // namespace
-
-// Global mutex to serialize ALL zetContextActivateMetricGroups calls
-// This protects Level Zero driver's global state
-inline std::mutex g_context_activation_mutex;
 
 enum class ptiMetricProfilerState {
   PROFILER_DISABLED = 0,
@@ -104,6 +102,11 @@ struct pti_metrics_device_descriptor_t {
   // Atomic state - no mutex needed
   std::atomic<ptiMetricProfilerState> profiling_state_ = ptiMetricProfilerState::PROFILER_DISABLED;
 
+  // Per-device thread start synchronization (not shared across devices!)
+  std::mutex profiling_thread_start_mutex_;
+  std::condition_variable profiling_thread_start_cv_;
+  bool profiling_thread_initialized_ = false;  // Protected by profiling_thread_start_mutex_
+
   // Query-specific fields
   zet_metric_query_pool_handle_t query_pool_ = nullptr;
 };
@@ -122,8 +125,6 @@ class PtiMetricsProfiler {
   std::string data_dir_name_;
   // spdlogger for user specific log file
   std::shared_ptr<spdlog::logger> user_logger_;
-  // condition variable to wait for the profiling thread to start
-  std::condition_variable cv_thread_start_;
   // condition variable for the profiling thread to wait for the profiling state to change
   std::condition_variable cv_pause_;
 
@@ -145,7 +146,7 @@ class PtiMetricsProfiler {
     auto data_dir = utils::CreateTempDirectory();
 
     PTI_ASSERT(pti::utils::filesystem::exists(data_dir));
-    SPDLOG_INFO("Temp dir {}", data_dir.string());
+    SPDLOG_DEBUG("Temp dir {}", data_dir.string());
 
     data_dir_name_ = data_dir.generic_string();
 
@@ -158,6 +159,7 @@ class PtiMetricsProfiler {
     std::call_once(device_descriptors_initialized_, [this, device_handle, metrics_group_handle]() {
       EnumerateDevices(device_handle, metrics_group_handle);
     });
+    SPDLOG_DEBUG("Found {} devices for metrics profiling", device_descriptors_.size());
   }
 
   static uint64_t GetMaxMetricBufferSize() {
@@ -201,6 +203,49 @@ class PtiMetricsProfiler {
     }
   }
 
+ protected:
+  // Helper: Wait for a profiling thread to complete initialization
+  // Returns PTI_SUCCESS if thread initialized successfully, PTI_ERROR_DRIVER on failure
+  pti_result WaitForProfilingThreadInitialization(
+      std::shared_ptr<pti_metrics_device_descriptor_t> desc) {
+    // Wait with predicate to avoid lost wakeup
+    std::unique_lock<std::mutex> thread_start_lock(desc->profiling_thread_start_mutex_);
+    desc->profiling_thread_start_cv_.wait(
+        thread_start_lock, [&desc]() { return desc->profiling_thread_initialized_; });
+    thread_start_lock.unlock();
+
+    // Check if the profiling thread successfully initialized
+    ptiMetricProfilerState final_state = desc->profiling_state_.load(std::memory_order_acquire);
+
+    if (final_state == ptiMetricProfilerState::PROFILER_DISABLED) {
+      // Thread failed to initialize
+      SPDLOG_DEBUG("Profiling thread failed to initialize");
+      if (desc->profiling_thread_ && desc->profiling_thread_->joinable()) {
+        desc->profiling_thread_->join();
+        desc->profiling_thread_.reset();
+      }
+      return PTI_ERROR_DRIVER;
+    }
+
+    return PTI_SUCCESS;
+  }
+
+  // Helper: Signal that profiling thread has completed initialization (success or failure)
+  // Should be called by profiling thread after initialization attempt
+  static void SignalThreadInitialized(std::shared_ptr<pti_metrics_device_descriptor_t> desc,
+                                      ptiMetricProfilerState state) {
+    // Set state first
+    desc->profiling_state_.store(state, std::memory_order_release);
+
+    // Then set flag and notify under lock
+    {
+      std::lock_guard<std::mutex> lock(desc->profiling_thread_start_mutex_);
+      desc->profiling_thread_initialized_ = true;
+      desc->profiling_thread_start_cv_.notify_one();
+    }
+  }
+
+ public:
   virtual pti_result StartProfiling(bool start_paused) = 0;
 
   virtual pti_result PauseProfiling() {
@@ -210,7 +255,7 @@ class PtiMetricsProfiler {
         continue;
       }
       if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_ENABLED) {
-        SPDLOG_INFO("Pausing profiling");
+        SPDLOG_DEBUG("Pausing profiling");
         it->second->profiling_state_.store(ptiMetricProfilerState::PROFILER_PAUSED,
                                            std::memory_order_release);
       } else {
@@ -233,7 +278,7 @@ class PtiMetricsProfiler {
         continue;
       }
       if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_PAUSED) {
-        SPDLOG_INFO("Resume profiling");
+        SPDLOG_DEBUG("Resume profiling");
         it->second->profiling_state_.store(ptiMetricProfilerState::PROFILER_ENABLED,
                                            std::memory_order_release);
         cv_pause_.notify_one();
@@ -270,6 +315,7 @@ class PtiMetricsProfiler {
       // notifying that the state has changed
       cv_pause_.notify_one();
       it->second->profiling_thread_->join();
+      SPDLOG_DEBUG("Stopping profiling for device: {}", static_cast<const void *>(it->first));
       it->second->profiling_thread_.reset();
       it->second->metric_file_stream_.close();
     }
@@ -472,19 +518,18 @@ class PtiMetricsProfiler {
  protected:
   pti_result CollectionInitialize(std::shared_ptr<pti_metrics_device_descriptor_t> desc) {
     PTI_ASSERT(desc != nullptr);
-    ze_result_t status;
 
-    // Serialize access to zetContextActivateMetricGroups
-    {
-      std::lock_guard<std::mutex> lock(g_context_activation_mutex);
-      status =
-          zetContextActivateMetricGroups(desc->context_, desc->device_, 1, &(desc->metrics_group_));
-    }
+    SPDLOG_DEBUG("Activating metric groups for context: {}, for device: {}",
+                 static_cast<const void *>(desc->context_),
+                 static_cast<const void *>(desc->device_));
+    // Access to zetContextActivateMetricGroups for different contexts and devices
+    // shouldn't be serialized
+    ze_result_t status =
+        zetContextActivateMetricGroups(desc->context_, desc->device_, 1, &(desc->metrics_group_));
     if (status != ZE_RESULT_SUCCESS) {
       return PTI_ERROR_DRIVER;
     }
 
-    // Create an event pool for the device and context
     ze_event_pool_desc_t event_pool_desc = {ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
                                             ZE_EVENT_POOL_FLAG_HOST_VISIBLE, 1};
     status = zeEventPoolCreate(desc->context_, &event_pool_desc, 1, &(desc->device_),
@@ -492,12 +537,14 @@ class PtiMetricsProfiler {
     if (status != ZE_RESULT_SUCCESS) {
       return PTI_ERROR_DRIVER;
     }
-
-    // Create an event from the event pool
     ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, 0,
                                   ZE_EVENT_SCOPE_FLAG_HOST, ZE_EVENT_SCOPE_FLAG_HOST};
     status = zeEventCreate(desc->event_pool_, &event_desc, &(desc->event_));
     if (status != ZE_RESULT_SUCCESS) {
+      status = zeEventPoolDestroy(desc->event_pool_);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_DEBUG("Failed to destroy event pool after event creation failure");
+      }
       return PTI_ERROR_DRIVER;
     }
 
@@ -507,28 +554,22 @@ class PtiMetricsProfiler {
   pti_result CollectionFinalize(std::shared_ptr<pti_metrics_device_descriptor_t> desc) {
     PTI_ASSERT(desc != nullptr);
 
-    // Destroy the event
     ze_result_t status = zeEventDestroy(desc->event_);
     if (status != ZE_RESULT_SUCCESS) {
       return PTI_ERROR_DRIVER;
     }
-
-    // Destroy the event pool
     status = zeEventPoolDestroy(desc->event_pool_);
     if (status != ZE_RESULT_SUCCESS) {
       return PTI_ERROR_DRIVER;
     }
 
-    // Serialize access to zetContextActivateMetricGroups
-    {
-      std::lock_guard<std::mutex> lock(g_context_activation_mutex);
-
-      // Disactivate the metric groups
-      status =
-          zetContextActivateMetricGroups(desc->context_, desc->device_, 0, &(desc->metrics_group_));
-      if (status != ZE_RESULT_SUCCESS) {
-        return PTI_ERROR_DRIVER;
-      }
+    // Access to zetContextActivateMetricGroups for different contexts and devices
+    // shouldn't be serialized
+    // Disactivate the metric groups
+    status =
+        zetContextActivateMetricGroups(desc->context_, desc->device_, 0, &(desc->metrics_group_));
+    if (status != ZE_RESULT_SUCCESS) {
+      return PTI_ERROR_DRIVER;
     }
 
     return PTI_SUCCESS;
@@ -537,12 +578,12 @@ class PtiMetricsProfiler {
   void SaveRawData(std::shared_ptr<pti_metrics_device_descriptor_t> desc, uint8_t *storage,
                    size_t data_size, bool immediate_save_to_disc) {
     if (data_size != 0) {
-      // Save the date to local memory
+      // Save the data to memory buffer
       desc->metric_data_.insert(desc->metric_data_.end(), storage, storage + data_size);
       desc->capture_count_++;  // per-device
     }
 
-    // Save local memory to cache file if there is something to write and
+    // Save memory buffer to cache file if there is something to write and
     // either we need an immediate save to disc or
     // the local buffer is getting too big after a few captures or
     // no data was captured from the hw buffer
@@ -588,6 +629,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
   ~PtiStreamMetricsProfiler() {}
 
   pti_result StartProfiling(bool start_paused) {
+    PTI_ASSERT(device_descriptors_.size() == 1);
     for (auto it = device_descriptors_.begin(); it != device_descriptors_.end(); ++it) {
       if (it->second->parent_device_ != nullptr) {
         // subdevice
@@ -609,16 +651,16 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
         return PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED;
       }
 
+      // Reset initialization flag before launching thread
+      it->second->profiling_thread_initialized_ = false;
       it->second->profiling_thread_ = std::make_unique<std::thread>(
           &PtiStreamMetricsProfiler::PerDeviceStreamMetricsProfilingThread, this, it->second,
           sampling_interval_, start_paused);
 
-      // Wait for the profiling thread to start
-      std::mutex thread_start_mutex;
-      std::unique_lock thread_start_lock(thread_start_mutex);
-      while (it->second->profiling_state_.load(std::memory_order_acquire) ==
-             ptiMetricProfilerState::PROFILER_DISABLED) {
-        cv_thread_start_.wait(thread_start_lock);
+      // Wait for thread initialization and check result
+      pti_result result = WaitForProfilingThreadInitialization(it->second);
+      if (result != PTI_SUCCESS) {
+        return result;
       }
     }
     return PTI_SUCCESS;
@@ -869,12 +911,16 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
     size_t data_size = ssize;
     status = zetMetricStreamerReadData(streamer, UINT32_MAX, &data_size, storage);
     if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
-      SPDLOG_DEBUG("Metric samples dropped.");
+      SPDLOG_WARN("Metric samples dropped.");
     } else if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_DEBUG("zetMetricStreamerReadData failed with error code {:x}",
-                   static_cast<std::size_t>(status));
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      SPDLOG_WARN(
+          "zetMetricStreamerReadData failed with error code {:x}, ssize:{}, data_size: {}, dev "
+          "handler {}",
+          static_cast<std::size_t>(status), ssize, data_size,
+          static_cast<const void *>(device_descriptors_.begin()->first));
     }
+    SPDLOG_DEBUG("Read {} bytes of raw metric data from the metric streamer for device: {}",
+                 data_size, static_cast<const void *>(desc->device_));
 
     SaveRawData(std::move(desc), storage, data_size, immediate_save_to_disc);
   }
@@ -886,15 +932,21 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
 
     ze_result_t status = zeEventQueryStatus(desc->event_);
     if (!(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY)) {
-      SPDLOG_DEBUG("zeEventQueryStatus failed with error code: 0x{:x}",
-                   static_cast<std::size_t>(status));
+      SPDLOG_WARN("zeEventQueryStatus failed with error code: 0x{:x}",
+                  static_cast<std::size_t>(status));
     }
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY);
 
     if (status == ZE_RESULT_SUCCESS) {
       status = zeEventHostReset(desc->event_);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_WARN("zeEventHostReset failed with error code {:x}",
+                    static_cast<std::size_t>(status));
+      }
+      SPDLOG_DEBUG("New data is ready to read from the metric streamer for device: {}",
+                   static_cast<const void *>(desc->device_));
     } else { /* ZE_RESULT_NOT_READY */
+      SPDLOG_DEBUG("No new data to read from the metric streamer for device: {}",
+                   static_cast<const void *>(desc->device_));
       return;
     }
     bool immediate_save_to_disc = false;
@@ -909,8 +961,6 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
 
     pti_result result = CollectionInitialize(desc);
     PTI_ASSERT(result == PTI_SUCCESS);
-
-    zet_metric_streamer_handle_t streamer = nullptr;
 
     uint32_t interval = (sampling_interval == 0) ? kDefaultSamplingIntervalNs : sampling_interval;
     // TODO: Should there be a min and/or max?
@@ -927,14 +977,41 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
 
     std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());
 
+    zet_metric_streamer_handle_t streamer = nullptr;
     bool streamer_open = false;
     ptiMetricProfilerState profiling_state = start_paused
                                                  ? ptiMetricProfilerState::PROFILER_PAUSED
                                                  : ptiMetricProfilerState::PROFILER_ENABLED;
-    desc->profiling_state_.store(profiling_state, std::memory_order_release);
 
-    // Unblock main thread
-    cv_thread_start_.notify_one();
+    // Try to open the streamer before notifying the main thread
+    // Only notify after we know if the streamer opened successfully
+    if (!start_paused) {
+      SPDLOG_DEBUG("Opening metric streamer for device: {}",
+                   static_cast<const void *>(desc->device_));
+      status = zetMetricStreamerOpen(desc->context_, desc->device_, desc->metrics_group_,
+                                     &streamer_desc, desc->event_, &streamer);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_DEBUG(
+            "Failed to open metric streamer during initialization. The sampling interval might be "
+            "too small. UMD driver returned {:x}",
+            static_cast<std::size_t>(status));
+#ifndef _WIN32
+        SPDLOG_DEBUG(
+            "Set the paranoid to 0, depending on Intel GPU kernel mode driver(s): i915 or Xe\n"
+            "/proc/sys/dev/i915/perf_stream_paranoid\n"
+            "/proc/sys/dev/xe/observation_paranoid\n"
+            "(Set whichever applicable to the system)");
+#endif /* _WIN32 */
+        // Signal failure to main thread by keeping state as DISABLED
+        SignalThreadInitialized(desc, ptiMetricProfilerState::PROFILER_DISABLED);
+        result = CollectionFinalize(std::move(desc));
+        return;
+      }
+      streamer_open = true;
+    }
+
+    // Signal successful initialization to main thread
+    SignalThreadInitialized(desc, profiling_state);
 
     bool immediate_save_to_disc = true;
     while (desc->profiling_state_.load(std::memory_order_acquire) !=
@@ -964,6 +1041,8 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       } else {  // PROFILER_ENABLED
         // open the streamer when profiler is enabled
         if (streamer_open == false) {
+          SPDLOG_DEBUG("Opening metric streamer for device: {}",
+                       static_cast<const void *>(desc->device_));
           status = zetMetricStreamerOpen(desc->context_, desc->device_, desc->metrics_group_,
                                          &streamer_desc, desc->event_, &streamer);
           if (status != ZE_RESULT_SUCCESS) {
@@ -995,6 +1074,8 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       CaptureRawMetrics(streamer, raw_metrics.data(), PtiMetricsProfiler::GetMaxMetricBufferSize(),
                         desc, immediate_save_to_disc);
 
+      SPDLOG_DEBUG("Closing metric streamer for device: {}",
+                   static_cast<const void *>(desc->device_));
       status = zetMetricStreamerClose(streamer);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
     }
@@ -1524,16 +1605,16 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
         return PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED;
       }
 
+      // Reset initialization flag before launching thread
+      it->second->profiling_thread_initialized_ = false;
       it->second->profiling_thread_ = std::make_unique<std::thread>(
           &PtiTraceMetricsProfiler::PerDeviceTraceMetricsProfilingThread, this, it->second,
           &(this->metric_decoder_), start_paused);
 
-      // Wait for the profiling thread to start
-      std::mutex thread_start_mutex;
-      std::unique_lock thread_start_lock(thread_start_mutex);
-      while (it->second->profiling_state_.load(std::memory_order_acquire) ==
-             ptiMetricProfilerState::PROFILER_DISABLED) {
-        cv_thread_start_.wait(thread_start_lock);
+      // Wait for thread initialization and check result
+      pti_result result = WaitForProfilingThreadInitialization(it->second);
+      if (result != PTI_SUCCESS) {
+        return result;
       }
     }
     return PTI_SUCCESS;
@@ -1823,9 +1904,25 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
     tracer_desc.pNext = nullptr;
     tracer_desc.notifyEveryNBytes = max_metric_samples_;
 
+    bool tracer_enabled = false;
+    ptiMetricProfilerState profiling_state = start_paused
+                                                 ? ptiMetricProfilerState::PROFILER_PAUSED
+                                                 : ptiMetricProfilerState::PROFILER_ENABLED;
+
+    // Try to create the tracer before notifying the main thread
+    // Only notify after we know if the tracer was created successfully
     status = tf.zetMetricTracerCreateExp(desc->context_, desc->device_, 1, &(desc->metrics_group_),
                                          &tracer_desc, desc->event_, &tracer);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG(
+          "Failed to create metric tracer during initialization. "
+          "UMD driver returned {:x}",
+          static_cast<std::size_t>(status));
+      // Signal failure to main thread by keeping state as DISABLED
+      SignalThreadInitialized(desc, ptiMetricProfilerState::PROFILER_DISABLED);
+      result = CollectionFinalize(std::move(desc));
+      return;
+    }
 
     // TODO: check if notifyEveryNBytes works well with max_metric_samples_ for tracer
     if (tracer_desc.notifyEveryNBytes > max_metric_samples_) {
@@ -1837,14 +1934,8 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
 
     std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());
 
-    bool tracer_enabled = false;
-    ptiMetricProfilerState profiling_state = start_paused
-                                                 ? ptiMetricProfilerState::PROFILER_PAUSED
-                                                 : ptiMetricProfilerState::PROFILER_ENABLED;
-    desc->profiling_state_.store(profiling_state, std::memory_order_release);
-
-    // Unblock the main thread
-    cv_thread_start_.notify_one();
+    // Signal successful initialization to main thread
+    SignalThreadInitialized(desc, profiling_state);
 
     bool immediate_save_to_disc = true;
     while (desc->profiling_state_.load(std::memory_order_acquire) !=
@@ -1963,6 +2054,13 @@ class PtiMetricsCollectorHandler {
     // Initialize devices during construction
     if (l0_initialized && metrics_enabled) {
       devices_ = utils::ze::GetDeviceList(init_drivers.Drivers());
+      // Remove duplicates while preserving order (O(n) using unordered_set)
+      std::unordered_set<ze_device_handle_t> seen;
+      auto end = std::remove_if(
+          devices_.begin(), devices_.end(),
+          [&seen](ze_device_handle_t device) { return !seen.insert(device).second; });
+      devices_.erase(end, devices_.end());
+      SPDLOG_DEBUG("In {} found {} devices", __func__, devices_.size());
 
       // Pre-populate device mutexes and metric groups for all devices
       for (auto device : devices_) {
@@ -2031,7 +2129,7 @@ class PtiMetricsCollectorHandler {
     // TODO: Do full discovery instead of using the first GPU driver instance.
     ze_driver_handle_t driver = utils::ze::GetGpuDriver(0);
     if (loader_lib_ == nullptr || driver == nullptr) {
-      SPDLOG_INFO("Could not enable trace metrics");
+      SPDLOG_WARN("Could not enable trace metrics");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2040,7 +2138,7 @@ class PtiMetricsCollectorHandler {
                             loader_lib_, "zetMetricTracerCreateExp",
                             reinterpret_cast<void **>(&tf.zetMetricTracerCreateExp))) ||
         tf.zetMetricTracerCreateExp == nullptr) {
-      SPDLOG_INFO("the zetMetricTracerCreateExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetMetricTracerCreateExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2048,7 +2146,7 @@ class PtiMetricsCollectorHandler {
                             loader_lib_, "zetMetricTracerDestroyExp",
                             reinterpret_cast<void **>(&tf.zetMetricTracerDestroyExp))) ||
         (tf.zetMetricTracerDestroyExp == nullptr)) {
-      SPDLOG_INFO("the zetMetricTracerDestroyExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetMetricTracerDestroyExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2056,7 +2154,7 @@ class PtiMetricsCollectorHandler {
                             loader_lib_, "zetMetricTracerEnableExp",
                             reinterpret_cast<void **>(&tf.zetMetricTracerEnableExp))) ||
         (tf.zetMetricTracerEnableExp == nullptr)) {
-      SPDLOG_INFO("the zetMetricTracerEnableExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetMetricTracerEnableExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2064,7 +2162,7 @@ class PtiMetricsCollectorHandler {
                             loader_lib_, "zetMetricTracerDisableExp",
                             reinterpret_cast<void **>(&tf.zetMetricTracerDisableExp))) ||
         (tf.zetMetricTracerDisableExp == nullptr)) {
-      SPDLOG_INFO("the zetMetricTracerDisableExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetMetricTracerDisableExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2072,7 +2170,7 @@ class PtiMetricsCollectorHandler {
                             loader_lib_, "zetMetricTracerReadDataExp",
                             reinterpret_cast<void **>(&tf.zetMetricTracerReadDataExp))) ||
         (tf.zetMetricTracerReadDataExp == nullptr)) {
-      SPDLOG_INFO("the zetMetricTracerReadDataExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetMetricTracerReadDataExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2080,7 +2178,7 @@ class PtiMetricsCollectorHandler {
                             loader_lib_, "zetMetricDecoderCreateExp",
                             reinterpret_cast<void **>(&tf.zetMetricDecoderCreateExp))) ||
         (tf.zetMetricDecoderCreateExp == nullptr)) {
-      SPDLOG_INFO("the zetMetricDecoderCreateExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetMetricDecoderCreateExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2088,7 +2186,7 @@ class PtiMetricsCollectorHandler {
                             loader_lib_, "zetMetricDecoderDestroyExp",
                             reinterpret_cast<void **>(&tf.zetMetricDecoderDestroyExp))) ||
         (tf.zetMetricDecoderDestroyExp == nullptr)) {
-      SPDLOG_INFO("the zetMetricDecoderDestroyExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetMetricDecoderDestroyExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2096,7 +2194,7 @@ class PtiMetricsCollectorHandler {
                             loader_lib_, "zetMetricTracerDecodeExp",
                             reinterpret_cast<void **>(&tf.zetMetricTracerDecodeExp))) ||
         (tf.zetMetricTracerDecodeExp == nullptr)) {
-      SPDLOG_INFO("the zetMetricTracerDecodeExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetMetricTracerDecodeExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2105,7 +2203,7 @@ class PtiMetricsCollectorHandler {
              loader_lib_, "zetMetricDecoderGetDecodableMetricsExp",
              reinterpret_cast<void **>(&tf.zetMetricDecoderGetDecodableMetricsExp))) ||
         (tf.zetMetricDecoderGetDecodableMetricsExp == nullptr)) {
-      SPDLOG_INFO("the zetMetricDecoderGetDecodableMetricsExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetMetricDecoderGetDecodableMetricsExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2115,7 +2213,7 @@ class PtiMetricsCollectorHandler {
              driver, "zetIntelMetricCalculateOperationCreateExp",
              reinterpret_cast<void **>(&tf.zetIntelMetricCalculateOperationCreateExp))) ||
         (tf.zetIntelMetricCalculateOperationCreateExp == nullptr)) {
-      SPDLOG_INFO("the zetIntelMetricCalculateOperationCreateExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetIntelMetricCalculateOperationCreateExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2124,7 +2222,7 @@ class PtiMetricsCollectorHandler {
              driver, "zetIntelMetricCalculateOperationDestroyExp",
              reinterpret_cast<void **>(&tf.zetIntelMetricCalculateOperationDestroyExp))) ||
         (tf.zetIntelMetricCalculateOperationDestroyExp == nullptr)) {
-      SPDLOG_INFO("the zetIntelMetricCalculateOperationDestroyExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetIntelMetricCalculateOperationDestroyExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2133,7 +2231,7 @@ class PtiMetricsCollectorHandler {
              driver, "zetIntelMetricCalculateGetReportFormatExp",
              reinterpret_cast<void **>(&tf.zetIntelMetricCalculateGetReportFormatExp))) ||
         (tf.zetIntelMetricCalculateGetReportFormatExp == nullptr)) {
-      SPDLOG_INFO("the zetIntelMetricCalculateGetReportFormatExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetIntelMetricCalculateGetReportFormatExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2142,7 +2240,7 @@ class PtiMetricsCollectorHandler {
              driver, "zetIntelMetricDecodeCalculateMultipleValuesExp",
              reinterpret_cast<void **>(&tf.zetIntelMetricDecodeCalculateMultipleValuesExp))) ||
         (tf.zetIntelMetricDecodeCalculateMultipleValuesExp == nullptr)) {
-      SPDLOG_INFO("the zetIntelMetricDecodeCalculateMultipleValuesExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetIntelMetricDecodeCalculateMultipleValuesExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 
@@ -2151,7 +2249,7 @@ class PtiMetricsCollectorHandler {
              driver, "zetIntelMetricDecodeToBinaryBufferExp",
              reinterpret_cast<void **>(&tf.zetIntelMetricDecodeToBinaryBufferExp))) ||
         (tf.zetIntelMetricDecodeToBinaryBufferExp == nullptr)) {
-      SPDLOG_INFO("the zetIntelMetricDecodeToBinaryBufferExp symbol could not be loaded");
+      SPDLOG_DEBUG("the zetIntelMetricDecodeToBinaryBufferExp symbol could not be loaded");
       return PTI_ERROR_DRIVER;
     }
 

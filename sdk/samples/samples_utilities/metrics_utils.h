@@ -275,8 +275,7 @@ class MetricsProfiler {
     // Iterate through devices
     for (uint32_t i = 0; i < device_count; i++) {
       devices_[device_buffer[i]._handle] = device_buffer[i];
-      out << "\nDEVICE(" << i << ")"
-          << "-> handle: "
+      out << "\nDEVICE(" << i << ")" << "-> handle: "
           << std::to_string((unsigned long long)(void **)(device_buffer[i]._handle))
           << " | model name: " << device_buffer[i]._model_name << " | dbdf: ["
           << +device_buffer[i]._address._domain << ":" << +device_buffer[i]._address._bus << ":"
@@ -306,8 +305,7 @@ class MetricsProfiler {
 
       // Iterate through metric groups
       for (uint32_t j = 0; j < group_count; j++) {
-        out << "\t METRIC GROUP(" << j << ")"
-            << "-> handle: "
+        out << "\t METRIC GROUP(" << j << ")" << "-> handle: "
             << std::to_string((unsigned long long)(void **)(groups_buffer[j]._handle))
             << " | name: " << groups_buffer[j]._name
             << " | description: " << groups_buffer[j]._description << std::endl
@@ -338,8 +336,7 @@ class MetricsProfiler {
         groups_[groups_buffer[j]._handle] = groups_buffer[j];
         // Iterate through metrics
         for (uint32_t k = 0; k < groups_buffer[j]._metric_count; k++) {
-          out << "\t\t\t METRIC(" << k << ")"
-              << "-> handle: "
+          out << "\t\t\t METRIC(" << k << ")" << "-> handle: "
               << std::to_string(
                      (unsigned long long)(void **)(groups_buffer[j]._metric_properties[k]._handle))
               << " | name: " << groups_buffer[j]._metric_properties[k]._name
@@ -483,14 +480,15 @@ class MetricsProfiler {
   //  if fine_name is empty, function will log to std out
   bool GetCalculatedData(bool log_data = false, std::string filename = std::string()) {
     if (configured_device_handle_ == nullptr) {
-      std::cerr << "Failed to start collection" << std::endl;
+      std::cerr << "In " << __func__ << ", configured_device_handle_ is null" << std::endl;
       return false;
     }
     uint32_t total_values_count = 0;
     pti_result result = ptiMetricsGetCalculatedData(
         configured_device_handle_, configured_group_handle_, nullptr, &total_values_count);
     if (result != PTI_SUCCESS || total_values_count == 0) {
-      std::cerr << "Failed to get required buffer size to dump collected data on specified device"
+      std::cerr << "In " << __func__ << ", ptiMetricsGetCalculatedData returned "
+                << ptiResultTypeToString(result) << ",  total_values_count = " << total_values_count
                 << std::endl;
       return false;
     }
@@ -501,7 +499,9 @@ class MetricsProfiler {
                                          metrics_values_buffer.data(), &total_values_count);
 
     if (result != PTI_SUCCESS || total_values_count == 0 || metrics_values_buffer.empty()) {
-      std::cerr << "Failed to capture collected data" << std::endl;
+      std::cerr << "In " << __func__ << ", failed to capture collected data, "
+                << "ptiMetricsGetCalculatedData returned " << ptiResultTypeToString(result)
+                << std::endl;
       return false;
     }
 

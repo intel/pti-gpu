@@ -26,7 +26,7 @@ jobs:
   sdk-build-and-test:
     name: Test PTI ${{ matrix.os_id }} ${{ matrix.tags }}
 
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     runs-on: ${{ fromJSON(matrix.tags) }}
     defaults:
@@ -47,7 +47,7 @@ jobs:
 
     container:
       image: ${{ matrix.container }}
-      options: --device=/dev/dri --cap-add CAP_PERFMON
+      options: --device=/dev/dri --cap-add CAP_PERFMON --shm-size=24G
       credentials:
         username: ${{ vars.PTI_DOCKER_USER }}
         password: ${{ secrets.PTI_DOCKER_PWD }}

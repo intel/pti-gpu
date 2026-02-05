@@ -460,6 +460,7 @@ if(HAVE_SYCL)
     DISCOVERY_TIMEOUT 60
     PROPERTIES
         ENVIRONMENT ZET_ENABLE_METRICS=1
+        TIMEOUT 20
         LABELS "functional"
         LABELS "metrics"
         LABELS "hw-metrics-multi-thread")
@@ -765,7 +766,7 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   # TODO(PTI-354): Re-enable test when it stops being flaky or hanging.
   set_tests_properties(
     run-metrics-iso PROPERTIES ENVIRONMENT "ZET_ENABLE_METRICS=1" LABELS
-    "functional;samples;metrics;hw-metrics" DISABLED TRUE)
+    "functional;samples;metrics;hw-metrics")
 
   set_tests_properties(
     mt-awk-test mt-awk-test-immediate run-dlworkload run-dpc_gemm run-onemkl_gemm_exe run-vec_sqadd

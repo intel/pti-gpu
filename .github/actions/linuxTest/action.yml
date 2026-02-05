@@ -20,8 +20,7 @@ runs:
       run: |
         source /opt/intel/oneapi/setvars.sh
 
-        # TODO(PTI-353)
-        ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance -E "MetricsMultiThreadingTest.ConcurrentStartCollectionDifferentDevices|MetricsMultiThreadingTest.ConcurrentCollectionManagement"
+        ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance
 
     - name: Quarantined tests # flaky tests
       continue-on-error: true
@@ -37,13 +36,3 @@ runs:
           echo "Test status: 1"
           echo "::warning::Performance tests failed"
         fi
-
-        # TODO(PTI-353)
-        if ctest --output-on-failure --preset ${{ inputs.preset }} -R "MetricsMultiThreadingTest.ConcurrentStartCollectionDifferentDevices|MetricsMultiThreadingTest.ConcurrentCollectionManagement"; then
-          echo "Test status: 0"
-          echo "Quarantined tests pass"
-        else
-          echo "Test status: 1"
-          echo "::warning::Quarantined tests failed"
-        fi
-        exit 0
