@@ -106,8 +106,8 @@ if(NOT TARGET Xpti::xpti)
   find_package(Xpti)
 endif()
 
-set(PTI_L0_LOADER 1.26.3)
-set(PTI_L0_LOADER_COMMIT_HASH "354190cd2e7aa485b55a39c91d108413a94cc5e1")
+set(PTI_L0_LOADER 1.28.0)
+set(PTI_L0_LOADER_COMMIT_HASH "2938500a6c080b5b9c4b5f013e02af2cdd27d994")
 
 if(NOT TARGET LevelZero::level-zero)
   find_package(LevelZero ${PTI_L0_LOADER})

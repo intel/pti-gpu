@@ -1440,6 +1440,22 @@ TEST_F(ClassApiFixtureTest, ValidateApiIdsNotChanged) {
   EXPECT_EQ((std::strcmp(api_name, "zeCommandListAppendLaunchKernelWithArguments") == 0), true);
   PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 210, &api_name));
   EXPECT_EQ((std::strcmp(api_name, "zeKernelGetAllocationPropertiesExp") == 0), true);
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 211, &api_name));
+  EXPECT_STREQ(api_name, "zeDeviceGetAggregatedCopyOffloadIncrementValue");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 212, &api_name));
+  EXPECT_STREQ(api_name, "zeEventCounterBasedCreate");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 213, &api_name));
+  EXPECT_STREQ(api_name, "zeEventCounterBasedGetIpcHandle");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 214, &api_name));
+  EXPECT_STREQ(api_name, "zeEventCounterBasedOpenIpcHandle");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 215, &api_name));
+  EXPECT_STREQ(api_name, "zeEventCounterBasedCloseIpcHandle");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 216, &api_name));
+  EXPECT_STREQ(api_name, "zeEventCounterBasedGetDeviceAddress");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 217, &api_name));
+  EXPECT_STREQ(api_name, "zeMemGetIpcHandleWithProperties");
+  PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_LEVELZERO, 218, &api_name));
+  EXPECT_STREQ(api_name, "zePhysicalMemGetProperties");
 }
 
 // Force failure of granular api with incorrect api_ids and ensure error code returned.
