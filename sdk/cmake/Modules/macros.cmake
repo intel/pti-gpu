@@ -168,8 +168,8 @@ macro(GetSpdlog)
   endif()
 endmacro()
 
-set(GetGTest_URL "https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz")
-set(GetGTest_SHA256 "7b42b4d6ed48810c5362c265a17faebe90dc2373c885e5216439d37927f02926")
+set(GetGTest_URL "https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz")
+set(GetGTest_SHA256 "65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c")
 macro(GetGTest)
   if(NOT TARGET GTest::gtest OR NOT TARGET GTest::gtest_main)
     include(FetchContent)
@@ -199,11 +199,9 @@ macro(GetGTest)
 
     set(PTI_GTEST_COMPILE_OPTIONS
       $<$<OR:$<CXX_COMPILER_ID:IntelLLVM>,$<CXX_COMPILER_ID:Clang>>:
-        $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:
           -Wno-deprecated-declarations
           -Wno-character-conversion
           -Wno-unknown-warning-option
-        >
       >
       $<$<CXX_COMPILER_ID:MSVC>:/wd6239 /wd6031 /wd6387>
     )
