@@ -176,8 +176,10 @@ endif()
 if (BUILD_WITH_OPENCL)
   FindOpenCLLibrary(unitrace_tool)
   FindOpenCLHeaders(unitrace_tool)
-  GetOpenCLTracingHeaders(unitrace_tool)
 endif()
+
+# GetComputeRuntimeHeaders is needed for both OpenCL tracing and Level Zero extension APIs
+GetComputeRuntimeHeaders(unitrace_tool)
 
 set (LEVEL_ZERO_COMMIT_ID "v1.26.0")
 GetLevelZeroHeaders(unitrace_tool)
@@ -186,19 +188,12 @@ FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_common_
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_callbacks.py" "tracing.gen" gen_tracing_header)
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_l0_loader.py" "l0_loader.gen" gen_l0_loader_header)
 
-if (TARGET cl_tracing_headers)
-  add_dependencies(gen_common_header
-      cl_tracing_headers)
-  add_dependencies(gen_tracing_header
-      cl_tracing_headers)
-endif()
-
-if(WIN32)
-  add_dependencies(gen_common_header
-    level_zero_headers)
-  add_dependencies(gen_tracing_header
-    level_zero_headers)
-endif()
+# gen_l0_loader_header needs extensions from compute_runtime_headers
+add_dependencies(gen_l0_loader_header compute_runtime_headers)
+# gen_tracing_header needs extensions from compute_runtime_headers for extension API tracing
+add_dependencies(gen_tracing_header compute_runtime_headers)
+# gen_common_header needs CL tracing headers from compute_runtime_headers
+add_dependencies(gen_common_header compute_runtime_headers)
 
 target_include_directories(unitrace_tool PRIVATE "${L0_INC_PATH}")
 
@@ -295,10 +290,12 @@ if(NOT LOWER_CMAKE_BUILD_TYPE STREQUAL "debug")
   if(UNIX)
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "rm" "-rf" "common_header.gen")
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "rm" "-rf" "tracing.gen")
+    add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "rm" "-rf" "tracing.gen.types")
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "rm" "-rf" "l0_loader.gen")
   else()
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "del" "common_header.gen")
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "del" "tracing.gen")
+    add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "del" "tracing.gen.types")
     add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "del" "l0_loader.gen")
   endif()
 endif()

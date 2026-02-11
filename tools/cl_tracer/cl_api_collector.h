@@ -49,10 +49,10 @@ typedef void (*OnClFunctionFinishCallback)(
 class ClApiCollector;
 
 void OnEnterFunction(
-    cl_function_id function, cl_callback_data* data,
+    ClFunctionId function, cl_callback_data* data,
     uint64_t start, ClApiCollector* collector);
 void OnExitFunction(
-    cl_function_id function, cl_callback_data* data,
+    ClFunctionId function, cl_callback_data* data,
     uint64_t start, uint64_t end, ClApiCollector* collector);
 
 class ClApiCollector {
@@ -199,8 +199,13 @@ class ClApiCollector {
     tracer_ = tracer;
 
     for (int id = 0; id < CL_FUNCTION_COUNT; ++id) {
-      bool set = tracer_->SetTracingFunction(static_cast<cl_function_id>(id));
-      PTI_ASSERT(set);
+      bool set = tracer_->SetTracingFunction(static_cast<ClFunctionId>(id));
+      // Older runtime versions may not support newer function IDs.
+      // Core APIs (id <= CL_FUNCTION_clWaitForEvents) must always succeed.
+      if (!set) {
+        PTI_ASSERT(id > CL_FUNCTION_clWaitForEvents);
+        break;
+      }
     }
 
     bool enabled = tracer_->Enable();
@@ -231,7 +236,7 @@ class ClApiCollector {
 
  private: // Callbacks
   static void Callback(
-      cl_function_id function,
+      ClFunctionId function,
       cl_callback_data* callback_data,
       void* user_data) {
     if (TraceGuard::Inactive()) return;

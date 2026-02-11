@@ -486,7 +486,7 @@ class ClMetricCollector {
   }
 
   static void Callback(
-      cl_function_id function,
+      ClFunctionId function,
       cl_callback_data* callback_data,
       void* user_data) {
     if (TraceGuard::Inactive() > 0) return;

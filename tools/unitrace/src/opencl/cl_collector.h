@@ -203,8 +203,8 @@ inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
   return nullptr;
 }
 
-void OnEnterFunction(cl_function_id function, cl_callback_data* data, uint64_t start, ClCollector* collector);
-void OnExitFunction(cl_function_id function, cl_callback_data* data, uint64_t start, uint64_t end, ClCollector* collector);
+void OnEnterFunction(ClFunctionId function, cl_callback_data* data, uint64_t start, ClCollector* collector);
+void OnExitFunction(ClFunctionId function, cl_callback_data* data, uint64_t start, uint64_t end, ClCollector* collector);
 
 template <cl_device_type device_type>
 void *clHostMemAllocINTEL(cl_context context, const cl_mem_properties_intel *properties, size_t size, cl_uint alignment, cl_int *errcode_ret);
@@ -854,8 +854,13 @@ class ClCollector {
 
     for (int id = 0; id < CL_FUNCTION_COUNT; ++id) {
       if (options_.api_tracing || (kernel_tracing_points_enabled[id] && options_.kernel_tracing)) {
-        bool set = tracer->SetTracingFunction(static_cast<cl_function_id>(id));
-        PTI_ASSERT(set);
+        bool set = tracer->SetTracingFunction(static_cast<ClFunctionId>(id));
+        // Older runtime versions may not support newer function IDs.
+        // Core APIs (id <= CL_FUNCTION_clWaitForEvents) must always succeed.
+        if (!set) {
+          PTI_ASSERT(id > CL_FUNCTION_clWaitForEvents);
+          break;
+        }
       }
     }
 
@@ -868,8 +873,13 @@ class ClCollector {
 
     for (int id = 0; id < CL_FUNCTION_COUNT; ++id) {
       if (kernel_tracing_points_enabled[id]) {
-        bool set = tracer->SetTracingFunction(static_cast<cl_function_id>(id));
-        PTI_ASSERT(set);
+        bool set = tracer->SetTracingFunction(static_cast<ClFunctionId>(id));
+        // Older runtime versions may not support newer function IDs.
+        // Core APIs (id <= CL_FUNCTION_clWaitForEvents) must always succeed.
+        if (!set) {
+          PTI_ASSERT(id > CL_FUNCTION_clWaitForEvents);
+          break;
+        }
       }
     }
 
@@ -1280,7 +1290,8 @@ class ClCollector {
       reinterpret_cast<const cl_params_clCreateCommandQueue*>(
           data->functionParams);
     PTI_ASSERT(params != nullptr);
-    *(params->properties) |=
+    // Cast away const to modify properties - needed to enable profiling for timing
+    *const_cast<cl_command_queue_properties*>(params->properties) |=
       static_cast<unsigned long>(CL_QUEUE_PROFILING_ENABLE);
   }
 
@@ -1698,7 +1709,7 @@ class ClCollector {
     }
   }
 
-  static void KernelTracingCallBackOnEnter(cl_function_id function, ClCollector *collector, cl_callback_data *callback_data, uint64_t * /* kid */) {
+  static void KernelTracingCallBackOnEnter(ClFunctionId function, ClCollector *collector, cl_callback_data *callback_data, uint64_t * /* kid */) {
     switch (function) {
       case CL_FUNCTION_clCreateCommandQueueWithProperties:
         OnEnterCreateCommandQueueWithProperties(callback_data, collector);
@@ -1761,7 +1772,7 @@ class ClCollector {
     }
   }
 
-  static void KernelTracingCallBackOnExit(cl_function_id function, ClCollector *collector, cl_callback_data *callback_data, uint64_t *kid) {
+  static void KernelTracingCallBackOnExit(ClFunctionId function, ClCollector *collector, cl_callback_data *callback_data, uint64_t *kid) {
     switch(function) {
       case CL_FUNCTION_clCreateCommandQueueWithProperties:
         OnExitCreateCommandQueueWithProperties(callback_data, collector);
@@ -1826,7 +1837,7 @@ class ClCollector {
     }
   }
 
-  static void TracingCallBack(cl_function_id function, cl_callback_data* callback_data, void* user_data) {
+  static void TracingCallBack(ClFunctionId function, cl_callback_data* callback_data, void* user_data) {
     if (IsTracingNow()) {
       // no recursive tracing
       return;

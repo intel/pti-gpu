@@ -1227,6 +1227,21 @@ inline ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t
   
 }
 
+// Forward declaration for global collector pointer
+class ZeCollector;
+
+// Global collector pointer for extension API wrappers
+static ZeCollector* s_global_ze_collector_ = nullptr;
+
+static void SetGlobalZeCollector(ZeCollector* collector) {
+  if (collector != nullptr && s_global_ze_collector_ != nullptr) {
+    std::cerr << "[ERROR] SetGlobalZeCollector: global pointer is already set. "
+              << "Only one ZeCollector per process is supported." << std::endl;
+    return;
+  }
+  s_global_ze_collector_ = collector;
+}
+
 class ZeCollector {
  private:
     // Helpers
@@ -1340,6 +1355,9 @@ class ZeCollector {
 
     collector->tracer_ = tracer;
 
+    // Initialize extension API tracing (graph APIs, etc.)
+    SetGlobalZeCollector(collector);
+
     return collector;
   }
 
@@ -1360,6 +1378,9 @@ class ZeCollector {
 #endif /* _WIN32 */
       }
     }
+
+    // Reset the global collector pointer for extension API tracing
+    SetGlobalZeCollector(nullptr);
 
     global_device_submissions_mutex_.lock();
     if (global_device_submissions_) {
@@ -3151,6 +3172,8 @@ class ZeCollector {
 
  private: // Callbacks
 
+  #include <tracing.gen.types> // Auto-generated types for callbacks
+
   static void OnEnterEventPoolCreate(ze_event_pool_create_params_t *params, void * /* global_data */, void **instance_data) {
     const ze_event_pool_desc_t* desc = *(params->pdesc);
     if (desc == nullptr) {
@@ -3231,6 +3254,19 @@ class ZeCollector {
       if (collector->counter_based_pools_.find(*params->phEventPool) != collector->counter_based_pools_.end()) {
         collector->counter_based_events_.insert(**params->pphEvent);
       }
+      collector->events_mutex_.unlock();
+    }
+  }
+
+  static void OnExitCounterBasedEventCreate2(
+      ze_x_counter_based_event_create2_params_t *params,
+      ze_result_t result,
+      void* global_data,
+      void** /* instance_data */) {
+    if (result == ZE_RESULT_SUCCESS && params->pphEvent && *params->pphEvent) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+      collector->events_mutex_.lock();
+      collector->counter_based_events_.insert(**params->pphEvent);
       collector->events_mutex_.unlock();
     }
   }
@@ -4902,7 +4938,7 @@ class ZeCollector {
     }
   }
 
-  static void OnEnterCommandListClose (ze_command_list_close_params_t* params, void* global_data, void** /* instance_data */) {
+  static void OnEnterCommandListClose(ze_command_list_close_params_t* params, void* global_data, void** /* instance_data */) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
 
     collector->command_lists_mutex_.lock();

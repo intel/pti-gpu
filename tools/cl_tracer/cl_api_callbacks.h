@@ -6675,7 +6675,7 @@ static void clReleaseEventOnExit(
 }
 
 void OnEnterFunction(
-    cl_function_id function, cl_callback_data* data,
+    ClFunctionId function, cl_callback_data* data,
     uint64_t start, ClApiCollector* collector) {
   PTI_ASSERT(collector != nullptr);
   switch (function) {
@@ -7039,7 +7039,7 @@ void OnEnterFunction(
 }
 
 void OnExitFunction(
-    cl_function_id function, cl_callback_data* data,
+    ClFunctionId function, cl_callback_data* data,
     uint64_t start, uint64_t end, ClApiCollector* collector) {
   PTI_ASSERT(collector != nullptr);
   switch (function) {

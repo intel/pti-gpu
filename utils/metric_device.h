@@ -107,7 +107,7 @@ class MetricDevice {
       uint32_t id = 0;
       for (const auto& entry : adapters_map ) {
         if (id == device_id) {
-          adapter = entry.second;
+          adapter = static_cast<md::IAdapterLatest*>(entry.second);
           break;
         }
         id++;

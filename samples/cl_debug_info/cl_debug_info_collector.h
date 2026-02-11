@@ -559,7 +559,7 @@ class ClDebugInfoCollector {
     PTI_ASSERT(parserHandle == nullptr);
   }
 
-  static void Callback(cl_function_id function, cl_callback_data* callback_data, void* user_data) {
+  static void Callback(ClFunctionId function, cl_callback_data* callback_data, void* user_data) {
     if (function == CL_FUNCTION_clBuildProgram) {
       if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
         OnEnterBuildProgram(callback_data);

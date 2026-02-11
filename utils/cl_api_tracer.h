@@ -39,7 +39,7 @@ class ClApiTracer {
     }
   }
 
-  bool SetTracingFunction(cl_function_id function) {
+  bool SetTracingFunction(ClFunctionId function) {
     if (!IsValid()) {
       return false;
     }

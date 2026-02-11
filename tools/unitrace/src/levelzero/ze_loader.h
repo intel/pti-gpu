@@ -17,6 +17,9 @@
 #include <level_zero/zet_api.h>
 #include <level_zero/layers/zel_tracing_api.h>
 
+// Include all Level Zero driver_experimental headers
+#include <level_zero/driver_experimental/zex_api.h>
+
 class ZeLoader {
  public:
   static auto& get() {

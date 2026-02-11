@@ -97,11 +97,13 @@ macro(FindOpenCLHeaders TARGET)
                       DEPENDS "${OPENCL_INC_PATH}/CL/cl.h"
                               "${OPENCL_INC_PATH}/CL/cl_gl.h"
                               "${OPENCL_INC_PATH}/CL/cl_version.h"
-                              "${OPENCL_INC_PATH}/CL/cl_platform.h")
+                              "${OPENCL_INC_PATH}/CL/cl_platform.h"
+                              "${OPENCL_INC_PATH}/CL/cl_ext.h")
     add_custom_command(OUTPUT "${OPENCL_INC_PATH}/CL/cl.h"
                               "${OPENCL_INC_PATH}/CL/cl_gl.h"
                               "${OPENCL_INC_PATH}/CL/cl_version.h"
                               "${OPENCL_INC_PATH}/CL/cl_platform.h"
+                              "${OPENCL_INC_PATH}/CL/cl_ext.h"
                       COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_cl_headers.py" "${OPENCL_INC_PATH}" "${CMAKE_BINARY_DIR}")
 
     target_include_directories(${TARGET} PUBLIC "${OPENCL_INC_PATH}")
@@ -113,23 +115,40 @@ macro(FindOpenCLHeaders TARGET)
     PRIVATE -DCL_TARGET_OPENCL_VERSION=300)
 endmacro()
 
-macro(GetOpenCLTracingHeaders TARGET)
-  set(OPENCL_TRACING_INC_PATH "${CMAKE_BINARY_DIR}")
+macro(GetComputeRuntimeHeaders TARGET)
+  set(COMPUTE_RUNTIME_INC_PATH "${CMAKE_BINARY_DIR}")
   RequirePythonInterp()
 
-  add_custom_target(cl_tracing_headers ALL
-                    DEPENDS ${OPENCL_TRACING_INC_PATH}/CL/tracing_api.h
-                            ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h
-                            ${OPENCL_TRACING_INC_PATH}/CL/cl_ext_private.h)
-  add_custom_command(OUTPUT ${OPENCL_TRACING_INC_PATH}/CL/tracing_api.h
-                            ${OPENCL_TRACING_INC_PATH}/CL/tracing_types.h
-                            ${OPENCL_TRACING_INC_PATH}/CL/cl_ext_private.h
-                    COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_cl_tracing_headers.py" ${OPENCL_TRACING_INC_PATH} ${CMAKE_BINARY_DIR})
+  if (NOT TARGET compute_runtime_headers)
+    # Include all headers under driver_experimental
+    file(GLOB COMPUTE_RUNTIME_ZEX_HEADERS
+      ${COMPUTE_RUNTIME_INC_PATH}/level_zero/driver_experimental/zex_*.h)
+    set(COMPUTE_RUNTIME_HEADERS
+      ${COMPUTE_RUNTIME_INC_PATH}/CL/tracing_api.h
+      ${COMPUTE_RUNTIME_INC_PATH}/CL/tracing_types.h
+      ${COMPUTE_RUNTIME_INC_PATH}/CL/cl_ext_private.h
+      ${COMPUTE_RUNTIME_INC_PATH}/level_zero/ze_stypes.h
+      ${COMPUTE_RUNTIME_INC_PATH}/level_zero/ze_intel_gpu.h
+      ${COMPUTE_RUNTIME_ZEX_HEADERS})
+
+    add_custom_target(compute_runtime_headers ALL
+                      DEPENDS ${COMPUTE_RUNTIME_HEADERS})
+    add_custom_command(OUTPUT ${COMPUTE_RUNTIME_HEADERS}
+                      COMMAND "${PYTHON_EXECUTABLE}" "${PTI_CMAKE_MACRO_DIR}/get_compute_runtime_headers.py" ${COMPUTE_RUNTIME_INC_PATH} ${CMAKE_BINARY_DIR})
+
+    # Backward compatibility alias
+    add_custom_target(cl_tracing_headers DEPENDS compute_runtime_headers)
+  endif()
 
   target_include_directories(${TARGET}
-    PUBLIC "${OPENCL_TRACING_INC_PATH}")
+    PUBLIC "${COMPUTE_RUNTIME_INC_PATH}")
   add_dependencies(${TARGET}
-    cl_tracing_headers)
+    compute_runtime_headers)
+endmacro()
+
+# Backward compatibility alias macro
+macro(GetOpenCLTracingHeaders TARGET)
+  GetComputeRuntimeHeaders(${TARGET})
 endmacro()
 
 macro(GetITT TARGET)

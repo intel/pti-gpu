@@ -7,6 +7,24 @@
 import os
 import sys
 import re
+from typing import List
+
+from parse_l0_headers import (
+  FunctionDecl,
+  find_extension_headers,
+  get_extension_functions,
+  get_param_struct_name as get_ext_param_struct_name,
+  get_param_struct_field_name,
+)
+
+# Extension APIs to skip due to L0 header uncommon behavior (reference params, struct by value, etc.)
+SKIPPED_EXTENSION_APIS = {
+  'zexIntelAllocateNetworkInterrupt',    # uses C++ reference parameter (uint32_t&)
+  'zexCounterBasedEventOpenIpcHandle',   # uses struct by value (zex_ipc_counter_based_event_handle_t)
+  'zexCounterBasedEventGetIpcHandle',    # uses struct by value (zex_ipc_counter_based_event_handle_t)
+  'zeIntelMediaCommunicationCreate',     # uses struct by value (ze_intel_media_doorbell_handle_desc_t)
+  'zeIntelMediaCommunicationDestroy',    # uses struct by value (ze_intel_media_doorbell_handle_desc_t)
+}
 
 # Parse Level Zero Headers ####################################################
 
@@ -240,7 +258,7 @@ def get_enum_map(include_path):
 def gen_register(f, func_list):
   for func in func_list:
     offset = 2
-    if func.find("zer") == 0:
+    if func.startswith("zer") or func.startswith("zex"):
       offset = 3
     reg_fname = "ZeLoader::get().zelTracer" + func[offset:] + "RegisterCallback_"
     f.write("    if (" + reg_fname + " != nullptr) {\n")
@@ -318,8 +336,9 @@ def get_kernel_tracing_callback(func):
   d = os.path.dirname(os.path.abspath(__file__))
   d = d + "/../src/levelzero/"
   cb = ""
+  func_ = func + "("
   with open(os.path.join(d, 'ze_collector.h')) as fp:
-    if func in fp.read():
+    if func_ in fp.read():
       cb = func
     fp.close()
     return cb
@@ -369,7 +388,7 @@ def gen_enter_callback(f, func, synchronize_func_list, params):
       f.write("    TO_HEX_STRING(str, (params->p" + name + ")->data);\n")
     else:
       if type.find("char*") >= 0 and type.find("char*") == len(type) - len("char*"):
-        if func == "zeModuleGetFunctionPointer" or func == "zeModuleGetGlobalPointer":
+        if func == "zeModuleGetFunctionPointer" or func == "zeModuleGetGlobalPointer" or func == "zeDriverGetExtensionFunctionAddress":
           f.write("    if (*(params->p" + name + ") == nullptr) {\n")
           f.write("      str += \" " + name + " = 0\";\n")
           f.write("    } else if (strlen(*(params->p" + name +")) == 0) {\n")
@@ -660,16 +679,19 @@ def gen_enter_callback(f, func, synchronize_func_list, params):
 
   f.write("  ze_instance_data.start_time_host = start_time_host;\n")
 
-def gen_exit_callback(f, func, return_type, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, params):
+def gen_exit_callback(f, func, return_type, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, params, tracing_id=None):
   func_name_offset = 2
-  if func.startswith("zer"):
+  if func.startswith("zer") or func.startswith("zex"):
     func_name_offset = 3
-  f.write("  ZeCollector* collector =\n")
-  f.write("    reinterpret_cast<ZeCollector*>(global_user_data);\n")
+  # For extension APIs, use the provided tracing_id; for regular APIs, compute from func name
+  if tracing_id is None:
+    tracing_id = func[func_name_offset:] + "TracingId"
 
   f.write("  uint64_t end_time_host = 0;\n")
-
   f.write("  end_time_host = UniTimer::GetHostTimestamp();\n")
+  
+  f.write("  ZeCollector* collector =\n")
+  f.write("    reinterpret_cast<ZeCollector*>(global_user_data);\n")
 
   cb = get_kernel_tracing_callback('OnExit' + func[func_name_offset:])
 
@@ -690,6 +712,16 @@ def gen_exit_callback(f, func, return_type, submission_func_list, synchronize_fu
       f.write("    " + cb + "(params, result, global_user_data, instance_user_data);\n")
     f.write("  }\n")
 
+  # Intercept extension API function pointers regardless of collection state,
+  # so that extension functions are always intercepted even if collection is
+  # enabled later.
+  if func == "zeDriverGetExtensionFunctionAddress":
+    f.write("\n")
+    f.write("  // Intercept extension API function pointers (graph APIs, etc.)\n")
+    f.write("  if (result == ZE_RESULT_SUCCESS && *(params->pname) != nullptr && *(params->pppFunctionAddress) != nullptr) {\n")
+    f.write("    collector->InterceptExtensionApiInternal(*(params->pname), *(params->pppFunctionAddress));\n")
+    f.write("  }\n")
+
   f.write("\n")
   f.write("  if (!UniController::IsCollectionEnabled()) {\n")
   f.write("      return;\n")
@@ -704,8 +736,9 @@ def gen_exit_callback(f, func, return_type, submission_func_list, synchronize_fu
   f.write("  uint64_t time;\n")
   f.write("  time = end_time_host - start_time_host;\n")
   f.write("  if (collector->options_.host_timing) {\n")
-  f.write("    collector->CollectHostFunctionTimeStats(" + func[func_name_offset:] + "TracingId, time);\n")
+  f.write("    collector->CollectHostFunctionTimeStats(" + tracing_id + ", time);\n")
   f.write("  }\n")
+
   f.write("  if (collector->options_.call_logging) {\n")
   f.write("    std::string str;\n")
   f.write("    str += \"<<<< [\" + std::to_string(end_time_host) + \"] \";\n")
@@ -822,25 +855,25 @@ def gen_exit_callback(f, func, return_type, submission_func_list, synchronize_fu
     f.write("    if (kids.size() == 0) {\n")
     f.write("      collector->fcallback_(\n")
     f.write("          nullptr, FLOW_NUL,\n")
-    f.write("          "+func[func_name_offset:]+"TracingId,\n")
+    f.write("          "+tracing_id+",\n")
     f.write("          start_time_host, end_time_host);\n")
     f.write("    }\n")
     f.write("    else {\n")
     if (func in submission_func_list):
       f.write("      collector->fcallback_(\n")
       f.write("          &kids, FLOW_H2D,\n")
-      f.write("          "+func[func_name_offset:]+"TracingId,\n")
+      f.write("          "+tracing_id+",\n")
       f.write("          start_time_host, end_time_host);\n")
     else:
       f.write("      collector->fcallback_(\n")
       f.write("          &kids, FLOW_D2H,\n")
-      f.write("          "+func[func_name_offset:]+"TracingId,\n")
+      f.write("          "+tracing_id+",\n")
       f.write("          start_time_host, end_time_host);\n")
     f.write("    }\n")
   else:
     f.write("      collector->fcallback_(\n")
     f.write("          nullptr, FLOW_NUL,\n")
-    f.write("          "+func[func_name_offset:]+"TracingId,\n")
+    f.write("          "+tracing_id+",\n")
     f.write("          start_time_host, end_time_host);\n")
   f.write("  }\n")
 
@@ -867,6 +900,7 @@ def gen_to_hex_string_functions(f):
     f.write("#include <string>\n")
     f.write("#include <cstdio>\n")
     f.write("#include <cstdint>\n")
+    f.write("#include <cstring>\n")  # For strcmp in extension interception
     f.write("#define TO_HEX_STRING(str, val) \\\n")
     f.write("    {char buffer[32]; \\\n")
     if (sys.platform == 'win32'):
@@ -876,6 +910,134 @@ def gen_to_hex_string_functions(f):
     f.write("    str += std::string(buffer); \\\n")
     f.write("    }\n")
     f.write("\n")
+
+# Extension API Generation ####################################################
+
+def gen_extension_params_struct(f, func: FunctionDecl):
+  """Generate a params struct for an extension function."""
+  struct_name = get_ext_param_struct_name(func.name)
+  f.write("typedef struct _" + struct_name + " {\n")
+  for param in func.params:
+    ptr_name = get_param_struct_field_name(param)
+    f.write("    " + param.type + "* " + ptr_name + ";\n")
+  f.write("} " + struct_name + ";\n\n")
+
+def gen_extension_callback(f, func: FunctionDecl):
+  """Generate OnEnter and OnExit callbacks for an extension function."""
+  struct_name = get_ext_param_struct_name(func.name)
+  tracing_id = func.name + "TracingId"
+
+  # Convert FunctionDecl.params to the format expected by gen_enter_callback/gen_exit_callback
+  # Format: list of (name, type) tuples
+  params = [(p.name, p.type) for p in func.params]
+
+  # OnEnter callback
+  f.write("static void " + func.name + "OnEnter(\n")
+  f.write("    [[maybe_unused]] " + struct_name + "* params,\n")
+  f.write("    [[maybe_unused]] ze_result_t result,\n")
+  f.write("    void* global_user_data,\n")
+  f.write("    [[maybe_unused]] void** instance_user_data) {\n")
+  gen_enter_callback(f, func.name, [], params)
+  f.write("}\n\n")
+
+  # OnExit callback
+  f.write("static void " + func.name + "OnExit(\n")
+  f.write("    [[maybe_unused]] " + struct_name + "* params,\n")
+  f.write("    ze_result_t result,\n")
+  f.write("    void* global_user_data,\n")
+  f.write("    [[maybe_unused]] void** instance_user_data) {\n")
+  gen_exit_callback(f, func.name, "ze_result_t", [], [], [], params, tracing_id=tracing_id)
+  f.write("}\n\n")
+
+def gen_extension_wrapper(f, func: FunctionDecl):
+  """Generate a wrapper function that calls OnEnter/OnExit with params."""
+  struct_name = get_ext_param_struct_name(func.name)
+
+  # Function signature
+  params_str = ", ".join([p.type + " " + p.name for p in func.params])
+  f.write("static " + func.return_type + " " + func.name + "Wrapper(" + params_str + ") {\n")
+
+  # Populate params struct
+  f.write("  " + struct_name + " params;\n")
+  for param in func.params:
+    ptr_name = get_param_struct_field_name(param)
+    f.write("  params." + ptr_name + " = &" + param.name + ";\n")
+
+  f.write("\n")
+  f.write("  void* instance_data = nullptr;\n")
+  f.write("  ZeCollector* collector = s_global_ze_collector_;\n")
+  f.write("  if (collector != nullptr) {\n")
+  f.write("    " + func.name + "OnEnter(&params, ZE_RESULT_SUCCESS, collector, &instance_data);\n")
+  f.write("  }\n")
+  f.write("\n")
+
+  # Call original function through ZeLoader
+  call_args_list = []
+  for p in func.params:
+    ptr_name = get_param_struct_field_name(p)
+    call_args_list.append("*params." + ptr_name)
+  call_args = ", ".join(call_args_list)
+  f.write("  " + func.return_type + " result = ZE_FUNC(" + func.name + ")(" + call_args + ");\n")
+  f.write("\n")
+
+  f.write("  if (collector != nullptr) {\n")
+  f.write("    " + func.name + "OnExit(&params, result, collector, &instance_data);\n")
+  f.write("  }\n")
+  f.write("\n")
+  f.write("  return result;\n")
+  f.write("}\n\n")
+
+def gen_extension_interception(f, ext_funcs: List[FunctionDecl]):
+  """Generate the InterceptExtensionApi function."""
+  f.write("// Extension API interception - called from zeDriverGetExtensionFunctionAddress exit callback\n")
+  f.write("inline bool InterceptExtensionApiInternal(const char* name, void** ppFunctionAddress) {\n")
+  f.write("  if (ppFunctionAddress == nullptr || *ppFunctionAddress == nullptr || name == nullptr) {\n")
+  f.write("    return false;\n")
+  f.write("  }\n")
+  f.write("\n")
+
+  for func in ext_funcs:
+    f.write("  if (strcmp(name, \"" + func.name + "\") == 0) {\n")
+    f.write("    ZeLoader::get()." + func.name + "_ = reinterpret_cast<decltype(&" + func.name + ")>(*ppFunctionAddress);\n")
+    f.write("    *ppFunctionAddress = reinterpret_cast<void*>(&" + func.name + "Wrapper);\n")
+    f.write("    return true;\n")
+    f.write("  }\n")
+
+  f.write("\n")
+  f.write("  return false;\n")
+  f.write("}\n\n")
+
+def gen_extension_api_tracing(f, types_f, ext_funcs: List[FunctionDecl]):
+  """Generate all extension API tracing code."""
+  if not ext_funcs:
+    return
+
+  # Filter out functions with L0 header uncommon behavior (reference params, struct by value, etc.)
+  filtered_funcs = [func for func in ext_funcs if func.name not in SKIPPED_EXTENSION_APIS]
+
+  if not filtered_funcs:
+    return
+
+  f.write("\n// ============== Extension API Tracing ==============\n\n")
+
+  # Generate params structs
+  types_f.write("// Extension API parameter structures\n")
+  for func in filtered_funcs:
+    gen_extension_params_struct(types_f, func)
+
+  # Generate OnEnter/OnExit callbacks
+  f.write("// Extension API callbacks\n")
+  for func in filtered_funcs:
+    gen_extension_callback(f, func)
+
+  # Generate wrapper functions
+  f.write("// Extension API wrappers\n")
+  for func in filtered_funcs:
+    gen_extension_wrapper(f, func)
+
+  # Generate interception function
+  gen_extension_interception(f, filtered_funcs)
+
 def main():
   if len(sys.argv) < 3:
     print("Usage: python gen_tracing_header.py <output_include_path> <l0_include_path>")
@@ -956,7 +1118,8 @@ def main():
       "zeEventQueryStatus",
       "zeFenceHostSynchronize",
       "zeContextDestroy",
-      "zeCommandListImmediateAppendCommandListsExp"]
+      "zeCommandListImmediateAppendCommandListsExp",
+      "zeDriverGetExtensionFunctionAddress"]
 
   command_list_func_list = [
       "zeCommandListAppendEventReset",
@@ -1001,6 +1164,20 @@ def main():
   gen_callbacks(dst_file, func_dict, submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map)
   gen_api(dst_file, func_list, kfunc_list)
 
+  # Parse and generate extension API tracing
+  ext_funcs = []
+  for header_path in find_extension_headers(l0_path):
+    ext_funcs.extend(get_extension_functions(header_path))
+
+  types_file_path = os.path.join(dst_path, "tracing.gen.types")
+  if (os.path.isfile(types_file_path)):
+    os.remove(types_file_path)
+
+  types_file = open(types_file_path, "wt")
+  if ext_funcs:
+    gen_extension_api_tracing(dst_file, types_file, ext_funcs)
+
+  types_file.close()
   l0_exp_file.close()
   l0_file.close()
   dst_file.close()

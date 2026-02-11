@@ -23,7 +23,7 @@ def main():
   build_utils.clone(url, commit, clone_path)
 
   src_path = os.path.join(clone_path, "CL")
-  build_utils.copy(src_path, dst_path, ["cl.h", "cl_gl.h", "cl_version.h", "cl_platform.h"])
+  build_utils.copy(src_path, dst_path, ["cl.h", "cl_gl.h", "cl_version.h", "cl_platform.h", "cl_ext.h"])
 
 if __name__ == "__main__":
   main()

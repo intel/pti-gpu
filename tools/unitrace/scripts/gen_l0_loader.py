@@ -6,7 +6,9 @@
 
 import os
 import sys
-import re
+
+from parse_l0_headers import find_extension_headers, get_extension_function_names
+
 
 def get_func_list(file_path, func_list):
   f = open(file_path, "rt")
@@ -33,7 +35,17 @@ def get_api_func_list(file_path, func_list):
   api_line = False
   for line in f.readlines():
     if line.find("ZE_APICALL") != -1:
-      api_line = True
+      # Check if function name is on the same line (format: ZE_APIEXPORT ze_result_t ZE_APICALL funcName(...))
+      parts = line.split("ZE_APICALL")
+      if len(parts) == 2 and "(" in parts[1]:
+        # Function name is on the same line after ZE_APICALL
+        items = parts[1].split("(")
+        if len(items) >= 2:
+          func_list.append(items[0].strip())
+        api_line = False
+      else:
+        # Function name is on the next line
+        api_line = True
     elif api_line:
       api_line = False
       items = line.split("(")
@@ -41,7 +53,7 @@ def get_api_func_list(file_path, func_list):
       func_list.append(items[0].strip())
   f.close()
 
-def gen_loader(f, register_func_list, api_func_list):
+def gen_loader(f, register_func_list, api_func_list, ext_func_list):
   f.write("public:\n")
   for func in register_func_list:
     offset = 2
@@ -51,6 +63,11 @@ def gen_loader(f, register_func_list, api_func_list):
     f.write("  decltype(&" + reg_fname + ") " + reg_fname + "_ = nullptr;\n")
     f.write("  decltype(&" + func + ") " + func + "_ = nullptr;\n")
   for func in api_func_list:
+    f.write("  decltype(&" + func + ") " + func + "_ = nullptr;\n")
+
+  # Extension function pointers - these are populated by interception, not from loader
+  f.write("\n  // Extension function pointers (populated via InterceptExtensionApi)\n")
+  for func in ext_func_list:
     f.write("  decltype(&" + func + ") " + func + "_ = nullptr;\n")
 
   f.write("private:\n")
@@ -64,6 +81,7 @@ def gen_loader(f, register_func_list, api_func_list):
     f.write("  LEVEL_ZERO_LOADER_GET_SYMBOL(" + func + ");\n")
   for func in api_func_list:
     f.write("  LEVEL_ZERO_LOADER_GET_SYMBOL(" + func + ");\n")
+  # Note: Extension functions are NOT loaded here - they come via interception
   f.write("}\n")
 
 def main():
@@ -83,15 +101,20 @@ def main():
 
   register_func_list = []
   api_func_list = []
+  ext_func_list = []
 
   l0_path = sys.argv[2]
   get_func_list(os.path.join(l0_path, "ze_api.h"), register_func_list)
   get_func_list(os.path.join(l0_path, "layers", "zel_tracing_register_cb.h"), register_func_list)
   get_api_func_list(os.path.join(l0_path, "zet_api.h"), api_func_list)
   get_api_func_list(os.path.join(l0_path, "zes_api.h"), api_func_list)
-  get_api_func_list(os.path.join(l0_path, "layers", "zel_tracing_api.h"),api_func_list)
+  get_api_func_list(os.path.join(l0_path, "layers", "zel_tracing_api.h"), api_func_list)
 
-  gen_loader(dst_loader_file, register_func_list, api_func_list)
+  # Extension functions go into a separate list - they're not loaded from the library
+  for header_path in find_extension_headers(l0_path):
+    ext_func_list.extend(get_extension_function_names(header_path))
+
+  gen_loader(dst_loader_file, register_func_list, api_func_list, ext_func_list)
 
   dst_loader_file.close()
 

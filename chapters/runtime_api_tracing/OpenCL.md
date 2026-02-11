@@ -19,7 +19,7 @@ cl_int CL_API_CALL clCreateTracingHandleINTEL(
 //! Function allows to specify which target API call should be traced
 cl_int CL_API_CALL clSetTracingPointINTEL(
     cl_tracing_handle handle,  //!< Tracing handle object
-    cl_function_id functionId, //!< Identifier of the API function from the list
+    ClFunctionId functionId, //!< Identifier of the API function from the list
     cl_bool enable);           //!< Flag that shows if the API function should be traced or not
 
 //! Function destroys the tracing handle object and releases all the associated resources
@@ -71,7 +71,7 @@ decltype(clCreateTracingHandleINTEL)* _clCreateTracingHandleINTEL =
 ```
 2. Define the function that will be called along with the traced API, e.g.:
 ```cpp
-void Callback(cl_function_id fid,
+void Callback(ClFunctionId fid,
               cl_callback_data* callback_data,
               void* user_data) {
   std::count << "Function " << callback_data->functionName << " is called (" <<

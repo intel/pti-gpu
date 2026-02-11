@@ -1,0 +1,2 @@
+Thread 159435 Device 94324456 : "eat_time[SIMD32 {1; 1; 1} {1; 1; 1}]" [ns] 87450406415014 (append) 87450406415014 (submit) 87450406440763 (start) 87450406442596 (end)
+Thread 159435 Device 94324456 : "zeCommandListAppendBarrier" [ns] 87450579094604 (append) 87450579094604 (submit) 87450579106103 (start) 87450579106436 (end)

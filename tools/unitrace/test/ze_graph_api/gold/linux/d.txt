@@ -1,0 +1,16 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns): *
+    Total Device Time for L0 backend (ns): *
+
+== L0 Backend ==
+
+                      Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+                   "eat_time",            1,                    *,           *,                    *,                    *,                    *
+"zeCommandListAppendBarrier",            1,                    *,           *,                    *,                    *,                    *
+
+=== Kernel Properties ===
+
+                      Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+                   "eat_time",      JIT,   32,                   1,                  0,                         0,                        0,                       unknown

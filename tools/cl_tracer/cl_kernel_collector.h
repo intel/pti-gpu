@@ -788,7 +788,7 @@ class ClKernelCollector {
       reinterpret_cast<const cl_params_clCreateCommandQueue*>(
           data->functionParams);
     PTI_ASSERT(params != nullptr);
-    *(params->properties) |=
+    *const_cast<cl_command_queue_properties*>(params->properties) |=
       static_cast<unsigned long>(CL_QUEUE_PROFILING_ENABLE);
   }
 
@@ -1300,7 +1300,7 @@ class ClKernelCollector {
     }
   }
 
-  static void Callback(cl_function_id function,
+  static void Callback(ClFunctionId function,
                       cl_callback_data* callback_data,
                       void* user_data) {
     if (TraceGuard::Inactive()) return;
