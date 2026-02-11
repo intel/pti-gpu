@@ -47,7 +47,7 @@ jobs:
 
     container:
       image: ${{ matrix.container }}
-      options: --device=/dev/dri --cap-add CAP_PERFMON --shm-size=24G
+      options: --device=/dev/dri --cap-add CAP_PERFMON --shm-size=24G --volume=/dev/dri/by-path:/dev/dri/by-path
       credentials:
         username: ${{ vars.PTI_DOCKER_USER }}
         password: ${{ secrets.PTI_DOCKER_PWD }}
