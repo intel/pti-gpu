@@ -340,7 +340,7 @@ inline std::vector<std::string> GetMetricList(zet_metric_group_handle_t group) {
 }
 
 inline uint32_t GetMetricId(const std::vector<std::string>& metric_list,
-                            const std::string& metric_name) {
+                            const std::string_view metric_name) {
   PTI_ASSERT(!metric_list.empty());
   PTI_ASSERT(!metric_name.empty());
 

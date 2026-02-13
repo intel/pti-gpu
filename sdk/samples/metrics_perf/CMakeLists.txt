@@ -18,8 +18,10 @@ add_executable(metrics_perf metrics_perf.cc)
 
 target_link_options(metrics_perf PUBLIC -fsycl)
 target_compile_options(metrics_perf PUBLIC -fsycl)
-target_include_directories(metrics_perf
-                           PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities")
+target_include_directories(
+  metrics_perf PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities"
+                          "${PROJECT_SOURCE_DIR}/../../src/utils"
+                          )
 
 if (NOT TARGET Threads::Threads)
   find_package(Threads REQUIRED)
@@ -29,5 +31,5 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti REQUIRED)
 endif()
 
-target_link_libraries(metrics_perf PUBLIC Pti::pti_view Threads::Threads)
+target_link_libraries(metrics_perf PUBLIC spdlog::spdlog Pti::pti_view Threads::Threads)
 

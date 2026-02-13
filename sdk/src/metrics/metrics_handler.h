@@ -18,6 +18,8 @@
 #include <mutex>
 #include <random>
 #include <shared_mutex>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_set>
 
@@ -61,6 +63,13 @@ constexpr const char *kLoaderLibraryName = "libze_loader.dll";
 #else
 constexpr const char *kLoaderLibraryName = "libze_loader.so.1";
 #endif
+
+// Important constants for metrics collection and handling
+constexpr uint64_t kMask64Bits = 0xFFFFFFFFFFFFFFFF;
+
+constexpr uint32_t kReportReasonContextSwitchBit = (1u << 3);  // Value of 8
+constexpr std::string_view kTimeStampMetric = "QueryBeginTime";
+constexpr std::string_view kReportReasonMetric = "ReportReason";
 
 }  // namespace
 
@@ -152,7 +161,9 @@ class PtiMetricsProfiler {
 
     bool enable_logging = (utils::GetEnv("PTI_LogToFile") == "1");
     std::string log_filename = enable_logging ? utils::GetEnv("PTI_LogFileName") : "";
-
+    SPDLOG_INFO("Metrics profiler logging is {}. Log file name: {}",
+                enable_logging ? "enabled" : "disabled",
+                log_filename.empty() ? "N/A" : log_filename);
     user_logger_ = utils::GetLogStream(enable_logging, std::move(log_filename));
 
     // Ensure thread-safe one-time initialization
@@ -681,6 +692,24 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
   }
 
  private:
+  bool ShouldSkipSample(bool report_reason_exist, uint32_t report_reason, uint64_t prev_timestamp,
+                        uint64_t current_timestamp) const {
+    return report_reason_exist && ((report_reason & kReportReasonContextSwitchBit) != 0) &&
+           (prev_timestamp != 0 && current_timestamp == prev_timestamp);
+  }
+
+  uint64_t ProcessTimestampOverflow(uint64_t current_timestamp, uint64_t prev_timestamp,
+                                    uint64_t time_span_between_wraparound) const {
+    if (current_timestamp <= prev_timestamp && time_span_between_wraparound != 0) {
+      auto new_timestamp = current_timestamp;
+      while (new_timestamp <= prev_timestamp) {
+        new_timestamp += time_span_between_wraparound;
+      }
+      return new_timestamp;
+    }
+    return current_timestamp;
+  }
+
   void ComputeMetrics(pti_metrics_group_handle_t metrics_group_handle,
                       pti_value_t *metrics_values_buffer, uint32_t *metrics_values_count) {
     PTI_ASSERT(metrics_values_count != nullptr);
@@ -736,6 +765,8 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
     // Option 2: user wants the buffer filled.
 
     *metrics_values_count = 0;
+    bool timestamp_metric_found = false;
+    bool report_reason_metric_found = false;
 
     // Search for the top/parent device; it doesn't have a parent
     for (auto it = device_descriptors_.begin(); it != device_descriptors_.end(); ++it) {
@@ -769,15 +800,33 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
         std::string group_name = group_props.name;
 
         // Get the index of the start timestamp from the metric list
-        uint32_t ts_idx = utils::ze::GetMetricId(metric_list, "QueryBeginTime");
-        if (ts_idx >= metric_list.size()) {
-          // no QueryBeginTime metric
-          continue;
+        uint32_t ts_idx = utils::ze::GetMetricId(metric_list, kTimeStampMetric);
+        timestamp_metric_found = (ts_idx < metric_list.size());
+        if (!timestamp_metric_found) {
+          // no QueryBeginTime metric, this is not expected for stream metrics groups
+          // but we can still process the metrics values without timestamps
+          SPDLOG_DEBUG(
+              "QueryBeginTime metric is not found in the metric list,"
+              " unable to capture timestamps for the metrics values");
         }
+        // Get the index of ReportReason metric from the metric list
+        uint32_t report_reason_idx = utils::ze::GetMetricId(metric_list, kReportReasonMetric);
+        report_reason_metric_found = (report_reason_idx < metric_list.size());
+        if (!report_reason_metric_found) {
+          // no ReportReason metric, this is not expected for stream metrics
+          // groups, but we can still process the metrics values without it
+          SPDLOG_DEBUG(
+              "ReportReason metric is not found in the metric list,"
+              " metrics will be processed without report reason information");
+        }
+
         // TODO: handle subdevices in case of implicit scaling
-        uint64_t time_span_between_clock_resets = (it->second->metric_timer_mask_ + 1ull) *
-                                                  static_cast<uint64_t>(NSEC_IN_SEC) /
-                                                  it->second->metric_timer_frequency_;
+        uint64_t time_span_between_clock_resets =
+            (it->second->metric_timer_mask_ == kMask64Bits)
+                ? 0
+                : (uint64_t)(((double)(it->second->metric_timer_mask_ + 1ull) *
+                              (double)static_cast<uint64_t>(NSEC_IN_SEC)) /
+                             (double)it->second->metric_timer_frequency_);
 
         std::lock_guard<std::mutex> file_lock(it->second->file_access_mutex_);
 
@@ -845,12 +894,41 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
                 const zet_typed_value_t *v = value + j * metric_list.size();
 
                 // Capture the timestamp using the timestamp index
-                uint64_t ts = v[ts_idx].value.ui64;
+                uint64_t ts = timestamp_metric_found ? v[ts_idx].value.ui64 : 0;
 
-                // Adjust timestamp if there is a clock overflow
+                // Looking into ReportReason metric to check
+                // if the sample is triggered by a context switch and
+                // if the sample timestamp needs to be adjusted to adjust on clock overflow
+                // (which is not expected on the system with 64bit timestamp width (mask))
                 if (cur_sampling_ts != 0) {
-                  while (cur_sampling_ts >= ts) {  // clock overflow
-                    ts += time_span_between_clock_resets;
+                  PTI_ASSERT(timestamp_metric_found);
+
+                  if (ts <= cur_sampling_ts) {
+                    if (ShouldSkipSample(
+                            report_reason_metric_found,
+                            report_reason_metric_found ? v[report_reason_idx].value.ui32 : 0,
+                            cur_sampling_ts, ts)) {
+                      SPDLOG_DEBUG(
+                          "Skipping sample with context switch report reason "
+                          "and current timestamp: {}, previous timestamp: {}",
+                          ts, cur_sampling_ts);
+                      continue;
+                    }
+
+                    auto new_ts = ProcessTimestampOverflow(ts, cur_sampling_ts,
+                                                           time_span_between_clock_resets);
+                    // Checking if the adjustment happened
+                    // it will not in case of 64bit timestamp width
+                    if (new_ts == ts && time_span_between_clock_resets == 0) {
+                      SPDLOG_DEBUG(
+                          "Timestamps are not expected to be adjusted for clock overflow when "
+                          "time_span_between_clock_resets is 0, current timestamp: {}, "
+                          "previous timestamp: {}",
+                          ts, cur_sampling_ts);
+                    } else {
+                      PTI_ASSERT(new_ts > cur_sampling_ts && new_ts > ts);
+                      ts = new_ts;
+                    }
                   }
                 }
                 cur_sampling_ts = ts;
@@ -861,7 +939,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
 
                 // Walk through the metric list and add metric values to output buffer
                 for (uint32_t k = 0; k < metric_list.size(); k++) {
-                  if (k == ts_idx) {
+                  if (timestamp_metric_found && k == ts_idx) {
                     metrics_values_buffer[buffer_idx++].ui64 = ts;
                   } else {
                     metrics_values_buffer[buffer_idx++].ui64 = v[k].value.ui64;

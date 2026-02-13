@@ -17,6 +17,7 @@
 #include <thread>
 #include <vector>
 
+#include "metrics_utils.h"
 #include "pti/pti_metrics.h"
 #include "samples_utils.h"
 
@@ -372,6 +373,70 @@ std::chrono::duration<double> RunMultiThreadedProfilingTest(
   return end_time - start_time;
 }
 
+// Print all metric groups and their metrics properties
+void PrintAllMetrics() {
+  std::cout << "\n=== AVAILABLE METRICS GROUPS AND METRICS ===" << std::endl;
+
+  for (size_t dev_idx = 0; dev_idx < g_devices.size(); ++dev_idx) {
+    std::cout << "\n[DEVICE " << dev_idx << "]" << std::endl;
+    std::cout << "  Model: " << g_devices[dev_idx]._model_name << std::endl;
+    std::cout << "  Handle: " << g_devices[dev_idx]._handle << std::endl;
+
+    for (size_t grp_idx = 0; grp_idx < g_device_metric_groups[dev_idx].size(); ++grp_idx) {
+      const auto& group = g_device_metric_groups[dev_idx][grp_idx];
+
+      std::cout << "\n  [METRIC GROUP " << grp_idx << "]" << std::endl;
+      std::cout << "    Name: " << group._name << std::endl;
+      std::cout << "    Description: " << group._description << std::endl;
+      std::cout << "    Type: " << group._type;
+
+      // Decode type flags
+      std::cout << " (";
+      bool first = true;
+      if (group._type & PTI_METRIC_GROUP_TYPE_EVENT_BASED) {
+        std::cout << "EVENT";
+        first = false;
+      }
+      if (group._type & PTI_METRIC_GROUP_TYPE_TIME_BASED) {
+        if (!first) std::cout << " | ";
+        std::cout << "TIME";
+        first = false;
+      }
+      if (group._type & PTI_METRIC_GROUP_TYPE_TRACE_BASED) {
+        if (!first) std::cout << " | ";
+        std::cout << "TRACE";
+      }
+      std::cout << ")" << std::endl;
+
+      std::cout << "    Domain: " << group._domain << std::endl;
+      std::cout << "    Metric Count: " << group._metric_count << std::endl;
+      if (group._metric_count == 0) {
+        std::cout << "      No metrics in this group." << std::endl;
+        continue;
+      }
+
+      // Get and print individual metrics
+      std::vector<pti_metric_properties_t> metrics(group._metric_count);
+      pti_result result = ptiMetricsGetMetricsProperties(group._handle, metrics.data());
+
+      if (result == PTI_SUCCESS) {
+        for (uint32_t m = 0; m < group._metric_count; ++m) {
+          std::cout << "      [Metric " << m << "] " << metrics[m]._name << std::endl;
+          std::cout << "        Description: " << metrics[m]._description << std::endl;
+          std::cout << "        Metric Type: "
+                    << metrics_utils::GetMetricType(metrics[m]._metric_type) << std::endl;
+          std::cout << "        Value Type: "
+                    << metrics_utils::GetMetricValueType(metrics[m]._value_type) << std::endl;
+          std::cout << "        Units: " << metrics[m]._units << std::endl;
+        }
+      } else {
+        std::cout << "      ERROR: Failed to get metrics properties" << std::endl;
+      }
+    }
+  }
+  std::cout << "\n===========================================\n" << std::endl;
+}
+
 bool InitializeTest() {
   bool metrics_enabled = (samples_utils::GetEnv("ZET_ENABLE_METRICS") == "1");
   if (!metrics_enabled) {
@@ -410,16 +475,19 @@ void Usage(const char* name) {
   std::cout << " Calculating floating point matrix multiply on gpu, compare the performance "
                "with and without PTI Metrics API (Single and multi-thread)\n"
             << "  Usage " << name << "  [ options ]" << std::endl;
-  std::cout << "--size [-s]     integer        "
+  std::cout << "--size [-s]       integer        "
             << "Matrix size, default: " << kDefaultMatrixSize << std::endl;
-  std::cout << "--repeat [-r]   integer        "
+  std::cout << "--repeat [-r]     integer        "
             << "Number of iterations, default: " << kNumIterations << std::endl;
+  std::cout << "--list-metrics    (no argument) "
+            << "List all available metrics groups and metrics, then exit" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
   int exit_code = EXIT_SUCCESS;
   unsigned repeat_count = kNumIterations;
   unsigned size = kDefaultMatrixSize;
+  bool list_metrics_only = false;
 
   try {
     for (int i = 1; i < argc; i++) {
@@ -431,6 +499,8 @@ int main(int argc, char* argv[]) {
         i++;
         auto temp = std::stoul(argv[i]);
         repeat_count = (temp < 1) ? 1 : temp;
+      } else if (strcmp(argv[i], "--list-metrics") == 0) {
+        list_metrics_only = true;
       } else {
         Usage(argv[0]);
         return EXIT_SUCCESS;
@@ -441,13 +511,21 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  std::cout << "=== PTI Metrics API Overhead Test ===" << std::endl;
-  std::cout << "Matrix size: " << size << "x" << size << std::endl;
-  std::cout << "Iterations: " << repeat_count << std::endl;
-  std::cout << std::endl;
+  if (!list_metrics_only) {
+    std::cout << "=== PTI Metrics API Overhead Test ===" << std::endl;
+    std::cout << "Matrix size: " << size << "x" << size << std::endl;
+    std::cout << "Iterations: " << repeat_count << std::endl;
+    std::cout << std::endl;
+  }
 
   if (!InitializeTest()) {
     return EXIT_FAILURE;
+  }
+
+  // If user just wants to list metrics, do that and exit
+  if (list_metrics_only) {
+    PrintAllMetrics();
+    return EXIT_SUCCESS;
   }
 
   try {
