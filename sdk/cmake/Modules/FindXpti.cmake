@@ -50,52 +50,42 @@ The following cache variables may also be set:
 # Based on tutorial found in CMake manual:
 # https://cmake.org/cmake/help/latest/manual/cmake-developer.7.html
 
-#
-# Note about PATHS:
-#
-# These are specifically hardcoded fallbacks.
-#
-# * `/opt/intel/oneapi/compiler/latest` - common oneAPI installation location on
-#   Linux.
-# * `/opt/sycl` - Intel/LLVM open-source compiler container installation
-#   location on Linux.
-#
-
 find_path(
   Xpti_INCLUDE_DIR
   NAMES xpti/xpti_trace_framework.h
-  HINTS ENV CMPLR_ROOT ENV CPATH
-  PATHS /opt/intel/oneapi/compiler/latest
-        /opt/intel/oneapi/compiler/latest/linux /opt/sycl
+  HINTS ENV CPLUS_INCLUDE_PATH
+        ENV C_INCLUDE_PATH
+        ENV CPATH
+        ENV INCLUDE
+        ENV CMPLR_ROOT
   PATH_SUFFIXES include linux/include)
 
 find_library(
   Xpti_Static_LIBRARY
   NAMES xpti
   HINTS ENV CMPLR_ROOT ENV LIBRARY_PATH
-  PATHS /opt/intel/oneapi/compiler/latest
-        /opt/intel/oneapi/compiler/latest/linux /opt/sycl
   PATH_SUFFIXES lib linux/lib)
 
 find_library(
   Xpti_Shared_LIBRARY
   NAMES xptifw
-  HINTS ENV CMPLR_ROOT ENV LIBRARY_PATH
-  PATHS /opt/intel/oneapi/compiler/latest
-        /opt/intel/oneapi/compiler/latest/linux /opt/sycl
+  HINTS ENV LIBRARY_PATH
+        ENV LD_LIBRARY_PATH
+        ENV LIB
+        ENV CMPLR_ROOT
   PATH_SUFFIXES lib linux/lib)
 
 if(WIN32)
 find_library(
   Xpti_Static_Debug_LIBRARY
   NAMES xptid
-  HINTS ENV CMPLR_ROOT ENV LIBRARY_PATH
+  HINTS ENV LIB ENV CMPLR_ROOT ENV LIBRARY_PATH
   PATH_SUFFIXES lib linux/lib)
 
 find_library(
   Xpti_Shared_Debug_LIBRARY
   NAMES xptifwd
-  HINTS ENV CMPLR_ROOT ENV LIBRARY_PATH
+  HINTS ENV LIB ENV CMPLR_ROOT ENV LIBRARY_PATH
   PATH_SUFFIXES lib linux/lib)
 
 find_file(

@@ -80,9 +80,6 @@ find_path(
         ENV CPLUS_INCLUDE_PATH
         ENV INCLUDE
         ENV CMPLR_ROOT
-  PATHS /opt/intel/oneapi/compiler/latest
-        /opt/intel/oneapi/compiler/latest/linux
-        /opt/sycl
   PATH_SUFFIXES include
                 linux/include
 )

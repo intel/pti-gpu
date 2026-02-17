@@ -92,6 +92,28 @@ def get_ur_api_list(ur_file_path):
         return (ur_enum_defs, ur_api_version)
 
 
+def get_current_ur_api_list(pti_file_path):
+    ur_enum_defs = []  # list of "ApiName,ApiId"
+    ur_function_id_found = False
+    ur_api_version = None
+    current_ur_api_name = ""
+    with open(pti_file_path, "rt", opener=default_file_opener) as ur_file:
+        for line in ur_file:
+            line = line.strip()
+            if "version v" in line:
+                ur_api_version = line.split("ApiVersion:")[1].strip()
+            if ur_function_id_found:
+                if line.startswith("ur"):
+                    api_id = line[line.find("=") + 1 : line.find(",")].strip()
+                    current_ur_api_name = line.split("_id")[0].strip()
+                    api_name = current_ur_api_name
+                    ur_enum_defs.append(api_name.strip() + "," + api_id)
+            elif "typedef enum" in line:
+                ur_function_id_found = True
+
+        return (ur_enum_defs, ur_api_version)
+
+
 #
 # Generates an API func_name -> <exposed apiid> mapping for all L0 API registerable functions.
 # returns a dict of this to caller.
@@ -161,7 +183,10 @@ def gen_func_param_dict(api_files):
                     assert items[1].find("Cb_t") != -1
                     items = items[1].split("Cb_t")
                     assert len(items) == 2
-                    func_dict["ze" + items[0].strip()] = [next(f).strip(), next(f).strip()]
+                    func_dict["ze" + items[0].strip()] = [
+                        next(f).strip(),
+                        next(f).strip(),
+                    ]
                     # func_list.append("ze" + items[0].strip())
                     # print("FUNC_LIST -- next line: ",next(f).split("* params,")[0])
     return (func_dict, L0_api_version)
@@ -543,7 +568,9 @@ def gen_api(
         #        )
         offset = 2
         dst_api_dlsym_private_file.write(
-            "LEVEL_ZERO_LOADER_GET_SYMBOL(zelTracer" + func[offset:] + "RegisterCallback);\n"
+            "LEVEL_ZERO_LOADER_GET_SYMBOL(zelTracer"
+            + func[offset:]
+            + "RegisterCallback);\n"
         )
         dst_api_dlsym_public_file.write(
             "decltype(&zelTracer"
@@ -576,7 +603,9 @@ def gen_api(
         f.write("    }\n")
     f.write("  }\n")
 
-    f.write("  else if (options_.kernel_tracing || IsAnyCallbackSubscriberActive() ) {\n")
+    f.write(
+        "  else if (options_.kernel_tracing || IsAnyCallbackSubscriberActive() ) {\n"
+    )
     offset = 2
     for func in kfunc_list:
         # if func not in exclude_from_prologue_list:
@@ -701,7 +730,9 @@ def gen_enter_callback(f, func, synchronize_func_list_on_enter, hybrid_mode_func
     cb = get_kernel_tracing_callback("OnEnter" + func[2:])
     if cb != "":
         f.write("\n")
-        f.write("  if (collector->options_.kernel_tracing || collector->IsAnyCallbackSubscriberActive() ) { \n")
+        f.write(
+            "  if (collector->options_.kernel_tracing || collector->IsAnyCallbackSubscriberActive() ) { \n"
+        )
         if func in synchronize_func_list_on_enter:
             f.write(
                 "    " + cb + "(params, global_data, instance_user_data, &kids); \n"
@@ -773,7 +804,9 @@ def gen_exit_callback(
         f.write("  uint64_t synch_corrid = UniCorrId::GetUniCorrId();\n")
 
     if cb != "":
-        f.write("  if (collector->options_.kernel_tracing || collector->IsAnyCallbackSubscriberActive() ) { \n")
+        f.write(
+            "  if (collector->options_.kernel_tracing || collector->IsAnyCallbackSubscriberActive() ) { \n"
+        )
         if (func in submission_func_list) or (func in synchronize_func_list_on_exit):
             if func in synchronization_viewkind_api_list:
                 f.write(
@@ -886,12 +919,16 @@ def gen_exit_callback(
         f.write("  }\n")
         f.write("\n")
 
+
 def gen_return_func(f, func):
     if func in ["zeDriverGetDefaultContext"]:
         f.write("static ze_result_t " + func + "ReturnStatus(\n")
         f.write("    [[maybe_unused]]" + "ze_context_handle_t result) {\n")
-        f.write("  return (result != nullptr ? ZE_RESULT_SUCCESS : ZE_RESULT_ERROR_UNKNOWN);\n")
+        f.write(
+            "  return (result != nullptr ? ZE_RESULT_SUCCESS : ZE_RESULT_ERROR_UNKNOWN);\n"
+        )
         f.write("}\n")
+
 
 # Generate OnEnter and OnExit callbacks.
 def gen_callbacks(
@@ -906,7 +943,7 @@ def gen_callbacks(
     existing_apiid_dict,
     regen_api_files,
     synchronization_viewkind_api_list,
-    l0_apis_with_diff_return_status
+    l0_apis_with_diff_return_status,
 ):
     for func in func_param_dict.keys():
         # print ("+++ Function : ", func)
@@ -933,7 +970,7 @@ def gen_callbacks(
         gen_exit_callback(
             f,
             func,
-            func_param_dict[func][1], # func return type
+            func_param_dict[func][1],  # func return type
             submission_func_list,
             synchronize_func_list_on_enter,
             synchronize_func_list_on_exit,
@@ -1064,12 +1101,15 @@ def main():
 
     pti_inc_path = sys.argv[4]
     ur_path = sys.argv[5]
-    ur_file_path = get_ur_api_file_path(ur_path)
 
-    if os.path.isfile(ur_file_path) == True:
+    ur_file_path = None
+    try:
+        ur_file_path = get_ur_api_file_path(ur_path)
+    except Exception as e:
+        print(f"Invalid path provided {ur_path}, defaulting to current API ids. {e}")
+
+    if ur_file_path:
         print("Found UR Path: ", ur_file_path)
-    else:
-        sys.exit("UR file not found: " + ur_file_path)
 
     regen_api_files = False  # Should we regenerate and update API ID files as well?
     if sys.argv[6] == "ON":
@@ -1082,7 +1122,7 @@ def main():
     ocl_api_list = []
 
     l0_api_files = [l0_file_path_api_1_0, l0_file_path_api_1_1_plus]
-    (func_param_dictionary, l0_api_version) = gen_func_param_dict(l0_api_files)
+    func_param_dictionary, l0_api_version = gen_func_param_dict(l0_api_files)
     func_list = list(func_param_dictionary.keys())
 
     kfunc_list = [
@@ -1189,7 +1229,7 @@ def main():
         "zeCommandListHostSynchronize",
     ]
 
-#   There are few level zero APIs which do not return ze_result_t hence need special handling
+    #   There are few level zero APIs which do not return ze_result_t hence need special handling
     l0_apis_with_diff_return_status = [
         "zeDriverGetDefaultContext",
     ]
@@ -1210,7 +1250,16 @@ def main():
 
     resource_list = []
 
-    (ur_func_list, ur_api_version) = get_ur_api_list(ur_file_path)
+    if ur_file_path:
+        ur_func_list, ur_api_version = get_ur_api_list(ur_file_path)
+    else:
+        current_sycl_runtime_pti_file_path = os.path.join(
+            pti_inc_path, "pti_runtime_sycl_api_ids.h"
+        )
+        ur_func_list, ur_api_version = get_current_ur_api_list(
+            current_sycl_runtime_pti_file_path
+        )
+        ur_file_path = current_sycl_runtime_pti_file_path
 
     # category_dict = {"runtime": ur_func_list, "driver": func_list}
     # category_dict = {"runtime": ur_func_list, "driver": func_list + ocl_api_list}

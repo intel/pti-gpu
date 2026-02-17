@@ -51,8 +51,8 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET
     find_package(unified-runtime)
   endif()
 
-  # Temporary until we remove UR build dependency.
-  set(UR_HEADER_PATH "<empty>")
+  # Fake file path until we stop generating code on each build.
+  set(UR_HEADER_PATH "${PROJECT_SOURCE_DIR}/third_party/ur_api.h")
   if (TARGET unified-runtime::loader)
     get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
   endif()
