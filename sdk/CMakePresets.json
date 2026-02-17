@@ -10,8 +10,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
-        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -D_FORTIFY_SOURCE=2",
-        "CMAKE_C_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -D_FORTIFY_SOURCE=2",
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -D_FORTIFY_SOURCE=2",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -D_FORTIFY_SOURCE=2",
         "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack",
         "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack"
       }
@@ -161,8 +161,8 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
-        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -O3 -D_FORTIFY_SOURCE=2",
-        "CMAKE_C_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -O3 -D_FORTIFY_SOURCE=2",
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -O3 -D_FORTIFY_SOURCE=2",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -O3 -D_FORTIFY_SOURCE=2",
         "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack",
         "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack"
       }

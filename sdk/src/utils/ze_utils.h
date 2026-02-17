@@ -18,7 +18,6 @@
 #include <cstring>
 #include <iomanip>
 #include <memory>
-#include <new>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -609,11 +608,7 @@ inline TimestampBuffer MakeTimestampBuffer(ze_context_handle_t ctx, size_t count
 
   // Align to cache line. It must also be multiple of `ze_kernel_timestamp_result_t` size, according
   // to Level Zero specification
-#if defined(__cpp_lib_hardware_interference_size)
-  constexpr size_t kAlignment = std::hardware_destructive_interference_size;
-#else
   constexpr size_t kAlignment = 64;
-#endif
   static_assert(kAlignment % sizeof(ze_kernel_timestamp_result_t) == 0);
 
   const ze_host_mem_alloc_desc_t alloc_desc{ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC, nullptr, 0};

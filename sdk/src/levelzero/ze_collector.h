@@ -522,10 +522,9 @@ class ZeCollector {
  private:
   pti_gpu_op_details MakeGPUOpDetails(const ZeKernelCommand& command) {
     return pti_gpu_op_details{
-        ._operation_kind = ZeCollectorCBSubscriber::GetGPUOperationKind(command.props.type),
-        ._operation_id = command.kernel_id,
-        ._kernel_handle = INVALID_KERNEL_HANDLE,  // temp, until modules & kernels in them supported
-        ._name = command.props.name.c_str()};
+        ZeCollectorCBSubscriber::GetGPUOperationKind(command.props.type), command.kernel_id,
+        INVALID_KERNEL_HANDLE,  // temp, until modules & kernels in them supported
+        command.props.name.c_str()};
   }
 
   pti_callback_gpu_op_data MakeGPUOpData(const ZeKernelCommand& command, pti_callback_phase phase,
@@ -535,16 +534,16 @@ class ZeCollector {
                                                        : PTI_BACKEND_COMMAND_LIST_TYPE_UNKNOWN;
     pti_backend_queue_t queue_handle =
         (IsCommandListImmediate(command.command_list)) ? command.command_list : nullptr;
-    return pti_callback_gpu_op_data{._domain = PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED,
-                                    ._cmd_list_properties = cmd_list_props,
-                                    ._cmd_list_handle = command.command_list,
-                                    ._queue_handle = queue_handle,
-                                    ._device_handle = command.device,
-                                    ._phase = phase,
-                                    ._return_code = static_cast<uint32_t>(return_code),
-                                    ._correlation_id = command.corr_id_,
-                                    ._operation_count = 1,
-                                    ._operation_details = op_details};
+    return pti_callback_gpu_op_data{PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED,
+                                    cmd_list_props,
+                                    command.command_list,
+                                    queue_handle,
+                                    command.device,
+                                    phase,
+                                    static_cast<uint32_t>(return_code),
+                                    command.corr_id_,
+                                    1,
+                                    op_details};
   }
 
   void DoCallbackOnGPUOperationCompletion(
@@ -569,17 +568,11 @@ class ZeCollector {
         ZeCollectorCBSubscriber::MakeGPUOpDetailsArray(records, op_details);
 
         pti_callback_gpu_op_data callback_data = {
-            ._domain = PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED,
+            PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED,
             // as operations from many cmd lists and queues comes in one completion callback
-            ._cmd_list_properties = PTI_BACKEND_COMMAND_LIST_TYPE_UNKNOWN,
-            ._cmd_list_handle = nullptr,
-            ._queue_handle = nullptr,
-            ._device_handle = device_handle,
-            ._phase = PTI_CB_PHASE_API_EXIT,
-            ._return_code = 0,
-            ._correlation_id = 0,
-            ._operation_count = static_cast<uint32_t>(op_details.size()),
-            ._operation_details = op_details.data()};
+            PTI_BACKEND_COMMAND_LIST_TYPE_UNKNOWN, nullptr, nullptr, device_handle,
+            PTI_CB_PHASE_API_EXIT, 0, 0, static_cast<uint32_t>(op_details.size()),
+            op_details.data()};
 
         for (auto& subscriber_handle : cb_subscribers_collection_) {
           auto subscriber = cb_subscribers_collection_.GetSubscriber(subscriber_handle);

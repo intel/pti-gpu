@@ -571,11 +571,11 @@ struct GpuOperationContext {
 
 inline GpuOperationContext ExtractGpuOperationContext(pti_callback_gpu_op_data* callback_data,
                                                       pti_backend_ctx_t backend_context) {
-  return {.context = static_cast<ze_context_handle_t>(backend_context),
-          .queue = static_cast<ze_command_queue_handle_t>(callback_data->_queue_handle),
-          .cmd_list = static_cast<ze_command_list_handle_t>(callback_data->_cmd_list_handle),
-          .submit_type = callback_data->_cmd_list_properties,
-          .device = static_cast<ze_device_handle_t>(callback_data->_device_handle)};
+  return GpuOperationContext{static_cast<ze_context_handle_t>(backend_context),
+                             static_cast<ze_command_queue_handle_t>(callback_data->_queue_handle),
+                             static_cast<ze_command_list_handle_t>(callback_data->_cmd_list_handle),
+                             callback_data->_cmd_list_properties,
+                             static_cast<ze_device_handle_t>(callback_data->_device_handle)};
 }
 
 /**
