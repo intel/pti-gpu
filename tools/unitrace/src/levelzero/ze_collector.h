@@ -726,8 +726,7 @@ struct ZeCommand {
   uint64_t host_time_origin_;   // in ns
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
-  uint64_t metric_timer_frequency_;
-  uint64_t metric_timer_mask_;
+  double device_ns_per_cycle_;
   uint64_t append_time_;
   uint64_t submit_time_;        // in ns
   uint64_t submit_time_device_; // in ticks
@@ -1063,8 +1062,7 @@ struct ZeDevice {
   uint64_t host_time_origin_;	// in ns
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
-  uint64_t metric_timer_frequency_;
-  uint64_t metric_timer_mask_;
+  double device_ns_per_cycle_;
   ze_driver_handle_t driver_;
   ze_context_handle_t context_;
   zet_metric_group_handle_t metric_group_;
@@ -1100,8 +1098,7 @@ struct ZeCommandList {
   uint64_t host_time_origin_;	// in ns
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
-  uint64_t metric_timer_frequency_;
-  uint64_t metric_timer_mask_;
+  double device_ns_per_cycle_;
   uint32_t engine_ordinal_;	// valid if immediate command list
   uint32_t engine_index_;	// valid if immediate command list
   bool immediate_;
@@ -1914,13 +1911,18 @@ class ZeCollector {
             desc.parent_id_ = -1;	// no parent
             desc.parent_device_ = nullptr;
             desc.subdevice_id_ = -1;	// not a subdevice
-            desc.device_timer_frequency_ = GetDeviceTimerFrequency(device);
-            desc.device_timer_mask_ = GetDeviceTimestampMask(device);
-            desc.metric_timer_frequency_ = GetMetricTimerFrequency(device);
-            desc.metric_timer_mask_ = GetMetricTimestampMask(device);
+
+            ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
+            ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
+            PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+            PTI_ASSERT(props.timerResolution != 0);
+
+            desc.device_timer_frequency_ = props.timerResolution;
+            desc.device_timer_mask_ = (props.kernelTimestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)() : ((1ull << props.kernelTimestampValidBits) - 1ull);
+            desc.device_ns_per_cycle_ = static_cast<double>(NSEC_IN_SEC) / static_cast<double>(props.timerResolution);
 
             ze_pci_ext_properties_t pci_device_properties;
-            ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device, &pci_device_properties);
+            status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device, &pci_device_properties);
             if (status != ZE_RESULT_SUCCESS) {
               std::cerr << "[WARNING] Unable to get device PCI properties" << std::endl;
               memset(&pci_device_properties, 0, sizeof(pci_device_properties));  // dummy device properties
@@ -2061,13 +2063,18 @@ class ZeCollector {
                 sub_desc.num_subdevices_ = 0;
                 sub_desc.subdevice_id_ = j;
                 sub_desc.id_ = did;	// take parent device's id
-                sub_desc.device_timer_frequency_ = GetDeviceTimerFrequency(sub_devices[j]);
-                sub_desc.device_timer_mask_ = GetDeviceTimestampMask(sub_devices[j]);
-                sub_desc.metric_timer_frequency_ = GetMetricTimerFrequency(sub_devices[j]);
-                sub_desc.metric_timer_mask_ = GetMetricTimestampMask(sub_devices[j]);
-  
+
+                ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
+                ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(sub_devices[j], &props);
+                PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+                PTI_ASSERT(props.timerResolution != 0);
+
+                sub_desc.device_timer_frequency_ = props.timerResolution;
+                sub_desc.device_timer_mask_ = (props.kernelTimestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)() : ((1ull << props.kernelTimestampValidBits) - 1ull);
+                sub_desc.device_ns_per_cycle_ = static_cast<double>(NSEC_IN_SEC) / static_cast<double>(props.timerResolution);
+
                 ze_pci_ext_properties_t pci_device_properties;
-                ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(sub_devices[j], &pci_device_properties);
+                status = ZE_FUNC(zeDevicePciGetPropertiesExt)(sub_devices[j], &pci_device_properties);
                 if (status != ZE_RESULT_SUCCESS) {
                   std::cerr << "[WARNING] Unable to get device PCI properties" << std::endl;
                   memset(&pci_device_properties, 0, sizeof(pci_device_properties)); // dummy device properties
@@ -2662,12 +2669,12 @@ class ZeCollector {
     global_device_submissions_mutex_.unlock_shared();
   }
 
-  inline uint64_t ComputeDuration(uint64_t start, uint64_t end, uint64_t freq, uint64_t mask) {
+  inline uint64_t ComputeDuration(uint64_t start, uint64_t end, uint64_t freq, uint64_t mask, double ns_per_cycle) {
     uint64_t duration = 0;
     if (start <= end) {
-      duration = (end - start) * static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      duration = static_cast<double>(end - start) * ns_per_cycle;
     } else { // Timer Overflow
-      duration = (mask - start + 1 + end) * static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+      duration = static_cast<double>(mask - start + 1 + end) * ns_per_cycle;
     }
     return duration;
   }
@@ -2675,6 +2682,7 @@ class ZeCollector {
   inline void GetHostTime(const ZeCommand *command, const ze_kernel_timestamp_result_t& ts, uint64_t& start, uint64_t& end) {
     uint64_t device_freq = command->device_timer_frequency_;
     uint64_t device_mask = command->device_timer_mask_;
+    double ns_per_cycle = command->device_ns_per_cycle_;
 
     uint64_t device_start = ts.global.kernelStart & device_mask;
     uint64_t device_end = ts.global.kernelEnd & device_mask;
@@ -2684,14 +2692,14 @@ class ZeCollector {
     uint64_t time_shift;
 
     if (device_start > device_submit_time) {
-      time_shift = (device_start - device_submit_time) * NSEC_IN_SEC / device_freq;
+      time_shift = static_cast<double>(device_start - device_submit_time) * ns_per_cycle;
     }
     else {
       // overflow
-      time_shift = (device_mask - device_submit_time + 1 + device_start) * NSEC_IN_SEC / device_freq;
+      time_shift = static_cast<double>(device_mask - device_submit_time + 1 + device_start) * ns_per_cycle;
     }
 
-    uint64_t duration = ComputeDuration(device_start, device_end, device_freq, device_mask);
+    uint64_t duration = ComputeDuration(device_start, device_end, device_freq, device_mask, ns_per_cycle);
 
     start = command->submit_time_ + time_shift;
     end = start + duration;
@@ -2933,8 +2941,7 @@ class ZeCollector {
       desc->host_time_origin_ = it2->second.host_time_origin_;
       desc->device_timer_frequency_ = it2->second.device_timer_frequency_;
       desc->device_timer_mask_ = it2->second.device_timer_mask_;
-      desc->metric_timer_frequency_ = it2->second.metric_timer_frequency_;
-      desc->metric_timer_mask_ = it2->second.metric_timer_mask_;
+      desc->device_ns_per_cycle_ = it2->second.device_ns_per_cycle_;
       desc->implicit_scaling_ = (it2->second.num_subdevices_ != 0);
     }
     devices_mutex_.unlock_shared();
@@ -3584,8 +3591,7 @@ class ZeCollector {
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
-      desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
-      desc->metric_timer_mask_ = it->second->metric_timer_mask_;
+      desc->device_ns_per_cycle_ = it->second->device_ns_per_cycle_;
       desc->implicit_scaling_ = it->second->implicit_scaling_;
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
@@ -3727,8 +3733,7 @@ class ZeCollector {
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
-      desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
-      desc->metric_timer_mask_ = it->second->metric_timer_mask_;
+      desc->device_ns_per_cycle_ = it->second->device_ns_per_cycle_;
       desc->event_ = event_to_signal;
       desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->device_ = it->second->device_;
@@ -3853,8 +3858,7 @@ class ZeCollector {
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
-      desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
-      desc->metric_timer_mask_ = it->second->metric_timer_mask_;
+      desc->device_ns_per_cycle_ = it->second->device_ns_per_cycle_;
       desc->event_ = event_to_signal;
       desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->device_ = it->second->device_;
@@ -3981,8 +3985,7 @@ class ZeCollector {
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
-      desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
-      desc->metric_timer_mask_ = it->second->metric_timer_mask_;
+      desc->device_ns_per_cycle_ = it->second->device_ns_per_cycle_;
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
       command_lists_mutex_.unlock_shared();
@@ -4095,8 +4098,7 @@ class ZeCollector {
       desc->host_time_origin_ = it->second->host_time_origin_;	// in ns
       desc->device_timer_frequency_ = it->second->device_timer_frequency_;
       desc->device_timer_mask_ = it->second->device_timer_mask_;
-      desc->metric_timer_frequency_ = it->second->metric_timer_frequency_;
-      desc->metric_timer_mask_ = it->second->metric_timer_mask_;
+      desc->device_ns_per_cycle_ = it->second->device_ns_per_cycle_;
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
       command_lists_mutex_.unlock_shared();
@@ -4204,8 +4206,7 @@ class ZeCollector {
       desc->host_time_origin_ = cl->host_time_origin_;	// in ns
       desc->device_timer_frequency_ = cl->device_timer_frequency_;
       desc->device_timer_mask_ = cl->device_timer_mask_;
-      desc->metric_timer_frequency_ = cl->metric_timer_frequency_;
-      desc->metric_timer_mask_ = cl->metric_timer_mask_;
+      desc->device_ns_per_cycle_ = cl->device_ns_per_cycle_;
       desc->device_ = cl->device_;
 
       desc->group_count_ = {0, 0, 0};

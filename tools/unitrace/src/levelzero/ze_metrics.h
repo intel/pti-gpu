@@ -177,11 +177,8 @@ enum ZeProfilerState {
 struct ZeDeviceDescriptor {
   ze_device_handle_t device_;
   ze_device_handle_t parent_device_;
-  uint64_t host_time_origin_;
-  uint64_t device_time_origin_;
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
-  uint64_t metric_time_origin_;
   uint64_t metric_timer_frequency_;
   uint64_t metric_timer_mask_;
   ze_driver_handle_t driver_;
@@ -544,13 +541,17 @@ class ZeMetricProfiler {
         desc->subdevice_id_ = -1;     // not a subdevice
         desc->num_sub_devices_ = sub_devices.size();
 
-        desc->device_timer_frequency_ = GetDeviceTimerFrequency(device);
-        desc->device_timer_mask_ = GetDeviceTimestampMask(device);
-        desc->metric_timer_frequency_ = GetMetricTimerFrequency(device);
-        desc->metric_timer_mask_ = GetMetricTimestampMask(device);
+        ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
+        ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        PTI_ASSERT(props.timerResolution != 0);
+        PTI_ASSERT(props.kernelTimestampValidBits != 0);
+
+        desc->device_timer_frequency_ = props.timerResolution;
+        desc->device_timer_mask_ = (props.kernelTimestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)() : ((1ull << props.kernelTimestampValidBits) - 1ull);
 
         ze_pci_ext_properties_t pci_device_properties;
-        ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device, &pci_device_properties);
+        status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device, &pci_device_properties);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
         desc->pci_properties_ = pci_device_properties;
 
@@ -560,26 +561,36 @@ class ZeMetricProfiler {
           exit(-1);
         }
 
+        zet_metric_group_properties_t metric_group_prop;
+        metric_group_prop.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
+        metric_group_prop.pNext = nullptr;
+
+        zet_metric_global_timestamps_resolution_exp_t metrics_ts_prop;
+        metrics_ts_prop.stype = ZET_STRUCTURE_TYPE_METRIC_GLOBAL_TIMESTAMPS_RESOLUTION_EXP;
+        metrics_ts_prop.pNext = nullptr;
+        metric_group_prop.pNext = &metrics_ts_prop;
+        status = ZE_FUNC(zetMetricGroupGetProperties)(group, &metric_group_prop);
+        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+        PTI_ASSERT(metrics_ts_prop.timerResolution != 0);
+        PTI_ASSERT(metrics_ts_prop.timestampValidBits != 0);
+
+        desc->metric_timer_frequency_ = metrics_ts_prop.timerResolution;
+        // specially handling certain older devices
+        uint32_t device_gen = (props.deviceId & 0xFF00);
+        if (device_gen == 0x0B00) {
+          if (desc->metric_timer_frequency_ > desc->device_timer_frequency_) {
+            desc->metric_timer_frequency_ = desc->device_timer_frequency_;
+          }
+
+          if (metrics_ts_prop.timestampValidBits == props.kernelTimestampValidBits) {
+            metrics_ts_prop.timestampValidBits = metrics_ts_prop.timestampValidBits - 1;
+          }
+        }
+        desc->metric_timer_mask_ = (metrics_ts_prop.timestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)() : ((1ull << metrics_ts_prop.timestampValidBits) - 1ull);
+
         desc->driver_ = driver;
         desc->context_ = context;
         desc->metric_group_ = group;
-
-        uint64_t host_time;
-        uint64_t ticks;
-        uint64_t device_time;
-        uint64_t metric_time;
-
-        ZE_FUNC(zeDeviceGetGlobalTimestamps)(device, &host_time, &ticks);
-
-        device_time = ticks & desc->device_timer_mask_;
-        device_time = device_time * NSEC_IN_SEC / desc->device_timer_frequency_;
-
-        metric_time = ticks & desc->metric_timer_mask_;
-        metric_time = metric_time * NSEC_IN_SEC / desc->metric_timer_frequency_;
-
-        desc->host_time_origin_ = host_time;
-        desc->device_time_origin_ = device_time;
-        desc->metric_time_origin_ = metric_time;
 
         desc->profiling_thread_ = nullptr;
         desc->profiling_state_.store(PROFILER_DISABLED, std::memory_order_release);
@@ -606,32 +617,17 @@ class ZeMetricProfiler {
           sub_desc->context_ = context;
           sub_desc->metric_group_ = group;
 
-          sub_desc->device_timer_frequency_ = GetDeviceTimerFrequency(sub_devices[j]);
-          sub_desc->device_timer_mask_ = GetDeviceTimestampMask(sub_devices[j]);
-          sub_desc->metric_timer_frequency_ = GetMetricTimerFrequency(sub_devices[j]);
-          sub_desc->metric_timer_mask_ = GetMetricTimestampMask(sub_devices[j]);
+          sub_desc->device_timer_frequency_ = desc->device_timer_frequency_;
+          sub_desc->device_timer_mask_ = desc->device_timer_mask_;
+
+          sub_desc->metric_timer_frequency_ = desc->metric_timer_frequency_;
+          sub_desc->metric_timer_mask_ = desc->metric_timer_mask_;
 
           ze_pci_ext_properties_t pci_device_properties;
           ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(sub_devices[j], &pci_device_properties);
           PTI_ASSERT(status == ZE_RESULT_SUCCESS);
           
           sub_desc->pci_properties_ = pci_device_properties;
-
-          uint64_t ticks;
-          uint64_t host_time;
-          uint64_t device_time;
-          uint64_t metric_time;
-
-          ZE_FUNC(zeDeviceGetGlobalTimestamps)(sub_devices[j], &host_time, &ticks);
-          device_time = ticks & sub_desc->device_timer_mask_;
-          device_time = device_time * NSEC_IN_SEC / sub_desc->device_timer_frequency_;
-
-          metric_time = ticks & sub_desc->metric_timer_mask_;
-          metric_time = metric_time * NSEC_IN_SEC / sub_desc->metric_timer_frequency_;
-
-          sub_desc->host_time_origin_ = host_time;
-          sub_desc->device_time_origin_ = device_time;
-          sub_desc->metric_time_origin_ = metric_time;
 
           sub_desc->driver_ = driver;
           sub_desc->context_ = context;
@@ -924,6 +920,9 @@ class ZeMetricProfiler {
       else {
         std::vector<ZeKernelInfo> kinfo;
         uint64_t max_global_instance_id = 0;
+        double device_ns_per_cycle = (static_cast<double>(NSEC_IN_SEC) / static_cast<double>(device->device_timer_frequency_));
+        double metric_ns_per_cycle = (static_cast<double>(NSEC_IN_SEC) / static_cast<double>(device->metric_timer_frequency_));
+
         // enumerate all kernel time files
         for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir_name_))) {
           // kernel properties file path: <data_dir>/.ktime.<device_id>.<pid>.txt
@@ -966,16 +965,26 @@ class ZeMetricProfiler {
               }
               info.metric_end = std::strtoll(line.c_str(), nullptr, 0);
 
-              info.metric_start = info.metric_start & device->metric_timer_mask_;
-              info.metric_start = info.metric_start * (NSEC_IN_SEC / device->metric_timer_frequency_);
+              uint64_t kstart;
+              uint64_t kend;
+              uint64_t elapsed;
 
-              info.metric_end = info.metric_end & device->metric_timer_mask_;
-              info.metric_end = info.metric_end * (NSEC_IN_SEC / device->metric_timer_frequency_);
+              kstart = info.metric_start & device->device_timer_mask_;
+              kstart = static_cast<double>(kstart) * device_ns_per_cycle;
 
-              if (info.metric_end < info.metric_start) {
-                // clock wraps around
-                info.metric_end += (device->metric_timer_mask_ + 1UL) * (NSEC_IN_SEC / device->metric_timer_frequency_);
+              kend = info.metric_end & device->device_timer_mask_;
+              kend = static_cast<double>(kend) * device_ns_per_cycle;
+
+              while (kend <= kstart) {
+                kend += static_cast<double>(device->device_timer_mask_ + 1UL) * device_ns_per_cycle;
               }
+              elapsed = kend - kstart;
+
+              info.metric_start = info.metric_start & device->metric_timer_mask_;
+              info.metric_start = static_cast<double>(info.metric_start) * metric_ns_per_cycle;
+
+              info.metric_end = info.metric_start + elapsed;
+
               std::getline(kf, info.kernel_name);
               if ((info.metric_start != 0) && (info.metric_end != 0) && (!info.kernel_name.empty())) {
                 kinfo.push_back(std::move(info));
@@ -1000,7 +1009,7 @@ class ZeMetricProfiler {
         }
 
         //TODO: handle subdevices in case of implicit scaling
-        uint64_t time_span_between_clock_resets = (device->metric_timer_mask_ + 1ull) * (static_cast<uint64_t>(NSEC_IN_SEC) / device->metric_timer_frequency_);
+        uint64_t time_span_between_clock_resets = static_cast<double>(device->metric_timer_mask_ + 1ull) * metric_ns_per_cycle;
 
         std::ifstream inf = std::ifstream(device->metric_file_name_, std::ios::in | std::ios::binary);
         if (!inf.is_open()) {

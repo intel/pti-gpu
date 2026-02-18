@@ -347,50 +347,6 @@ inline void GetMetricTimestamps(
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 }
 
-inline uint64_t GetDeviceTimerFrequency(ze_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
-  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
-  ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  return props.timerResolution;
-}
-
-inline uint64_t GetMetricTimerFrequency(ze_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
-  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
-  ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  return props.timerResolution;
-}
-
-inline uint64_t GetDeviceTimestampMask(ze_device_handle_t device) {
-  PTI_ASSERT(device != nullptr);
-  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
-  ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  return ((props.kernelTimestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)()
-              : ((1ull << props.kernelTimestampValidBits) - 1ull));
-}
-
-inline uint64_t GetMetricTimestampMask(ze_device_handle_t device) {
-#ifdef PTI_OA_TIMESTAMP_VALID_BITS
-  return (1ull << PTI_OA_TIMESTAMP_VALID_BITS) - 1ull;
-#else
-  ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
-  ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  uint32_t devicemask = (props.deviceId & 0xFF00);
-  if ((devicemask == 0x5600) || (devicemask == 0x4F00) || (devicemask == 0x0B00) ||
-      (devicemask == 0x7D00) || (devicemask == 0xE200) || (devicemask == 0x6400) || (devicemask == 0x9A00)) {
-      return (1ull << (props.kernelTimestampValidBits - 1)) - 1ull;
-  }
-  else {
-      return ((props.kernelTimestampValidBits == 64) ? (std::numeric_limits<uint64_t>::max)()
-                  : ((1ull << props.kernelTimestampValidBits) - 1ull));
-  }
-#endif
-}
-
 inline ze_api_version_t GetDriverVersion(ze_driver_handle_t driver) {
   PTI_ASSERT(driver != nullptr);
 

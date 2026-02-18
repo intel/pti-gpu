@@ -33,6 +33,8 @@
 
 #include "cl_intel_ext.h"
 
+#include "utils_ze.h"
+
 class ClCollector;
 
 enum ClKernelType {
@@ -181,26 +183,45 @@ inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
   return pci_info;
 }
 
-inline ze_device_handle_t GetZeDevice(cl_device_id device_id) {
+//TODO: this can be done when the device is enumerated at startup
+inline double GetZeDeviceTimerNsPerCycle(cl_device_id device_id) {
   if (device_id == nullptr) {
-    return nullptr;
+    return 0;
   }
 
+  static cl_device_id last_seen_device_id = nullptr;
+  static double last_seen_ze_device_timer_ns_per_cycle = 0;
+
+  if (last_seen_device_id == device_id) {
+    return last_seen_ze_device_timer_ns_per_cycle;
+  }
   cl_device_pci_bus_info_khr pci_info = GetDevicePciInfo(device_id);
 
   for (auto device : GetDeviceList()) {
-    zes_pci_properties_t pci_props{ZES_STRUCTURE_TYPE_PCI_PROPERTIES, };
-    ze_result_t status = ZE_FUNC(zesDevicePciGetProperties)(device, &pci_props);
+    ze_pci_ext_properties_t pci_props;
+
+    pci_props.pNext = nullptr;
+    pci_props.stype = ZE_STRUCTURE_TYPE_PCI_EXT_PROPERTIES;
+    ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(device, &pci_props);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
     if (pci_info.pci_domain == pci_props.address.domain &&
         pci_info.pci_bus == pci_props.address.bus &&
         pci_info.pci_device == pci_props.address.device &&
         pci_info.pci_function == pci_props.address.function) {
-      return device;
+
+      ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
+      ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+      last_seen_device_id = device_id;
+      last_seen_ze_device_timer_ns_per_cycle = static_cast<double>(NSEC_IN_SEC) / static_cast<double>(props.timerResolution);
+
+      return last_seen_ze_device_timer_ns_per_cycle;
     }
   }
-
-  return nullptr;
+  // should not get here
+  return 0;
 }
 
 void OnEnterFunction(ClFunctionId function, cl_callback_data* data, uint64_t start, ClCollector* collector);
@@ -1012,8 +1033,6 @@ class ClCollector {
         utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_START);
       cl_ulong ended =
         utils::cl::GetEventTimestamp(event, CL_PROFILING_COMMAND_END);
-      cl_ulong time = ended - started;
-      PTI_ASSERT(time > 0);
 
       cl_device_id device = utils::cl::GetDevice(queue);
       PTI_ASSERT(device != nullptr);
@@ -1057,44 +1076,16 @@ class ClCollector {
       }
 
       if (options_.metric_stream) {
-        cl_ulong cl_host_timestamp = 0;
-        cl_ulong cl_device_timestamp = 0;
-        utils::cl::GetTimestamps(device, &cl_host_timestamp, &cl_device_timestamp);
-
-        uint64_t ze_host_timestamp;
-        uint64_t ze_device_timestamp;
-        ze_device_handle_t ze_device;
-        uint64_t mask;
-        uint64_t freq;
-
-        ze_device = GetZeDevice(device);
-        PTI_ASSERT(ze_device != nullptr);
-        mask = GetMetricTimestampMask(ze_device);
-        freq = GetMetricTimerFrequency(ze_device);
-
-        ZE_FUNC(zeDeviceGetGlobalTimestamps)(ze_device, &ze_host_timestamp, &ze_device_timestamp);
-        ze_device_timestamp = ze_device_timestamp & mask;
-
-        cl_ulong elapsed;
-
-        elapsed = cl_device_timestamp - started;
-        elapsed += (ze_host_timestamp - cl_host_timestamp);
+        double ns_per_cycle = GetZeDeviceTimerNsPerCycle(device);
+        PTI_ASSERT(ns_per_cycle > 0);
 
         uint64_t ze_started;
         uint64_t ze_ended;
 
-        uint64_t ns_per_cycle;
-        ns_per_cycle = static_cast<uint64_t>(NSEC_IN_SEC) / freq;
+        // convert time from nano seconds to cycles
+        ze_started = static_cast<double>(started) / ns_per_cycle;
+        ze_ended = static_cast<double>(ended) / ns_per_cycle;
 
-        ze_started = (ze_device_timestamp - (elapsed / ns_per_cycle)) & mask;
-        ze_ended = (ze_started + ((ended - started) / ns_per_cycle)) & mask;;
-
-        ze_started = ze_started * ns_per_cycle;
-        ze_ended = ze_ended * ns_per_cycle;
-
-        if (ze_ended < ze_started) {
-          ze_ended += ((mask + 1)* ns_per_cycle);
-        }
         ClKernelProfileRecord rec{device, instance->kernel_id, ze_started, ze_ended, std::move(name)};
 
         profile_records_.push_back(std::move(rec));
