@@ -195,9 +195,8 @@ jobs:
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
           REM TODO(PTI-88): OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
-          REM TODO(PTI-360): Occasionally `run-metrics-perf` hangs on Windows.
           ctest --output-on-failure --preset ${{ matrix.preset }} -LE performance ^
-            -E "MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords|run-metrics-perf"
+            -E "MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords"
 
       - name: Quarantined tests # flaky tests
         continue-on-error: true
