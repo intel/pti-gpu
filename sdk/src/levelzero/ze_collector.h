@@ -244,14 +244,16 @@ class ZeCollector {
   }
 
   ~ZeCollector() {
-#if !defined(_WIN32)
-    // TODO Looks on Windows due to not specified DLLs unload order we hit assert here
     if (tracer_ != nullptr) {
-      [[maybe_unused]] ze_result_t status = zelTracerDestroy(tracer_);
-      // PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      // Prevents crash when potentially receiving late Level Zero calls,
+      // particularly on Windows.
+      [[maybe_unused]] auto status = zelTracerSetEnabled(tracer_, false);
+#if !defined(_WIN32)
+      // TODO(PTI): Looks on Windows due to not specified DLLs unload order we hit assert here
+      status = zelTracerDestroy(tracer_);
+#endif
       tracer_ = nullptr;
     }
-#endif
   }
   enum class ZeCollectionMode { Full = 0, Hybrid = 1, Local = 2 };
   enum class ZeCollectionState { Normal = 0, Abnormal = 1 };
