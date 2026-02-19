@@ -313,8 +313,6 @@ void VecSqAddRouter(sycl::queue &sycl_queue, TestType a_test_type) {
 }
 
 void RunVecsqadd(TestType a_test_type) {
-  auto dev = sycl::device(sycl::gpu_selector_v);
-
   auto d_selector{sycl::gpu_selector_v};
   sycl::property_list prop{sycl::property::queue::in_order()};
   sycl::queue q(d_selector, prop);

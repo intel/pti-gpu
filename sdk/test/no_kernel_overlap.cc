@@ -68,7 +68,6 @@ float TestCore(bool do_immediate) {
     std::cout << "Time stamp (ns):" << samples_utils::AposFormat(third_stamp) << std::endl;
     std::cout << "Time stamp (ns):" << samples_utils::AposFormat(forth_stamp) << std::endl;
 
-    auto dev = sycl::device(sycl::gpu_selector_v);
     // Important that queue is in order
     sycl::queue q;
     if (do_immediate) {

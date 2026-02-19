@@ -185,7 +185,6 @@ int main(int argc, char* argv[]) {
   size_t n1_block, n2_block, n3_block;
   unsigned int num_iterations;
 
-  auto dev = sycl::device(sycl::gpu_selector_v);
   uint8_t uuid[16];
   bool sycl_device_has_uuid = false;
 

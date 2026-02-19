@@ -433,8 +433,6 @@ void RunVecsqadd(TestType a_test_type) {
                 pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid),
             pti_result::PTI_SUCCESS);
 
-  auto dev = sycl::device(sycl::gpu_selector_v);
-
   auto d_selector{sycl::gpu_selector_v};
   sycl::property_list prop_list{sycl::property::queue::in_order()};
   sycl::queue q(d_selector, sycl::async_handler{}, prop_list);

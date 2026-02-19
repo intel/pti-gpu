@@ -304,7 +304,6 @@ int main(int argc, char* argv[]) {
       });
 
   StartTracing();
-  auto dev = sycl::device(sycl::gpu_selector_v);
 
   // Read Input Parameters
   try {
