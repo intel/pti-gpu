@@ -68,6 +68,7 @@ inline static const std::unordered_map<std::string, ApiType> kCoreApis = {
     {"piEnqueueKernelLaunch", ApiType::kKernel},
     {"piextEnqueueKernelLaunchCustom", ApiType::kKernel},
     {"piextEnqueueCooperativeKernelLaunch", ApiType::kKernel},
+    {"urEnqueueKernelLaunchWithArgsExp", ApiType::kKernel},
 
     {"piEnqueueMemBufferRead", ApiType::kMemory},
     {"piEnqueueMemBufferWrite", ApiType::kMemory},
@@ -259,6 +260,7 @@ class SyclCollector {
           if (InKernelCoreApis(function_name)) {
             sycl_data_kview.sycl_enqk_begin_time_ = time;
           }
+
           if (InMemoryCoreApis(function_name)) {
             sycl_data_mview.sycl_task_begin_time_ = time;
           }

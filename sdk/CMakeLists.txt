@@ -83,6 +83,7 @@ endif()
 
 option(PTI_BUILD_TESTING "Build PTI tests" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_BUILD_SAMPLES "Build samples with library" ${PROJECT_IS_TOP_LEVEL})
+option(PTI_BUILD_URGEMM "Build urgemm_suite test" ${PROJECT_IS_TOP_LEVEL})
 option(PTI_INSTALL "Install library when invoking --install" ON)
 option(PTI_ENABLE_LOGGING "Enable logging for Pti" OFF)
 option(PTI_FUZZ "Enable Fuzz Pti" OFF)

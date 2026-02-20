@@ -586,33 +586,35 @@ add_subdirectory(graph)
 
 if (HAVE_SYCL AND TARGET unified-runtime::loader)
 
-  add_executable(urgemm_suite main_urgemm_fixture.cc)
+  if (PTI_BUILD_URGEMM)
+    add_executable(urgemm_suite main_urgemm_fixture.cc)
 
-  target_include_directories(
-    urgemm_suite
-    PUBLIC "${CMAKE_BINARY_DIR}"
-           "${PROJECT_SOURCE_DIR}/include"
-           "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
-           "${PROJECT_SOURCE_DIR}/src"
-           "${PROJECT_SOURCE_DIR}/src/levelzero"
-    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+    target_include_directories(
+      urgemm_suite
+      PUBLIC "${CMAKE_BINARY_DIR}"
+             "${PROJECT_SOURCE_DIR}/include"
+             "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+             "${PROJECT_SOURCE_DIR}/src"
+             "${PROJECT_SOURCE_DIR}/src/levelzero"
+      PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
-  target_compile_options(urgemm_suite  PUBLIC -fsycl)
-  target_link_options(urgemm_suite PUBLIC -fsycl)
-  target_link_libraries(urgemm_suite PUBLIC spdlog::spdlog
+    target_compile_options(urgemm_suite  PUBLIC -fsycl)
+    target_link_options(urgemm_suite PUBLIC -fsycl)
+    target_link_libraries(urgemm_suite PUBLIC spdlog::spdlog
                                             Pti::pti_view
                                             GTest::gtest_main
                                             GTest::gmock
                                             LevelZero::level-zero
                                             unified-runtime::loader
                                             ${FS_LIB})
-  gtest_discover_tests(
-    urgemm_suite
-    DISCOVERY_TIMEOUT 60
-    TEST_LIST URGEMM_SUITE_TEST_LIST
-    PROPERTIES LABELS "unit" "sycl" "unified-runtime")
+    gtest_discover_tests(
+      urgemm_suite
+      DISCOVERY_TIMEOUT 60
+      TEST_LIST URGEMM_SUITE_TEST_LIST
+      PROPERTIES LABELS "unit" "sycl" "unified-runtime")
 
-  add_dependencies(urgemm_suite copy_test_spv)
+    add_dependencies(urgemm_suite copy_test_spv)
+  endif()
 
   RequirePythonInterp()
 

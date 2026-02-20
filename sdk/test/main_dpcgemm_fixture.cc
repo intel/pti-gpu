@@ -27,6 +27,8 @@ size_t completed_buffer_calls = 0;
 size_t completed_buffer_used_bytes = 0;
 uint64_t eid_ = 11;
 const uint64_t kEnqueueKernelLaunchId = 17;  // apiid of urEnqueueKernelLaunch
+const uint64_t kEnqueueKernelLaunchWithArgsExpId =
+    295;  // apiid of urEnqueueKernelLaunchWithArgsExp
 pti_result pop_null_ptr_result = pti_result::PTI_SUCCESS;
 bool special_sycl_rec_present = false;
 bool memory_view_record_created = false;
@@ -673,7 +675,9 @@ TEST_F(MainFixtureTest, SyclRunTimeFunctionCheck) {
     EXPECT_EQ(sycl_has_all_records, false);  // user has requested no records in buffer via env var.
   } else {
     EXPECT_EQ(kernel_launch_func_name, true);
-    EXPECT_EQ(kernel_launch_func_id, kEnqueueKernelLaunchId);  // EnqueueKernelLaunch
+    // EnqueueKernelLaunch or EnqueueKernelLaunchWithArgsExp
+    EXPECT_TRUE(kernel_launch_func_id == kEnqueueKernelLaunchId ||
+                kernel_launch_func_id == kEnqueueKernelLaunchWithArgsExpId);
     EXPECT_EQ(sycl_has_all_records, true);
   }
 }
@@ -963,8 +967,11 @@ void EnableIndividualApis(bool is_for_driver, pti_api_group_id pti_group) {
     PTI_CHECK_SUCCESS(ptiViewEnableDriverApi(
         1, pti_group, pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernel_id));
   } else {
+    // Either of these two APIs should be present
     PTI_CHECK_SUCCESS(
         ptiViewEnableRuntimeApi(1, pti_group, pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(
+        1, pti_group, pti_api_id_runtime_sycl::urEnqueueKernelLaunchWithArgsExp_id));
   }
 }
 
