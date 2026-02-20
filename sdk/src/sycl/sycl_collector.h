@@ -454,35 +454,11 @@ class XptiStreamRegistrationHandler {
 
  private:
   static void RegisterSyclCallbacks(uint8_t stream_id) {
-    // Register our lone callback to all pre-defined trace point types
+    // Register our lone callback to node_create, tast_begin, and task_end
     // TODO: Do something with result besides log.
     [[maybe_unused]] auto result = xptiRegisterCallback(
         stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::node_create),
         SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result = xptiRegisterCallback(stream_id,
-                                  static_cast<uint16_t>(xpti::trace_point_type_t::queue_create),
-                                  SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result = xptiRegisterCallback(stream_id,
-                                  static_cast<uint16_t>(xpti::trace_point_type_t::edge_create),
-                                  SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result = xptiRegisterCallback(stream_id,
-                                  static_cast<uint16_t>(xpti::trace_point_type_t::region_begin),
-                                  SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::region_end),
-                             SyclCollector::TpCallback);
     if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
       SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
     }
@@ -494,72 +470,6 @@ class XptiStreamRegistrationHandler {
     }
     result =
         xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::task_end),
-                             SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result = xptiRegisterCallback(stream_id,
-                                  static_cast<uint16_t>(xpti::trace_point_type_t::barrier_begin),
-                                  SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result = xptiRegisterCallback(stream_id,
-                                  static_cast<uint16_t>(xpti::trace_point_type_t::barrier_end),
-                                  SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::lock_begin),
-                             SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::lock_end),
-                             SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result = xptiRegisterCallback(stream_id,
-                                  static_cast<uint16_t>(xpti::trace_point_type_t::transfer_begin),
-                                  SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result = xptiRegisterCallback(stream_id,
-                                  static_cast<uint16_t>(xpti::trace_point_type_t::transfer_end),
-                                  SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result = xptiRegisterCallback(stream_id,
-                                  static_cast<uint16_t>(xpti::trace_point_type_t::thread_begin),
-                                  SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::thread_end),
-                             SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::wait_begin),
-                             SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::wait_end),
-                             SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::metadata),
                              SyclCollector::TpCallback);
     if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
       SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
