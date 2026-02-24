@@ -23,7 +23,7 @@ extern "C" {
  * @brief const defines.
  */
 #define PTI_MAX_PCI_ADDRESS_SIZE 16                         //!< Size of pci address array.
-#define PTI_INVALID_QUEUE_ID 0xFFFFFFFFFFFFFFFF-1           //!< Indicates a missing sycl queue id. UINT64_MAX-1
+#define PTI_INVALID_QUEUE_ID (0xFFFFFFFFFFFFFFFF-1)         //!< Indicates a missing sycl queue id. UINT64_MAX-1
 
 /**
  * @brief Kinds of software and hardware operations to be tracked and viewed,
@@ -53,7 +53,7 @@ typedef enum _pti_view_synchronization_type {
   PTI_VIEW_SYNCHRONIZATION_TYPE_UNKNOWN = 0,                  //!< Unknown synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_EXECUTION = 1,    //!< Barrier execution and global memory synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_GPU_BARRIER_MEMORY = 2,       //!< Barrier memory range coherency synchronization type
-  PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_FENCE= 3,                //!< Fence coarse grain execution synchronization type
+  PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_FENCE = 3,               //!< Fence coarse grain execution synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_EVENT = 4,               //!< Event host synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_LIST = 5,        //!< Commandlist host synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_QUEUE = 6,       //!< CommandQueue host synchronization type
@@ -199,11 +199,11 @@ typedef struct pti_view_record_kernel {
 /**
  * @brief Synchronization View record type
  */
-typedef struct pti_view_record_synchronization{
+typedef struct pti_view_record_synchronization {
   pti_view_record_base _view_kind;                  //!< Base record
   pti_view_synchronization_type _synch_type;        //!< Synchronization type
   pti_backend_ctx_t _context_handle;                //!< Context handle
-  pti_backend_ctx_t _queue_handle;                  //!< Queue handle
+  pti_backend_queue_t _queue_handle;                //!< Queue handle
   pti_backend_evt_t _event_handle;                  //!< Event handle synchronization api is called with.
   uint64_t _start_timestamp;                        //!< For host synchronization types: function enter timestamp
                                                     //!< For gpu synchronization types: synch start timestamp on device
@@ -313,7 +313,7 @@ typedef struct pti_view_record_external_correlation {
                                             //!< of other Views
   uint64_t _external_id;                    //!< ID provided by user, marking an external
                                             //!< to PTI operation
-  pti_view_external_kind _external_kind;
+  pti_view_external_kind _external_kind;    //!< External correlation kind
 } pti_view_record_external_correlation;
 
 
@@ -421,7 +421,7 @@ pti_result PTI_EXPORT ptiFlushAllViews(void);
  * @brief Gets next view record in buffer.
  *
  * @param buffer The buffer initially provided by pti_fptr_buffer_requested
- * user function and now passd to pti_fptr_buffer_completed
+ * user function and now passed to pti_fptr_buffer_completed
  * @param valid_bytes Size of portion of the buffer filled with view records
  * @param record Current view record
  * @return pti_result
@@ -431,7 +431,7 @@ ptiViewGetNextRecord(uint8_t* buffer, size_t valid_bytes,
                        pti_view_record_base** record);
 
 /**
- * @brief Pushes ExternelCorrelationId kind and id for generation of external correlation records
+ * @brief Pushes ExternalCorrelationId kind and id for generation of external correlation records
  *
  * @param external_kind
  * @param external_id
@@ -441,7 +441,7 @@ pti_result PTI_EXPORT
 ptiViewPushExternalCorrelationId(pti_view_external_kind external_kind, uint64_t external_id);
 
 /**
- * @brief Pops ExternelCorrelationId kind and id for generation of external correlation records
+ * @brief Pops ExternalCorrelationId kind and id for generation of external correlation records
  *
  * @param external_kind
  * @param external_id
