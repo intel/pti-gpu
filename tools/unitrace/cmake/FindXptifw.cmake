@@ -14,8 +14,13 @@ find_path(Xptifw_INCLUDE_DIR
 
 find_package_handle_standard_args(Xptifw REQUIRED_VARS Xptifw_LIBRARY Xptifw_INCLUDE_DIR)
 
+if (Xptifw_LIBRARY)
+	get_filename_component(Xptifw_LIBRARY_DIR ${Xptifw_LIBRARY} DIRECTORY)
+endif()
+
 if (Xptifw_FOUND)
     mark_as_advanced(Xptifw_LIBRARY)
+    mark_as_advanced(Xptifw_LIBRARY_DIR)
     mark_as_advanced(Xptifw_INCLUDE_DIR)
 endif()
 
@@ -26,5 +31,6 @@ if (Xptifw_FOUND AND NOT TARGET Xptifw::Xptifw)
     PROPERTIES IMPORTED_LOCATION "${Xptifw_LIBRARY}"
                INTERFACE_COMPILE_DEFINITIONS
                "XPTI_API_EXPORTS;XPTI_CALLBACK_API_EXPORTS"
+               INTERFACE_LINK_DIRECTORIES "${Xptifw_LIBRARY_DIR}"
                INTERFACE_INCLUDE_DIRECTORIES "${Xptifw_INCLUDE_DIR}")
 endif()
