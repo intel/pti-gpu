@@ -48,7 +48,6 @@ struct SyclUrFuncT {
 };
 
 inline thread_local bool framework_finalized = false;
-inline thread_local SyclUrFuncT current_func_task_info;
 
 inline constexpr static std::array<const char* const, 13> kSTraceType = {
     "TaskBegin",           "TaskEnd",     "Signal",    "NodeCreate", "FunctionWithArgsBegin",
@@ -57,41 +56,24 @@ inline constexpr static std::array<const char* const, 13> kSTraceType = {
 
 enum class ApiType { kInvalid = 0, kKernel = 1, kMemory = 2 };
 
-inline static const std::unordered_map<std::string, ApiType> kCoreApis = {
-    {"piextUSMEnqueueFill", ApiType::kMemory},
-    {"piextUSMEnqueueFill2D", ApiType::kMemory},
-    {"piextUSMEnqueueMemcpy", ApiType::kMemory},
-    {"piextUSMEnqueueMemset", ApiType::kMemory},
-    {"piextUSMEnqueueMemcpy2D", ApiType::kMemory},
-    {"piextUSMEnqueueMemset2D", ApiType::kMemory},
+inline static const std::unordered_map<pti_api_id_runtime_sycl, ApiType> kCoreApis = {
+    {pti_api_id_runtime_sycl::urEnqueueUSMFill_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urEnqueueUSMFill2D_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urEnqueueUSMMemcpy_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urEnqueueUSMMemcpy2D_id, ApiType::kMemory},
 
-    {"piEnqueueKernelLaunch", ApiType::kKernel},
-    {"piextEnqueueKernelLaunchCustom", ApiType::kKernel},
-    {"piextEnqueueCooperativeKernelLaunch", ApiType::kKernel},
-    {"urEnqueueKernelLaunchWithArgsExp", ApiType::kKernel},
+    {pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id, ApiType::kKernel},
+    {pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id, ApiType::kKernel},
+    {pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id, ApiType::kKernel},
+    {pti_api_id_runtime_sycl::urEnqueueKernelLaunchWithArgsExp_id, ApiType::kKernel},
 
-    {"piEnqueueMemBufferRead", ApiType::kMemory},
-    {"piEnqueueMemBufferWrite", ApiType::kMemory},
-    {"piextUSMSharedAlloc", ApiType::kMemory},
-    {"piextUSMHostAlloc", ApiType::kMemory},
-    {"piextUSMDeviceAlloc", ApiType::kMemory},
-
-    {"urEnqueueUSMFill", ApiType::kMemory},
-    {"urEnqueueUSMFill2D", ApiType::kMemory},
-    {"urEnqueueUSMMemcpy", ApiType::kMemory},
-    {"urEnqueueUSMMemcpy2D", ApiType::kMemory},
-
-    {"urEnqueueKernelLaunch", ApiType::kKernel},
-    {"urEnqueueKernelLaunchCustomExp", ApiType::kKernel},
-    {"urEnqueueCooperativeKernelLaunchExp", ApiType::kKernel},
-
-    {"urEnqueueMemBufferFill", ApiType::kMemory},
-    {"urEnqueueMemBufferRead", ApiType::kMemory},
-    {"urEnqueueMemBufferWrite", ApiType::kMemory},
-    {"urEnqueueMemBufferCopy", ApiType::kMemory},
-    {"urUSMHostAlloc", ApiType::kMemory},
-    {"urUSMSharedAlloc", ApiType::kMemory},
-    {"urUSMDeviceAlloc", ApiType::kMemory}};
+    {pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urEnqueueMemBufferRead_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urEnqueueMemBufferWrite_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urEnqueueMemBufferCopy_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urUSMHostAlloc_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urUSMSharedAlloc_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urUSMDeviceAlloc_id, ApiType::kMemory}};
 
 inline const char* GetTracePointTypeString(xpti::trace_point_type_t trace_type) {
   switch (trace_type) {
@@ -132,20 +114,17 @@ inline std::string Truncate(const std::string& name) {
   return name;
 }
 
-inline bool InKernelCoreApis(const char* function_name) {
-  const auto it = kCoreApis.find(function_name);
-  if (it != kCoreApis.end()) {
-    return it->second == ApiType::kKernel;
-  }
-  return false;
+inline ApiType GetApiType(const pti_api_id_runtime_sycl api_id) noexcept {
+  const auto it = kCoreApis.find(api_id);
+  return (it != kCoreApis.end()) ? it->second : ApiType::kInvalid;
 }
 
-inline bool InMemoryCoreApis(const char* function_name) {
-  const auto it = kCoreApis.find(function_name);
-  if (it != kCoreApis.end()) {
-    return it->second == ApiType::kMemory;
-  }
-  return false;
+inline bool InKernelCoreApis(const pti_api_id_runtime_sycl api_id) noexcept {
+  return GetApiType(api_id) == ApiType::kKernel;
+}
+
+inline bool InMemoryCoreApis(const pti_api_id_runtime_sycl api_id) noexcept {
+  return GetApiType(api_id) == ApiType::kMemory;
 }
 
 inline bool IsMemoryOperation(xpti::string_id_t xpti_metadata_key) {
@@ -216,176 +195,163 @@ class SyclCollector {
   static XPTI_CALLBACK_API void TpCallback(uint16_t TraceType, xpti::trace_event_data_t* /*Parent*/,
                                            xpti::trace_event_data_t* Event, uint64_t /*instance*/,
                                            const void* UserData) {
-    const uint64_t time = utils::GetTime();
-    const auto* payload = xptiQueryPayload(Event);
-
-    uint64_t ID = Event ? Event->unique_id : 0;
-    uint64_t Instance_ID = Event ? Event->instance_id : 0;
-    uint32_t pid = thread_local_pid_tid_info.pid;
-    uint32_t tid = thread_local_pid_tid_info.tid;
-
     const auto trace_type = static_cast<xpti::trace_point_type_t>(TraceType);
-
-    SPDLOG_TRACE("{}: TraceType: {} - id: {}", time, GetTracePointTypeString(trace_type),
-                 TraceType);
-    SPDLOG_TRACE(" Event_id: {}, Instance_id: {}, pid: {}, tid: {}", ID, Instance_ID, pid, tid);
 
     switch (trace_type) {
       case xpti::trace_point_type_t::function_with_args_begin:
-        // case xpti::trace_point_type_t::function_begin:
-        sycl_data_kview.cid_ = UniCorrId::GetUniCorrId();
-        sycl_data_mview.cid_ = sycl_data_kview.cid_;
-        SyclCollector::Instance().sycl_runtime_rec_.cid_ = sycl_data_kview.cid_;
-
-        if (UserData) {
-          const auto* args = static_cast<const xpti::function_with_args_t*>(UserData);
-
-          // const auto* function_name = static_cast<const char*>(UserData);
-          const auto* function_name = args->function_name;
-          SPDLOG_TRACE("\tSYCL.UR Function Begin: {}, corr_id: {}", function_name,
-                       sycl_data_kview.cid_);
-          // TODO: Re-evaluate whether this is actually needed. I do not see what we are doing with
-          // current_func_task_info.func_name.
-          auto function_name_size = std::strlen(function_name) + 1;  // plus '\0'
-          if (function_name_size < current_func_task_info.func_name.size()) {
-            std::copy_n(function_name, function_name_size,
-                        current_func_task_info.func_name.begin());
-          } else {
-            std::copy_n(kUnknownFunctionName.begin(), kUnknownFunctionName.size(),
-                        current_func_task_info.func_name.begin());
-            current_func_task_info.func_name[kUnknownFunctionName.size()] = '\0';
-          }
-          current_func_task_info.func_pid = pid;
-          current_func_task_info.func_tid = tid;
-          if (InKernelCoreApis(function_name)) {
-            sycl_data_kview.sycl_enqk_begin_time_ = time;
-          }
-
-          if (InMemoryCoreApis(function_name)) {
-            sycl_data_mview.sycl_task_begin_time_ = time;
-          }
-          SyclCollector::Instance().sycl_runtime_rec_.pid_ = pid;
-          SyclCollector::Instance().sycl_runtime_rec_.tid_ = tid;
-          SyclCollector::Instance().sycl_runtime_rec_.start_time_ = time;
-          SyclCollector::Instance().sycl_runtime_rec_.sycl_func_name_ = function_name;
-          SyclCollector::Instance().sycl_runtime_rec_.callback_id_ = args->function_id;
-        }
+        HandleFunctionWithArgsBegin(UserData);
         break;
       case xpti::trace_point_type_t::function_with_args_end:
-        // case xpti::trace_point_type_t::function_end:
-        if (UserData) {
-          [[maybe_unused]] const char* api_name = nullptr;
-          const auto* args = static_cast<const xpti::function_with_args_t*>(UserData);
-          // const auto* function_name = static_cast<const char*>(UserData);
-          const auto* function_name = args->function_name;
-          SPDLOG_TRACE("\tSYCL.UR Function End: {}, corr_id: {}", function_name,
-                       sycl_data_kview.cid_);
-          PTI_ASSERT(std::strcmp(current_func_task_info.func_name.data(), function_name) == 0);
-          // Following asserts check that the function_id arg matches the one in ur_api.h.
-          //  These asserts only appear in debug builds and are filtered out for release builds.
-          //  So no overhead in release builds.
-          assert(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, args->function_id,
-                                     &api_name) == pti_result::PTI_SUCCESS);
-          assert(std::strcmp(api_name, function_name) == 0);
-          PTI_ASSERT(current_func_task_info.func_pid == pid);
-          PTI_ASSERT(current_func_task_info.func_tid == tid);
-          SPDLOG_TRACE("\tVerified: func: {} - Pid: {} - Tid: {}",
-                       current_func_task_info.func_name.data(), current_func_task_info.func_pid,
-                       current_func_task_info.func_tid);
-          if (InKernelCoreApis(function_name)) {
-            SyclCollector::Instance().sycl_runtime_rec_.kid_ = sycl_data_kview.kid_;
-          }
-          if (InMemoryCoreApis(function_name)) {
-            SyclCollector::Instance().sycl_runtime_rec_.kid_ = sycl_data_mview.kid_;
-            SyclCollector::Instance().sycl_runtime_rec_.tid_ = sycl_data_mview.tid_;
-          }
-          SyclCollector::Instance().sycl_runtime_rec_.end_time_ = time;
-          if (SyclCollector::Instance().acallback_ != nullptr) {
-            {
-              const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
-              uint32_t id_enabled = 1;  // by default state maps are 1
-              id_enabled = pti_api_id_runtime_sycl_state[args->function_id];
-
-              int32_t trace_all = SyclCollector::Instance().trace_all_env_value_;
-              if ((trace_all > 0) || ((trace_all < 0) && id_enabled)) {
-                if (SyclCollector::Instance().enabled_ && !framework_finalized) {
-                  (SyclCollector::Instance().acallback_.load())(
-                      nullptr, SyclCollector::Instance().sycl_runtime_rec_);
-                }
-              }
-            }
-            SyclCollector::Instance().sycl_runtime_rec_.kid_ = 0;
-            sycl_data_kview.kid_ = 0;
-            sycl_data_kview.tid_ = 0;
-            sycl_data_kview.cid_ = 0;
-            sycl_data_mview.kid_ = 0;
-            sycl_data_mview.tid_ = 0;
-            sycl_data_mview.cid_ = 0;
-          }
-        }
+        HandleFunctionWithArgsEnd(UserData);
         break;
       case xpti::trace_point_type_t::task_begin:
-        if (Event) {
-          const auto* metadata = xptiQueryMetadata(Event);
-          for (const auto& item : *metadata) {
-            if (IsKernelOperation(item.first)) {
-              if (payload) {
-                if (payload->source_file) {
-                  sycl_data_kview.source_file_name_ = std::string{payload->source_file};
-                }
-                sycl_data_kview.source_line_number_ = payload->line_no;
-              }
-              sycl_data_kview.sycl_node_id_ = ID;
-              const auto queue_id_loc = node_q_map.find(ID);
-              sycl_data_kview.sycl_queue_id_ =
-                  (queue_id_loc != std::end(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
-              sycl_data_kview.sycl_invocation_id_ = static_cast<uint32_t>(Instance_ID);
-              sycl_data_kview.sycl_task_begin_time_ = time;
-              break;  // no need to keep searching metadata
-            }
-
-            if (IsMemoryOperation(item.first)) {
-              const auto queue_id_loc = node_q_map.find(ID);
-              sycl_data_mview.sycl_queue_id_ =
-                  (queue_id_loc != std::end(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
-              break;  // no need to keep searching metadata
-            }
-          }
-        }
+        HandleTaskBegin(Event);
+        break;
+      case xpti::trace_point_type_t::node_create:
+        HandleNodeCreate(Event);
         break;
       case xpti::trace_point_type_t::task_end:
-        break;
       case xpti::trace_point_type_t::queue_create:
-        break;
-      case xpti::trace_point_type_t::node_create: {
-        if (Event) {
-          char* stashed_key = nullptr;
-          uint64_t stashed_value = 0;
-          if (SyclCollector::Instance().xptiGetStashedKV_ &&
-              SyclCollector::Instance().xptiGetStashedKV_(&stashed_key, stashed_value) ==
-                  xpti::result_t::XPTI_RESULT_SUCCESS) {
-            if (std::strcmp(stashed_key, "queue_id") == 0) {
-              node_q_map[ID] = stashed_value;
-            }
-          } else {
-            node_q_map[ID] = kDefaultQueueId;
-          }
-          const auto* metadata = xptiQueryMetadata(Event);
-          for (const auto& item : *metadata) {
-            if (IsKernelOperation(item.first)) {
-              sycl_data_kview.sycl_queue_id_ = node_q_map[ID];
-              break;
-            }
-            if (IsMemoryOperation(item.first)) {
-              sycl_data_mview.sycl_queue_id_ = node_q_map[ID];
-              break;
-            }
-          }
-        }
-        break;
-      }
       default:
         break;
+    }
+  }
+
+ private:
+  static void HandleFunctionWithArgsBegin(const void* UserData) {
+    sycl_data_kview.cid_ = UniCorrId::GetUniCorrId();
+    sycl_data_mview.cid_ = sycl_data_kview.cid_;
+    SyclCollector::Instance().sycl_runtime_rec_.cid_ = sycl_data_kview.cid_;
+
+    if (!UserData) return;
+
+    const auto* args = static_cast<const xpti::function_with_args_t*>(UserData);
+    const auto api_id = static_cast<pti_api_id_runtime_sycl>(args->function_id);
+
+    auto& runtime_rec = SyclCollector::Instance().sycl_runtime_rec_;
+    runtime_rec.pid_ = thread_local_pid_tid_info.pid;
+    runtime_rec.tid_ = thread_local_pid_tid_info.tid;
+    runtime_rec.callback_id_ = args->function_id;
+
+    const ApiType api_type = GetApiType(api_id);
+
+    runtime_rec.start_time_ = utils::GetTime();
+    if (api_type == ApiType::kKernel) {
+      sycl_data_kview.sycl_enqk_begin_time_ = runtime_rec.start_time_;
+    } else if (api_type == ApiType::kMemory) {
+      sycl_data_mview.sycl_task_begin_time_ = runtime_rec.start_time_;
+    }
+  }
+
+  static void HandleFunctionWithArgsEnd(const void* UserData) {
+    if (!UserData) return;
+
+    const auto* args = static_cast<const xpti::function_with_args_t*>(UserData);
+    const auto api_id = static_cast<pti_api_id_runtime_sycl>(args->function_id);
+    auto time = utils::GetTime();
+
+    const ApiType api_type = GetApiType(api_id);
+    auto& runtime_rec = SyclCollector::Instance().sycl_runtime_rec_;
+
+    if (api_type == ApiType::kKernel) {
+      runtime_rec.kid_ = sycl_data_kview.kid_;
+    } else if (api_type == ApiType::kMemory) {
+      runtime_rec.kid_ = sycl_data_mview.kid_;
+      runtime_rec.tid_ = sycl_data_mview.tid_;
+    }
+
+    runtime_rec.end_time_ = time;
+
+    // Check callback and invoke if needed
+    auto& instance = SyclCollector::Instance();
+    if (instance.acallback_ != nullptr) {
+      const std::lock_guard<std::mutex> lock(sycl_set_granularity_map_mtx);
+      const uint32_t id_enabled = pti_api_id_runtime_sycl_state[args->function_id];
+      const int32_t trace_all = instance.trace_all_env_value_;
+
+      if ((trace_all > 0) || ((trace_all < 0) && id_enabled)) {
+        if (instance.enabled_ && !framework_finalized) {
+          (instance.acallback_.load())(nullptr, runtime_rec);
+        }
+      }
+
+      // Reset state
+      runtime_rec.kid_ = 0;
+      sycl_data_kview.kid_ = 0;
+      sycl_data_kview.tid_ = 0;
+      sycl_data_kview.cid_ = 0;
+      sycl_data_mview.kid_ = 0;
+      sycl_data_mview.tid_ = 0;
+      sycl_data_mview.cid_ = 0;
+    }
+  }
+
+  static void HandleTaskBegin(xpti::trace_event_data_t* Event) {
+    if (!Event) return;
+
+    const uint64_t ID = Event->unique_id;
+    const uint64_t Instance_ID = Event->instance_id;
+    const auto* metadata = xptiQueryMetadata(Event);
+    auto time = utils::GetTime();
+
+    for (const auto& item : *metadata) {
+      if (IsKernelOperation(item.first)) {
+        const auto* payload = xptiQueryPayload(Event);
+        if (payload) {
+          if (payload->source_file) {
+            sycl_data_kview.source_file_name_ = std::string{payload->source_file};
+          }
+          sycl_data_kview.source_line_number_ = payload->line_no;
+        }
+
+        sycl_data_kview.sycl_node_id_ = ID;
+        const auto queue_id_loc = node_q_map.find(ID);
+        sycl_data_kview.sycl_queue_id_ =
+            (queue_id_loc != std::end(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
+        sycl_data_kview.sycl_invocation_id_ = static_cast<uint32_t>(Instance_ID);
+        sycl_data_kview.sycl_task_begin_time_ = time;
+        return;
+      }
+
+      if (IsMemoryOperation(item.first)) {
+        const auto queue_id_loc = node_q_map.find(ID);
+        sycl_data_mview.sycl_queue_id_ =
+            (queue_id_loc != std::end(node_q_map)) ? queue_id_loc->second : kDefaultQueueId;
+        sycl_data_mview.sycl_task_begin_time_ = time;
+        return;
+      }
+    }
+  }
+
+  static void HandleNodeCreate(xpti::trace_event_data_t* Event) {
+    if (!Event) return;
+
+    const uint64_t ID = Event->unique_id;
+    char* stashed_key = nullptr;
+    uint64_t stashed_value = 0;
+
+    auto& instance = SyclCollector::Instance();
+    if (instance.xptiGetStashedKV_ && (instance.xptiGetStashedKV_(&stashed_key, stashed_value) ==
+                                       xpti::result_t::XPTI_RESULT_SUCCESS)) {
+      if (std::strcmp(stashed_key, "queue_id") == 0) {
+        node_q_map[ID] = stashed_value;
+      }
+    } else {
+      node_q_map[ID] = kDefaultQueueId;
+    }
+
+    const uint64_t queue_id = node_q_map[ID];
+    const auto* metadata = xptiQueryMetadata(Event);
+
+    for (const auto& item : *metadata) {
+      if (IsKernelOperation(item.first)) {
+        sycl_data_kview.sycl_queue_id_ = queue_id;
+        return;
+      }
+      if (IsMemoryOperation(item.first)) {
+        sycl_data_mview.sycl_queue_id_ = queue_id;
+        return;
+      }
     }
   }
 
@@ -443,11 +409,6 @@ class XptiStreamRegistrationHandler {
       RegisterImplCallbacks(stream_id_);
       SPDLOG_DEBUG("Registering callbacks for {}", stream_name);
       ++stream_count_;
-    } else if (std::strcmp(stream_name, "sycl.pi.debug") == 0) {  // PLUGIN INTERFACE
-      stream_id_ = xptiRegisterStream(stream_name);
-      RegisterImplCallbacks(stream_id_);
-      SPDLOG_DEBUG("Registering callbacks for {}", stream_name);
-      ++stream_count_;
     } else {
       SPDLOG_DEBUG("XPTI Stream: {} v{} no callbacks registered!", stream_name, version_str);
     }
@@ -455,49 +416,32 @@ class XptiStreamRegistrationHandler {
   }
 
  private:
+  // Helper to register a single callback and check result
+  static void RegisterCallback(uint8_t stream_id, xpti::trace_point_type_t trace_point) {
+    const auto result = xptiRegisterCallback(stream_id, static_cast<uint16_t>(trace_point),
+                                             SyclCollector::TpCallback);
+    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
+      SPDLOG_ERROR("For XPTI Stream ID: {} Callback Registration for trace point {} returned: {}",
+                   static_cast<int32_t>(stream_id), static_cast<int32_t>(trace_point),
+                   static_cast<int32_t>(result));
+    }
+  }
+
   static void RegisterSyclCallbacks(uint8_t stream_id) {
-    // Register our lone callback to node_create, tast_begin, and task_end
-    // TODO: Do something with result besides log.
-    [[maybe_unused]] auto result = xptiRegisterCallback(
-        stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::node_create),
-        SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::task_begin),
-                             SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::task_end),
-                             SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
+    // Register callback to predefined trace point types
+    constexpr std::array<xpti::trace_point_type_t, 3> trace_points = {
+        xpti::trace_point_type_t::node_create, xpti::trace_point_type_t::task_begin,
+        xpti::trace_point_type_t::task_end};
+
+    for (const auto trace_point : trace_points) {
+      RegisterCallback(stream_id, trace_point);
     }
   }
 
   static void RegisterImplCallbacks(uint8_t stream_id) {
-    // TODO: Do something with result besides log.
-    [[maybe_unused]] auto result = xptiRegisterCallback(
-        stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::function_with_args_begin),
-        SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result = xptiRegisterCallback(
-        stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::function_with_args_end),
-        SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
-    result =
-        xptiRegisterCallback(stream_id, static_cast<uint16_t>(xpti::trace_point_type_t::metadata),
-                             SyclCollector::TpCallback);
-    if (result != xpti::result_t::XPTI_RESULT_SUCCESS) {
-      SPDLOG_ERROR("XPTI Callback Registration returned: {}", static_cast<int32_t>(result));
-    }
+    RegisterCallback(stream_id, xpti::trace_point_type_t::function_with_args_begin);
+    RegisterCallback(stream_id, xpti::trace_point_type_t::function_with_args_end);
+    RegisterCallback(stream_id, xpti::trace_point_type_t::metadata);
   }
 
   //  Until the user calls EnableTracing(), disable tracing when we are
