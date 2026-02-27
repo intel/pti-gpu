@@ -1691,12 +1691,18 @@ class ZeCollector {
       if (collector->IsIntrospectionCapable()) {
         auto status = collector->l0_wrapper_.w_zeEventGetEventPool(event_h, &epool_h);
         if (status == ZE_RESULT_SUCCESS) {
-          status = collector->l0_wrapper_.w_zeEventPoolGetContextHandle(epool_h, &ctxt_h);
-          if (status == ZE_RESULT_SUCCESS) {
-            rec.context_ = ctxt_h;
+          if (epool_h != nullptr) {
+            status = collector->l0_wrapper_.w_zeEventPoolGetContextHandle(epool_h, &ctxt_h);
+            if (status == ZE_RESULT_SUCCESS) {
+              rec.context_ = ctxt_h;
+            } else {
+              SPDLOG_DEBUG(
+                  "\tLevel-Zero Introspection API: zeEventPoolGetContextHandle return unsuccessful "
+                  "-- inserting null context handle in synch. record..");
+            }
           } else {
-            SPDLOG_WARN(
-                "\tLevel-Zero Introspection API: zeEventPoolGetContextHandle return unsuccessful "
+            SPDLOG_DEBUG(
+                "\tLevel-Zero Introspection API: zeEventGetEventPool returned null event pool "
                 "-- inserting null context handle in synch. record..");
           }
         }
