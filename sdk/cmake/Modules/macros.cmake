@@ -249,6 +249,8 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
         GIT_REPOSITORY
         https://github.com/oneapi-src/level-zero.git
         GIT_TAG ${PTI_L0_LOADER_COMMIT_HASH}
+        # Patch: Fix VERSION file location to avoid Windows <version> header conflict (CMAKE_BINARY_DIR -> CMAKE_CURRENT_BINARY_DIR)
+        PATCH_COMMAND git apply --ignore-whitespace "${PROJECT_SOURCE_DIR}/cmake/levelzero_version_fix.patch"
     )
     # Prevent content from automatically being installed with PTI
     FetchContent_GetProperties(LevelZero)
