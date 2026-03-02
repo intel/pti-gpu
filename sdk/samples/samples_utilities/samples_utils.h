@@ -281,6 +281,21 @@ inline void DumpRecord(pti_view_record_api* record) {
   std::cout << "Thread Id:      " << record->_thread_id << '\n';
 }
 
+inline void DumpRecord(pti_view_record_comms* record) {
+  if (nullptr == record) {
+    return;
+  }
+
+  std::cout << "ITT Api Execution Time: "
+            << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
+  std::cout << "Api Start Time: " << AposFormat(record->_start_timestamp) << " ns" << '\n';
+  std::cout << "Api End Time: " << AposFormat(record->_end_timestamp) << " ns" << '\n';
+  std::cout << "Process Id: " << record->_process_id << '\n';
+  std::cout << "Thread Id: " << record->_thread_id << '\n';
+  std::cout << "Metadata_size: " << record->_metadata_size << '\n';
+  std::cout << "ITT CMD: <" << record->_name << ">\n";
+}
+
 inline void DumpRecord(pti_view_record_synchronization* record) {
   if (nullptr == record) return;
   switch (record->_synch_type) {

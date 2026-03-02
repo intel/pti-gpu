@@ -1,3 +1,8 @@
+#==============================================================
+# Copyright (C) Intel Corporation
+#
+# SPDX-License-Identifier: MIT
+# =============================================================
 include(macros)
 RemoveNDebugFlag() # For SYCL Function Name
 CheckExperimentalFilesystem()
@@ -643,6 +648,8 @@ target_include_directories(
 
 target_link_libraries(view_record_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main)
 
+get_itt()
+
 add_executable(assert_exception_test assert_exception_test.cc
    "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc")
 
@@ -650,10 +657,12 @@ target_include_directories(
   assert_exception_test
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/itt"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
 target_link_libraries(assert_exception_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
                                                    LevelZero::level-zero
+                                                   ittapi::headers
                                                    ${CMAKE_DL_LIBS}
                                                    ${FS_LIB})
 
@@ -784,6 +793,56 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
 
   # It is enabled only for functional test as there is an issue observed with Intel OpenMP with Address Sanitizer.
   set_tests_properties(run-omp_vec_add PROPERTIES LABELS "functional;samples")
+endif()
+
+# CCL ITT tests 
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  get_itt()
+
+  add_executable(itt_test_suite itt_test_suite.cc)
+  target_include_directories(
+    itt_test_suite
+    PUBLIC "${PROJECT_SOURCE_DIR}/include"
+     "${PROJECT_BINARY_DIR}/include"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/utils"
+      "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+  )
+  target_compile_options(itt_test_suite PUBLIC -fsycl)
+  target_link_options(itt_test_suite PUBLIC -fsycl)
+  target_link_libraries(itt_test_suite PUBLIC GTest::gmock
+               GTest::gtest_main
+               spdlog::spdlog
+               fmt::fmt
+               Pti::pti_view
+               ittapi::ittnotify
+               LevelZero::level-zero)
+
+  #
+  # Bug warning in cmake. It will not accept LABELS separted by ';'.
+  #
+  gtest_discover_tests(
+     itt_test_suite
+     DISCOVERY_TIMEOUT 60
+     PROPERTIES
+        ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
+        LABELS "unit"
+        LABELS "itt")
+
+  add_executable(itt_basic itt_basic.cc)
+  target_link_options(itt_basic PUBLIC -fsycl)
+  target_compile_options(itt_basic PUBLIC -fsycl)
+  target_include_directories(itt_basic PRIVATE "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+                                               "${PROJECT_SOURCE_DIR}/src/utils")
+  target_link_libraries(itt_basic PRIVATE Pti::pti_view ittapi::ittnotify)
+  add_test(NAME itt_basic COMMAND itt_basic)
+  set_tests_properties(itt_basic PROPERTIES ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>")
+
+  add_test(NAME sycl_allreduce_usm_test COMMAND mpiexec -n 2 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/sycl_allreduce_usm_test gpu device)
+  set_tests_properties(sycl_allreduce_usm_test PROPERTIES
+    ENVIRONMENT INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>)
+
+
 endif()
 
 if(PTI_FUZZ)

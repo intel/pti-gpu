@@ -10,6 +10,7 @@
 #include <level_zero/layers/zel_tracing_api.h>
 
 #include <atomic>
+#include <cstdint>
 #include <cstring>
 #include <map>
 #include <stack>
@@ -155,6 +156,17 @@ struct ZeKernelCommandExecutionRecord {
   uint64_t api_end_time_;
   uint64_t num_wait_events_ = 0;  // tracks wait event count for synchronization activity commands
   ze_result_t result_;
+};
+
+struct CommunicationRecord {
+  pti_view_external_kind external_kind_;
+  uint32_t pid_;
+  uint32_t tid_;
+  uint64_t start_time_;
+  uint64_t end_time_;
+  uint64_t metadata_size_;
+  uint64_t communicator_id_;
+  const char* name_;
 };
 
 // This structure and thread_local object enables collectors to avoid retrieving pid and tid

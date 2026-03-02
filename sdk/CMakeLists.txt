@@ -1,3 +1,8 @@
+#==============================================================
+# Copyright (C) Intel Corporation
+#
+# SPDX-License-Identifier: MIT
+# =============================================================
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
                       "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 
@@ -118,6 +123,8 @@ if(NOT TARGET LevelZero::level-zero)
   GetLevelZero(${PTI_L0_LOADER} ${PTI_L0_LOADER_COMMIT_HASH})
 endif()
 
+get_itt()
+
 find_package(Threads REQUIRED)
 
 # Build PTI libraries.
@@ -133,13 +140,24 @@ configure_file(${PROJECT_SOURCE_DIR}/src/utils/platform_config.h.in
 add_library(pti_all INTERFACE)
 add_library(Pti::pti_all ALIAS pti_all)
 
+#
+# The ITT collector is only built for the Linux version
+#
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(PTI_ITT_COLLECTOR_FILE "${PROJECT_SOURCE_DIR}/src/itt/itt_collector.cc")
+  set(PTI_ITT_STUBS_FILE "${PROJECT_SOURCE_DIR}/src/itt/itt_stubs.cc")
+  set(PTI_ITT_ADAPTER_FILE "${PROJECT_SOURCE_DIR}/src/itt/itt_adapter.cc")
+  add_compile_definitions(PTI_CCL_ITT_COMPILE)
+endif()
+
 # Core implementation loaded by pti_view
 add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                        "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_callbacks.cc"
                        "${PROJECT_SOURCE_DIR}/src/metrics/pti_metrics.cc"
                        "${PROJECT_SOURCE_DIR}/src/metrics/pti_metrics_scope.cc"
-                       "${PROJECT_SOURCE_DIR}/src/pti_version.cc")
+                       "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
+                       "${PTI_ITT_COLLECTOR_FILE}")
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
 include(GenerateExportHeader)
@@ -163,6 +181,7 @@ set(PTI_PRIVATE_INCLUDE_DIRS
   "${PROJECT_SOURCE_DIR}/src"
   "${PROJECT_SOURCE_DIR}/src/sycl"
   "${PROJECT_SOURCE_DIR}/src/levelzero"
+  "${PROJECT_SOURCE_DIR}/src/itt"
   "${PROJECT_SOURCE_DIR}/src/utils"
 )
 
@@ -170,6 +189,8 @@ target_include_directories(
   pti
   PUBLIC ${PTI_PUBLIC_INCLUDE_DIRS}
   PRIVATE ${PTI_PRIVATE_INCLUDE_DIRS})
+
+target_link_libraries(pti PRIVATE ittapi::headers)
 
 set_target_properties(
   pti
@@ -201,7 +222,8 @@ target_link_libraries(
           LevelZero::level-zero
           spdlog::spdlog
           ${CMAKE_DL_LIBS}
-          ${FS_LIB})
+          ${FS_LIB}
+          ittapi::headers)
 
 FindHeadersPath(
   pti "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py"
@@ -211,13 +233,17 @@ if(PROJECT_IS_TOP_LEVEL)
   AddApiGenTarget(
     "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py" "tracing.gen" LevelZero::level-zero)
   add_dependencies(generate-ids gen_tracing_header)
+
 endif()
 
 # Library that loads core (pti). User links to this one.
+# pti_metrics
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/xpti_adapter.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
-                            "${PROJECT_SOURCE_DIR}/src/pti_view_load.cc")
+                            "${PROJECT_SOURCE_DIR}/src/pti_view_load.cc"
+                            "${PTI_ITT_ADAPTER_FILE}"
+                            "${PTI_ITT_STUBS_FILE}")
 
 add_library(Pti::pti_view ALIAS pti_view)
 
@@ -226,12 +252,14 @@ target_include_directories(
   PUBLIC ${PTI_PUBLIC_INCLUDE_DIRS}
   PRIVATE ${PTI_PRIVATE_INCLUDE_DIRS})
 
+target_link_libraries(pti_view PRIVATE ittapi::headers)
+
 set_target_properties(
   pti_view
   PROPERTIES VERSION "${PROJECT_VERSION}"
              SOVERSION "${PTI_API_SOVERSION}"
              POSITION_INDEPENDENT_CODE ON
-	           DEFINE_SYMBOL "${PTI_DEFINE_SYMBOL}")
+             DEFINE_SYMBOL "${PTI_DEFINE_SYMBOL}")
 
 if (WIN32)
   set_target_properties(
@@ -260,7 +288,7 @@ target_link_libraries(
           ${FS_LIB})
 
 target_link_libraries(
-	pti_all INTERFACE Pti::pti_view)
+  pti_all INTERFACE Pti::pti_view)
 
 include(CTest)
 
@@ -279,6 +307,7 @@ if(BUILD_TESTING AND PTI_BUILD_SAMPLES)
   add_subdirectory(samples/metrics_scope)
   add_subdirectory(samples/omp_vec_add)
   add_subdirectory(samples/metrics_perf)
+  add_subdirectory(samples/itt_ccl)
 endif()
 
 if(BUILD_TESTING AND PTI_BUILD_TESTING)

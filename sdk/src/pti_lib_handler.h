@@ -22,6 +22,13 @@
 #include "utils/utils.h"
 #include "xpti_adapter.h"
 
+#define INTEL_NO_MACRO_BODY
+#define INTEL_ITTNOTIFY_API_PRIVATE
+
+#include <ittnotify.h>
+#include <ittnotify_config.h>
+ITT_EXTERN_C void ITTAPI __itt_api_init(__itt_global* p, __itt_group_id init_groups);
+
 namespace pti {
 
 #if defined(_WIN32)
@@ -131,6 +138,13 @@ class PtiLibHandler {
   decltype(&ptiMetricsScopeGetMetricsMetadata) ptiMetricsScopeGetMetricsMetadata_ =
       nullptr;  // NOLINT
 
+  decltype(&__itt_api_init) __itt_api_init_ = nullptr;                          // NOLINT
+  decltype(&__itt_domain_create) __itt_domain_create_ = nullptr;                // NOLINT
+  decltype(&__itt_task_begin) __itt_task_begin_ = nullptr;                      // NOLINT
+  decltype(&__itt_task_end) __itt_task_end_ = nullptr;                          // NOLINT
+  decltype(&__itt_string_handle_create) __itt_string_handle_create_ = nullptr;  // NOLINT
+  decltype(&__itt_metadata_add) __itt_metadata_add_ = nullptr;                  // NOLINT
+
  private:
   inline void CommunicateForeignXPTISubscriber() {
     // Passing information about XPTI subscriber to PTI Core library right after it is loaded.
@@ -221,6 +235,13 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeCalculateMetrics);
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeQueryMetricsBufferSize);
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeGetMetricsMetadata);
+
+#define PTI_VIEW_GET_ITT_SYMBOL(X) X##_ = pti_view_lib_->GetSymbol<decltype(&X)>(#X "_impl")
+    PTI_VIEW_GET_ITT_SYMBOL(__itt_api_init);
+    PTI_VIEW_GET_ITT_SYMBOL(__itt_task_begin);
+    PTI_VIEW_GET_ITT_SYMBOL(__itt_task_end);
+    PTI_VIEW_GET_ITT_SYMBOL(__itt_string_handle_create);
+    PTI_VIEW_GET_ITT_SYMBOL(__itt_metadata_add);
 
 #undef PTI_VIEW_GET_SYMBOL
     CommunicateForeignXPTISubscriber();

@@ -42,6 +42,7 @@ typedef enum _pti_view_kind {
   PTI_VIEW_DEVICE_GPU_MEM_FILL = 9,          //!< Device memory fills
   PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P = 10,     //!< Peer to Peer Memory copies between Devices.
   PTI_VIEW_DEVICE_SYNCHRONIZATION = 11,      //!< synchronization operations on host and GPU.
+  PTI_VIEW_COMMUNICATION = 12,               //!< Communication records via oneCCL. Only for Linux.
 } pti_view_kind;
 
 /**
@@ -349,6 +350,19 @@ typedef struct pti_view_record_api {
   uint32_t _return_code;           //!< Applicable only for PTI_VIEW_DRIVER_CALL, type cast to specific driver code type
 } pti_view_record_api;
 
+/**
+ * @brief commuincation View record type, only for Linux
+ */
+typedef struct pti_view_record_comms {
+  pti_view_record_base _view_kind; //!< Base record
+  uint64_t _start_timestamp;       //!< function call start timestamp, ns
+  uint64_t _end_timestamp;         //!< function call end timestamp, ns
+  uint32_t _process_id;            //!< Process ID of where the api call observed
+  uint32_t _thread_id;             //!< Thread ID of where the api call observed
+  uint64_t _metadata_size;         //!< Size of metadata attached to this communication record
+  uint64_t _communicator_id;       //!< Communicator ID provided by CCL
+  const char *_name;               //!< oneCCL function name
+} pti_view_record_comms;
 
 /**
  * @brief Function pointer for buffer completed

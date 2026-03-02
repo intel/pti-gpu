@@ -7,11 +7,13 @@
 #define SRC_API_VIEW_HANDLER_H_
 
 #include <spdlog/cfg/env.h>
+#include <spdlog/common.h>
 #include <spdlog/spdlog.h>
 
 #include <atomic>
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <map>
 #include <memory>
@@ -28,6 +30,7 @@
 #include "sycl_collector.h"
 #endif
 
+#include "itt_collector.h"
 #include "overhead_kinds.h"
 #include "unikernel.h"
 #include "utils.h"
@@ -70,6 +73,7 @@ inline void ZeChromeKernelStagesCallback(void* data,
                                          std::vector<ZeKernelCommandExecutionRecord>& kcexecrec);
 
 inline void ZeApiCallsCallback(void* data, ZeKernelCommandExecutionRecord& rec);
+inline void CommunicationEvent(void* data, CommunicationRecord& rec);
 
 inline void SyclRuntimeViewCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 inline void OverheadCollectionCallback(void* data, ZeKernelCommandExecutionRecord& rec);
@@ -180,6 +184,8 @@ inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
             ViewData{"ZecallEvent", ZeDriverEvent},
           }
         },
+        {PTI_VIEW_COMMUNICATION, {}
+        }
       };
   // clang-format on
   const auto result = view_data_map.find(view);
@@ -314,6 +320,10 @@ struct PtiViewRecordHandler {
       collector_options.kernel_tracing = true;
       collector_ = ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback,
                                        ZeApiCallsCallback, nullptr);
+#if defined(PTI_CCL_ITT_COMPILE)
+      IttCollector::Instance().SetCallback(CommunicationEvent);
+#endif  // PTI_CCL_ITT_COMPILE
+
       overhead::SetOverheadCallback(OverheadCollectionCallback);
       // Get timevalue in nanoseconds for frequency of sync between clock sources
       // (clock_monotonic_raw and by default clock_realtime)
@@ -519,6 +529,14 @@ struct PtiViewRecordHandler {
 #endif
     }
 
+#if defined(PTI_CCL_ITT_COMPILE)
+    if (type == pti_view_kind::PTI_VIEW_COMMUNICATION) {
+      IttCollector::Instance().SetCallback(CommunicationEvent);
+      IttCollector::Instance().EnableTrace();
+      collection_enabled = true;
+    }
+#endif  // PTI_CCL_ITT_COMPILE
+
     if (collector_) {
       collection_enabled = true;
       if (l0_collection_type) {
@@ -589,6 +607,11 @@ struct PtiViewRecordHandler {
       SyclCollector::Instance().DisableTracing();
 #endif
     }
+#if defined(PTI_CCL_ITT_COMPILE)
+    if (type == pti_view_kind::PTI_VIEW_COMMUNICATION) {
+      IttCollector::Instance().DisableTrace();
+    }
+#endif  // PTI_CCL_ITT_COMPILE
     if (type == pti_view_kind::PTI_VIEW_INVALID) {
       return pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
@@ -1431,4 +1454,25 @@ inline void ZeApiCallsCallback([[maybe_unused]] void* data,
     Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
   }
 }
+
+#if defined(PTI_CCL_ITT_COMPILE)
+inline void CommunicationEvent([[maybe_unused]] void* data, CommunicationRecord& rec) {
+  pti_view_record_comms record_comms = {};
+  record_comms._view_kind._view_kind = pti_view_kind::PTI_VIEW_COMMUNICATION;
+
+  record_comms._process_id = rec.pid_;
+  record_comms._thread_id = rec.tid_;
+
+  int64_t ts_shift = Instance().GetTimeShift();
+  record_comms._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
+  record_comms._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
+
+  record_comms._metadata_size = rec.metadata_size_;
+  record_comms._communicator_id = rec.communicator_id_;
+
+  record_comms._name = rec.name_;
+
+  Instance().InsertRecord(record_comms, rec.tid_);
+}
+#endif  // PTI_CCL_ITT_COMPILE
 #endif  // SRC_API_VIEW_HANDLER_H_
