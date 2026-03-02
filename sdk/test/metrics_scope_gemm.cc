@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
@@ -21,6 +22,32 @@
 #include "metrics_utils.h"
 #include "pti/pti_metrics_scope.h"
 #include "utils.h"
+
+struct OverheadTestStats {
+  uint64_t total_overhead_ns = 0;
+  uint64_t total_count = 0;
+  std::vector<pti_view_record_overhead> overhead_records;
+
+  size_t kernel_record_count = 0;
+  size_t mem_copy_record_count = 0;
+  size_t runtime_api_record_count = 0;
+  size_t invalid_record_count = 0;
+
+  void Reset() {
+    total_overhead_ns = 0;
+    total_count = 0;
+    overhead_records.clear();
+    kernel_record_count = 0;
+    mem_copy_record_count = 0;
+    runtime_api_record_count = 0;
+    invalid_record_count = 0;
+  }
+};
+
+// Forward declarations for callback functions
+void ProcessViewBufferWithOverhead(unsigned char* buf, std::size_t buf_size,
+                                   std::size_t used_bytes);
+void ProvideBufferWithOverhead(unsigned char** buf, std::size_t* buf_size);
 
 namespace {
 
@@ -157,6 +184,9 @@ void RunGemm(unsigned size = 1024, unsigned repeat_count = 1) {
 }  // namespace
 
 class GemmMetricsScopeFixtureTest : public ::testing::Test {
+ public:
+  inline static OverheadTestStats overhead_stats;
+
  protected:
   void SetUp() override {
     uint32_t device_count = 0;
@@ -188,34 +218,84 @@ class GemmMetricsScopeFixtureTest : public ::testing::Test {
         std::cout << "Failed to get metric groups" << std::endl;
       }
     }
-    // For now, need ptiView to enable ptiCallback
-    auto dummy_provide = [](unsigned char** buf, std::size_t* buf_size) {
-      *buf_size = sizeof(pti_view_record_kernel) * 100;
-      void* ptr = ::operator new(*buf_size);
-      *buf = static_cast<unsigned char*>(ptr);
-      if (!*buf) {
-        std::abort();
-      }
-    };
-    auto dummy_parse = [](unsigned char* buf, std::size_t, std::size_t) {
-      if (buf) ::operator delete(buf);
-    };
 
-    EXPECT_EQ(ptiViewSetCallbacks(dummy_provide, dummy_parse), PTI_SUCCESS);
+    EXPECT_EQ(ptiViewSetCallbacks(ProvideBufferWithOverhead, ProcessViewBufferWithOverhead),
+              PTI_SUCCESS);
+
     EXPECT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), PTI_SUCCESS);
-    EXPECT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), PTI_SUCCESS);
     EXPECT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), PTI_SUCCESS);
+    EXPECT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), PTI_SUCCESS);
   }
 
   void TearDown() override {
     devices.clear();
     metric_groups.clear();
+
     EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), PTI_SUCCESS);
-    EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), PTI_SUCCESS);
     EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), PTI_SUCCESS);
+    EXPECT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), PTI_SUCCESS);
     EXPECT_EQ(ptiFlushAllViews(), PTI_SUCCESS);
   }
 };
+
+// Overhead tracking Callbacks
+void ProcessViewBufferWithOverhead(unsigned char* buf, std::size_t /*buf_size*/,
+                                   std::size_t used_bytes) {
+  if (!buf || used_bytes == 0) {
+    if (buf) delete[] buf;
+    return;
+  }
+
+  pti_view_record_base* record = nullptr;
+  pti_result result = ptiViewGetNextRecord(buf, used_bytes, &record);
+
+  while (result == PTI_SUCCESS) {
+    if (record->_view_kind == PTI_VIEW_INVALID) {
+      std::cerr << "ERROR: Received PTI_VIEW_INVALID record in callback" << std::endl;
+      GemmMetricsScopeFixtureTest::overhead_stats.invalid_record_count++;
+    } else if (record->_view_kind == PTI_VIEW_COLLECTION_OVERHEAD) {
+      auto* overhead_rec = reinterpret_cast<pti_view_record_overhead*>(record);
+
+      GemmMetricsScopeFixtureTest::overhead_stats.overhead_records.push_back(*overhead_rec);
+
+      GemmMetricsScopeFixtureTest::overhead_stats.total_overhead_ns +=
+          overhead_rec->_overhead_duration_ns;
+      GemmMetricsScopeFixtureTest::overhead_stats.total_count += overhead_rec->_overhead_count;
+
+    } else if (record->_view_kind == PTI_VIEW_DEVICE_GPU_KERNEL) {
+      GemmMetricsScopeFixtureTest::overhead_stats.kernel_record_count++;
+    } else if (record->_view_kind == PTI_VIEW_DEVICE_GPU_MEM_COPY) {
+      GemmMetricsScopeFixtureTest::overhead_stats.mem_copy_record_count++;
+    } else if (record->_view_kind == PTI_VIEW_RUNTIME_API) {
+      GemmMetricsScopeFixtureTest::overhead_stats.runtime_api_record_count++;
+    } else {
+      std::cerr << "WARNING: Received unexpected record kind " << record->_view_kind
+                << " in callback" << std::endl;
+    }
+
+    result = ptiViewGetNextRecord(buf, used_bytes, &record);
+  }
+
+  delete[] buf;
+}
+
+static std::size_t SizeOfLargestViewRecord() {
+  return (std::max)({sizeof(pti_view_record_overhead), sizeof(pti_view_record_kernel),
+                     sizeof(pti_view_record_memory_copy), sizeof(pti_view_record_api)});
+}
+
+void ProvideBufferWithOverhead(unsigned char** buf, std::size_t* buf_size) {
+  std::size_t record_size = SizeOfLargestViewRecord();
+  if (record_size == 0) {
+    record_size = sizeof(pti_view_record_overhead);
+  }
+  *buf_size = record_size * 1000;
+  *buf = new unsigned char[*buf_size];
+  if (!*buf) {
+    std::cerr << "Failed to allocate buffer of size " << *buf_size << " bytes" << std::endl;
+    std::abort();
+  }
+}
 
 // ============================================================================
 // PARAMETERIZED TESTS
@@ -442,10 +522,11 @@ TEST_P(GemmMetricsScopeBufferSizeTest, ScopeSetBufferSizeVariations) {
 
   // Configure with valid metrics first
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", "GpuCoreClocks"};
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  pti_result config_result = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
-                                                      &device, 1, metric_names, 2);
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result == PTI_SUCCESS) {
     pti_result result = ptiMetricsScopeSetCollectionBufferSize(scope_handle, param.buffer_size);
@@ -569,10 +650,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeConfigureNullDevice) {
   pti_scope_collection_handle_t scope_handle = nullptr;
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
-  const char* metric_names[] = {"GpuTime"};
+  auto kMetricNames = std::array{"GpuTime"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   EXPECT_EQ(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, nullptr, 1,
-                                     metric_names, 1),
+                                     kMetricNames.data(), metric_count),
             PTI_ERROR_NOT_IMPLEMENTED);
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
@@ -583,10 +665,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeConfigureZeroDevices) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime"};
+  auto kMetricNames = std::array{"GpuTime"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   EXPECT_EQ(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 0,
-                                     metric_names, 1),
+                                     kMetricNames.data(), metric_count),
             PTI_ERROR_BAD_ARGUMENT);
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
@@ -610,11 +693,12 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeConfigureUserMode) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime"};
+  auto kMetricNames = std::array{"GpuTime"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  EXPECT_EQ(
-      ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_USER, &device, 1, metric_names, 1),
-      PTI_ERROR_NOT_IMPLEMENTED);
+  EXPECT_EQ(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_USER, &device, 1,
+                                     kMetricNames.data(), metric_count),
+            PTI_ERROR_NOT_IMPLEMENTED);
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
 }
@@ -665,15 +749,16 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeGetBuffersCountWhileActive) {
 
   // Configure with ComputeBasic metrics like in client.cc
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime",
-                                "GpuCoreClocks",
-                                "AvgGpuCoreFrequencyMHz",
-                                "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
-                                "XVE_ACTIVE",
-                                "XVE_STALL"};
+  auto kMetricNames = std::array{"GpuTime",
+                                 "GpuCoreClocks",
+                                 "AvgGpuCoreFrequencyMHz",
+                                 "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
+                                 "XVE_ACTIVE",
+                                 "XVE_STALL"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  pti_result config_result = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
-                                                      &device, 1, metric_names, 6);
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result == PTI_SUCCESS) {
     // Set buffer size
@@ -779,15 +864,16 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeStartStopCollection) {
 
   // Configure with ComputeBasic metrics like in client.cc
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime",
-                                "GpuCoreClocks",
-                                "AvgGpuCoreFrequencyMHz",
-                                "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
-                                "XVE_ACTIVE",
-                                "XVE_STALL"};
+  auto kMetricNames = std::array{"GpuTime",
+                                 "GpuCoreClocks",
+                                 "AvgGpuCoreFrequencyMHz",
+                                 "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
+                                 "XVE_ACTIVE",
+                                 "XVE_STALL"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  pti_result config_result = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
-                                                      &device, 1, metric_names, 6);
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result == PTI_SUCCESS) {
     // Set buffer size
@@ -807,15 +893,16 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeStartAlreadyStartedCollection) {
 
   // Configure with ComputeBasic metrics like in client.cc
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime",
-                                "GpuCoreClocks",
-                                "AvgGpuCoreFrequencyMHz",
-                                "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
-                                "XVE_ACTIVE",
-                                "XVE_STALL"};
+  auto kMetricNames = std::array{"GpuTime",
+                                 "GpuCoreClocks",
+                                 "AvgGpuCoreFrequencyMHz",
+                                 "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
+                                 "XVE_ACTIVE",
+                                 "XVE_STALL"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  pti_result config_result = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
-                                                      &device, 1, metric_names, 6);
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result == PTI_SUCCESS) {
     // Set buffer size
@@ -838,15 +925,16 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeSetBufferSizeWhileActive) {
 
   // Configure with ComputeBasic metrics like in client.cc
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime",
-                                "GpuCoreClocks",
-                                "AvgGpuCoreFrequencyMHz",
-                                "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
-                                "XVE_ACTIVE",
-                                "XVE_STALL"};
+  auto kMetricNames = std::array{"GpuTime",
+                                 "GpuCoreClocks",
+                                 "AvgGpuCoreFrequencyMHz",
+                                 "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
+                                 "XVE_ACTIVE",
+                                 "XVE_STALL"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  pti_result config_result = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
-                                                      &device, 1, metric_names, 6);
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result == PTI_SUCCESS) {
     // Set buffer size and start collection
@@ -869,15 +957,16 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeQueryBufferSizeValid) {
 
   // Configure with ComputeBasic metrics like in client.cc
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime",
-                                "GpuCoreClocks",
-                                "AvgGpuCoreFrequencyMHz",
-                                "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
-                                "XVE_ACTIVE",
-                                "XVE_STALL"};
+  auto kMetricNames = std::array{"GpuTime",
+                                 "GpuCoreClocks",
+                                 "AvgGpuCoreFrequencyMHz",
+                                 "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
+                                 "XVE_ACTIVE",
+                                 "XVE_STALL"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  pti_result config_result = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
-                                                      &device, 1, metric_names, 6);
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result == PTI_SUCCESS) {
     // Query buffer size for different scope counts
@@ -901,10 +990,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeCalculateMetricsInsufficientBuffer) {
 
   // Configure with valid metrics
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", "GpuCoreClocks"};
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  pti_result config_result = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
-                                                      &device, 1, metric_names, 2);
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result == PTI_SUCCESS) {
     EXPECT_EQ(ptiMetricsScopeSetCollectionBufferSize(scope_handle, 1024), PTI_SUCCESS);
@@ -964,10 +1054,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeHandleDestructorWithActiveCollection) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", "GpuCoreClocks"};
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   if (ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
-                               metric_names, 2) == PTI_SUCCESS) {
+                               kMetricNames.data(), metric_count) == PTI_SUCCESS) {
     EXPECT_EQ(ptiMetricsScopeSetCollectionBufferSize(scope_handle, 1024), PTI_SUCCESS);
     EXPECT_EQ(ptiMetricsScopeStartCollection(scope_handle), PTI_SUCCESS);
 
@@ -984,10 +1075,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeMemoryAllocationStress) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", "GpuCoreClocks"};
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   if (ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
-                               metric_names, 2) == PTI_SUCCESS) {
+                               kMetricNames.data(), metric_count) == PTI_SUCCESS) {
     // Set very small buffer to force multiple buffer allocations
     EXPECT_EQ(ptiMetricsScopeSetCollectionBufferSize(scope_handle, 64), PTI_SUCCESS);
     EXPECT_EQ(ptiMetricsScopeStartCollection(scope_handle), PTI_SUCCESS);
@@ -1013,10 +1105,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeMultipleBufferCreation) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", "GpuCoreClocks"};
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   if (ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
-                               metric_names, 2) == PTI_SUCCESS) {
+                               kMetricNames.data(), metric_count) == PTI_SUCCESS) {
     // Set very small buffer to force buffer overflow
     EXPECT_EQ(ptiMetricsScopeSetCollectionBufferSize(scope_handle, 1024), PTI_SUCCESS);
     EXPECT_EQ(ptiMetricsScopeStartCollection(scope_handle), PTI_SUCCESS);
@@ -1061,10 +1154,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeInvalidBufferIndex) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", "GpuCoreClocks"};
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   if (ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
-                               metric_names, 2) == PTI_SUCCESS) {
+                               kMetricNames.data(), metric_count) == PTI_SUCCESS) {
     EXPECT_EQ(ptiMetricsScopeSetCollectionBufferSize(scope_handle, 1024), PTI_SUCCESS);
     EXPECT_EQ(ptiMetricsScopeStartCollection(scope_handle), PTI_SUCCESS);
     EXPECT_EQ(ptiMetricsScopeStopCollection(scope_handle), PTI_SUCCESS);
@@ -1089,10 +1183,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeMetadataZeroStructSize) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", "GpuCoreClocks"};
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   if (ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
-                               metric_names, 2) == PTI_SUCCESS) {
+                               kMetricNames.data(), metric_count) == PTI_SUCCESS) {
     pti_metrics_scope_record_metadata_t metadata;
     metadata._struct_size = 0;  // Invalid size
 
@@ -1108,11 +1203,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeConfigureZeroMetrics) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime"};
+  auto kMetricNames = std::array{"GpuTime"};
 
   // Test with zero metric count
   EXPECT_EQ(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
-                                     metric_names, 0),
+                                     kMetricNames.data(), 0),
             PTI_ERROR_BAD_ARGUMENT);
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
@@ -1124,11 +1219,12 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeConfigureNullMetricInArray) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", nullptr, "GpuCoreClocks"};
+  auto kMetricNames = std::array<const char*, 3>{"GpuTime", nullptr, "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   // Should fail due to null metric name in array
   EXPECT_EQ(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
-                                     metric_names, 3),
+                                     kMetricNames.data(), metric_count),
             PTI_ERROR_BAD_ARGUMENT);
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
@@ -1140,10 +1236,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeQueryInvalidCollectionBuffer) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", "GpuCoreClocks"};
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   if (ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
-                               metric_names, 2) == PTI_SUCCESS) {
+                               kMetricNames.data(), metric_count) == PTI_SUCCESS) {
     // Test with invalid buffer pointer
     void* invalid_buffer = reinterpret_cast<void*>(0xDEADBEEF);
     size_t required_size = 0;
@@ -1163,10 +1260,11 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeCalculateMetricsZeroBuffer) {
   EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
 
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime", "GpuCoreClocks"};
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   if (ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
-                               metric_names, 2) == PTI_SUCCESS) {
+                               kMetricNames.data(), metric_count) == PTI_SUCCESS) {
     EXPECT_EQ(ptiMetricsScopeSetCollectionBufferSize(scope_handle, 1024), PTI_SUCCESS);
     EXPECT_EQ(ptiMetricsScopeStartCollection(scope_handle), PTI_SUCCESS);
 
@@ -1210,11 +1308,12 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeQueryProfilerEdgeCases) {
 
   // Try to configure with a potentially invalid device
   pti_device_handle_t invalid_device = reinterpret_cast<pti_device_handle_t>(0x12345678);
-  const char* metric_names[] = {"GpuTime"};
+  auto kMetricNames = std::array{"GpuTime"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
   // This should fail during device validation
   EXPECT_NE(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &invalid_device,
-                                     1, metric_names, 1),
+                                     1, kMetricNames.data(), metric_count),
             PTI_SUCCESS);
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
@@ -1245,16 +1344,16 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeCompleteWorkflowWithGemm) {
 
   // Configure with ComputeBasic metrics
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime",
-                                "GpuCoreClocks",
-                                "AvgGpuCoreFrequencyMHz",
-                                "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
-                                "XVE_ACTIVE",
-                                "XVE_STALL"};
+  auto kMetricNames = std::array{"GpuTime",
+                                 "GpuCoreClocks",
+                                 "AvgGpuCoreFrequencyMHz",
+                                 "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
+                                 "XVE_ACTIVE",
+                                 "XVE_STALL"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  const uint32_t metric_count = sizeof(metric_names) / sizeof(metric_names[0]);
-  pti_result config_result = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
-                                                      &device, 1, metric_names, 6);
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result == PTI_SUCCESS) {
     // Query buffer size
@@ -1443,16 +1542,16 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeMultiThreadedDifferentKernels) {
 
   // Configure with ComputeBasic metrics
   pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
-  const char* metric_names[] = {"GpuTime",
-                                "GpuCoreClocks",
-                                "AvgGpuCoreFrequencyMHz",
-                                "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
-                                "XVE_ACTIVE",
-                                "XVE_STALL"};
-  const uint32_t metric_count = sizeof(metric_names) / sizeof(metric_names[0]);
+  auto kMetricNames = std::array{"GpuTime",
+                                 "GpuCoreClocks",
+                                 "AvgGpuCoreFrequencyMHz",
+                                 "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
+                                 "XVE_ACTIVE",
+                                 "XVE_STALL"};
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
 
-  pti_result config_result = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
-                                                      &device, 1, metric_names, metric_count);
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result != PTI_SUCCESS) {
     std::cout << "Configuration failed with error: " << config_result
@@ -2098,4 +2197,190 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeMultiThreadedDifferentKernels) {
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
 
   std::cout << "\n=== Multi-threaded metrics scope test completed successfully ===" << std::endl;
+}
+
+TEST_F(GemmMetricsScopeFixtureTest, ScopeWithOverheadTracking) {
+  GemmMetricsScopeFixtureTest::overhead_stats.Reset();
+
+  EXPECT_EQ(ptiViewEnableRuntimeApiClass(1, PTI_API_CLASS_GPU_OPERATION_CORE, PTI_API_GROUP_ALL),
+            PTI_SUCCESS);
+  EXPECT_EQ(ptiViewEnable(PTI_VIEW_COLLECTION_OVERHEAD), PTI_SUCCESS);
+
+  // Set up metrics scope collection
+  pti_scope_collection_handle_t scope_handle = nullptr;
+  EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
+
+  // Configure with ComputeBasic metrics
+  pti_device_handle_t device = devices.size() > 0 ? devices[0]._handle : nullptr;
+  auto kMetricNames = std::array{"GpuTime",
+                                 "GpuCoreClocks",
+                                 "AvgGpuCoreFrequencyMHz",
+                                 "XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION",
+                                 "XVE_ACTIVE",
+                                 "XVE_STALL"};
+
+  const auto metric_count = static_cast<uint32_t>(kMetricNames.size());
+  pti_result config_result = ptiMetricsScopeConfigure(
+      scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
+
+  if (config_result != PTI_SUCCESS) {
+    std::cout << "Configuration failed with error: " << config_result << std::endl;
+    EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
+    EXPECT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), PTI_SUCCESS);
+    EXPECT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), PTI_SUCCESS);
+    return;
+  }
+
+  // Query and set buffer size
+  size_t estimated_buffer_size = 0;
+  EXPECT_EQ(ptiMetricsScopeQueryCollectionBufferSize(scope_handle, 10, &estimated_buffer_size),
+            PTI_SUCCESS);
+  EXPECT_GT(estimated_buffer_size, static_cast<size_t>(0));
+
+  EXPECT_EQ(ptiMetricsScopeSetCollectionBufferSize(scope_handle, estimated_buffer_size),
+            PTI_SUCCESS);
+
+  // Get metadata
+  pti_metrics_scope_record_metadata_t metadata;
+  metadata._struct_size = sizeof(pti_metrics_scope_record_metadata_t);
+  EXPECT_EQ(ptiMetricsScopeGetMetricsMetadata(scope_handle, &metadata), PTI_SUCCESS);
+
+  std::cout << "=== Testing Metrics Scope with Overhead Tracking ===" << std::endl;
+  std::cout << "Metrics count per record: " << metadata._metrics_count << std::endl;
+
+  // Start collection
+  EXPECT_EQ(ptiMetricsScopeStartCollection(scope_handle), PTI_SUCCESS);
+
+  // Run GEMM workload
+  try {
+    RunGemm(256, 2);  // Small matrix size, 2 iterations
+  } catch (...) {
+    std::cout << "GEMM workload failed, but continuing with test" << std::endl;
+  }
+
+  // Stop collection
+  EXPECT_EQ(ptiMetricsScopeStopCollection(scope_handle), PTI_SUCCESS);
+
+  // Get metrics scope buffer count
+  size_t buffer_count = 0;
+  EXPECT_EQ(ptiMetricsScopeGetCollectionBuffersCount(scope_handle, &buffer_count), PTI_SUCCESS);
+
+  std::cout << "\n=== Metrics Scope Results ===" << std::endl;
+  std::cout << "Number of collection buffers: " << buffer_count << std::endl;
+
+  size_t total_metrics_records = 0;
+
+  // Process metrics scope buffers
+  if (buffer_count > 0) {
+    for (size_t i = 0; i < buffer_count; i++) {
+      void* buffer_data = nullptr;
+      size_t actual_buffer_size = 0;
+      EXPECT_EQ(
+          ptiMetricsScopeGetCollectionBuffer(scope_handle, i, &buffer_data, &actual_buffer_size),
+          PTI_SUCCESS);
+
+      if (buffer_data != nullptr) {
+        pti_metrics_scope_collection_buffer_properties_t props;
+        props._struct_size = sizeof(props);
+        EXPECT_EQ(ptiMetricsScopeGetCollectionBufferProperties(scope_handle, buffer_data, &props),
+                  PTI_SUCCESS);
+
+        std::cout << "  Buffer " << i << ": " << props._num_scopes << " scopes" << std::endl;
+
+        // Query and calculate metrics
+        size_t required_buffer_size = 0;
+        size_t records_count = 0;
+
+        pti_result query_result = ptiMetricsScopeQueryMetricsBufferSize(
+            scope_handle, buffer_data, &required_buffer_size, &records_count);
+
+        if (query_result == PTI_SUCCESS && records_count > 0) {
+          auto metrics_buffer = std::make_unique<uint8_t[]>(required_buffer_size);
+          size_t actual_records_count = 0;
+
+          pti_result calc_result =
+              ptiMetricsScopeCalculateMetrics(scope_handle, buffer_data, metrics_buffer.get(),
+                                              required_buffer_size, &actual_records_count);
+
+          if (calc_result == PTI_SUCCESS) {
+            std::cout << "  Calculated " << actual_records_count << " metric records" << std::endl;
+            total_metrics_records += actual_records_count;
+
+            // Validate we can access the records
+            auto records = reinterpret_cast<pti_metrics_scope_record_t*>(metrics_buffer.get());
+            for (size_t r = 0; r < actual_records_count; r++) {
+              EXPECT_NE(records[r]._metrics_values, nullptr);
+              if (records[r]._kernel_name) {
+                std::cout << "    Record " << r << ": " << records[r]._kernel_name << std::endl;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Flush all views to ensure overhead records are captured
+  EXPECT_EQ(ptiFlushAllViews(), PTI_SUCCESS);
+
+  // Display overhead tracking results
+  std::cout << "\n=== Overhead Tracking Results ===" << std::endl;
+  std::cout << "Overhead records collected: "
+            << GemmMetricsScopeFixtureTest::overhead_stats.overhead_records.size() << std::endl;
+
+  std::cout << "\n=== View Records Summary ===" << std::endl;
+  std::cout << "GPU Kernel records: "
+            << GemmMetricsScopeFixtureTest::overhead_stats.kernel_record_count << std::endl;
+  std::cout << "Memory Copy records: "
+            << GemmMetricsScopeFixtureTest::overhead_stats.mem_copy_record_count << std::endl;
+  std::cout << "Runtime API records: "
+            << GemmMetricsScopeFixtureTest::overhead_stats.runtime_api_record_count << std::endl;
+  std::cout << "Invalid records: "
+            << GemmMetricsScopeFixtureTest::overhead_stats.invalid_record_count << std::endl;
+
+  std::cout << "\n=== Test Validation ===" << std::endl;
+
+  // Check metrics scope records
+  ASSERT_GT(total_metrics_records, static_cast<size_t>(0))
+      << "FAILURE: No metrics scope records collected. Expected at least 1 record.";
+  std::cout << "PASS: Metrics scope records collected: " << total_metrics_records << std::endl;
+
+  // Check overhead records
+  ASSERT_GT(GemmMetricsScopeFixtureTest::overhead_stats.overhead_records.size(),
+            static_cast<size_t>(0))
+      << "FAILURE: No overhead records collected. Expected at least 1 overhead record when "
+         "PTI_VIEW_COLLECTION_OVERHEAD is enabled.";
+  std::cout << "PASS: Overhead records collected: "
+            << GemmMetricsScopeFixtureTest::overhead_stats.overhead_records.size() << std::endl;
+
+  // Check for invalid records (should be zero)
+  ASSERT_EQ(GemmMetricsScopeFixtureTest::overhead_stats.invalid_record_count,
+            static_cast<size_t>(0))
+      << "FAILURE: Received " << GemmMetricsScopeFixtureTest::overhead_stats.invalid_record_count
+      << " PTI_VIEW_INVALID records.";
+  std::cout << "PASS: No invalid records received" << std::endl;
+
+  // Check each view kind - all should have records
+  ASSERT_GT(GemmMetricsScopeFixtureTest::overhead_stats.kernel_record_count, static_cast<size_t>(0))
+      << "FAILURE: No PTI_VIEW_DEVICE_GPU_KERNEL records received. Expected at least 1.";
+  std::cout << "PASS: GPU Kernel records received" << std::endl;
+
+  ASSERT_GT(GemmMetricsScopeFixtureTest::overhead_stats.mem_copy_record_count,
+            static_cast<size_t>(0))
+      << "FAILURE: No PTI_VIEW_DEVICE_GPU_MEM_COPY records received. Expected at least 1.";
+  std::cout << "PASS: Memory Copy records received" << std::endl;
+
+  ASSERT_GT(GemmMetricsScopeFixtureTest::overhead_stats.runtime_api_record_count,
+            static_cast<size_t>(0))
+      << "FAILURE: No PTI_VIEW_RUNTIME_API records received. Expected at least 1.";
+  std::cout << "PASS: Runtime API records received" << std::endl;
+
+  std::cout << "\n=== TEST PASSED: All validations successful ===" << std::endl;
+
+  // Cleanup
+  EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
+  EXPECT_EQ(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD), PTI_SUCCESS);
+  EXPECT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), PTI_SUCCESS);
+
+  std::cout << "\n=== Overhead tracking test completed ===" << std::endl;
 }

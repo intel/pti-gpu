@@ -13,6 +13,7 @@
  * overhead captured is trickled into the buffer stream via buffer callback -
  * ocallback.
  */
+#include <atomic>
 #include <type_traits>
 
 #include "pti/pti_driver_levelzero_api_ids.h"
@@ -21,22 +22,32 @@
 
 namespace overhead {
 
-// TODO: redo this approach to enable/disable state tracking.
-inline static std::atomic<bool> overhead_collection_enabled = false;
-
 enum class OverheadRuntimeType {
   kSycl = 0,
   kL0,
 };
 
 typedef void (*OnZeOverheadFinishCallback)(void* data, ZeKernelCommandExecutionRecord& kcexec);
-inline OnZeOverheadFinishCallback ocallback_ =
-    nullptr;  // Overhead callback registered for any overhead records that need
-              // to be captured and sent to buffer.
+
+#ifdef PTI_OVERHEAD_TRACKING_ENABLED
+extern std::atomic<bool> overhead_collection_enabled;
+extern OnZeOverheadFinishCallback
+    ocallback_;  // Overhead callback registered for any overhead records that need
+                 // to be captured and sent to buffer.
+
+#else
+inline std::atomic<bool> overhead_collection_enabled{false};
+inline OnZeOverheadFinishCallback ocallback_{nullptr};
+#endif
 
 inline thread_local uint64_t init_ref_count = 0;
+
 inline static void SetOverheadCallback(OnZeOverheadFinishCallback callback) {
+#ifdef PTI_OVERHEAD_TRACKING_ENABLED
   ocallback_ = callback;
+#else
+  (void)callback;
+#endif
 }
 
 //
@@ -49,6 +60,7 @@ inline static void SetOverheadCallback(OnZeOverheadFinishCallback callback) {
 //
 
 inline void Init() {
+#ifdef PTI_OVERHEAD_TRACKING_ENABLED
   if (!overhead_collection_enabled) {
     return;
   }
@@ -80,9 +92,11 @@ inline void Init() {
     overhead_rec._overhead_thread_id = tid;
     map_overhead_per_kind[{pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME}] = overhead_rec;
   }
+#endif
 }
 
 inline void ResetRecord() {
+#ifdef PTI_OVERHEAD_TRACKING_ENABLED
   auto overhead_it =
       map_overhead_per_kind.find({pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME});
   if (overhead_it != map_overhead_per_kind.cend()) {
@@ -92,10 +106,12 @@ inline void ResetRecord() {
     overhead_it->second._overhead_count = 0;
     PTI_ASSERT(init_ref_count == 0);
   }
+#endif
 }
 
 inline void FiniLevel0(OverheadRuntimeType runtime_type,
                        [[maybe_unused]] pti_api_id_driver_levelzero api_id) {
+#ifdef PTI_OVERHEAD_TRACKING_ENABLED
   if (!overhead_collection_enabled) {
     return;
   }
@@ -137,9 +153,14 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
     }
     ResetRecord();
   }
+#else
+  (void)runtime_type;
+  (void)api_id;
+#endif
 }
 
 inline void FiniSycl(OverheadRuntimeType runtime_type) {
+#ifdef PTI_OVERHEAD_TRACKING_ENABLED
   // Init not called, nothing to do.
   if (init_ref_count == 0) {
     return;
@@ -170,6 +191,9 @@ inline void FiniSycl(OverheadRuntimeType runtime_type) {
     }
     ResetRecord();
   }
+#else
+  (void)runtime_type;
+#endif
 }
 
 template <typename E>
@@ -177,7 +201,9 @@ class ScopedOverheadCollector {
  public:
   constexpr explicit ScopedOverheadCollector(E api_id) : identifier_(api_id) {
     static_assert(std::is_enum_v<E>, "Must be overhead enum type");
+#ifdef PTI_OVERHEAD_TRACKING_ENABLED
     Init();
+#endif
   }
 
   ScopedOverheadCollector(const ScopedOverheadCollector&) = delete;
@@ -186,11 +212,13 @@ class ScopedOverheadCollector {
   ScopedOverheadCollector& operator=(ScopedOverheadCollector&&) = delete;
 
   ~ScopedOverheadCollector() noexcept {
+#ifdef PTI_OVERHEAD_TRACKING_ENABLED
     if constexpr (std::is_same_v<E, pti_api_id_driver_levelzero>) {
       FiniLevel0(OverheadRuntimeType::kL0, identifier_);
     }
     // Remove and add SYCL/other runtimes here as needed.
     static_assert(std::is_same_v<E, pti_api_id_driver_levelzero>, "Unsupported overhead enum type");
+#endif
   }
 
  private:
@@ -200,8 +228,11 @@ class ScopedOverheadCollector {
 }  // namespace overhead
 
 static inline void overhead_fini(pti_api_id_driver_levelzero api_id) {
-  // std::string o_api_string = l0_api;
+#ifdef PTI_OVERHEAD_TRACKING_ENABLED
   overhead::FiniLevel0(overhead::OverheadRuntimeType::kL0, api_id);
+#else
+  (void)api_id;
+#endif
 }
 
 #endif  // PTI_TOOLS_OVERHEAD_H_

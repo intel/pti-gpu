@@ -157,7 +157,12 @@ add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                        "${PROJECT_SOURCE_DIR}/src/metrics/pti_metrics.cc"
                        "${PROJECT_SOURCE_DIR}/src/metrics/pti_metrics_scope.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
+                       "${PROJECT_SOURCE_DIR}/src/overhead_kinds.cc"
                        "${PTI_ITT_COLLECTOR_FILE}")
+
+# Enable overhead tracking for pti library (tests will use stub implementations)
+target_compile_definitions(pti PRIVATE PTI_OVERHEAD_TRACKING_ENABLED)
+
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
 include(GenerateExportHeader)
