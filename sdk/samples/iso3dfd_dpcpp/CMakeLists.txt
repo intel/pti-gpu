@@ -1,3 +1,9 @@
+#==============================================================
+# Copyright (C) Intel Corporation
+#
+# SPDX-License-Identifier: MIT
+# =============================================================
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
                       "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/Modules/")
 include(macros)

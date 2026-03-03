@@ -1,3 +1,9 @@
+#==============================================================
+# Copyright (C) Intel Corporation
+#
+# SPDX-License-Identifier: MIT
+# =============================================================
+
 add_executable(pti_view_fuzz test_pti_view.cc)
 
 target_link_libraries(pti_view_fuzz PUBLIC Pti::pti_view)

@@ -1,3 +1,9 @@
+//==============================================================
+// Copyright (C) Intel Corporation
+//
+// SPDX-License-Identifier: MIT
+// =============================================================
+
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 #include <level_zero/ze_api.h>

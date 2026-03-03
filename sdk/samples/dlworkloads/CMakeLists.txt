@@ -1,3 +1,9 @@
+#==============================================================
+# Copyright (C) Intel Corporation
+#
+# SPDX-License-Identifier: MIT
+# =============================================================
+
 if(WIN32)
   if(CMAKE_VERSION VERSION_LESS "3.20")
     message(WARNING "sample requires CMake version 3.20 or greater.")

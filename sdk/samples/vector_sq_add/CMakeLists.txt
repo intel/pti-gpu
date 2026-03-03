@@ -1,3 +1,9 @@
+#==============================================================
+# Copyright (C) Intel Corporation
+#
+# SPDX-License-Identifier: MIT
+# =============================================================
+
 cmake_minimum_required(VERSION 3.14)
 
 project(PTI_Samples_KERNEL_V CXX)

@@ -1,9 +1,9 @@
 //==============================================================
-// Based on Vector Add example from OneAPI samples
-//==============================================================
 // Copyright © Intel Corporation
 // SPDX-License-Identifier: MIT
 // =============================================================
+// Based on Vector Add example from OneAPI samples
+//==============================================================
 
 #include <gtest/gtest.h>
 

@@ -1,3 +1,9 @@
+#==============================================================
+# Copyright (C) Intel Corporation
+#
+# SPDX-License-Identifier: MIT
+# =============================================================
+
 CheckExperimentalFilesystem()
 
 option(SHARED_KERNEL "Use SLM Kernel Version - Only for GPU" OFF)

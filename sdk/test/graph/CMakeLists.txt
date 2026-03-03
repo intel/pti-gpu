@@ -1,3 +1,9 @@
+#==============================================================
+# Copyright (C) Intel Corporation
+#
+# SPDX-License-Identifier: MIT
+# =============================================================
+
 # For now we only have DPC++ SYCL graph tests. Be a little more targeted when
 # (or if) we have other kinds of workloads.
 if(NOT HAVE_SYCL)
