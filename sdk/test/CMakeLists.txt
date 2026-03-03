@@ -819,11 +819,15 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
                LevelZero::level-zero)
 
   #
-  # Bug warning in cmake. It will not accept LABELS separted by ';'.
+  # 1) Bug warning in CMake: it does not accept LABELS separated by ';'.
+  # 2) We use DISCOVERY_MODE PRE_TEST to prevent invoking tests when
+  #    INTEL_LIBITTNOTIFY64 is not set, which would otherwise produce
+  #    spurious warnings during the build.
   #
   gtest_discover_tests(
      itt_test_suite
      DISCOVERY_TIMEOUT 60
+     DISCOVERY_MODE PRE_TEST
      PROPERTIES
         ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
         LABELS "unit"
