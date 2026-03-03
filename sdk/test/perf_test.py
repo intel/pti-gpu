@@ -117,8 +117,8 @@ def run_test(path, test_type="profiled", repetitions=15, warm_up_runs=1):
     for i in range(repetitions):
         print(str(i + 1) + "/" + str(repetitions) + ", ", end="", flush=True)
         # Interleaved: baseline first, then test (keeps CPU state similar)
-        (stdout_b, stderr_b) = run_process(command_baseline, path)
-        (stdout_t, stderr_t) = run_process(command_test, path)
+        stdout_b, stderr_b = run_process(command_baseline, path)
+        stdout_t, stderr_t = run_process(command_test, path)
         if stderr_t or stderr_b:
             print("WARNING (Detected stderr output)")
             print(stderr_t)
@@ -244,7 +244,9 @@ def main():
         return 1
     else:
         print("Processing baseline results: ", end="")
-        min_base, avg_base, med_base, max_base, std_base = process_data(throughput_baseline)
+        min_base, avg_base, med_base, max_base, std_base = process_data(
+            throughput_baseline
+        )
         print("Processing test results: ", end="")
         min_test, avg_test, med_test, max_test, std_test = process_data(throughput_test)
 
@@ -263,9 +265,7 @@ def main():
 
         if test_type != "overhead":
             print("\nThreshold Overhead to pass: " + str(threshold_overhead) + "% =>")
-            print(
-                " Measured overhead should not exceed Threshold Overhead\n"
-            )
+            print(" Measured overhead should not exceed Threshold Overhead\n")
         else:
             print(
                 "\nThreshold Ratio to pass: " + str(threshold_overhead * 0.01) + " =>"
@@ -352,10 +352,14 @@ def main():
                 return 0
 
         if test_type != "overhead" and diff_med > threshold_overhead:
-            print(f"\nTest failed - Measured overhead {diff_med:.2f}% exceeds threshold {threshold_overhead}%")
+            print(
+                f"\nTest failed - Measured overhead {diff_med:.2f}% exceeds threshold {threshold_overhead}%"
+            )
             return 1
 
-        print(f"\nTest passed - Measured overhead {diff_med:.2f}% is within threshold {threshold_overhead}%")
+        print(
+            f"\nTest passed - Measured overhead {diff_med:.2f}% is within threshold {threshold_overhead}%"
+        )
         return 0
 
 

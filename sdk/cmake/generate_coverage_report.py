@@ -19,7 +19,6 @@ get a profdata file. Also, I would generally recommend aggregating binaries
 into a single directory.
 """
 
-
 import argparse
 import pathlib
 import subprocess

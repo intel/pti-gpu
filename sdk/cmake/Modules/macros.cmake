@@ -480,7 +480,6 @@ macro(AddFormatTarget)
   if(BLACK_FORMAT_EXE)
     list(APPEND py_src_dirs "${PROJECT_SOURCE_DIR}/cmake"
                             "${PROJECT_SOURCE_DIR}/src"
-                            "${PROJECT_SOURCE_DIR}/fuzz"
                             "${PROJECT_SOURCE_DIR}/test"
                             "${PROJECT_SOURCE_DIR}/samples")
     file(GLOB py_src_dirs_cur "${PROJECT_SOURCE_DIR}/*.py")
