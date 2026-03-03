@@ -11,8 +11,8 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        message(WARNING "${PROJECT_NAME} is only supported in Linux")
-    return()
+  message(WARNING "${PROJECT_NAME} is only supported in Linux")
+  return()
 endif()
 
 include(CheckCXXCompilerFlag)
@@ -22,14 +22,6 @@ if (NOT has_sycl)
   message(WARNING "${PROJECT_NAME} requires a sycl compatible compiler")
   return()
 endif()
-
-add_executable(sycl_allreduce_usm_test sycl_allreduce_usm_test.cpp)
-
-target_link_options(sycl_allreduce_usm_test PUBLIC -fsycl)
-target_compile_options(sycl_allreduce_usm_test PUBLIC -fsycl)
-
-target_include_directories(sycl_allreduce_usm_test PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities"
-                                                           "${PROJECT_SOURCE_DIR}/../../src/utils")
 
 find_package(oneCCL)
 
@@ -41,6 +33,14 @@ endif()
 if (NOT TARGET Pti::pti_view)
   find_package(Pti)
 endif()
+
+add_executable(sycl_allreduce_usm_test sycl_allreduce_usm_test.cpp)
+
+target_link_options(sycl_allreduce_usm_test PUBLIC -fsycl)
+target_compile_options(sycl_allreduce_usm_test PUBLIC -fsycl)
+
+target_include_directories(sycl_allreduce_usm_test PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities"
+                                                           "${PROJECT_SOURCE_DIR}/../../src/utils")
 
 target_compile_definitions(
   sycl_allreduce_usm_test

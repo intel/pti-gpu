@@ -19,3 +19,6 @@ max_line_length = 80
 indent_style = space
 indent_size = 4
 profile = black
+
+[*.patch]
+trim_trailing_whitespace = false

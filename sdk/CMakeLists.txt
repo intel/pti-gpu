@@ -140,15 +140,10 @@ configure_file(${PROJECT_SOURCE_DIR}/src/utils/platform_config.h.in
 add_library(pti_all INTERFACE)
 add_library(Pti::pti_all ALIAS pti_all)
 
-#
 # The ITT collector is only built for the Linux version
-#
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  set(PTI_ITT_COLLECTOR_FILE "${PROJECT_SOURCE_DIR}/src/itt/itt_collector.cc")
-  set(PTI_ITT_STUBS_FILE "${PROJECT_SOURCE_DIR}/src/itt/itt_stubs.cc")
-  set(PTI_ITT_ADAPTER_FILE "${PROJECT_SOURCE_DIR}/src/itt/itt_adapter.cc")
-  add_compile_definitions(PTI_CCL_ITT_COMPILE)
-endif()
+set(PTI_ITT_COLLECTOR_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_collector.cc>)
+set(PTI_ITT_STUBS_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_stubs.cc>)
+set(PTI_ITT_ADAPTER_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_adapter.cc>)
 
 # Core implementation loaded by pti_view
 add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
@@ -159,9 +154,6 @@ add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
                        "${PROJECT_SOURCE_DIR}/src/overhead_kinds.cc"
                        "${PTI_ITT_COLLECTOR_FILE}")
-
-# Enable overhead tracking for pti library (tests will use stub implementations)
-target_compile_definitions(pti PRIVATE PTI_OVERHEAD_TRACKING_ENABLED)
 
 # We might want to make our own, but for now use CMake's
 # https://cmake.org/cmake/help/latest/module/GenerateExportHeader.html
@@ -195,8 +187,6 @@ target_include_directories(
   PUBLIC ${PTI_PUBLIC_INCLUDE_DIRS}
   PRIVATE ${PTI_PRIVATE_INCLUDE_DIRS})
 
-target_link_libraries(pti PRIVATE ittapi::headers)
-
 set_target_properties(
   pti
   PROPERTIES VERSION "${PROJECT_VERSION}"
@@ -218,7 +208,9 @@ target_compile_definitions(
           $<$<CONFIG:Debug>:PTI_XPTI_FRAMEWORK_DISPATCHER_NAME=$<TARGET_FILE_NAME:Xpti::xpti>>
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
-          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
+          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
+          $<$<PLATFORM_ID:Linux>:PTI_CCL_ITT_COMPILE>
+          PTI_OVERHEAD_TRACKING_ENABLED)
 
 target_link_libraries(
   pti
@@ -228,7 +220,7 @@ target_link_libraries(
           spdlog::spdlog
           ${CMAKE_DL_LIBS}
           ${FS_LIB}
-          ittapi::headers)
+          $<TARGET_NAME_IF_EXISTS:ittapi::headers>)
 
 FindHeadersPath(
   pti "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py"
@@ -257,8 +249,6 @@ target_include_directories(
   PUBLIC ${PTI_PUBLIC_INCLUDE_DIRS}
   PRIVATE ${PTI_PRIVATE_INCLUDE_DIRS})
 
-target_link_libraries(pti_view PRIVATE ittapi::headers)
-
 set_target_properties(
   pti_view
   PROPERTIES VERSION "${PROJECT_VERSION}"
@@ -284,13 +274,15 @@ target_compile_definitions(
           $<$<CONFIG:Debug>:PTI_XPTI_FRAMEWORK_DISPATCHER_NAME=$<TARGET_FILE_NAME:Xpti::xpti>>
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
           SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,
-          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
+          SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>
+          $<$<PLATFORM_ID:Linux>:PTI_CCL_ITT_COMPILE>)
 
 target_link_libraries(
   pti_view
   PRIVATE spdlog::spdlog
           ${CMAKE_DL_LIBS}
-          ${FS_LIB})
+          ${FS_LIB}
+          $<TARGET_NAME_IF_EXISTS:ittapi::headers>)
 
 target_link_libraries(
   pti_all INTERFACE Pti::pti_view)
