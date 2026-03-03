@@ -127,18 +127,35 @@ inline bool InMemoryCoreApis(const pti_api_id_runtime_sycl api_id) noexcept {
   return GetApiType(api_id) == ApiType::kMemory;
 }
 
-inline bool IsMemoryOperation(xpti::string_id_t xpti_metadata_key) {
+// Metadata key classification enum and cache
+enum class MetadataKeyType : uint8_t { kUnknown = 0, kKernel = 1, kMemory = 2 };
+inline thread_local std::unordered_map<xpti::string_id_t, MetadataKeyType> metadata_key_type_cache;
+
+inline MetadataKeyType ClassifyMetadataKey(xpti::string_id_t xpti_metadata_key) {
+  auto it = metadata_key_type_cache.find(xpti_metadata_key);
+  if (it != metadata_key_type_cache.end()) {
+    return it->second;
+  }
+
   const auto* const xpti_metadata_name = xptiLookupString(xpti_metadata_key);
+  MetadataKeyType type = MetadataKeyType::kUnknown;
 
-  constexpr const char* const kMemorySubStr = "memory";
+  if (std::strcmp(xpti_metadata_name, "kernel_name") == 0) {
+    type = MetadataKeyType::kKernel;
+  } else if (std::strstr(xpti_metadata_name, "memory") != nullptr) {
+    type = MetadataKeyType::kMemory;
+  }
 
-  return std::strstr(xpti_metadata_name, kMemorySubStr) != nullptr;
+  metadata_key_type_cache[xpti_metadata_key] = type;
+  return type;
+}
+
+inline bool IsMemoryOperation(xpti::string_id_t xpti_metadata_key) {
+  return ClassifyMetadataKey(xpti_metadata_key) == MetadataKeyType::kMemory;
 }
 
 inline bool IsKernelOperation(xpti::string_id_t xpti_metadata_key) {
-  const auto* const xpti_metadata_name = xptiLookupString(xpti_metadata_key);
-
-  return std::strcmp(xpti_metadata_name, "kernel_name") == 0;
+  return ClassifyMetadataKey(xpti_metadata_key) == MetadataKeyType::kKernel;
 }
 
 class SyclCollector {
