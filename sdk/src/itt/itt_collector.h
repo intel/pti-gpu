@@ -82,8 +82,8 @@ class IttCollector {
     SPDLOG_DEBUG("{}() - name: {}, start_ts: {}, end_ts: {}, metadata_size: {:#x}", __FUNCTION__,
                  rec.name ? rec.name->strA : "NULL", rec.start_time, end, rec.metadata_size);
     if (acallback_.load()) {
-      itt_runtime_rec_.pid_ = utils::GetPid();
-      itt_runtime_rec_.tid_ = utils::GetTid();
+      itt_runtime_rec_.pid_ = PidTidInfo::Get().pid;
+      itt_runtime_rec_.tid_ = PidTidInfo::Get().tid;
       itt_runtime_rec_.start_time_ = rec.start_time;
       itt_runtime_rec_.end_time_ = end;
       itt_runtime_rec_.metadata_size_ = rec.metadata_size;

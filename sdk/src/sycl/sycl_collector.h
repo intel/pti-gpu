@@ -246,8 +246,8 @@ class SyclCollector {
     const auto api_id = static_cast<pti_api_id_runtime_sycl>(args->function_id);
 
     auto& runtime_rec = SyclCollector::Instance().sycl_runtime_rec_;
-    runtime_rec.pid_ = thread_local_pid_tid_info.pid;
-    runtime_rec.tid_ = thread_local_pid_tid_info.tid;
+    runtime_rec.pid_ = PidTidInfo::Get().pid;
+    runtime_rec.tid_ = PidTidInfo::Get().tid;
     runtime_rec.callback_id_ = args->function_id;
 
     const ApiType api_type = GetApiType(api_id);

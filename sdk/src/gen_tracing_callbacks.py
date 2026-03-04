@@ -907,8 +907,8 @@ def gen_exit_callback(
             f.write("       sycl_data_mview.cid_ = 0;\n")
         # f.write("    sycl_data_kview.cid_ = 0;\n")
         # f.write("    sycl_data_mview.cid_ = 0;\n")
-        f.write("       rec.pid_ = thread_local_pid_tid_info.pid;\n")
-        f.write("       rec.tid_ = thread_local_pid_tid_info.tid;\n")
+        f.write("       rec.pid_ = PidTidInfo::Get().pid;\n")
+        f.write("       rec.tid_ = PidTidInfo::Get().tid;\n")
 
         if return_value.startswith("ze_result_t"):
             f.write("       rec.result_ = result;\n")

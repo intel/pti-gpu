@@ -74,7 +74,7 @@ inline void Init() {
     map_overhead_per_kind[{pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME}] = overhead_rec;
   }
 
-  uint64_t tid = thread_local_pid_tid_info.tid;
+  uint64_t tid = PidTidInfo::Get().tid;
   uint64_t start_time_ns = utils::GetTime();
   auto overhead_it =
       map_overhead_per_kind.find({pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME});
@@ -145,7 +145,7 @@ inline void FiniLevel0(OverheadRuntimeType runtime_type,
       overhead_it->second._overhead_count += 1;
     }
     overhead_it->second._overhead_end_timestamp_ns = end_time_ns;
-    overhead_it->second._overhead_thread_id = thread_local_pid_tid_info.tid;
+    overhead_it->second._overhead_thread_id = PidTidInfo::Get().tid;
     overhead_it->second._api_id = api_id;  // Turn this
     // back on if we need to propagate api_name to user.
     if ((runtime_type == OverheadRuntimeType::kL0) && (ocallback_ != nullptr)) {

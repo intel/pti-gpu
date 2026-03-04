@@ -434,11 +434,10 @@ class ZeCollector {
       collection_state_ = ZeCollectionState::Abnormal;
 
       PTI_ASSERT(global_ref_count == 0);
-      SPDLOG_DEBUG("In {}, L0 Tracing OFF, tid: {}", __FUNCTION__, thread_local_pid_tid_info.tid);
+      SPDLOG_DEBUG("In {}, L0 Tracing OFF, tid: {}", __FUNCTION__, PidTidInfo::Get().tid);
       return;
     }
-    SPDLOG_CRITICAL("In {}, Cannot stop L0 Tracing, tid: {}", __FUNCTION__,
-                    thread_local_pid_tid_info.tid);
+    SPDLOG_CRITICAL("In {}, Cannot stop L0 Tracing, tid: {}", __FUNCTION__, PidTidInfo::Get().tid);
     PTI_ASSERT(false);
   }
 
@@ -1477,7 +1476,7 @@ class ZeCollector {
       for (auto it = info.kernel_commands.begin(); it != info.kernel_commands.end(); it++) {
         ZeKernelCommand* command = (*it).get();
         if (!command->tid) {
-          command->tid = thread_local_pid_tid_info.tid;
+          command->tid = PidTidInfo::Get().tid;
         }
         command->queue = queue;
         command->submit_time = host_time_sync;
@@ -1708,7 +1707,7 @@ class ZeCollector {
         }
       }
       rec.name_ = "zeEventHostSynchronize";
-      rec.tid_ = thread_local_pid_tid_info.tid;
+      rec.tid_ = PidTidInfo::Get().tid;
       rec.start_time_ = ze_instance_data.start_time_host;
       rec.end_time_ = utils::GetTime();
       rec.event_ = event_h;
@@ -1758,7 +1757,7 @@ class ZeCollector {
         }
       }
       rec.name_ = "zeCommandListHostSynchronize";
-      rec.tid_ = thread_local_pid_tid_info.tid;
+      rec.tid_ = PidTidInfo::Get().tid;
       rec.start_time_ = ze_instance_data.start_time_host;
       rec.end_time_ = utils::GetTime();
       rec.event_ = nullptr;
@@ -1844,7 +1843,7 @@ class ZeCollector {
         }
       }
       rec.name_ = "zeFenceHostSynchronize";
-      rec.tid_ = thread_local_pid_tid_info.tid;
+      rec.tid_ = PidTidInfo::Get().tid;
       rec.start_time_ = ze_instance_data.start_time_host;
       rec.end_time_ = utils::GetTime();
       rec.event_ = nullptr;
@@ -2042,7 +2041,7 @@ class ZeCollector {
     PTI_ASSERT(command != nullptr);
 
     PTI_ASSERT(signal_event != nullptr);
-    command->tid = thread_local_pid_tid_info.tid;
+    command->tid = PidTidInfo::Get().tid;
     uint64_t host_timestamp = ze_instance_data.timestamp_host;
     command->append_time = host_timestamp;
     command->device_timer_frequency_ = device_descriptors_[command->device].device_timer_frequency;
@@ -2657,7 +2656,7 @@ class ZeCollector {
           ZeKernelCommandExecutionRecord rec = {};
           ze_context_handle_t ctxt = *params->phContext;
           rec.name_ = "zeContextSystemBarrier";
-          rec.tid_ = thread_local_pid_tid_info.tid;
+          rec.tid_ = PidTidInfo::Get().tid;
           rec.start_time_ = ze_instance_data.start_time_host;
           rec.end_time_ = ze_instance_data.end_time_host;
           rec.context_ = ctxt;
@@ -2987,7 +2986,7 @@ class ZeCollector {
           rec.context_ = it->second.context_;
         }
         rec.name_ = "zeCommandQueueSynchronize";
-        rec.tid_ = thread_local_pid_tid_info.tid;
+        rec.tid_ = PidTidInfo::Get().tid;
         rec.start_time_ = ze_instance_data.start_time_host;
         rec.end_time_ = ze_instance_data.end_time_host;
         rec.context_ = nullptr;
@@ -3221,8 +3220,7 @@ class ZeCollector {
         if (ZE_RESULT_SUCCESS == status) {
           PTI_ASSERT(global_ref_count == 0);
           global_ref_count++;
-          SPDLOG_DEBUG(" --- In {}, Tracing ON, tid: {}", __FUNCTION__,
-                       thread_local_pid_tid_info.tid);
+          SPDLOG_DEBUG(" --- In {}, Tracing ON, tid: {}", __FUNCTION__, PidTidInfo::Get().tid);
         }
       }
       parent_collector_->cb_enabled_.acallback = true;
@@ -3256,8 +3254,7 @@ class ZeCollector {
         if (ZE_RESULT_SUCCESS == status) {
           global_ref_count--;
           PTI_ASSERT(global_ref_count == 0);
-          SPDLOG_DEBUG(" --- In {}, Tracing OFF, tid: {}", __FUNCTION__,
-                       thread_local_pid_tid_info.tid);
+          SPDLOG_DEBUG(" --- In {}, Tracing OFF, tid: {}", __FUNCTION__, PidTidInfo::Get().tid);
         }
       }
       parent_collector_->cb_enabled_.fcallback = false;

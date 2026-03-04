@@ -169,15 +169,18 @@ struct CommunicationRecord {
   const char* name_;
 };
 
-// This structure and thread_local object enables collectors to avoid retrieving pid and tid
-// multiple times. Especially taking into account that getting tid is syscall and thus expensive.
-// Collectors just read this structure to get pid and tid.
+// This structure enables collectors to avoid retrieving pid and tid multiple times.
+// Especially taking into account that getting tid is syscall and thus expensive.
+// Collectors use PidTidInfo::Get() to access thread-local cached pid and tid.
 struct PidTidInfo {
   uint32_t pid;
   uint32_t tid;
-};
 
-inline thread_local PidTidInfo thread_local_pid_tid_info = {utils::GetPid(), utils::GetTid()};
+  static const PidTidInfo& Get() {
+    thread_local const PidTidInfo pid_tid_info = {utils::GetPid(), utils::GetTid()};
+    return pid_tid_info;
+  }
+};
 
 // clang-format off
 // Below table highlights when we will emit special record.  Special records are in api records with hybrid api_groups
