@@ -845,7 +845,7 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add(const __itt_domain * /* domain */, _
     void* dataDest = task.metadata_args.data;
     size_t metadataSize = count * metadata_type_sizes[type];
     if (newArgs->count) {
-      newArgs->next = (IttArgs*)malloc(std::max(metadataSize, sizeof(void*)) + sizeof(IttArgs) - sizeof(void*));
+      newArgs->next = (IttArgs*)calloc(1, std::max(metadataSize, sizeof(void*)) + sizeof(IttArgs) - sizeof(void*));
       UniMemory::ExitIfOutOfMemory(newArgs->next);
       newArgs = newArgs->next;
       dataDest = newArgs->data;
@@ -877,7 +877,7 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_str_add(const __itt_domain * /* domain *
     void* dataDest = task.metadata_args.data;
     size_t metadataSize = length * metadata_type_sizes[0];
     if (newArgs->count) {
-      newArgs->next = (IttArgs*)malloc(std::max(metadataSize, sizeof(void*)) + sizeof(IttArgs) - sizeof(void*));
+      newArgs->next = (IttArgs*)calloc(1, std::max(metadataSize, sizeof(void*)) + sizeof(IttArgs) - sizeof(void*));
       UniMemory::ExitIfOutOfMemory(newArgs->next);
       newArgs = newArgs->next;
       dataDest = newArgs->data;
