@@ -197,6 +197,20 @@
       }
     },
     {
+      "name": "windows-icx-reldebuginfo",
+      "displayName": "Windows Release x64 IntelLLVM Config with Debug Info",
+      "description": "Windows Release x64 IntelLLVM Compiler Config with Debug Info. Uses icx and Ninja.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
+        "CMAKE_CXX_FLAGS": "/W4 /WX /MD /EHcs /fp:precise -Qstd:c++17 /sdl /GS /Gy /DYNAMICBASE /guard:cf",
+        "CMAKE_SHARED_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf",
+        "CMAKE_EXE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf"
+      }
+    },
+    {
       "name": "windows-cov",
       "displayName": "Windows Code Coverage",
       "description": "Windows Source-based Code Coverage Config",
@@ -353,6 +367,11 @@
     "configurePreset": "windows-icx-release"
   },
   {
+    "name": "windows-icx-reldebuginfo",
+    "displayName": "Windows Release x64 IntelLLVM Build with Debug Info",
+    "configurePreset": "windows-icx-reldebuginfo"
+  },
+  {
     "name": "windows-cov",
     "configurePreset": "windows-cov",
     "displayName": "Windows Source-Based Code Coverage Build"
@@ -472,6 +491,11 @@
     "name": "windows-icx-release",
     "displayName": "Windows Release x64 IntelLLVM Test",
     "configurePreset": "windows-icx-release"
+  },
+  {
+    "name": "windows-icx-reldebuginfo",
+    "displayName": "Windows Release x64 IntelLLVM Test with Debug Info",
+    "configurePreset": "windows-icx-reldebuginfo"
   },
   {
     "name": "windows-cov",
