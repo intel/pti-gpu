@@ -795,8 +795,8 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   set_tests_properties(run-omp_vec_add PROPERTIES LABELS "functional;samples")
 endif()
 
-# CCL ITT tests 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+# CCL ITT tests
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
   get_itt()
 
   add_executable(itt_test_suite itt_test_suite.cc)
@@ -816,7 +816,8 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
                fmt::fmt
                Pti::pti_view
                ittapi::ittnotify
-               LevelZero::level-zero)
+               LevelZero::level-zero
+               ${FS_LIB})
 
   #
   # 1) Bug warning in CMake: it does not accept LABELS separated by ';'.
@@ -833,19 +834,50 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
         LABELS "unit"
         LABELS "itt")
 
+  # Library loading regression tests (standalone executable)
+  add_executable(lib_load_suite lib_load_suite.cc)
+  target_include_directories(
+    lib_load_suite
+    PUBLIC "${PROJECT_SOURCE_DIR}/include"
+     "${PROJECT_BINARY_DIR}/include"
+  )
+  # Intentionally NOT linking against Pti::pti_view to test library loading scenarios
+  target_link_libraries(lib_load_suite PRIVATE
+    GTest::gtest_main
+    ${CMAKE_DL_LIBS})
+
+  gtest_discover_tests(
+     lib_load_suite
+     DISCOVERY_TIMEOUT 60
+     PROPERTIES
+        ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Pti::pti_view>:$ENV{LD_LIBRARY_PATH}"
+        LABELS "unit"
+        LABELS "libload"
+        LABELS "itt")
+
   add_executable(itt_basic itt_basic.cc)
   target_link_options(itt_basic PUBLIC -fsycl)
   target_compile_options(itt_basic PUBLIC -fsycl)
   target_include_directories(itt_basic PRIVATE "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
                                                "${PROJECT_SOURCE_DIR}/src/utils")
-  target_link_libraries(itt_basic PRIVATE Pti::pti_view ittapi::ittnotify)
+  target_link_libraries(itt_basic PRIVATE Pti::pti_view ittapi::ittnotify ${FS_LIB})
   add_test(NAME itt_basic COMMAND itt_basic)
-  set_tests_properties(itt_basic PROPERTIES ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>")
+  set_tests_properties(itt_basic PROPERTIES
+    ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
+    LABELS "functional;itt")
 
-  add_test(NAME sycl_allreduce_usm_test COMMAND mpiexec -n 2 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/sycl_allreduce_usm_test gpu device)
-  set_tests_properties(sycl_allreduce_usm_test PROPERTIES
-    ENVIRONMENT INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>)
+  if (TARGET sycl_allreduce_usm_test)
+    find_package(oneCCL 2021.17 QUIET)
+    find_package(MPI QUIET)
 
+    if (TARGET oneCCL AND MPI_FOUND)
+      add_test(NAME sycl_allreduce_usm_test
+              COMMAND ${MPIEXEC_EXECUTABLE} -n 2 $<TARGET_FILE:sycl_allreduce_usm_test> gpu device)
+      set_tests_properties(sycl_allreduce_usm_test PROPERTIES
+        ENVIRONMENT INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>
+        LABELS "functional;ccl;itt")
+    endif()
+  endif()
 
 endif()
 

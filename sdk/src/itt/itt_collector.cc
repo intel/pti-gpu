@@ -3,10 +3,12 @@
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
+
 #include "itt_collector.h"
 
 #include <spdlog/spdlog.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdio>
 #include <stack>
@@ -17,32 +19,39 @@
 //
 // The ITT collector only supports oneCCL usage. The said
 // library always uses the same domain name "oneCCL::API" for all its calls.
-// By inserting the oneCCL::API in the domain list
-// operations on domain are made on pointer equalities in contrast
-// with expensive string equalities.
+// Operations on domain are made on pointer equalities in contrast
+// to expensive string equalities.
 //
-static const char *GetCclDomainString() {
-  static const char *const itt_ccl_domain_cstr = []() {
-    auto domain = __itt_domain_create("oneCCL::API");
-    SPDLOG_DEBUG("GetCclDomainString() - CCL domain: {}", domain->nameA);
-    return domain->nameA;
-  }();
-  return itt_ccl_domain_cstr;
+static std::atomic<const __itt_domain *> itt_ccl_domain{nullptr};
+
+static inline const __itt_domain *GetCclDomain(const __itt_domain *domain) {
+  static const char *const kcclDomain = "oneCCL::API";
+
+  // Fast path: if already initialized, return the cached domain
+  const __itt_domain *cached = itt_ccl_domain.load(std::memory_order_relaxed);
+  if (cached != nullptr) {
+    return cached;
+  }
+
+  // Slow path: check if this domain matches oneCCL and try to cache it
+  if (domain != nullptr && domain->nameA != nullptr && !strcmp(domain->nameA, kcclDomain)) {
+    const __itt_domain *expected = nullptr;
+    // Only one thread will successfully update itt_ccl_domain from nullptr to domain
+    // If compare_exchange_weak fails, another thread already set it, which is fine
+    itt_ccl_domain.compare_exchange_weak(expected, domain, std::memory_order_relaxed);
+    return domain;
+  }
+
+  return nullptr;
 }
 
 //
 // Helper function to determine if we should return early from ITT
 // API calls based on tracing state and domain filtering
 //
-static inline bool IttReturnEarly(const __itt_domain *domain = nullptr) {
-  if (!IttCollector::Instance().IsTraceEnabled()) {
-    SPDLOG_TRACE("{}() Collector - tracing disabled, returning immediately", __FUNCTION__);
-    return true;
-  }
-  if (domain && !(domain->nameA && domain->nameA == GetCclDomainString())) {
-    return true;
-  }
-  return false;
+static inline bool IttReturnEarly(const __itt_domain *domain) {
+  return !IttCollector::Instance().IsTraceEnabled() || domain == nullptr ||
+         domain->nameA == nullptr || domain != GetCclDomain(domain);
 }
 
 thread_local std::stack<ThreadTaskDescriptor> task_desc;
@@ -107,6 +116,26 @@ ITT_EXTERN_C void ITTAPI __itt_api_init_impl(__itt_global *p,
 
   __itt_mutex_unlock(&(itt_global->mutex));
   return result;
+}
+
+ITT_EXTERN_C __itt_domain *ITTAPI __itt_domain_create_impl(const char *name) {
+  SPDLOG_DEBUG("{}() Collector - name: {}", __FUNCTION__, name ? name : "NULL");
+  if (itt_global == NULL || name == nullptr) {
+    return NULL;
+  }
+
+  __itt_domain *h_tail = NULL, *h = NULL;
+
+  __itt_mutex_lock(&(itt_global->mutex));
+  for (h_tail = NULL, h = itt_global->domain_list; h != NULL; h_tail = h, h = h->next) {
+    if (h->nameA != NULL && !__itt_fstrcmp(h->nameA, name)) break;
+  }
+  if (h == NULL) {
+    NEW_DOMAIN_A(itt_global, h, h_tail, name);
+  }
+  __itt_mutex_unlock(&(itt_global->mutex));
+
+  return h;
 }
 
 [[maybe_unused]] static std::string __itt_string_handle_dump() {
@@ -233,5 +262,3 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add_impl(const __itt_domain *domain,
   }
   SPDLOG_DEBUG("{}() Collector - NOT FOUND!!", __FUNCTION__);
 }
-
-//

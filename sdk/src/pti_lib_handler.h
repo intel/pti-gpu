@@ -242,6 +242,7 @@ class PtiLibHandler {
     PTI_VIEW_GET_ITT_SYMBOL(__itt_task_end);
     PTI_VIEW_GET_ITT_SYMBOL(__itt_string_handle_create);
     PTI_VIEW_GET_ITT_SYMBOL(__itt_metadata_add);
+    PTI_VIEW_GET_ITT_SYMBOL(__itt_domain_create);
 
 #undef PTI_VIEW_GET_SYMBOL
     CommunicateForeignXPTISubscriber();

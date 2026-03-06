@@ -145,6 +145,14 @@ set(PTI_ITT_COLLECTOR_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/
 set(PTI_ITT_STUBS_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_stubs.cc>)
 set(PTI_ITT_ADAPTER_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_adapter.cc>)
 
+# Apply -Wno-attributes flag to ITT files only for GCC on Linux 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set_source_files_properties(${PROJECT_SOURCE_DIR}/src/itt/itt_collector.cc
+                               ${PROJECT_SOURCE_DIR}/src/itt/itt_stubs.cc
+                               ${PROJECT_SOURCE_DIR}/src/itt/itt_adapter.cc
+                               PROPERTIES COMPILE_FLAGS "-Wno-attributes")
+endif()
+
 # Core implementation loaded by pti_view
 add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                        "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc"

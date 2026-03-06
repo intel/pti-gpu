@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
+
 #define INTEL_NO_MACRO_BODY
 #define INTEL_ITTNOTIFY_API_PRIVATE
 #define ITTAPI_CDECL __attribute__((visibility("default")))
@@ -11,8 +12,6 @@
 
 #include "pti_lib_handler.h"
 #include "utils/utils.h"
-
-static __itt_global *itt_global_adapter = NULL;
 
 static void fill_func_ptr_per_lib(__itt_global *p) {
   SPDLOG_TRACE("{}() Adapter:", __FUNCTION__);
@@ -30,7 +29,6 @@ ITT_EXTERN_C void ITTAPI __itt_api_init(__itt_global *p, __itt_group_id init_gro
   SPDLOG_DEBUG("{}() Adapter: {}", __FUNCTION__, p ? "non-NULL" : "NULL");
   if (p != NULL) {
     fill_func_ptr_per_lib(p);
-    itt_global_adapter = p;
   }
   pti::PtiLibHandler::Instance().__itt_api_init_(p, init_groups);
 }
@@ -62,20 +60,6 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add(const __itt_domain *domain, __itt_id
 
 ITT_EXTERN_C __itt_domain *ITTAPI __itt_domain_create(const char *name) {
   SPDLOG_DEBUG("{}() Adapter - name: {}", __FUNCTION__, name ? name : "NULL");
-  if (itt_global_adapter == NULL) {
-    return NULL;
-  }
 
-  __itt_domain *h_tail = NULL, *h = NULL;
-
-  __itt_mutex_lock(&(itt_global_adapter->mutex));
-  for (h_tail = NULL, h = itt_global_adapter->domain_list; h != NULL; h_tail = h, h = h->next) {
-    if (h->nameA != NULL && !__itt_fstrcmp(h->nameA, name)) break;
-  }
-  if (h == NULL) {
-    NEW_DOMAIN_A(itt_global_adapter, h, h_tail, name);
-  }
-  __itt_mutex_unlock(&(itt_global_adapter->mutex));
-
-  return h;
+  return pti::PtiLibHandler::Instance().__itt_domain_create_(name);
 }

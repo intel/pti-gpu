@@ -191,6 +191,44 @@ TEST_F(IttTest, StrayDomain_Filtered) {
       << "Expected " << kExpectedRecords << " record, collected " << local_records_vector.size();
 }
 
+//
+// Interesting fact of this test if you add breakpoints to gdb.
+// The first call to __itt_domain_create will not be hit.
+// The next two will.
+//
+TEST_F(IttTest, ThreeDomainsAdded) {
+  constexpr std::string_view kTaskName = "StrayDomain_Task";
+  constexpr int kExpectedRecords = 1;
+  std::vector<pti_view_record_comms> local_records_vector;
+  comms_vector_ = &local_records_vector;
+
+  PtiProlog();
+
+  auto task_stray = __itt_string_handle_create(kTaskName.data());
+  auto stray_domain1 = __itt_domain_create("Stray Domain1");
+  __itt_task_begin(stray_domain1, __itt_null, __itt_null, task_stray);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  __itt_task_end(stray_domain1);
+
+  auto stray_domain2 = __itt_domain_create("Stray Domain2");
+  __itt_task_begin(stray_domain2, __itt_null, __itt_null, task_stray);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  __itt_task_end(stray_domain2);
+
+  auto ccl_domain = __itt_domain_create(kCclDomain.data());
+  constexpr std::string_view task_name = "ThreeDomainsAdded";
+  auto task = __itt_string_handle_create(task_name.data());
+
+  __itt_task_begin(ccl_domain, __itt_null, __itt_null, task);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  __itt_task_end(ccl_domain);
+
+  PtiEpilog();
+
+  ASSERT_EQ(local_records_vector.size(), kExpectedRecords)
+      << "Expected " << kExpectedRecords << " record, collected " << local_records_vector.size();
+}
+
 TEST_F(IttTest, StackedTasks) {
   constexpr std::string_view kTask1Name = "task1_should_finish_last";
   constexpr std::string_view kTask2Name = "task2_should_finish_first";

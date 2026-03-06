@@ -23,10 +23,16 @@ if (NOT has_sycl)
   return()
 endif()
 
-find_package(oneCCL)
+find_package(oneCCL 2021.17)
+find_package(MPI)
 
 if (NOT TARGET oneCCL)
   message(WARNING "${PROJECT_NAME} requires a oneCCL installed.")
+  return()
+endif()
+
+if (NOT MPI_FOUND)
+  message(WARNING "${PROJECT_NAME} requires MPI to be installed.")
   return()
 endif()
 
