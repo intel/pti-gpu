@@ -22,6 +22,9 @@ _Choose one or multiple, leave empty if none of the other choices apply_
 - [ ] Samples - _change in samples_
 - [ ] Documentation - _documentation update_
 
+### Review
+- [ ] Have you requested Copilot review and addressed all its comments? _(If you believe a comment is incorrect or not important, please reply to it explaining your reasoning)_
+
 ### Tests
 
 - [ ] Added - _required for new features and some bug fixes_
