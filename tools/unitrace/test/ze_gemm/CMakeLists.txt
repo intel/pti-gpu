@@ -17,3 +17,4 @@ add_custom_command(TARGET ze_gemm PRE_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/gemm.spv ${CMAKE_BINARY_DIR}/ze_gemm/gemm.spv)
 
 add_test(NAME ze_gemm COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/run_test.py ${CMAKE_SOURCE_DIR} ze_gemm)
+add_test(NAME ze_gemm_metric COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/run_test.py ${CMAKE_SOURCE_DIR} ze_gemm 4096)

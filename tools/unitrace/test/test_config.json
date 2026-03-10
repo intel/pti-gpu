@@ -77,6 +77,11 @@
             "name": "mpi_test_1_rank_sample_device_256",
             "platform": ["Linux"],
             "scenarios": ["-d --devices-to-sample 256"]
+        },
+        {
+            "name": "ze_gemm_metric",
+            "platform": ["Windows", "Linux"],
+            "scenarios": ["-k", "-q"]
         }
     ]
 }

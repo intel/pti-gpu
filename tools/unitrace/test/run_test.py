@@ -172,7 +172,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 and test_case_name.replace("/","_").split(".")[0] in result_file_pattern[0]
                ):
                 output_files.append(f)
-            elif scenario in ["-k", "-q"] and f.endswith(output_file):
+            elif scenario in ["-k", "-q"] and f.endswith(output_file) and "metrics" in f:
                 output_files.append(f)
             elif output_file.startswith(result_file_pattern[0]):
                 output_files.append(f)
