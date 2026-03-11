@@ -144,7 +144,7 @@ struct ZeCommandQueue {
 };
 
 struct ZeCommandListInfo {
-  std::vector<std::unique_ptr<ZeKernelCommand>> kernel_commands;
+  std::vector<std::shared_ptr<ZeKernelCommand>> appended_commands;
   ze_context_handle_t context;
   ze_device_handle_t device;
   bool immediate;
@@ -1036,12 +1036,12 @@ class ZeCollector {
       return;
     }
 
-    for (auto it = kernel_command_list_.begin(); it != kernel_command_list_.end();) {
+    for (auto it = submitted_commands_.begin(); it != submitted_commands_.end();) {
       ZeKernelCommand* command = (*it).get();
       if (!command || !command->event_self) {
         SPDLOG_DEBUG("\tDeleting of unexpected command {} containing zero event.",
                      static_cast<const void*>(command));
-        it = kernel_command_list_.erase(it);
+        it = submitted_commands_.erase(it);
         continue;
       }
 
@@ -1051,7 +1051,7 @@ class ZeCollector {
 
       if (ready_to_process_command) {
         ProcessCallCommand(command, kids, kcexecrec);
-        it = kernel_command_list_.erase(it);
+        it = submitted_commands_.erase(it);
         if (is_target_event) {
           return;
         }
@@ -1075,11 +1075,11 @@ class ZeCollector {
       return;
     }
 
-    for (auto it = kernel_command_list_.begin(); it != kernel_command_list_.end();) {
+    for (auto it = submitted_commands_.begin(); it != submitted_commands_.end();) {
       ZeKernelCommand* command = (*it).get();
       if (!command) {
         SPDLOG_DEBUG("\tDeleting unexpected null command.");
-        it = kernel_command_list_.erase(it);
+        it = submitted_commands_.erase(it);
         continue;
       }
 
@@ -1091,20 +1091,20 @@ class ZeCollector {
                      static_cast<const void*>(fence));
         ProcessCallCommand(command, kids, kcexecrec);
         // TODO - check if we need to clean up the fence event
-        it = kernel_command_list_.erase(it);
+        it = submitted_commands_.erase(it);
         return;
       }
       if (command->event_self != nullptr) {
         if (AbleToProcessCommand(command)) {
           ProcessCallCommand(command, kids, kcexecrec);
-          it = kernel_command_list_.erase(it);
+          it = submitted_commands_.erase(it);
         } else {
           it++;
         }
       } else {
         SPDLOG_WARN("\tDeleting of unexpected command {} containing zero event.",
                     static_cast<const void*>(command));
-        it = kernel_command_list_.erase(it);
+        it = submitted_commands_.erase(it);
       }
     }
   }
@@ -1303,7 +1303,8 @@ class ZeCollector {
     // In most cases event_swap present for Local collection,
     // but since introduction UR V2, where UR uses counter-based events by default
     // - for all modes PTI uses the same event_swap flow
-    if (command->event_swap.Get() != nullptr) {
+    const bool using_swap_event = (command->event_swap.Get() != nullptr);
+    if (using_swap_event) {
       event_to_query = command->event_swap.Get();
     }
     ze_result_t status = ZE_RESULT_SUCCESS;
@@ -1315,6 +1316,7 @@ class ZeCollector {
     } else {
       timestamp = *command->timestamp;
     }
+
     if (status != ZE_RESULT_SUCCESS) {
       // sporadic - smth wrong with event from time to time
       // TODO: watch for it and investigate
@@ -1332,37 +1334,46 @@ class ZeCollector {
 
     ProcessCallTimestamp(command, timestamp, -1, true, kcexecrec);
 
-    if (command->event_swap.Get() == nullptr) {
-      // Only release to cache if no event swap was needed
-      //   - Regular events in Full/Hybrid/Local mode for V1 or V2 where PTI used an event
-      //     from its event_cache because signal_event was null; or
-      //   - User-provided / pool-modified timestamped events (non counter-based)
-      //     where event came from a modified pool rather than the cache
-      //     (in this case event_cache_.ReleaseEvent() is effectively a NOP).
-      event_cache_.ReleaseEvent(command->event_self);
-      command->event_self = nullptr;
+    // Reset events that signal timestamp availability, but don't allow them to be re-issued until
+    // the command list is reset or destroyed.
+    bool reset_result = command->event_swap.ResetSignal();
+
+    if (!reset_result) {
+      SPDLOG_WARN("Failed to reset swap event for command {}, event: {}",
+                  static_cast<const void*>(command),
+                  static_cast<const void*>(command->event_swap.Get()));
+    }
+
+    if (!using_swap_event) {
+      event_cache_.ResetEvent(command->event_self);
+    }
+    reset_result = command->timestamp_query_event.ResetSignal();
+    if (!reset_result) {
+      SPDLOG_WARN("Failed to reset timestamp event for command {}, event: {}",
+                  static_cast<const void*>(command),
+                  static_cast<const void*>(command->timestamp_query_event.Get()));
     }
   }
 
   void ProcessCalls(std::vector<uint64_t>* kids,
                     std::vector<ZeKernelCommandExecutionRecord>* kcexecrec) {
-    SPDLOG_TRACE("In {} Kernel command list size: {}", __FUNCTION__, kernel_command_list_.size());
+    SPDLOG_TRACE("In {} Kernel command list size: {}", __FUNCTION__, submitted_commands_.size());
     // lock is acquired in the caller
     // const std::lock_guard<std::mutex> lock(lock_);
     //
-    auto it = kernel_command_list_.begin();
-    while (it != kernel_command_list_.end()) {
+    auto it = submitted_commands_.begin();
+    while (it != submitted_commands_.end()) {
       ZeKernelCommand* command = (*it).get();
       if (!command || !command->event_self) {
         SPDLOG_DEBUG("\tDeleting of unexpected command {} containing zero event.",
                      static_cast<const void*>(command));
-        it = kernel_command_list_.erase(it);
+        it = submitted_commands_.erase(it);
         continue;
       }
 
       if (AbleToProcessCommand(command)) {
         ProcessCallCommand(command, kids, kcexecrec);
-        it = kernel_command_list_.erase(it);
+        it = submitted_commands_.erase(it);
       } else {
         ++it;
       }
@@ -1388,7 +1399,7 @@ class ZeCollector {
 
       PTI_ASSERT(device_descriptors_.count(device) != 0);
 
-      command_list_map_[command_list] = {std::vector<std::unique_ptr<ZeKernelCommand>>(),
+      command_list_map_[command_list] = {std::vector<std::shared_ptr<ZeKernelCommand>>(),
                                          context,
                                          device,
                                          immediate,
@@ -1406,7 +1417,7 @@ class ZeCollector {
   }
 
   void CleanEventsAssociatedWithCommandsInList(
-      std::vector<std::unique_ptr<ZeKernelCommand>>& commands) {
+      std::vector<std::shared_ptr<ZeKernelCommand>>& commands) {
     for (auto& cmd : commands) {
       if (collection_mode_ != ZeCollectionMode::Local) {
         event_cache_.ReleaseEvent(cmd->event_self);
@@ -1414,13 +1425,18 @@ class ZeCollector {
     }
   }
 
+  void ResetCommandListInfo(ZeCommandListInfo& command_list_info) {
+    CleanEventsAssociatedWithCommandsInList(command_list_info.appended_commands);
+    command_list_info.appended_commands.clear();
+    command_list_info.closed = false;
+  }
+
   void ResetCommandList(ze_command_list_handle_t command_list) {
     const std::lock_guard<std::mutex> lock(lock_);
     const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
     auto cmd_list_iter = command_list_map_.find(command_list);
     if (cmd_list_iter != command_list_map_.end()) {
-      CleanEventsAssociatedWithCommandsInList(cmd_list_iter->second.kernel_commands);
-      cmd_list_iter->second.kernel_commands.clear();
+      ResetCommandListInfo(cmd_list_iter->second);
     }
   }
 
@@ -1436,7 +1452,7 @@ class ZeCollector {
           queue_ordinal_index_map_.erase(queue_ordinal_index_map_iter);
         }
       }
-      CleanEventsAssociatedWithCommandsInList(cmd_list_iter->second.kernel_commands);
+      CleanEventsAssociatedWithCommandsInList(cmd_list_iter->second.appended_commands);
       command_list_map_.erase(cmd_list_iter);
     }
   }
@@ -1473,7 +1489,7 @@ class ZeCollector {
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
       const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
-      for (auto it = info.kernel_commands.begin(); it != info.kernel_commands.end(); it++) {
+      for (auto it = info.appended_commands.begin(); it != info.appended_commands.end(); it++) {
         ZeKernelCommand* command = (*it).get();
         if (!command->tid) {
           command->tid = PidTidInfo::Get().tid;
@@ -1502,14 +1518,13 @@ class ZeCollector {
       const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
       // as all command lists submitted to the execution into queue - they are not immediate
       PTI_ASSERT(!info.immediate);
-      for (auto it = info.kernel_commands.begin(); it != info.kernel_commands.end(); it++) {
+      for (auto it = info.appended_commands.begin(); it != info.appended_commands.end(); it++) {
         ZeKernelCommand* command = (*it).get();
         if (kids) {
           kids->push_back(command->kernel_id);
         }
-        kernel_command_list_.push_back(std::move(*it));
+        submitted_commands_.push_back(*it);
       }
-      info.kernel_commands.clear();
     }
   }
 
@@ -1575,12 +1590,17 @@ class ZeCollector {
   }
 
   // Callbacks
-  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t* params, void* /*global_data*/,
+  static void OnEnterEventPoolCreate(ze_event_pool_create_params_t* params, void* global_data,
                                      void** instance_data) {
     const ze_event_pool_desc_t* desc = *(params->pdesc);
     if (desc == nullptr) {
       return;
     }
+    auto* collector = static_cast<ZeCollector*>(global_data);
+    if (collector->collection_mode_ == ZeCollectionMode::Local) {
+      return;
+    }
+
     if (desc->flags & ZE_EVENT_POOL_FLAG_IPC) {
       // TODO Might need special processing of such pool
       SPDLOG_DEBUG("In {} skipping IPC event pool", __func__);
@@ -1917,13 +1937,15 @@ class ZeCollector {
                  static_cast<const void*>(command_list), static_cast<const void*>(signal_event),
                  static_cast<uint32_t>(kernel_type));
 
-    if (!collector->CommandListInfoExists(command_list)) {
-      ze_result_t res = collector->ReBuildCommandListInfo(command_list);
-      if (res != ZE_RESULT_SUCCESS) {
-        collector->AbnormalStopTracing();
-        return;
+    auto& info = collector->GetCommandListInfo(command_list);
+    {
+      const std::lock_guard<std::shared_mutex> cl_list_lock(collector->command_list_map_mutex_);
+      // we may have missed a call to CommandListReset.
+      if (info.closed && !info.immediate) {
+        collector->ResetCommandListInfo(info);
       }
     }
+
     ze_context_handle_t context = collector->GetCommandListContext(command_list);
     ze_device_handle_t device = collector->GetCommandListDevice(command_list);
 
@@ -2118,22 +2140,26 @@ class ZeCollector {
       PTI_ASSERT(append_res);
     }
 
-    // creating unique ptr here so command will be properly deleted when removed from
-    // the container it stored
-    std::unique_ptr<ZeKernelCommand> p_command(command);
+    // A shared pointer is being created here because the lifetime of this GPU execution command is
+    // shared between the command list info (append commands) and the submitted commands for
+    // non-immediate command lists. For immediate command lists, the command will free itself after
+    // querying timestamps. There is a refactoring opportunity here to use a unique_ptr and a
+    // non-owning raw pointer. However, using a shared pointer requires fewer changes.
+
+    std::shared_ptr<ZeKernelCommand> p_command(command);
     {
       // We need to keep this lock order (lock, cl_list_lock).
-      // lock: protects kernel_command_list_.
+      // lock: protects submitted_commands_.
       // cl_list_lock: protects command_list_info (reference, locked in other places)
-      const std::lock_guard<std::mutex> lock(lock_);  // kernel_command_list_ lock
+      const std::lock_guard<std::mutex> lock(lock_);  // submitted_commands_ lock
       const std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
       if (command_list_info.immediate) {
         command->submit_time = command->append_time;
         command->submit_time_device_ =
             ze_instance_data.timestamp_device;  // append time and submit time are the same
         command->queue = reinterpret_cast<ze_command_queue_handle_t>(command->command_list);
-        kernel_command_list_.push_back(std::move(p_command));
-        SPDLOG_TRACE("\tImmediate CmdList, command: {} pushed to kernel_command_list_, queue: {}",
+        submitted_commands_.push_back(std::move(p_command));
+        SPDLOG_TRACE("\tImmediate CmdList, command: {} pushed to submitted_commands_, queue: {}",
                      static_cast<void*>(command), static_cast<const void*>(command->queue));
         kids->push_back(command->kernel_id);
       } else {
@@ -2167,7 +2193,7 @@ class ZeCollector {
                 static_cast<uint32_t>(result));
           }
         }
-        command_list_info.kernel_commands.push_back(std::move(p_command));
+        command_list_info.appended_commands.push_back(std::move(p_command));
         SPDLOG_TRACE("\tcommand: {} pushed to command_list_info",
                      static_cast<const void*>(command));
       }
@@ -2900,23 +2926,23 @@ class ZeCollector {
 
   static void OnExitCommandListReset(ze_command_list_reset_params_t* params, ze_result_t result,
                                      void* global_data, void** /*instance_data*/) {
-    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
-    if (result == ZE_RESULT_SUCCESS) {
-      PTI_ASSERT(*params->phCommandList != nullptr);
-      ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-      std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      {
-        // collector->ResetCommandList(*params->phCommandList);
-        const std::lock_guard<std::mutex> lock(collector->lock_);
-        collector->ProcessCalls(nullptr, &kcexec);
-      }
-
-      if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
-        collector->acallback_(collector->callback_data_, kcexec);
-      }
-      collector->DoCallbackOnGPUOperationCompletion(kcexec);
-      collector->ResetCommandList(*params->phCommandList);
+    SPDLOG_TRACE("In {}, result: {:x}", __FUNCTION__, static_cast<uint32_t>(result));
+    if (result != ZE_RESULT_SUCCESS) {
+      return;
     }
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+    std::vector<ZeKernelCommandExecutionRecord> kcexec;
+    {
+      // collector->ResetCommandList(*params->phCommandList);
+      const std::lock_guard<std::mutex> lock(collector->lock_);
+      collector->ProcessCalls(nullptr, &kcexec);
+    }
+
+    if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+      collector->acallback_(collector->callback_data_, kcexec);
+    }
+    collector->DoCallbackOnGPUOperationCompletion(kcexec);
+    collector->ResetCommandList(*params->phCommandList);
   }
 
   static void OnEnterCommandQueueExecuteCommandLists(
@@ -3160,7 +3186,8 @@ class ZeCollector {
   // event_pool_manager_ owns.
   ZeEventPoolManager event_pool_manager_;
 
-  std::list<std::unique_ptr<ZeKernelCommand>> kernel_command_list_;
+  // ZeKernelCommand objects are shared w/ ZeCommandListInfo
+  std::list<std::shared_ptr<ZeKernelCommand>> submitted_commands_;
   // keep track of destroyed events, not request their status
   // CCL workloads often destroy events
   std::unordered_set<ze_event_handle_t> destroyed_events_;

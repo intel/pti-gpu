@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
-#ifndef SYCL_GRAPH_TEST_KERNELS_H_
-#define SYCL_GRAPH_TEST_KERNELS_H_
+#ifndef TEST_GRAPH_SYCL_GRAPH_TEST_KERNELS_H_
+#define TEST_GRAPH_SYCL_GRAPH_TEST_KERNELS_H_
 
 #include <cstddef>
 #include <sycl/sycl.hpp>
@@ -116,4 +116,4 @@ struct DecrementBuffersKernel {
   }
 };
 
-#endif  // SYCL_GRAPH_TEST_KERNELS_H_
+#endif  // TEST_GRAPH_SYCL_GRAPH_TEST_KERNELS_H_

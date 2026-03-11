@@ -33,4 +33,5 @@ gtest_discover_tests(
   DISCOVERY_TIMEOUT 60
   PROPERTIES
      LABELS "functional"
-     LABELS "graph")
+     LABELS "graph"
+     ENVIRONMENT "PTI_CONV_CLOCK_SYNC_TIME_NS=1000000000")

@@ -52,6 +52,15 @@ class ZeEventView {
   constexpr uint32_t Idx() const { return index_; }
   constexpr bool Empty() const { return event_ == nullptr; }
 
+  bool ResetSignal() {
+    auto result = ZE_RESULT_SUCCESS;
+    if (event_) {
+      overhead::ScopedOverheadCollector overhead(zeEventHostReset_id);
+      result = zeEventHostReset(event_);
+    }
+    return result == ZE_RESULT_SUCCESS;
+  }
+
   bool Ready() const {
     if (Empty()) {
       return false;

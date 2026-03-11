@@ -583,3 +583,20 @@ TEST_F(ZeEventPoolTestSuite, TestManagerHandlesOutOfOrderReturnsAcrossMultiplePo
     EXPECT_NE(new_events.back().Get(), nullptr);
   }
 }
+
+TEST_F(ZeEventPoolTestSuite, TestNonOwningSoftEventNullReset) {
+  ZeEventView<ZeEventPool> empty_event_view{nullptr};
+  EXPECT_TRUE(empty_event_view.Empty());
+  // ignore resets on empty events because we are no longer using it.
+  EXPECT_TRUE(empty_event_view.ResetSignal());
+}
+
+TEST_F(ZeEventPoolTestSuite, TestNonOwningSoftEventReset) {
+  constexpr uint32_t kPoolSize = 1;
+  ZeEventPool event_pool(ctx_, kPoolSize);
+
+  auto event0 = event_pool.AcquireEvent();
+  auto* event0_handle = event0.Get();
+  EXPECT_TRUE(event0.ResetSignal());
+  EXPECT_EQ(event0.Get(), event0_handle);
+}
