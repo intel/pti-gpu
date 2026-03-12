@@ -1,0 +1,21 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):           3527922600
+    Total Device Time for L0 backend (ns):               117494
+
+== L0 Backend ==
+
+                                                                                                                                                         Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+        "_ZTSN2at6native3xpu36DistributionElementwiseKernelFunctorIffLi4ENS0_9templates3xpu27Uniform4DistributionFunctorENS4_23UniformTransformFunctorIffEEiEE",            2,                68332,    58.157864,                34166,                25937,                42395
+"_ZTSN2at6native3xpu27VectorizedElementwiseKernelILi4ENS1_13BinaryFunctorIfffNS1_10AddFunctorIfEEEENS_6detail5ArrayIPcLi3EEE23TrivialOffsetCalculatorILi2EjEEE",           10,                34163,    29.076378,                 3416,                 1979,                 7083
+                                                                                                                           "zeCommandListAppendMemoryCopy(D2M)",            3,                14999,    12.765759,                 4999,                 3541,                 5729
+
+
+=== Kernel Properties ===
+
+                                                                                                                                                         Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+        "_ZTSN2at6native3xpu36DistributionElementwiseKernelFunctorIffLi4ENS0_9templates3xpu27Uniform4DistributionFunctorENS4_23UniformTransformFunctorIffEEiEE",      AOT,   32,                   5,                  0,                         0,                       0,                           128
+"_ZTSN2at6native3xpu27VectorizedElementwiseKernelILi4ENS1_13BinaryFunctorIfffNS1_10AddFunctorIfEEEENS_6detail5ArrayIPcLi3EEE23TrivialOffsetCalculatorILi2EjEEE",      AOT,   32,                   3,                  0,                         0,                       0,                           128
+
+

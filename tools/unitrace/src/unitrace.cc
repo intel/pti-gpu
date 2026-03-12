@@ -1067,6 +1067,22 @@ int main(int argc, char *argv[]) {
   }
 
 #ifndef _WIN32
+  // For some environments (e.g. virtualenv), the required shared libraries may be in the virtualenv folder which is not in LD_LIBRARY_PATH.
+  // To address this, we append the virtualenv lib folder to LD_LIBRARY_PATH if VIRTUAL_ENV is set.
+  // It is noticed while running pytorch test apps.
+  std::string virtual_env = utils::GetEnv("VIRTUAL_ENV");
+  if (!virtual_env.empty()) {
+    std::string ld_library_path = utils::GetEnv("LD_LIBRARY_PATH");
+    // append virtualenv lib folder to LD_LIBRARY_PATH
+    virtual_env = virtual_env + "/lib";
+    if (ld_library_path.empty()) {
+      ld_library_path = virtual_env;
+    } else {
+      ld_library_path = ld_library_path + ":" + virtual_env;
+    }
+    utils::SetEnv("LD_LIBRARY_PATH", ld_library_path.c_str());
+  }
+
   utils::SetEnv("LD_PRELOAD", preload.c_str());
 
   if (utils::GetEnv("UNITRACE_KernelMetrics") == "1" || !utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {

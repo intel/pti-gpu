@@ -31,6 +31,15 @@
             "scenarios":["--chrome-device-logging"]
         },
         {
+            "name": "mat_mul",
+            "platform": ["Linux"],
+            "skip_scenarios":["-q"]
+        },
+        {
+            "name": "vec_add",
+            "platform": ["Linux"]
+        },
+        {
             "name": "temporal",
             "platform": [ "Windows", "Linux" ],
             "scenarios": ["-d --session test --start-paused", "--session test --start-paused --chrome-call-logging --chrome-kernel-logging", "-h --session test --start-paused", "-t --session test --start-paused"]

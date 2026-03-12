@@ -148,13 +148,14 @@ def get_tests_in_ctest(test_dir):
             uni_tests.append(test_name)
     return uni_tests
 
-def get_filter_tests(tests_configs,default_cmd_list):
+def get_filter_tests(tests_configs, default_cmd_list):
     filter_tests = {}
     for test_config in tests_configs:
         test_name = test_config.get("name")
         platforms = test_config.get("platform")
         scenarios = test_config.get("scenarios")
         skip_scenarios = test_config.get("skip_scenarios")
+        skip_gpus = test_config.get("skip_gpus")
         enabled_scenarios = []
         if scenarios:
             for scenario in scenarios:
@@ -168,7 +169,7 @@ def get_filter_tests(tests_configs,default_cmd_list):
             for scenario in skip_scenarios:
                 if scenario in enabled_scenarios:
                     enabled_scenarios.remove(scenario)
-        filter_tests[test_name] = {"platforms":platforms, "scenarios":enabled_scenarios}
+        filter_tests[test_name] = {"platforms":platforms, "scenarios":enabled_scenarios, "skip_gpus":skip_gpus}
     return filter_tests
 
 def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
@@ -178,11 +179,10 @@ def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
 
     for cmd in scenarios:
         os.environ['UNITRACE_OPTION'] = cmd
-        #total_tests += 1
         sub_tests += 1
         try:
             subprocess.run(
-                ['ctest', '-C', 'Release', '-R', test, '-Q'],
+                ['ctest', '-C', 'Release', '-V', '-R', test, '-Q'],
                 check=True,
                 text=True,
                 env=os.environ,
@@ -223,6 +223,7 @@ def run_ctest(test_dir, scenarios, test_name=None):
     tests = get_tests_in_ctest(test_dir)
     tests_configs = scenarios.get("test_configuration") # some tests need special handling
     filter_tests = get_filter_tests(tests_configs, default_scenarios)
+
     for test in tests:
         if test_name is not None:
             if test != test_name:
@@ -230,7 +231,7 @@ def run_ctest(test_dir, scenarios, test_name=None):
         total_sub_tests = 0
         tests_status = []
         if test in filter_tests:
-            if platform.system() in filter_tests[test]["platforms"]:
+            if not filter_tests[test]["platforms"] or platform.system() in filter_tests[test]["platforms"]:
                 total_sub_tests, tests_status = launch_test_with_scenarios(test, filter_tests[test]["scenarios"], test_dir, total_tests)
         else:
             total_sub_tests, tests_status = launch_test_with_scenarios(test, default_scenarios, test_dir, total_tests)
@@ -308,6 +309,12 @@ def parse_arguments():
         default=os.getcwd(),
         help="Path to the test directory. Defaults to the current working directory."
     )
+    parser.add_argument(
+        "--test-group",
+        type=str,
+        default="cpp-test",
+        help="cpp-test or python-test group to run. default is cpp-test."
+    )
     # Flags for actions
     parser.add_argument(
         "--run",
@@ -343,15 +350,20 @@ def main():
         print("[ERROR] No config file is present")
         return 1
 
-    print("Cleaning up test folder ...")
-    status = clean_up_testing_folder(args.test_dir, args.test_name)
-    if status == 0:
-        if args.run == False:
+    if args.run == False:
+        status = 0
+        # Build the tests now
+        if status == 0:
+            if args.test_group == "cpp-test":
+                args.test_dir = os.path.join(args.test_dir, "cpp_test")
+            elif args.test_group == "python-test":
+                args.test_dir = os.path.join(args.test_dir, "python_test")
+            print("Cleaning up test folder ...")
+            status = clean_up_testing_folder(args.test_dir, args.test_name)
             status = build(args.test_dir, args.test_name)
-            if status != 0: #build error check and return
-                return status
-                
-    print("Start testing...")        
+        if status != 0: #build error check and return
+            return status
+    print("Start testing...")
     status = run_ctest(args.test_dir, scenarios, args.test_name)
     return(status)
 

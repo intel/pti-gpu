@@ -1,0 +1,21 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):           6475366100
+    Total Device Time for L0 backend (ns):               141976
+
+== L0 Backend ==
+
+                                                                                                                                                 Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+"_ZTSN2at6native3xpu36DistributionElementwiseKernelFunctorIffLi4ENS0_9templates3xpu27Uniform4DistributionFunctorENS4_23UniformTransformFunctorIffEEiEE",            2,               104061,    73.294785,                52030,                50416,                53645
+                                                                                                                   "zeCommandListAppendMemoryCopy(D2M)",            3,                27395,    19.295515,                 9131,                 4166,                12604
+                                                                                                                                          "gemm_kernel",            1,                10520,     7.409703,                10520,                10520,                10520
+
+
+=== Kernel Properties ===
+
+                                                                                                                                                 Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+"_ZTSN2at6native3xpu36DistributionElementwiseKernelFunctorIffLi4ENS0_9templates3xpu27Uniform4DistributionFunctorENS4_23UniformTransformFunctorIffEEiEE",      AOT,   32,                   5,                  0,                         0,                       0,                           128
+                                                                                                                                          "gemm_kernel",      AOT,    8,                  15,               4096,                         0,                       0,                           128
+
+

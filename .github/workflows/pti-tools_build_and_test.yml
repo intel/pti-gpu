@@ -65,11 +65,25 @@ jobs:
           cmake -DBUILD_WITH_MPI=0 -GNinja ..
           ninja
 
-      - name: Test-unitrace
+      - name: Unitrace-cpp-test
         working-directory: tools/unitrace/test
         run: |
           source /opt/intel/oneapi/setvars.sh
-          python ./test_unitrace.py
+          python ./test_unitrace.py --test-group cpp-test
+
+      - name: Python Environment Setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Unitrace-python-test
+        working-directory: tools/unitrace/test
+        run: |
+           python -m venv venv
+           source venv/bin/activate
+           python -m pip install --upgrade setuptools wheel
+           python -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/xpu
+           python ./test_unitrace.py --test-group python-test
 
       - name: Build-and-test-sysmon
         if: contains(fromJSON(matrix.tags), 'PVC')

@@ -68,13 +68,18 @@ def contains_non_whitespace(path):
 
 def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_prog, use_mpiexec=False, num_ranks=1, specific_test_case=None):
     output_dir = cmake_root_path + "/build/results"
+    is_python_test = test_case_name.find("python") != -1
+
     if platform.system() == "Windows":
-        unitrace_exe = cmake_root_path + "/../build/unitrace.exe"
+        unitrace_exe = cmake_root_path + "/../../build/unitrace.exe"
         test_case = os.path.join(cmake_root_path, "build", test_case_name, f"{test_case_name}.exe").replace("\\", "/")
 
     else:
-        unitrace_exe = cmake_root_path + "/../build/unitrace"
+        unitrace_exe = cmake_root_path + "/../../build/unitrace"
         test_case = os.path.join(cmake_root_path, "build", test_case_name, f"{test_case_name}").replace("\\", "/")
+
+    if is_python_test:
+        test_case = test_case_name
 
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok = True)
@@ -130,32 +135,46 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
         result = subprocess.run(command, text=True, capture_output=True) # executing Unitrace command
         if result.returncode != 0:
             print(f"[ERROR] Unitrace execution failed with return code {result.returncode}.", file = sys.stderr)
+            print(f"[ERROR] Unitrace command {' '.join(command)} failed.", file = sys.stderr)
+            print(f"[ERROR] Unitrace stderr output: {result.stderr}", file = sys.stderr)
+            print(f"[ERROR] Unitrace stdout output: {result.stdout}", file = sys.stderr)
             return 1  # Indicate failure due to Unitrace ERROR
+
+        print(f"[ERROR] Unitrace stderr output: {result.stderr}", file = sys.stderr)
+        print(f"[ERROR] Unitrace stdout output: {result.stdout}", file = sys.stderr)
 
         # Metric logs need to be moved to result folder
         if scenario in ["-k", "-q"]:
-            test_case_path = os.path.join(cmake_root_path, "build", test_case_name)
+            if is_python_test and specific_test_case is not None:
+                test_case_path = os.path.join(cmake_root_path, "build", specific_test_case)
+            else:
+                test_case_path = os.path.join(cmake_root_path, "build", test_case_name)
             # Find all files starting with "metric" in source directory
             pattern = os.path.join(test_case_path, "metric*")
             metric_files = glob.glob(pattern)
-
+            print(f"[INFO] Found metric files: {metric_files}", file = sys.stderr)
             # Move each file to destination
             for file_path in metric_files:
                 filename = os.path.basename(file_path)
                 destination_path = os.path.join(output_dir, filename)
                 shutil.move(file_path, destination_path)
                 os.rename(destination_path, output_dir + "/" + filename + "_" + output_file)
+                print(f"[INFO] Moved metric file {file_path} to {destination_path}", file = sys.stderr)
 
         after_list_of_files = set(os.listdir(output_dir))
         new_files = list(after_list_of_files - before_list_of_files)
         # check if scenario is "chrome" logging
         # then test needs to modify the file name to reflect right test case.
         if is_chrome_logging_present:
+            min_no_of_lines = 4 # Metric files has initial few lines for headers etc..
+            print(f"[INFO] Chrome logging scenario detected, renaming output files to reflect test case name.", file = sys.stderr)
             for idx, new_file in enumerate(new_files):
                 new_file = os.path.join(output_dir, new_file)
                 new_file_name = ""
-
-                new_file_name += "_" +os.path.basename(new_file)
+                if new_file.find("python") != -1 and new_file.find(".json") != -1:
+                    new_file_name = "_" + specific_test_case + ".json"
+                else:
+                    new_file_name += "_" +os.path.basename(new_file)
                 new_name = os.path.join(output_dir, "output") + scenarios.replace(" ","").replace("--", "_").replace("-", "_").replace(" ","") + new_file_name
                 try:
                     os.rename(new_file, new_name)
@@ -163,13 +182,14 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                     print(f"[ERROR] Occurred while renaming the output file: {e}", file = sys.stderr)
                     return 1
                 new_files[idx] = os.path.basename(new_name)
+                print(f"[INFO] Renamed chrome logging output file to {new_name}", file = sys.stderr)
 
         # Check if the output file is generated
         output_files = []
         for f in new_files:
             result_file_pattern = f.split(".")
             if (is_chrome_logging_present and "chrome" in result_file_pattern[0]
-                and test_case_name.replace("/","_").split(".")[0] in result_file_pattern[0]
+                and (test_case_name.replace("/","_").split(".")[0] in result_file_pattern[0] or (specific_test_case is not None and specific_test_case in result_file_pattern[0]))
                ):
                 output_files.append(f)
             elif scenario in ["-k", "-q"] and f.endswith(output_file) and "metrics" in f:
@@ -197,7 +217,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 return 1  # Indicate failure due to ERROR in output
 
         if extra_test_prog != None:
-            print("[INFO] Test has custom checker, going to use it for validation.")
+            print("[INFO] Test has custom checker, going to use it for validation.", file = sys.stderr)
             # obtain list of generated files from unitrace stderr output
             full_path_output_files = []
             err_lines = result.stderr.splitlines()
@@ -229,7 +249,8 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                         print(f"[ERROR] Metric file '{output_file}' is not having counters present.")
                         return 1 # Metric file should have more than 4 line present.
         elif scenario_set.isdisjoint(set(["--device-timing", "-d", "--device-timeline", "-t"])):
-            print(f"[INFO] Nothing to compare for {scenario_set} hence exiting early.")
+            min_no_of_lines = 4 # Metric files has initial few lines for headers etc..
+            print(f"[INFO] Nothing to compare for {scenario_set} hence exiting early.", file = sys.stderr)
             # check if unidiff support validation for current scenario else return early as success
             return 0
         else:
@@ -321,7 +342,8 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 else:
                     return 1
             else:
-                expected_output_file = extract_test_case_output(cmake_root_path, test_case_name, scenario_d_or_t)
+                gold_file_to_compare = specific_test_case if specific_test_case is not None else test_case_name
+                expected_output_file = extract_test_case_output(cmake_root_path, gold_file_to_compare, scenario_d_or_t)
 
                 output_file_with_pid = max(output_files, key = lambda f: os.path.getmtime(os.path.join(output_dir, f)))
 
@@ -339,12 +361,19 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
 def main():
     parser = argparse.ArgumentParser(prog="run_test.py", description="Run unitrace test")
     parser.add_argument('-e', '--extra_test_prog', type=str)
-    parser.add_argument('cmake_root_path')
-    parser.add_argument('args', nargs='+')
+    parser.add_argument('-c', '--cmake_root_path', type=str, required=True, help='Path to the root of the CMake project')
     parser.add_argument('--mpiexec', action='store_true', help='Run unitrace with mpiexec')
     parser.add_argument('-n', '--num_ranks', type=int, default=1, help='Number of MPI ranks (default: 1)')
     parser.add_argument('-t','--test_case', type=str, default=None, help='Specific test case name (not the test executable name)')
+    parser.add_argument('args', nargs=argparse.REMAINDER, help='Application and its arguments (parsing stops here)')
     args = parser.parse_args()
+
+    if not args.args:
+        parser.error("[ERROR] Application command is required")
+        return 1
+    elif args.args[0] == "--":
+        args.args = args.args[1:]
+
     scenario = os.environ["UNITRACE_OPTION"]
 
     return run_unitrace(args.cmake_root_path, scenario, args.args[0], args.args[1:], 

@@ -1,0 +1,7 @@
+Thread 32936 Device 1863164014248 : "_ZTSN2at6native3xpu36DistributionElementwiseKernelFunctorIffLi4ENS0_9templates3xpu27Uniform4DistributionFunctorENS4_23UniformTransformFunctorIffEEiEE[SIMD32 {1; 1; 1} {256; 1; 1}]" [ns] 365787111234400 (append) 365787112001800 (submit) 365787112939404 (start) 365787112977008 (end)
+Thread 32936 Device 1863164014248 : "_ZTSN2at6native3xpu36DistributionElementwiseKernelFunctorIffLi4ENS0_9templates3xpu27Uniform4DistributionFunctorENS4_23UniformTransformFunctorIffEEiEE[SIMD32 {1; 1; 1} {256; 1; 1}]" [ns] 365787112713500 (append) 365787443913700 (submit) 365787444558595 (start) 365787444601199 (end)
+Thread 32936 Device 1863164014248 : "gemm_kernel[SIMD8 {1; 1; 1} {16; 8; 1}]" [ns] 365787438022000 (append) 365787443913700 (submit) 365787444601720 (start) 365787444611511 (end)
+Thread 32936 Device 1863164014248 : "zeCommandListAppendMemoryCopy(D2M)[64]" [ns] 365787439619200 (append) 365787443913700 (submit) 365787444612241 (start) 365787444615886 (end)
+Thread 32936 Device 1863164014248 : "zeCommandListAppendMemoryCopy(D2M)[64]" [ns] 365787454279800 (append) 365787455109300 (submit) 365787455517216 (start) 365787455524716 (end)
+Thread 32936 Device 1863164014248 : "zeCommandListAppendMemoryCopy(D2M)[64]" [ns] 365787456442400 (append) 365787456726300 (submit) 365787456951508 (start) 365787456959008 (end)
+
