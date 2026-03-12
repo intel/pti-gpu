@@ -41,8 +41,6 @@
 using AskForBufferEvent = std::function<void(unsigned char**, size_t*)>;
 using ReturnBufferEvent = std::function<void(unsigned char*, size_t, size_t)>;
 
-using ViewInsert = std::function<void(void*, const ZeKernelCommandExecutionRecord&)>;
-
 inline void MemCopyEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void MemCopyP2PEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
@@ -69,8 +67,8 @@ inline void SyclRuntimeEvent(void* data, const ZeKernelCommandExecutionRecord& r
 
 inline void OverheadCollectionEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
-inline void ZeChromeKernelStagesCallback(void* data,
-                                         std::vector<ZeKernelCommandExecutionRecord>& kcexecrec);
+inline void ZeKernelStagesCallback(void* data,
+                                   std::vector<ZeKernelCommandExecutionRecord>& kcexecrec);
 
 inline void ZeApiCallsCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 inline void CommunicationEvent(void* data, CommunicationRecord& rec);
@@ -130,69 +128,40 @@ inline static constexpr std::array kPtiClassLzGpuOpsCoreApis{
     pti_api_id_driver_levelzero::zeCommandListImmediateAppendCommandListsExp_id,
 };
 
-struct ViewData {
-  const char* fn_name = "";
-  ViewInsert callback;
-};
+// It represents pti_view_kind count. Any update in pti_view_kind enum needs to be reflected here.
+inline constexpr size_t kPtiViewKindCount = 13;
 
-inline const std::vector<ViewData>& GetViewNameAndCallback(pti_view_kind view) {
-  // clang-format off
-  static const std::map<pti_view_kind, std::vector<ViewData>> view_data_map =
-      {
-        {PTI_VIEW_DEVICE_GPU_KERNEL,
-          {
-            ViewData{"KernelEvent", KernelEvent}
-          }
-        },
-        {PTI_VIEW_RUNTIME_API,
-          {
-            ViewData{"SyclRuntimeEvent", SyclRuntimeEvent}
-          }
-        },
-        {PTI_VIEW_COLLECTION_OVERHEAD,
-          {
-            ViewData{"OverheadCollectionEvent", OverheadCollectionEvent}
-          }
-        },
-        {PTI_VIEW_DEVICE_GPU_MEM_COPY,
-          {
-            ViewData{"zeCommandListAppendMemoryCopy", MemCopyEvent}
-          }
-        },
-        {PTI_VIEW_DEVICE_GPU_MEM_FILL,
-          {
-            ViewData{"zeCommandListAppendMemoryFill", MemFillEvent}
-          }
-        },
-        {PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P,
-          {
-            ViewData{"zeCommandListAppendMemoryCopyP2P", MemCopyP2PEvent},
-          }
-        },
-        {PTI_VIEW_DEVICE_SYNCHRONIZATION,
-          {
-            ViewData{"zeCommandListAppendBarrier", BarrierExecEvent},
-            ViewData{"zeCommandListAppendMemoryRangesBarrier", BarrierMemEvent},
-            ViewData{"zeFenceHostSynchronize", FenceSynchEvent},
-            ViewData{"zeEventHostSynchronize", EventSynchEvent},
-            ViewData{"zeCommandListHostSynchronize", CommandListSynchEvent},
-            ViewData{"zeCommandQueueSynchronize", CommandQueueSynchEvent}
-          }
-        },
-        {PTI_VIEW_DRIVER_API,
-          {
-            ViewData{"ZecallEvent", ZeDriverEvent},
-          }
-        },
-        {PTI_VIEW_COMMUNICATION, {}
-        }
-      };
-  // clang-format on
-  const auto result = view_data_map.find(view);
-  if (result == view_data_map.end()) {
-    throw std::out_of_range("No view record handling routine in table");
+inline std::array<std::atomic<bool>, kPtiViewKindCount> list_of_api_view_state{};
+
+inline void SetApiViewState(pti_view_kind view_kind, bool enabled) {
+  const auto index = static_cast<uint32_t>(view_kind);
+  if (index >= kPtiViewKindCount ||
+      index == static_cast<uint32_t>(pti_view_kind::PTI_VIEW_INVALID) ||
+      index == static_cast<uint32_t>(pti_view_kind::PTI_VIEW_RESERVED)) {
+    SPDLOG_WARN("Invalid or reserved view kind: {}", index);
+    return;
   }
-  return result->second;
+  list_of_api_view_state[index].store(enabled, std::memory_order_release);
+}
+
+inline bool GetApiViewState(pti_view_kind view_kind) {
+  const auto index = static_cast<uint32_t>(view_kind);
+  if (index >= kPtiViewKindCount ||
+      index == static_cast<uint32_t>(pti_view_kind::PTI_VIEW_INVALID) ||
+      index == static_cast<uint32_t>(pti_view_kind::PTI_VIEW_RESERVED)) {
+    SPDLOG_WARN("Invalid or reserved view kind: {}", index);
+    return false;
+  }
+  return list_of_api_view_state[index].load(std::memory_order_acquire);
+}
+
+inline bool IsAnyViewEnabled() {
+  for (size_t i = 0; i < list_of_api_view_state.size(); ++i) {
+    if (list_of_api_view_state[i].load(std::memory_order_acquire)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 template <typename T, typename M>
@@ -289,7 +258,6 @@ struct PtiViewRecordHandler {
   using ViewBuffer = pti::view::utilities::ViewBuffer;
   using ViewBufferQueue = pti::view::utilities::ViewBufferQueue;
   using ViewBufferTable = pti::view::utilities::ViewBufferTable<uint32_t>;
-  using ViewEventTable = pti::view::utilities::GuardedUnorderedMap<std::string, ViewInsert>;
   using KernelNameStorageQueue =
       pti::view::utilities::ViewRecordBufferQueue<std::unique_ptr<std::string>>;
 
@@ -318,7 +286,7 @@ struct PtiViewRecordHandler {
       // (too much overhead)
       // However, dealing with it requires cross-thread synchronization
       collector_options.kernel_tracing = true;
-      collector_ = ZeCollector::Create(&state_, collector_options, ZeChromeKernelStagesCallback,
+      collector_ = ZeCollector::Create(&state_, collector_options, ZeKernelStagesCallback,
                                        ZeApiCallsCallback, nullptr);
 #if defined(PTI_CCL_ITT_COMPILE)
       IttCollector::Instance().SetCallback(CommunicationEvent);
@@ -515,7 +483,7 @@ struct PtiViewRecordHandler {
 
     if (type == pti_view_kind::PTI_VIEW_RUNTIME_API) {
 #if defined(PTI_TRACE_SYCL)
-      if (!view_event_map_.TryFindElement("SyclRuntimeEvent")) {
+      if (GetApiViewState(pti_view_kind::PTI_VIEW_RUNTIME_API) == false) {
         SyclCollector::Instance().SetCallback(SyclRuntimeViewCallback);
         EnableAllRuntimeApisWithoutGranularity();
         SyclCollector::Instance().EnableTracing();
@@ -568,9 +536,8 @@ struct PtiViewRecordHandler {
 
     try {
       if (type != pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION) {
-        for (const auto& view_types : GetViewNameAndCallback(type)) {
-          view_event_map_.Add(view_types.fn_name, view_types.callback);
-        }
+        SetApiViewState(type, true);
+
         // Note: at this point EnableTracing on collector may be on and we maybe in granular mode.
         // We hit the below reset of granular enables in case we have in Multithread scenario where
         // the overall flow is:
@@ -633,14 +600,12 @@ struct PtiViewRecordHandler {
 
     try {
       if (type != pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION) {
-        for (const auto& view_types : GetViewNameAndCallback(type)) {
-          view_event_map_.Erase(view_types.fn_name);
-        }
+        SetApiViewState(type, false);
       }
     } catch (const std::out_of_range&) {
       result = pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
-    if (view_event_map_.Empty()) {
+    if (!IsAnyViewEnabled()) {
       DisableTracing();
     }
     return result;
@@ -684,16 +649,6 @@ struct PtiViewRecordHandler {
       result = pti_result::PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY;
     }
     return result;
-  }
-
-  inline InternalResult operator()(const std::string& key, void* data,
-                                   const ZeKernelCommandExecutionRecord& rec) {
-    auto view_event_callback = view_event_map_.TryFindElement(key);
-    if (view_event_callback) {
-      (*view_event_callback)(data, rec);
-      return InternalResult::kStatusSuccess;
-    }
-    return InternalResult::kStatusViewNotEnabled;
   }
 
   inline const char* InsertKernel(const std::string& name) {
@@ -951,7 +906,6 @@ struct PtiViewRecordHandler {
   mutable std::mutex set_special_calls_map_mtx_;
   mutable std::mutex map_granularity_set_mtx_;
 
-  ViewEventTable view_event_map_;
   KernelNameStorageQueue kernel_name_storage_;
   ViewBufferTable view_buffers_;
   pti::view::BufferConsumer consumer_ = {};  // Starts thread
@@ -1407,48 +1361,92 @@ inline void ZeDriverEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& 
 }
 
 inline void SyclRuntimeViewCallback(void* data, ZeKernelCommandExecutionRecord& rec) {
-  Instance()("SyclRuntimeEvent", data, rec);
+  if (GetApiViewState(pti_view_kind::PTI_VIEW_RUNTIME_API)) {
+    SyclRuntimeEvent(data, rec);
+  }
 }
 
 inline void OverheadCollectionCallback(void* data, ZeKernelCommandExecutionRecord& rec) {
-  Instance()("OverheadCollectionEvent", data, rec);
+  if (GetApiViewState(pti_view_kind::PTI_VIEW_COLLECTION_OVERHEAD)) {
+    OverheadCollectionEvent(data, rec);
+  }
 }
 
-inline void ZeChromeKernelStagesCallback(void* data,
-                                         std::vector<ZeKernelCommandExecutionRecord>& kcexecrec) {
+inline void ZeKernelStagesCallback(void* data,
+                                   std::vector<ZeKernelCommandExecutionRecord>& kcexecrec) {
   for (const auto& rec : kcexecrec) {
-    if ((rec.name_.find("P2P)") != std::string::npos) &&
-        (rec.name_.find("zeCommandListAppendMemoryCopy") != std::string::npos)) {
-      Instance()("zeCommandListAppendMemoryCopyP2P", data, rec);
-    } else if (rec.name_.find("zeCommandListAppendMemoryCopy") != std::string::npos) {
-      Instance()("zeCommandListAppendMemoryCopy", data, rec);
-    } else if (rec.name_.find("zeCommandListAppendMemoryFill") != std::string::npos) {
-      Instance()("zeCommandListAppendMemoryFill", data, rec);
-    } else if (rec.name_.find("zeCommandListAppendBarrier") != std::string::npos) {
-      Instance()("zeCommandListAppendBarrier", data, rec);
-    } else if (rec.name_.find("zeCommandListAppendMemoryRangesBarrier") != std::string::npos) {
-      Instance()("zeCommandListAppendMemoryRangesBarrier", data, rec);
-    } else if (rec.name_.find("zeFenceHostSynchronize") != std::string::npos) {
-      Instance()("zeFenceHostSynchronize", data, rec);
-    } else if (rec.name_.find("zeEventHostSynchronize") != std::string::npos) {
-      Instance()("zeEventHostSynchronize", data, rec);
-    } else if (rec.name_.find("zeCommandListHostSynchronize") != std::string::npos) {
-      Instance()("zeCommandListHostSynchronize", data, rec);
-    } else if (rec.name_.find("zeCommandQueueSynchronize") != std::string::npos) {
-      Instance()("zeCommandQueueSynchronize", data, rec);
-    } else if (rec.name_.find("zeContextSystemBarrier") != std::string::npos) {
-      // No-op for now -- driver support not there in L0 yet (returns unsupported_feature).
-    } else {
-      Instance()("KernelEvent", data, rec);
+    switch (rec.callback_id_) {
+      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopy_id:
+      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopyFromContext_id:
+      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopyRegion_id:
+        if (rec.name_.find("P2P)") != std::string::npos) {
+          if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P)) {
+            MemCopyP2PEvent(data, rec);
+          }
+        } else {
+          if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY)) {
+            MemCopyEvent(data, rec);
+          }
+        }
+        break;
+      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernel_id:
+      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchCooperativeKernel_id:
+      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelIndirect_id:
+      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelWithArguments_id:
+      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelWithParameters_id:
+        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL)) {
+          KernelEvent(data, rec);
+        }
+        break;
+      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryFill_id:
+        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL)) {
+          MemFillEvent(data, rec);
+        }
+        break;
+      case pti_api_id_driver_levelzero::zeCommandListAppendBarrier_id:
+        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
+          BarrierExecEvent(data, rec);
+        }
+        break;
+      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryRangesBarrier_id:
+        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
+          BarrierMemEvent(data, rec);
+        }
+        break;
+      case pti_api_id_driver_levelzero::zeFenceHostSynchronize_id:
+        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
+          FenceSynchEvent(data, rec);
+        }
+        break;
+      case pti_api_id_driver_levelzero::zeEventHostSynchronize_id:
+        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
+          EventSynchEvent(data, rec);
+        }
+        break;
+      case pti_api_id_driver_levelzero::zeCommandListHostSynchronize_id:
+        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
+          CommandListSynchEvent(data, rec);
+        }
+        break;
+      case pti_api_id_driver_levelzero::zeCommandQueueSynchronize_id:
+        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
+          CommandQueueSynchEvent(data, rec);
+        }
+        break;
+      default:
+        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL)) {
+          KernelEvent(data, rec);
+        }
+        break;
     }
   }
 }
 
 inline void ZeApiCallsCallback([[maybe_unused]] void* data,
                                [[maybe_unused]] ZeKernelCommandExecutionRecord& rec) {
-  InternalResult status = Instance()("ZecallEvent", data, rec);
-  // Assume zecalls are disabled unless we know it is not so.
-  if (status == InternalResult::kStatusSuccess) {
+  if (GetApiViewState(pti_view_kind::PTI_VIEW_DRIVER_API)) {
+    ZeDriverEvent(data, rec);
+    // Assume zecalls are disabled unless we know it is not so.
     SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
     special_rec_data.zecall_disabled = false;
     Instance().SetSpecialCallsData(rec.cid_, special_rec_data);

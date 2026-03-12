@@ -33,9 +33,3 @@ TEST_F(AssertExceptionFixtureTest, AssertApplyTimeShiftOverflow) {
   uint64_t aTS = ApplyTimeShift(UINT64_MAX, 1);
   ASSERT_EQ(aTS, 0ULL);
 }
-
-TEST_F(AssertExceptionFixtureTest, ExceptionGetViewNameAndCallbackThrow) {
-  Instance().SetState(pti_result::PTI_SUCCESS);
-  EXPECT_THROW(
-      { GetViewNameAndCallback(pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION); }, std::out_of_range);
-}
