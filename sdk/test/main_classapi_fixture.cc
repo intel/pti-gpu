@@ -314,12 +314,21 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
 };
 
 void EnableIndividualApis(bool is_for_driver, pti_api_group_id pti_group) {
+  // Depending on GPU device/UR/L0 - one or more of these APIs will be present
   if (is_for_driver) {
     PTI_CHECK_SUCCESS(ptiViewEnableDriverApi(
         1, pti_group, pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernel_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableDriverApi(
+        1, pti_group,
+        pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelWithParameters_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableDriverApi(
+        1, pti_group,
+        pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelWithArguments_id));
   } else {
     PTI_CHECK_SUCCESS(
         ptiViewEnableRuntimeApi(1, pti_group, pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id));
+    PTI_CHECK_SUCCESS(ptiViewEnableRuntimeApi(
+        1, pti_group, pti_api_id_runtime_sycl::urEnqueueKernelLaunchWithArgsExp_id));
   }
 }
 
