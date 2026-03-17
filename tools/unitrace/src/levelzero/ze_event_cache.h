@@ -29,6 +29,12 @@ class ZeEventCache {
   ZeEventCache& operator=(const ZeEventCache& that) = delete;
 
   ~ZeEventCache() {
+#ifdef _WIN32
+    // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail
+    // so ignore any L0 call.
+    return;
+#endif /* _WIN32 */
+
     bool destroyed = true;
     const std::lock_guard<std::shared_mutex> lock(lock_);
 
