@@ -10,3 +10,5 @@ endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG_INIT "-Xarch_host -fsanitize=address -Xarch_host -fsanitize=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 set(CMAKE_C_FLAGS_DEBUG_INIT "-Xarch_host -fsanitize=address -Xarch_host -fsanitize=undefined")
+
+set(PTI_SANITIZER ON CACHE BOOL "Build uses sanitizers")
