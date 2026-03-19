@@ -23,6 +23,9 @@
 #include <sycl/sycl.hpp>
 #include <thread>
 #include <vector>
+#ifdef __linux__
+#include <unistd.h>
+#endif
 
 #include "pti/pti.h"
 #include "pti/pti_view.h"
@@ -39,22 +42,37 @@
   } while (0)
 
 class IttEnvVarInitializer {
-  inline static bool SetIttEnvVariable() {
-    std::string itt_lib_path = samples_utils::GetEnv("INTEL_LIBITTNOTIFY64");
+ public:
+  enum class Status { Success, LibraryNotSet, LibraryNotFound };
+
+  IttEnvVarInitializer() : status_(initialize()) {}
+  Status getStatus() const { return status_; }
+  bool isValid() const { return status_ == Status::Success; }
+
+ private:
+  Status initialize() {
+    const std::string itt_lib_path = samples_utils::GetEnv("INTEL_LIBITTNOTIFY64");
+
     if (itt_lib_path.empty()) {
-      std::cerr << "Warning: Failed to set INTEL_LIBITTNOTIFY64 environment variable." << std::endl;
-      std::cerr << "Warning: ITT collector inactive." << std::endl;
-    } else if (!pti::utils::filesystem::exists(itt_lib_path)) {
-      std::cerr << "Warning: ITT library defined in INTEL_LIBITTNOTIFY64 not found at: "
-                << itt_lib_path << " ITT collector inactive." << std::endl;
-      std::cerr << "Warning: ITT collector inactive." << std::endl;
-    } else {
-      std::cout << "Using ITT library: " << itt_lib_path << std::endl;
+      logWarning("INTEL_LIBITTNOTIFY64 environment variable not set");
+      return Status::LibraryNotSet;
     }
-    return true;
+
+    if (!pti::utils::filesystem::exists(itt_lib_path)) {
+      logWarning("ITT library not found at: " + itt_lib_path);
+      return Status::LibraryNotFound;
+    }
+
+    std::cout << "Using ITT library: " << itt_lib_path << std::endl;
+    return Status::Success;
   }
 
-  inline static bool result_ = SetIttEnvVariable();
+  void logWarning(const std::string &message) const {
+    std::cerr << "Warning: " << message << std::endl;
+    std::cerr << "Warning: ITT collector inactive." << std::endl;
+  }
+
+  Status status_;
 };
 
 class IttTest : public ::testing::Test {
@@ -133,6 +151,7 @@ class IttTest : public ::testing::Test {
   // Collection Start and Stop helpers to avoid repetition in test bodies
 
   inline void PtiProlog() {
+    IttEnvVarInitializer();
     ASSERT_EQ(ptiViewSetCallbacks(IttTest::ProvideBuffer, IttTest::BufferCompletedMultiThreaded),
               pti_result::PTI_SUCCESS);
 
@@ -229,6 +248,45 @@ TEST_F(IttTest, ThreeDomainsAdded) {
       << "Expected " << kExpectedRecords << " record, collected " << local_records_vector.size();
 }
 
+//
+// Test CCL domain when created first because it executes a different
+// code path.
+//
+TEST_F(IttTest, ThreeDomainsAddedCclFirst) {
+  constexpr std::string_view kTaskName = "CclFirst_Task";
+  constexpr int kExpectedRecords = 1;
+  std::vector<pti_view_record_comms> local_records_vector;
+  comms_vector_ = &local_records_vector;
+
+  PtiProlog();
+
+  // Create CCL domain first
+  auto ccl_domain = __itt_domain_create(kCclDomain.data());
+  constexpr std::string_view ccl_task_name = "ThreeDomainsAddedCclFirst";
+  auto ccl_task = __itt_string_handle_create(ccl_task_name.data());
+
+  __itt_task_begin(ccl_domain, __itt_null, __itt_null, ccl_task);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  __itt_task_end(ccl_domain);
+
+  // Then create stray domains
+  auto task_stray = __itt_string_handle_create(kTaskName.data());
+  auto stray_domain1 = __itt_domain_create("Stray Domain1");
+  __itt_task_begin(stray_domain1, __itt_null, __itt_null, task_stray);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  __itt_task_end(stray_domain1);
+
+  auto stray_domain2 = __itt_domain_create("Stray Domain2");
+  __itt_task_begin(stray_domain2, __itt_null, __itt_null, task_stray);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  __itt_task_end(stray_domain2);
+
+  PtiEpilog();
+
+  ASSERT_EQ(local_records_vector.size(), kExpectedRecords)
+      << "Expected " << kExpectedRecords << " record, collected " << local_records_vector.size();
+}
+
 TEST_F(IttTest, StackedTasks) {
   constexpr std::string_view kTask1Name = "task1_should_finish_last";
   constexpr std::string_view kTask2Name = "task2_should_finish_first";
@@ -315,8 +373,10 @@ TEST_F(IttTest, EnableDisableTrace) {
   // Split Epilog into 2 parts: 1st - disabling
   ASSERT_PTI_SUCCESS(ptiViewDisable(PTI_VIEW_COMMUNICATION));
 
-  // Generate ITT traffic that SHOULD NOT BE RECORDED
-  __itt_task_begin(domain, __itt_null, __itt_null, task);
+  // Generate ITT traffic that SHOULD NOT BE RECORDED, but
+  // for the __itt_string_handle that was created.
+  auto no_more_itt_ops = __itt_string_handle_create("there_should_be_no_further_itt_ops");
+  __itt_task_begin(domain, __itt_null, __itt_null, no_more_itt_ops);
   __itt_task_end(domain);
 
   // Split Epilog into 2 parts: 2nd - flushing records
@@ -326,6 +386,90 @@ TEST_F(IttTest, EnableDisableTrace) {
       << "Expected " << kExpectedRecords << " records, collected " << local_records_vector.size();
 
   // Validate PID/TID fields for the one recorded task
+  ASSERT_EQ(local_records_vector[0]._process_id, utils::GetPid()) << "PID mismatch in ITT record";
+  ASSERT_EQ(local_records_vector[0]._thread_id, utils::GetTid()) << "TID mismatch in ITT record";
+}
+
+TEST_F(IttTest, EnableDisableEnable) {
+  constexpr std::string_view kFirstTaskName = "Task_First_Record";
+  constexpr std::string_view kSecondTaskName = "Task_Second_Drop";
+  constexpr std::string_view kThirdTaskName = "Task_Third_Record";
+  constexpr int kExpectedRecords = 2;
+  std::vector<pti_view_record_comms> local_records_vector;
+
+  comms_vector_ = &local_records_vector;
+
+  PtiProlog();
+
+  auto domain = __itt_domain_create(kCclDomain.data());
+
+  // First task to be recorded
+  auto task1 = __itt_string_handle_create(kFirstTaskName.data());
+  __itt_task_begin(domain, __itt_null, __itt_null, task1);
+  __itt_task_end(domain);
+
+  ASSERT_PTI_SUCCESS(ptiViewDisable(PTI_VIEW_COMMUNICATION));
+
+  // Second task to be dropped
+  auto task2 = __itt_string_handle_create(kSecondTaskName.data());
+  __itt_task_begin(domain, __itt_null, __itt_null, task2);
+  __itt_task_end(domain);
+
+  ASSERT_PTI_SUCCESS(ptiViewEnable(PTI_VIEW_COMMUNICATION));
+
+  // Third task to be recorded
+  auto task3 = __itt_string_handle_create(kThirdTaskName.data());
+  __itt_task_begin(domain, __itt_null, __itt_null, task3);
+  __itt_task_end(domain);
+
+  PtiEpilog();
+
+  ASSERT_EQ(local_records_vector.size(), kExpectedRecords)
+      << "Expected " << kExpectedRecords << " records, collected " << local_records_vector.size();
+
+  // Verify specific task names are recorded in correct order
+  ASSERT_STREQ(local_records_vector[0]._name, kFirstTaskName.data())
+      << "First record should be " << kFirstTaskName.data();
+  ASSERT_STREQ(local_records_vector[1]._name, kThirdTaskName.data())
+      << "Second record should be " << kThirdTaskName.data();
+}
+
+TEST_F(IttTest, StackPurgeOnDisable) {
+  constexpr std::string_view kTask1Name = "IncompleteTask1";
+  constexpr std::string_view kTask2Name = "IncompleteTask2";
+  std::vector<pti_view_record_comms> local_records_vector;
+
+  comms_vector_ = &local_records_vector;
+
+  PtiProlog();
+
+  auto domain = __itt_domain_create(kCclDomain.data());
+  auto task1 = __itt_string_handle_create(kTask1Name.data());
+  auto task2 = __itt_string_handle_create(kTask2Name.data());
+
+  __itt_task_begin(domain, __itt_null, __itt_null, task1);
+  __itt_task_begin(domain, __itt_null, __itt_null, task2);
+
+  ASSERT_PTI_SUCCESS(ptiViewDisable(PTI_VIEW_COMMUNICATION));
+
+  __itt_task_end(domain);
+  __itt_task_end(domain);
+
+  ASSERT_PTI_SUCCESS(ptiViewEnable(PTI_VIEW_COMMUNICATION));
+
+  constexpr std::string_view kValidTaskName = "ValidTaskAfterPurge";
+  auto valid_task = __itt_string_handle_create(kValidTaskName.data());
+  __itt_task_begin(domain, __itt_null, __itt_null, valid_task);
+  __itt_task_end(domain);
+
+  PtiEpilog();
+
+  ASSERT_EQ(local_records_vector.size(), 1)
+      << "Expected 1 record after stack purge, collected " << local_records_vector.size();
+
+  ASSERT_STREQ(local_records_vector[0]._name, kValidTaskName.data())
+      << "Should only record the task created after stack purge";
+
   ASSERT_EQ(local_records_vector[0]._process_id, utils::GetPid()) << "PID mismatch in ITT record";
   ASSERT_EQ(local_records_vector[0]._thread_id, utils::GetTid()) << "TID mismatch in ITT record";
 }

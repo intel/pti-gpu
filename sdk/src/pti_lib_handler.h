@@ -25,9 +25,7 @@
 #define INTEL_NO_MACRO_BODY
 #define INTEL_ITTNOTIFY_API_PRIVATE
 
-#include <ittnotify.h>
-#include <ittnotify_config.h>
-ITT_EXTERN_C void ITTAPI __itt_api_init(__itt_global* p, __itt_group_id init_groups);
+#include "itt/itt_pti_exports.h"
 
 namespace pti {
 

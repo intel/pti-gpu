@@ -8,62 +8,22 @@
 
 #include <spdlog/spdlog.h>
 
-#include <atomic>
 #include <cstddef>
 #include <cstdio>
 #include <stack>
 #include <string>
+#include <vector>
 
 #include "utils.h"
 
-//
-// The ITT collector only supports oneCCL usage. The said
-// library always uses the same domain name "oneCCL::API" for all its calls.
-// Operations on domain are made on pointer equalities in contrast
-// to expensive string equalities.
-//
-static std::atomic<const __itt_domain *> itt_ccl_domain{nullptr};
-
-static inline const __itt_domain *GetCclDomain(const __itt_domain *domain) {
-  static const char *const kcclDomain = "oneCCL::API";
-
-  // Fast path: if already initialized, return the cached domain
-  const __itt_domain *cached = itt_ccl_domain.load(std::memory_order_relaxed);
-  if (cached != nullptr) {
-    return cached;
-  }
-
-  // Slow path: check if this domain matches oneCCL and try to cache it
-  if (domain != nullptr && domain->nameA != nullptr && !strcmp(domain->nameA, kcclDomain)) {
-    const __itt_domain *expected = nullptr;
-    // Only one thread will successfully update itt_ccl_domain from nullptr to domain
-    // If compare_exchange_weak fails, another thread already set it, which is fine
-    itt_ccl_domain.compare_exchange_weak(expected, domain, std::memory_order_relaxed);
-    return domain;
-  }
-
-  return nullptr;
-}
-
-//
-// Helper function to determine if we should return early from ITT
-// API calls based on tracing state and domain filtering
-//
-static inline bool IttReturnEarly(const __itt_domain *domain) {
-  return !IttCollector::Instance().IsTraceEnabled() || domain == nullptr ||
-         domain->nameA == nullptr || domain != GetCclDomain(domain);
-}
-
-thread_local std::stack<ThreadTaskDescriptor> task_desc;
-
 // Static method definitions
-std::string ThreadTaskDescriptor::DumpTaskDescriptor() noexcept {
-  if (task_desc.empty()) {
+std::string IttCollector::DumpTaskDescriptor() noexcept {
+  if (task_desc_.empty()) {
     return "Task descriptor: (empty stack)";
   }
 
   std::string result = "\nTask descriptor stack:\n";
-  std::stack<ThreadTaskDescriptor> temp_stack = task_desc;
+  std::stack<ThreadTaskDescriptor> temp_stack = task_desc_;
   std::vector<ThreadTaskDescriptor> elements;
 
   // Extract all elements from the copy (this reverses the order)
@@ -104,7 +64,8 @@ ITT_EXTERN_C void ITTAPI __itt_api_init_impl(__itt_global *p,
 
   int count = 0;
   for (__itt_domain *h = itt_global->domain_list; h != nullptr; h = h->next) {
-    result += "  [" + std::to_string(count) + "] " + (h->nameA ? h->nameA : "NULL") + "\n";
+    result += "  [" + std::to_string(count) + "] " + (h->nameA ? h->nameA : "NULL") +
+              " <flag: " + std::to_string(h->flags) + ">\n";
     count++;
   }
 
@@ -132,6 +93,8 @@ ITT_EXTERN_C __itt_domain *ITTAPI __itt_domain_create_impl(const char *name) {
   }
   if (h == NULL) {
     NEW_DOMAIN_A(itt_global, h, h_tail, name);
+    // Turn off all domains except oneCCL:API
+    h->flags = IttCollector::Instance().GetCclDomain(h) == h;
   }
   __itt_mutex_unlock(&(itt_global->mutex));
 
@@ -192,37 +155,35 @@ ITT_EXTERN_C void ITTAPI __itt_task_begin_impl(const __itt_domain *domain,
   SPDLOG_DEBUG("{}() Collector - domain: {}, name: {}", __FUNCTION__,
                domain ? domain->nameA : "NULL", name ? name->strA : "NULL");
 
-  if (IttReturnEarly(domain)) {
+  if ((domain == nullptr) || (IttCollector::Instance().GetCclDomain(domain) != domain)) {
     return;
   }
 
   SPDLOG_DEBUG("{}() {}", __FUNCTION__, __itt_domain_dump());
   SPDLOG_DEBUG("{}() {}", __FUNCTION__, __itt_string_handle_dump());
 
-  task_desc.push(ThreadTaskDescriptor(domain, name, utils::GetTime()));
+  IttCollector::task_desc_.push(ThreadTaskDescriptor(domain, name, utils::GetTime()));
 
-  SPDLOG_DEBUG("Combined domain::name: {}::{} start_time: {}", domain->nameA, name->strA,
-               utils::GetTime());
-  SPDLOG_DEBUG("{}() {}", __FUNCTION__, ThreadTaskDescriptor::DumpTaskDescriptor());
+  SPDLOG_DEBUG("{}() {}", __FUNCTION__, IttCollector::DumpTaskDescriptor());
 }
 
 ITT_EXTERN_C void ITTAPI __itt_task_end_impl(const __itt_domain *domain) {
   SPDLOG_DEBUG("{}() Collector - domain: {}", __FUNCTION__, domain ? domain->nameA : "NULL");
 
-  if (IttReturnEarly(domain)) {
+  if ((domain == nullptr) || (IttCollector::Instance().GetCclDomain(domain) != domain)) {
     return;
   }
 
   auto end = utils::GetTime();
 
-  SPDLOG_DEBUG("{}() {}", __FUNCTION__, ThreadTaskDescriptor::DumpTaskDescriptor());
+  SPDLOG_DEBUG("{}() {}", __FUNCTION__, IttCollector::DumpTaskDescriptor());
 
-  if (task_desc.empty()) {
+  if (IttCollector::task_desc_.empty()) {
     return;
   }
 
-  auto task = task_desc.top();
-  task_desc.pop();
+  auto task = IttCollector::task_desc_.top();
+  IttCollector::task_desc_.pop();
 
   SPDLOG_DEBUG("{}() line {} - {}::{}, start: {}, end: {}, metadata_size: {:#x}", __FUNCTION__,
                __LINE__, task.domain ? task.domain->nameA : "NULL",
@@ -235,7 +196,7 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add_impl(const __itt_domain *domain,
                                                  [[maybe_unused]] __itt_string_handle *key,
                                                  __itt_metadata_type type, size_t count,
                                                  void *data) {
-  if (IttReturnEarly(domain)) {
+  if ((domain == nullptr) || (IttCollector::Instance().GetCclDomain(domain) != domain)) {
     return;
   }
 
@@ -247,18 +208,36 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add_impl(const __itt_domain *domain,
                domain ? domain->nameA : "NULL", key ? key->strA : "NULL",
                *static_cast<uint64_t *>(data));
 
-  //
-  // This is the ID of the CCL object associated with this metadata.
-  // We only care about this ID.
-  //
-  if (type != __itt_metadata_u64 || count != 1) {
-    return;
-  }
-
-  if (!task_desc.empty() && task_desc.top().domain == domain) {
+  if (!IttCollector::task_desc_.empty() && IttCollector::task_desc_.top().domain == domain) {
     SPDLOG_DEBUG("{}() Collector - FOUND!!", __FUNCTION__);
-    task_desc.top().metadata_size = *static_cast<uint64_t *>(data);
+    IttCollector::task_desc_.top().metadata_size = *static_cast<uint64_t *>(data);
     return;
   }
   SPDLOG_DEBUG("{}() Collector - NOT FOUND!!", __FUNCTION__);
+}
+
+void IttEnableCclDomain(void) {
+  SPDLOG_DEBUG("{}() Collector", __FUNCTION__);
+  if (itt_global == nullptr) {
+    return;
+  }
+  __itt_mutex_lock(&(itt_global->mutex));
+  auto cclDomain = IttCollector::Instance().GetCclDomain(nullptr);
+  if (cclDomain != nullptr) {
+    const_cast<__itt_domain *>(cclDomain)->flags = 1;
+  }
+  __itt_mutex_unlock(&(itt_global->mutex));
+}
+
+void IttDisableCclDomain(void) {
+  SPDLOG_DEBUG("{}() Collector", __FUNCTION__);
+  if (itt_global == nullptr) {
+    return;
+  }
+  __itt_mutex_lock(&(itt_global->mutex));
+  auto cclDomain = IttCollector::Instance().GetCclDomain(nullptr);
+  if (cclDomain != nullptr) {
+    const_cast<__itt_domain *>(cclDomain)->flags = 0;
+  }
+  __itt_mutex_unlock(&(itt_global->mutex));
 }

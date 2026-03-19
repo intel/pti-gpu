@@ -13,13 +13,37 @@
 #include <iostream>
 #include <sycl/sycl.hpp>
 #include <thread>
+#ifdef __linux__
+#include <unistd.h>
+#endif
 
 #include "pti/pti_view.h"
 #include "pti_filesystem.h"
 #include "samples_utils.h"
 
 class IttEnvVarInitializer {
+  //
+  // Workaround to prevent spurious Warning when ctest are being discovered.
+  // However keeping the warning adds to usability because it diagnoses an
+  // obvious reason for failure.
+  //
+  inline static bool IsRunningUnderCTest() {
+#ifdef __linux__
+    // Check if parent process is ctest
+    std::ifstream cmdline("/proc/" + std::to_string(getppid()) + "/cmdline");
+    std::string parent_cmd;
+    if (std::getline(cmdline, parent_cmd)) {
+      return parent_cmd.find("ctest") != std::string::npos;
+    }
+#endif
+    return false;
+  }
+
   inline static bool SetIttEnvVariable() {
+    if (IsRunningUnderCTest()) {
+      return true;  // Suppress all output when under CTest
+    }
+
     const std::string itt_lib_path = samples_utils::GetEnv("INTEL_LIBITTNOTIFY64");
     if (itt_lib_path.empty()) {
       std::cerr << "Warning: Failed to set INTEL_LIBITTNOTIFY64 environment variable." << std::endl;
