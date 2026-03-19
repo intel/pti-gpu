@@ -87,7 +87,7 @@ class IttCollector {
   }
 
   void SetCallback(const OnIttLoggingCallback callback) {
-    acallback_.store(callback, std::memory_order_relaxed);
+    record_dispatcher_.store(callback, std::memory_order_relaxed);
   }
 
   // Debug utility for dumping thread-local task stack
@@ -103,7 +103,7 @@ class IttCollector {
                  rec.name ? rec.name->strA : "NULL", rec.start_time, end, rec.metadata_size);
 
     // Single atomic load with relaxed ordering
-    auto cb = acallback_.load(std::memory_order_relaxed);
+    auto cb = record_dispatcher_.load(std::memory_order_relaxed);
     if (cb) {
       itt_runtime_rec_.pid_ = PidTidInfo::Get().pid;
       itt_runtime_rec_.tid_ = PidTidInfo::Get().tid;
@@ -119,10 +119,10 @@ class IttCollector {
 
  private:  // Implementation
   inline static thread_local CommunicationRecord itt_runtime_rec_;
-  IttCollector(OnIttLoggingCallback callback) : acallback_(callback) {}
+  IttCollector(OnIttLoggingCallback callback) : record_dispatcher_(callback) {}
 
  private:  // Data
-  std::atomic<OnIttLoggingCallback> acallback_ = nullptr;
+  std::atomic<OnIttLoggingCallback> record_dispatcher_ = nullptr;
   std::atomic<const __itt_domain*> itt_ccl_domain_{nullptr};
 
  public:
