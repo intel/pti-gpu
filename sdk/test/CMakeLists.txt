@@ -766,6 +766,10 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   set_property(TEST mt-awk-test-immediate PROPERTY ENVIRONMENT SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=1)
   set_property(TEST mt-awk-test PROPERTY ENVIRONMENT SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=0)
 
+  if(TEST_THREADS GREATER 16)
+    set_property(TEST mt-awk-test APPEND PROPERTY ENVIRONMENT "UR_L0_USM_RESIDENT=0")
+  endif()
+
   add_test(NAME run-dlworkload COMMAND dlworkload)
   add_test(NAME run-dpc_gemm COMMAND dpc_gemm)
   add_test(NAME run-onemkl_gemm_exe COMMAND onemkl_gemm_exe)
