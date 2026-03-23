@@ -117,134 +117,59 @@ class LlvmCovHelper:
             cov_cmd, "report", merge_data, objects, sources, extra
         )
 
+    def __run_cmd(self, cmd):
+        """Helper function to run llvm-cov command with verbosity"""
+
+        if self.verbose:
+            print(*cmd)
+
+        subprocess.run(cmd, check=True)
+
+    def __export_to_file(self, cmd, file_name):
+        """Helper function to export llvm-cov output to file"""
+
+        if self.verbose:
+            print(*cmd)
+
+        exported_data = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            universal_newlines=True,
+            check=True,
+        )
+
+        with file_name.open("w") as export_file:
+            export_file.write(exported_data.stdout)
+
     def html(self, outputdir):
         """Generate html with source-based coverage"""
 
         html_cmd = self.show_cmd + ["--format=html"] + [f"--output-dir={outputdir!s}"]
 
-        if self.verbose:
-            print(*html_cmd)
-
-        subprocess.run(html_cmd, check=True)
+        self.__run_cmd(html_cmd)
 
     def summary(self):
         """Generate a console summary with source-based coverage"""
 
-        if self.verbose:
-            print(*self.report_cmd)
-
-        subprocess.run(self.report_cmd, check=True)
+        self.__run_cmd(self.report_cmd)
 
     def export_lcov(self, file_name):
         """Export source-based coverage data into lcov format."""
 
         lcov_cmd = self.export_cmd + ["--format=lcov"]
 
-        if self.verbose:
-            print(*lcov_cmd)
+        self.__export_to_file(lcov_cmd, file_name)
 
-        exported_lcov = subprocess.run(
-            lcov_cmd,
-            stdout=subprocess.PIPE,
-            universal_newlines=True,
-            check=True,
-        )
+    def export_json(self, file_name):
+        """Export source-based coverage data into JSON format (summary only)."""
 
-        with file_name.open("w") as lcov_info:
-            lcov_info.write(exported_lcov.stdout)
+        json_cmd = self.export_cmd + ["--format=text", "--summary-only"]
+
+        self.__export_to_file(json_cmd, file_name)
 
 
-def main():
-    """
-    Entry point to the program.
-
-    Run with --help for detailed usage information
-    """
-
-    parser = argparse.ArgumentParser(
-        description="Utility generating coverage reports with llvm-cov."
-    )
-
-    parser.add_argument(
-        "--llvm-cov",
-        type=pathlib.Path,
-        default=DEFAULT_LLVM_COV,
-        help=f"Default llvm-cov command. Defaults to {DEFAULT_LLVM_COV}",
-    )
-
-    parser.add_argument(
-        "--objects",
-        nargs="+",
-        required=True,
-        type=pathlib.Path,
-        help=(
-            "Objects to generate report with (pass into llvm-cov..)."
-            " Can either be a directory or binary file."
-        ),
-    )
-
-    parser.add_argument(
-        "--data",
-        type=pathlib.Path,
-        default=DEFAULT_COVERAGE_DATA_FILE,
-        help=(
-            "Merged coverage data (profdata format)."
-            f" Defaults to {DEFAULT_COVERAGE_DATA_FILE}"
-        ),
-    )
-    parser.add_argument(
-        "--exclude",
-        nargs="+",
-        default=DEFAULT_OBJECT_EXTENSION_EXCLUSION,
-        help="List of extensions to exclude from objects.",
-    )
-    parser.add_argument(
-        "--lcov",
-        type=pathlib.Path,
-        required=False,
-        help=(
-            "File in lcov format to export coverage data into"
-            " (e.g. coverage.info file one can pass into `genhtml`)."
-        ),
-    )
-
-    parser.add_argument(
-        "--summary",
-        action="store_true",
-        help="Generate coverage summary Report.",
-    )
-
-    parser.add_argument(
-        "--sources",
-        nargs="+",
-        type=pathlib.Path,
-        help="Source code to generate coverage data.",
-    )
-
-    parser.add_argument(
-        "--output-dir",
-        type=pathlib.Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help="Default output directory for html reports (default: coverage).",
-    )
-
-    parser.add_argument(
-        "--extra",
-        type=str,
-        help=(
-            "Semi-colon separated list of extra args to pass to llvm-cov."
-            " Must use '=' instead of ' ', e.g., --extra=\"-args\"."
-        ),
-    )
-
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Verbose output.",
-    )
-
-    args = parser.parse_args()
+def generate_subcommand(args):
+    """Coverage report generation subcommand entry"""
 
     obj_list = gen_object_list(args.objects, args.exclude)
 
@@ -260,7 +185,123 @@ def main():
         coverage_generation.export_lcov(args.lcov)
         return
 
+    if args.json:
+        coverage_generation.export_json(args.json)
+        return
+
     coverage_generation.html(args.output_dir)
+
+
+def main():
+    """
+    Entry point to the program.
+
+    Run with --help for detailed usage information
+    """
+
+    parser = argparse.ArgumentParser(
+        description="Utility for working with coverage reports from llvm-cov."
+    )
+
+    subparsers = parser.add_subparsers(dest="command")
+
+    generate_parser = subparsers.add_parser(
+        "generate", help="Generate coverage reports."
+    )
+
+    generate_parser.add_argument(
+        "--llvm-cov",
+        type=pathlib.Path,
+        default=DEFAULT_LLVM_COV,
+        help=f"Default llvm-cov command. Defaults to {DEFAULT_LLVM_COV}",
+    )
+
+    generate_parser.add_argument(
+        "--objects",
+        nargs="+",
+        required=True,
+        type=pathlib.Path,
+        help=(
+            "Objects to generate report with (pass into llvm-cov..)."
+            " Can either be a directory or binary file."
+        ),
+    )
+
+    generate_parser.add_argument(
+        "--data",
+        type=pathlib.Path,
+        default=DEFAULT_COVERAGE_DATA_FILE,
+        help=(
+            "Merged coverage data (profdata format)."
+            f" Defaults to {DEFAULT_COVERAGE_DATA_FILE}"
+        ),
+    )
+    generate_parser.add_argument(
+        "--exclude",
+        nargs="+",
+        default=DEFAULT_OBJECT_EXTENSION_EXCLUSION,
+        help="List of extensions to exclude from objects.",
+    )
+    generate_parser.add_argument(
+        "--lcov",
+        type=pathlib.Path,
+        required=False,
+        help=(
+            "File in lcov format to export coverage data into"
+            " (e.g. coverage.info file one can pass into `genhtml`)."
+        ),
+    )
+
+    generate_parser.add_argument(
+        "--json",
+        type=pathlib.Path,
+        required=False,
+        help=(
+            "JSON file to export coverage summary into (i.e., results of"
+            " llvm-cov export with --summary-only)."
+        ),
+    )
+
+    generate_parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Generate coverage summary Report.",
+    )
+
+    generate_parser.add_argument(
+        "--sources",
+        nargs="+",
+        type=pathlib.Path,
+        help="Source code to generate coverage data.",
+    )
+
+    generate_parser.add_argument(
+        "--output-dir",
+        type=pathlib.Path,
+        default=DEFAULT_OUTPUT_DIR,
+        help="Default output directory for html reports (default: coverage).",
+    )
+
+    generate_parser.add_argument(
+        "--extra",
+        type=str,
+        help=(
+            "Semi-colon separated list of extra args to pass to llvm-cov."
+            " Must use '=' instead of ' ', e.g., --extra=\"-args\"."
+        ),
+    )
+
+    generate_parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Verbose output.",
+    )
+
+    args = parser.parse_args()
+
+    if args.command == "generate":
+        generate_subcommand(args)
 
 
 if __name__ == "__main__":

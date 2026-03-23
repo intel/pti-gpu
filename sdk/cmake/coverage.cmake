@@ -81,7 +81,8 @@ add_custom_command(
 
 set(CODE_COVERAGE_BASE_CMD
     ${Python_EXECUTABLE}
-    ${PROJECT_SOURCE_DIR}/cmake/generate_coverage_report.py
+    ${PROJECT_SOURCE_DIR}/cmake/coverage_report.py
+    generate
     --llvm-cov
     ${LLVM_COV_PROG}
     --objects
@@ -105,9 +106,10 @@ add_custom_target(
 add_custom_target(
   coverage_report
   COMMAND ${CODE_COVERAGE_BASE_CMD} --lcov ${PTI_COVERAGE_DIR}/coverage.info
+  COMMAND ${CODE_COVERAGE_BASE_CMD} --json ${PTI_COVERAGE_DIR}/coverage.json
   COMMAND ${CODE_COVERAGE_BASE_CMD} --output-dir ${PTI_COVERAGE_DIR}/html
   DEPENDS ${PTI_PROFDATA_MERGE_OUTPUT}
-  COMMENT "Generate html coverage report along with lcov export data."
+  COMMENT "Generate HTML coverage report along with lcov and JSON summary export data."
   VERBATIM)
 
 if(PTI_INSTALL_COVERAGE)
