@@ -104,6 +104,8 @@ inline void PrintMetricList(uint32_t device_id) {
   auto status = ZE_FUNC(zetMetricGroupGet)(device, &group_count, nullptr);
   if (status != ZE_RESULT_SUCCESS || group_count == 0) {
     std::cerr << "[WARNING] No metrics found (status = 0x" << std::hex << status << std::dec << ") group_count = " << group_count << std::endl;
+	std::cerr << "[INFO] Please make sure the intel-metrics-discovery and intel-metrics-library packages are installed." << std::endl;
+
     return;
   }
 
