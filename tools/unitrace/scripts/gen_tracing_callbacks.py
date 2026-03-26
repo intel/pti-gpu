@@ -884,6 +884,8 @@ def gen_callbacks(f, func_dict, submission_func_list, synchronize_func_list_on_e
     f.write("    [[maybe_unused]] "+ func_dict[func][1] +"\n")
     f.write("    void* global_user_data,\n")
     f.write("    [[maybe_unused]] void** instance_user_data) {\n")
+    # Skip callback if called re-entrantly from an extension API wrapper
+    f.write("  if (s_extension_api_tracing_in_progress_) return;\n")
     gen_enter_callback(f, func, synchronize_func_list_on_enter, param_map[func])
     f.write("}\n")
     f.write("\n")
@@ -892,6 +894,8 @@ def gen_callbacks(f, func_dict, submission_func_list, synchronize_func_list_on_e
     f.write("    [[maybe_unused]] " + func_dict[func][1] +"\n")
     f.write("    void* global_user_data,\n")
     f.write("    [[maybe_unused]] void** instance_user_data) {\n")
+    # Skip callback if called re-entrantly from an extension API wrapper
+    f.write("  if (s_extension_api_tracing_in_progress_) return;\n")
     gen_exit_callback(f, func, func_dict[func][1], submission_func_list, synchronize_func_list_on_enter, synchronize_func_list_on_exit, param_map[func])
     f.write("}\n")
     f.write("\n")
@@ -966,6 +970,9 @@ def gen_extension_wrapper(f, func: FunctionDecl):
   f.write("\n")
   f.write("  void* instance_data = nullptr;\n")
   f.write("  ZeCollector* collector = s_global_ze_collector_;\n")
+  # Set recursion guard so that any L0 API calls made from within
+  # our callbacks do not re-enter kernel_tracing callbacks via zelTracer.
+  f.write("  s_extension_api_tracing_in_progress_ = true;\n")
   f.write("  if (collector != nullptr) {\n")
   f.write("    " + func.name + "OnEnter(&params, ZE_RESULT_SUCCESS, collector, &instance_data);\n")
   f.write("  }\n")
@@ -983,6 +990,7 @@ def gen_extension_wrapper(f, func: FunctionDecl):
   f.write("  if (collector != nullptr) {\n")
   f.write("    " + func.name + "OnExit(&params, result, collector, &instance_data);\n")
   f.write("  }\n")
+  f.write("  s_extension_api_tracing_in_progress_ = false;\n")
   f.write("\n")
   f.write("  return result;\n")
   f.write("}\n\n")
@@ -1097,6 +1105,8 @@ def main():
       "zeCommandListAppendImageCopyRegion",
       "zeCommandListAppendImageCopyToMemory",
       "zeCommandListAppendImageCopyFromMemory",
+      "zeCommandListAppendSignalEvent",
+      "zeCommandListAppendWaitOnEvents",
       "zeCommandQueueExecuteCommandLists",
       "zeCommandListClose",
       "zeCommandListCreate",

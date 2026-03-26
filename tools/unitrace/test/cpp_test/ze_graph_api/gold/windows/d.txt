@@ -6,11 +6,15 @@
 
 == L0 Backend ==
 
-                      Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
-                   "eat_time",            1,                    *,           *,                    *,                    *,                    *
-"zeCommandListAppendBarrier",            1,                    *,           *,                    *,                    *,                    *
+                              Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+                           "add_one",            6,                    *,             *,                   *,                    *,                     *
+"zeCommandListAppendMemoryCopy(D2D)",            6,                    *,             *,                   *,                    *,                     *
+                      "multiply_two",            3,                    *,             *,                   *,                    *,                     *
+"zeCommandListAppendMemoryCopy(H2D)",            3,                    *,             *,                   *,                    *,                     *
+"zeCommandListAppendMemoryCopy(D2H)",            3,                    *,             *,                   *,                    *,                     *
 
 === Kernel Properties ===
 
-                      Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
-                   "eat_time",      JIT,   32,                   1,                  0,                         0,                        0,                       unknown
+                              Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread
+                           "add_one",      JIT,   32,                   2,                  0,                         0,                       0,                       unknown
+                      "multiply_two",      JIT,   32,                   2,                  0,                         0,                       0,                       unknown

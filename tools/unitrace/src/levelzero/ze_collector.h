@@ -629,6 +629,36 @@ struct ZeKernelProfileRecord {
 
 using ZeKernelProfiles = std::map<uint64_t, ZeKernelProfileRecord>;
 
+struct ZeCommand;
+struct ZeCommandMetricQuery;
+
+struct ZeGraph {
+  // Captured command descriptors and metric queries, cloned on each
+  // graph execution.
+  std::vector<ZeCommand *> commands_;
+  std::vector<ZeCommandMetricQuery *> metric_queries_;
+
+  // Maps each captured signal event to the cmdlist that signaled it.
+  // Used for fork detection (a non-capturing cmdlist waits on one of these)
+  // and join detection (primary cmdlist waits on a forked cmdlist's event).
+  std::map<ze_event_handle_t, ze_command_list_handle_t> event_to_cmdlist_;
+
+  // The cmdlist that initiated capture (BeginGraphCapture / BeginCaptureIntoGraph).
+  ze_command_list_handle_t primary_command_list_ = nullptr;
+
+  // Cmdlists that auto-entered capture via fork detection.
+  // Cleaned up on EndGraphCapture if not already joined.
+  std::set<ze_command_list_handle_t> forked_command_lists_;
+};
+
+// Global graph tracking data structures
+static std::shared_mutex graphs_mutex_;
+static std::map<ze_graph_handle_t, ZeGraph*> graphs_;
+
+// Map from executable graph to source graph (for looking up captured commands on execution)
+static std::shared_mutex executable_graphs_mutex_;
+static std::map<ze_executable_graph_handle_t, ZeGraph*> executable_to_source_graph_;
+
 static std::mutex global_kernel_profiles_mutex_;
 static ZeKernelProfiles global_kernel_profiles_;
 
@@ -749,6 +779,7 @@ struct ZeCommand {
   std::vector<int> *index_timestamps_on_event_reset_;	// indices to timestamps_on_event_reset_
   bool implicit_scaling_;
   bool immediate_;
+  bool graph_command_;  // true if this command is part of a graph execution (event is owned by graph)
 };
 
 
@@ -846,6 +877,7 @@ struct ZeDeviceSubmissions {
     command->device_global_timestamps_ = nullptr;
     command->index_timestamps_on_commands_completion_ = nullptr;   // indices to timestamps_on_commands_completion_
     command->index_timestamps_on_event_reset_ = nullptr;
+    command->graph_command_ = false;
 
     return command;
   }
@@ -1116,6 +1148,9 @@ struct ZeCommandList {
   std::vector<uint64_t *> device_global_timestamps_;	// device timestamps on host
   int num_device_global_timestamps_;
   ze_event_handle_t timestamp_event_to_signal_;
+  bool graph_capturing_ = false;
+  ZeGraph* graph_capture_target_ = nullptr;
+  ZeGraph* pending_graph_capture_ = nullptr;  // Heap-allocated for BeginGraphCaptureExp path
 };
 
 typedef void (*OnZeFunctionFinishCallback)(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id, uint64_t started, uint64_t ended);
@@ -1229,6 +1264,16 @@ class ZeCollector;
 
 // Global collector pointer for extension API wrappers
 static ZeCollector* s_global_ze_collector_ = nullptr;
+
+// Recursion guard for extension API wrappers.
+// Extension APIs are intercepted via zeDriverGetExtensionFunctionAddress and do
+// not go through the Level Zero tracing layer (zelTracer), so L0's built-in
+// ZE_HANDLE_TRACER_RECURSION guard (tracing_layer::tracingInProgress) does not
+// apply. This flag prevents zelTracer callbacks from re-entering when L0 APIs
+// are called from within extension API wrapper callbacks.
+// This could be replaced by ZE_HANDLE_TRACER_RECURSION if Level Zero exposes
+// access to tracing_layer::tracingInProgress via a public API.
+static thread_local bool s_extension_api_tracing_in_progress_ = false;
 
 static void SetGlobalZeCollector(ZeCollector* collector) {
   if (collector != nullptr && s_global_ze_collector_ != nullptr) {
@@ -2871,10 +2916,10 @@ class ZeCollector {
       LogCommandCompleted(command, timestamp, -1);
     }
 
-    if (command->immediate_) {
+    // Graph commands are reused across executions.
+    if (command->immediate_ && !command->graph_command_) {
       event_cache_.ReleaseEvent(command->event_);
-    }
-    else {
+    } else {
       event_cache_.ResetEvent(command->event_);
     }
     command->event_ = nullptr;
@@ -3004,6 +3049,12 @@ class ZeCollector {
         it->second->index_timestamps_on_event_reset_.clear();
         event_cache_.ReleaseEvent(it->second->timestamp_event_to_signal_);
         it->second->timestamp_event_to_signal_ = nullptr;
+      }
+      // Clean up pending graph capture to prevent memory leak
+      if (it->second->pending_graph_capture_ != nullptr) {
+        ReleaseGraphResources(*it->second->pending_graph_capture_);
+        delete it->second->pending_graph_capture_;
+        it->second->pending_graph_capture_ = nullptr;
       }
       command_lists_.erase(it);
     }
@@ -3438,7 +3489,9 @@ class ZeCollector {
     ze_event_handle_t& signal_event,
     ze_command_list_handle_t command_list,
     bool iskernel,
-    ze_kernel_handle_t kernel = nullptr) {
+    ze_kernel_handle_t kernel = nullptr,
+    uint32_t num_wait_events = 0,
+    ze_event_handle_t* wait_events = nullptr) {
 
     ze_context_handle_t context = nullptr;
     ze_device_handle_t device = nullptr;
@@ -3482,6 +3535,12 @@ class ZeCollector {
       std::cerr << "[ERROR] Command list (" << command_list << ") is not found for appending." << std::endl;
       ze_instance_data.instrument_ = true;
       return;
+    }
+
+    // Check if this append triggers a fork transition
+    // (i.e., this cmdlist waits on an event from an active graph capture)
+    if (num_wait_events > 0 && wait_events != nullptr) {
+      collector->CheckAndApplyForkTransition(command_list, num_wait_events, wait_events);
     }
 
     if (signal_event == nullptr) {
@@ -3596,8 +3655,6 @@ class ZeCollector {
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
 
-      command_lists_mutex_.unlock_shared();
-
       desc->mem_size_ = 0;
       desc->event_ = event_to_signal;
       desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
@@ -3606,6 +3663,18 @@ class ZeCollector {
       desc->tid_ = utils::GetTid();
 
       desc->device_global_timestamps_ = nullptr;
+      desc->timestamps_on_event_reset_ = nullptr;
+      desc->timestamps_on_commands_completion_ = nullptr;
+      desc->timestamp_event_ = nullptr;
+      desc->timestamp_seq_ = -1;
+      desc->index_timestamps_on_commands_completion_ = nullptr;
+      desc->index_timestamps_on_event_reset_ = nullptr;
+
+      // Read graph capture state before releasing the lock
+      bool graph_capturing = it->second->graph_capturing_;
+      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
+
+      command_lists_mutex_.unlock_shared();
 
       if (ze_instance_data.in_order_counter_event_ && it->second->in_order_) {
         ze_result_t status = ZE_FUNC(zeCommandListAppendSignalEvent)(command_list, ze_instance_data.in_order_counter_event_);
@@ -3624,14 +3693,12 @@ class ZeCollector {
       }
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
-      if (it->second->immediate_) {
-        desc->timestamps_on_event_reset_ = nullptr;
-        desc->timestamps_on_commands_completion_ = nullptr;
-        desc->timestamp_event_ = nullptr;
-        desc->timestamp_seq_ = -1;
-        desc->index_timestamps_on_commands_completion_ = nullptr;
-        desc->index_timestamps_on_event_reset_ = nullptr;
 
+      // Check if command list is in graph capture mode
+      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
+      if (capture_graph) {
+        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
         desc->append_time_ = host_timestamp;
@@ -3665,7 +3732,7 @@ class ZeCollector {
           desc->timestamps_on_commands_completion_ = &(it->second->timestamps_on_commands_completion_);
           desc->index_timestamps_on_commands_completion_ = &(it->second->index_timestamps_on_commands_completion_);
           desc->index_timestamps_on_event_reset_ = &(it->second->index_timestamps_on_event_reset_);
-	}
+      	}
 
         desc->timestamp_event_ = it->second->timestamp_event_to_signal_;
 
@@ -3738,6 +3805,11 @@ class ZeCollector {
       desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
+
+      // Read graph capture state before releasing the lock
+      bool graph_capturing = it->second->graph_capturing_;
+      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
+
       command_lists_mutex_.unlock_shared();
 
       desc->group_count_ = {0, 0, 0};
@@ -3771,7 +3843,12 @@ class ZeCollector {
       }
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
-      if (it->second->immediate_) {
+
+      // Check if command list is in graph capture mode
+      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
+      if (capture_graph) {
+        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
         desc->append_time_ = host_timestamp;
@@ -3863,6 +3940,11 @@ class ZeCollector {
       desc->in_order_counter_event_ = ze_instance_data.in_order_counter_event_;
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
+
+      // Read graph capture state before releasing the lock
+      bool graph_capturing = it->second->graph_capturing_;
+      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
+
       command_lists_mutex_.unlock_shared();
 
       desc->group_count_ = {0, 0, 0};
@@ -3895,7 +3977,12 @@ class ZeCollector {
       }
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
-      if (it->second->immediate_) {
+
+      // Check if command list is in graph capture mode
+      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
+      if (capture_graph) {
+        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
         desc->append_time_ = host_timestamp;
@@ -3988,6 +4075,11 @@ class ZeCollector {
       desc->device_ns_per_cycle_ = it->second->device_ns_per_cycle_;
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
+
+      // Read graph capture state before releasing the lock
+      bool graph_capturing = it->second->graph_capturing_;
+      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
+
       command_lists_mutex_.unlock_shared();
 
       desc->group_count_ = {0, 0, 0};
@@ -4022,7 +4114,12 @@ class ZeCollector {
       }
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
-      if (it->second->immediate_) {
+
+      // Check if command list is in graph capture mode
+      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
+      if (capture_graph) {
+        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
         desc->append_time_ = host_timestamp;
@@ -4101,6 +4198,11 @@ class ZeCollector {
       desc->device_ns_per_cycle_ = it->second->device_ns_per_cycle_;
       desc->device_ = it->second->device_;
       ze_context_handle_t context = it->second->context_;
+
+      // Read graph capture state before releasing the lock
+      bool graph_capturing = it->second->graph_capturing_;
+      ZeGraph* graph_capture_target = it->second->graph_capture_target_;
+
       command_lists_mutex_.unlock_shared();
 
       desc->group_count_ = {0, 0, 0};
@@ -4129,12 +4231,18 @@ class ZeCollector {
 
         ze_event_handle_t metric_query_event = event_cache_.GetEvent(context);
         desc_query->metric_query_ = query;
+        desc_query->metric_query_event_ = metric_query_event;
         ze_result_t status = ZE_FUNC(zetCommandListAppendMetricQueryEnd)(command_list, query, metric_query_event, 0, nullptr);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       }
 
       uint64_t host_timestamp = ze_instance_data.timestamp_host;
-      if (it->second->immediate_) {
+
+      // Check if command list is in graph capture mode
+      ZeGraph* capture_graph = graph_capturing ? graph_capture_target : nullptr;
+      if (capture_graph) {
+        StoreCommandInGraph(capture_graph, desc, desc_query, host_timestamp, event_to_signal, command_list);
+      } else if (it->second->immediate_) {
         desc->immediate_ = true;
         desc->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
         desc->append_time_ = host_timestamp;
@@ -4249,12 +4357,393 @@ class ZeCollector {
     }
   }
 
+  // Stores a command into a graph during capture mode and tracks the signal event.
+  void StoreCommandInGraph(ZeGraph* graph, ZeCommand* desc,
+                           ZeCommandMetricQuery* desc_query, uint64_t host_timestamp,
+                           ze_event_handle_t signal_event,
+                           ze_command_list_handle_t command_list) {
+    desc->immediate_ = true;
+    desc->graph_command_ = true;
+    desc->append_time_ = host_timestamp;
+    desc->command_metric_query_ = desc_query;
+
+    graph->commands_.push_back(desc);
+    if (desc_query != nullptr) {
+      desc_query->immediate_ = false;
+      graph->metric_queries_.push_back(desc_query);
+    }
+
+    // Track signal event for fork detection and join handling
+    if (signal_event != nullptr) {
+      graph->event_to_cmdlist_[signal_event] = command_list;
+    }
+  }
+
+  // Detects fork and join transitions during graph capture.
+  //
+  // Fork: when a non-capturing cmdlist waits on an event signaled during an
+  //   active graph capture, it auto-transitions into capture mode.
+  // Join: when the primary cmdlist waits on an event signaled by a forked
+  //   cmdlist, capture ends on that fork. Per spec each fork must join back
+  //   to the primary cmdlist (no nested forks).
+  void CheckAndApplyForkTransition(
+      ze_command_list_handle_t command_list,
+      uint32_t num_wait_events, ze_event_handle_t* wait_events) {
+    if (wait_events == nullptr || num_wait_events == 0) return;
+
+    bool already_capturing = false;
+    ZeGraph* existing_target = nullptr;
+    {
+      std::shared_lock<std::shared_mutex> lock(command_lists_mutex_);
+      auto clit = command_lists_.find(command_list);
+      if (clit == command_lists_.end()) {
+        return;
+      }
+      already_capturing = clit->second->graph_capturing_;
+      existing_target = clit->second->graph_capture_target_;
+    }
+
+    // Find the graph whose captured signal events match a wait event
+    ZeGraph* target = nullptr;
+    {
+      std::shared_lock<std::shared_mutex> lock(graphs_mutex_);
+      for (auto& [gh, ginfo] : graphs_) {
+        for (uint32_t i = 0; i < num_wait_events; ++i) {
+          if (ginfo->event_to_cmdlist_.count(wait_events[i])) {
+            target = ginfo;
+            break;
+          }
+        }
+        if (target) break;
+      }
+    }
+
+    if (target == nullptr) return;
+
+    // --- Join: primary waits on fork events → end capture on those forks ---
+    if (already_capturing && command_list == target->primary_command_list_) {
+      std::lock_guard<std::shared_mutex> cmd_lock(command_lists_mutex_);
+      std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
+      for (uint32_t i = 0; i < num_wait_events; ++i) {
+        auto evt_it = target->event_to_cmdlist_.find(wait_events[i]);
+        if (evt_it == target->event_to_cmdlist_.end()) continue;
+        ze_command_list_handle_t fork_cl = evt_it->second;
+        if (fork_cl == target->primary_command_list_) continue;
+        auto fit = command_lists_.find(fork_cl);
+        if (fit != command_lists_.end() && fit->second->graph_capturing_) {
+          fit->second->graph_capturing_ = false;
+          fit->second->graph_capture_target_ = nullptr;
+        }
+        target->forked_command_lists_.erase(fork_cl);
+      }
+      return;
+    }
+
+    // Already capturing into the same graph — nothing to do
+    if (already_capturing && existing_target == target) return;
+
+    // Cross-graph merge prevention
+    if (already_capturing && existing_target != nullptr && existing_target != target) {
+      std::cerr << "[ERROR] Cross-graph merge detected: command list " << command_list
+                << " is already capturing into a different graph." << std::endl;
+      return;
+    }
+
+    // --- Fork: auto-transition this cmdlist into capture mode ---
+    {
+      std::lock_guard<std::shared_mutex> lock(command_lists_mutex_);
+      auto it = command_lists_.find(command_list);
+      if (it != command_lists_.end() && !it->second->graph_capturing_) {
+        it->second->graph_capturing_ = true;
+        it->second->graph_capture_target_ = target;
+      }
+    }
+    {
+      std::lock_guard<std::shared_mutex> lock(graphs_mutex_);
+      target->forked_command_lists_.insert(command_list);
+    }
+  }
+
+  // Called when zeGraphDestroyExp succeeds - cleanup graph tracking
+  void OnGraphDestroy(ze_graph_handle_t graph) {
+    std::lock_guard<std::shared_mutex> cmd_lock(command_lists_mutex_);
+    std::lock_guard<std::shared_mutex> graph_lock(graphs_mutex_);
+    auto git = graphs_.find(graph);
+    if (git != graphs_.end()) {
+      ZeGraph* g = git->second;
+      if (g != nullptr) {
+        // Reset any command lists still referencing this graph
+        for (auto& [cl_handle, cl] : command_lists_) {
+          if (cl->graph_capture_target_ == g) {
+            cl->graph_capturing_ = false;
+            cl->graph_capture_target_ = nullptr;
+            cl->pending_graph_capture_ = nullptr;
+          }
+        }
+        ReleaseGraphResources(*g);
+        delete g;
+      }
+      graphs_.erase(git);
+    }
+  }
+
+  // Release all resources owned by a ZeGraph (events, metric queries, commands)
+  void ReleaseGraphResources(ZeGraph& graph_info) {
+    for (auto* cmd : graph_info.commands_) {
+      if (cmd != nullptr) {
+        if (cmd->event_ != nullptr) {
+          event_cache_.ReleaseEvent(cmd->event_);
+          cmd->event_ = nullptr;
+        }
+        delete cmd;
+      }
+    }
+    for (auto* mq : graph_info.metric_queries_) {
+      if (mq != nullptr) {
+        if (mq->metric_query_event_ != nullptr) {
+          event_cache_.ReleaseEvent(mq->metric_query_event_);
+          mq->metric_query_event_ = nullptr;
+        }
+        if (mq->metric_query_ != nullptr) {
+          query_pools_.PutQuery(mq->metric_query_);
+          mq->metric_query_ = nullptr;
+        }
+        delete mq;
+      }
+    }
+    graph_info.commands_.clear();
+    graph_info.metric_queries_.clear();
+  }
+
+  // Called when zeExecutableGraphDestroyExp succeeds - cleanup executable graph mapping
+  void OnExecutableGraphDestroy(ze_executable_graph_handle_t exec_graph) {
+    std::lock_guard<std::shared_mutex> lock(executable_graphs_mutex_);
+    executable_to_source_graph_.erase(exec_graph);
+  }
+
+  // Called when zeCommandListBeginGraphCaptureExp succeeds (no graph handle yet).
+  // Allocates a temporary ZeGraph so that Append* methods can capture commands
+  // into it.  OnEndGraphCapture will adopt this into graphs_ under the real handle.
+  void OnBeginGraphCaptureNoGraph(ze_command_list_handle_t command_list) {
+    std::lock_guard<std::shared_mutex> lock(command_lists_mutex_);
+    auto it = command_lists_.find(command_list);
+    if (it == command_lists_.end()) {
+      return;
+    }
+
+    // Allocate a temporary graph info to accumulate captured commands
+    ZeGraph* pending = new ZeGraph();
+    pending->primary_command_list_ = command_list;
+
+    it->second->graph_capturing_ = true;
+    it->second->graph_capture_target_ = pending;
+    it->second->pending_graph_capture_ = pending;  // Ownership tracked here
+  }
+
+  // Called when zeCommandListBeginCaptureIntoGraphExp succeeds - start tracking captures
+  void OnBeginGraphCapture(ze_command_list_handle_t command_list, ze_graph_handle_t graph) {
+    {
+      std::shared_lock<std::shared_mutex> lock(command_lists_mutex_);
+      if (command_lists_.find(command_list) == command_lists_.end()) {
+        return;
+      }
+    }
+
+    // Create or update the graph entry and reset capture state
+    ZeGraph* graph_info = nullptr;
+    {
+      std::lock_guard<std::shared_mutex> lock(graphs_mutex_);
+      auto git = graphs_.try_emplace(graph, nullptr).first;
+      if (git->second == nullptr) {
+        git->second = new ZeGraph();
+      }
+      graph_info = git->second;
+      graph_info->commands_.clear();
+      graph_info->metric_queries_.clear();
+      graph_info->primary_command_list_ = command_list;
+      graph_info->forked_command_lists_.clear();
+      graph_info->event_to_cmdlist_.clear();
+    }
+
+    // Mark command list as in graph capture mode with pointer to graph in graphs_ map
+    {
+      std::lock_guard<std::shared_mutex> lock(command_lists_mutex_);
+      auto it = command_lists_.find(command_list);
+      if (it != command_lists_.end()) {
+        it->second->graph_capturing_ = true;
+        it->second->graph_capture_target_ = graph_info;
+      }
+    }
+  }
+
+  // Called when zeCommandListEndGraphCaptureExp succeeds - stop tracking captures
+  void OnEndGraphCapture(ze_command_list_handle_t command_list, ze_graph_handle_t graph) {
+    // Get pending capture (if any) and reset capture state on command list
+    ZeGraph* pending = nullptr;
+
+    // Reset capture state on primary and all forked command lists
+    {
+      std::lock_guard<std::shared_mutex> lock(command_lists_mutex_);
+      auto it = command_lists_.find(command_list);
+      if (it != command_lists_.end()) {
+        pending = it->second->pending_graph_capture_;
+        ZeGraph* target = it->second->graph_capture_target_;
+        it->second->graph_capturing_ = false;
+        it->second->graph_capture_target_ = nullptr;
+        it->second->pending_graph_capture_ = nullptr;
+
+        // End capture on all forked command lists
+        if (target != nullptr) {
+          for (auto forked_cl : target->forked_command_lists_) {
+            auto fit = command_lists_.find(forked_cl);
+            if (fit != command_lists_.end()) {
+              fit->second->graph_capturing_ = false;
+              fit->second->graph_capture_target_ = nullptr;
+            }
+          }
+          // Clear event tracking data now that capture is complete.
+          // Prevents stale events from triggering false fork matches
+          // in CheckAndApplyForkTransition during a later capture.
+          target->event_to_cmdlist_.clear();
+          target->forked_command_lists_.clear();
+        }
+      }
+    }
+
+    {
+      std::lock_guard<std::shared_mutex> lock(graphs_mutex_);
+      auto git = graphs_.find(graph);
+      if (git == graphs_.end()) {
+        // BeginGraphCaptureExp path: adopt the pending capture into graphs_
+        if (pending != nullptr) {
+          graphs_.insert({graph, pending});
+        }
+      } else {
+        // BeginCaptureIntoGraphExp path: graph already exists with captured commands.
+        // If there was somehow a pending capture, clean it up.
+        if (pending != nullptr) {
+          ReleaseGraphResources(*pending);
+          delete pending;
+        }
+      }
+    }
+  }
+
+  // Called when zeCommandListInstantiateGraphExp succeeds - map executable to source graph
+  void OnInstantiateGraph(ze_graph_handle_t graph, ze_executable_graph_handle_t exec_graph) {
+    // Map executable graph directly to source graph's ZeGraph
+    ZeGraph* graph_info = nullptr;
+    {
+      std::shared_lock<std::shared_mutex> lock(graphs_mutex_);
+      auto git = graphs_.find(graph);
+      if (git != graphs_.end()) {
+        graph_info = git->second;
+      }
+    }
+
+    if (graph_info != nullptr) {
+      std::lock_guard<std::shared_mutex> lock(executable_graphs_mutex_);
+      executable_to_source_graph_.insert({exec_graph, graph_info});
+    }
+  }
+
+  // Called from Enter callback for zeCommandListAppendGraphExp.
+  // Prepares timing entries for all captured kernels in the graph.
+  // Mirrors the pattern in OnEnterCommandListImmediateAppendCommandListsExp.
+  void PrepareGraphExecution(
+      ze_command_list_handle_t command_list,
+      ze_executable_graph_handle_t exec_graph) {
+
+    if (local_device_submissions_.IsFinalized()) {
+      return;
+    }
+
+    // Look up source graph info directly from executable graph
+    ZeGraph* graph_info = nullptr;
+    executable_graphs_mutex_.lock_shared();
+    auto eit = executable_to_source_graph_.find(exec_graph);
+    if (eit != executable_to_source_graph_.end()) {
+      graph_info = eit->second;
+    }
+    executable_graphs_mutex_.unlock_shared();
+
+    if (graph_info == nullptr) {
+      return;  // Graph not tracked
+    }
+
+    // Get command list info for execution context
+    ze_device_handle_t device = nullptr;
+    uint32_t engine_ordinal = 0;
+    uint32_t engine_index = 0;
+
+    command_lists_mutex_.lock_shared();
+    auto clit = command_lists_.find(command_list);
+    if (clit != command_lists_.end()) {
+      device = clit->second->device_;
+      engine_ordinal = clit->second->engine_ordinal_;
+      engine_index = clit->second->engine_index_;
+    }
+    command_lists_mutex_.unlock_shared();
+
+    if (device == nullptr) {
+      return;
+    }
+
+    ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted last time are processed
+
+    // Get timestamp for submit time
+    uint64_t host_timestamp = 0;
+    uint64_t device_timestamp = 0;
+
+    ze_result_t status = ZE_FUNC(zeDeviceGetGlobalTimestamps)(device, &host_timestamp, &device_timestamp);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+
+    // Get graph captured commands and clone them for this execution
+    graphs_mutex_.lock_shared();
+    if (graph_info->commands_.empty()) {
+      graphs_mutex_.unlock_shared();
+      return;
+    }
+
+    // Clone each captured command for this execution (similar to PrepareToExecuteCommandListsLocked)
+    for (auto command : graph_info->commands_) {
+      ZeCommand* cmd = local_device_submissions_.GetKernelCommand();
+      ZeCommandMetricQuery* cmd_query = nullptr;
+
+      if (command->command_metric_query_ != nullptr) {
+        cmd_query = local_device_submissions_.GetCommandMetricQuery();
+      }
+      *cmd = *command;
+
+      cmd->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
+      cmd->engine_ordinal_ = engine_ordinal;
+      cmd->engine_index_ = engine_index;
+      cmd->submit_time_ = host_timestamp;		//in ns
+      cmd->submit_time_device_ = device_timestamp;	//in ticks
+      cmd->tid_ = utils::GetTid();
+
+      local_device_submissions_.StageKernelCommand(cmd);
+
+      if (cmd_query) {
+        *cmd_query = *(command->command_metric_query_);
+        cmd_query->instance_id_ = cmd->instance_id_;
+        local_device_submissions_.StageCommandMetricQuery(cmd_query);
+      }
+      else {
+        local_device_submissions_.StageCommandMetricQuery(nullptr);
+      }
+    }
+
+    graphs_mutex_.unlock_shared();
+  }
+
   static void OnEnterCommandListAppendLaunchKernel(
       ze_command_list_append_launch_kernel_params_t* params,
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
+          *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
     else {
       *instance_data = nullptr;
@@ -4286,7 +4775,8 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
+          *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
     else {
       *instance_data = nullptr;
@@ -4317,7 +4807,8 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
+          *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
     else {
       *instance_data = nullptr;
@@ -4348,7 +4839,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
+          *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4376,7 +4868,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel));
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
+          *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4492,7 +4985,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4516,7 +5010,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4540,7 +5035,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4564,7 +5060,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4587,7 +5084,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4620,7 +5118,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4645,7 +5144,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4669,7 +5169,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4693,7 +5194,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4717,7 +5219,8 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     if (UniController::IsCollectionEnabled()) {
       ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false);
+      PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
+          nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
   }
 
@@ -4882,6 +5385,36 @@ class ZeCollector {
         }
       }
       collector->command_lists_mutex_.unlock();
+    }
+  }
+
+  static void OnExitCommandListAppendSignalEvent(
+      ze_command_list_append_signal_event_params_t* params,
+      ze_result_t /* result */, void* global_data, void** /* instance_data */) {
+    if (UniController::IsCollectionEnabled()) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+      // Track this as a potential fork signal event during graph capture
+      std::shared_lock<std::shared_mutex> lock(collector->command_lists_mutex_);
+      auto it = collector->command_lists_.find(*(params->phCommandList));
+      if (it != collector->command_lists_.end() && it->second->graph_capturing_) {
+        ZeGraph* graph = it->second->graph_capture_target_;
+        if (graph != nullptr) {
+          graph->event_to_cmdlist_[*(params->phEvent)] = *(params->phCommandList);
+        }
+      }
+    }
+  }
+
+  static void OnEnterCommandListAppendWaitOnEvents(
+      ze_command_list_append_wait_on_events_params_t* params,
+      void* global_data, void** /* instance_data */) {
+    if (UniController::IsCollectionEnabled()) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+      // Check for fork/join transitions based on wait events
+      collector->CheckAndApplyForkTransition(
+          *(params->phCommandList),
+          *(params->pnumEvents),
+          *(params->pphEvents));
     }
   }
 
@@ -5352,6 +5885,86 @@ typedef struct _zex_kernel_register_file_size_exp_t {
     }
   }
 
+  static void OnExitGraphCreateExp(
+      ze_graph_create_exp_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    // Graph tracking entry is created lazily in OnBeginGraphCapture.
+  }
+
+  static void OnExitGraphDestroyExp(
+      ze_graph_destroy_exp_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnGraphDestroy(*(params->phGraph));
+  }
+
+  static void OnExitExecutableGraphDestroyExp(
+      ze_executable_graph_destroy_exp_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnExecutableGraphDestroy(*(params->phGraph));
+  }
+
+  static void OnExitCommandListBeginGraphCaptureExp(
+      ze_command_list_begin_graph_capture_exp_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnBeginGraphCaptureNoGraph(*(params->phCommandList));
+  }
+
+  static void OnExitCommandListBeginCaptureIntoGraphExp(
+      ze_command_list_begin_capture_into_graph_exp_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnBeginGraphCapture(*(params->phCommandList), *(params->phGraph));
+  }
+
+  static void OnExitCommandListEndGraphCaptureExp(
+      ze_command_list_end_graph_capture_exp_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnEndGraphCapture(*(params->phCommandList), **(params->pphGraph));
+  }
+
+  static void OnExitCommandListInstantiateGraphExp(
+      ze_command_list_instantiate_graph_exp_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnInstantiateGraph(*(params->phGraph), **(params->pphExecutableGraph));
+  }
+
+  static void OnEnterCommandListAppendGraphExp(
+      ze_command_list_append_graph_exp_params_t* params,
+      void* global_data, void** /* instance_data */) {
+    if (UniController::IsCollectionEnabled()) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+      collector->PrepareGraphExecution(
+          *(params->phCommandList),
+          *(params->phGraph));
+    }
+  }
+
+  static void OnExitCommandListAppendGraphExp(
+      ze_command_list_append_graph_exp_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) {
+      local_device_submissions_.RevertStagedKernelCommandAndMetricQueries();
+      return;
+    }
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (UniController::IsCollectionEnabled()) {
+      local_device_submissions_.SubmitStagedKernelCommandAndMetricQueries(collector->event_cache_, nullptr);
+    } else {
+      local_device_submissions_.RevertStagedKernelCommandAndMetricQueries();
+    }
+  }
+
   #include <tracing.gen> // Auto-generated callbacks
 
   void CollectHostFunctionTimeStats(uint32_t id, uint64_t time) {
@@ -5503,4 +6116,3 @@ typedef struct _zex_kernel_register_file_size_exp_t {
 };
 
 #endif // PTI_TOOLS_UNITRACE_LEVEL_ZERO_COLLECTOR_H_
-

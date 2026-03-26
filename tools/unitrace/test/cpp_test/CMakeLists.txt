@@ -1,5 +1,5 @@
 
-cmake_minimum_required(VERSION 3.22) 
+cmake_minimum_required(VERSION 3.22)
 
 if(WIN32)
   set(CMAKE_C_COMPILER "$ENV{CMPLR_ROOT}/bin/icx.exe")
@@ -25,7 +25,7 @@ enable_testing()
 add_subdirectory(graph)
 add_subdirectory(cl_gemm)
 add_subdirectory(ze_gemm)
-#add_subdirectory(ze_graph_api)
+add_subdirectory(ze_graph_api)
 add_subdirectory(dpc_gemm)
 add_subdirectory(grf)
 add_subdirectory(omp_gemm)
