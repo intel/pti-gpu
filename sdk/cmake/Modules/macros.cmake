@@ -93,46 +93,23 @@ macro(CheckIfSyclIsAvailable)
   endif()
 endmacro()
 
-set(SPDLOG_FMT_URL "https://github.com/fmtlib/fmt/archive/refs/tags/11.0.2.tar.gz")
-set(SPDLOG_FMT_SHA256 "6cb1e6d37bdcb756dbbe59be438790db409cdb4868c66e888d5df9f13f7c027f")
-set(SPDLOG_GABIME_URL "https://github.com/gabime/spdlog/archive/refs/tags/v1.15.0.tar.gz")
-set(SPDLOG_GABIME_SHA256 "9962648c9b4f1a7bbc76fd8d9172555bad1871fdb14ff4f842ef87949682caa5")
 macro(GetSpdlog)
   if(NOT TARGET spdlog::spdlog)
-    find_package(spdlog 1.15.0 QUIET)
+    find_package(spdlog 1.17.0 QUIET)
   endif()
 
   if(NOT TARGET spdlog::spdlog)
     include(FetchContent)
-    if(CMAKE_VERSION VERSION_LESS "3.24")
-      FetchContent_Declare(
-        fmt
-        URL ${SPDLOG_FMT_URL}
-        URL_HASH
-        SHA256=${SPDLOG_FMT_SHA256}
-      )
-      FetchContent_Declare(
-        spdlog
-        URL ${SPDLOG_GABIME_URL}
-        URL_HASH
-        SHA256=${SPDLOG_GABIME_SHA256}
-        )
-    else()
-      FetchContent_Declare(
-        fmt
-        URL ${SPDLOG_FMT_URL}
-        URL_HASH
-        SHA256=${SPDLOG_FMT_SHA256}
-        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
-      )
-      FetchContent_Declare(
-        spdlog
-        URL ${SPDLOG_GABIME_URL}
-        URL_HASH
-        SHA256=${SPDLOG_GABIME_SHA256}
-        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
-        )
-    endif()
+    FetchContent_Declare(
+      fmt
+      GIT_REPOSITORY https://github.com/fmtlib/fmt
+      GIT_TAG 407c905e45ad75fc29bf0f9bb7c5c2fd3475976f # 12.1.0
+    )
+    FetchContent_Declare(
+      spdlog
+      GIT_REPOSITORY https://github.com/gabime/spdlog
+      GIT_TAG 79524ddd08a4ec981b7fea76afd08ee05f83755d # v1.17.0
+    )
     set(FMT_SYSTEM_HEADERS
         ON
         CACHE BOOL "" FORCE)
