@@ -44,18 +44,42 @@
     }                                                                                         \
   } while (0)
 
+// Removed check of __SYCL_COMPILER_VERSION number as it refers to the build date,
+// instead rely on  __INTEL_LLVM_COMPILER that provided by oneAPI compiler
+// (can be seen: icpx -dM -E -x c /dev/null),
+// but not defined in any of header files.
+//
+// However, for Open Source compiler there is still no reliable solution -
+// as we found no macro defintion from which compiler version could be derived and
+// so UR API signatures derived.
+// The solution in such case - disable building this test at configuring build
+// - providing to cmake "-DPTI_BUILD_URGEMM=OFF"
+// or providing one of defines PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3 /
+// PTI_TESTS_INTEL_ONEAPI_CMPLR_2026_0
+
 #if !defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
-#if (defined(__SYCL_COMPILER_VERSION) && (__SYCL_COMPILER_VERSION >= 20250830)) || \
-    (defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20250300))
+#if (defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20250300))
+
 #define PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3 1
+
+#endif
+#endif
+
+#if !defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2026_0)
+#if (defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER >= 20260000))
+
+#define PTI_TESTS_INTEL_ONEAPI_CMPLR_2026_0 1
+#undef PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3
+
 #endif
 #endif
 
 // This corrects for future patch releases prior to 2025.3. We will assume a patch won't be issued
-// for the open-source version of the compiler (which relies on __SYCL_COMPILER_VERSION). We still
-// need the __SYCL_COMPILER_VERSION check above.
+// for the open-source version of the compiler (which has only __SYCL_COMPILER_VERSION).
+// For oneAPI compiler we rely on  __INTEL_LLVM_COMPILER check.
 #if defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER < 20250300)
 #undef PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3
+#undef PTI_TESTS_INTEL_ONEAPI_CMPLR_2026_0
 #endif
 
 // Static asserts to ensure PTI and UR API ids match.
@@ -76,13 +100,16 @@ static_assert(static_cast<uint32_t>(urEnqueueUSMMemcpy_id) ==
 static_assert(static_cast<uint32_t>(urEnqueueKernelLaunch_id) ==
                   static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_KERNEL_LAUNCH),
               "Critical PTI - Unified Runtime API ID Mismatch");
-#if !defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
+#if !defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3) && !defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2026_0)
 // These were removed in 2025.3. They should not be reassigned though.
 static_assert(static_cast<uint32_t>(urEnqueueKernelLaunchCustomExp_id) ==
                   static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_KERNEL_LAUNCH_CUSTOM_EXP),
               "Critical PTI - Unified Runtime API ID Mismatch");
 static_assert(static_cast<uint32_t>(urEnqueueCooperativeKernelLaunchExp_id) ==
                   static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_COOPERATIVE_KERNEL_LAUNCH_EXP),
+              "Critical PTI - Unified Runtime API ID Mismatch");
+static_assert(static_cast<uint32_t>(urEnqueueKernelLaunchWithArgsExp_id) ==
+                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_KERNEL_LAUNCH_WITH_ARGS_EXP),
               "Critical PTI - Unified Runtime API ID Mismatch");
 #endif
 static_assert(static_cast<uint32_t>(urEnqueueMemBufferFill_id) ==
@@ -215,7 +242,40 @@ float RunAndCheck(ur_kernel_handle_t kernel, ur_device_handle_t device, ur_conte
 
   ur_event_handle_t event;
 
-#if defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
+  // UR API Compatibility Matrix for urEnqueueKernelLaunch:
+  //
+  // Compiler Version | Signature
+  // -----------------|------------------------------------------------------------------
+  // < 2025.3         | (queue, kernel, dim, offset, global, local,
+  //                  |  num_events_in_wait_list, event_wait_list, event)
+  //                  |
+  // 2025.3           | (queue, kernel, dim, offset, global, local,
+  //                  |  num_events_in_wait_list, event_wait_list,
+  //                  |  num_sync_points_in_wait_list, sync_point_wait_list, event)
+  //                  | Added: sync point parameters after event_wait_list
+  //                  |
+  // 2026.0+          | (queue, kernel, dim, offset, global, local,
+  //                  |  kernel_launch_ext_properties,
+  //                  |  num_events_in_wait_list, event_wait_list, event)
+  //                  | Added: kernel_launch_ext_properties after lWorkSize
+  //                  | Removed: sync_point parameters (replaced by ext_properties)
+  //
+  // Note: event_wait_list parameter specifies events that must complete before
+  //       this kernel launch begins execution (for dependency ordering)
+  //
+  // Deprecated APIs removed in 2025.3+:
+  //   - urEnqueueKernelLaunchCustomExp
+  //   - urEnqueueCooperativeKernelLaunchExp
+  //   - urEnqueueKernelLaunchWithArgsExp
+  // But we still keep their ids - e.g. in sycl_collector.h kCoreApis
+  // as someone might run with previous compiler runtime
+
+#if defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2026_0)
+  UR_CHECK_SUCCESS(urEnqueueKernelLaunch(queue, kernel, 2, gWorkOffset, gWorkSize, lWorkSize,
+                                         /* kernel_launch_ext_properties */ nullptr,
+                                         /* num_events_in_wait_list */ 0,
+                                         /* event_wait_list */ nullptr, &event));
+#elif defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
   UR_CHECK_SUCCESS(urEnqueueKernelLaunch(queue, kernel, 2, gWorkOffset, gWorkSize, lWorkSize,
                                          /* num_events_in_wait_list */ 0,
                                          /* event_wait_list */ nullptr,
@@ -238,7 +298,7 @@ float RunAndCheck(ur_kernel_handle_t kernel, ur_device_handle_t device, ur_conte
 ur_result_t GetL0Adapter(std::vector<ur_adapter_handle_t>& adapters, unsigned int& idx) {
   unsigned int index = 0;
   for (auto adapter : adapters) {
-#if defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
+#if defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3) || defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2026_0)
     ur_backend_t backend;
     UR_CHECK_SUCCESS(urAdapterGetInfo(adapter, UR_ADAPTER_INFO_BACKEND, sizeof(ur_backend_t),
                                       &backend, nullptr));
@@ -276,7 +336,7 @@ void ComputeUsingUr(std::vector<float>& a, std::vector<float>& b, std::vector<fl
   UR_CHECK_SUCCESS(GetL0Adapter(adapters, idx));
 
   std::vector<ur_platform_handle_t> platforms(count);
-#if defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3)
+#if defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2025_3) || defined(PTI_TESTS_INTEL_ONEAPI_CMPLR_2026_0)
   UR_CHECK_SUCCESS(urPlatformGet(adapters[idx], 1, platforms.data(), nullptr));
 #else
   UR_CHECK_SUCCESS(urPlatformGet(&adapters[idx], 1, 1, platforms.data(), nullptr));

@@ -277,6 +277,11 @@ typedef enum _pti_api_id_runtime_sycl {
     urGraphDumpContentsExp_id=306,
     urGraphInstantiateGraphExp_id=307,
     urEnqueueGraphExp_id=308,
+    urEnqueueHostTaskExp_id=309,
+    urCommandBufferAppendKernelLaunchWithArgsExp_id=310,
+    urKernelGetSuggestedLocalWorkSizeWithArgs_id=311,
+    urUSMHostAllocRegisterExp_id=312,
+    urUSMHostAllocUnregisterExp_id=313,
  } pti_api_id_runtime_sycl;
 
 #endif
