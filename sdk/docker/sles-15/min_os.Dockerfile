@@ -28,9 +28,10 @@ RUN  zypper refresh && \
       python311 && \
      zypper clean --all
 
-RUN zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
-  rpm --import https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
-  zypper addrepo -f -r https://repositories.intel.com/gpu/sles/15sp7/lts/2523/unified/intel-gpu-15sp7.repo && \
-  rpm --import https://repositories.intel.com/gpu/intel-graphics.key
+RUN zypper addrepo -f -r \
+        https://repositories.intel.com/gpu/sles/15sp7/lts/2523/unified/intel-gpu-15sp7.repo && \
+    rpm --import https://repositories.intel.com/gpu/intel-graphics.key && \
+    zypper addrepo https://yum.repos.intel.com/oneapi oneAPI && \
+    rpm --import https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB 
 
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1

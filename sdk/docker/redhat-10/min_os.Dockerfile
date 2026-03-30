@@ -38,7 +38,7 @@ RUN echo '[oneAPI]' > /etc/yum.repos.d/oneAPI.repo; \
     echo 'enabled=1' >> /etc/yum.repos.d/oneAPI.repo; \
     echo 'gpgcheck=1' >> /etc/yum.repos.d/oneAPI.repo; \
     echo 'repo_gpgcheck=1' >> /etc/yum.repos.d/oneAPI.repo; \
-    echo 'gpgkey=https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB' >> /etc/yum.repos.d/oneAPI.repo 
+    echo 'gpgkey=https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB' >> /etc/yum.repos.d/oneAPI.repo
 
 #
 # Setup the appropriate repos for GPU
@@ -49,15 +49,6 @@ RUN rpm --import https://repositories.intel.com/gpu/intel-graphics.key && \
     dnf config-manager --add-repo https://repositories.intel.com/gpu/rhel/10.0/lts/2523/unified/intel-gpu-10.0.repo && \
     dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
     dnf config-manager --disable epel && \
-    dnf install -y \
-        intel-opencl intel-media libmfxgen1 libvpl2 \
-        level-zero intel-level-zero-gpu mesa-dri-drivers mesa-vulkan-drivers \
-        mesa-vdpau-drivers libdrm mesa-libEGL mesa-libgbm mesa-libGL \
-        mesa-libxatracker libvpl-tools intel-metrics-discovery \
-        intel-metrics-library intel-igc-core intel-igc-cm \
-        libva libva-utils intel-gmmlib libmetee intel-gsc intel-ocloc \
-        intel-metrics-discovery intel-metrics-discovery-devel \
-        intel-metrics-library intel-metrics-library-devel && \
     dnf clean all
 
 RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3 10

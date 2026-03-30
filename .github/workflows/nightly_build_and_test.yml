@@ -35,11 +35,8 @@ jobs:
       max-parallel: 3
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_SLES_15_3_ONEAPI_NMINUS1 }}
-            uploadname: ${{ vars.PTI_PKG_SLES_15_3_ONEAPI_NMINUS1 }}
-            preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_NMINUS1 }}
-            uploadname: ${{ vars.PTI_PKG_UBUNTU_22_4_ONEAPI_NMINUS1 }}
+          - container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_NMINUS1 }}
+            uploadname: ${{ vars.PTI_PKG_SLES_15_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_NMINUS1 }}
             uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_ONEAPI_NMINUS1 }}
@@ -56,9 +53,6 @@ jobs:
             preset: linux-gxx-release
           - container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_N }}
             uploadname: ${{ vars.PTI_PKG_SLES_15_ONEAPI_N }}
-            preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_22_4_ONEAPI_N }}
-            uploadname: ${{ vars.PTI_PKG_UBUNTU_22_4_ONEAPI_N }}
             preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
             uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_ONEAPI_N }}
