@@ -63,10 +63,11 @@ inline static const std::unordered_map<pti_api_id_runtime_sycl, ApiType> kCoreAp
     {pti_api_id_runtime_sycl::urEnqueueUSMMemcpy2D_id, ApiType::kMemory},
 
     {pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id, ApiType::kKernel},
-    // three APIs below removed in 2025.3+ compiler runtime,
+    // two APIs below removed in 2025.3+ compiler runtime,
     // but we keep them around for the case when someone runs with earlier runtime
     {pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id, ApiType::kKernel},
     {pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id, ApiType::kKernel},
+
     {pti_api_id_runtime_sycl::urEnqueueKernelLaunchWithArgsExp_id, ApiType::kKernel},
 
     {pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id, ApiType::kMemory},

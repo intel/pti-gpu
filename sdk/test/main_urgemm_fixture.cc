@@ -108,9 +108,6 @@ static_assert(static_cast<uint32_t>(urEnqueueKernelLaunchCustomExp_id) ==
 static_assert(static_cast<uint32_t>(urEnqueueCooperativeKernelLaunchExp_id) ==
                   static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_COOPERATIVE_KERNEL_LAUNCH_EXP),
               "Critical PTI - Unified Runtime API ID Mismatch");
-static_assert(static_cast<uint32_t>(urEnqueueKernelLaunchWithArgsExp_id) ==
-                  static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_KERNEL_LAUNCH_WITH_ARGS_EXP),
-              "Critical PTI - Unified Runtime API ID Mismatch");
 #endif
 static_assert(static_cast<uint32_t>(urEnqueueMemBufferFill_id) ==
                   static_cast<uint32_t>(UR_FUNCTION_ENQUEUE_MEM_BUFFER_FILL),
@@ -266,7 +263,6 @@ float RunAndCheck(ur_kernel_handle_t kernel, ur_device_handle_t device, ur_conte
   // Deprecated APIs removed in 2025.3+:
   //   - urEnqueueKernelLaunchCustomExp
   //   - urEnqueueCooperativeKernelLaunchExp
-  //   - urEnqueueKernelLaunchWithArgsExp
   // But we still keep their ids - e.g. in sycl_collector.h kCoreApis
   // as someone might run with previous compiler runtime
 
