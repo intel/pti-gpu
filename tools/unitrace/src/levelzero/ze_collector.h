@@ -1658,9 +1658,9 @@ class ZeCollector {
   }
 
   void DisableTracing() {
-    // Win_Todo: For windows zelTracerSetEnabled() returns ZE_RESULT_ERROR_UNINITIALIZED error
-#ifndef _WIN32
     ze_result_t status = ZE_FUNC(zelTracerSetEnabled)(tracer_, false);
+    // For Windows, level-zero might have been unloaded by now hence status can be ZE_RESULT_ERROR_UNINITIALIZED
+#ifndef _WIN32
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 #endif /* _WIN32 */
   }
