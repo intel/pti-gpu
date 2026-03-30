@@ -219,11 +219,12 @@ class PtiMetricsProfiler {
   // Returns PTI_SUCCESS if thread initialized successfully, PTI_ERROR_DRIVER on failure
   pti_result WaitForProfilingThreadInitialization(
       std::shared_ptr<pti_metrics_device_descriptor_t> desc) {
-    // Wait with predicate to avoid lost wakeup
-    std::unique_lock<std::mutex> thread_start_lock(desc->profiling_thread_start_mutex_);
-    desc->profiling_thread_start_cv_.wait(
-        thread_start_lock, [&desc]() { return desc->profiling_thread_initialized_; });
-    thread_start_lock.unlock();
+    {
+      // Wait with predicate to avoid lost wakeup
+      std::unique_lock<std::mutex> thread_start_lock(desc->profiling_thread_start_mutex_);
+      desc->profiling_thread_start_cv_.wait(
+          thread_start_lock, [&desc]() { return desc->profiling_thread_initialized_; });
+    }
 
     // Check if the profiling thread successfully initialized
     ptiMetricProfilerState final_state = desc->profiling_state_.load(std::memory_order_acquire);
