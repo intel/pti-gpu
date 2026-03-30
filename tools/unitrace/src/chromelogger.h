@@ -67,7 +67,6 @@ ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device
 std::string GetClKernelCommandName(uint64_t id);
 std::string GetZeDeviceName(ze_device_handle_t device);
 std::string GetZeEngineName(ze_device_handle_t device, uint32_t ordinal);
-std::string GetClDeviceName(cl_device_id device);
 
 static Logger* logger_ = nullptr;
 
@@ -260,6 +259,8 @@ struct ClDeviceTidKey {
   int32_t host_pid_;
   int32_t host_tid_;
 };
+
+std::string GetClDeviceName(cl_device_id device);
 
 struct ClDevicePidKeyCompare {
   bool operator()(const ClDevicePidKey& lhs, const ClDevicePidKey& rhs) const {
