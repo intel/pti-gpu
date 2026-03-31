@@ -1833,6 +1833,7 @@ class ClCollector {
       // no recursive tracing
       return;
     }
+
     ClCollector* collector = reinterpret_cast<ClCollector*>(user_data);
     if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
       if (UniController::IsCollectionEnabled()) {
@@ -1853,38 +1854,39 @@ class ClCollector {
     else {
       // take end timestamp first to avoid tool overhead
       uint64_t end_time = collector->GetTimestamp();
-      
       collector->TracingNowOn();
-      uint64_t kid = KERNEL_INSTANCE_ID_INVALID;
-      if (collector->options_.kernel_tracing && collector->kernel_tracing_points_enabled[function]) {
-        KernelTracingCallBackOnExit(function, collector, callback_data, &kid);
-      }
-
       uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
 
-      if (collector->options_.host_timing) {
-        collector->AddFunctionTime(callback_data->functionName, end_time - start_time);
-      }
-
-      if (collector->options_.call_logging) {
-        OnExitFunction(function, callback_data, start_time, end_time, collector);
-      }
-
-      if (collector->fcallback_ != nullptr) {
-        FLOW_DIR flow_dir = FLOW_NUL;
-        std::vector<uint64_t> kids;
-        if (function == CL_FUNCTION_clEnqueueNDRangeKernel ||
-            function == CL_FUNCTION_clWaitForEvents ||
-            function == CL_FUNCTION_clEnqueueReadBuffer ||
-            function == CL_FUNCTION_clEnqueueWriteBuffer) {
-          flow_dir = (function == CL_FUNCTION_clWaitForEvents ? FLOW_D2H : FLOW_H2D);
-	  if (kid != KERNEL_INSTANCE_ID_INVALID) {
-	    kids.push_back(kid);
-	  }
+      if (UniController::IsCollectionEnabled()) {
+        uint64_t kid = KERNEL_INSTANCE_ID_INVALID;
+        if (collector->options_.kernel_tracing && collector->kernel_tracing_points_enabled[function]) {
+          KernelTracingCallBackOnExit(function, collector, callback_data, &kid);
         }
 
-        API_TRACING_ID api_id = (API_TRACING_ID)(OCLStartTracingId + function);
-        collector->fcallback_((kids.empty() ? nullptr: &kids), flow_dir, api_id, start_time, end_time);
+        if (collector->options_.host_timing) {
+          collector->AddFunctionTime(callback_data->functionName, end_time - start_time);
+        }
+
+        if (collector->options_.call_logging) {
+          OnExitFunction(function, callback_data, start_time, end_time, collector);
+        }
+
+        if (collector->fcallback_ != nullptr) {
+          FLOW_DIR flow_dir = FLOW_NUL;
+          std::vector<uint64_t> kids;
+          if (function == CL_FUNCTION_clEnqueueNDRangeKernel ||
+              function == CL_FUNCTION_clWaitForEvents ||
+              function == CL_FUNCTION_clEnqueueReadBuffer ||
+              function == CL_FUNCTION_clEnqueueWriteBuffer) {
+            flow_dir = (function == CL_FUNCTION_clWaitForEvents ? FLOW_D2H : FLOW_H2D);
+            if (kid != KERNEL_INSTANCE_ID_INVALID) {
+              kids.push_back(kid);
+            }
+          }
+
+          API_TRACING_ID api_id = (API_TRACING_ID)(OCLStartTracingId + function);
+          collector->fcallback_((kids.empty() ? nullptr: &kids), flow_dir, api_id, start_time, end_time);
+        }
       }
 
       #define REPLACE_INTEL_EXTENSION_FUNCTION(params, name, i, cb_data) \
