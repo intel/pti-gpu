@@ -65,6 +65,15 @@ jobs:
           cmake -DBUILD_WITH_MPI=0 -GNinja ..
           ninja
 
+      - name: Build-l0-only-unitrace
+        working-directory: tools/unitrace
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          mkdir l0_only_build
+          cd l0_only_build
+          cmake -DBUILD_WITH_ITT=0 -DBUILD_WITH_MPI=0 -DBUILD_WITH_XPTI=0 -DBUILD_WITH_OPENCL=0 -GNinja ..
+          ninja
+
       - name: Unitrace-cpp-test
         working-directory: tools/unitrace/test
         run: |
