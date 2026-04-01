@@ -584,3 +584,23 @@ macro(AddVersionlessLinkFile MY_TARGET)
     $<TARGET_LINKER_FILE_DIR:${MY_TARGET}>/${CMAKE_SHARED_LIBRARY_PREFIX}${MY_TARGET}$<$<PLATFORM_ID:Windows>:$<$<CONFIG:Debug>:d>>${CMAKE_LINK_LIBRARY_SUFFIX}
   )
 endmacro()
+
+function(GetCurrentGitCommit COMMIT_OUTPUT_VAR)
+  set(_OUT_TEMP "")
+  set(_GIT_RESULT_TEMP 1)
+  if (NOT Git_FOUND)
+    find_package(Git)
+  endif()
+  if(Git_FOUND)
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+      OUTPUT_VARIABLE _OUT_TEMP
+      RESULT_VARIABLE _GIT_RESULT_TEMP
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(_GIT_RESULT_TEMP EQUAL 0)
+      set(${COMMIT_OUTPUT_VAR} "${_OUT_TEMP}" PARENT_SCOPE)
+    endif()
+  endif()
+endfunction()

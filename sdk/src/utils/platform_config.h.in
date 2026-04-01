@@ -7,7 +7,20 @@
 #ifndef UTILS_PLATFORM_CONFIG_H_
 #define UTILS_PLATFORM_CONFIG_H_
 
+#if defined(__GNUC__) || defined(__clang__)
+#ifdef __has_attribute
+#if __has_attribute(__used__)
+#define PTI_USED __attribute__((__used__))
+#endif
+#else
+#define PTI_USED __attribute__((__used__))
+#endif
+#endif
+
+#ifndef PTI_USED
+#define PTI_USED
+#endif
+
 #cmakedefine PTI_EXPERIMENTAL_FILESYSTEM
 
 #endif  // UTILS_PLATFORM_CONFIG_H_
-

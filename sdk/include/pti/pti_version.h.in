@@ -24,6 +24,8 @@ extern "C" {
 #define PTI_VERSION_MINOR @PROJECT_VERSION_MINOR@
 #define PTI_VERSION_PATCH @PROJECT_VERSION_PATCH@
 
+#define PTI_COMMIT_HASH_STRING "@PTI_COMMIT_HASH@"
+
 typedef struct pti_version {
   uint32_t _major;
   uint32_t _minor;
