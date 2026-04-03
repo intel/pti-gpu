@@ -8,4 +8,12 @@ venv/
 compile_commands.json
 CMakeUserPresets.json
 error_diff.txt
+
+# Shortened Windows build directory
 wbr
+
+# Common test install directory
+out/
+
+# Raw install/packaging intermediary data
+drop_raw/

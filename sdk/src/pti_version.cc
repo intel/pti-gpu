@@ -7,7 +7,7 @@
 
 #include "platform_config.h"
 
-#if defined(_MSC_VER) || !defined(__clang__)
+#if defined(_MSC_VER) && !defined(__clang__)
 #pragma comment(linker, "/include:kPtiIdentifierString")
 #endif
 

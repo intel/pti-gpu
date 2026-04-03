@@ -220,6 +220,10 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
       set(LZ_BASE_DIR ${FETCHCONTENT_BASE_DIR})
     endif()
 
+    if (NOT Git_FOUND)
+      find_package(Git REQUIRED)
+    endif()
+
     include(FetchContent)
     FetchContent_Declare(
         LevelZero
@@ -227,8 +231,8 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
         https://github.com/oneapi-src/level-zero.git
         GIT_TAG ${PTI_L0_LOADER_COMMIT_HASH}
         # Patch: Fix VERSION file location to avoid Windows <version> header conflict (CMAKE_BINARY_DIR -> CMAKE_CURRENT_BINARY_DIR)
-        PATCH_COMMAND git checkout .
-        COMMAND git apply --ignore-whitespace "${PROJECT_SOURCE_DIR}/cmake/levelzero_version_fix.patch"
+        PATCH_COMMAND "${GIT_EXECUTABLE}" checkout .
+        COMMAND "${GIT_EXECUTABLE}" apply --ignore-whitespace --whitespace=fix "${PROJECT_SOURCE_DIR}/cmake/levelzero_version_fix.patch"
     )
     # Prevent content from automatically being installed with PTI
     FetchContent_GetProperties(LevelZero)
