@@ -1293,7 +1293,7 @@ class ZeCollector {
 
       // Check if rank is specified for tracing in MPI environment
       if (ranks_to_sample.size() > 0) {
-        auto my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+        const auto &my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
         if (!my_MPI_rank.empty()) {
             auto my_rank = std::stoi(my_MPI_rank);
             if (ranks_to_sample.find(my_rank) == ranks_to_sample.end()) {

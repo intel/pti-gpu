@@ -402,7 +402,7 @@ inline int GetZeRanksToSample(std::set<int>& ranks_to_sample) {
     return -1;
   }
   int32_t my_size = std::stoi(my_MPI_size);
-  auto my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+  const auto &my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
   if (my_MPI_rank.empty()) {
     std::cerr << "[ERROR] Given --ranks-to-sample but the application does not seem to be using MPI" << std::endl;
     return -1;
