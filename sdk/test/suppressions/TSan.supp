@@ -21,3 +21,12 @@ called_from_lib:libigdgmm.so*
 
 #TODO: Fixed in compiler >= 2024.0.0? Definitely an issue on == 2023.2.1
 deadlock:libigdrcl*
+
+# ITT library initialization has benign race by design
+# Function pointers written under mutex but read without (relies on api_initialized flag)
+race:FillFuncPtrPerLib
+race:__itt_string_handle_create_init_3_0
+race:__itt_task_begin_init_3_0
+race:__itt_task_end_init_3_0
+race:__itt_domain_create_init_3_0
+race:__itt_metadata_add_init_3_0

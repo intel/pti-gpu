@@ -15,6 +15,15 @@ class GlobalSyclInitializer {
   inline static bool likely_unitrace_subscriber_ = false;
 
   inline static bool Initialize() {
+    // initialize spdlog before any other code for libpti_view
+    spdlog::set_level(spdlog::level::off);
+
+    auto env_string = ::utils::GetEnv("PTILOG_LEVEL");
+    if (!env_string.empty()) {
+      spdlog::cfg::helpers::load_levels(env_string);
+    }
+    ::utils::SetGlobalSpdLogPattern();
+
     // respecting another XPTI subscriber:
     // if someone already subscribed (e.g. might be that the app runs under unitrace) -
     // we do not subscribe for XPTI

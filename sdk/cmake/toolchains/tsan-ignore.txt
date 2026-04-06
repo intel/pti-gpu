@@ -3,3 +3,8 @@
 fun:*ZeCollector*ProcessCallTimestamp*
 fun:*ZeCollector*ProcessCallCommand*
 fun:*ZeCollector*ProcessCalls*
+
+# Exclude ITT initialization function - benign race by ITT library design
+# The ITT library writes function pointers under mutex, but stub functions
+# read them without mutex (relying on api_initialized flag).
+fun:*FillFuncPtrPerLib*

@@ -80,6 +80,7 @@ class IttTest : public ::testing::Test {
   static inline std::vector<pti_view_record_comms> *comms_vector_ = nullptr;
   static inline std::mutex buffer_mutex_;
   static inline constexpr std::string_view kCclDomain = "oneCCL::API";
+  static constexpr uint32_t kSleepTimeMs = 5;
 
   // Functions for PTI buffer management
 
@@ -175,7 +176,7 @@ TEST_F(IttTest, Task_Handlecreate_Begin_End) {
   auto domain = __itt_domain_create(kCclDomain.data());
   auto task = __itt_string_handle_create(task_name.data());
   __itt_task_begin(domain, __itt_null, __itt_null, task);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(domain);
 
   PtiEpilog();
@@ -190,6 +191,153 @@ TEST_F(IttTest, Task_Handlecreate_Begin_End) {
   ASSERT_EQ(local_records_vector[0]._thread_id, utils::GetTid()) << "TID mismatch in ITT record";
 }
 
+TEST_F(IttTest, IttCallsBeforeViewInit) {
+  constexpr std::string_view some_domain1 = "someDomain1";
+  constexpr std::string_view some_domain2 = "someDomain2";
+  constexpr std::string_view task_name1 = "IttCallsBeforeViewInit_Task1";
+  constexpr std::string_view task_name2 = "IttCallsAfterViewInit_Task2";
+  constexpr std::string_view task_name3 = "IttCallsAfterViewInit_Task3";
+
+  constexpr int kExpectedRecords = 2;  // Only two records should be generated for this test
+  std::vector<pti_view_record_comms> local_records_vector;
+
+  comms_vector_ = &local_records_vector;
+
+  auto some_domain_handle1 = __itt_domain_create(some_domain1.data());
+
+  // This task will be handled by default itt implementation
+  auto task2 = __itt_string_handle_create(task_name2.data());
+
+  // Here ITT would call __itt_api_init - on the first task_begin
+  __itt_task_begin(some_domain_handle1, __itt_null, __itt_null, task2);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(some_domain_handle1);
+
+  // Purposely creating CCL domain after _itt_api_init call but before ptiViewEnable
+  auto ccl_domain_handle = __itt_domain_create(kCclDomain.data());
+
+  auto task1 = __itt_string_handle_create(task_name1.data());
+
+  __itt_task_begin(ccl_domain_handle, __itt_null, __itt_null, task1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(ccl_domain_handle);
+
+  auto some_domain_handle2 = __itt_domain_create(some_domain2.data());
+
+  PtiProlog();
+
+  auto task3 = __itt_string_handle_create(task_name3.data());
+
+  // Only these two tasks should be captured by PTI as they are in CCL domain
+  __itt_task_begin(ccl_domain_handle, __itt_null, __itt_null, task2);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(ccl_domain_handle);
+
+  __itt_task_begin(ccl_domain_handle, __itt_null, __itt_null, task3);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(ccl_domain_handle);
+
+  // This task indeed should not appear in PTI records
+  __itt_task_begin(some_domain_handle1, __itt_null, __itt_null, task3);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(some_domain_handle1);
+
+  PtiEpilog();
+
+  __itt_task_begin(some_domain_handle2, __itt_null, __itt_null, task3);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(some_domain_handle2);
+
+  EXPECT_EQ(local_records_vector.size(), kExpectedRecords)
+      << "Expected " << kExpectedRecords << " record, collected " << local_records_vector.size();
+  EXPECT_STREQ(local_records_vector[0]._name, task_name2.data());
+  EXPECT_GT(local_records_vector[0]._end_timestamp, local_records_vector[0]._start_timestamp);
+
+  EXPECT_STREQ(local_records_vector[1]._name, task_name3.data());
+  EXPECT_GT(local_records_vector[1]._end_timestamp, local_records_vector[1]._start_timestamp);
+  // Validate PID/TID fields
+  EXPECT_EQ(local_records_vector[0]._process_id, utils::GetPid()) << "PID mismatch in ITT record";
+  EXPECT_EQ(local_records_vector[0]._thread_id, utils::GetTid()) << "TID mismatch in ITT record";
+  EXPECT_EQ(local_records_vector[1]._process_id, utils::GetPid()) << "PID mismatch in ITT record";
+  EXPECT_EQ(local_records_vector[1]._thread_id, utils::GetTid()) << "TID mismatch in ITT record";
+}
+
+TEST_F(IttTest, IttCclDomainLateCreation) {
+  constexpr std::string_view some_domain1 = "someDomain1";
+  constexpr std::string_view task_name1 = "IttCallsBeforeViewInit_Task1";
+  constexpr std::string_view task_name2 = "IttCallsAfterViewInit_Task2";
+  constexpr std::string_view task_name3 = "IttCallsAfterViewInit_Task3";
+
+  constexpr int kExpectedRecords = 2;  // Only two records should be generated for this test
+  std::vector<pti_view_record_comms> local_records_vector;
+
+  comms_vector_ = &local_records_vector;
+
+  auto some_domain_handle1 = __itt_domain_create(some_domain1.data());
+
+  // This task will be handled by default itt implementation
+  auto task2 = __itt_string_handle_create(task_name2.data());
+
+  PtiProlog();
+
+  // Here ITT would call __itt_api_init - on the first task_begin
+  __itt_task_begin(some_domain_handle1, __itt_null, __itt_null, task2);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(some_domain_handle1);
+
+  PtiEpilog();
+
+  // Purposely creating CCL domain outside of PTI COMMUNICATION collection
+  auto ccl_domain_handle = __itt_domain_create(kCclDomain.data());
+
+  auto task1 = __itt_string_handle_create(task_name1.data());
+
+  __itt_task_begin(ccl_domain_handle, __itt_null, __itt_null, task1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(ccl_domain_handle);
+
+  auto task3 = __itt_string_handle_create(task_name3.data());
+
+  PtiProlog();
+
+  // Only these two tasks should be captured by PTI as they are in CCL domain
+  __itt_task_begin(ccl_domain_handle, __itt_null, __itt_null, task2);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(ccl_domain_handle);
+
+  __itt_task_begin(ccl_domain_handle, __itt_null, __itt_null, task3);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(ccl_domain_handle);
+
+  // This task indeed should not appear in PTI records
+  __itt_task_begin(some_domain_handle1, __itt_null, __itt_null, task3);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(some_domain_handle1);
+
+  PtiEpilog();
+
+  __itt_task_begin(some_domain_handle1, __itt_null, __itt_null, task3);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(some_domain_handle1);
+
+  __itt_task_begin(ccl_domain_handle, __itt_null, __itt_null, task1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+  __itt_task_end(ccl_domain_handle);
+
+  EXPECT_EQ(local_records_vector.size(), kExpectedRecords)
+      << "Expected " << kExpectedRecords << " record, collected " << local_records_vector.size();
+  EXPECT_STREQ(local_records_vector[0]._name, task_name2.data());
+  EXPECT_GT(local_records_vector[0]._end_timestamp, local_records_vector[0]._start_timestamp);
+
+  EXPECT_STREQ(local_records_vector[1]._name, task_name3.data());
+  EXPECT_GT(local_records_vector[1]._end_timestamp, local_records_vector[1]._start_timestamp);
+  // Validate PID/TID fields
+  EXPECT_EQ(local_records_vector[0]._process_id, utils::GetPid()) << "PID mismatch in ITT record";
+  EXPECT_EQ(local_records_vector[0]._thread_id, utils::GetTid()) << "TID mismatch in ITT record";
+  EXPECT_EQ(local_records_vector[1]._process_id, utils::GetPid()) << "PID mismatch in ITT record";
+  EXPECT_EQ(local_records_vector[1]._thread_id, utils::GetTid()) << "TID mismatch in ITT record";
+}
+
 TEST_F(IttTest, StrayDomain_Filtered) {
   constexpr std::string_view kTaskName = "StrayDomain_Task";
   constexpr int kExpectedRecords = 0;
@@ -201,7 +349,7 @@ TEST_F(IttTest, StrayDomain_Filtered) {
   auto stray_domain = __itt_domain_create("Stray Domain");
   auto task = __itt_string_handle_create(kTaskName.data());
   __itt_task_begin(stray_domain, __itt_null, __itt_null, task);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(stray_domain);
 
   PtiEpilog();
@@ -226,12 +374,12 @@ TEST_F(IttTest, ThreeDomainsAdded) {
   auto task_stray = __itt_string_handle_create(kTaskName.data());
   auto stray_domain1 = __itt_domain_create("Stray Domain1");
   __itt_task_begin(stray_domain1, __itt_null, __itt_null, task_stray);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(stray_domain1);
 
   auto stray_domain2 = __itt_domain_create("Stray Domain2");
   __itt_task_begin(stray_domain2, __itt_null, __itt_null, task_stray);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(stray_domain2);
 
   auto ccl_domain = __itt_domain_create(kCclDomain.data());
@@ -239,7 +387,7 @@ TEST_F(IttTest, ThreeDomainsAdded) {
   auto task = __itt_string_handle_create(task_name.data());
 
   __itt_task_begin(ccl_domain, __itt_null, __itt_null, task);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(ccl_domain);
 
   PtiEpilog();
@@ -266,19 +414,19 @@ TEST_F(IttTest, ThreeDomainsAddedCclFirst) {
   auto ccl_task = __itt_string_handle_create(ccl_task_name.data());
 
   __itt_task_begin(ccl_domain, __itt_null, __itt_null, ccl_task);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(ccl_domain);
 
   // Then create stray domains
   auto task_stray = __itt_string_handle_create(kTaskName.data());
   auto stray_domain1 = __itt_domain_create("Stray Domain1");
   __itt_task_begin(stray_domain1, __itt_null, __itt_null, task_stray);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(stray_domain1);
 
   auto stray_domain2 = __itt_domain_create("Stray Domain2");
   __itt_task_begin(stray_domain2, __itt_null, __itt_null, task_stray);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(stray_domain2);
 
   PtiEpilog();
@@ -302,7 +450,7 @@ TEST_F(IttTest, StackedTasks) {
 
   __itt_task_begin(domain, __itt_null, __itt_null, task1);
   __itt_task_begin(domain, __itt_null, __itt_null, task2);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(domain);
   __itt_task_end(domain);
 
@@ -340,7 +488,7 @@ TEST_F(IttTest, Task_Begin_Handlecreate_Addmetadata_End) {
   __itt_task_begin(domain, __itt_null, __itt_null, task);
   __itt_metadata_add(domain, __itt_null, handle, __itt_metadata_u64, 1,
                      &validate_metadata_expected_size);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
   __itt_task_end(domain);
 
   PtiEpilog();

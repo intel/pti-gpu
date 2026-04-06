@@ -27,7 +27,8 @@ using OnIttLoggingCallback = void (*)(void* data, CommunicationRecord& rec);
 #define ITTAPI_CDECL
 #endif  // PTI_CCL_ITT_COMPILE
 
-#include "itt_pti_exports.h"
+#include <ittnotify.h>
+#include <ittnotify_config.h>
 
 struct ThreadTaskDescriptor {
   __itt_domain* domain;
@@ -64,6 +65,8 @@ class IttCollector {
   void EnableTrace() {
     SPDLOG_DEBUG("{}(): TID: {}", __PRETTY_FUNCTION__, utils::GetTid());
 
+    trace_enabled_.store(true, std::memory_order_release);
+
     // Clear any stale stack state for clean start
     if (!task_desc_.empty()) {
       SPDLOG_DEBUG("Clearing {} stale tasks on EnableTrace", task_desc_.size());
@@ -78,6 +81,8 @@ class IttCollector {
 
     IttDisableCclDomain();
 
+    trace_enabled_.store(false, std::memory_order_release);
+
     if (!task_desc_.empty()) {
       SPDLOG_DEBUG("Purging {} incomplete tasks from thread-local stack", task_desc_.size());
       std::stack<ThreadTaskDescriptor> empty_stack;
@@ -90,8 +95,44 @@ class IttCollector {
     record_dispatcher_.store(callback, std::memory_order_relaxed);
   }
 
+  bool IsTraceEnabled() const { return trace_enabled_.load(std::memory_order_acquire); }
+
   // Debug utility for dumping thread-local task stack
   static std::string DumpTaskDescriptor() noexcept;
+
+  /**
+   * @brief Scan existing domains in itt_global and cache CCL domain if found
+   *
+   * This method scans the global ITT domain list to find and cache the CCL domain.
+   * It's safe to call multiple times (idempotent).
+   */
+  void ScanExistingDomainsAndFindCclDomain();
+
+  /**
+   * @brief Check if a domain is the CCL domain and cache it if found
+   * @param domain Domain to check (can be nullptr to just retrieve cached value)
+   * @return Pointer to CCL domain if found/cached, nullptr otherwise
+   */
+  inline const __itt_domain* GetCclDomain(const __itt_domain* domain) {
+    static const char* const kcclDomain = "oneCCL::API";
+
+    // Fast path: if already initialized, return the cached domain
+    const __itt_domain* cached = itt_ccl_domain_.load(std::memory_order_relaxed);
+    if (cached != nullptr) {
+      return cached;
+    }
+
+    // Slow path: check if this domain matches oneCCL and try to cache it
+    if (domain != nullptr && domain->nameA != nullptr && !std::strcmp(domain->nameA, kcclDomain)) {
+      const __itt_domain* expected = nullptr;
+      // Only one thread will successfully update itt_ccl_domain_ from nullptr to domain
+      // If compare_exchange_weak fails, another thread already set it, which is fine
+      itt_ccl_domain_.compare_exchange_weak(expected, domain, std::memory_order_relaxed);
+      return domain;
+    }
+
+    return nullptr;
+  }
 
   // Thread-local task stack - public for implementation functions access
   inline static thread_local std::stack<ThreadTaskDescriptor> task_desc_;
@@ -119,33 +160,15 @@ class IttCollector {
 
  private:  // Implementation
   inline static thread_local CommunicationRecord itt_runtime_rec_;
-  IttCollector(OnIttLoggingCallback callback) : record_dispatcher_(callback) {}
+
+  IttCollector(OnIttLoggingCallback callback) : record_dispatcher_(callback) {
+    ScanExistingDomainsAndFindCclDomain();
+  }
 
  private:  // Data
   std::atomic<OnIttLoggingCallback> record_dispatcher_ = nullptr;
   std::atomic<const __itt_domain*> itt_ccl_domain_{nullptr};
-
- public:
-  inline const __itt_domain* GetCclDomain(const __itt_domain* domain) {
-    static const char* const kcclDomain = "oneCCL::API";
-
-    // Fast path: if already initialized, return the cached domain
-    const __itt_domain* cached = itt_ccl_domain_.load(std::memory_order_relaxed);
-    if (cached != nullptr) {
-      return cached;
-    }
-
-    // Slow path: check if this domain matches oneCCL and try to cache it
-    if (domain != nullptr && domain->nameA != nullptr && !std::strcmp(domain->nameA, kcclDomain)) {
-      const __itt_domain* expected = nullptr;
-      // Only one thread will successfully update itt_ccl_domain_ from nullptr to domain
-      // If compare_exchange_weak fails, another thread already set it, which is fine
-      itt_ccl_domain_.compare_exchange_weak(expected, domain, std::memory_order_relaxed);
-      return domain;
-    }
-
-    return nullptr;
-  }
+  std::atomic<bool> trace_enabled_{false};
 };
 
 #endif  // ITT_ITT_COLLECTOR_H_
