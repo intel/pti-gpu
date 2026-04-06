@@ -1076,7 +1076,7 @@ int main(int argc, char *argv[]) {
     // append virtualenv lib folder to LD_LIBRARY_PATH
     virtual_env = virtual_env + "/lib";
     if (ld_library_path.empty()) {
-      ld_library_path = virtual_env;
+      ld_library_path = std::move(virtual_env);
     } else {
       ld_library_path = ld_library_path + ":" + virtual_env;
     }
