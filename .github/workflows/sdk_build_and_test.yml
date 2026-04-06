@@ -36,8 +36,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
-            os_id: "ubuntu-24.04.2025.3.0"
+          #
+          # 4/3/2026
+          # Client uses Kobuk build process for both Ubuntu-25.10 and Ubuntu-24.04,
+          # while PVC does not. Client packages are identical across versions.
+          # Using Ubuntu-25.10 for Client builds until next update.
+          #
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_25_10_ONEAPI_N }}
+            os_id: "ubuntu-25.10.2025.3.0"
             preset: linux-icpx-release
             tags: '["self-hosted", "Linux", "pti", "client", "BMG"]'
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}

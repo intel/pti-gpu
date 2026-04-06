@@ -1,39 +1,41 @@
 USE_BUILDKIT := 1
 
-REL_UBUNTU_22:= ubuntu-22-04
 REL_UBUNTU_24:= ubuntu-24-04
-REL_UBUNTU_25:= ubuntu-25-04
 #
-# TODO: 5/21/2025
-# Can't build redhat-9 nor rocky-8 for PVC, there are missing
-# libraries
+# Observation 4/2/26 is that SERVER is working with Ubuntu_25_10 container
+# But it is aimed at CLIENT
 #
+REL_UBUNTU_25_10:= ubuntu-25-10
 REL_RHEL:= redhat-10
 REL_SLES:= sles-15
 REL_ROCKY:= rocky-8
-OS_TARGETS:= ${REL_SLES} ${REL_UBUNTU_22} ${REL_UBUNTU_24} ${REL_UBUNTU_25} ${REL_ROCKY} ${REL_RHEL}
-.PHONY:${OS_TARGETS}
+SERVER_TARGETS:= ${REL_SLES} ${REL_UBUNTU_24} ${REL_ROCKY} ${REL_RHEL}
+CLIENT_TARGETS:= ${REL_UBUNTU_25_10}
+.PHONY:${SERVER_TARGETS} ${CLIENT_TARGETS}
 
 ONEAPI_VER=2025.3.0
 
-targets: ${OS_TARGETS}
-	@echo BUILT ${OS_TARGETS}
+targets: ${SERVER_TARGETS} ${CLIENT_TARGETS}
+	@echo BUILT ${SERVER_TARGETS} ${CLIENT_TARGETS}
 
-VER_UBUNTU_22:=06
+OS_TARGETS_MIN:=$(foreach os, ${SERVER_TARGETS} ${CLIENT_TARGETS} ,  min_os_${os})
+
+.PHONY: min_os_all
+min_os_all: ${OS_TARGETS_MIN}
+
 VER_UBUNTU_24:=06
-VER_UBUNTU_25:=06
+VER_UBUNTU_25_10:=06
 VER_REDHAT:=06
 VER_SLES:=06
 VER_ROCKY:=06
 define getOsVer
-	$(if $(filter $1, ${REL_UBUNTU_22}),${VER_UBUNTU_22},\
 	$(if $(filter $1, ${REL_UBUNTU_24}),${VER_UBUNTU_24},\
-	$(if $(filter $1, ${REL_UBUNTU_25}),${VER_UBUNTU_25},\
+	$(if $(filter $1, ${REL_UBUNTU_25_10}),${VER_UBUNTU_25_10},\
 	$(if $(filter $1, ${REL_RHEL}),${VER_REDHAT},\
 	$(if $(filter $1, ${REL_SLES}),${VER_SLES},\
 	$(if $(filter $1, ${REL_ROCKY}),${VER_ROCKY},\
 	$(error "Undefined target $1 in getOsVer function") \
-	))))))
+	)))))
 endef
 
 define ERROR_MESSAGE_PTI_CONTAINER
@@ -65,16 +67,13 @@ endif
 help:
 	@echo Possible invocations are
 	@echo PTI_CONTAINER_NAME=<NAME> PROXY='<http_proxy=X,https_proxy=Y>' make -f docker.mk sles-15
-	@echo PTI_CONTAINER_NAME=<NAME> PROXY='<http_proxy=X,https_proxy=Y>' make -f docker.mk redhat-9
-	@echo PTI_CONTAINER_NAME=<NAME> PROXY='<http_proxy=X,https_proxy=Y>' make -f docker.mk ubuntu-22-04
+	@echo PTI_CONTAINER_NAME=<NAME> PROXY='<http_proxy=X,https_proxy=Y>' make -f docker.mk redhat-10
 	@echo PTI_CONTAINER_NAME=<NAME> PROXY='<http_proxy=X,https_proxy=Y>' make -f docker.mk ubuntu-24-04
-	@echo PTI_CONTAINER_NAME=<NAME>  PROXY='<PROXY_SETTINGS>' make -f docker.mk 
+	@echo PTI_CONTAINER_NAME=<NAME> PROXY='<http_proxy=X,https_proxy=Y>' make -f docker.mk ubuntu-25-10
+	@echo PTI_CONTAINER_NAME=<NAME>  PROXY='<PROXY_SETTINGS>' make -f docker.mk
 
 
 PARSED_PROXY:=$(shell IFS=','; for i in  $${PROXY}; do echo -n " --build-arg " $$i; done)
-
-OS_TARGETS_MIN:=$(foreach os, ${OS_TARGETS},  min_os_${os})
-.PHONY: ${OS_TARGETS}
 
 # Rule to build the minimal OS image for each target.
 # This builds a Docker image using the min_os.Dockerfile for the given OS.
@@ -91,7 +90,7 @@ min_os_%:
 # Also prints proxy settings and tags the resulting image with version and oneAPI version.
 # This allows invocations like this one:
 #   PROXY='http_proxy=XX,https_proxy=YY' PTI_CONTAINER_NAME=pti_container make -f docker.mk  sles-15
-$(foreach os,$(OS_TARGETS),$(eval $(os): min_os_$(os) ;\
+$(foreach os,$(SERVER_TARGETS) $(CLIENT_TARGETS),$(eval $(os): min_os_$(os) ;\
 	@echo "Building $(os) from min_os_$(os)" ; \
 	echo "Proxy setting:" ${PARSED_PROXY}  ; \
 	DOCKER_BUILDKIT=${USE_BUILDKIT} docker build \

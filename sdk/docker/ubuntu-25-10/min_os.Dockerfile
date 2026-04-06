@@ -1,9 +1,9 @@
-# syntax=docker/dockerfile:1.3
+# syntax=docker/dockerfile:1.4
 
 # hadolint ignore=DL3007
 
-# This is ubuntu:22.04 / jammy
-FROM ubuntu:jammy
+# This is ubuntu:25.10
+FROM ubuntu:questing
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -23,17 +23,17 @@ RUN apt-get update -y && \
     vim \
     make \
     sudo \
-    python3.10 \
     g++ \
+    python3.13 \
     python3-pip \
-    python3.10-venv \
+    python3.13-venv \
     ca-certificates && \
     apt-get clean -y
 
-#
+
 # Setup the appropriate repos for oneAPI
 #
-RUN wget -O- --progress=dot:giga  https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
+RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
     gpg --dearmor | \
     tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null && \
     echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
@@ -42,10 +42,8 @@ RUN wget -O- --progress=dot:giga  https://apt.repos.intel.com/intel-gpg-keys/GPG
 #
 # Setup the appropriate repos for GPU
 #
-RUN wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
-    gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | \
-    tee /etc/apt/sources.list.d/intel-gpu-jammy.list
+RUN apt-get update && apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:kobuk-team/intel-graphics
 
 RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3 10
 
