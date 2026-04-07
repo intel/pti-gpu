@@ -10,10 +10,8 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-#include <atomic>
 #include <memory>
 
-#include "itt/itt_pti_view_export.h"
 #include "pti/pti.h"
 #include "pti/pti_callback.h"
 #include "pti/pti_metrics.h"
@@ -23,6 +21,11 @@
 #include "utils/platform_strings.h"
 #include "utils/utils.h"
 #include "xpti_adapter.h"
+
+#define INTEL_NO_MACRO_BODY
+#define INTEL_ITTNOTIFY_API_PRIVATE
+
+#include "itt/itt_pti_exports.h"
 
 namespace pti {
 
@@ -58,19 +61,8 @@ inline std::string GetPathToWindowsLibraryDirectory() {
 // if such were detected at the library load time
 void PtiSetXPTIEnvironmentDetails(bool is_foreign_subscriber, bool is_likely_unitrace_subscriber);
 
-// API implemented in PTI Core library
-// to pass cached ITT initialization from PTI Interface library to PTI Core library
-// Note: ITT+CCL support is only available on Linux
-#if defined(PTI_CCL_ITT_COMPILE)
-void PtiSetCachedIttInit(__itt_global* p, __itt_group_id init_groups);
-#endif  // PTI_CCL_ITT_COMPILE
-
 class PtiLibHandler {
  public:
-  static bool IsInitialized() {
-    return initialized_instance_.load(std::memory_order_acquire) != nullptr;
-  }
-
   static auto& Instance() {
     static PtiLibHandler instance{};
     return instance;
@@ -122,10 +114,6 @@ class PtiLibHandler {
   decltype(&ptiCallbackDomainTypeToString) ptiCallbackDomainTypeToString_ = nullptr;      // NOLINT
   decltype(&ptiCallbackPhaseTypeToString) ptiCallbackPhaseTypeToString_ = nullptr;        // NOLINT
   decltype(&PtiSetXPTIEnvironmentDetails) PtiSetXPTIEnvironmentDetails_ = nullptr;        // NOLINT
-  // ITT+CCL support is only available on Linux
-#if defined(PTI_CCL_ITT_COMPILE)
-  decltype(&PtiSetCachedIttInit) PtiSetCachedIttInit_ = nullptr;  // NOLINT
-#endif                                                            // PTI_CCL_ITT_COMPILE
 
   decltype(&ptiMetricsScopeEnable) ptiMetricsScopeEnable_ = nullptr;                    // NOLINT
   decltype(&ptiMetricsScopeConfigure) ptiMetricsScopeConfigure_ = nullptr;              // NOLINT
@@ -148,15 +136,12 @@ class PtiLibHandler {
   decltype(&ptiMetricsScopeGetMetricsMetadata) ptiMetricsScopeGetMetricsMetadata_ =
       nullptr;  // NOLINT
 
-  // ITT collector symbols - only available on Linux
-#if defined(PTI_CCL_ITT_COMPILE)
   decltype(&__itt_api_init) __itt_api_init_ = nullptr;                          // NOLINT
   decltype(&__itt_domain_create) __itt_domain_create_ = nullptr;                // NOLINT
   decltype(&__itt_task_begin) __itt_task_begin_ = nullptr;                      // NOLINT
   decltype(&__itt_task_end) __itt_task_end_ = nullptr;                          // NOLINT
   decltype(&__itt_string_handle_create) __itt_string_handle_create_ = nullptr;  // NOLINT
   decltype(&__itt_metadata_add) __itt_metadata_add_ = nullptr;                  // NOLINT
-#endif  // PTI_CCL_ITT_COMPILE
 
  private:
   inline void CommunicateForeignXPTISubscriber() {
@@ -170,28 +155,6 @@ class PtiLibHandler {
       SPDLOG_DEBUG("PtiSetXPTIEnvironmentDetails_ is not available in the loaded library.");
     }
   }
-
-  // ITT+CCL support is only available on Linux
-#if defined(PTI_CCL_ITT_COMPILE)
-  inline void CommunicateCachedIttInit() {
-    // Pass cached ITT initialization from adapter to PTI Core library right after it is loaded.
-    // This ensures itt_global is available before collector singleton is created.
-    __itt_global* p = nullptr;
-    __itt_group_id init_groups = __itt_group_none;
-    PtiGetCachedIttInitParams(&p, &init_groups);
-
-    if (PtiSetCachedIttInit_) {
-      if (p != nullptr) {
-        SPDLOG_DEBUG("Passing cached ITT init to libpti.so (p={})", static_cast<void*>(p));
-        PtiSetCachedIttInit_(p, init_groups);
-      } else {
-        SPDLOG_DEBUG("No cached ITT init available yet - will forward later when ITT initializes");
-      }
-    } else {
-      SPDLOG_DEBUG("PtiSetCachedIttInit_ is not available in the loaded library.");
-    }
-  }
-#endif  // PTI_CCL_ITT_COMPILE
 
   PtiLibHandler() {
     try {
@@ -212,8 +175,6 @@ class PtiLibHandler {
     } catch (const std::exception& e) {
       SPDLOG_ERROR("Unable to load {} because {}", strings::kPtiViewLib, e.what());
       pti_view_lib_ = nullptr;
-      // Mark as initialized even on failure
-      initialized_instance_.store(this, std::memory_order_release);
       return;
     }
 #define PTI_VIEW_GET_SYMBOL(X) X##_ = pti_view_lib_->GetSymbol<decltype(&X)>(#X)  // NOLINT
@@ -258,10 +219,6 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiCallbackPhaseTypeToString);
 
     PTI_VIEW_GET_SYMBOL(PtiSetXPTIEnvironmentDetails);
-    // ITT+CCL support is only available on Linux
-#if defined(PTI_CCL_ITT_COMPILE)
-    PTI_VIEW_GET_SYMBOL(PtiSetCachedIttInit);
-#endif  // PTI_CCL_ITT_COMPILE
 
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeEnable);
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeConfigure);
@@ -277,8 +234,6 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeQueryMetricsBufferSize);
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeGetMetricsMetadata);
 
-    // ITT collector symbols - only available on Linux
-#if defined(PTI_CCL_ITT_COMPILE)
 #define PTI_VIEW_GET_ITT_SYMBOL(X) X##_ = pti_view_lib_->GetSymbol<decltype(&X)>(#X "_impl")
     PTI_VIEW_GET_ITT_SYMBOL(__itt_api_init);
     PTI_VIEW_GET_ITT_SYMBOL(__itt_task_begin);
@@ -286,21 +241,10 @@ class PtiLibHandler {
     PTI_VIEW_GET_ITT_SYMBOL(__itt_string_handle_create);
     PTI_VIEW_GET_ITT_SYMBOL(__itt_metadata_add);
     PTI_VIEW_GET_ITT_SYMBOL(__itt_domain_create);
-#undef PTI_VIEW_GET_ITT_SYMBOL
-#endif  // PTI_CCL_ITT_COMPILE
 
 #undef PTI_VIEW_GET_SYMBOL
     CommunicateForeignXPTISubscriber();
-    // ITT+CCL support is only available on Linux
-#if defined(PTI_CCL_ITT_COMPILE)
-    CommunicateCachedIttInit();
-#endif  // PTI_CCL_ITT_COMPILE
-
-    // Mark as fully initialized at the very end
-    initialized_instance_.store(this, std::memory_order_release);
   }
-
-  static inline std::atomic<PtiLibHandler*> initialized_instance_{nullptr};
   std::unique_ptr<LibraryLoader> pti_view_lib_ = nullptr;
 };
 }  // namespace pti

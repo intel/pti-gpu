@@ -14,7 +14,6 @@
 #include <string>
 #include <vector>
 
-#include "itt_common_helpers.h"
 #include "utils.h"
 
 // Static method definitions
@@ -46,52 +45,25 @@ std::string IttCollector::DumpTaskDescriptor() noexcept {
   return result;
 }
 
-static std::atomic<__itt_global *> itt_global{nullptr};
-
-void IttCollector::ScanExistingDomainsAndFindCclDomain() {
-  __itt_global *global_ptr = itt_global.load(std::memory_order_acquire);
-  if (global_ptr == nullptr) {
-    SPDLOG_DEBUG("{}(): itt_global is NULL, no domains to scan", __FUNCTION__);
-    return;
-  }
-
-  SPDLOG_DEBUG("{}(): Scanning existing domains in itt_global", __FUNCTION__);
-
-  __itt_mutex_lock(&(global_ptr->mutex));
-  for (__itt_domain *d = global_ptr->domain_list; d != nullptr; d = d->next) {
-    // This will cache the domain if it's the CCL domain
-    GetCclDomain(d);
-    if (d->nameA != nullptr) {
-      SPDLOG_DEBUG("{}(): Found domain '{}'", __FUNCTION__, d->nameA);
-    }
-  }
-  __itt_mutex_unlock(&(global_ptr->mutex));
-
-  [[maybe_unused]] const __itt_domain *cached = itt_ccl_domain_.load(std::memory_order_relaxed);
-  SPDLOG_DEBUG("{}(): CCL domain {}", __FUNCTION__, cached ? "found and cached" : "not found");
-}
-
+static __itt_global *itt_global = nullptr;
 ITT_EXTERN_C void ITTAPI __itt_api_init_impl(__itt_global *p,
                                              [[maybe_unused]] __itt_group_id init_groups) {
   SPDLOG_DEBUG("{}() - Collector: {}", __FUNCTION__, p ? "non-NULL" : "NULL");
   if (p != nullptr) {
-    itt_global.store(p, std::memory_order_release);
-    // Scan for domains that may have been created before collector initialized
-    IttCollector::Instance().ScanExistingDomainsAndFindCclDomain();
+    itt_global = p;
   }
 }
 
 [[maybe_unused]] static std::string __itt_domain_dump() {
-  __itt_global *global_ptr = itt_global.load(std::memory_order_acquire);
-  if (global_ptr == nullptr) {
+  if (itt_global == nullptr) {
     return "itt_global is NULL";
   }
 
   std::string result = "\nDomain list:\n";
-  __itt_mutex_lock(&(global_ptr->mutex));
+  __itt_mutex_lock(&(itt_global->mutex));
 
   int count = 0;
-  for (__itt_domain *h = global_ptr->domain_list; h != nullptr; h = h->next) {
+  for (__itt_domain *h = itt_global->domain_list; h != nullptr; h = h->next) {
     result += "  [" + std::to_string(count) + "] " + (h->nameA ? h->nameA : "NULL") +
               " <flag: " + std::to_string(h->flags) + ">\n";
     count++;
@@ -103,44 +75,42 @@ ITT_EXTERN_C void ITTAPI __itt_api_init_impl(__itt_global *p,
     result += "  Total domains: " + std::to_string(count);
   }
 
-  __itt_mutex_unlock(&(global_ptr->mutex));
+  __itt_mutex_unlock(&(itt_global->mutex));
   return result;
 }
 
 ITT_EXTERN_C __itt_domain *ITTAPI __itt_domain_create_impl(const char *name) {
   SPDLOG_DEBUG("{}() Collector - name: {}", __FUNCTION__, name ? name : "NULL");
-  __itt_global *global_ptr = itt_global.load(std::memory_order_acquire);
-  if (global_ptr == nullptr || name == nullptr) {
-    return nullptr;
+  if (itt_global == NULL || name == nullptr) {
+    return NULL;
   }
 
-  __itt_domain *h_tail = nullptr, *h = nullptr;
-  __itt_mutex_lock(&(global_ptr->mutex));
-  for (h_tail = nullptr, h = global_ptr->domain_list; h != nullptr; h_tail = h, h = h->next) {
-    if (h->nameA != nullptr && !__itt_fstrcmp(h->nameA, name)) break;
+  __itt_domain *h_tail = NULL, *h = NULL;
+
+  __itt_mutex_lock(&(itt_global->mutex));
+  for (h_tail = NULL, h = itt_global->domain_list; h != NULL; h_tail = h, h = h->next) {
+    if (h->nameA != NULL && !__itt_fstrcmp(h->nameA, name)) break;
   }
-  if (h == nullptr) {
-    NEW_DOMAIN_A(global_ptr, h, h_tail, name);
-    // Only enable CCL domain if tracing is currently enabled
-    bool is_ccl_domain = IttCollector::Instance().GetCclDomain(h) == h;
-    h->flags = is_ccl_domain && IttCollector::Instance().IsTraceEnabled() ? 1 : 0;
+  if (h == NULL) {
+    NEW_DOMAIN_A(itt_global, h, h_tail, name);
+    // Turn off all domains except oneCCL:API
+    h->flags = IttCollector::Instance().GetCclDomain(h) == h;
   }
-  __itt_mutex_unlock(&(global_ptr->mutex));
+  __itt_mutex_unlock(&(itt_global->mutex));
 
   return h;
 }
 
 [[maybe_unused]] static std::string __itt_string_handle_dump() {
-  __itt_global *global_ptr = itt_global.load(std::memory_order_acquire);
-  if (global_ptr == nullptr) {
+  if (itt_global == nullptr) {
     return "itt_global is NULL";
   }
 
   std::string result = "\nString handle list:\n";
-  __itt_mutex_lock(&(global_ptr->mutex));
+  __itt_mutex_lock(&(itt_global->mutex));
 
   int count = 0;
-  for (__itt_string_handle *h = global_ptr->string_list; h != nullptr; h = h->next) {
+  for (__itt_string_handle *h = itt_global->string_list; h != nullptr; h = h->next) {
     result += "  [" + std::to_string(count) + "] " + (h->strA ? h->strA : "NULL") + "\n";
     count++;
   }
@@ -151,20 +121,28 @@ ITT_EXTERN_C __itt_domain *ITTAPI __itt_domain_create_impl(const char *name) {
     result += "  Total string handles: " + std::to_string(count);
   }
 
-  __itt_mutex_unlock(&(global_ptr->mutex));
+  __itt_mutex_unlock(&(itt_global->mutex));
   return result;
 }
 
 ITT_EXTERN_C __itt_string_handle *ITTAPI __itt_string_handle_create_impl(const char *name) {
   SPDLOG_DEBUG("{}() - name: {}", __FUNCTION__, name ? name : "NULL");
 
-  __itt_global *global_ptr = itt_global.load(std::memory_order_acquire);
-  if (global_ptr == nullptr) {
+  if (itt_global == nullptr) {
     SPDLOG_WARN("{}(): itt_global is NULL", __FUNCTION__);
     return nullptr;
   }
 
-  __itt_string_handle *h = itt_helpers::FindOrCreateStringHandle(global_ptr, name);
+  __itt_string_handle *h_tail = nullptr, *h = nullptr;
+
+  __itt_mutex_lock(&(itt_global->mutex));
+  for (h_tail = nullptr, h = itt_global->string_list; h != nullptr; h_tail = h, h = h->next) {
+    if (h->strA != nullptr && !__itt_fstrcmp(h->strA, name)) break;
+  }
+  if (h == nullptr) {
+    NEW_STRING_HANDLE_A(itt_global, h, h_tail, name);
+  }
+  __itt_mutex_unlock(&(itt_global->mutex));
 
   SPDLOG_DEBUG("{}() {}", __FUNCTION__, __itt_string_handle_dump());
   return h;
@@ -240,72 +218,26 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add_impl(const __itt_domain *domain,
 
 void IttEnableCclDomain(void) {
   SPDLOG_DEBUG("{}() Collector", __FUNCTION__);
-  __itt_global *global_ptr = itt_global.load(std::memory_order_acquire);
-  if (global_ptr == nullptr) {
+  if (itt_global == nullptr) {
     return;
   }
-
-  // Scan for CCL domain in case it was created before collector initialized
-  // or if this is called before __itt_api_init completed
-  IttCollector::Instance().ScanExistingDomainsAndFindCclDomain();
-
-  __itt_mutex_lock(&(global_ptr->mutex));
+  __itt_mutex_lock(&(itt_global->mutex));
   auto cclDomain = IttCollector::Instance().GetCclDomain(nullptr);
   if (cclDomain != nullptr) {
-    SPDLOG_DEBUG("{}() Enabling domain: {}", __FUNCTION__, cclDomain->nameA);
     const_cast<__itt_domain *>(cclDomain)->flags = 1;
-  } else {
-    SPDLOG_DEBUG("{}() CCL domain not found", __FUNCTION__);
   }
-  __itt_mutex_unlock(&(global_ptr->mutex));
+  __itt_mutex_unlock(&(itt_global->mutex));
 }
 
 void IttDisableCclDomain(void) {
   SPDLOG_DEBUG("{}() Collector", __FUNCTION__);
-  __itt_global *global_ptr = itt_global.load(std::memory_order_acquire);
-  if (global_ptr == nullptr) {
+  if (itt_global == nullptr) {
     return;
   }
-  __itt_mutex_lock(&(global_ptr->mutex));
+  __itt_mutex_lock(&(itt_global->mutex));
   auto cclDomain = IttCollector::Instance().GetCclDomain(nullptr);
   if (cclDomain != nullptr) {
     const_cast<__itt_domain *>(cclDomain)->flags = 0;
   }
-  __itt_mutex_unlock(&(global_ptr->mutex));
+  __itt_mutex_unlock(&(itt_global->mutex));
 }
-
-// clang-format off
-extern "C" {
-  void
-#if (defined(_WIN32) || defined(_WIN64))
-  __declspec(dllexport)
-#else
-  __attribute__((visibility("default")))
-#endif
-  PtiSetCachedIttInit(__itt_global* p, [[maybe_unused]] __itt_group_id init_groups) {
-    SPDLOG_DEBUG("{}() - p={}, init_groups={}", __FUNCTION__,
-                 static_cast<void*>(p), static_cast<int>(init_groups));
-
-    // Defensive: Handle NULL case (ITT not initialized yet)
-    if (p == nullptr) {
-      SPDLOG_DEBUG("{}() - NULL itt_global, ITT not initialized yet", __FUNCTION__);
-      return;  // Will be called again later via __itt_api_init_impl
-    }
-
-    // Defensive: Avoid double-initialization
-    __itt_global* current = itt_global.load(std::memory_order_acquire);
-    if (current != nullptr && current != p) {
-      SPDLOG_WARN("{}() - itt_global already set to different value!", __FUNCTION__);
-      return;
-    }
-
-    if (current == nullptr) {
-      SPDLOG_DEBUG("{}() - Setting itt_global and scanning domains", __FUNCTION__);
-      itt_global.store(p, std::memory_order_release);
-      IttCollector::Instance().ScanExistingDomainsAndFindCclDomain();
-    } else {
-      SPDLOG_DEBUG("{}() - itt_global already set, skipping", __FUNCTION__);
-    }
-  }
-}
-// clang-format on
