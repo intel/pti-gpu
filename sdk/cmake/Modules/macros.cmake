@@ -135,9 +135,9 @@ macro(GetSpdlog)
 
     # Prevent fmt from using exceptions because it could throw while logging.
     # Disable warning in fmt due to our usage of EHsc.
-    target_compile_definitions(fmt PUBLIC FMT_EXCEPTIONS=0)
+    target_compile_definitions(fmt PUBLIC FMT_USE_EXCEPTIONS=0)
     target_compile_options(fmt PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/wd6285 $<$<CONFIG:Release>:/wd4702 /wd6385>>)
-    target_compile_definitions(fmt-header-only INTERFACE FMT_EXCEPTIONS=0)
+    target_compile_definitions(fmt-header-only INTERFACE FMT_USE_EXCEPTIONS=0)
     target_compile_options(fmt-header-only INTERFACE $<$<CXX_COMPILER_ID:MSVC>:/wd6285 $<$<CONFIG:Release>:/wd4702 /wd6385>>)
 
     # spdlog sets the /MP flag on MSVC which causes a warning on icx.
