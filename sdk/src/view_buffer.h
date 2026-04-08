@@ -51,7 +51,8 @@ struct ViewRecordBuffer {
     }
     return *this;
   }
-  virtual ~ViewRecordBuffer() = default;
+
+  ~ViewRecordBuffer() = default;
 
   inline void Refresh(UnderlyingType* buffer, SizeType size) {
     buf_ = buffer;
@@ -195,7 +196,7 @@ struct ViewRecordBufferQueue {
     buffer_depth_ = depth;
   }
 
-  virtual ~ViewRecordBufferQueue() = default;
+  ~ViewRecordBufferQueue() = default;
 
  private:
   std::queue<T> buffer_queue_;
@@ -225,7 +226,7 @@ struct GuardedUnorderedMap {
   GuardedUnorderedMap& operator=(GuardedUnorderedMap&& other) = delete;
   GuardedUnorderedMap(const GuardedUnorderedMap&) = delete;
   GuardedUnorderedMap(GuardedUnorderedMap&& other) = delete;
-  virtual ~GuardedUnorderedMap() = default;
+  ~GuardedUnorderedMap() = default;
 
   /**
    * \internal

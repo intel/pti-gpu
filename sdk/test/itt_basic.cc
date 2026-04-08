@@ -80,8 +80,8 @@ void ProvideBuffer(unsigned char **buf, std::size_t *buf_size) {
   *buf_size = 1000;
 }
 
-static constexpr int THREE_RECORDS_EXPECTED = 3;
-static int recordCount = 0;
+static constexpr int kThreeRecordsExpected = 3;
+static int record_count = 0;
 
 void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf_size) {
   if (!buf || !valid_buf_size || !buf_size) {
@@ -94,15 +94,15 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
 
   pti_view_record_base *ptr = nullptr;
 
-  for (recordCount = 0;; recordCount++) {
+  for (record_count = 0;; record_count++) {
     auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
     if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
-      if (recordCount != THREE_RECORDS_EXPECTED) {
-        std::cerr << "FAIL: Expected " << THREE_RECORDS_EXPECTED << " records, but received "
-                  << recordCount << '\n';
+      if (record_count != kThreeRecordsExpected) {
+        std::cerr << "FAIL: Expected " << kThreeRecordsExpected << " records, but received "
+                  << record_count << '\n';
       } else {
-        std::cout << "SUCCESS: Reached End of buffer after " << recordCount << '/'
-                  << THREE_RECORDS_EXPECTED << " records " << '\n';
+        std::cout << "SUCCESS: Reached End of buffer after " << record_count << '/'
+                  << kThreeRecordsExpected << " records " << '\n';
       }
       break;
     }
@@ -129,6 +129,7 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cerr << std::hex;
         std::cerr << "This shouldn't happen " << ptr->_view_kind << '\n';
+        std::cerr << std::dec;
         break;
       }
     }
@@ -175,5 +176,5 @@ int main() {
 
   std::cout << "Size of pti_view_record_comms: " << sizeof(pti_view_record_comms) << '\n';
 
-  return recordCount == THREE_RECORDS_EXPECTED ? 0 : 1;
+  return record_count == kThreeRecordsExpected ? 0 : 1;
 }

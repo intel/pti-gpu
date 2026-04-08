@@ -1554,7 +1554,7 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeMultiThreadedDifferentKernels) {
       scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1, kMetricNames.data(), metric_count);
 
   if (config_result != PTI_SUCCESS) {
-    std::cout << "Configuration failed with error: " << config_result
+    std::cerr << "Configuration failed with error: " << config_result
               << ", skipping multi-threaded test" << std::endl;
     EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
     return;
@@ -1569,6 +1569,9 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeMultiThreadedDifferentKernels) {
   // Populate metadata
   EXPECT_EQ(ptiMetricsScopeGetMetricsMetadata(scope_handle, &metadata), PTI_SUCCESS);
 
+  const auto default_precision = std::cout.precision();
+  const auto default_fill = std::cout.fill();
+  const auto default_flags = std::cout.flags();
   std::cout << "Metrics Metadata set to " << metadata._struct_size << " bytes\n\n";
 
   std::cout << "Metadata for all records:\n";
@@ -2197,6 +2200,10 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeMultiThreadedDifferentKernels) {
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
 
   std::cout << "\n=== Multi-threaded metrics scope test completed successfully ===" << std::endl;
+  std::cout << std::defaultfloat;
+  std::cout.precision(default_precision);
+  std::cout.flags(default_flags);
+  std::cout.fill(default_fill);
 }
 
 TEST_F(GemmMetricsScopeFixtureTest, ScopeWithOverheadTracking) {

@@ -35,6 +35,12 @@ std::mutex g_level_zero_api_mutex;
 
 // Complete handle type
 struct _pti_scope_collection_handle_t {
+  _pti_scope_collection_handle_t() = default;
+  _pti_scope_collection_handle_t(const _pti_scope_collection_handle_t&) = delete;
+  _pti_scope_collection_handle_t& operator=(const _pti_scope_collection_handle_t&) = delete;
+  _pti_scope_collection_handle_t(_pti_scope_collection_handle_t&&) = delete;
+  _pti_scope_collection_handle_t& operator=(_pti_scope_collection_handle_t&&) = delete;
+
   pti_device_handle_t device_handle_ = nullptr;
   const char* collected_metrics_group_name_ = nullptr;
   pti_metrics_group_handle_t metrics_group_handle_ = nullptr;

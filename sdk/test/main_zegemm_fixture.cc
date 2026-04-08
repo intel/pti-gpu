@@ -1043,12 +1043,12 @@ TEST_F(MainZeFixtureTest, AllSynchronizationRelated) {
   // capture_records = true;
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   EXPECT_EQ(RunGemm(), 0);
-  bool with_polling = false;
-  bool sycl = false;
-  bool zecalls = true;
-  bool kernel = true;
-  bool add_sycl = false;
-  bool synch = true;
+  const bool with_polling = false;
+  const bool sycl = false;
+  const bool zecalls = true;
+  const bool kernel = true;
+  const bool add_sycl = false;
+  const bool synch = true;
   EXPECT_EQ(RunGemm(with_polling, sycl, zecalls, kernel, add_sycl, synch),
             0);  // with_polling, sycl, zecalls, kernel and sych enabled
 
@@ -1085,12 +1085,8 @@ TEST_F(MainZeFixtureTest, AllSynchronizationRelated) {
   EXPECT_EQ(synchronization_record_fence_exec_seen, true);
   EXPECT_EQ(synchronization_record_event_seen, true);
   EXPECT_EQ(synchronization_record_cqueue_seen, true);
-  // Since 0.15.1+ ExternalCorrelation records generated for both Sycl and Level-Zero runtime
-  // these checks are redundant but they makes things explicit
-  if (zecalls) {
-    EXPECT_EQ(external_corrid_special_record_seen, true);
-  }
-  if (sycl && !zecalls) {
+  // Since 0.15.1+ ExternalCorrelation records generated for both Sycl and Level-Zero runtime.
+  if (sycl || zecalls) {
     EXPECT_EQ(external_corrid_special_record_seen, true);
   }
 }

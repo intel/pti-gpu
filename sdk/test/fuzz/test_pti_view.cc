@@ -1,3 +1,4 @@
+#include <pti/pti.h>
 #include <pti/pti_view.h>
 #include <stddef.h>
 
@@ -29,17 +30,20 @@ ATTRIBUTE_NO_SANITIZE_UNDEFINED inline T ConvertByteArray(const unsigned char* b
 extern "C" {
 ATTRIBUTE_NO_SANITIZE_UNDEFINED
 int LLVMFuzzerTestOneInput(unsigned char* data, size_t size) {
+  // TODO(PTI): Add more fuzzing and figure out how to deal with function output, for now, not
+  // checking the output is valid.
+  [[maybe_unused]] pti_result result = PTI_SUCCESS;
   if (size >= sizeof(pti_view_kind)) {
     auto view_type = ConvertByteArray<pti_view_kind>(data);
-    ptiViewEnable(view_type);
+    result = ptiViewEnable(view_type);
   }
 
   pti_view_record_base* record = nullptr;
-  ptiViewGetNextRecord(data, size, &record);
+  result = ptiViewGetNextRecord(data, size, &record);
 
   if (size >= sizeof(pti_view_kind)) {
     auto view_type = ConvertByteArray<pti_view_kind>(data);
-    ptiViewDisable(view_type);
+    result = ptiViewDisable(view_type);
   }
   return 0;
 }

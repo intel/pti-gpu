@@ -645,6 +645,8 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << std::endl;
+
+    const auto default_precision = std::cout.precision();
     std::cout << "=== RESULTS ===" << std::endl;
     std::cout << std::fixed << std::setprecision(2);
 
@@ -665,6 +667,7 @@ int main(int argc, char* argv[]) {
     if (g_devices.size() >= 2) {
       std::cout << "Multi-threaded profiling overhead:  " << multi_overhead_pct << "%" << std::endl;
     }
+    std::cout << std::setprecision(default_precision) << std::defaultfloat;
 
   } catch (const std::exception& e) {
     std::cerr << "ERROR: " << e.what() << std::endl;

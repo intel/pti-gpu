@@ -15,17 +15,17 @@ struct ViewsBufferable {
   std::atomic<bool> synch_enabled = false;      // is synchronization viewkind enabled by user.
   std::atomic<bool> api_calls_enabled = false;  // are driver api calls enabled by user.
 
-  ViewsBufferable() : synch_enabled(false), api_calls_enabled(false) {}
+  ViewsBufferable() = default;
 
   // to copy atomics
-  ViewsBufferable(ViewsBufferable& other)
+  ViewsBufferable(const ViewsBufferable& other)
       : synch_enabled(other.synch_enabled.load()),
         api_calls_enabled(other.api_calls_enabled.load()) {}
 
   ViewsBufferable& operator=(const ViewsBufferable&) = delete;  // Not used.
   ViewsBufferable(ViewsBufferable&&) = delete;
-  ViewsBufferable& operator=(const ViewsBufferable&&) = delete;
-  virtual ~ViewsBufferable() = default;
+  ViewsBufferable& operator=(ViewsBufferable&&) = delete;
+  ~ViewsBufferable() = default;
 };
 
 struct CollectorOptions {

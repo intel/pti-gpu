@@ -109,12 +109,6 @@ class PtiMetricsScopeBuffer {
     records_.reserve(64);
   }
 
-  ~PtiMetricsScopeBuffer() = default;
-
-  // Delete copy constructor and assignment operator
-  PtiMetricsScopeBuffer(const PtiMetricsScopeBuffer&) = delete;
-  PtiMetricsScopeBuffer& operator=(const PtiMetricsScopeBuffer&) = delete;
-
   // PtiMetricsScopeBuffer state management
   uint8_t* GetRawBuffer() const { return raw_buffer_.get(); }
   size_t GetUsedSize() const { return used_size_; }
