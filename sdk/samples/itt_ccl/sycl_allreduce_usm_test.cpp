@@ -17,10 +17,19 @@ using namespace sycl;
 #include <cstring>
 #include <fstream>
 #include <string_view>
+#include <vector>
+#include <mutex>
 #include "pti_filesystem.h"
 
 #include "pti/pti_view.h"
 #include "samples_utils.h"
+
+// Global vector to store communication records
+std::vector<pti_view_record_comms> comms_vector;
+std::mutex buffer_mutex;
+
+// A lower bound of records to expect
+constexpr size_t EXPECTED_COMMS_RECORDS = 2;
 
 void StartTracing(){
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_COMMUNICATION));
@@ -42,45 +51,71 @@ void ProvideBuffer(unsigned char **buf, std::size_t *buf_size) {
 void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf_size) {
   if (!buf || !valid_buf_size || !buf_size) {
     std::cerr << "Received empty buffer" << '\n';
-    if (valid_buf_size) {
+    if (buf) {
       samples_utils::AlignedDealloc(buf);
     }
     return;
   }
+
+  std::lock_guard<std::mutex> lock(buffer_mutex);
+
   pti_view_record_base *ptr = nullptr;
-  while (true) {
-    auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
-    if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
-      std::cout << "Reached End of buffer" << '\n';
-      break;
-    }
-    if (buf_status != pti_result::PTI_SUCCESS) {
-      std::cerr << "Found Error Parsing Records from PTI" << '\n';
+  pti_result result = pti_result::PTI_SUCCESS;
+  bool has_error = false;
+
+  // Collect all records in the order they appear in the buffer
+  while (pti_result::PTI_STATUS_END_OF_BUFFER !=
+         (result = ptiViewGetNextRecord(buf, valid_buf_size, &ptr))) {
+    if (result != pti_result::PTI_SUCCESS) {
+      std::cerr << "Error retrieving the next record: " << result << std::endl;
+      has_error = true;
       break;
     }
     switch (ptr->_view_kind) {
       case pti_view_kind::PTI_VIEW_INVALID: {
-        std::cout << "Found Invalid Record" << '\n';
-        break;
+         std::cout << "Found Invalid Record" << '\n';
+         has_error = true;
+         break;
       }
       case pti_view_kind::PTI_VIEW_COMMUNICATION: {
-        std::cout << "---------------------------------------------------"
-                     "-----------------------------"
-                  << '\n';
-        std::cout << "Found ITT Record" << '\n';
-        samples_utils::DumpRecord(reinterpret_cast<pti_view_record_comms *>(ptr));
+        // Capture the record into the vector
+        comms_vector.push_back(*reinterpret_cast<pti_view_record_comms *>(ptr));
         break;
       }
       default: {
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
                   << '\n';
-        std::cerr << "This shouldn't happen " << ptr->_view_kind << '\n';
+        std::cerr << "Unexpected record type: " << ptr->_view_kind << '\n';
+        has_error = true;
         break;
       }
     }
+    if (has_error) break;
   }
+
+  // Always deallocate buffer, even on error
   samples_utils::AlignedDealloc(buf);
+}
+
+void DumpCollectedRecords() {
+  std::lock_guard<std::mutex> lock(buffer_mutex);
+
+  std::cout << "\n=================================================\n";
+  std::cout << "DEBUG: Dumping collected communication records\n";
+  std::cout << "Total records collected: " << comms_vector.size() << "\n";
+  std::cout << "=================================================\n";
+
+  for (size_t i = 0; i < comms_vector.size(); ++i) {
+    std::cout << "\nRecord #" << (i + 1) << ":" << "\n";
+    std::cout << "---------------------------------------------------\n";
+    samples_utils::DumpRecord(&comms_vector[i]);
+  }
+
+  if (comms_vector.empty()) {
+    std::cout << "No communication records were collected.\n";
+  }
+  std::cout << "=================================================\n\n";
 }
 #endif
 
@@ -618,16 +653,16 @@ int main(int argc, char *argv[]) {
 
 #if defined(USE_PTI_VIEW)
     std::string itt_lib_path = samples_utils::GetEnv("INTEL_LIBITTNOTIFY64");
-    if (itt_lib_path.empty()) { 
-        std::cerr << "Warning: INTEL_LIBITTNOTIFY64 environment variable not set." << std::endl; 
-        std::cerr << "Warning: ITT collector inactive." << std::endl; 
+    if (itt_lib_path.empty()) {
+        std::cerr << "Warning: INTEL_LIBITTNOTIFY64 environment variable not set." << std::endl;
+        std::cerr << "Warning: ITT collector inactive." << std::endl;
     } else if (!pti::utils::filesystem::exists(itt_lib_path)) {
             std::cerr << "Warning: ITT library defined in INTEL_LIBITTNOTIFY64 not found at: " << itt_lib_path << " ITT collector inactive." << std::endl;
-            std::cerr << "Warning: ITT collector inactive." << std::endl; 
+            std::cerr << "Warning: ITT collector inactive." << std::endl;
     } else {
             std::cout << "Using ITT library: " << itt_lib_path << std::endl;
     }
-    
+
     PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
     StartTracing();
 #endif
@@ -771,6 +806,29 @@ int main(int argc, char *argv[]) {
     // PTI Tracing finalization
     StopTracing();
     PTI_CHECK_SUCCESS(ptiFlushAllViews());
-#endif
+    DumpCollectedRecords();
+
+    // Verify that every record in comms_vector has valid timestamps
+    for (auto it = comms_vector.begin(); it != comms_vector.end(); ++it) {
+        if (it->_end_timestamp <= it->_start_timestamp) {
+            auto record_index = std::distance(comms_vector.begin(), it);
+            std::cerr << "ERROR: Record " << record_index << " has invalid timestamps: "
+                      << "end (" << it->_end_timestamp << ") <= start ("
+                      << it->_start_timestamp << ")" << std::endl;
+            return -1;
+        }
+    }
+
+    // Verify we have collected records. We cannot fix it
+    // because depending on the mpiexec invocation this may change
+    if (comms_vector.size() <  EXPECTED_COMMS_RECORDS) {
+        std::cerr << "ERROR: Expected at least " << EXPECTED_COMMS_RECORDS
+                  << " records, but collected " << comms_vector.size() << std::endl;
+        return -1;
+    }
+
     return 0;
+#else
+    return 0;
+#endif
 }

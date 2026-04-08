@@ -8,6 +8,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdio>
 #include <stack>
@@ -15,6 +16,12 @@
 #include <vector>
 
 #include "utils.h"
+
+// String constants for specific handle identification
+static constexpr const char *kSendSizeString = "send_size";
+static std::atomic<__itt_string_handle *> send_size_handle{nullptr};
+static constexpr const char *kCommIdString = "comm_id";
+static std::atomic<__itt_string_handle *> comm_id_handle{nullptr};
 
 // Static method definitions
 std::string IttCollector::DumpTaskDescriptor() noexcept {
@@ -36,9 +43,9 @@ std::string IttCollector::DumpTaskDescriptor() noexcept {
   for (size_t i = 0; i < elements.size(); ++i) {
     const auto &desc = elements[elements.size() - 1 - i];
     result += "  [" + std::to_string(i) + "] " +
-              (desc.domain && desc.domain->nameA ? desc.domain->nameA : "NULL") +
-              "::" + (desc.name && desc.name->strA ? desc.name->strA : "NULL") +
-              " start_time: " + std::to_string(desc.start_time) + "\n";
+              (desc.domain_ && desc.domain_->nameA ? desc.domain_->nameA : "NULL") +
+              "::" + (desc.name_ && desc.name_->strA ? desc.name_->strA : "NULL") +
+              " start_time: " + std::to_string(desc.start_time_) + "\n";
   }
 
   result += "  Total task descriptors: " + std::to_string(elements.size()) + "\n";
@@ -141,6 +148,15 @@ ITT_EXTERN_C __itt_string_handle *ITTAPI __itt_string_handle_create_impl(const c
   }
   if (h == nullptr) {
     NEW_STRING_HANDLE_A(itt_global, h, h_tail, name);
+
+    // Capture pointer address for specific strings
+    if (name != nullptr) {
+      if (!__itt_fstrcmp(name, kSendSizeString)) {
+        send_size_handle.store(h);
+      } else if (!__itt_fstrcmp(name, kCommIdString)) {
+        comm_id_handle.store(h);
+      }
+    }
   }
   __itt_mutex_unlock(&(itt_global->mutex));
 
@@ -186,8 +202,8 @@ ITT_EXTERN_C void ITTAPI __itt_task_end_impl(const __itt_domain *domain) {
   IttCollector::task_desc_.pop();
 
   SPDLOG_DEBUG("{}() line {} - {}::{}, start: {}, end: {}, metadata_size: {:#x}", __FUNCTION__,
-               __LINE__, task.domain ? task.domain->nameA : "NULL",
-               task.name ? task.name->strA : "NULL", task.start_time, end, task.metadata_size);
+               __LINE__, task.domain_ ? task.domain_->nameA : "NULL",
+               task.name_ ? task.name_->strA : "NULL", task.start_time_, end, task.metadata_size_);
 
   IttCollector::Instance().CallbackUser(task, end);
 }
@@ -208,9 +224,32 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add_impl(const __itt_domain *domain,
                domain ? domain->nameA : "NULL", key ? key->strA : "NULL",
                *static_cast<uint64_t *>(data));
 
-  if (!IttCollector::task_desc_.empty() && IttCollector::task_desc_.top().domain == domain) {
+  if (!IttCollector::task_desc_.empty() && IttCollector::task_desc_.top().domain_ == domain) {
     SPDLOG_DEBUG("{}() Collector - FOUND!!", __FUNCTION__);
-    IttCollector::task_desc_.top().metadata_size = *static_cast<uint64_t *>(data);
+
+    // Helper lambda to check and capture string handles
+    auto check_and_capture = [&](auto &handle, const char *target_string) -> bool {
+      __itt_string_handle *current_handle = handle.load();
+      if (current_handle == key) return true;  // Fast path
+      if (key == nullptr) return false;
+      if (current_handle == nullptr && key->strA != nullptr &&
+          !__itt_fstrcmp(key->strA, target_string)) {
+        // Attempt atomic capture - use compare_exchange to avoid races
+        __itt_string_handle *expected = nullptr;
+        if (handle.compare_exchange_strong(expected, key)) {
+          return true;  // Successfully captured
+        }
+        // Another thread captured it, check if it matches our key
+        return handle.load() == key;
+      }
+      return false;
+    };
+
+    if (check_and_capture(send_size_handle, kSendSizeString)) {
+      IttCollector::task_desc_.top().metadata_size_ = *static_cast<uint64_t *>(data);
+    } else if (check_and_capture(comm_id_handle, kCommIdString)) {
+      IttCollector::task_desc_.top().communicator_id_ = *static_cast<uint64_t *>(data);
+    }
     return;
   }
   SPDLOG_DEBUG("{}() Collector - NOT FOUND!!", __FUNCTION__);

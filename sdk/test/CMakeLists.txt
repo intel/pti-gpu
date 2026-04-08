@@ -881,7 +881,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
       add_test(NAME sycl_allreduce_usm_test
               COMMAND ${MPIEXEC_EXECUTABLE} -n 2 $<TARGET_FILE:sycl_allreduce_usm_test> gpu device)
       set_tests_properties(sycl_allreduce_usm_test PROPERTIES
-        ENVIRONMENT INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>
+        ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
         LABELS "functional;ccl;itt")
     endif()
   endif()

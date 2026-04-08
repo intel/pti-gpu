@@ -30,19 +30,19 @@ using OnIttLoggingCallback = void (*)(void* data, CommunicationRecord& rec);
 #include "itt_pti_exports.h"
 
 struct ThreadTaskDescriptor {
-  __itt_domain* domain;
-  __itt_string_handle* name;
+  __itt_domain* domain_;
+  __itt_string_handle* name_;
 
-  uint64_t start_time;
-  uint64_t metadata_size;
+  uint64_t start_time_;
+  uint64_t metadata_size_;
   uint64_t communicator_id_;
 
   ThreadTaskDescriptor(const __itt_domain* d = nullptr, const __itt_string_handle* n = nullptr,
                        uint64_t start = 0)
-      : domain(const_cast<__itt_domain*>(d)),
-        name(const_cast<__itt_string_handle*>(n)),
-        start_time(start),
-        metadata_size(0),
+      : domain_(const_cast<__itt_domain*>(d)),
+        name_(const_cast<__itt_string_handle*>(n)),
+        start_time_(start),
+        metadata_size_(0),
         communicator_id_(0) {}
 };
 
@@ -100,18 +100,18 @@ class IttCollector {
 
   void CallbackUser(ThreadTaskDescriptor& rec, uint64_t end) {
     SPDLOG_DEBUG("{}() - name: {}, start_ts: {}, end_ts: {}, metadata_size: {:#x}", __FUNCTION__,
-                 rec.name ? rec.name->strA : "NULL", rec.start_time, end, rec.metadata_size);
+                 rec.name_ ? rec.name_->strA : "NULL", rec.start_time_, end, rec.metadata_size_);
 
     // Single atomic load with relaxed ordering
     auto cb = record_dispatcher_.load(std::memory_order_relaxed);
     if (cb) {
       itt_runtime_rec_.pid_ = PidTidInfo::Get().pid;
       itt_runtime_rec_.tid_ = PidTidInfo::Get().tid;
-      itt_runtime_rec_.start_time_ = rec.start_time;
+      itt_runtime_rec_.start_time_ = rec.start_time_;
       itt_runtime_rec_.end_time_ = end;
-      itt_runtime_rec_.metadata_size_ = rec.metadata_size;
-      itt_runtime_rec_.communicator_id_ = 12345;  // Placeholder
-      itt_runtime_rec_.name_ = rec.name ? rec.name->strA : nullptr;
+      itt_runtime_rec_.metadata_size_ = rec.metadata_size_;
+      itt_runtime_rec_.communicator_id_ = rec.communicator_id_;
+      itt_runtime_rec_.name_ = rec.name_ ? rec.name_->strA : nullptr;
 
       cb(nullptr, itt_runtime_rec_);
     }

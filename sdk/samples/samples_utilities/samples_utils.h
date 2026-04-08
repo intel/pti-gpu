@@ -293,6 +293,7 @@ inline void DumpRecord(pti_view_record_comms* record) {
   std::cout << "Process Id: " << record->_process_id << '\n';
   std::cout << "Thread Id: " << record->_thread_id << '\n';
   std::cout << "Metadata_size: " << record->_metadata_size << '\n';
+  std::cout << "Communicator Id: " << record->_communicator_id << '\n';
   std::cout << "ITT CMD: <" << record->_name << ">\n";
 }
 
