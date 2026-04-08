@@ -29,7 +29,7 @@ std::vector<pti_view_record_comms> comms_vector;
 std::mutex buffer_mutex;
 
 // A lower bound of records to expect
-constexpr size_t EXPECTED_COMMS_RECORDS = 2;
+constexpr size_t kExpectedCommsRecords = 2;
 
 void StartTracing(){
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_COMMUNICATION));
@@ -821,8 +821,8 @@ int main(int argc, char *argv[]) {
 
     // Verify we have collected records. We cannot fix it
     // because depending on the mpiexec invocation this may change
-    if (comms_vector.size() <  EXPECTED_COMMS_RECORDS) {
-        std::cerr << "ERROR: Expected at least " << EXPECTED_COMMS_RECORDS
+    if (comms_vector.size() <  kExpectedCommsRecords) {
+        std::cerr << "ERROR: Expected at least " << kExpectedCommsRecords
                   << " records, but collected " << comms_vector.size() << std::endl;
         return -1;
     }

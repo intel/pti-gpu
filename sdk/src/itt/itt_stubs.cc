@@ -116,7 +116,9 @@ ITT_EXTERN_C void ITTAPI __itt_sync_cancel(void *addr [[maybe_unused]]) {
 }
 
 ITT_EXTERN_C void ITTAPI __itt_sync_acquired(void *addr [[maybe_unused]]) {
-  SPDLOG_TRACE("{}() Adapter", __FUNCTION__);
+  // NOTE: Logging disabled to prevent race condition between sync tracking
+  // and spdlog's internal synchronization mechanisms.
+  // SPDLOG_TRACE("{}() Adapter", __FUNCTION__);
 }
 
 ITT_EXTERN_C void ITTAPI __itt_sync_releasing(void *addr [[maybe_unused]]) {
