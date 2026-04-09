@@ -13,7 +13,7 @@
 
 #include "ze_loader.h"
 
-#define EVENT_POOL_SIZE	1024
+#define EVENT_POOL_SIZE  1024
 
 struct ZeEventInfo {
   ze_event_pool_handle_t pool;
@@ -53,7 +53,7 @@ class ZeEventCache {
       for (auto pool : value.second) {
         ze_result_t status = ZE_FUNC(zeEventPoolDestroy)(pool);
         if (status != ZE_RESULT_SUCCESS) {
-	  destroyed = false;
+          destroyed = false;
         }
       }
     }

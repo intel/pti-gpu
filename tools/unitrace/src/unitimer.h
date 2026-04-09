@@ -69,21 +69,21 @@ public:
     static uint64_t GetEpochTime(uint64_t systime) {
         return epoch_start_time_ + systime;
     }
-    
+
     static double GetEpochTimeInUs(uint64_t systime) {
         // (double(1.0) * (epoch_start_time_ + systime) / 1000.0);
         uint64_t us = (epoch_start_time_ + systime) / 1000;
         uint64_t ns = (epoch_start_time_ + systime) % 1000;
         return double(us) + (double(ns) * 0.001);
     }
-        
+
     static double GetTimeInUs(uint64_t systime) {
         // (double(1.0) * systime / 1000.0);
         uint64_t us = systime / 1000;
         uint64_t ns = systime % 1000;
         return double(us) + (double(ns) * 0.001);
     }
-        
+
     static uint64_t GetHostTimestampFromBootTimestamp(uint64_t ts) {
         return ts + boot_monotonic_raw_time_diff_;
     }
@@ -153,5 +153,5 @@ private:
     inline static LARGE_INTEGER frequency_{{0}};
 #endif /* _WIN32 */
 };
-    
+
 #endif // PTI_TOOLS_UNITRACE_UNITIMER_H

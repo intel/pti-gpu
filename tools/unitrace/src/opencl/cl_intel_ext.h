@@ -24,7 +24,7 @@ enum cl_ext_api_id {
   ClExtEnqueueMemAdviseINTEL,
   ClExtEnqueueMemFillINTEL,
   ClExtMemBlockingFreeINTEL,
-  ClExtApiEnd 
+  ClExtApiEnd
 };
 
 static const char *cl_ext_api[] = {

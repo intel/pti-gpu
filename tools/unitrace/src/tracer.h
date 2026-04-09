@@ -45,7 +45,7 @@ static std::string GetChromeTraceFileName(void) {
     std::string name(str);
     auto pos = name.find_last_of('\\');
     if (pos == std::string::npos) {
-      return name;	// std::move(name) here prevents copy elision on Windows
+      return name;  // std::move(name) here prevents copy elision on Windows
     }
     else {
       return name.substr(pos + 1);
@@ -202,7 +202,7 @@ class UniTracer {
           }
           tracer->cl_cpu_collector_ = cl_cpu_collector;
         }
-  
+
         if (cl_gpu_device != nullptr) {
           cl_gpu_collector = ClCollector::Create(cl_gpu_device, &tracer->logger_, collector_options, cl_kcallback, cl_fcallback, tracer);
           if (cl_gpu_collector == nullptr) {
@@ -210,7 +210,7 @@ class UniTracer {
           }
           tracer->cl_gpu_collector_ = cl_gpu_collector;
         }
-  
+
         if (cl_cpu_collector == nullptr && cl_gpu_collector == nullptr) {
           std::cerr << "[WARNING] Unable to trace any OpenCL kernels" << std::endl;
           delete tracer;
@@ -428,7 +428,7 @@ class UniTracer {
     if ((ze_collector == nullptr) && (cl_cpu_collector == nullptr) && (cl_gpu_collector == nullptr)) {
         return;
     }
-    
+
     std::string stype = std::string(type);
 
     std::string ze_title =
@@ -445,11 +445,11 @@ class UniTracer {
     const size_t time_width = 20;
 
     std::string str("\n=== ");
-    str += stype + " Timing Summary ===\n\n" + 
+    str += stype + " Timing Summary ===\n\n" +
            std::string(std::max(int(title_width - sizeof("Total Execution Time (ns): ") + 1), 0), ' ') +
            "Total Execution Time (ns): " +
            std::string(std::max(int(time_width - std::to_string(total_execution_time_).length()), 0), ' ') +
-           std::to_string(total_execution_time_) + 
+           std::to_string(total_execution_time_) +
            "\n";
 
     if (ze_collector != nullptr) {
@@ -537,7 +537,7 @@ class UniTracer {
     if ((ze_collector == nullptr) && (cl_cpu_collector == nullptr) && (cl_gpu_collector == nullptr)) {
       return;
     }
-    
+
     std::string ze_title =
       std::string("Total ") + std::string(type) +
       " Time for L0 backend (ns): ";

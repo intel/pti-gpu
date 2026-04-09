@@ -131,12 +131,12 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--chrome-no-thread-on-device     " <<
-    "Trace device activities without per-thread info" << std::endl << 
+    "Trace device activities without per-thread info" << std::endl <<
     "                                 Device activities are traced per thread if this option is not present" <<
     std::endl;
   std::cout <<
     "--chrome-no-engine-on-device     " <<
-    "Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info." << std::endl << 
+    "Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info." << std::endl <<
     "                                 Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present" <<
     std::endl;
   std::cout <<
@@ -636,7 +636,7 @@ int ParseArgs(int argc, char* argv[]) {
   }
 
   if (utils::GetEnv("UNITRACE_FollowChildProcess").empty()) {
-    utils::SetEnv("UNITRACE_FollowChildProcess", "1");	// default is to follow child processes
+    utils::SetEnv("UNITRACE_FollowChildProcess", "1");  // default is to follow child processes
   }
 
   if (stall_sampling) {
@@ -715,7 +715,7 @@ int ParseArgs(int argc, char* argv[]) {
   }
 
   if ((utils::GetEnv("UNITRACE_MetricQuery") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
-    // kernel tracing must be on 
+    // kernel tracing must be on
     if (utils::GetEnv("UNITRACE_DeviceTiming").empty() && utils::GetEnv("UNITRACE_ChromeKernelLogging").empty() && utils::GetEnv("UNITRACE_ChromeDeviceLogging").empty()) {
       utils::SetEnv("UNITRACE_DeviceTiming", "1");
     }
@@ -739,7 +739,7 @@ int ParseArgs(int argc, char* argv[]) {
   }
 
   if (utils::GetEnv("UNITRACE_ChromeEventBufferSize").empty()) {
-    utils::SetEnv("UNITRACE_ChromeEventBufferSize", "-1");	// does not hurt to set to default even if chrome logging is not enabled
+    utils::SetEnv("UNITRACE_ChromeEventBufferSize", "-1");  // does not hurt to set to default even if chrome logging is not enabled
   }
   std::string include_kernels_file = utils::GetEnv("git addFile");
   if (!include_kernels_file.empty()) {
@@ -808,10 +808,10 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
   std::ifstream inf = std::ifstream(raw_data_file);
   if (!inf.is_open()) {
     std::cerr << "[ERROR] Failed to open raw kernel/kmd tracing date file" << std::endl;
-    return; 
+    return;
   }
 
-  UniTimer::StartUniTimer();	// need the timer to get the epoch time of system boot and difference between boot time and monotonic time
+  UniTimer::StartUniTimer();  // need the timer to get the epoch time of system boot and difference between boot time and monotonic time
 
   std::string out_trace_file_name(KMD_TRACE_FILE_BASE_NAME);
 
@@ -831,7 +831,7 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
 
   oskmd_logger->Log("{ \"traceEvents\":[\n");
 
-  std::string str("{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": 0,");	// 0 as dummy process id
+  std::string str("{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": 0,");  // 0 as dummy process id
 
   str += "\"args\": {\"name\": \"";
 
@@ -875,7 +875,7 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
     std::string args;
     auto n = dur.find(',');
     if (n != dur.npos) {
-      args = dur.substr(n + 1);	// optional data
+      args = dur.substr(n + 1);  // optional data
       dur = dur.substr(0, n);
     }
 
@@ -935,7 +935,7 @@ int main(int argc, char *argv[]) {
 #endif /* !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__)) */
 
   std::string executable_path = utils::GetExecutablePath();
-  
+
   bool use_ld_lib_path = false;
   std::string lib_path = executable_path + LIB_UNITRACE_TOOL_NAME;
   FILE *fp;
@@ -1119,7 +1119,7 @@ int main(int argc, char *argv[]) {
         // child process
         // wait for the profiler to be ready
         std::ifstream inf;
-      
+
         inf.open(latch_file_name, std::ios_base::in);
         uint32_t t = 0;
         while (!inf.is_open() && (t < 10)) {	// wait for no more than 10s
@@ -1144,7 +1144,7 @@ int main(int argc, char *argv[]) {
           cmdline += " ";
           cmdline += app_args[i];
         }
-	
+
         ret = execlp("bpftrace", "bpftrace", "-q", "-o", oskmd_data_file_name.c_str(), "-c", cmdline.c_str(), utils::GetEnv("UNITRACE_ChromeKmdLogging").c_str(), nullptr);
       }
       else {
@@ -1161,7 +1161,7 @@ int main(int argc, char *argv[]) {
       if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
 
         metric_profiler = EnableProfiling(child, data_dir, logfile, idle_sampling);
-    
+
         // create a latch file to notify the application process to proceed
         std::ofstream outf(latch_file_name, std::ios_base::out);
         if (!outf.is_open()) {
@@ -1311,7 +1311,7 @@ int main(int argc, char *argv[]) {
         metric_profiler = EnableProfiling(app_pid, data_dir, logfile, idle_sampling);
       }
 
-      ResumeThread(pi.hThread); 
+      ResumeThread(pi.hThread);
       WaitForSingleObject(pi.hProcess, INFINITE);
 
       CloseHandle(pi.hThread);

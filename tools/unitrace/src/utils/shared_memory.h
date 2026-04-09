@@ -57,7 +57,7 @@ private:
 #ifndef _WIN32
     int handle_ = -1;
 #else /* _WIN32 */
-    HANDLE hMapFile_ = nullptr;   
+    HANDLE hMapFile_ = nullptr;
 #endif /* _WIN32 */
     bool ValidateSessionName(const char* session) {
         if (strlen(session) > (SHM_NAME_MAX - strlen(SHM_NAME_PREFIX) - 1)) {
@@ -71,14 +71,14 @@ private:
         if (!ValidateSessionName(session)) {
             return false;
         }
-        
+
         shm_size_ = size;
         strcpy(shm_name_, SHM_NAME_PREFIX);
         strcat(shm_name_, session);
         return true;
     }
 
-public: 
+public:
     void* GetPtr() {
         return p_data_;
     }
@@ -155,11 +155,11 @@ public:
                 std::cout << "[INFO] session " << session << " data already mapped" << std::endl;
                 return SHM_SUCCESS;
             }
-    
+
             std::cout << "[INFO] session " << session << " is already mapped in write mode" << std::endl;
-            SoftRelease(); 
+            SoftRelease();
         }
-        
+
         if (!SetSessionNameSize(session, size)) {
             return SHM_FAILED;
         }
@@ -219,7 +219,7 @@ public:
     }
 
 #else /* _WIN32 */
-    
+
     SharedMemoryReturnStatus Create(const char* session, size_t size) {
         if (!SetSessionNameSize(session, size)) {
             return SHM_FAILED;
@@ -260,7 +260,7 @@ public:
             std::cout << "[INFO] session " << session << " is already mapped in read-only mode" << std::endl;
             UnmapViewOfFile(p_data_);
             p_data_ = MapViewOfFile(hMapFile_, FILE_MAP_WRITE, 0, 0, shm_size_);
-            if (!p_data_) {  
+            if (!p_data_) {
                 std::cerr << "[ERROR] Failed to map shared memory (" << GetErrorMessage(errno) << ")" << std::endl;
                 CloseHandle(hMapFile_);
                 return SHM_FAILED;
@@ -300,7 +300,7 @@ public:
             std::cout << "[INFO] session " << session << " is already mapped in write mode" << std::endl;
             UnmapViewOfFile(p_data_);
             p_data_ = MapViewOfFile(hMapFile_, FILE_MAP_READ, 0, 0, shm_size_);
-            if (!p_data_) {  
+            if (!p_data_) {
                 std::cerr << "[ERROR] Failed to map shared memory (" << GetErrorMessage(errno) << ")" << std::endl;
                 CloseHandle(hMapFile_);
                 return SHM_FAILED;

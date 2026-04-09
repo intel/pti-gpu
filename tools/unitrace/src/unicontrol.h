@@ -31,7 +31,7 @@ struct TemporalControl {
   TemporalControlState state_;
   char padding_[1024 - sizeof(TemporalControlState)];
 };
-  
+
 
 class UniController{
   public:
@@ -73,7 +73,7 @@ class UniController{
         }
         ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_PAUSED;
         std::cerr << "[INFO] Session " << session << " is paused" << std::endl;
-      }	
+      }
     }
 
     static void TemporalResume(const char *session) {
@@ -84,7 +84,7 @@ class UniController{
         }
         ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_RESUMED;
         std::cerr << "[INFO] Session " << session << " is resumed" << std::endl;
-      }	
+      }
     }
 
     static void TemporalStop(const char *session) {
@@ -92,7 +92,7 @@ class UniController{
       if (session_shm_.GetPtr() != nullptr) {
         ((TemporalControl*)session_shm_.GetPtr())->state_ = TEMPORAL_STOPPED;
         std::cerr << "[INFO] Session " << session << " is stopped and can no longer be paused or resumed" << std::endl;
-      }	
+      }
     }
 
     static void CreateMetricSamplingControl() {
@@ -148,16 +148,16 @@ class UniController{
         if (environ != nullptr) {
           char *env;
           char *value = nullptr;
-          constexpr int len = sizeof("PTI_ENABLE_COLLECTION") - 1;	// do not count trailing '\0' 
+          constexpr int len = sizeof("PTI_ENABLE_COLLECTION") - 1;  // do not count trailing '\0'
           char **cursor = environ;
           // PTI_ENABLE_COLLECTION is likely at the end if it is set
           while (*cursor) {
-            cursor++;	
+            cursor++;
           }
           cursor--;
           for (; (cursor != environ - 1) && ((env = *cursor) != nullptr); cursor--) {
             if ((env[0] == 'P') && (env[1] == 'T') && (env[2] == 'I') && (strncmp(env + 3, "_ENABLE_COLLECTION", len - 3) == 0) && (env[len] == '=')) {
-              value = (env + len + 1); 
+              value = (env + len + 1);
               break;
             }
           }
@@ -193,24 +193,24 @@ class UniController{
         }
       }
     }
-    
+
   private:
     inline static bool conditional_collection_ = (utils::GetEnv("UNITRACE_StartPaused") == "1") ? true : false;
     inline static bool itt_paused_ = false;
     // when the session is stopped, the shared memory will be removed so processes started afterwards
-    // gets null value for session_shm_.GetPtr() 
+    // gets null value for session_shm_.GetPtr()
     // but session_shm_.GetPtr() can also be null if the session is unnamed
     // this flag is true when session_shm_.GetPtr() is null but the named session is stopped
-    // so subsequent processes are not profiled 
+    // so subsequent processes are not profiled
     inline static bool temporal_control_stopped_ = false;
-    
+
     inline static SharedMemory session_shm_;
     // shared memory to interact between child and parent process for metric sampling.
-    // In application control can't be done using enviroment variable for metric sampling.
+    // In application control can't be done using environment variable for metric sampling.
     // the sampling thread is owned by the parent process.
     inline static SharedMemory metric_sample_shm_;
 };
-    
+
 #endif // PTI_TOOLS_UNITRACE_UNICONTROL_H_
 
 

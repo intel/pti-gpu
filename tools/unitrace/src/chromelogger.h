@@ -55,9 +55,9 @@ static std::string EncodeURI(const std::string &input) {
 
 static std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
 #ifdef _WIN32
-static uint32_t mpi_rank = rank.empty() ? _getpid() : std::atoi(rank.c_str());	// use pid as a dummy rank id
+static uint32_t mpi_rank = rank.empty() ? _getpid() : std::atoi(rank.c_str());  // use pid as a dummy rank id
 #else /* _WIN32 */
-static uint32_t mpi_rank = rank.empty() ? getpid() : std::atoi(rank.c_str());	// use pid as a dummy rank id
+static uint32_t mpi_rank = rank.empty() ? getpid() : std::atoi(rank.c_str());  // use pid as a dummy rank id
 #endif /* _WIN32 */
 
 static std::string pmi_hostname = GetHostName();
@@ -80,16 +80,16 @@ static std::mutex device_pid_tid_map_lock_;
 struct ZeDevicePidKey {
   ze_pci_address_ext_t pci_addr_;
   int32_t parent_device_id_;
-  int32_t device_id_; 
-  int32_t subdevice_id_; 
+  int32_t device_id_;
+  int32_t subdevice_id_;
   int32_t host_pid_;
 };
 
 struct ZeDeviceTidKey {
   ze_pci_address_ext_t pci_addr_;
   int32_t parent_device_id_;
-  int32_t device_id_; 
-  int32_t subdevice_id_; 
+  int32_t device_id_;
+  int32_t subdevice_id_;
   uint32_t engine_ordinal_;
   uint32_t engine_index_;
   int32_t host_pid_;
@@ -110,11 +110,11 @@ struct ZeDeviceTidKeyCompare {
 
 static std::map<ZeDeviceTidKey, std::tuple<uint32_t, uint32_t, uint64_t>, ZeDeviceTidKeyCompare> device_tid_map_;
 
-static uint32_t next_device_pid_ = (uint32_t)(~0) - (mpi_rank << 5);	// each rank uses no more than 32 devices
-static uint32_t next_device_tid_ = (uint32_t)(~0) - (mpi_rank << 5);	// the first device thread is the "main" thread which has the same id as the device process id
+static uint32_t next_device_pid_ = (uint32_t)(~0) - (mpi_rank << 5);  // each rank uses no more than 32 devices
+static uint32_t next_device_tid_ = (uint32_t)(~0) - (mpi_rank << 5);  // the first device thread is the "main" thread which has the same id as the device process id
 
 static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device, uint32_t engine_ordinal,
-  uint32_t engine_index, int host_pid, int host_tid) {
+                                                       uint32_t engine_index, int host_pid, int host_tid) {
   if (device_logging_no_thread_) {
     // map all threads to the process
     host_tid = host_pid;
@@ -129,14 +129,14 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
   uint32_t device_pid;
   uint32_t device_tid;
   const std::lock_guard<std::mutex> lock(device_pid_tid_map_lock_);
-   
+
   ze_pci_ext_properties_t *props;
   int32_t device_id;
   int32_t parent_device_id;
   int32_t subdevice_id;
   props = GetZeDevicePciPropertiesAndId(device, &parent_device_id, &device_id, &subdevice_id);
   PTI_ASSERT(props != nullptr);
-  
+
   ZeDeviceTidKey tid_key;
 
   memset(&tid_key, 0, sizeof(ZeDeviceTidKey));
@@ -176,7 +176,7 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
       std::string str = ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
-            ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+                        ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
       if (rank.empty()) {
         str += "DEVICE<" + pmi_hostname + ">";
       }
@@ -219,7 +219,7 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
     std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
     std::string str = ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) + ", \"tid\": " +
-           std::to_string(device_tid) + ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+                      std::to_string(device_tid) + ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
     if (device_logging_no_thread_) {
       if (device_logging_no_engine_) {
         str += "L0\"}}";
@@ -229,7 +229,7 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
       }
     } else {
       if (device_logging_no_engine_) {
-        str += "Thread " + std::to_string(tid_key.host_tid_) + " L0\"}}"; 
+        str += "Thread " + std::to_string(tid_key.host_tid_) + " L0\"}}";
       } else {
         str += "Thread " + std::to_string(tid_key.host_tid_);
         str += " " + GetZeEngineName(device, tid_key.engine_ordinal_);
@@ -320,11 +320,11 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
       device_pid = next_device_pid_--;
       auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
       cl_device_pid_map_.insert({pid_key, std::make_tuple(device_pid, start_time)});
-    
+
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
       std::string str = ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
-             ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+                        ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
       if (rank.empty()) {
         str += "DEVICE<" + pmi_hostname + ">";
       }
@@ -347,8 +347,8 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_function);
       str += std::string(str2);
 
-      str += "\"}}"; 
-  
+      str += "\"}}";
+
       logger_->Log(str);
       logger_->Flush();
     }
@@ -359,8 +359,8 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
     std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
     std::string str = ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) +
-           ", \"tid\": " + std::to_string(device_tid) +
-           ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+                      ", \"tid\": " + std::to_string(device_tid) +
+                      ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
     if (device_logging_no_thread_) {
       if (device_logging_no_engine_) {
         str += "CL\"}}";
@@ -369,21 +369,21 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
         char str2[128];
 
         snprintf(str2, sizeof(str2), "%p", tid_key.queue_);
-        str += "CL Queue<" + std::string(str2) + ">\"}}"; 
+        str += "CL Queue<" + std::string(str2) + ">\"}}";
       }
     }
     else {
       if (device_logging_no_engine_) {
-        str += "Thread " + std::to_string(tid_key.host_tid_) + " CL\"}}"; 
+        str += "Thread " + std::to_string(tid_key.host_tid_) + " CL\"}}";
       }
       else {
         char str2[128];
 
         snprintf(str2, sizeof(str2), "%p", tid_key.queue_);
-        str += "Thread " + std::to_string(tid_key.host_tid_) + " CL Queue<" + std::string(str2) + ">\"}}"; 
+        str += "Thread " + std::to_string(tid_key.host_tid_) + " CL Queue<" + std::string(str2) + ">\"}}";
       }
     }
-  
+
     logger_->Log(str);
     logger_->Flush();
   }
@@ -498,7 +498,7 @@ static std::string convertDataToString(IttArgs* args) {
 class TraceBuffer;
 std::set<TraceBuffer *> *trace_buffers_ = nullptr;
 
-#define BUFFER_SLICE_SIZE_DEFAULT	(0x1 << 20)
+#define BUFFER_SLICE_SIZE_DEFAULT  (0x1 << 20)
 
 class TraceBuffer {
   public:
@@ -510,8 +510,8 @@ class TraceBuffer {
       }
       else {
         buffer_capacity_ = std::stoi(szstr);
-	if (buffer_capacity_ == 0) {
-          buffer_capacity_ = 1;	// at least one event slot
+        if (buffer_capacity_ == 0) {
+          buffer_capacity_ = 1;  // at least one event slot
           flush_immediately_ = true;
         }
         slice_capacity_ = buffer_capacity_;
@@ -519,12 +519,12 @@ class TraceBuffer {
       ZeKernelCommandExecutionRecord *der = (ZeKernelCommandExecutionRecord *)(malloc(sizeof(ZeKernelCommandExecutionRecord) * slice_capacity_));
       UniMemory::ExitIfOutOfMemory((void *)(der));
 
-      device_event_buffer_.push_back(der); 
+      device_event_buffer_.push_back(der);
 
       HostEventRecord *her = (HostEventRecord *)(malloc(sizeof(HostEventRecord) * slice_capacity_));
       UniMemory::ExitIfOutOfMemory((void *)(her));
 
-      host_event_buffer_.push_back(her); 
+      host_event_buffer_.push_back(her);
       tid_= utils::GetTid();
       pid_= utils::GetPid();
 
@@ -542,7 +542,7 @@ class TraceBuffer {
         metrics_enabled_ = false;
       }
 
-      std::lock_guard<std::recursive_mutex> lock(logger_lock_);	// use this lock to protect trace_buffers_
+      std::lock_guard<std::recursive_mutex> lock(logger_lock_);  // use this lock to protect trace_buffers_
 
       if (trace_buffers_ == NULL) {
         trace_buffers_ = new std::set<TraceBuffer *>;
@@ -880,7 +880,7 @@ class TraceBuffer {
         FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][j]);
       }
       current_host_event_buffer_slice_ = 0;
-      next_host_event_index_ = 0;   
+      next_host_event_index_ = 0;
       host_event_buffer_flushed_ = true;
     }
 
@@ -918,11 +918,11 @@ class TraceBuffer {
 
   private:
     int32_t buffer_capacity_;
-    int32_t slice_capacity_;	// each buffer can have multiple slices
-    int32_t current_device_event_buffer_slice_;	// device slice in use
-    int32_t current_host_event_buffer_slice_;	// host slice in use
-    int32_t next_device_event_index_;	// next free device event in in-use slice
-    int32_t next_host_event_index_;	// next free host event in in-use slice
+    int32_t slice_capacity_;  // each buffer can have multiple slices
+    int32_t current_device_event_buffer_slice_;  // device slice in use
+    int32_t current_host_event_buffer_slice_;  // host slice in use
+    int32_t next_device_event_index_;  // next free device event in in-use slice
+    int32_t next_host_event_index_;  // next free host event in in-use slice
     uint32_t tid_;
     uint32_t pid_;
     std::vector<ZeKernelCommandExecutionRecord *> device_event_buffer_;
@@ -947,21 +947,21 @@ class ClTraceBuffer {
         slice_capacity_ = BUFFER_SLICE_SIZE_DEFAULT;
       } else {
         buffer_capacity_ = std::stoi(szstr);
-	if (buffer_capacity_ == 0){
-          buffer_capacity_ = 1;	// at least one event slot
-	  flush_immediately_ = true;
+        if (buffer_capacity_ == 0) {
+          buffer_capacity_ = 1;  // at least one event slot
+          flush_immediately_ = true;
         }
         slice_capacity_ = buffer_capacity_;
       }
       ClKernelCommandExecutionRecord *der = (ClKernelCommandExecutionRecord *)(malloc(sizeof(ClKernelCommandExecutionRecord) * slice_capacity_));
       UniMemory::ExitIfOutOfMemory((void *)(der));
 
-      device_event_buffer_.push_back(der); 
+      device_event_buffer_.push_back(der);
 
       HostEventRecord *her = (HostEventRecord *)(malloc(sizeof(HostEventRecord) * slice_capacity_));
       UniMemory::ExitIfOutOfMemory((void *)(her));
 
-      host_event_buffer_.push_back(her); 
+      host_event_buffer_.push_back(her);
       tid_= utils::GetTid();
       pid_= utils::GetPid();
 
@@ -978,7 +978,7 @@ class ClTraceBuffer {
         metrics_enabled_ = false;
       }
 
-      std::lock_guard<std::recursive_mutex> lock(logger_lock_);	// use this lock to protect trace_buffers_
+      std::lock_guard<std::recursive_mutex> lock(logger_lock_);  // use this lock to protect trace_buffers_
 
       if (cl_trace_buffers_ == nullptr) {
         cl_trace_buffers_ = new std::set<ClTraceBuffer *>;
@@ -1288,8 +1288,8 @@ class ClTraceBuffer {
           args = args->next;
           free(toFree);
         }
-	// reset count to 0
-	rec.itt_args_.count = 0;
+        // reset count to 0
+        rec.itt_args_.count = 0;
       }
 
       if (!str_args.empty()) {
@@ -1361,11 +1361,11 @@ class ClTraceBuffer {
 
   private:
     int32_t buffer_capacity_;
-    int32_t slice_capacity_;	// each buffer can have multiple slices
-    int32_t current_device_event_buffer_slice_;	// device slice in use
-    int32_t current_host_event_buffer_slice_;	// host slice in use
-    int32_t next_device_event_index_;	// next free device event in in-use slice
-    int32_t next_host_event_index_;	// next free host event in in-use slice
+    int32_t slice_capacity_;  // each buffer can have multiple slices
+    int32_t current_device_event_buffer_slice_;  // device slice in use
+    int32_t current_host_event_buffer_slice_;  // host slice in use
+    int32_t next_device_event_index_;  // next free device event in in-use slice
+    int32_t next_host_event_index_;  // next free host event in in-use slice
     uint32_t tid_;
     uint32_t pid_;
     std::vector<ClKernelCommandExecutionRecord *> device_event_buffer_;
@@ -1398,7 +1398,7 @@ class ChromeLogger {
           std::string dir = utils::GetEnv("UNITRACE_TraceOutputDir");
           chrome_trace_file_name_ = (dir + '/' + chrome_trace_file_name_);
       }
-      
+
       if (this->CheckOption(TRACE_KERNEL_NAME_FILTER)) {
         if (this->CheckOption(TRACE_K_NAME_FILTER_IN)) {
           filter_in_ = true;
@@ -1538,19 +1538,18 @@ class ChromeLogger {
         if ((metadata_args != nullptr) && (metadata_args->count != 0)) {
           rec->api_type_ = API_TYPE_ITT;
           rec->itt_args_ = *metadata_args;
-        }
-	else {
+        } else {
           // no arguments so set api_type_ to API_TYPE_NONE
           rec->api_type_ = API_TYPE_NONE;
           rec->itt_args_.count = 0;
-	}
+        }
 
         thread_local_buffer_.BufferHostEvent();
       }
     }
 
-    static void MpiLoggingCallback(const char *name, uint64_t start_ts, uint64_t end_ts,size_t src_size, int src_location, int src_tag,
-                                     size_t dst_size, int dst_location, int dst_tag) {
+    static void MpiLoggingCallback(const char *name, uint64_t start_ts, uint64_t end_ts, size_t src_size, int src_location, int src_tag,
+                                   size_t dst_size, int dst_location, int dst_tag) {
       if (!thread_local_buffer_.IsFinalized()) {
         HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
         rec->type_ = EVENT_COMPLETE;
@@ -1632,7 +1631,7 @@ class ChromeLogger {
       cl_device_id device,
       cl_command_queue& queue,
       int tile,
-      bool implicit, 
+      bool implicit,
       const uint64_t id,
       uint64_t started,
       uint64_t ended) {
@@ -1660,7 +1659,7 @@ class ChromeLogger {
 #endif /* BUILD_WITH_OPENCL */
 
     static void ChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
-      uint64_t started, uint64_t ended) {
+                                          uint64_t started, uint64_t ended) {
       if (thread_local_buffer_.IsFinalized()) {
         return;
       }
@@ -1705,7 +1704,7 @@ class ChromeLogger {
     }
 
     static void ClChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
-      uint64_t started, uint64_t ended) {
+                                            uint64_t started, uint64_t ended) {
       if (cl_thread_local_buffer_.IsFinalized()) {
         return;
       }

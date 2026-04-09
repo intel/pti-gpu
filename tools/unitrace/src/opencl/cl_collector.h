@@ -315,7 +315,7 @@ class ClCollector {
     PTI_ASSERT(collector != nullptr);
 
     collector->SetKernelTracingPoints();
- 
+
     ClApiTracer* tracer;
     tracer = new ClApiTracer(device, TracingCallBack, collector);
     collector->EnableTracing(tracer);
@@ -365,7 +365,7 @@ class ClCollector {
         device_kprops.insert({dev_id->second,std::move(prop)});
       }
 
-      for(auto& props : device_kprops) {
+      for (auto& props : device_kprops) {
         // kernel properties file path: data_dir/.kprops.<device_id>.<pid>.txt
         std::string fpath = data_dir_name_ + "/.kprops." + std::to_string(props.first) + "." + std::to_string(utils::GetPid()) + ".txt";
         std::ofstream kpfs = std::ofstream(fpath, std::ios::out | std::ios::trunc);
@@ -412,7 +412,7 @@ class ClCollector {
         // kernel instance time file path: <data_dir>/.ktime.<device_id>.<pid>.txt
         std::string fpath = data_dir_name_ + "/.ktime." + std::to_string(dev_kprofile.first) + "." + std::to_string(utils::GetPid()) + ".txt";
         ouf = std::ofstream(fpath, std::ios::out | std::ios::trunc);
-        for(const auto &profile : dev_kprofile.second) {
+        for (const auto &profile : dev_kprofile.second) {
           ouf << std::to_string((-1)) << std::endl;
           ouf << std::to_string(profile.global_instance_id_) << std::endl;
           ouf << std::to_string(profile.device_started_) << std::endl;
@@ -642,7 +642,7 @@ class ClCollector {
   }
 
   static bool IsTracingNow() {
-    return trace_now_; 
+    return trace_now_;
   }
 
   static void TracingNowOn() {
@@ -654,7 +654,7 @@ class ClCollector {
   }
 
   static void PushTraceNesting() {
-    trace_nesting_level_++; 
+    trace_nesting_level_++;
     if (trace_nesting_level_ == max_trace_nesting_level_) {
       std::cerr << "[ERROR] Nest tracing level " << trace_nesting_level_ << " is unsupported" << std::endl;
       exit(-1);
@@ -662,7 +662,7 @@ class ClCollector {
   }
 
   static void PopTraceNesting() {
-    trace_nesting_level_--; 
+    trace_nesting_level_--;
     if (trace_nesting_level_ < -1) {
       std::cerr << "[ERROR] Nest tracing level " << trace_nesting_level_ << " is unsupported" << std::endl;
       exit(-1);
@@ -737,10 +737,10 @@ class ClCollector {
     cl_int status = CL_SUCCESS;
     cl_uint pcount = 0;
     status = clGetPlatformIDs(0, nullptr, &pcount);
-    
+
     if ((status != CL_SUCCESS) || (pcount == 0)) {
       std::cerr << "[WARNING] Unable to get platform identifiers" << std::endl;
-      return; 
+      return;
     }
 
     std::vector<cl_platform_id> platforms(pcount, nullptr);
@@ -929,7 +929,7 @@ class ClCollector {
     cl_device_id device = utils::cl::GetDevice(queue);
     PTI_ASSERT(device != nullptr);
 
-    auto it = device_map_.find(device); 
+    auto it = device_map_.find(device);
     if (it != device_map_.end()) {
       if (it->second.isroot_) {
         int i = 0;
@@ -1242,7 +1242,7 @@ class ClCollector {
     } else {
       cl_queue_properties *p = props;
       int i;
-      
+
       for (i = 0; p[i]; i += 2) {
         if (p[i] == CL_QUEUE_PROPERTIES) {
           p[i + 1] |= CL_QUEUE_PROFILING_ENABLE;
@@ -1764,7 +1764,7 @@ class ClCollector {
   }
 
   static void KernelTracingCallBackOnExit(ClFunctionId function, ClCollector *collector, cl_callback_data *callback_data, uint64_t *kid) {
-    switch(function) {
+    switch (function) {
       case CL_FUNCTION_clCreateCommandQueueWithProperties:
         OnExitCreateCommandQueueWithProperties(callback_data, collector);
         break;
@@ -1854,6 +1854,7 @@ class ClCollector {
     else {
       // take end timestamp first to avoid tool overhead
       uint64_t end_time = collector->GetTimestamp();
+
       collector->TracingNowOn();
       uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
 
@@ -1957,7 +1958,7 @@ class ClCollector {
 
   constexpr static int max_trace_nesting_level_ = 2;
   inline static thread_local int trace_nesting_level_ = -1; // in case an extension is called within an OCL call
-  inline static thread_local uint64_t trace_start_time_[max_trace_nesting_level_] = {0}; // start time of traced API 
+  inline static thread_local uint64_t trace_start_time_[max_trace_nesting_level_] = {0}; // start time of traced API
   inline static thread_local bool trace_now_ = false; // prevent recursive tracing
 
   cl_device_id device_ = nullptr;
@@ -2019,14 +2020,14 @@ void *clHostMemAllocINTEL(cl_context context, const cl_mem_properties_intel *pro
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clHostMemAllocINTEL:";
-  
+
         str += " context = " + std::to_string(uint64_t(context));
         str += " properties = " + std::to_string(uint64_t(properties));
         str += " size = " + std::to_string(size);
         str += " alignment = " + std::to_string(alignment);
         str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2093,7 +2094,7 @@ void *clDeviceMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clDeviceMemAllocINTEL:";
-  
+
         str += " context = " + std::to_string(uint64_t(context));
         str += " device = " + std::to_string(uint64_t(device));
         str += " properties = " + std::to_string(uint64_t(properties));
@@ -2101,7 +2102,7 @@ void *clDeviceMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
         str += " alignment = " + std::to_string(alignment);
         str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2168,7 +2169,7 @@ void *clSharedMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clSharedMemAllocINTEL:";
-  
+
         str += " context = " + std::to_string(uint64_t(context));
         str += " device = " + std::to_string(uint64_t(device));
         str += " properties = " + std::to_string(uint64_t(properties));
@@ -2176,7 +2177,7 @@ void *clSharedMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
         str += " alignment = " + std::to_string(alignment);
         str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2245,11 +2246,11 @@ cl_int clMemFreeINTEL(cl_context context, void *ptr) {
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clMemFreeINTEL:";
-  
+
         str += " context = " + std::to_string(uint64_t(context));
         str += " ptr = " + std::to_string(uint64_t(ptr));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2312,7 +2313,7 @@ cl_int clGetMemAllocInfoINTEL(cl_context context, const void *ptr, cl_mem_info_i
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clGetMemAllocInfoINTEL:";
-  
+
         str += " context = " + std::to_string(uint64_t(context));
         str += " ptr = " + std::to_string(uint64_t(ptr));
         str += " param_name = " + std::to_string(param_name);
@@ -2320,7 +2321,7 @@ cl_int clGetMemAllocInfoINTEL(cl_context context, const void *ptr, cl_mem_info_i
         str += " param_value = " + std::to_string(uint64_t(param_value));
         str += " param_value_size_ret = " + std::to_string(uint64_t(param_value_size_ret));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2385,12 +2386,12 @@ cl_int clSetKernelArgMemPointerINTEL(cl_kernel kernel, cl_uint arg_index, const 
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clSetKernelArgMemPointerINTEL:";
-  
+
         str += " kernel = " + std::to_string(uint64_t(kernel));
         str += " arg_index = " + std::to_string(arg_index);
         str += " arg_value = " + std::to_string(uint64_t(arg_value));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2464,7 +2465,7 @@ cl_int clEnqueueMemcpyINTEL(cl_command_queue command_queue, cl_bool blocking, vo
         str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
         str += " event = " + std::to_string(uint64_t(event));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2536,7 +2537,7 @@ cl_int clGetDeviceGlobalVariablePointerINTEL(cl_device_id device, cl_program pro
         str += " global_variable_size_ret = " + std::to_string(uint64_t(global_variable_size_ret));
         str += " global_variable_pointer_ret = " + std::to_string(uint64_t(global_variable_pointer_ret));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2608,7 +2609,7 @@ cl_int clGetKernelSuggestedLocalWorkSizeINTEL(cl_command_queue command_queue, cl
         str += " global_work_size = " + std::to_string(uint64_t(global_work_size));
         str += " suggested_local_work_size = " + std::to_string(uint64_t(suggested_local_work_size));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2682,7 +2683,7 @@ cl_mem clCreateBufferWithPropertiesINTEL(cl_context context, const cl_mem_proper
         str += " host_ptr = " + std::to_string(uint64_t(host_ptr));
         str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2759,7 +2760,7 @@ cl_int clEnqueueMemsetINTEL(cl_command_queue command_queue, void *dst_ptr, cl_in
         str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
         str += " event = " + std::to_string(uint64_t(event));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2832,7 +2833,7 @@ cl_int clEnqueueMigrateMemINTEL(cl_command_queue command_queue, const void *ptr,
         str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
         str += " event = " + std::to_string(uint64_t(event));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2905,7 +2906,7 @@ cl_int clEnqueueMemAdviseINTEL(cl_command_queue command_queue, const void *ptr, 
         str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
         str += " event = " + std::to_string(uint64_t(event));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -2979,7 +2980,7 @@ cl_int clEnqueueMemFillINTEL(cl_command_queue command_queue, void *dst_ptr, cons
         str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
         str += " event = " + std::to_string(uint64_t(event));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }
@@ -3046,7 +3047,7 @@ cl_int clMemBlockingFreeINTEL(cl_context context, void *ptr) {
         str += " context = " + std::to_string(uint64_t(context));
         str += " ptr = " + std::to_string(uint64_t(ptr));
         str += "\n";
-  
+
         collector->Log(str);
         collector->TracingNowOff();
       }

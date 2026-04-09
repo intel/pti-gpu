@@ -449,13 +449,13 @@ ITT_EXTERN_C int ITTAPI __itt_event_start(__itt_event event) {
   if (!UniController::IsCollectionEnabled()) {
     return __itt_error_success;
   }
-  
+
   if (!itt_collector->IsCclSummaryOn() && !itt_collector->IsEnableChromeLoggingOn()) {
     return __itt_error_success;
   }
 
   if ((event < 0) || (event >= num_itt_events)) { // let it race
-    return __itt_error_no_symbol;	// which error code to return?
+    return __itt_error_no_symbol;  // which error code to return?
   }
 
   uint64_t start = UniTimer::GetHostTimestamp();
@@ -473,7 +473,7 @@ ITT_EXTERN_C int ITTAPI __itt_event_end(__itt_event event) {
     return __itt_error_success;
   }
   if ((event < 0) || (event >= num_itt_events)) { // let it race
-    return __itt_error_no_symbol;	// which error code to return?
+    return __itt_error_no_symbol;  // which error code to return?
   }
 
   auto it = event_desc.find(event);
@@ -494,7 +494,7 @@ ITT_EXTERN_C int ITTAPI __itt_event_end(__itt_event event) {
     return __itt_error_success;
   }
 
-  return __itt_error_no_symbol;		// which error code to return?
+  return __itt_error_no_symbol;    // which error code to return?
 }
 
 
@@ -546,7 +546,7 @@ ITT_EXTERN_C void ITTAPI __itt_marker(const __itt_domain *domain, __itt_id id, _
       }
     }
   }
-    
+
   uint64_t ts = UniTimer::GetHostTimestamp();
   itt_collector->Log(marker, ts, ts, nullptr);
 }

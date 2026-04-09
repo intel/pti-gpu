@@ -14,8 +14,8 @@
 #endif /* BUILD_WITH_OPENCL */
 #include <level_zero/layers/zel_tracing_api.h>
 
-#define KERNEL_ID_INVALID		0
-#define KERNEL_INSTANCE_ID_INVALID	0
+#define KERNEL_ID_INVALID              0
+#define KERNEL_INSTANCE_ID_INVALID     0
 
 class UniKernelId{
   public:
@@ -24,9 +24,9 @@ class UniKernelId{
     }
 
   private:
-    inline static std::atomic<uint64_t> kernel_id_ = 1;	//start with 1
+    inline static std::atomic<uint64_t> kernel_id_ = 1;  // start with 1
 };
-    
+
 class UniKernelInstanceId{
   public:
     static uint64_t GetKernelInstanceId(void) {
@@ -34,9 +34,9 @@ class UniKernelInstanceId{
     }
 
   private:
-    inline static std::atomic<uint64_t> kernel_instance_id_ = 1;	//start with 1
+    inline static std::atomic<uint64_t> kernel_instance_id_ = 1;  // start with 1
 };
-    
+
 enum FLOW_DIR {
   FLOW_NUL = 0,
   FLOW_D2H = 1,
@@ -74,6 +74,6 @@ struct ClKernelCommandExecutionRecord {
   // uint32_t engine_ordinal_;
   // uint32_t engine_index_;
   // ze_group_count_t group_count_;
-  bool implicit_scaling_;  
+  bool implicit_scaling_;
 };
 #endif // PTI_TOOLS_UNITRACE_UNIKERNEL_H

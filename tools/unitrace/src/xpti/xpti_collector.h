@@ -105,7 +105,7 @@ void xptiTraceInit(unsigned int /* major_version */, unsigned int /* minor_versi
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::thread_begin, tpCallback);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::thread_end, tpCallback);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::signal, tpCallback);
-     
+
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::mem_alloc_begin, tpCallback);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::mem_alloc_end, tpCallback);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::mem_release_begin, tpCallback);
@@ -144,8 +144,8 @@ enum XPTI_EVENT {
   XPTI_EVENT_TRANSFER,
   XPTI_EVENT_LAST
 };
-  
-constexpr static int max_xpti_trace_nesting_level = 8;	// 8 layers should be sufficient for SYCL and runtime
+
+constexpr static int max_xpti_trace_nesting_level = 8;  // 8 layers should be sufficient for SYCL and runtime
 static thread_local uint64_t xpti_event_start_ts[XPTI_EVENT_LAST][max_xpti_trace_nesting_level];
 static thread_local int xpti_tracing_level = 0;
 
@@ -190,7 +190,7 @@ void tpCallback(uint16_t TraceType, xpti::trace_event_data_t * /* Parent */, xpt
       case (uint16_t)xpti::trace_point_type_t::task_end:
         {
 #if 0
-          // TODO: get kernel information. name is always nullptr in current implmentation
+          // TODO: get kernel information. name is always nullptr in current implementation
           const char *name = nullptr;
           xpti::metadata_t *Metadata = xptiQueryMetadata(Event);
           for (auto &item : *Metadata) {
@@ -244,7 +244,7 @@ void tpCallback(uint16_t TraceType, xpti::trace_event_data_t * /* Parent */, xpt
       case (uint16_t)xpti::trace_point_type_t::node_create:
         {
 #if 0
-          // TODO: get kernel information. name is always nullptr in current implmentation
+          // TODO: get kernel information. name is always nullptr in current implementation
           const char *name = nullptr;
           xpti::metadata_t *Metadata = xptiQueryMetadata(Event);
           for (auto &item : *Metadata) {

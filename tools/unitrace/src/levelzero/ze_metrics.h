@@ -34,7 +34,7 @@
 #include "unicontrol.h"
 #include <inttypes.h>
 
-constexpr static uint64_t min_dummy_instance_id = 1024 * 1024;	// min dummy instance id if idle sampling is enabled
+constexpr static uint64_t min_dummy_instance_id = 1024 * 1024;  // min dummy instance id if idle sampling is enabled
 constexpr static uint32_t max_metric_samples = 32768;
 
 #define MAX_METRIC_BUFFER  (8ULL * 1024ULL * 1024ULL)
@@ -43,7 +43,7 @@ inline void PrintDeviceList() {
   if (!InitializeL0()) {
     return;
   }
-  
+
   auto device_list = GetDeviceList();
   if (device_list.empty()) {
     std::cout << "[WARNING] No Level Zero devices found" << std::endl;
@@ -226,7 +226,7 @@ class ZeMetricProfiler {
     std::string metric_group_name = utils::GetEnv("UNITRACE_MetricGroup");
     std::vector<zet_metric_group_handle_t> groups;
     ze_result_t status = ZE_RESULT_SUCCESS;
- 
+
     // get handle of the metric group on each device
     // but initialize L0 first
     if (ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY) != ZE_RESULT_SUCCESS) {
@@ -240,7 +240,7 @@ class ZeMetricProfiler {
       std::cerr << "[ERROR] Unable to get driver" << std::endl;
       return;
     }
- 
+
     if (num_drivers > 0) {
       std::vector<ze_driver_handle_t> drivers(num_drivers);
       status = ZE_FUNC(zeDriverGet)(&num_drivers, drivers.data());
@@ -248,7 +248,7 @@ class ZeMetricProfiler {
         std::cerr << "[ERROR] Unable to get driver" << std::endl;
         return;
       }
- 
+
       for (auto driver : drivers) {
         uint32_t num_devices = 0;
         status = ZE_FUNC(zeDeviceGet)(driver, &num_devices, nullptr);
@@ -360,7 +360,7 @@ class ZeMetricProfiler {
       uint64_t instance_id;
       uint64_t data_size;
       std::vector<uint8_t> metrics_data;
- 
+
       mf.read(reinterpret_cast<char *>(&device), sizeof(int32_t));
       if (mf.gcount() != sizeof(int32_t)) {
         break;
@@ -391,7 +391,7 @@ class ZeMetricProfiler {
       if (mf.gcount() != data_size) {
         break;
       }
- 
+
       if (device != did) {
         did = device;
         group = groups[device];
@@ -405,7 +405,7 @@ class ZeMetricProfiler {
         header += "\n";
         metrics_logger->Log(header);
       }
- 
+
       // compute metrics
       uint32_t num_samples = 0;
       uint32_t num_metrics = 0;
@@ -413,23 +413,23 @@ class ZeMetricProfiler {
         group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
         data_size, metrics_data.data(), &num_samples, &num_metrics,
         nullptr, nullptr);
-   
+
       if ((status == ZE_RESULT_SUCCESS) && (num_samples > 0) && (num_metrics > 0)) {
         std::vector<uint32_t> samples(num_samples);
         std::vector<zet_typed_value_t> computed_metrics(num_metrics);
-   
+
         status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
           group, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
           data_size, metrics_data.data(), &num_samples, &num_metrics,
           samples.data(), computed_metrics.data());
-   
+
         if (status == ZE_RESULT_SUCCESS) {
           std::string str;
           for (uint32_t i = 0; i < num_samples; ++i) {
             str = kname + ",";
             str += std::to_string(instance_id) + ",";
             str += std::to_string(i);
- 
+
             uint32_t size = samples[i];
             const zet_typed_value_t *value = computed_metrics.data() + i * size;
             for (int j = 0; j < size; ++j) {
@@ -439,7 +439,7 @@ class ZeMetricProfiler {
             str += "\n";
           }
           str += "\n";
- 
+
           metrics_logger->Log(str);
         }
         else {
@@ -493,7 +493,7 @@ class ZeMetricProfiler {
     idle_sampling_ = idle_sampling;
 
     logger_ = new Logger(log_name_, true, true);
-    
+
     GetZeDevicesStringToSet(devices_to_sample_, devices_to_sample);
 
     EnumerateDevices(app_pid, dir);
@@ -628,7 +628,7 @@ class ZeMetricProfiler {
           ze_pci_ext_properties_t pci_device_properties;
           ze_result_t status = ZE_FUNC(zeDevicePciGetPropertiesExt)(sub_devices[j], &pci_device_properties);
           PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-          
+
           sub_desc->pci_properties_ = pci_device_properties;
 
           sub_desc->driver_ = driver;
@@ -687,7 +687,7 @@ class ZeMetricProfiler {
   void StopProfilingMetrics() {
     for (auto [handle, device] : device_descriptors_) {
       if (device->parent_device_ != nullptr) {
-        // subdevice 
+        // subdevice
         continue;
       }
       PTI_ASSERT(device->profiling_thread_ != nullptr);
@@ -715,7 +715,7 @@ class ZeMetricProfiler {
   void ComputeMetricsSampled() {
     auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
-    
+
     for (auto [handle, device] : device_descriptors_) {
       if (device->parent_device_ != nullptr) {
         // subdevice
@@ -777,11 +777,11 @@ class ZeMetricProfiler {
           continue;
         }
 
-        constexpr uint32_t max_num_of_stall_types = 16;	// should be enough for all current platforms
+        constexpr uint32_t max_num_of_stall_types = 16;  // should be enough for all current platforms
 
         if ((metric_list.size() - 1) > max_num_of_stall_types) { // metric_list.size() includes IP
           std::cerr << "[ERROR] Number of stall types exceeds supported limit of " << max_num_of_stall_types << std::endl;
-          free (raw_metrics);          
+          free (raw_metrics);
           return;
         }
 
@@ -1083,7 +1083,7 @@ class ZeMetricProfiler {
 
             const zet_typed_value_t *value = metrics.data();
             bool kernelsampled = false;
-            bool idle = false;	// is the sample collected while the device is idle?
+            bool idle = false;  // is the sample collected while the device is idle?
             for (uint32_t i = 0; i < num_samples; ++i) {
               uint32_t size = samples[i];
 
@@ -1099,14 +1099,14 @@ class ZeMetricProfiler {
                 cur_sampling_ts = ts;
                 if ((ts >= kit->metric_start) && (ts <= kit->metric_end)) {
                   if (idle) {
-                    logger_->Log("\n");	// separate from samples that do not belong to any kernels/commands
+                    logger_->Log("\n");  // separate from samples that do not belong to any kernels/commands
                     idle = false;
                   }
 
                   // belong to this kernel
                   kernelsampled = true;
                   str = kit->kernel_name + ", ";
-                  logger_->Log(str);	// in case the kernel name is too long
+                  logger_->Log(str);  // in case the kernel name is too long
                   str = std::to_string(kit->global_instance_id);
                   for (size_t k = 0; k < metric_list.size(); k++) {
                     str += ", ";
@@ -1124,12 +1124,12 @@ class ZeMetricProfiler {
                   if (ts > kit->metric_end) {
                     if (kernelsampled) {
                       logger_->Log("\n");
-                      kernelsampled = false;	// reset for next kernel
+                      kernelsampled = false;  // reset for next kernel
                     }
-                    kit++;	// move to next kernel
+                    kit++;  // move to next kernel
                     dummy_global_instance_id++;
                     if (kit == kinfo.end()) {
-                      break;	// we are done
+                      break;  // we are done
                     }
                   }
                   else { // ts < kit->metric_start
@@ -1142,7 +1142,7 @@ class ZeMetricProfiler {
                       else {
                         str = "\"NoKernel\", ";
                       }
-                      logger_->Log(str);	// in case the kernel name is too long
+                      logger_->Log(str);  // in case the kernel name is too long
                       str = std::to_string(dummy_global_instance_id);
                       for (size_t k = 0; k < metric_list.size(); k++) {
                         str += ", ";
@@ -1328,7 +1328,7 @@ class ZeMetricProfiler {
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     zet_metric_streamer_handle_t streamer = nullptr;
-    uint32_t interval = std::stoi(utils::GetEnv("UNITRACE_SamplingInterval")) * 1000;	// convert us to ns
+    uint32_t interval = std::stoi(utils::GetEnv("UNITRACE_SamplingInterval")) * 1000;  // convert us to ns
 
     zet_metric_streamer_desc_t streamer_desc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr, max_metric_samples, interval};
     status = ZE_FUNC(zetMetricStreamerOpen)(context, device, group, &streamer_desc, event, &streamer);

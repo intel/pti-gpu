@@ -182,7 +182,7 @@ static SignalHandler siguser_handler = nullptr;
 void HandleAbnormalTermination(int sig) {
   Teardown();
   switch (sig) {
-    case SIGINT: 
+    case SIGINT:
       if (sigint_handler) {
         sigint_handler(sig);
       }

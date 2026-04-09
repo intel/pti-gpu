@@ -54,7 +54,7 @@ typedef struct HostEventRecord_ {
   EVENT_TYPE type_;
 
   API_TYPE api_type_ = API_TYPE::API_TYPE_NONE;
-  union{
+  union {
     MpiArgs mpi_args_;
     IttArgs itt_args_;
   };

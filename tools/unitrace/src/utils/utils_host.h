@@ -17,7 +17,7 @@
 static inline std::string GetHostName(void) {
   char hname[256];
 #ifdef _WIN32
- static_assert(256 >= MAX_COMPUTERNAME_LENGTH + 1, "Buffer too small to fit hostname");
+  static_assert(256 >= MAX_COMPUTERNAME_LENGTH + 1, "Buffer too small to fit hostname");
   DWORD size = sizeof(hname);
   GetComputerNameA(hname, &size);
 #else  /* _WIN32 */
