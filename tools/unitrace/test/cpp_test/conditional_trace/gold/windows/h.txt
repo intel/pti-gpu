@@ -1,0 +1,43 @@
+
+=== API Timing Summary ===
+
+             Total Execution Time (ns):           1349818700
+    Total API Time for L0 backend (ns):                 2400
+Total API Time for CL CPU backend (ns):                49700
+Total API Time for CL GPU backend (ns):            156338400
+
+== L0 Backend ==
+
+   Function,        Calls,            Time (ns),      Time (%),         Average (ns),             Min (ns),             Max (ns)
+zeDriverGet,            1,                 2400,    100.000000,                 2400,                 2400,                 2400
+
+== CL CPU Backend ==
+
+      Function,       Calls,           Time (ns),    Time (%),        Average (ns),            Min (ns),            Max (ns)
+clGetDeviceIDs,           1,               49700,      100.00,               49700,               49700,               49700
+
+== CL GPU Backend ==
+
+                          Function,       Calls,           Time (ns),    Time (%),        Average (ns),            Min (ns),            Max (ns)
+                          clFinish,           4,            99202300,       63.45,            24800575,            23985400,            26389000
+                  clReleaseContext,           1,            45225600,       28.93,            45225600,            45225600,            45225600
+               clEnqueueReadBuffer,           4,             5093500,        3.26,             1273375,              894700,             1929300
+                    clCreateBuffer,          12,             3411100,        2.18,              284258,               47400,              543700
+              clEnqueueWriteBuffer,           8,             1272800,        0.81,              159100,               40700,              796800
+                    clBuildProgram,           1,              984100,        0.63,              984100,              984100,              984100
+                   clCreateContext,           1,              417900,        0.27,              417900,              417900,              417900
+            clEnqueueNDRangeKernel,           4,              397900,        0.25,               99475,               12000,              235100
+                clReleaseMemObject,          12,              140300,        0.09,               11691,                1800,               65400
+                    clCreateKernel,           1,               50700,        0.03,               50700,               50700,               50700
+                  clReleaseProgram,           1,               33700,        0.02,               33700,               33700,               33700
+         clCreateProgramWithSource,           1,               19800,        0.01,               19800,               19800,               19800
+           clGetEventProfilingInfo,           8,               19600,        0.01,                2450,                 200,                4900
+                    clSetKernelArg,          16,               14700,        0.01,                 918,                 200,                3300
+                   clGetKernelInfo,           4,               12600,        0.01,                3150,                1600,                5300
+                    clReleaseEvent,           4,               12200,        0.01,                3050,                2800,                3300
+                   clReleaseKernel,           1,               10200,        0.01,               10200,               10200,               10200
+             clReleaseCommandQueue,           1,                7000,        0.00,                7000,                7000,                7000
+clCreateCommandQueueWithProperties,           1,                4800,        0.00,                4800,                4800,                4800
+                    clGetDeviceIDs,           2,                4400,        0.00,                2200,                 300,                4100
+                   clGetDeviceInfo,           3,                3200,        0.00,                1066,                 300,                1800
+

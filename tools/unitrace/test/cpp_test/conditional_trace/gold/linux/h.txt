@@ -1,0 +1,31 @@
+
+=== API Timing Summary ===
+
+             Total Execution Time (ns):            145765267
+Total API Time for CL CPU backend (ns):                 1145
+Total API Time for CL GPU backend (ns):              7225670
+
+== CL CPU Backend ==
+
+      Function,       Calls,           Time (ns),    Time (%),        Average (ns),            Min (ns),            Max (ns)
+clGetDeviceIDs,           1,                1145,      100.00,                1145,                1145,                1145
+
+== CL GPU Backend ==
+
+               Function,       Calls,           Time (ns),    Time (%),        Average (ns),            Min (ns),            Max (ns)
+               clFinish,           2,             6492107,       89.85,             3246053,             3230099,             3262008
+    clEnqueueReadBuffer,           2,              473442,        6.55,              236721,              236264,              237178
+   clEnqueueWriteBuffer,           4,               89342,        1.24,               22335,               15038,               31214
+     clReleaseMemObject,           6,               48383,        0.67,                8063,                5161,               12865
+ clEnqueueNDRangeKernel,           2,               45678,        0.63,               22839,               18259,               27419
+         clCreateBuffer,           6,               44497,        0.62,                7416,                3139,               12437
+       clReleaseProgram,           1,               13756,        0.19,               13756,               13756,               13756
+clGetEventProfilingInfo,           4,                8454,        0.12,                2113,                  74,                4157
+  clReleaseCommandQueue,           1,                2359,        0.03,                2359,                2359,                2359
+       clReleaseContext,           1,                2276,        0.03,                2276,                2276,                2276
+         clSetKernelArg,           8,                1860,        0.03,                 232,                  78,                 563
+        clReleaseKernel,           1,                1643,        0.02,                1643,                1643,                1643
+         clReleaseEvent,           2,                1346,        0.02,                 673,                 600,                 746
+        clGetKernelInfo,           2,                 527,        0.01,                 263,                 238,                 289
+
+

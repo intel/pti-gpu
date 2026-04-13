@@ -1,0 +1,12 @@
+
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):            149421702
+Total Device Time for CL GPU backend (ns):              6924080
+
+== CL GPU Backend ==
+
+              Kernel,       Calls,           Time (ns),    Time (%),        Average (ns),            Min (ns),            Max (ns)
+                GEMM,           2,             5720800,       82.62,             2860400,             2850080,             2870720
+clEnqueueWriteBuffer,           4,              789760,       11.41,              197440,              196800,              198240
+ clEnqueueReadBuffer,           2,              413520,        5.97,              206760,              206640,              206880

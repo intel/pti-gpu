@@ -1,3 +1,5 @@
+include("${PROJECT_SOURCE_DIR}/../../../../build_utils/CMakeLists.txt")
+
 project(device_and_rank_to_sample CXX)
 add_executable(device_and_rank_to_sample empty.cpp empty_kernel.cpp)
 
