@@ -84,7 +84,7 @@ public:
     }
 
 #ifndef _WIN32
-    SharedMemoryReturnStatus Create(const char* session, size_t size) {
+    SharedMemoryReturnStatus Create(const char* session, size_t size, bool force_recreate = false) {
         // create shared memory object
         if (!SetSessionNameSize(session, size)) {
             return SHM_FAILED;
@@ -92,13 +92,19 @@ public:
 
         handle_ = shm_open(shm_name_, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
         if (handle_ == -1) {
-            handle_ = shm_open(shm_name_, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+            if (errno == EEXIST && force_recreate) {
+                // Stale shared memory from abnormal termination; clean up and recreate
+                shm_unlink(shm_name_);
+                handle_ = shm_open(shm_name_, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+            } else if (errno == EEXIST) {
+                handle_ = shm_open(shm_name_, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+                if (handle_ != -1) {
+                    std::cerr << "[WARNING] Session " << session << " was not stopped before reusing" << std::endl;
+                }
+            }
             if (handle_ == -1) {
                 std::cerr << "[ERROR] Failed to create shared memory for session " << session << " (" << GetErrorMessage(errno) << ")" << std::endl;
                 return SHM_FAILED;
-            }
-            else {
-                std::cerr << "[WARNING] Session " << session << " was not stopped before reusing" << std::endl;
             }
         }
 
@@ -220,7 +226,7 @@ public:
 
 #else /* _WIN32 */
 
-    SharedMemoryReturnStatus Create(const char* session, size_t size) {
+    SharedMemoryReturnStatus Create(const char* session, size_t size, bool force_recreate = false) {
         if (!SetSessionNameSize(session, size)) {
             return SHM_FAILED;
         }
@@ -237,6 +243,10 @@ public:
         if (!hMapFile_) {
             std::cerr <<"[ERROR] Failed to create shared memory for session " << session << " (" << GetErrorMessage(errno) << ")" << std::endl;
             return SHM_FAILED;
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS && !force_recreate) {
+            std::cerr << "[WARNING] Session " << session << " was not stopped before reusing" << std::endl;
         }
 
         p_data_ = MapViewOfFile(hMapFile_, FILE_MAP_ALL_ACCESS, 0, 0, shm_size_);

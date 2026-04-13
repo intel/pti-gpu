@@ -96,7 +96,7 @@ class UniController{
     }
 
     static void CreateMetricSamplingControl() {
-      if (metric_sample_shm_.Create(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl)) == SHM_FAILED) {
+      if (metric_sample_shm_.Create(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl), true) == SHM_FAILED) {
         exit(-1);
       }
 
