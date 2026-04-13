@@ -326,13 +326,8 @@ static void PrintProcesses(zes_device_handle_t device) {
   }
 }
 
-void PrintDeviceList() {
+void PrintDeviceList(const std::vector<ze_driver_handle_t>& driver_list) {
   ze_result_t status = ZE_RESULT_SUCCESS;
-
-  std::vector<ze_driver_handle_t> driver_list = utils::ze::GetDriverList();
-  if (driver_list.empty()) {
-    return;
-  }
 
   for (size_t i = 0; i < driver_list.size(); ++i) {
     ze_api_version_t version = utils::ze::GetDriverVersion(driver_list[i]);
@@ -1249,21 +1244,52 @@ int main(int argc, char* argv[]) {
 
   utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
 
-  status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
-  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+  ze_init_driver_type_desc_t driver_type_desc {
+    ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC,
+    nullptr,
+    ZE_INIT_DRIVER_TYPE_FLAG_GPU
+  };
 
+  uint32_t driver_count = 0;
+  status = zeInitDrivers(&driver_count, nullptr, &driver_type_desc);
+
+  std::vector<ze_driver_handle_t> driver_list;
+
+  if (status == ZE_RESULT_SUCCESS && driver_count > 0) {
+    driver_list.resize(driver_count);
+    status = zeInitDrivers(&driver_count, driver_list.data(), &driver_type_desc);
+  } else {
+    status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+    if (status == ZE_RESULT_SUCCESS) {
+      driver_list = utils::ze::GetDriverList();
+    }
+  }
+
+  if (status != ZE_RESULT_SUCCESS || driver_list.empty()) {
+    std::cerr << "No Level Zero driver found (status: 0x" << std::hex << status << std::dec << ")" << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  status = zesInit(0);
+
+  if (status != ZE_RESULT_SUCCESS) {
+    status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
+    if (status == ZE_RESULT_SUCCESS && driver_list.empty()) {
+      driver_list = utils::ze::GetDriverList();
+    }
+  }
 
   PTI_ASSERT(mode == MODE_DEVICE_LIST || mode == MODE_DETAILS ||
              mode == MODE_PROCESSES);
   switch(mode) {
     case MODE_DEVICE_LIST: {
-      PrintDeviceList();
+      PrintDeviceList(driver_list);
       break;
     }
     case MODE_DETAILS:
     case MODE_PROCESSES: {
       uint32_t device_id = 0;
-      for (auto driver : utils::ze::GetDriverList()) {
+      for (auto driver : driver_list) {
         for (auto device : utils::ze::GetDeviceList(driver)) {
           if(mode == MODE_PROCESSES) {
             PrintShorInfo(driver, device, device_id);
