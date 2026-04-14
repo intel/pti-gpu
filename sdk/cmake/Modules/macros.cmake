@@ -145,27 +145,33 @@ macro(GetSpdlog)
   endif()
 endmacro()
 
-set(GetGTest_URL "https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz")
-set(GetGTest_SHA256 "65fab701d9829d38cb77c14acdc431d2108bfdbf8979e40eb8ae567edf10b27c")
 macro(GetGTest)
-  if(NOT TARGET GTest::gtest OR NOT TARGET GTest::gtest_main)
-    include(FetchContent)
-    if(CMAKE_VERSION VERSION_LESS "3.24")
-      FetchContent_Declare(
-        googletest
-        URL ${GetGTest_URL}
-        URL_HASH
-        SHA256=${GetGTest_SHA256}
-        )
-    else()
-      FetchContent_Declare(
-        googletest
-        URL ${GetGTest_URL}
-        URL_HASH
-        SHA256=${GetGTest_SHA256}
-        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
-        )
+  # TODO(PTI): Use FetchContent find_package mode when we bump minimum CMake
+  # version to 3.24 or higher.
+  if(NOT TARGET GTest::gtest
+      OR NOT TARGET GTest::gtest_main
+      OR NOT TARGET GTest::gmock
+      OR NOT TARGET GTest::gmock_main)
+    find_package(GTest QUIET)
+  endif()
+
+  if(NOT TARGET GTest::gtest
+      OR NOT TARGET GTest::gtest_main
+      OR NOT TARGET GTest::gmock
+      OR NOT TARGET GTest::gmock_main)
+    if(TARGET GTest::gtest AND NOT TARGET GTest::gmock)
+      message(FATAL_ERROR "GTest/GMock mismatch. Uninstall GTest or ensure GMock is available (e.g., install libgmock-dev on Ubuntu)")
     endif()
+    if(TARGET GTest::gmock AND NOT TARGET GTest::gmock)
+      message(FATAL_ERROR "GTest/GMock mismatch. Uninstall GMock or ensure GTest is available (e.g., install libgtest-dev on Ubuntu)")
+    endif()
+    include(FetchContent)
+    FetchContent_Declare(
+      googletest
+      GIT_REPOSITORY https://github.com/google/googletest
+      GIT_TAG 52eb8108c5bdec04579160ae17225d66034bd723 # v1.17.0
+    )
+
     set(INSTALL_GTEST
         OFF
         CACHE BOOL "" FORCE)
@@ -186,7 +192,6 @@ macro(GetGTest)
     set_target_properties(gmock_main gmock gtest gtest_main
       PROPERTIES
         COMPILE_OPTIONS "${PTI_GTEST_COMPILE_OPTIONS}")
-
   endif()
 endmacro()
 
