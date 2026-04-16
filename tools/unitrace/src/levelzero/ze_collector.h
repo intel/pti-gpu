@@ -4914,6 +4914,9 @@ class ZeCollector {
         case ZE_MEMORY_TYPE_SHARED:
           stype = 3;
           break;
+        case ZE_MEMORY_TYPE_HOST_IMPORTED:
+          stype = 0;
+          break;
         default:
           break;
       }
@@ -4944,6 +4947,9 @@ class ZeCollector {
         case ZE_MEMORY_TYPE_SHARED:
           stype = 3;
           break;
+        case ZE_MEMORY_TYPE_HOST_IMPORTED:
+          stype = 0;
+          break;
         default:
           break;
       }
@@ -4966,6 +4972,9 @@ class ZeCollector {
           break;
         case ZE_MEMORY_TYPE_SHARED:
           dtype = 3;
+          break;
+        case ZE_MEMORY_TYPE_HOST_IMPORTED:
+          dtype = 0;
           break;
         default:
           break;
