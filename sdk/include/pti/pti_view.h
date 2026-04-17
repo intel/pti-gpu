@@ -41,8 +41,8 @@ typedef enum _pti_view_kind {
   PTI_VIEW_DEVICE_GPU_MEM_COPY = 8,          //!< Memory copies between Host and Device
   PTI_VIEW_DEVICE_GPU_MEM_FILL = 9,          //!< Device memory fills
   PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P = 10,     //!< Peer to Peer Memory copies between Devices.
-  PTI_VIEW_DEVICE_SYNCHRONIZATION = 11,      //!< synchronization operations on host and GPU.
-  PTI_VIEW_COMMUNICATION = 12,               //!< Communication records via oneCCL. Only for Linux.
+  PTI_VIEW_DEVICE_SYNCHRONIZATION = 11,      //!< Synchronization operations on host and GPU.
+  PTI_VIEW_COMMUNICATION = 12,               //!< Communication operations via oneCCL. Only for Linux.
 } pti_view_kind;
 
 /**
@@ -336,32 +336,33 @@ typedef struct pti_view_record_overhead {
 } pti_view_record_overhead;
 
 /**
- * @brief apicalls View record type
+ * @brief API Calls View record type
  */
 typedef struct pti_view_record_api {
   pti_view_record_base _view_kind; //!< Base record
-  uint64_t _start_timestamp;       //!< function call start timestamp, ns
-  uint64_t _end_timestamp;         //!< function call end timestamp, ns
-  pti_api_group_id _api_group;     //!< Defines api api_group this record was collected in (L0,Sycl,OCL, etc).
+  uint64_t _start_timestamp;       //!< Function call start timestamp, ns
+  uint64_t _end_timestamp;         //!< Function call end timestamp, ns
+  pti_api_group_id _api_group;     //!< Defines the API group this record was collected in (L0, SYCL, OCL, etc).
   uint32_t _api_id;                //!< Id of this api call
-  uint32_t _process_id;            //!< Process ID of where the api call observed
-  uint32_t _thread_id;             //!< Thread ID of where the api call observed
-  uint32_t _correlation_id;        //!< Id correlating this call with other views, eg: memfill, memcpy and kernel gpu activity
-  uint32_t _return_code;           //!< Applicable only for PTI_VIEW_DRIVER_CALL, type cast to specific driver code type
+  uint32_t _process_id;            //!< Process ID of where the API call observed
+  uint32_t _thread_id;             //!< Thread ID of where the API call observed
+  uint32_t _correlation_id;        //!< Id correlating this call with other views, eg: memfill, memcpy and kernel GPU activity
+  uint32_t _return_code;           //!< Applicable only for PTI_VIEW_DRIVER_API, type cast to specific driver code type
 } pti_view_record_api;
 
 /**
- * @brief commuincation View record type, only for Linux
+ * @brief Communication View record type,
+ *        communication provided by oneCCL, supported only for Linux
  */
 typedef struct pti_view_record_comms {
   pti_view_record_base _view_kind; //!< Base record
-  uint64_t _start_timestamp;       //!< function call start timestamp, ns
-  uint64_t _end_timestamp;         //!< function call end timestamp, ns
-  uint32_t _process_id;            //!< Process ID of where the api call observed
-  uint32_t _thread_id;             //!< Thread ID of where the api call observed
+  uint64_t _start_timestamp;       //!< Operation start timestamp, ns
+  uint64_t _end_timestamp;         //!< Operation end timestamp, ns
+  uint32_t _process_id;            //!< Process ID of where the operation observed
+  uint32_t _thread_id;             //!< Thread ID of where the operation observed
   uint64_t _metadata_size;         //!< Size of metadata attached to this communication record
-  uint64_t _communicator_id;       //!< Communicator ID provided by CCL
-  const char *_name;               //!< oneCCL function name
+  uint64_t _communicator_id;       //!< Communicator ID of the operation
+  const char *_name;               //!< Operation name
 } pti_view_record_comms;
 
 /**
