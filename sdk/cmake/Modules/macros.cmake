@@ -326,41 +326,39 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
 endmacro()
 
 macro(get_itt)
-  if (NOT TARGET ittapi::ittnotify OR NOT TARGET ittnotify)
-    cmake_policy(PUSH)
-    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
-       cmake_policy(SET CMP0135 NEW)
-    endif()
+  if (NOT TARGET ittapi::ittnotify OR NOT TARGET ittapi::headers)
     include(FetchContent)
     FetchContent_Declare(
-      ittnotify
-      URL https://github.com/intel/ittapi/archive/refs/tags/v3.26.7.tar.gz
-      URL_HASH
-      SHA256=29aa0dd50cdf0f0a0a21563eafc5b7ce79052c19594a64017a51f09304a4a39f
+      ittapi
+      GIT_REPOSITORY https://github.com/intel/ittapi.git
+      GIT_TAG 2369c7eb60bbe5db9f0996b0366c68c4c0950100 # v3.26.8
     )
 
-    FetchContent_GetProperties(ittnotify)
-    if (NOT ittnotify_POPULATED)
-      FetchContent_Populate(ittnotify)
-      add_subdirectory(${ittnotify_SOURCE_DIR} ${ittnotify_BINARY_DIR} EXCLUDE_FROM_ALL)
-    endif()
+    set(ITT_API_INSTALL OFF CACHE BOOL "ITT is statically linked - avoid install" FORCE)
+    FetchContent_MakeAvailable(ittapi)
 
     target_compile_options(ittnotify PRIVATE
       $<$<C_COMPILER_ID:IntelLLVM>:-Wno-strict-prototypes>
       $<$<C_COMPILER_ID:Clang>:-Wno-strict-prototypes>
     )
+
     target_compile_options(jitprofiling PRIVATE
       $<$<C_COMPILER_ID:IntelLLVM>:-Wno-strict-prototypes>
       $<$<C_COMPILER_ID:Clang>:-Wno-strict-prototypes>
     )
 
-    add_library(ittapi::ittnotify ALIAS ittnotify)
-    add_library(ittapi::headers INTERFACE IMPORTED)
-    set_target_properties(
-      ittapi::headers
-      PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${ittnotify_SOURCE_DIR}/include;${ittnotify_SOURCE_DIR}/src/ittnotify")
+    # Allow rolling back to older versions of ITT without breaking the build.
+    # One can remove later.
+    if (TARGET ittnotify AND NOT TARGET ittapi::ittnotify)
+      add_library(ittapi::ittnotify ALIAS ittnotify)
+    endif()
 
-    cmake_policy(POP)
+    if (NOT TARGET ittapi::headers)
+      add_library(ittapi::headers INTERFACE IMPORTED)
+      set_target_properties(
+        ittapi::headers
+        PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${ittapi_SOURCE_DIR}/include;${ittapi_SOURCE_DIR}/src/ittnotify")
+    endif()
   endif()
 endmacro()
 
