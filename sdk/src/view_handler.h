@@ -35,6 +35,7 @@
 #include "unikernel.h"
 #include "utils.h"
 #include "view_buffer.h"
+#include "view_helpers.h"
 #include "view_record_info.h"
 #include "ze_collector.h"
 
@@ -127,42 +128,6 @@ inline static constexpr std::array kPtiClassLzGpuOpsCoreApis{
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchMultipleKernelsIndirect_id,
     pti_api_id_driver_levelzero::zeCommandListImmediateAppendCommandListsExp_id,
 };
-
-// It represents pti_view_kind count. Any update in pti_view_kind enum needs to be reflected here.
-inline constexpr size_t kPtiViewKindCount = 13;
-
-inline std::array<std::atomic<bool>, kPtiViewKindCount> list_of_api_view_state{};
-
-inline void SetApiViewState(pti_view_kind view_kind, bool enabled) {
-  const auto index = static_cast<uint32_t>(view_kind);
-  if (index >= kPtiViewKindCount ||
-      index == static_cast<uint32_t>(pti_view_kind::PTI_VIEW_INVALID) ||
-      index == static_cast<uint32_t>(pti_view_kind::PTI_VIEW_RESERVED)) {
-    SPDLOG_WARN("Invalid or reserved view kind: {}", index);
-    return;
-  }
-  list_of_api_view_state[index].store(enabled, std::memory_order_release);
-}
-
-inline bool GetApiViewState(pti_view_kind view_kind) {
-  const auto index = static_cast<uint32_t>(view_kind);
-  if (index >= kPtiViewKindCount ||
-      index == static_cast<uint32_t>(pti_view_kind::PTI_VIEW_INVALID) ||
-      index == static_cast<uint32_t>(pti_view_kind::PTI_VIEW_RESERVED)) {
-    SPDLOG_WARN("Invalid or reserved view kind: {}", index);
-    return false;
-  }
-  return list_of_api_view_state[index].load(std::memory_order_acquire);
-}
-
-inline bool IsAnyViewEnabled() {
-  for (size_t i = 0; i < list_of_api_view_state.size(); ++i) {
-    if (list_of_api_view_state[i].load(std::memory_order_acquire)) {
-      return true;
-    }
-  }
-  return false;
-}
 
 template <typename T, typename M>
 inline void EnableAllIndividualApis(M& mtx, T& map) {
@@ -286,8 +251,8 @@ struct PtiViewRecordHandler {
       // (too much overhead)
       // However, dealing with it requires cross-thread synchronization
       collector_options.kernel_tracing = true;
-      collector_ = ZeCollector::Create(&state_, collector_options, ZeKernelStagesCallback,
-                                       ZeApiCallsCallback, nullptr);
+      collector_ = ZeCollector::Create(&view_state_.state_, collector_options,
+                                       ZeKernelStagesCallback, ZeApiCallsCallback, nullptr);
 #if defined(PTI_CCL_ITT_COMPILE)
       IttCollector::Instance().SetCallback(CommunicationEvent);
 #endif  // PTI_CCL_ITT_COMPILE
@@ -751,8 +716,8 @@ struct PtiViewRecordHandler {
     return SetRuntimeClassSpecificGranularIds(new_value, pti_class);
   }
 
-  inline pti_result GetState() { return state_; }
-  inline void SetState(pti_result new_state) { state_ = new_state; }
+  inline pti_result GetState() { return view_state_.GetState(); }
+  inline void SetState(pti_result new_state) { view_state_.SetState(new_state); }
 
   inline SpecialCallsData& GetSpecialCallsData(const uint32_t& corrId) {
     const std::lock_guard<std::mutex> lock(set_special_calls_map_mtx_);
@@ -893,8 +858,8 @@ struct PtiViewRecordHandler {
   std::unique_ptr<ZeCollector> collector_ = nullptr;
   std::atomic<bool> collection_enabled_ = false;
   // Internal PTI state.
-  // If abnornal situation happens - this variable will be set the corresponding value
-  std::atomic<pti_result> state_ = pti_result::PTI_SUCCESS;
+  // If abnormal situation happens - this variable will be set the corresponding value
+  ViewState& view_state_ = ViewStateInstance();
   std::atomic<bool> callbacks_set_ = false;
   AskForBufferEvent get_new_buffer_;
   ReturnBufferEvent deliver_buffer_;
@@ -1013,41 +978,6 @@ inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRec
     Instance().InsertRecord(ext_record, rec.tid_);
   }
   thread_local_map_ext_corrid_vectors_deferred_erase.clear();
-}
-
-inline uint64_t ApplyTimeShift(uint64_t timestamp, int64_t time_shift) {
-  uint64_t out_ts = 0;
-  if (timestamp == 0) {
-    // this could happen if some collections disabled so not collected timestamps
-    // (e.g. task_enqueue.. ) might be zeros
-    SPDLOG_DEBUG("Timestamp is 0 when shifting time domains: TS: {}, time_shift: {}", timestamp,
-                 time_shift);
-    return 0;
-  }
-  try {
-    if (time_shift < 0) {
-      if (timestamp < static_cast<uint64_t>(-time_shift)) {  // underflow?
-        SPDLOG_WARN(
-            "Timestamp underflow detected when shifting time domains: TS: {}, "
-            "time_shift: {}",
-            timestamp, time_shift);
-        throw std::out_of_range("Timestamp underflow detected");
-      }
-      out_ts = timestamp - static_cast<uint64_t>(-time_shift);
-    } else {
-      if ((UINT64_MAX - timestamp) < static_cast<uint64_t>(time_shift)) {  // overflow?
-        SPDLOG_WARN(
-            "Timestamp overflow detected when shifting time domains: TS: {}, "
-            "time_shift: {}",
-            timestamp, time_shift);
-        throw std::out_of_range("Timestamp overflow detected");
-      }
-      out_ts = timestamp + static_cast<uint64_t>(time_shift);
-    }
-  } catch (const std::out_of_range&) {
-    Instance().SetState(pti_result::PTI_ERROR_BAD_TIMESTAMP);
-  }
-  return out_ts;
 }
 
 template <typename T>

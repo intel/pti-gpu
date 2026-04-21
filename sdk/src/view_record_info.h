@@ -27,7 +27,7 @@ inline constexpr std::array<std::size_t, kSizeOfViewRecordTable> kViewSizeLookup
     sizeof(pti_view_record_kernel),                   // PTI_VIEW_DEVICE_GPU_KERNEL
     kReserved,                                        // PTI_VIEW_DEVICE_CPU_KERNEL
     sizeof(pti_view_record_api),                      // PTI_VIEW_LEVEL_ZERO_CALLS
-    kReserved,                                        // PTI_VIEW_OPENCL_CALLS
+    kReserved,                                        // PTI_VIEW_RESERVED
     sizeof(pti_view_record_overhead),                 // PTI_VIEW_COLLECTION_OVERHEAD
     sizeof(pti_view_record_api),                      // PTI_VIEW_SYCL_RUNTIME_CALLS
     sizeof(pti_view_record_external_correlation),     // PTI_VIEW_EXTERNAL_CORRELATION
@@ -58,20 +58,31 @@ inline constexpr auto SizeOfLargestViewRecord() {
 //
 // Convert pti_view_kind enum to actual size of record.
 //
-// @param view_type onpti_view_kind enum value
-// @return size of record corresponding to view_type
-inline auto GetViewSize(pti_view_kind view_type) {
-  const auto view_type_index = static_cast<std::size_t>(view_type);
-  if (view_type_index >= std::size(kViewSizeLookupTable)) {
+// @param view_kind pti_view_kind enum value
+// @return size of record corresponding to view_kind
+inline auto GetViewSize(pti_view_kind view_kind) {
+  const auto view_kind_index = static_cast<std::size_t>(view_kind);
+  if (view_kind_index >= std::size(kViewSizeLookupTable)) {
     return SIZE_MAX;
   }
 
-  const auto view_size = kViewSizeLookupTable[view_type_index];
+  const auto view_size = kViewSizeLookupTable[view_kind_index];
   if (view_size == kReserved) {
     return SIZE_MAX;
   }
 
   return view_size;
+}
+
+// IsPtiViewKindValid()
+//
+// Returns true when view_kind has a positive record size,
+// i.e. it is a view kind that can be enabled/disabled.
+//
+// @param view_kind pti_view_kind enum value
+// @return true if view_kind is valid and enabled-able
+inline bool IsPtiViewKindValid(pti_view_kind view_kind) {
+  return GetViewSize(view_kind) != SIZE_MAX;
 }
 
 #endif  // SRC_VIEW_RECORD_INFO_

@@ -650,21 +650,14 @@ target_link_libraries(view_record_test PUBLIC spdlog::spdlog Pti::pti_view GTest
 
 get_itt()
 
-add_executable(assert_exception_test assert_exception_test.cc
-   "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc")
+add_executable(assert_exception_test assert_exception_test.cc)
 
 target_include_directories(
   assert_exception_test
-  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
-         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
-         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/itt"
-         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
+  PUBLIC "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/include"
+         "${PROJECT_SOURCE_DIR}/src")
 
-target_link_libraries(assert_exception_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
-                                                   LevelZero::level-zero
-                                                   ittapi::headers
-                                                   ${CMAKE_DL_LIBS}
-                                                   ${FS_LIB})
+target_link_libraries(assert_exception_test PUBLIC spdlog::spdlog GTest::gtest_main)
 
 add_executable(subscribers_unit_test subscribers_unit_test.cc)
 
