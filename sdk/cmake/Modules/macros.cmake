@@ -340,11 +340,13 @@ macro(get_itt)
     target_compile_options(ittnotify PRIVATE
       $<$<C_COMPILER_ID:IntelLLVM>:-Wno-strict-prototypes>
       $<$<C_COMPILER_ID:Clang>:-Wno-strict-prototypes>
+      $<$<C_COMPILER_ID:GNU>:-Wno-pedantic>
     )
 
     target_compile_options(jitprofiling PRIVATE
       $<$<C_COMPILER_ID:IntelLLVM>:-Wno-strict-prototypes>
       $<$<C_COMPILER_ID:Clang>:-Wno-strict-prototypes>
+      $<$<C_COMPILER_ID:GNU>:-Wno-pedantic>
     )
 
     # Allow rolling back to older versions of ITT without breaking the build.
