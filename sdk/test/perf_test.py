@@ -15,13 +15,16 @@ expected_stderr_strings = [
     "but not supported by driver, returning uninitialized."
 ]
 
+# Sometimes we might run it with different number of threads
+num_threads_str = "5"
+
 # fmt: off
-test_profiled = [["dpc_gemm_threaded_profiled", "-t", "5", "-r", "50", "-s", "32",
+test_profiled = [["dpc_gemm_threaded_profiled", "-t", num_threads_str, "-r", "50", "-s", "32",
                   "-c", "gpu", "-c", "sycl", "-c" , "overhead"]]
-test_prof_gpu = [["dpc_gemm_threaded_profiled", "-t", "5", "-r", "50", "-s", "32",
+test_prof_gpu = [["dpc_gemm_threaded_profiled", "-t", num_threads_str, "-r", "50", "-s", "32",
                   "-c", "gpu"]]
-test_linkonly = [["dpc_gemm_threaded_linkonly", "-t", "5", "-r", "50", "-s", "32"]]
-test_baseline = [["dpc_gemm_threaded_baseline", "-t", "5", "-r", "50", "-s", "32"]]
+test_linkonly = [["dpc_gemm_threaded_linkonly", "-t", num_threads_str, "-r", "50", "-s", "32"]]
+test_baseline = [["dpc_gemm_threaded_baseline", "-t", num_threads_str, "-r", "50", "-s", "32"]]
 
 # For Overhead View test, we run the baseline with 1 thread and bigger GPU kernel.
 # The test checks if the accumulated Overhead View time is at least
@@ -263,10 +266,12 @@ def main():
             print("Test failed")
             return 1
 
+        units_str = "items/s"
         if test_type != "overhead":
             print("\nThreshold Overhead to pass: " + str(threshold_overhead) + "% =>")
             print(" Measured overhead should not exceed Threshold Overhead\n")
         else:
+            units_str = "sec"
             print(
                 "\nThreshold Ratio to pass: " + str(threshold_overhead * 0.01) + " =>"
             )
@@ -276,7 +281,7 @@ def main():
             )
 
         print(
-            "Baseline (sec): min "
+            "Baseline (" + units_str + "): min "
             + format(min_base, ".2f")
             + " avg: "
             + format(avg_base, ".2f")
@@ -288,7 +293,7 @@ def main():
             + format(max_base, ".2f")
         )
         print(
-            "Test (sec):     min "
+            "Test (" + units_str + "):     min "
             + format(min_test, ".2f")
             + " avg: "
             + format(avg_test, ".2f")
