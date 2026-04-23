@@ -11,7 +11,6 @@ endmacro()
 
 macro(SetPtiVersion)
   file(STRINGS "${PTI_CMAKE_MACRO_DIR}/VERSION" PTI_VERSION)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPTI_VERSION=${PTI_VERSION}")
 endmacro()
 
 macro(SetBuildType)

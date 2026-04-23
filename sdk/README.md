@@ -158,7 +158,7 @@ From `build` directory:
 ```console
 > mkdir build
 > cd build
-> cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/icpx_toolchain.cmake -DCMAKE_CXX_FLAGS=/EHcs
+> cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/icpx_toolchain.cmake
 > cmake --build . --parallel 4
 > cmake --install . --config Release --prefix "../out"
 ```
