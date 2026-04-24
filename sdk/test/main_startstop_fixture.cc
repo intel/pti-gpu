@@ -47,8 +47,8 @@ constexpr size_t kNumElementsForCorrIds = 3;
 constexpr uint64_t kMinKernelDurationNs = 100;
 constexpr uint64_t kExternalCorrelationIdBase = 11;
 
-bool matched_sq_corr_ids = false;
-bool matched_add_corr_ids = false;
+[[maybe_unused]] bool matched_sq_corr_ids = false;
+[[maybe_unused]] bool matched_add_corr_ids = false;
 bool timestamps_nonzero_duration = true;
 bool kernel_timestamps_monotonic = false;
 uint64_t sycl_kernel_corr_id[kNumElementsForCorrIds];
@@ -57,11 +57,11 @@ uint64_t kernel_corr_id[kNumElementsForCorrIds];
 uint64_t kernel_append_time[kNumElementsForCorrIds];
 uint64_t sycl_idx = 0;
 uint64_t kernel_idx = 0;
-uint64_t kernel_start_ts = 0;
-uint64_t kernel_stop_ts = 0;
+[[maybe_unused]] uint64_t kernel_start_ts = 0;
+[[maybe_unused]] uint64_t kernel_stop_ts = 0;
 uint64_t number_of_kernel_recs = 0;
 uint64_t number_of_sycl_recs = 0;
-uint64_t expected_sycl_recs = 0;
+[[maybe_unused]] uint64_t expected_sycl_recs = 0;
 uint64_t eid = kExternalCorrelationIdBase;
 
 // sync variables

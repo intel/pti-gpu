@@ -297,6 +297,11 @@
     "displayName": "Linux Release x64 IntelLLVM Ninja Build"
   },
   {
+    "name": "linux-clang-release",
+    "configurePreset": "linux-clang-release",
+    "displayName": "Linux Release x64 Clang Ninja Build"
+  },
+  {
     "name": "linux-icpx-reldebuginfo",
     "configurePreset": "linux-icpx-reldebuginfo",
     "displayName": "Linux Release x64 IntelLLVM Ninja Build"
@@ -305,6 +310,11 @@
     "name": "linux-icpx-debug",
     "configurePreset": "linux-icpx-debug",
     "displayName": "Linux Debug x64 IntelLLVM Ninja Build"
+  },
+  {
+    "name": "linux-clang-debug",
+    "configurePreset": "linux-clang-debug",
+    "displayName": "Linux Debug x64 Clang Ninja Build"
   },
   {
     "name": "linux-cov",
@@ -402,6 +412,14 @@
     }
   },
   {
+    "name": "linux-clang-release",
+    "configurePreset": "linux-clang-release",
+    "displayName": "Linux Release x64 Clang Tests",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
+    }
+  },
+  {
     "name": "linux-icpx-reldebuginfo",
     "configurePreset": "linux-icpx-reldebuginfo",
     "displayName": "Linux Release x64 IntelLLVM Tests",
@@ -413,6 +431,14 @@
     "name": "linux-icpx-debug",
     "configurePreset": "linux-icpx-debug",
     "displayName": "Linux Debug x64 IntelLLVM Tests",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
+    }
+  },
+  {
+    "name": "linux-clang-debug",
+    "configurePreset": "linux-clang-debug",
+    "displayName": "Linux Debug x64 Clang Tests",
     "environment": {
       "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
     }
