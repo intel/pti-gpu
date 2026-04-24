@@ -157,7 +157,7 @@ class ZeCollectorCBSubscriber {
       // for memory ops device is tricky -- it could be source or destination,
       // or for D2D - both source and destination - so ask route object who is "main" device
       auto device_in_memory_op =
-          (record.route_.IsMainDeviceSrc()) ? record.device_ : record.dst_device_;
+          (record.memory_route_.IsMainDeviceSrc()) ? record.device_ : record.dst_device_;
       auto key = (record.command_type_ == KernelCommandType::kMemory)
                      ? std::make_pair(record.context_, device_in_memory_op)
                      : std::make_pair(record.context_, record.device_);

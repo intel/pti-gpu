@@ -20,8 +20,8 @@
 #include "pti/pti_view.h"
 #include "sycl_graph_test_kernels.h"
 #include "sycl_graph_workloads.h"
-#include "sycl_usm_helper.h"
-#include "utils/test_helpers.h"
+#include "utils/pti_record_collection_fixture.h"
+#include "utils/sycl_usm_helper.h"
 
 namespace {
 
@@ -69,23 +69,8 @@ void ValidateViewTimestamps(const std::vector<T*>& records) {
 
 }  // namespace
 
-class SyclGraphTestSuite : public ::testing::Test {
+class SyclGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
  protected:
-  struct TestData {
-    void Reset() {
-      kernel_records.clear();
-      memcpy_records.clear();
-      const std::lock_guard<std::mutex> lock(buffers_mtx);
-      buffers.clear();
-    }
-    mutable std::mutex buffers_mtx;
-    std::unordered_map<unsigned char*, pti::test::utils::PtiViewBuffer> buffers;
-    std::vector<const pti_view_record_kernel*> kernel_records;
-    std::vector<const pti_view_record_memory_copy*> memcpy_records;
-  };
-
-  SyclGraphTestSuite() { test_data_.Reset(); }
-
   void SetUp() override {
     try {
       auto graph_selector = [](const sycl::device& dev) {
@@ -106,71 +91,6 @@ class SyclGraphTestSuite : public ::testing::Test {
     }
   }
 
-  static void ProvideBuffer(unsigned char** buf, size_t* buf_size) {
-    auto buffer = pti::test::utils::PtiViewBuffer(kRequestedBufferSize);
-    if (!buffer.Valid()) {
-      FAIL() << "Unable to allocate buffer for PTI tracing";
-    }
-    *buf = buffer.data();
-    *buf_size = buffer.size();
-
-    const std::lock_guard<std::mutex> lock(test_data_.buffers_mtx);
-    test_data_.buffers[*buf] = std::move(buffer);
-  }
-
-  static void MarkBuffer(unsigned char* buf, size_t /*buf_size*/, size_t used_bytes) {
-    const std::lock_guard<std::mutex> lock(test_data_.buffers_mtx);
-    if (auto buffer = test_data_.buffers.find(buf); buffer != test_data_.buffers.end()) {
-      buffer->second.SetUsedBytes(used_bytes);
-    }
-  }
-
-  static void HandleView(pti_view_record_base* view) {
-    switch (view->_view_kind) {
-      case PTI_VIEW_DEVICE_GPU_KERNEL: {
-        const auto* const record = reinterpret_cast<const pti_view_record_kernel*>(view);
-        test_data_.kernel_records.push_back(record);
-        break;
-      }
-      case PTI_VIEW_DEVICE_GPU_MEM_COPY: {
-        const auto* const record = reinterpret_cast<const pti_view_record_memory_copy*>(view);
-        test_data_.memcpy_records.push_back(record);
-        break;
-      }
-      case PTI_VIEW_RUNTIME_API: {
-        // Empty, we just want to enable SYCL runtime tracing to get additional timestamps
-        break;
-      }
-      default: {
-        FAIL() << "View found but not handled: " << view->_view_kind;
-        break;
-      }
-    }
-  }
-
-  static void ParseBuffer(unsigned char* buf, size_t used_bytes) {
-    pti_view_record_base* record = nullptr;
-    while (true) {
-      auto buf_status = ptiViewGetNextRecord(buf, used_bytes, &record);
-      if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
-        break;
-      }
-      if (buf_status != pti_result::PTI_SUCCESS) {
-        FAIL() << "Found Error Parsing Records from PTI";
-        break;
-      }
-      HandleView(record);
-    }
-  }
-
-  static void ParseAllBuffers() {
-    const std::lock_guard<std::mutex> lock(test_data_.buffers_mtx);
-    for (auto& [_, buffer] : test_data_.buffers) {
-      ParseBuffer(buffer.data(), buffer.UsedBytes());
-    }
-  }
-
-  inline static TestData test_data_{};
   sycl::queue queue_;
   constexpr static std::size_t kMaxRecordsInBuffer = 10;
   constexpr static std::size_t kRequestedBufferSize =
@@ -181,7 +101,7 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
                                        public testing::WithParamInterface<std::tuple<std::size_t>> {
  protected:
   using UnderlyingType = float;
-  using FloatVec = SyclUsmVector<UnderlyingType>;
+  using FloatVec = pti::test::utils::SyclUsmVector<UnderlyingType>;
   using FinalizedGraphType = sycl::ext::oneapi::experimental::command_graph<
       sycl::ext::oneapi::experimental::graph_state::executable>;
   static constexpr std::size_t kExpectedKernelsPerExecution = kDefaultUsmKernelNumber;
@@ -191,7 +111,7 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
   // However, that is fragile as well.
   static constexpr auto kTimestampEqualityTolerance = std::chrono::nanoseconds(5);
 
-  SyclUsmGraphExecutionTestSuite() : replays_(std::get<0>(GetParam())) { test_data_.Reset(); }
+  SyclUsmGraphExecutionTestSuite() : replays_(std::get<0>(GetParam())) {}
 
   void InitializeTracing() {
     ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
@@ -236,7 +156,7 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
     //  Ks_4_1 < Ks_4_2 < Ks_4_3 (Ks = Kernel start time)
     //  Ks_4_1 < Ks_1_2
     // clang-format on
-    std::sort(test_data_.kernel_records.begin(), test_data_.kernel_records.end(),
+    std::sort(record_storage_.kernel_records.begin(), record_storage_.kernel_records.end(),
               [](const auto* first_record, const auto* second_record) {
                 if (first_record->_submit_timestamp != second_record->_submit_timestamp) {
                   return first_record->_submit_timestamp < second_record->_submit_timestamp;
@@ -244,19 +164,19 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
                 return first_record->_append_timestamp < second_record->_append_timestamp;
               });
 
-    ValidateViewTimestamps(test_data_.kernel_records);
+    ValidateViewTimestamps(record_storage_.kernel_records);
     ValidateGraphSubmitTimestamps();
     ValidateGraphAppendTimestamps();
   }
 
   void ValidateGraphSubmitTimestamps() {
-    for (std::size_t i = 0; i < std::size(test_data_.kernel_records);
+    for (std::size_t i = 0; i < std::size(record_storage_.kernel_records);
          i += kExpectedKernelsPerExecution) {
-      const auto* prev_kernel_in_submission = test_data_.kernel_records.at(i);
+      const auto* prev_kernel_in_submission = record_storage_.kernel_records.at(i);
       const std::size_t next_submission_idx = i + kExpectedKernelsPerExecution;
       // Validate that all kernels in the same submission have the same submit timestamp.
       for (std::size_t j = i + 1; j < next_submission_idx; ++j) {
-        const auto* curr_kernel_record = test_data_.kernel_records.at(j);
+        const auto* curr_kernel_record = record_storage_.kernel_records.at(j);
         const uint64_t submit_diff =
             curr_kernel_record->_submit_timestamp > prev_kernel_in_submission->_submit_timestamp
                 ? curr_kernel_record->_submit_timestamp -
@@ -276,8 +196,8 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
       // Validate that each submission happens after the previous one and that the kernel timestamps
       // relect that too. Each graph submission is sequential (perhaps not the kernel execution,
       // given the diamond shape graph). We're comparing _submissions_.
-      if (next_submission_idx < std::size(test_data_.kernel_records)) {
-        const auto* next_submission_kernel = test_data_.kernel_records.at(next_submission_idx);
+      if (next_submission_idx < std::size(record_storage_.kernel_records)) {
+        const auto* next_submission_kernel = record_storage_.kernel_records.at(next_submission_idx);
         EXPECT_LT(prev_kernel_in_submission->_submit_timestamp,
                   next_submission_kernel->_submit_timestamp)
             << "Next submission starts before the previous one. Previous kernel: "
@@ -296,18 +216,18 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
     // we initially submit K1 then K2 and K3 can execute in any order, then K4 executes after K2 and
     // K3 are done.
     constexpr std::size_t kLastKernelIndex = kExpectedKernelsPerExecution - 1;
-    for (std::size_t i = 0; i < std::size(test_data_.kernel_records);
+    for (std::size_t i = 0; i < std::size(record_storage_.kernel_records);
          i += kExpectedKernelsPerExecution) {
-      const auto* curr_kernel_record = test_data_.kernel_records.at(i);
-      const auto* last_kernel_record = test_data_.kernel_records.at(i + kLastKernelIndex);
+      const auto* curr_kernel_record = record_storage_.kernel_records.at(i);
+      const auto* last_kernel_record = record_storage_.kernel_records.at(i + kLastKernelIndex);
       const std::size_t first_kernel_next_submission_idx = i + kExpectedKernelsPerExecution;
       const std::size_t last_kernel_next_submission_idx =
           i + kLastKernelIndex + kExpectedKernelsPerExecution;
-      if (last_kernel_next_submission_idx < std::size(test_data_.kernel_records)) {
+      if (last_kernel_next_submission_idx < std::size(record_storage_.kernel_records)) {
         const auto* first_kernel_next_submission =
-            test_data_.kernel_records.at(first_kernel_next_submission_idx);
+            record_storage_.kernel_records.at(first_kernel_next_submission_idx);
         const auto* last_kernel_next_submission =
-            test_data_.kernel_records.at(last_kernel_next_submission_idx);
+            record_storage_.kernel_records.at(last_kernel_next_submission_idx);
         EXPECT_STREQ(curr_kernel_record->_name, first_kernel_next_submission->_name)
             << "Kernels being compared should be the same across submissions. Previous kernel:\n"
             << FormatRecord(curr_kernel_record)
@@ -370,8 +290,8 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecution) {
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   ParseAllBuffers();
-  EXPECT_EQ(std::size(test_data_.kernel_records), std::size_t{kDefaultUsmKernelNumber});
-  ValidateViewTimestamps(test_data_.kernel_records);
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{kDefaultUsmKernelNumber});
+  ValidateViewTimestamps(record_storage_.kernel_records);
 }
 
 TEST_F(SyclGraphTestSuite, TestSyclBuffersGraphExecution) {
@@ -441,14 +361,14 @@ TEST_F(SyclGraphTestSuite, TestSyclBuffersGraphExecution) {
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   ParseAllBuffers();
-  EXPECT_EQ(std::size(test_data_.kernel_records), std::size_t{4});
-  ValidateViewTimestamps(test_data_.kernel_records);
-  EXPECT_EQ(std::size(test_data_.memcpy_records), std::size_t{6});
-  ValidateViewTimestamps(test_data_.memcpy_records);
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{4});
+  ValidateViewTimestamps(record_storage_.kernel_records);
+  EXPECT_EQ(std::size(record_storage_.memcpy_records), std::size_t{6});
+  ValidateViewTimestamps(record_storage_.memcpy_records);
   constexpr std::size_t kExpectedMemCopies = kNumberOfBuffers * 2;
   constexpr std::size_t kExpectedBytesPerCopy = sizeof(UnderlyingType) * kElements;
   for (std::size_t idx = 0; idx < kExpectedMemCopies; ++idx) {
-    EXPECT_EQ(test_data_.memcpy_records.at(idx)->_bytes, kExpectedBytesPerCopy);
+    EXPECT_EQ(record_storage_.memcpy_records.at(idx)->_bytes, kExpectedBytesPerCopy);
   }
 }
 
@@ -486,9 +406,9 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmTwoGraphsReplay) {
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   ParseAllBuffers();
 
-  EXPECT_EQ(std::size(test_data_.kernel_records),
+  EXPECT_EQ(std::size(record_storage_.kernel_records),
             std::size_t{kDefaultUsmKernelNumber * kNumberOfGraphs * kNumberOfReplaysPerGraph});
-  ValidateViewTimestamps(test_data_.kernel_records);
+  ValidateViewTimestamps(record_storage_.kernel_records);
 }
 
 TEST_P(SyclUsmGraphExecutionTestSuite, TestArbitraryReplays) {
@@ -507,7 +427,8 @@ TEST_P(SyclUsmGraphExecutionTestSuite, TestArbitraryReplays) {
                                 static_cast<UnderlyingType>(replays_)) +
                                CalculateHostDotProduct<UnderlyingType>(kDefaultUsmVectorSize);
   EXPECT_FLOAT_EQ(*dot_product_, expected_result);
-  EXPECT_EQ(std::size(test_data_.kernel_records), (replays_ + 1) * kExpectedKernelsPerExecution);
+  EXPECT_EQ(std::size(record_storage_.kernel_records),
+            (replays_ + 1) * kExpectedKernelsPerExecution);
   ValidateGraphReplayTimestamps();
 }
 

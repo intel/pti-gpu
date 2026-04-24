@@ -1,3 +1,4 @@
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <level_zero/ze_api.h>
 
@@ -7,10 +8,17 @@
 #include <vector>
 
 #include "pti/pti_view.h"
-#include "utils.h"
+#include "utils/pti_record_collection_fixture.h"
+#include "utils/sycl_usm_helper.h"
 
 namespace {
 constexpr uint64_t kMaxQueueId = static_cast<uint64_t>(PTI_INVALID_QUEUE_ID);
+
+constexpr const char* const kSubstringMemoryTypeDevice = "Device";
+constexpr const char* const kSubstringMemoryTypeShared = "Shared";
+constexpr const char* const kSubstringMemoryTypeHost = "Host";
+constexpr const char* const kSubstringMemoryTypeDriverAllocated = "Driver";
+constexpr const char* const kSubstringMemoryTypeUserAllocated = "User";
 
 bool p2p_d2d_record = false;
 bool p2p_d2s_record = false;
@@ -41,12 +49,10 @@ bool queue_id_memp2p_records = false;
 }  // namespace
 
 void StartTracing() {
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_SYNCHRONIZATION), pti_result::PTI_SUCCESS);
 }
 
 void StopTracing() {
@@ -55,7 +61,6 @@ void StopTracing() {
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_FILL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), pti_result::PTI_SUCCESS);
-  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_SYNCHRONIZATION), pti_result::PTI_SUCCESS);
 }
 
 static void BufferRequested(unsigned char** buf, size_t* buf_size) {
@@ -73,8 +78,6 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
   }
 
   pti_view_record_base* ptr = nullptr;
-  uint8_t zero_uuid[PTI_MAX_DEVICE_UUID_SIZE];
-  memset(zero_uuid, 0, PTI_MAX_DEVICE_UUID_SIZE);
   while (true) {
     auto buf_status = ptiViewGetNextRecord(buf, used_bytes, &ptr);
     if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
@@ -110,13 +113,13 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
           }
           if (rec->_mem_src == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE) {
             memsrc_type_valid = true;
-            memory_src_type_stringified =
-                (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_src), "DEVICE") == 0);
+            memory_src_type_stringified = (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_src),
+                                                       kSubstringMemoryTypeDevice) == 0);
           }
           if (rec->_mem_dst == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE) {
             memdst_type_valid = true;
-            memory_dst_type_stringified =
-                (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_dst), "DEVICE") == 0);
+            memory_dst_type_stringified = (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_dst),
+                                                       kSubstringMemoryTypeDevice) == 0);
           }
         }
         break;
@@ -151,23 +154,23 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
           }
           if (rec->_mem_src == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE) {
             memsrc_type_valid = true;
-            memory_src_type_p2p_stringified =
-                (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_src), "DEVICE") == 0);
+            memory_src_type_p2p_stringified = (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_src),
+                                                           kSubstringMemoryTypeDevice) == 0);
           }
           if (rec->_mem_dst == pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED) {
             memdst_type_valid = true;
-            memory_dst_type_p2p_stringified =
-                (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_dst), "SHARED") == 0);
+            memory_dst_type_p2p_stringified = (std::strcmp(ptiViewMemoryTypeToString(rec->_mem_dst),
+                                                           kSubstringMemoryTypeShared) == 0);
           }
         }
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
-        auto* rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
+        const auto* rec = reinterpret_cast<const pti_view_record_memory_fill*>(ptr);
         std::string tmp_str = rec->_name;
-        if (!std::equal(std::begin(rec->_device_uuid), std::end(rec->_device_uuid),
-                        std::begin(zero_uuid))) {
-          memfill_uuid_zero = false;
+        if (std::all_of(std::begin(rec->_device_uuid), std::end(rec->_device_uuid),
+                        [](auto raw_byte) { return raw_byte == 0; })) {
+          memfill_uuid_zero = true;
         }
         memfill_m2s = memfill_m2s || ((rec->_mem_type == PTI_VIEW_MEMORY_TYPE_SHARED) &&
                                       (tmp_str.find("M2S") != std::string::npos));
@@ -180,7 +183,7 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         const char* plain_function_name = nullptr;
         pti_result status = ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id,
                                                 &plain_function_name);
-        PTI_ASSERT(status == PTI_SUCCESS);
+        ASSERT_EQ(status, pti_result::PTI_SUCCESS);
         std::string function_name(plain_function_name);
         if ((function_name.find("EnqueueUSMFill") != std::string::npos) ||
             (function_name.find("USMEnqueueMemset") != std::string::npos)) {
@@ -221,14 +224,14 @@ void P2pTest() {
   std::vector<float*> gpu_device_ptrs;
   std::vector<float*> gpu_shared_ptrs;
   std::vector<sycl::context> gpu_context;
-  size_t num_root_devices;
+  size_t num_root_devices = 0;
 
   try {
     std::vector<sycl::device> gpu_devices = platform.get_devices();
     num_root_devices = gpu_devices.size();
     std::cout << "Number of Root Devices: " << num_root_devices << "\n";
     sycl::property_list prop{sycl::property::queue::in_order()};
-    for (uint32_t i = 0; i < num_root_devices; i++) {
+    for (size_t i = 0; i < num_root_devices; i++) {
       gpu_context.push_back(sycl::context(gpu_devices[i]));
       gpu_queues.push_back(sycl::queue(gpu_context[i], gpu_devices[i], prop));
       gpu_device_ptrs.push_back(
@@ -459,7 +462,7 @@ TEST_F(MemoryOperationFixtureTest, P2PQueueIdPresent) {
   ASSERT_EQ(queue_id_memp2p_records, true);
 }
 
-TEST_F(MemoryOperationFixtureTest, syclRuntimeRecordsDetected) {
+TEST_F(MemoryOperationFixtureTest, SyclRuntimeRecordsDetected) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   P2pTest();
   EXPECT_EQ(sycl_host_alloc_seen, true);
@@ -467,4 +470,94 @@ TEST_F(MemoryOperationFixtureTest, syclRuntimeRecordsDetected) {
   EXPECT_EQ(sycl_shared_alloc_seen, true);
   EXPECT_EQ(sycl_memfill_seen, true);
   EXPECT_EQ(sycl_memcpy_seen, true);
+}
+
+// TODO(PTI): Right now, each member of MemoryOperationFixtureTests runs the
+// same P2pTest, which is way overkill for simple memory functional tests. This new fixture will run
+// each scenario independently.
+class MemoryOperationTest : public ::pti::test::utils::RecordCollectionFixture {
+ protected:
+  void SetUp() override {
+    try {
+      const sycl::property_list prop_list{
+          sycl::property::queue::in_order(),
+          sycl::ext::intel::property::queue::immediate_command_list()};
+      queue_ = sycl::queue(sycl::gpu_selector_v, prop_list);
+    } catch (const sycl::exception& e) {
+      GTEST_SKIP() << "No SYCL device or queue available: " << e.what();
+    } catch (...) {
+      FAIL() << "Unknown exception during SYCL device or queue creation.";
+    }
+  }
+
+  sycl::queue queue_;
+};
+
+TEST_F(MemoryOperationTest, SuccessfulMemFillDriverAllocated) {
+  InitCollection();
+  EnableViews(PTI_VIEW_DEVICE_GPU_MEM_FILL);
+  constexpr std::size_t kVecSize = 64;
+  auto host_vector = pti::test::utils::CreateHostUsmVector<int>(queue_, kVecSize);
+  queue_.memset(host_vector.get(), 0, kVecSize * sizeof(int)).wait();
+  FinalizeCollection();
+  EXPECT_EQ(std::size(record_storage_.memfill_records), 1);
+  const auto memtype = record_storage_.memfill_records[0]->_mem_type;
+  EXPECT_EQ(memtype, PTI_VIEW_MEMORY_TYPE_HOST);
+  EXPECT_THAT(ptiViewMemoryTypeToString(memtype),
+              ::testing::AllOf(::testing::HasSubstr(kSubstringMemoryTypeHost),
+                               ::testing::HasSubstr(kSubstringMemoryTypeDriverAllocated)));
+}
+
+TEST_F(MemoryOperationTest, SuccessfulMemCopyUserAllocated) {
+  InitCollection();
+  EnableViews(PTI_VIEW_DEVICE_GPU_MEM_COPY);
+
+  constexpr std::size_t kVecSize = 64;
+
+  // Force M2D with use_host_ptr and doing a memcpy
+  auto host_vector = std::vector<int>(kVecSize, 1);
+  {
+    sycl::buffer<int, 1> buf(host_vector.data(), sycl::range<1>(kVecSize),
+                             {sycl::property::buffer::use_host_ptr()});
+
+    queue_
+        .submit([&](sycl::handler& cgh) {
+          auto acc = buf.get_access<sycl::access::mode::read_write>(cgh);
+          cgh.parallel_for(sycl::range<1>(kVecSize),
+                           [=](sycl::id<1> idx) { acc[idx] = acc[idx] + 1; });
+        })
+        .wait();
+
+    buf.get_host_access();
+
+    EXPECT_TRUE(
+        std::all_of(host_vector.begin(), host_vector.end(), [](int idx) { return idx == 2; }));
+  }
+  FinalizeCollection();
+  std::sort(record_storage_.memcpy_records.begin(), record_storage_.memcpy_records.end(),
+            [](const auto* first, const auto* second) {
+              return first->_start_timestamp < second->_start_timestamp;
+            });
+  EXPECT_EQ(std::size(record_storage_.memcpy_records), 2);
+  EXPECT_EQ(record_storage_.memcpy_records[0]->_mem_dst, PTI_VIEW_MEMORY_TYPE_DEVICE);
+  EXPECT_EQ(record_storage_.memcpy_records[0]->_memcpy_type,
+            pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2D);
+  const auto memtype = record_storage_.memcpy_records[0]->_mem_src;
+  EXPECT_EQ(memtype, PTI_VIEW_MEMORY_TYPE_MEMORY);
+  EXPECT_THAT(ptiViewMemoryTypeToString(memtype),
+              ::testing::AllOf(::testing::HasSubstr(kSubstringMemoryTypeHost),
+                               ::testing::HasSubstr(kSubstringMemoryTypeUserAllocated)));
+}
+
+TEST(MemoryTypeStringificationTest, ToStringReturnsCorrectStringsForAllMemoryTypes) {
+  EXPECT_THAT(ptiViewMemoryTypeToString(pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED),
+              ::testing::HasSubstr(kSubstringMemoryTypeShared));
+  EXPECT_THAT(ptiViewMemoryTypeToString(pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST),
+              ::testing::AllOf(::testing::HasSubstr(kSubstringMemoryTypeHost),
+                               ::testing::HasSubstr(kSubstringMemoryTypeDriverAllocated)));
+  EXPECT_THAT(ptiViewMemoryTypeToString(pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY),
+              ::testing::AllOf(::testing::HasSubstr(kSubstringMemoryTypeHost),
+                               ::testing::HasSubstr(kSubstringMemoryTypeUserAllocated)));
+  EXPECT_THAT(ptiViewMemoryTypeToString(pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE),
+              ::testing::HasSubstr(kSubstringMemoryTypeDevice));
 }

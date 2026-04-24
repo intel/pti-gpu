@@ -64,8 +64,8 @@ typedef enum _pti_view_synchronization_type {
  * @brief Memory types
  */
 typedef enum _pti_view_memory_type {
-  PTI_VIEW_MEMORY_TYPE_MEMORY = 0,  //!< Unknown memory type
-  PTI_VIEW_MEMORY_TYPE_HOST = 1,    //!< Host memory
+  PTI_VIEW_MEMORY_TYPE_MEMORY = 0,  //!< Unknown or host memory (user allocated)
+  PTI_VIEW_MEMORY_TYPE_HOST = 1,    //!< Host memory (driver allocated)
   PTI_VIEW_MEMORY_TYPE_DEVICE = 2,  //!< Device memory
   PTI_VIEW_MEMORY_TYPE_SHARED = 3,  //!< Shared memory
 } pti_view_memory_type;

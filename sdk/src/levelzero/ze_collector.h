@@ -33,6 +33,7 @@
 #include <new>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -42,6 +43,7 @@
 #include "overhead_kinds.h"
 #include "pti/pti_view.h"
 #include "pti_api_ids_state_maps.h"
+#include "pti_memory_route.h"
 #include "unikernel.h"
 #include "utils.h"
 #include "ze_collector_cb_helpers.h"
@@ -87,7 +89,7 @@ struct ZeKernelGroupSize {
 struct ZeKernelCommandProps {
   std::string name;
   KernelCommandType type = KernelCommandType::kInvalid;
-  ZeMemoryCommandRoute route;
+  PtiMemoryCommandRoute route;
   size_t simd_width;
   size_t bytes_transferred;
   std::array<uint32_t, 3> group_count;
@@ -98,6 +100,12 @@ struct ZeKernelCommandProps {
   ze_device_handle_t dst_device = nullptr;  // Device for p2p memcpy, destination of copy data
   void* dst = nullptr;                      // Addressess for MemoryCopy or Fill
   void* src = nullptr;
+};
+
+struct ZeMemoryInfo {
+  ze_device_handle_t device = nullptr;
+  pti_view_memory_type type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
+  bool is_p2p_capable = false;
 };
 
 struct ZeKernelCommand {
@@ -1220,7 +1228,7 @@ class ZeCollector {
       rec.name_ = std::move(name);
       rec.queue_ = command->queue;
       rec.device_ = command->device;
-      rec.route_ = command->props.route;
+      rec.memory_route_ = command->props.route;
       rec.num_wait_events_ = command->num_wait_events;
       rec.result_ = command->result_;
       if (command->props.src_device != nullptr) {
@@ -2245,7 +2253,7 @@ class ZeCollector {
     }
   }
 
-  void PostAppendMemoryCommand(ZeCollector* collector, std::string command_name,
+  void PostAppendMemoryCommand(ZeCollector* collector, std::string_view command_name,
                                size_t bytes_transferred, const void* src, const void* dst,
                                ze_event_handle_t& signal_event,
                                ze_command_list_handle_t command_list, ze_result_t result,
@@ -2267,9 +2275,8 @@ class ZeCollector {
     PTI_ASSERT(context != nullptr);
 
     ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
-    command->props =
-        GetTransferProps(std::move(command_name), bytes_transferred, (src ? context : nullptr), src,
-                         (dst ? context : nullptr), dst, pattern_size);
+    command->props = GetTransferProps(command_name, bytes_transferred, (src ? context : nullptr),
+                                      src, (dst ? context : nullptr), dst, pattern_size);
 
     // Subscriber callback
     collector->DoCallbackOnGPUOperationAppended(command, PTI_CB_PHASE_API_EXIT, result);
@@ -2277,7 +2284,7 @@ class ZeCollector {
     PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
   }
 
-  void AppendMemoryCommandContext(std::string command_name, size_t bytes_transferred,
+  void AppendMemoryCommandContext(std::string_view command_name, size_t bytes_transferred,
                                   ze_context_handle_t src_context, const void* src,
                                   ze_context_handle_t dst_context, const void* dst,
                                   ze_event_handle_t& signal_event,
@@ -2292,13 +2299,13 @@ class ZeCollector {
     PTI_ASSERT(context != nullptr);
 
     ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
-    command->props = GetTransferProps(std::move(command_name), bytes_transferred, src_context, src,
+    command->props = GetTransferProps(command_name, bytes_transferred, src_context, src,
                                       (dst_context ? dst_context : context), dst);
 
     PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
   }
 
-  void AppendImageMemoryCopyCommand(std::string command_name, ze_image_handle_t image,
+  void AppendImageMemoryCopyCommand(std::string_view command_name, ze_image_handle_t image,
                                     const void* src, const void* dst,
                                     ze_event_handle_t& signal_event,
                                     ze_command_list_handle_t command_list, void** instance_data,
@@ -2313,8 +2320,7 @@ class ZeCollector {
     size_t bytes_transferred = GetImageSize(image);
 
     ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
-    command->props =
-        GetTransferProps(std::move(command_name), bytes_transferred, context, src, context, dst);
+    command->props = GetTransferProps(command_name, bytes_transferred, context, src, context, dst);
 
     // TODO implement image copy support in Local collection model
     if (collection_mode_ != ZeCollectionMode::Local) {
@@ -2343,107 +2349,106 @@ class ZeCollector {
     PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
   }
 
-  static ZeKernelCommandProps GetTransferProps(std::string name, size_t bytes_transferred,
-                                               ze_context_handle_t src_context, const void* src,
-                                               ze_context_handle_t dst_context, const void* dst,
-                                               size_t pattern_size = 0) {
+  [[nodiscard]] static ZeMemoryInfo GetMemoryInfo(ze_context_handle_t ctx, const void* ptr) {
+    ZeMemoryInfo mem_info{};
+    if (ctx == nullptr || ptr == nullptr) {
+      return mem_info;
+    }
+
+    ze_memory_allocation_properties_t props{};
+    props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
+    auto status = ZE_RESULT_SUCCESS;
+    ze_device_handle_t device = nullptr;
+    {
+      overhead::ScopedOverheadCollector overhead_collector(zeMemGetAllocProperties_id);
+      status = zeMemGetAllocProperties(ctx, ptr, &props, &device);
+    }
+
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("Failed to get memory properties for pointer: {} in context: {}, error: {:x}.",
+                   ptr, static_cast<const void*>(ctx), static_cast<uint32_t>(status));
+      return mem_info;
+    }
+    mem_info.device = device;
+
+    // Conversion from L0 -> PTI view memory types
+    switch (props.type) {
+      case ZE_MEMORY_TYPE_UNKNOWN:
+        mem_info.type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
+        mem_info.is_p2p_capable = false;
+        break;
+      case ZE_MEMORY_TYPE_HOST:
+        mem_info.type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
+        mem_info.is_p2p_capable = false;
+        break;
+      case ZE_MEMORY_TYPE_DEVICE:
+        mem_info.type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
+        mem_info.is_p2p_capable = true;
+        break;
+      case ZE_MEMORY_TYPE_SHARED:
+        mem_info.type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
+        mem_info.is_p2p_capable = true;
+        break;
+      case ZE_MEMORY_TYPE_HOST_IMPORTED:
+        mem_info.type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
+        mem_info.is_p2p_capable = false;
+        break;
+      default:
+        mem_info.type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
+        mem_info.is_p2p_capable = false;
+        break;
+    }
+
+    return mem_info;
+  }
+
+  [[nodiscard]] static ZeKernelCommandProps GetTransferProps(
+      std::string_view name, size_t bytes_transferred, ze_context_handle_t src_context,
+      const void* src, ze_context_handle_t dst_context, const void* dst, size_t pattern_size = 0) {
     SPDLOG_TRACE("In {}", __FUNCTION__);
     PTI_ASSERT(!name.empty());
 
-    ZeMemoryCommandRoute route;
-    ze_device_handle_t src_dev = nullptr;
-    ze_device_handle_t dst_dev = nullptr;
+    ZeKernelCommandProps transfer_properties{};
+    transfer_properties.name = std::string(name);
+    transfer_properties.bytes_transferred = bytes_transferred;
+    transfer_properties.value_size = pattern_size;
+    transfer_properties.type = KernelCommandType::kMemory;
 
-    if (src_context != nullptr && src != nullptr) {
-      ze_memory_allocation_properties_t props;
-      props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
-      props.pNext = nullptr;
-      overhead::Init();
-      ze_result_t status = zeMemGetAllocProperties(src_context, src, &props, &src_dev);
-      overhead_fini(zeMemGetAllocProperties_id);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    PtiMemoryCommandRoute memory_route{};
 
-      switch (props.type) {
-        case ZE_MEMORY_TYPE_UNKNOWN:
-          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-          route.peer_2_peer = false;
-          break;
-        case ZE_MEMORY_TYPE_HOST:
-          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-          route.peer_2_peer = false;
-          break;
-        case ZE_MEMORY_TYPE_DEVICE:
-          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-          route.peer_2_peer = true;
-          break;
-        case ZE_MEMORY_TYPE_SHARED:
-          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-          route.peer_2_peer = true;
-          break;
-        default:
-          route.src_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-          route.peer_2_peer = false;
-          break;
-      }
+    const auto src_info = GetMemoryInfo(src_context, src);
+    const auto dst_info = GetMemoryInfo(dst_context, dst);
+
+    memory_route.is_peer_2_peer = (src_info.is_p2p_capable && dst_info.is_p2p_capable) &&
+                                  (src_info.device != nullptr) && (dst_info.device != nullptr) &&
+                                  (src_info.device != dst_info.device);
+
+    memory_route.src_type = src_info.type;
+    memory_route.dst_type = dst_info.type;
+
+    transfer_properties.name += "(" + memory_route.GetCompactStringForTypes();
+
+    ze_bool_t can_access_peer = 0;
+    ze_result_t status = ZE_RESULT_SUCCESS;
+    if (memory_route.is_peer_2_peer) {
+      overhead::ScopedOverheadCollector overhead_collector(zeDeviceCanAccessPeer_id);
+      status = zeDeviceCanAccessPeer(src_info.device, dst_info.device, &can_access_peer);
     }
 
-    if (dst_context != nullptr && dst != nullptr) {
-      ze_memory_allocation_properties_t props;
-      props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
-      props.pNext = nullptr;
-      overhead::Init();
-      ze_result_t status = zeMemGetAllocProperties(dst_context, dst, &props, &dst_dev);
-      overhead_fini(zeMemGetAllocProperties_id);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-      switch (props.type) {
-        case ZE_MEMORY_TYPE_UNKNOWN:
-          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-          route.peer_2_peer = false;
-          break;
-        case ZE_MEMORY_TYPE_HOST:
-          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_HOST;
-          route.peer_2_peer = false;
-          break;
-        case ZE_MEMORY_TYPE_DEVICE:
-          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE;
-          break;
-        case ZE_MEMORY_TYPE_SHARED:
-          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED;
-          break;
-        default:
-          route.dst_type = pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_MEMORY;
-          route.peer_2_peer = false;
-          break;
-      }
+    if (status == ZE_RESULT_SUCCESS && can_access_peer) {
+      transfer_properties.name += memory_route.GetCompactStringForP2P();
     }
 
-    //
-    // TODO:  Redo the stringified -P2P propagation.
-    //
-    name += "(" + route.StringifyTypesCompact();
-    ze_bool_t p2p_access = 0;
-    if (route.peer_2_peer && src_dev && dst_dev && (src_dev != dst_dev)) {
-      auto status = zeDeviceCanAccessPeer(src_dev, dst_dev, &p2p_access);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-      if (p2p_access) {
-        name += route.StringifyPeer2PeerCompact();
-      }
-    }
-    name += ")";
-    SPDLOG_TRACE("\t\tIn {}, ops name: {}, p2p: {}", __FUNCTION__, name.c_str(), route.peer_2_peer);
+    transfer_properties.name += ")";
+    SPDLOG_TRACE("\t\tIn {}, ops name: {}, p2p: {}", __FUNCTION__, transfer_properties.name,
+                 can_access_peer ? "true" : "false");
 
-    ZeKernelCommandProps props{};
-    props.name = std::move(name);
-    props.route = route;
-    props.bytes_transferred = bytes_transferred;
-    props.value_size = pattern_size;
-    props.type = KernelCommandType::kMemory;
-    props.src_device = src_dev;
-    props.dst_device = dst_dev;
-    props.dst = const_cast<void*>(dst);
-    props.src = const_cast<void*>(src);
-    return props;
+    transfer_properties.route = memory_route;
+    transfer_properties.src_device = src_info.device;
+    transfer_properties.dst_device = dst_info.device;
+    transfer_properties.dst = const_cast<void*>(dst);
+    transfer_properties.src = const_cast<void*>(src);
+    return transfer_properties;
   }
 
   static void OnEnterCommandListAppendLaunchKernel(

@@ -935,15 +935,16 @@ inline pti_result GetNextRecord(uint8_t* buffer, size_t valid_bytes,
 
 inline void SetMemFillType(pti_view_record_memory_fill& mem_record,
                            const ZeKernelCommandExecutionRecord& rec) {
-  SPDLOG_TRACE("In {}, memory route: {}", __FUNCTION__, rec.route_.StringifyTypesCompact());
-  mem_record._mem_type = rec.route_.dst_type;
+  SPDLOG_TRACE("In {}, memory route: {}", __FUNCTION__,
+               rec.memory_route_.GetCompactStringForTypes());
+  mem_record._mem_type = rec.memory_route_.dst_type;
 }
 
 template <typename T>
 inline void SetMemCopyType(T& mem_record, const ZeKernelCommandExecutionRecord& rec) {
-  mem_record._memcpy_type = rec.route_.GetMemcpyType();
-  mem_record._mem_src = rec.route_.src_type;
-  mem_record._mem_dst = rec.route_.dst_type;
+  mem_record._memcpy_type = rec.memory_route_.GetMemcpyType();
+  mem_record._mem_src = rec.memory_route_.src_type;
+  mem_record._mem_dst = rec.memory_route_.dst_type;
 }
 
 inline void GetDeviceId(char* buf, const ze_pci_ext_properties_t& pci_prop_) {

@@ -11,7 +11,7 @@
 #include <tuple>
 
 #include "sycl_graph_test_kernels.h"
-#include "sycl_usm_helper.h"
+#include "utils/sycl_usm_helper.h"
 
 constexpr static inline std::size_t kDefaultUsmVectorSize = 10;
 constexpr static inline std::size_t kDefaultUsmKernelNumber = 4;
@@ -20,8 +20,10 @@ constexpr static inline std::size_t kDefaultUsmKernelNumber = 4;
 // (device).
 template <typename T>
 [[nodiscard]] inline auto CreateUsmDotProductVectors(sycl::queue& queue, size_t n) {
-  return std::make_tuple(CreateSharedUsmVector<T>(queue, 1), CreateDeviceUsmVector<T>(queue, n),
-                         CreateDeviceUsmVector<T>(queue, n), CreateDeviceUsmVector<T>(queue, n));
+  return std::make_tuple(pti::test::utils::CreateSharedUsmVector<T>(queue, 1),
+                         pti::test::utils::CreateDeviceUsmVector<T>(queue, n),
+                         pti::test::utils::CreateDeviceUsmVector<T>(queue, n),
+                         pti::test::utils::CreateDeviceUsmVector<T>(queue, n));
 }
 
 template <typename T>

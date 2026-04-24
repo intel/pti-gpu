@@ -277,16 +277,16 @@ if(HAVE_SYCL)
 
   target_include_directories(
     mem_ops_test
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
-         "${PROJECT_SOURCE_DIR}/src"
-         "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
-         "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
+    PUBLIC "${PROJECT_BINARY_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/src")
 
   target_compile_options(mem_ops_test PRIVATE -fsycl)
 
   target_link_options(mem_ops_test PRIVATE -fsycl)
 
-  target_link_libraries(mem_ops_test PUBLIC spdlog::spdlog Pti::pti_view GTest::gtest_main
+  target_link_libraries(mem_ops_test PUBLIC spdlog::spdlog Pti::pti_view
+    GTest::gtest_main GTest::gmock
     LevelZero::level-zero)
 
   add_executable(sycl_queue_id sycl_queue_id.cc)
@@ -700,6 +700,20 @@ target_link_libraries(pti_assert_test PUBLIC GTest::gtest_main GTest::gmock)
 
 gtest_discover_tests(
   pti_assert_test
+  PROPERTIES LABELS "unit")
+
+add_executable(pti_memory_route_test pti_memory_route_test.cc)
+
+target_include_directories(pti_memory_route_test PUBLIC
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_BINARY_DIR}/include"
+  "${PROJECT_SOURCE_DIR}/src/utils"
+  "${PROJECT_SOURCE_DIR}/include")
+
+target_link_libraries(pti_memory_route_test PUBLIC GTest::gtest_main GTest::gmock)
+
+gtest_discover_tests(
+  pti_memory_route_test
   PROPERTIES LABELS "unit")
 
 gtest_discover_tests(

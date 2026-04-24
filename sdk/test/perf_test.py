@@ -281,7 +281,9 @@ def main():
             )
 
         print(
-            "Baseline (" + units_str + "): min "
+            "Baseline ("
+            + units_str
+            + "): min "
             + format(min_base, ".2f")
             + " avg: "
             + format(avg_base, ".2f")
@@ -293,7 +295,9 @@ def main():
             + format(max_base, ".2f")
         )
         print(
-            "Test (" + units_str + "):     min "
+            "Test ("
+            + units_str
+            + "):     min "
             + format(min_test, ".2f")
             + " avg: "
             + format(avg_test, ".2f")

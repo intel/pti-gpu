@@ -230,24 +230,20 @@ const char* ptiViewOverheadKindToString(pti_view_overhead_kind type) {
   return kOverheadKindType[0];
 }
 
-// Capture all memory types and associate strings to static storage
-//
-inline constexpr static std::array<const char* const, 5> kMemoryType = {
-    "INVALID", "MEMORY(Unknown)", "HOST", "DEVICE", "SHARED"};
-
+// Keep INVALID uppercase to match other types (for now).
 // Returns the stringified version of memory type back.
 const char* ptiViewMemoryTypeToString(pti_view_memory_type type) {
   switch (type) {
     case PTI_VIEW_MEMORY_TYPE_MEMORY:
-      return kMemoryType[1];
+      return "Host (User Allocated)";
     case PTI_VIEW_MEMORY_TYPE_HOST:
-      return kMemoryType[2];
+      return "Host (Driver Allocated)";
     case PTI_VIEW_MEMORY_TYPE_DEVICE:
-      return kMemoryType[3];
+      return "Device";
     case PTI_VIEW_MEMORY_TYPE_SHARED:
-      return kMemoryType[4];
+      return "Shared";
   }
-  return kMemoryType[0];
+  return "INVALID";
 }
 
 // Capture all memcpy types and associate strings to static storage
