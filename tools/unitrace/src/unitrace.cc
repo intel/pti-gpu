@@ -44,6 +44,10 @@
 #include "unitimer.h"
 #include "utils_host.h"
 
+#if !defined(UNITRACE_INSTALL_LIBDIR)
+#define UNITRACE_INSTALL_LIBDIR "lib"
+#endif /* UNITRACE_INSTALL_LIBDIR */
+
 static ZeMetricProfiler* metric_profiler = nullptr;
 static bool idle_sampling = false;
 
@@ -942,7 +946,7 @@ int main(int argc, char *argv[]) {
 #ifdef _WIN32
   errno_t err = fopen_s(&fp, lib_path.c_str(), "rb");
   if (err != 0 || fp == nullptr) {
-    lib_path = executable_path + "/../lib/" + LIB_UNITRACE_TOOL_NAME;
+    lib_path = executable_path + "/../" UNITRACE_INSTALL_LIBDIR "/" + LIB_UNITRACE_TOOL_NAME;
     err = fopen_s(&fp, lib_path.c_str(), "rb");
     if (err != 0 || fp == nullptr) {
       use_ld_lib_path = true;
@@ -956,7 +960,7 @@ int main(int argc, char *argv[]) {
 #else /* _WIN32 */
   fp = fopen(lib_path.c_str(), "rb");
   if (fp == nullptr) {
-      lib_path = executable_path + "/../lib/" + LIB_UNITRACE_TOOL_NAME;
+      lib_path = executable_path + "/../" UNITRACE_INSTALL_LIBDIR "/" + LIB_UNITRACE_TOOL_NAME;
       fp = fopen(lib_path.c_str(), "rb");
       if (fp == nullptr) {
         use_ld_lib_path = true;
@@ -976,7 +980,7 @@ int main(int argc, char *argv[]) {
   } else {
     fp = fopen(mpi_interceptor_path.c_str(), "rb");
     if (fp == nullptr) {
-      mpi_interceptor_path = executable_path + "/../lib/" + LIB_UNITRACE_MPI_NAME;
+      mpi_interceptor_path = executable_path + "/../" UNITRACE_INSTALL_LIBDIR "/" + LIB_UNITRACE_MPI_NAME;
       fp = fopen(mpi_interceptor_path.c_str(), "rb");
       if (fp == nullptr) {
         std::cerr << "[ERROR] Library " << mpi_interceptor_path << " cannot be found or opened. " << std::endl;

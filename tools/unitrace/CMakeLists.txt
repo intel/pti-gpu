@@ -8,6 +8,8 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 SetCompilerFlags()
 SetBuildType()
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 if(WIN32)
   #Win_Todo :  Default MPI is disabled on windows.It will be enabled once verified.
   option(BUILD_WITH_MPI
@@ -40,6 +42,8 @@ endif()
 if (BUILD_WITH_MPI AND BUILD_WITH_ITT STREQUAL "0")
   message(FATAL_ERROR "BUILD_WITH_ITT=0 and BUILD_WITH_MPI=1 is not a valid configuration for unitrace tool.")
 endif()
+
+include(GNUInstallDirs)
 
 add_compile_definitions(BUILD_WITH_ITT=${BUILD_WITH_ITT})
 add_compile_definitions(BUILD_WITH_XPTI=${BUILD_WITH_XPTI})
@@ -257,6 +261,11 @@ else()
   set(_use_mpi 0)
 endif()
 target_compile_definitions(unitrace PRIVATE BUILD_WITH_MPI=${_use_mpi})
+
+if(CMAKE_INSTALL_LIBDIR)
+  target_compile_definitions(unitrace PRIVATE UNITRACE_INSTALL_LIBDIR="${CMAKE_INSTALL_LIBDIR}")
+endif()
+
 target_include_directories(unitrace
   PRIVATE "${CMAKE_BINARY_DIR}"
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
@@ -315,15 +324,38 @@ configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/bmg/ComputeBasic.txt
 configure_file(${PROJECT_SOURCE_DIR}/scripts/metrics/config/bmg/MemoryProfile.txt ${CMAKE_BINARY_DIR}/scripts/metrics/config/bmg/MemoryProfile.txt COPYONLY)
 
 # Installation
-install(TARGETS unitrace)
-install(TARGETS unitrace_tool RUNTIME)
-install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/uniview.py DESTINATION bin)
-install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/tracemerge/mergetrace.py DESTINATION bin)
-install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/metrics/analyzeperfmetrics.py DESTINATION bin)
-install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/metrics/addrasm.py DESTINATION bin)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/scripts/metrics/config DESTINATION etc/unitrace/metrics)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/scripts/summary DESTINATION bin)
+# Note: CMake will ignore not relevant DESTINATION (e.g., LIBRARY DESTINATION
+# for unitrace)
+install(TARGETS unitrace unitrace_tool
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                COMPONENT Unitrace_Runtime
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+                COMPONENT Unitrace_Runtime
+)
+
+install(PROGRAMS
+        ${PROJECT_SOURCE_DIR}/scripts/uniview.py
+        ${PROJECT_SOURCE_DIR}/scripts/tracemerge/mergetrace.py
+        ${PROJECT_SOURCE_DIR}/scripts/metrics/analyzeperfmetrics.py
+        ${PROJECT_SOURCE_DIR}/scripts/metrics/addrasm.py
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT Unitrace_Scripts)
+
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/scripts/metrics/config
+        DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/unitrace/metrics
+        COMPONENT Unitrace_Config)
+
+# TODO: Properly handle the directory inside bin (a little expected on Linux).
+install(DIRECTORY
+        ${PROJECT_SOURCE_DIR}/scripts/summary
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT Unitrace_Scripts)
 
 if (BUILD_WITH_MPI)
-  install(TARGETS unitrace_mpi RUNTIME)
+  install(TARGETS unitrace_mpi
+          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                  COMPONENT Unitrace_Runtime
+          RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+                  COMPONENT Unitrace_Runtime
+  )
 endif()
