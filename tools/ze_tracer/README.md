@@ -2,7 +2,7 @@
 
 > **Warning**: This repository is obsolete. We will not be providing updates or support.
 
-Please use [Unitrace](https://github.com/intel-innersource/applications.analyzers.profilingtoolsinterfaces.sdk/tree/master/tools/unitrace) instead. Unitrace has support of all the options. Report in case of any issue found. We will be happy to help.
+Please use [unitrace](../unitrace) instead. Unitrace has support of all the options. Report in case of any issue found. We will be happy to help.
 
 # Level Zero Tracer
 ## Overview
