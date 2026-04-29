@@ -311,9 +311,17 @@ target_link_libraries(
 include(CTest)
 
 if(BUILD_TESTING AND PTI_BUILD_SAMPLES)
+  # Workaround for crash with tbb_debug in oneAPI < 2026.0
   # https://github.com/uxlfoundation/oneTBB/commit/d784b628190cbbcb6139916da3efe8c0b60abaa2
-  set(TBB_FIND_RELEASE_ONLY ON CACHE BOOL
-    "Only use release TBB to workaround crash with tbb_debug")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM" AND DEFINED ENV{CMPLR_ROOT})
+    string(REGEX MATCH "compiler/([0-9]+)" ONEAPI_VERSION_MATCH "$ENV{CMPLR_ROOT}")
+    set(ONEAPI_VERSION "${CMAKE_MATCH_1}")
+    if(ONEAPI_VERSION AND ONEAPI_VERSION LESS 2026)
+      set(TBB_FIND_RELEASE_ONLY ON CACHE BOOL "Only use release TBB to workaround crash with tbb_debug" FORCE)
+      message(STATUS "oneAPI ${ONEAPI_VERSION}: Enabling TBB_FIND_RELEASE_ONLY workaround")
+    endif()
+  endif()
+
   add_subdirectory(samples/dlworkloads)
   add_subdirectory(samples/dpc_gemm)
   add_subdirectory(samples/dpc_gemm_threaded)

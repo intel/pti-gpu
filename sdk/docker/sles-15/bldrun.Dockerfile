@@ -25,8 +25,8 @@ RUN zypper refresh && \
     libOpenCL1 libva-utils hwinfo \
     intel-metrics-discovery intel-metrics-discovery-devel \
     intel-metrics-library intel-metrics-library-devel \
-    intel-dpcpp-cpp-compiler-2025.3 \
-    intel-oneapi-mkl-devel-2025.3 \
-    intel-oneapi-dnnl-devel-2025.3 \
-    intel-oneapi-ccl-devel-2021.17 && \
+    intel-dpcpp-cpp-compiler-2026.0 \
+    intel-oneapi-mkl-devel-2026.0 \
+    intel-oneapi-dnnl-devel-2026.0 \
+    intel-oneapi-ccl-devel-2022.0 && \
   zypper clean --all
