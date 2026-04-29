@@ -47,3 +47,11 @@ void xptiTraceInit(unsigned int major_version, unsigned int minor_version, const
 }
 
 void xptiTraceFinish(const char* /*stream_name*/) {}
+
+bool xptiQuerySubscriberStreamDetailLevel(const char* stream_name,
+                                          xpti::stream_detail_level_t* level) {
+  if (!pti::PtiLibHandler::Instance().xptiQuerySubscriberStreamDetailLevel_) {
+    return false;
+  }
+  return pti::PtiLibHandler::Instance().xptiQuerySubscriberStreamDetailLevel_(stream_name, level);
+}

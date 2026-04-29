@@ -143,6 +143,10 @@ class PtiLibHandler {
   decltype(&__itt_string_handle_create) __itt_string_handle_create_ = nullptr;  // NOLINT
   decltype(&__itt_metadata_add) __itt_metadata_add_ = nullptr;                  // NOLINT
 
+  // Forward to implementation in core library
+  decltype(&xptiQuerySubscriberStreamDetailLevel) xptiQuerySubscriberStreamDetailLevel_ =  // NOLINT
+      nullptr;                                                                             // NOLINT
+
  private:
   inline void CommunicateForeignXPTISubscriber() {
     // Passing information about XPTI subscriber to PTI Core library right after it is loaded.
@@ -180,6 +184,7 @@ class PtiLibHandler {
 #define PTI_VIEW_GET_SYMBOL(X) X##_ = pti_view_lib_->GetSymbol<decltype(&X)>(#X)  // NOLINT
     PTI_VIEW_GET_SYMBOL(xptiTraceInit);
     PTI_VIEW_GET_SYMBOL(xptiTraceFinish);
+    PTI_VIEW_GET_SYMBOL(xptiQuerySubscriberStreamDetailLevel);
     PTI_VIEW_GET_SYMBOL(ptiViewEnable);
     PTI_VIEW_GET_SYMBOL(ptiViewDisable);
     PTI_VIEW_GET_SYMBOL(ptiViewGPULocalAvailable);

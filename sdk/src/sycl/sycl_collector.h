@@ -498,6 +498,23 @@ XPTI_CALLBACK_API void xptiTraceInit(unsigned int major_version, unsigned int mi
 
 XPTI_CALLBACK_API void xptiTraceFinish(const char* /*stream_name*/) {}
 
+#ifdef XPTI_HAS_STREAM_DETAIL_LEVEL
+XPTI_CALLBACK_API bool xptiQuerySubscriberStreamDetailLevel(const char* stream_name,
+                                                            xpti::stream_detail_level_t* level) {
+  // The framework calls this to query our desired detail level
+  if (!level) return false;
+
+  if (stream_name && std::strcmp(stream_name, "sycl") == 0) {
+    // Request BASIC level for minimal overhead on the sycl stream
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_BASIC;
+  } else {
+    // Use NORMAL (default) for other streams
+    *level = xpti::stream_detail_level_t::XPTI_STREAM_DETAIL_LEVEL_NORMAL;
+  }
+  return true;
+}
+#endif
+
 // clang-format off
 extern "C" {
   void
