@@ -32,7 +32,7 @@ RUN echo '[oneAPI]' > /etc/yum.repos.d/oneAPI.repo; \
 #
 RUN wget https://repositories.intel.com/gpu/rhel/8.10/intel-gpu-rhel-8.10.run && \
   chmod +x intel-gpu-rhel-8.10.run && \
-  ./intel-gpu-rhel-8.10.run -f && \
+  ./intel-gpu-rhel-8.10.run -f -y && \
   rm ./intel-gpu-rhel-8.10.run
 
 RUN dnf install -y --setopt=tsflags=nodocs \

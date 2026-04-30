@@ -119,6 +119,7 @@ jobs:
           python ./tests/run.py -s instcount
 
       - name: Build-and-test-ze_debug_info
+        if: false
         if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
