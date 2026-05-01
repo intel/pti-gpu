@@ -42,12 +42,6 @@
 using AskForBufferEvent = std::function<void(unsigned char**, size_t*)>;
 using ReturnBufferEvent = std::function<void(unsigned char*, size_t, size_t)>;
 
-inline void MemCopyEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
-
-inline void MemCopyP2PEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
-
-inline void MemFillEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
-
 inline void BarrierExecEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void BarrierMemEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
@@ -59,8 +53,6 @@ inline void EventSynchEvent(void* data, const ZeKernelCommandExecutionRecord& re
 inline void CommandListSynchEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void CommandQueueSynchEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
-
-inline void KernelEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void ZeDriverEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
@@ -76,6 +68,8 @@ inline void CommunicationEvent(void* data, CommunicationRecord& rec);
 
 inline void SyclRuntimeViewCallback(void* data, ZeKernelCommandExecutionRecord& rec);
 inline void OverheadCollectionCallback(void* data, ZeKernelCommandExecutionRecord& rec);
+
+inline void GetDeviceId(char* buf, const ze_pci_ext_properties_t& pci_prop_);
 
 enum class InternalResult {
   kStatusSuccess = 0,
@@ -128,6 +122,8 @@ inline static constexpr std::array kPtiClassLzGpuOpsCoreApis{
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchMultipleKernelsIndirect_id,
     pti_api_id_driver_levelzero::zeCommandListImmediateAppendCommandListsExp_id,
 };
+
+inline constexpr size_t kPtiViewKindCount = 13;
 
 template <typename T, typename M>
 inline void EnableAllIndividualApis(M& mtx, T& map) {
@@ -330,11 +326,22 @@ struct PtiViewRecordHandler {
     const std::lock_guard<std::mutex> lock(insert_record_mtx_);
     auto& buffer = view_buffers_[thread_id];
 
+    // If buffer is null, or if buffer does not have space for at least one record of the largest
     if (buffer.IsNull()) {
       RequestNewBuffer(buffer);
     }
 
-    buffer.Insert(view_record);
+    if (buffer.FreeBytes() >= sizeof(T)) {
+      buffer.Insert(view_record);
+    } else {
+      // This should never happen since we ensure the buffer can at least fit the largest record,
+      // but just in case.
+      SPDLOG_ERROR(
+          "Record of size {} bytes is large to fit in the buffer of size {} bytes. Record "
+          "dropped.",
+          sizeof(T), buffer.FreeBytes());
+    }
+
     static_assert(SizeOfLargestViewRecord() != 0, "Largest record not avaiable on compile time");
     if (buffer.FreeBytes() >= SizeOfLargestViewRecord()) {
       // There's space to insert more records. No need for swap.
@@ -369,6 +376,7 @@ struct PtiViewRecordHandler {
     unsigned char* raw_buffer = nullptr;
     std::size_t raw_buffer_size = 0;
     get_new_buffer(&raw_buffer, &raw_buffer_size);
+
     if (raw_buffer_size < SizeOfLargestViewRecord() || !raw_buffer) {
       // Keep using default callbacks
       result = pti_result::PTI_ERROR_BAD_ARGUMENT;
@@ -418,6 +426,16 @@ struct PtiViewRecordHandler {
     map_granularity_set_[pti_api_group_id::PTI_API_GROUP_OPENCL] = false;
   }
 
+  inline bool IsValidViewKind(pti_view_kind view_kind) {
+    bool valid = true;
+    if ((view_kind == pti_view_kind::PTI_VIEW_INVALID) ||
+        (view_kind == pti_view_kind::PTI_VIEW_RESERVED) ||
+        (static_cast<uint32_t>(view_kind) >= kPtiViewKindCount)) {
+      valid = false;
+    }
+    return valid;
+  }
+
   inline pti_result Enable(pti_view_kind type) {
     if (!callbacks_set_) {
       return pti_result::PTI_ERROR_NO_CALLBACKS_SET;
@@ -444,6 +462,10 @@ struct PtiViewRecordHandler {
 
     if (type == pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION) {
       external_collection_enabled = true;
+    }
+
+    if (!IsValidViewKind(type)) {
+      return pti_result::PTI_ERROR_BAD_ARGUMENT;
     }
 
     if (type == pti_view_kind::PTI_VIEW_RUNTIME_API) {
@@ -933,8 +955,8 @@ inline pti_result GetNextRecord(uint8_t* buffer, size_t valid_bytes,
   return pti_result::PTI_SUCCESS;
 }
 
-inline void SetMemFillType(pti_view_record_memory_fill& mem_record,
-                           const ZeKernelCommandExecutionRecord& rec) {
+template <typename T>
+inline void SetMemFillType(T& mem_record, const ZeKernelCommandExecutionRecord& rec) {
   SPDLOG_TRACE("In {}, memory route: {}", __FUNCTION__,
                rec.memory_route_.GetCompactStringForTypes());
   mem_record._mem_type = rec.memory_route_.dst_type;
@@ -1017,14 +1039,8 @@ inline void SetMemCpyIdsP2P(T& record, const ZeKernelCommandExecutionRecord& rec
 }
 
 template <typename T>
-inline auto DoCommonMemCopy(bool p2p, const ZeKernelCommandExecutionRecord& rec) {
-  T record;
+inline void DoCommonMemCopy(T& record, const ZeKernelCommandExecutionRecord& rec) {
   utils::Zeroize(record);
-
-  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY;
-  if (p2p) {
-    record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
-  }
 
   int64_t ts_shift = Instance().GetTimeShift();
 
@@ -1042,28 +1058,34 @@ inline auto DoCommonMemCopy(bool p2p, const ZeKernelCommandExecutionRecord& rec)
   record._thread_id = rec.tid_;
   record._mem_op_id = rec.kid_;
   record._correlation_id = rec.cid_;
-
-  return record;
 }
 
-inline void MemCopyP2PEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
-  bool p2p = true;
-  pti_view_record_memory_copy_p2p record =
-      DoCommonMemCopy<pti_view_record_memory_copy_p2p>(p2p, rec);
+inline void MemCopyP2PEvent(const ZeKernelCommandExecutionRecord& rec) {
+  pti_view_record_memory_copy_p2p_v2 record;
+  DoCommonMemCopy(record, rec);
   SetMemCpyIdsP2P(record, rec);
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
+
+  record._engine_ordinal = rec.engine_ordinal_;
+  record._engine_index = rec.engine_index_;
   Instance().InsertRecord(record, record._thread_id);
 }
 
-inline void MemCopyEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
-  bool p2p = false;
-  pti_view_record_memory_copy record = DoCommonMemCopy<pti_view_record_memory_copy>(p2p, rec);
+inline void MemCopyEvent(const ZeKernelCommandExecutionRecord& rec) {
+  pti_view_record_memory_copy_v2 record;
+
+  DoCommonMemCopy(record, rec);
   SetMemCpyIds(record, rec);
+
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY;
+  record._engine_ordinal = rec.engine_ordinal_;
+  record._engine_index = rec.engine_index_;
   Instance().InsertRecord(record, record._thread_id);
 }
 
-inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
-  pti_view_record_memory_fill record;
-  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL;
+inline void MemFillEvent(const ZeKernelCommandExecutionRecord& rec) {
+  pti_view_record_memory_fill_v2 record;
+  utils::Zeroize(record);
 
   int64_t ts_shift = Instance().GetTimeShift();
 
@@ -1077,16 +1099,22 @@ inline void MemFillEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& r
   record._bytes = rec.bytes_xfered_;
   record._value_for_set = rec.value_set_;
 
-  GetDeviceId(record._pci_address, rec.pci_prop_);
-  // for MemoryFill op the reported device is the destination device, where fill happens
-  std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
-  SetMemFillType(record, rec);
-
   // We're storing it in a kernel map so this shouldn't go out of scope
   record._name = Instance().InsertKernel(rec.name_);
   record._thread_id = rec.tid_;
   record._mem_op_id = rec.kid_;
   record._correlation_id = rec.cid_;
+
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL;
+
+  GetDeviceId(record._pci_address, rec.pci_prop_);
+  SetMemFillType(record, rec);
+
+  // for MemoryFill op the reported device is the destination device, where fill happens
+  std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
+
+  record._engine_ordinal = rec.engine_ordinal_;
+  record._engine_index = rec.engine_index_;
   Instance().InsertRecord(record, record._thread_id);
 }
 
@@ -1203,15 +1231,13 @@ inline void BarrierMemEvent(void* /*data*/, const ZeKernelCommandExecutionRecord
   CommonSynchEvent(record, rec);
 }
 
-inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
-  pti_view_record_kernel record;
-  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL;
-
+inline void KernelEvent(const ZeKernelCommandExecutionRecord& rec) {
+  pti_view_record_kernel_v2 record;
   // Note: no need to call  GenerateExternalCorrelationRecords(rec)
   // as there records go only with runtime API records and not with GPU kernels, memory ops..
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL;
 
   int64_t ts_shift = Instance().GetTimeShift();
-
   record._append_timestamp = ApplyTimeShift(rec.append_time_, ts_shift);
   record._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
   record._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
@@ -1219,17 +1245,17 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
   record._queue_handle = rec.queue_;
   record._context_handle = rec.context_;
 
-  GetDeviceId(record._pci_address, rec.pci_prop_);
-  std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
-
   // We're storing it in a kernel map so this shouldn't go out of scope
   record._name = Instance().InsertKernel(rec.name_);
   record._thread_id = rec.tid_;
   record._kernel_id = rec.kid_;
   record._correlation_id = rec.cid_;
+
+  // source file name and line info is collected when SYCL tracing is enabled
   record._source_file_name = Instance().InsertKernel(rec.source_file_name_);
   record._source_line_number =
       rec.source_line_number_ != UINT32_MAX ? rec.source_line_number_ : 0ULL;
+
   record._sycl_node_id = rec.sycl_node_id_;
   record._sycl_queue_id = rec.sycl_queue_id_;
   record._sycl_invocation_id = rec.sycl_invocation_id_;
@@ -1266,6 +1292,12 @@ inline void KernelEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& re
     Instance().InsertRecord(special_rec, special_rec._thread_id);
   }
 #endif
+  // Update PCI and UUID info here
+  GetDeviceId(record._pci_address, rec.pci_prop_);
+  std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
+
+  record._engine_ordinal = rec.engine_ordinal_;
+  record._engine_index = rec.engine_index_;
   Instance().InsertRecord(record, record._thread_id);
 }
 
@@ -1303,71 +1335,77 @@ inline void OverheadCollectionCallback(void* data, ZeKernelCommandExecutionRecor
   }
 }
 
+inline void ZeKernelRecordHandler(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, callback_id: {}, name: {}", __func__, rec.callback_id_, rec.name_);
+  if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL)) {
+    KernelEvent(rec);
+  }
+}
+
+inline void ZeMemRecordHandler(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, callback_id: {}, name: {}", __func__, rec.callback_id_, rec.name_);
+  if (rec.callback_id_ == pti_api_id_driver_levelzero::zeCommandListAppendMemoryFill_id) {
+    if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL)) {
+      MemFillEvent(rec);
+    }
+  } else {
+    if (rec.name_.find("P2P)") != std::string::npos) {
+      if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P)) {
+        MemCopyP2PEvent(rec);
+      }
+    } else {
+      if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY)) {
+        MemCopyEvent(rec);
+      }
+    }
+  }
+}
+
+inline void ZeCommandRecordHandler(void* data, const ZeKernelCommandExecutionRecord& rec) {
+  if (!GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
+    // view is not enabled hence no processing is required.
+    return;
+  }
+  switch (rec.callback_id_) {
+    case pti_api_id_driver_levelzero::zeCommandListAppendBarrier_id:
+      BarrierExecEvent(data, rec);
+      break;
+    case pti_api_id_driver_levelzero::zeCommandListAppendMemoryRangesBarrier_id:
+      BarrierMemEvent(data, rec);
+      break;
+    case pti_api_id_driver_levelzero::zeFenceHostSynchronize_id:
+      FenceSynchEvent(data, rec);
+      break;
+    case pti_api_id_driver_levelzero::zeEventHostSynchronize_id:
+      EventSynchEvent(data, rec);
+      break;
+    case pti_api_id_driver_levelzero::zeCommandListHostSynchronize_id:
+      CommandListSynchEvent(data, rec);
+      break;
+    case pti_api_id_driver_levelzero::zeCommandQueueSynchronize_id:
+      CommandQueueSynchEvent(data, rec);
+      break;
+    default:
+      ZeKernelRecordHandler(data, rec);
+      break;
+  }
+}
+
 inline void ZeKernelStagesCallback(void* data,
                                    std::vector<ZeKernelCommandExecutionRecord>& kcexecrec) {
   for (const auto& rec : kcexecrec) {
-    switch (rec.callback_id_) {
-      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopy_id:
-      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopyFromContext_id:
-      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryCopyRegion_id:
-        if (rec.name_.find("P2P)") != std::string::npos) {
-          if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P)) {
-            MemCopyP2PEvent(data, rec);
-          }
-        } else {
-          if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY)) {
-            MemCopyEvent(data, rec);
-          }
-        }
+    switch (rec.command_type_) {
+      case KernelCommandType::kMemory:
+        ZeMemRecordHandler(data, rec);
         break;
-      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernel_id:
-      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchCooperativeKernel_id:
-      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelIndirect_id:
-      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelWithArguments_id:
-      case pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelWithParameters_id:
-        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL)) {
-          KernelEvent(data, rec);
-        }
+      case KernelCommandType::kKernel:
+        ZeKernelRecordHandler(data, rec);
         break;
-      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryFill_id:
-        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL)) {
-          MemFillEvent(data, rec);
-        }
-        break;
-      case pti_api_id_driver_levelzero::zeCommandListAppendBarrier_id:
-        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
-          BarrierExecEvent(data, rec);
-        }
-        break;
-      case pti_api_id_driver_levelzero::zeCommandListAppendMemoryRangesBarrier_id:
-        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
-          BarrierMemEvent(data, rec);
-        }
-        break;
-      case pti_api_id_driver_levelzero::zeFenceHostSynchronize_id:
-        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
-          FenceSynchEvent(data, rec);
-        }
-        break;
-      case pti_api_id_driver_levelzero::zeEventHostSynchronize_id:
-        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
-          EventSynchEvent(data, rec);
-        }
-        break;
-      case pti_api_id_driver_levelzero::zeCommandListHostSynchronize_id:
-        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
-          CommandListSynchEvent(data, rec);
-        }
-        break;
-      case pti_api_id_driver_levelzero::zeCommandQueueSynchronize_id:
-        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION)) {
-          CommandQueueSynchEvent(data, rec);
-        }
+      case KernelCommandType::kCommand:
+        ZeCommandRecordHandler(data, rec);
         break;
       default:
-        if (GetApiViewState(pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL)) {
-          KernelEvent(data, rec);
-        }
+        ZeKernelRecordHandler(data, rec);
         break;
     }
   }

@@ -64,7 +64,7 @@ void StopTracing() {
 }
 
 static void BufferRequested(unsigned char** buf, size_t* buf_size) {
-  *buf_size = sizeof(pti_view_record_kernel);
+  *buf_size = sizeof(pti_view_record_kernel_type);
   void* ptr = ::operator new(*buf_size);
   ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
   *buf = static_cast<unsigned char*>(ptr);
@@ -125,7 +125,7 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P: {
-        auto* rec = reinterpret_cast<pti_view_record_memory_copy_p2p*>(ptr);
+        auto* rec = reinterpret_cast<pti_view_record_memory_copy_p2p_type*>(ptr);
         std::string memcpy_name = rec->_name;
         if (memcpy_name.find("D2D - P2P") != std::string::npos) {
           p2p_d2d_record = true;
@@ -166,7 +166,7 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
-        const auto* rec = reinterpret_cast<const pti_view_record_memory_fill*>(ptr);
+        const auto* rec = reinterpret_cast<const pti_view_record_memory_fill_type*>(ptr);
         std::string tmp_str = rec->_name;
         if (std::all_of(std::begin(rec->_device_uuid), std::end(rec->_device_uuid),
                         [](auto raw_byte) { return raw_byte == 0; })) {
@@ -201,8 +201,8 @@ static void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-        [[maybe_unused]] pti_view_record_kernel* rec =
-            reinterpret_cast<pti_view_record_kernel*>(ptr);
+        [[maybe_unused]] pti_view_record_kernel_type* rec =
+            reinterpret_cast<pti_view_record_kernel_type*>(ptr);
         break;
       }
       default: {

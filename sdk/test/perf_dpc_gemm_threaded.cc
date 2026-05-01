@@ -23,6 +23,7 @@
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
+#include "utils/test_helpers.h"
 #endif
 
 #define A_VALUE 0.128f
@@ -280,8 +281,8 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cout << "Found Memory Record" << '\n';
 
-        pti_view_record_memory_copy* p_memory_rec =
-            reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+        pti_view_record_memory_copy_type* p_memory_rec =
+            reinterpret_cast<pti_view_record_memory_copy_type*>(ptr);
         samples_utils::DumpRecord(p_memory_rec);
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
@@ -301,8 +302,8 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cout << "Found Memory Record" << '\n';
 
-        pti_view_record_memory_fill* p_memory_rec =
-            reinterpret_cast<pti_view_record_memory_fill*>(ptr);
+        pti_view_record_memory_fill_type* p_memory_rec =
+            reinterpret_cast<pti_view_record_memory_fill_type*>(ptr);
         samples_utils::DumpRecord(p_memory_rec);
         std::cout << "---------------------------------------------------"
                      "-----------------------------"
@@ -322,7 +323,8 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cout << "Found Kernel Record" << '\n';
 
-        pti_view_record_kernel* p_kernel_rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
+        pti_view_record_kernel_type* p_kernel_rec =
+            reinterpret_cast<pti_view_record_kernel_type*>(ptr);
         samples_utils::DumpRecord(p_kernel_rec);
         std::cout << "---------------------------------------------------"
                      "-----------------------------"

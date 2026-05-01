@@ -90,8 +90,8 @@ uint32_t num_special_records = 0;
 uint32_t num_sycl_runtime_launch_records = 0;
 uint64_t corrid_in_special_record = 0;
 uint64_t external_corrid_in_ext_rec = 0;
-std::vector<pti_view_record_memory_copy> copy_records;
-std::vector<pti_view_record_kernel> kernel_records;
+std::vector<pti_view_record_memory_copy_type> copy_records;
+std::vector<pti_view_record_kernel_type> kernel_records;
 ze_device_uuid_t device_uuid = {};
 ze_context_handle_t context_test = nullptr;
 [[maybe_unused]] ze_device_handle_t device_test = nullptr;
@@ -663,7 +663,8 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
           memory_view_record_count += 1;
           if (capture_records) {
             std::cout << "--- Record Memory Copy" << '\n';
-            pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+            pti_view_record_memory_copy_type* rec =
+                reinterpret_cast<pti_view_record_memory_copy_type*>(ptr);
             // std::cout << "---------------------------------------------------" << '\n';
             // samples_utils::DumpRecord(rec);
             uint64_t duration = rec->_end_timestamp - rec->_start_timestamp;
@@ -783,7 +784,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
-          pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
+          pti_view_record_kernel_type* rec = reinterpret_cast<pti_view_record_kernel_type*>(ptr);
           // std::cout << "---------------------------------------------------" << '\n';
           // samples_utils::DumpRecord(rec);
           if (capture_records) {
@@ -810,16 +811,16 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     ::operator delete(buf);
   }
   static void NullBufferRequested(unsigned char** buf, size_t* buf_size) {
-    *buf_size = sizeof(pti_view_record_memory_copy) - sizeof(pti_view_record_memory_copy);
+    *buf_size = sizeof(pti_view_record_memory_copy_type) - sizeof(pti_view_record_memory_copy_type);
     void* ptr = ::operator new(*buf_size);
     requested_buffer_calls += 1;
     rejected_buffer_calls += 1;
     *buf = static_cast<unsigned char*>(ptr);
-    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy);
+    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy_type);
   }
 
   static void InadequateBufferRequested(unsigned char** buf, size_t* buf_size) {
-    *buf_size = sizeof(pti_view_record_kernel) - 1;
+    *buf_size = 1;  // buffer size should be less than the smallest size.
     void* ptr = ::operator new(*buf_size);
     requested_buffer_calls += 1;
     rejected_buffer_calls += 1;
@@ -828,10 +829,10 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     if (!*buf) {
       std::abort();
     }
-    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy);
+    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy_type);
   }
   static void BufferRequested(unsigned char** buf, size_t* buf_size) {
-    *buf_size = sizeof(pti_view_record_kernel);
+    *buf_size = sizeof(pti_view_record_kernel_type);
     void* ptr = ::operator new(*buf_size);
     requested_buffer_calls += 1;
     ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
@@ -839,7 +840,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     if (!*buf) {
       std::abort();
     }
-    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy);
+    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy_type);
   }
 
   int RunGemm(bool with_polling = false, bool include_sycl_runtime = false,
@@ -1172,10 +1173,10 @@ class GetNextRecordTestSuite : public ::testing::Test {
       2 * kNumOhRecs + 2 * kNumMemRecs + kNumKernelRecs + kNumExtRecs;
   GetNextRecordTestSuite()
       : test_buf_(CreateFullBuffer<RecordInserts<pti_view_record_overhead, kNumOhRecs>,
-                                   RecordInserts<pti_view_record_memory_copy, kNumMemRecs>,
-                                   RecordInserts<pti_view_record_memory_fill, kNumMemRecs>,
+                                   RecordInserts<pti_view_record_memory_copy_type, kNumMemRecs>,
+                                   RecordInserts<pti_view_record_memory_fill_type, kNumMemRecs>,
                                    RecordInserts<pti_view_record_external_correlation, kNumExtRecs>,
-                                   RecordInserts<pti_view_record_kernel, kNumKernelRecs>,
+                                   RecordInserts<pti_view_record_kernel_type, kNumKernelRecs>,
                                    RecordInserts<pti_view_record_overhead, kNumOhRecs>>()) {}
   std::vector<unsigned char> test_buf_;
 };

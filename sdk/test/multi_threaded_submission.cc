@@ -242,8 +242,7 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
   while (true) {
     auto buf_status = ptiViewGetNextRecord(buf, valid_buf_size, &ptr);
     if (buf_status == pti_result::PTI_STATUS_END_OF_BUFFER) {
-      std::cout << "Reached End of buffer"
-                << "\n";
+      std::cout << "Reached End of buffer" << "\n";
       break;
     }
     if (buf_status != pti_result::PTI_SUCCESS) {
@@ -302,8 +301,8 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
                      "-----------------------------"
                   << '\n';
         std::cout << "Found Memory Record" << '\n';
-        pti_view_record_memory_copy* p_memory_rec =
-            reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+        pti_view_record_memory_copy_type* p_memory_rec =
+            reinterpret_cast<pti_view_record_memory_copy_type*>(ptr);
         IncrementThreadViewKindStat(p_memory_rec->_thread_id, ptr->_view_kind,
                                     p_memory_rec->_memcpy_type);
         samples_utils::DumpRecord(p_memory_rec);
@@ -332,8 +331,8 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cout << "Found Memory Record" << '\n';
 
-        pti_view_record_memory_fill* p_memory_rec =
-            reinterpret_cast<pti_view_record_memory_fill*>(ptr);
+        pti_view_record_memory_fill_type* p_memory_rec =
+            reinterpret_cast<pti_view_record_memory_fill_type*>(ptr);
         IncrementThreadViewKindStat(p_memory_rec->_thread_id, ptr->_view_kind);
         samples_utils::DumpRecord(p_memory_rec);
         ASSERT_TRUE(corr_id_map.find(p_memory_rec->_correlation_id) != corr_id_map.end())
@@ -360,7 +359,8 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
                   << '\n';
         std::cout << "Found Kernel Record" << '\n';
 
-        pti_view_record_kernel* p_kernel_rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
+        pti_view_record_kernel_type* p_kernel_rec =
+            reinterpret_cast<pti_view_record_kernel_type*>(ptr);
         IncrementThreadViewKindStat(p_kernel_rec->_thread_id, ptr->_view_kind);
         samples_utils::DumpRecord(p_kernel_rec);
         ASSERT_TRUE(corr_id_map.find(p_kernel_rec->_correlation_id) != corr_id_map.end())

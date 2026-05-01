@@ -163,7 +163,7 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
   }
 
   static void BufferRequested(unsigned char** buf, size_t* buf_size) {
-    *buf_size = sizeof(pti_view_record_kernel);
+    *buf_size = sizeof(pti_view_record_kernel_type);
     void* ptr = ::operator new(*buf_size);
     ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
     *buf = static_cast<unsigned char*>(ptr);

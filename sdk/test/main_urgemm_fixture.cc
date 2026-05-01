@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "pti/pti_runtime_sycl_api_ids.h"
+#include "pti/pti_version.h"
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
@@ -134,6 +135,20 @@ static_assert(static_cast<uint32_t>(urUSMDeviceAlloc_id) ==
 namespace syclex = sycl::ext::oneapi::experimental;
 
 namespace {
+
+// Use V2 record types when PTI version > 0.17
+#if (PTI_VERSION_MAJOR > 0) || (PTI_VERSION_MAJOR == 0 && PTI_VERSION_MINOR > 17)
+using pti_view_record_kernel_type = pti_view_record_kernel_v2;
+using pti_view_record_memory_copy_type = pti_view_record_memory_copy_v2;
+using pti_view_record_memory_fill_type = pti_view_record_memory_fill_v2;
+using pti_view_record_memory_copy_p2p_type = pti_view_record_memory_copy_p2p_v2;
+#else
+using pti_view_record_kernel_type = pti_view_record_kernel;
+using pti_view_record_memory_copy_type = pti_view_record_memory_copy;
+using pti_view_record_memory_fill_type = pti_view_record_memory_fill;
+using pti_view_record_memory_copy_p2p_type = pti_view_record_memory_copy_p2p;
+#endif
+
 bool is_integrated_graphics = false;
 bool memory_view_record_created = false;
 bool kernel_view_record_created = false;
@@ -155,8 +170,8 @@ size_t completed_buffer_calls = 0;
 size_t completed_buffer_used_bytes = 0;
 bool buffer_size_atleast_largest_record = false;
 bool capture_records = false;
-std::vector<pti_view_record_memory_copy> copy_records;
-std::vector<pti_view_record_kernel> kernel_records;
+std::vector<pti_view_record_memory_copy_type> copy_records;
+std::vector<pti_view_record_kernel_type> kernel_records;
 
 float Check(const std::vector<float>& a, float value) {
   PTI_ASSERT(value > MAX_EPS);
@@ -444,7 +459,8 @@ class MainUrFixtureTest : public ::testing::Test {
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
           memory_view_record_created = true;
           memory_view_record_count += 1;
-          pti_view_record_memory_copy* rec = reinterpret_cast<pti_view_record_memory_copy*>(ptr);
+          pti_view_record_memory_copy_type* rec =
+              reinterpret_cast<pti_view_record_memory_copy_type*>(ptr);
           std::cout << " --- Found Memory Copy Record" << '\n';
           samples_utils::DumpRecord(rec);
 
@@ -461,7 +477,8 @@ class MainUrFixtureTest : public ::testing::Test {
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
           memory_view_record_created = true;
-          pti_view_record_memory_fill* rec = reinterpret_cast<pti_view_record_memory_fill*>(ptr);
+          pti_view_record_memory_fill_type* rec =
+              reinterpret_cast<pti_view_record_memory_fill_type*>(ptr);
           samples_utils::DumpRecord(rec);
 
           if (memcmp(rec->_device_uuid, zero_uuid, PTI_MAX_DEVICE_UUID_SIZE) == 0) {
@@ -505,7 +522,7 @@ class MainUrFixtureTest : public ::testing::Test {
           kernel_view_record_created = true;
           kernel_view_record_count += 1;
           if (capture_records) {
-            pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
+            pti_view_record_kernel_type* rec = reinterpret_cast<pti_view_record_kernel_type*>(ptr);
             kernel_records.push_back(*rec);
           }
           break;
@@ -520,7 +537,7 @@ class MainUrFixtureTest : public ::testing::Test {
   }
 
   static void BufferRequested(unsigned char** buf, size_t* buf_size) {
-    *buf_size = sizeof(pti_view_record_kernel);
+    *buf_size = sizeof(pti_view_record_kernel_type);
     void* ptr = ::operator new(*buf_size);
     requested_buffer_calls += 1;
     ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
@@ -528,7 +545,7 @@ class MainUrFixtureTest : public ::testing::Test {
     if (!*buf) {
       std::abort();
     }
-    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy);
+    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy_type);
   }
 
   void ComputeUsingSycl(std::vector<float>& a, std::vector<float>& b, std::vector<float>& c,

@@ -21,6 +21,7 @@
 #define MAX_EPS 1.0e-4f
 
 namespace {
+
 size_t requested_buffer_calls = 0;
 size_t rejected_buffer_calls = 0;  // Buffer requests that are called and rejected by the API
 size_t completed_buffer_calls = 0;
@@ -246,7 +247,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
   }
 
   static void InadequateBufferRequested(unsigned char** buf, size_t* buf_size) {
-    *buf_size = sizeof(pti_view_record_kernel) - 1;
+    *buf_size = 1;
     void* ptr = ::operator new(*buf_size);
     requested_buffer_calls += 1;
     rejected_buffer_calls += 1;
@@ -255,11 +256,11 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     if (!*buf) {
       std::abort();
     }
-    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_kernel);
+    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_kernel_type);
   }
 
   static void BufferRequested(unsigned char** buf, size_t* buf_size) {
-    *buf_size = sizeof(pti_view_record_kernel);
+    *buf_size = sizeof(pti_view_record_kernel_type);
     void* ptr = ::operator new(*buf_size);
     requested_buffer_calls += 1;
     ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
@@ -267,16 +268,16 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     if (!*buf) {
       std::abort();
     }
-    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_kernel);
+    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_kernel_type);
   }
 
   static void NullBufferRequested(unsigned char** buf, size_t* buf_size) {
-    *buf_size = sizeof(pti_view_record_memory_copy) - sizeof(pti_view_record_memory_copy);
+    *buf_size = sizeof(pti_view_record_memory_copy_type) - sizeof(pti_view_record_memory_copy_type);
     void* ptr = ::operator new(*buf_size);
     requested_buffer_calls += 1;
     rejected_buffer_calls += 1;
     *buf = static_cast<unsigned char*>(ptr);
-    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy);
+    buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy_type);
   }
 
   static void CheckIfIdUniqueAndSaveIt(bool& is_unique, uint32_t id, std::set<uint32_t>& id_set,
@@ -346,10 +347,10 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
           memory_view_record_count += 1;
           uint32_t this_corrid = 0;
           if (ptr->_view_kind == PTI_VIEW_DEVICE_GPU_MEM_COPY) {
-            memory_bytes_copied = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_bytes;
-            this_corrid = reinterpret_cast<pti_view_record_memory_copy*>(ptr)->_correlation_id;
+            memory_bytes_copied = reinterpret_cast<pti_view_record_memory_copy_type*>(ptr)->_bytes;
+            this_corrid = reinterpret_cast<pti_view_record_memory_copy_type*>(ptr)->_correlation_id;
           } else {
-            this_corrid = reinterpret_cast<pti_view_record_memory_fill*>(ptr)->_correlation_id;
+            this_corrid = reinterpret_cast<pti_view_record_memory_fill_type*>(ptr)->_correlation_id;
           }
 
           CheckIfIdUniqueAndSaveIt(zecall_at_gpu_op_corrids_unique, this_corrid,
@@ -399,15 +400,15 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-          pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
-          std::string kernel_name = reinterpret_cast<pti_view_record_kernel*>(ptr)->_name;
+          pti_view_record_kernel_type* rec = reinterpret_cast<pti_view_record_kernel_type*>(ptr);
+          std::string kernel_name = reinterpret_cast<pti_view_record_kernel_type*>(ptr)->_name;
           if (kernel_name.find("LaunchGemm(") != std::string::npos) {
             demangled_kernel_name = true;
           }
           std::string kernel_source_filename =
-              reinterpret_cast<pti_view_record_kernel*>(ptr)->_source_file_name;
+              reinterpret_cast<pti_view_record_kernel_type*>(ptr)->_source_file_name;
           uint64_t kernel_enqueue_ts =
-              reinterpret_cast<pti_view_record_kernel*>(ptr)->_sycl_enqk_begin_timestamp;
+              reinterpret_cast<pti_view_record_kernel_type*>(ptr)->_sycl_enqk_begin_timestamp;
           if (kernel_source_filename != "") {
             kernel_has_sycl_file_count += 1;
             kernel_has_sycl_file_info = true;
@@ -1129,7 +1130,7 @@ class GemmLaunchTest
   static constexpr unsigned int kDefaultMatrixSize = 8;
   // This is a reasonable default. We are storing the buffers during the tests, so not super
   // important.
-  static constexpr auto kRequestedBufferSize = 1'000 * sizeof(pti_view_record_kernel);
+  static constexpr auto kRequestedBufferSize = 1'000 * sizeof(pti_view_record_kernel_type);
 
   struct TimestampRange {
     uint64_t start = 0;
@@ -1171,7 +1172,7 @@ class GemmLaunchTest
   static void HandleView(pti_view_record_base* view) {
     switch (view->_view_kind) {
       case PTI_VIEW_DEVICE_GPU_KERNEL: {
-        const auto* const kernel = reinterpret_cast<const pti_view_record_kernel*>(view);
+        const auto* const kernel = reinterpret_cast<const pti_view_record_kernel_type*>(view);
         auto range = GemmLaunchTestData::Instance().range;
         if (range.has_value()) {
           auto within_range = WithinRange(*range, kernel->_start_timestamp);

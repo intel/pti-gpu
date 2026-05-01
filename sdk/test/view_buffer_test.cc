@@ -29,20 +29,20 @@ std::size_t FillBuffer(pti::view::utilities::ViewBuffer& a_buffer) {
     using pti::test::utils::CreateRecord;
     if (number_of_memory_records_left) {
       EXPECT_EQ(keep_inserting, true);
-      a_buffer.Insert(CreateRecord<pti_view_record_memory_copy>());
+      a_buffer.Insert(CreateRecord<pti_view_record_memory_copy_type>());
       // check if we can insert a kernel record after
-      keep_inserting = !a_buffer.BufferFull<pti_view_record_kernel>();
-      bytes_inserted += sizeof(pti_view_record_memory_copy);
+      keep_inserting = !a_buffer.BufferFull<pti_view_record_kernel_type>();
+      bytes_inserted += sizeof(pti_view_record_memory_copy_type);
       number_of_memory_records_left--;
     }
     if (number_of_kernel_records_left) {
       EXPECT_EQ(keep_inserting, true);
-      auto record = CreateRecord<pti_view_record_kernel>();
+      auto record = CreateRecord<pti_view_record_kernel_type>();
       record._name = kDefaultKernelName;
       a_buffer.Insert(record);
       // check if we can insert a memory record after
-      keep_inserting = !a_buffer.BufferFull<pti_view_record_memory_copy>();
-      bytes_inserted += sizeof(pti_view_record_kernel);
+      keep_inserting = !a_buffer.BufferFull<pti_view_record_memory_copy_type>();
+      bytes_inserted += sizeof(pti_view_record_kernel_type);
       number_of_kernel_records_left--;
     }
   }

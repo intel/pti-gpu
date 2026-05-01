@@ -19,6 +19,7 @@
 
 #include "pti/pti_view.h"
 #include "utils.h"
+#include "utils/test_helpers.h"
 
 namespace {
 
@@ -134,7 +135,7 @@ void StopTracing() {
 }
 
 static void BufferRequested(unsigned char **buf, size_t *buf_size) {
-  *buf_size = sizeof(pti_view_record_kernel);
+  *buf_size = sizeof(pti_view_record_kernel_type);
   void *ptr = ::operator new(*buf_size);
   ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
   *buf = reinterpret_cast<unsigned char *>(ptr);
@@ -179,12 +180,14 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
-        pti_view_record_memory_copy *rec = reinterpret_cast<pti_view_record_memory_copy *>(ptr);
+        pti_view_record_memory_copy_type *rec =
+            reinterpret_cast<pti_view_record_memory_copy_type *>(ptr);
         runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
-        pti_view_record_memory_fill *rec = reinterpret_cast<pti_view_record_memory_fill *>(ptr);
+        pti_view_record_memory_fill_type *rec =
+            reinterpret_cast<pti_view_record_memory_fill_type *>(ptr);
         runtime_enq_2_gpu_mem_op_name_map[rec->_correlation_id] = rec->_name;
         break;
       }
@@ -209,7 +212,8 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t valid_bu
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-        pti_view_record_kernel *a_kernel_rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
+        pti_view_record_kernel_type *a_kernel_rec =
+            reinterpret_cast<pti_view_record_kernel_type *>(ptr);
         std::string kernel_name = a_kernel_rec->_name;
         runtime_enq_2_gpu_kernel_name_map[a_kernel_rec->_correlation_id] = kernel_name;
         std::cout << "Found Kernel: " << kernel_name << '\n';

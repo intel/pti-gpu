@@ -404,7 +404,7 @@ class LocalModeZeGemmTest : public testing::Test {
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           LocalModeZeGemmTestData::Instance().num_kernels++;
-          auto* kernel_record = reinterpret_cast<pti_view_record_kernel*>(ptr);
+          auto* kernel_record = reinterpret_cast<pti_view_record_kernel_type*>(ptr);
           EXPECT_THAT(kernel_record->_name, ::testing::StrEq(kKernelName));
           break;
         }

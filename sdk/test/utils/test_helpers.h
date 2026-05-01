@@ -10,7 +10,21 @@
 #include <type_traits>
 #include <vector>
 
+#include "pti/pti_version.h"
 #include "pti/pti_view.h"
+
+// Use V2 record types when PTI version > 0.17
+#if (PTI_VERSION_MAJOR > 0) || (PTI_VERSION_MAJOR == 0 && PTI_VERSION_MINOR > 17)
+using pti_view_record_kernel_type = pti_view_record_kernel_v2;
+using pti_view_record_memory_copy_type = pti_view_record_memory_copy_v2;
+using pti_view_record_memory_fill_type = pti_view_record_memory_fill_v2;
+using pti_view_record_memory_copy_p2p_type = pti_view_record_memory_copy_p2p_v2;
+#else
+using pti_view_record_kernel_type = pti_view_record_kernel;
+using pti_view_record_memory_copy_type = pti_view_record_memory_copy;
+using pti_view_record_memory_fill_type = pti_view_record_memory_fill;
+using pti_view_record_memory_copy_p2p_type = pti_view_record_memory_copy_p2p;
+#endif
 
 // Needs to be in the same namespace as pti_result so leave it outside.
 inline std::ostream& operator<<(std::ostream& out, pti_result result_val) {
@@ -207,22 +221,24 @@ inline T CreateRecord() {
 
 template <pti_view_kind E>
 inline auto CreateRecord() {
-  return CreateRecord<pti_view_record_kernel, E>();
+  return CreateRecord<pti_view_record_kernel_type, E>();
 }
 
 template <>
-inline pti_view_record_memory_copy CreateRecord() {
-  return CreateRecord<pti_view_record_memory_copy, pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY>();
+inline pti_view_record_memory_copy_type CreateRecord() {
+  return CreateRecord<pti_view_record_memory_copy_type,
+                      pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY>();
 }
 
 template <>
-inline pti_view_record_memory_fill CreateRecord() {
-  return CreateRecord<pti_view_record_memory_fill, pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL>();
+inline pti_view_record_memory_fill_type CreateRecord() {
+  return CreateRecord<pti_view_record_memory_fill_type,
+                      pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL>();
 }
 
 template <>
-inline pti_view_record_kernel CreateRecord() {
-  return CreateRecord<pti_view_record_kernel, pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL>();
+inline pti_view_record_kernel_type CreateRecord() {
+  return CreateRecord<pti_view_record_kernel_type, pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL>();
 }
 
 template <>

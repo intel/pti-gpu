@@ -12,8 +12,7 @@
 #include "pti/pti_view.h"
 
 inline constexpr auto kReserved = 0;
-inline constexpr auto kLastViewRecordEnumValue = PTI_VIEW_COMMUNICATION;
-inline constexpr auto kSizeOfViewRecordTable = kLastViewRecordEnumValue + 1;
+inline constexpr auto kSizeOfViewRecordTable = 13;
 
 // kViewSizeLookUpTable
 //
@@ -24,19 +23,20 @@ inline constexpr auto kSizeOfViewRecordTable = kLastViewRecordEnumValue + 1;
 // clang-format off
 inline constexpr std::array<std::size_t, kSizeOfViewRecordTable> kViewSizeLookupTable{
     kReserved,                                        // PTI_VIEW_INVALID
-    sizeof(pti_view_record_kernel),                   // PTI_VIEW_DEVICE_GPU_KERNEL
+    sizeof(pti_view_record_kernel_v2),                // PTI_VIEW_DEVICE_GPU_KERNEL
     kReserved,                                        // PTI_VIEW_DEVICE_CPU_KERNEL
     sizeof(pti_view_record_api),                      // PTI_VIEW_LEVEL_ZERO_CALLS
     kReserved,                                        // PTI_VIEW_RESERVED
     sizeof(pti_view_record_overhead),                 // PTI_VIEW_COLLECTION_OVERHEAD
     sizeof(pti_view_record_api),                      // PTI_VIEW_SYCL_RUNTIME_CALLS
     sizeof(pti_view_record_external_correlation),     // PTI_VIEW_EXTERNAL_CORRELATION
-    sizeof(pti_view_record_memory_copy),              // PTI_VIEW_DEVICE_GPU_MEM_COPY
-    sizeof(pti_view_record_memory_fill),              // PTI_VIEW_DEVICE_GPU_MEM_FILL
-    sizeof(pti_view_record_memory_copy_p2p),          // PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P
+    sizeof(pti_view_record_memory_copy_v2),           // PTI_VIEW_DEVICE_GPU_MEM_COPY
+    sizeof(pti_view_record_memory_fill_v2),           // PTI_VIEW_DEVICE_GPU_MEM_FILL
+    sizeof(pti_view_record_memory_copy_p2p_v2),       // PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P
     sizeof(pti_view_record_synchronization),          // PTI_VIEW_DEVICE_SYNCHRONIZATION
     sizeof(pti_view_record_comms),                    // PTI_VIEW_COMMUNICATION
 };
+
 // clang-format on
 
 // SizeOfLargestViewRecord()
@@ -46,6 +46,7 @@ inline constexpr std::array<std::size_t, kSizeOfViewRecordTable> kViewSizeLookup
 // @return size of largest view record
 inline constexpr auto SizeOfLargestViewRecord() {
   auto largest_record_size = kViewSizeLookupTable.front();
+
   for (const auto& record_size : kViewSizeLookupTable) {
     if (largest_record_size < record_size) {
       largest_record_size = record_size;

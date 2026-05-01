@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "pti/pti_view.h"
-#include "samples_utils.h"
 #include "utils.h"
+#include "utils/test_helpers.h"
 
 namespace {
 constexpr int kVectorSize = 1024;
@@ -48,7 +48,7 @@ void StopTracing() {
 }
 
 static void BufferRequested(unsigned char **buf, size_t *buf_size) {
-  *buf_size = sizeof(pti_view_record_kernel);
+  *buf_size = sizeof(pti_view_record_kernel_type);
   void *ptr = ::operator new(*buf_size);
   ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
   *buf = static_cast<unsigned char *>(ptr);
@@ -83,7 +83,7 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY: {
-        auto *rec = reinterpret_cast<pti_view_record_memory_copy *>(ptr);
+        auto *rec = reinterpret_cast<pti_view_record_memory_copy_type *>(ptr);
         if (rec->_sycl_queue_id != kMaxQueueId) {
           queue_id_memcpy_records = true;
         }
@@ -93,7 +93,7 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL: {
-        auto *rec = reinterpret_cast<pti_view_record_memory_fill *>(ptr);
+        auto *rec = reinterpret_cast<pti_view_record_memory_fill_type *>(ptr);
         if (rec->_sycl_queue_id != kMaxQueueId) {
           queue_id_memfill_records = true;
         }
@@ -103,7 +103,7 @@ static void BufferCompleted(unsigned char *buf, size_t buf_size, size_t used_byt
         break;
       }
       case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
-        auto *rec = reinterpret_cast<pti_view_record_kernel *>(ptr);
+        auto *rec = reinterpret_cast<pti_view_record_kernel_type *>(ptr);
         if (rec->_sycl_queue_id != kMaxQueueId) {
           queue_id_kernel_records = true;
         }

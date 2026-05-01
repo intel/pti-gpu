@@ -368,7 +368,6 @@ if(HAVE_SYCL)
   target_link_libraries(callback_api_test PUBLIC GTest::gtest_main spdlog::spdlog
                                           PRIVATE Pti::pti_view LevelZero::level-zero)
 
-
   add_executable(dpc_gemm_threaded_profiled perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_baseline perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_linkonly perf_dpc_gemm_threaded.cc)

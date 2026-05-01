@@ -1742,6 +1742,7 @@ class ZeCollector {
       rec.cid_ = synch_corrid;
       rec.result_ = result;
       rec.callback_id_ = zeEventHostSynchronize_id;
+      rec.command_type_ = KernelCommandType::kCommand;
       kcexec.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec);
     }
@@ -1792,6 +1793,7 @@ class ZeCollector {
       rec.cid_ = synch_corrid;
       rec.result_ = result;
       rec.callback_id_ = zeCommandListHostSynchronize_id;
+      rec.command_type_ = KernelCommandType::kCommand;
       kcexec1.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec1);
     }
@@ -1878,6 +1880,7 @@ class ZeCollector {
       rec.cid_ = synch_corrid;
       rec.result_ = result;
       rec.callback_id_ = zeFenceHostSynchronize_id;
+      rec.command_type_ = KernelCommandType::kCommand;
       kcexec1.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec1);
     }
@@ -3041,6 +3044,7 @@ class ZeCollector {
         rec.event_ = nullptr;
         rec.cid_ = synch_corrid;
         rec.callback_id_ = zeCommandQueueSynchronize_id;
+        rec.command_type_ = KernelCommandType::kCommand;
         rec.result_ = result;
         kcexec1.push_back(std::move(rec));
         collector->acallback_(collector->callback_data_, kcexec1);

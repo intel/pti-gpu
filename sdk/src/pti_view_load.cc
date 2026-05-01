@@ -261,6 +261,7 @@ pti_result ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id type, uint32
     return pti_result::PTI_ERROR_INTERNAL;
   }
 }
+
 pti_result ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id type, uint32_t api_id) {
   try {
     if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
