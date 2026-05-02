@@ -120,7 +120,7 @@ jobs:
 
       - name: Build-and-test-ze_debug_info
         if: false
-        if: contains(fromJSON(matrix.tags), 'PVC')
+        #if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s ze_debug_info
