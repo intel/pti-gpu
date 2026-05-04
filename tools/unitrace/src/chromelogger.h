@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <thread>
 #include <tuple>
+#include <set>
+#include <vector>
 #include "trace_options.h"
 #include "unitimer.h"
 #include "unikernel.h"
@@ -25,6 +27,8 @@
 #include "utils_host.h"
 
 #include "common_header.gen"
+
+static constexpr uint32_t num_device_timestamps_cahced_ = 1024;
 
 #ifdef _WIN32
 #define strdup _strdup
@@ -94,6 +98,7 @@ struct ZeDeviceTidKey {
   uint32_t engine_index_;
   int32_t host_pid_;
   int32_t host_tid_;
+  uint32_t track_id_;
 };
 
 struct ZeDevicePidKeyCompare {
@@ -113,8 +118,7 @@ static std::map<ZeDeviceTidKey, std::tuple<uint32_t, uint32_t, uint64_t>, ZeDevi
 static uint32_t next_device_pid_ = (uint32_t)(~0) - (mpi_rank << 5);  // each rank uses no more than 32 devices
 static uint32_t next_device_tid_ = (uint32_t)(~0) - (mpi_rank << 5);  // the first device thread is the "main" thread which has the same id as the device process id
 
-static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device, uint32_t engine_ordinal,
-                                                       uint32_t engine_index, int host_pid, int host_tid) {
+static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device, uint32_t engine_ordinal, uint32_t engine_index, int host_pid, int host_tid, uint32_t track_id) {
   if (device_logging_no_thread_) {
     // map all threads to the process
     host_tid = host_pid;
@@ -148,6 +152,7 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
   tid_key.engine_index_ = engine_index;
   tid_key.host_pid_ = host_pid;
   tid_key.host_tid_ = host_tid;
+  tid_key.track_id_ = track_id;
 
   auto it = device_tid_map_.find(tid_key);
   if (it != device_tid_map_.cend()) {
@@ -258,6 +263,7 @@ struct ClDeviceTidKey {
   cl_command_queue queue_;
   int32_t host_pid_;
   int32_t host_tid_;
+  uint32_t track_id_;
 };
 
 std::string GetClDeviceName(cl_device_id device);
@@ -276,7 +282,7 @@ struct ClDeviceTidKeyCompare {
 
 static std::map<ClDeviceTidKey, std::tuple<uint32_t, uint32_t, uint64_t>, ClDeviceTidKeyCompare> cl_device_tid_map_;
 
-static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_khr& pci, cl_device_id device, cl_command_queue queue, int host_pid, int host_tid) {
+static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_khr& pci, cl_device_id device, cl_command_queue queue, int host_pid, int host_tid, uint32_t track_id) {
   if (device_logging_no_thread_) {
     // map all threads to the process
     host_tid = host_pid;
@@ -299,6 +305,7 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
   tid_key.queue_ = queue;
   tid_key.host_pid_ = host_pid;
   tid_key.host_tid_ = host_tid;
+  tid_key.track_id_ = track_id;
 
   auto it = cl_device_tid_map_.find(tid_key);
   if (it != cl_device_tid_map_.cend()) {
@@ -393,7 +400,7 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
 #endif /* BUILD_WITH_OPENCL */
 
 #if BUILD_WITH_ITT
-static std::string convertDataToString(IttArgs* args) {
+static std::string ConvertDataToString(IttArgs* args) {
   std::string strData = "";
   void* dataPtr = args->isIndirectData ? args->data[0] : args->data;
   if (args->count) {
@@ -490,10 +497,69 @@ static std::string convertDataToString(IttArgs* args) {
   return strData;
 }
 #else /* BUILD_WITH_ITT */
-static std::string convertDataToString(IttArgs* args) {
+static std::string ConvertDataToString(IttArgs* args) {
   return "";
 }
 #endif /* BUILD_WITH_ITT */
+
+// comparator for std::pair<start_time, end_time> of device timestamps
+struct DeviceTimestampComparator {
+  bool operator()(const std::pair<uint64_t, uint64_t>& a, const std::pair<uint64_t, uint64_t>& b) const {
+    // sort by end_time ascending, then start_time ascending 
+    if (a.second != b.second) {
+      return a.second < b.second; // primary sort
+    }
+    return a.first< b.first;   // secondary sort
+  }
+};
+
+// overlap but not completely nested events go to different tracks
+uint32_t GetDeviceEventTrack(std::vector<std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>>& timestamps, uint64_t start_time, uint64_t end_time) {
+  bool track_found = false;
+  uint32_t track = 0;
+  for (uint32_t i = 0; i < timestamps.size(); i++) {
+    auto& rdt = timestamps[i];
+    bool overlap = false;
+    for (auto it = rdt.rbegin(); it != rdt.rend(); ++it) {
+      auto s = std::get<0>(*it);
+      auto t = std::get<1>(*it);
+      if (start_time > t) {
+        // ok to put in this track
+        break;
+      }
+      else {
+        if (((start_time < s) && (end_time > s) && (end_time < t)) || ((start_time  > s) && (start_time < t) && (end_time > t))) {
+          // overlap but not nested
+          // check the next track
+          overlap = true;
+          break;
+        }
+      }
+    }
+    if (!overlap) {
+      track_found = true;
+      track = i;
+      rdt.erase(rdt.begin());
+      rdt.insert({start_time, end_time});
+      break;
+    }
+  }
+
+  if (!track_found) {
+    // create a new track
+    track = timestamps.size();
+    timestamps.push_back(std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>());
+    auto& rdt = timestamps[track];
+    // populate the recent device timestamps with dummies
+    for (int i = 0; i < num_device_timestamps_cahced_; i++) {
+      rdt.insert({0, i});
+    }
+    rdt.erase(rdt.begin());
+    rdt.insert({start_time, end_time});
+  }
+
+  return track;
+}
 
 class TraceBuffer;
 std::set<TraceBuffer *> *trace_buffers_ = nullptr;
@@ -593,6 +659,26 @@ class TraceBuffer {
     TraceBuffer(const TraceBuffer& that) = delete;
     TraceBuffer& operator=(const TraceBuffer& that) = delete;
 
+    // device event timestampes cached are <device, engine_ordinal, engine_index> specific
+    std::vector<std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>>&
+    GetRecentDeviceTimestamps(ze_device_handle_t device, uint32_t engine_ordinal, uint32_t engine_index) {
+      auto it = recent_device_timestamps_.find({device, engine_ordinal, engine_index});
+      if (it == recent_device_timestamps_.end()) {
+        auto rdt = std::vector<std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>>();
+        rdt.push_back(std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>());
+        auto& ts = rdt[0];
+        // populate the recent device timestamps with dummies
+        for (int i = 0; i < num_device_timestamps_cahced_; i++) {
+          ts.insert({0, i});
+        }
+        recent_device_timestamps_.insert({{device, engine_ordinal, engine_index}, std::move(rdt)});
+
+        it = recent_device_timestamps_.find({device, engine_ordinal, engine_index});
+      }
+
+      return it->second;
+    }
+
     ZeKernelCommandExecutionRecord *GetDeviceEvent(void) {
       if (next_device_event_index_ ==  slice_capacity_) {
         if (buffer_capacity_ == -1) {
@@ -655,8 +741,11 @@ class TraceBuffer {
     uint32_t GetTid() { return tid_; }
     uint32_t GetPid() { return pid_; }
 
+
     std::string StringifyDeviceEvent(ZeKernelCommandExecutionRecord& rec) {
-      auto [pid, tid] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, pid_, rec.tid_);
+      auto& rdt = GetRecentDeviceTimestamps(rec.device_, rec.engine_ordinal_, rec.engine_index_);
+      uint32_t track = GetDeviceEventTrack(rdt, rec.start_time_, rec.end_time_);
+      auto [pid, tid] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, pid_, rec.tid_, track);
       std::string kname = GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
       std::string str = ",\n{";
 
@@ -805,7 +894,7 @@ class TraceBuffer {
         }
       } else if (rec.api_type_ == API_TYPE_ITT) {
         str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
-        str_args += convertDataToString(&rec.itt_args_);
+        str_args += ConvertDataToString(&rec.itt_args_);
         str_args += "]";
         if (rec.itt_args_.isIndirectData) {
           free(rec.itt_args_.data[0]);
@@ -814,7 +903,7 @@ class TraceBuffer {
         while (args != nullptr) {
           str_args += ",";
           str_args = str_args + "\"" + args->key + "\":[";
-          str_args += convertDataToString(args);
+          str_args += ConvertDataToString(args);
           str_args += "]";
           IttArgs* toFree = args;
           args = args->next;
@@ -927,6 +1016,8 @@ class TraceBuffer {
     uint32_t pid_;
     std::vector<ZeKernelCommandExecutionRecord *> device_event_buffer_;
     std::vector<HostEventRecord *> host_event_buffer_;
+    // device event timestampes cached are <device, engine_ordinal, engine_index> specific
+    std::map<std::tuple<ze_device_handle_t, uint32_t, uint32_t>, std::vector<std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>>> recent_device_timestamps_;
     bool flush_immediately_;
     bool host_event_buffer_flushed_;
     bool device_event_buffer_flushed_;
@@ -936,6 +1027,7 @@ class TraceBuffer {
 
 thread_local TraceBuffer thread_local_buffer_;
 
+#if BUILD_WITH_OPENCL
 class ClTraceBuffer;
 std::set<ClTraceBuffer *> *cl_trace_buffers_ = nullptr;
 class ClTraceBuffer {
@@ -1031,6 +1123,26 @@ class ClTraceBuffer {
     ClTraceBuffer(const ClTraceBuffer& that) = delete;
     ClTraceBuffer& operator=(const ClTraceBuffer& that) = delete;
 
+    // device event timestampes cached are <device, queue> specific
+    std::vector<std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>>&
+    GetRecentDeviceTimestamps(cl_device_id device, cl_command_queue queue) {
+      auto it = recent_device_timestamps_.find({device, queue});
+      if (it == recent_device_timestamps_.end()) {
+        auto rdt = std::vector<std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>>();
+        rdt.push_back(std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>());
+        auto& ts = rdt[0];
+        // populate the recent device timestamps with dummies
+        for (int i = 0; i < num_device_timestamps_cahced_; i++) {
+          ts.insert({0, i});
+        }
+        recent_device_timestamps_.insert({{device, queue}, std::move(rdt)});
+
+        it = recent_device_timestamps_.find({device, queue});
+      }
+
+      return it->second;
+    }
+
     ClKernelCommandExecutionRecord *GetDeviceEvent(void) {
       if (next_device_event_index_ ==  slice_capacity_) {
         if (buffer_capacity_ == -1) {
@@ -1093,8 +1205,9 @@ class ClTraceBuffer {
     uint32_t GetPid() { return pid_; }
 
     std::string StringifyDeviceEvent(ClKernelCommandExecutionRecord& rec) {
-#if BUILD_WITH_OPENCL
-      auto [pid, tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_);
+      auto& rdt = GetRecentDeviceTimestamps(rec.device_, rec.queue_);
+      uint32_t track = GetDeviceEventTrack(rdt, rec.start_time_, rec.end_time_);
+      auto [pid, tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_, track);
       std::string kname = GetClKernelCommandName(rec.kernel_command_id_);
 
       std::string str = ",\n{";
@@ -1157,9 +1270,6 @@ class ClTraceBuffer {
       }
 
       return str;
-#else /* BUILD_WITH_OPENCL */
-      return ""; // Unitrace build does not support OpenCL
-#endif /* BUILD_WITH_OPENCL */
     }
 
     void FlushDeviceEvent(ClKernelCommandExecutionRecord& rec) {
@@ -1273,7 +1383,7 @@ class ClTraceBuffer {
 
       } else if (rec.api_type_ == API_TYPE_ITT) {
         str_args = str_args + "\"" + rec.itt_args_.key + "\":[";
-        str_args += convertDataToString(&rec.itt_args_);
+        str_args += ConvertDataToString(&rec.itt_args_);
         str_args += "]";
         if (rec.itt_args_.isIndirectData) {
           free(rec.itt_args_.data[0]);
@@ -1282,7 +1392,7 @@ class ClTraceBuffer {
         while (args != nullptr) {
           str_args += ",";
           str_args = str_args + "\"" + args->key + "\":[";
-          str_args += convertDataToString(args);
+          str_args += ConvertDataToString(args);
           str_args += "]";
           IttArgs* toFree = args;
           args = args->next;
@@ -1370,6 +1480,8 @@ class ClTraceBuffer {
     uint32_t pid_;
     std::vector<ClKernelCommandExecutionRecord *> device_event_buffer_;
     std::vector<HostEventRecord *> host_event_buffer_;
+    // device event timestampes cached are <device, queue> specific
+    std::map<std::tuple<cl_device_id, cl_command_queue>, std::vector<std::set<std::pair<uint64_t, uint64_t>, DeviceTimestampComparator>>> recent_device_timestamps_;
     bool flush_immediately_;
     bool host_event_buffer_flushed_;
     bool device_event_buffer_flushed_;
@@ -1378,6 +1490,7 @@ class ClTraceBuffer {
 };
 
 thread_local ClTraceBuffer cl_thread_local_buffer_;
+#endif /* BUILD_WITH_OPENCL */
 
 class ChromeLogger {
   private:
@@ -1460,12 +1573,14 @@ class ChromeLogger {
           }
         }
 
+#if BUILD_WITH_OPENCL
         if (cl_trace_buffers_) {
           for (auto it = cl_trace_buffers_->begin(); it != cl_trace_buffers_->end();) {
             (*it)->Finalize();
             it = cl_trace_buffers_->erase(it);
           }
         }
+#endif /* BUILD_WITH_OPENCL */
 
         logger_lock_.unlock();
 
@@ -1624,40 +1739,6 @@ class ChromeLogger {
       thread_local_buffer_.BufferDeviceEvent();
     }
 
-#if BUILD_WITH_OPENCL
-    // OnenCL tracer callbacks.
-    static void ClChromeKernelLoggingCallback(
-      cl_device_pci_bus_info_khr& pci,
-      cl_device_id device,
-      cl_command_queue& queue,
-      int tile,
-      bool implicit,
-      const uint64_t id,
-      uint64_t started,
-      uint64_t ended) {
-
-      if (cl_thread_local_buffer_.IsFinalized()) {
-        return;
-      }
-
-      PTI_ASSERT(ended > started);
-
-      ClKernelCommandExecutionRecord *rec = cl_thread_local_buffer_.GetDeviceEvent();
-
-      rec->tid_ = utils::GetTid();
-      rec->tile_ = tile;
-      rec->start_time_ = started;
-      rec->end_time_ = ended;
-      rec->device_ = device;
-      rec->pci_ = pci;
-      rec->queue_ = queue;
-      rec->implicit_scaling_ = implicit;
-      rec->kid_ = id;
-      rec->kernel_command_id_ = id;
-      cl_thread_local_buffer_.BufferDeviceEvent();
-    }
-#endif /* BUILD_WITH_OPENCL */
-
     static void ChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
                                           uint64_t started, uint64_t ended) {
       if (thread_local_buffer_.IsFinalized()) {
@@ -1701,6 +1782,39 @@ class ChromeLogger {
           thread_local_buffer_.BufferHostEvent();
         }
       }
+    }
+
+#if BUILD_WITH_OPENCL
+    // OnenCL tracer callbacks.
+    static void ClChromeKernelLoggingCallback(
+      cl_device_pci_bus_info_khr& pci,
+      cl_device_id device,
+      cl_command_queue& queue,
+      int tile,
+      bool implicit,
+      const uint64_t id,
+      uint64_t started,
+      uint64_t ended) {
+
+      if (cl_thread_local_buffer_.IsFinalized()) {
+        return;
+      }
+
+      PTI_ASSERT(ended > started);
+
+      ClKernelCommandExecutionRecord *rec = cl_thread_local_buffer_.GetDeviceEvent();
+
+      rec->tid_ = utils::GetTid();
+      rec->tile_ = tile;
+      rec->start_time_ = started;
+      rec->end_time_ = ended;
+      rec->device_ = device;
+      rec->pci_ = pci;
+      rec->queue_ = queue;
+      rec->implicit_scaling_ = implicit;
+      rec->kid_ = id;
+      rec->kernel_command_id_ = id;
+      cl_thread_local_buffer_.BufferDeviceEvent();
     }
 
     static void ClChromeCallLoggingCallback(std::vector<uint64_t> *kids, FLOW_DIR flow_dir, API_TRACING_ID api_id,
@@ -1747,6 +1861,7 @@ class ChromeLogger {
         }
       }
     }
+#endif /* BUILD_WITH_OPENCL */
 };
 
 #endif // PTI_TOOLS_UNITRACE_CHROME_LOGGER_H_
