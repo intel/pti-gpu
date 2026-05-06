@@ -482,8 +482,9 @@ endmacro()
 
 macro(AddProjectVersionInfo TARGET)
   if (WIN32)
-    set(PTI_VERSIONINFO_RC "${PROJECT_BINARY_DIR}/${TARGET}_versioninfo.rc")
-    set(PTI_VERSIONINFO_RC_IN "${PROJECT_SOURCE_DIR}/cmake/Modules/pti_versioninfo.rc.in")
+    set(PTI_VERSIONINFO_RC "${PROJECT_BINARY_DIR}/$<CONFIG>/${TARGET}_versioninfo.rc")
+    set(PTI_VERSIONINFO_RC_IN "${PROJECT_BINARY_DIR}/${TARGET}_versioninfo.rc.in")
+    set(PTI_VERSIONINFO_RC_IN_INIT "${PROJECT_SOURCE_DIR}/cmake/Modules/pti_versioninfo.rc.in")
 
     set(INTEL_LIC_PATH "${PTI_CMAKE_MACRO_DIR}/../LICENSE")
 
@@ -499,10 +500,25 @@ macro(AddProjectVersionInfo TARGET)
 
     if(NOT PTI_COPYRIGHT)
       message(WARNING "Copyright file not found, Windows versioninfo will be incomplete")
-      set(PTI_COPYRIGHT "")
+      set(PTI_COPYRIGHT "Copyright (C) Intel Corporation")
     endif()
 
-    configure_file(${PTI_VERSIONINFO_RC_IN} ${PTI_VERSIONINFO_RC} @ONLY)
+    set(PTI_VERSION_TWEAK "${PROJECT_VERSION_TWEAK}")
+    if(NOT PTI_VERSION_TWEAK)
+      set(PTI_VERSION_TWEAK 0)
+    endif()
+
+    set(TARGET_NAME ${TARGET})
+
+    # https://discourse.cmake.org/t/configuring-a-file-that-has-both-substitution-and-generator-expressions/3064/2
+    configure_file(${PTI_VERSIONINFO_RC_IN_INIT} ${PTI_VERSIONINFO_RC_IN} @ONLY NEWLINE_STYLE CRLF)
+    file(
+      GENERATE
+      OUTPUT ${PTI_VERSIONINFO_RC}
+      INPUT  ${PTI_VERSIONINFO_RC_IN}
+      NEWLINE_STYLE CRLF
+    )
+
     target_sources(${TARGET} PRIVATE ${PTI_VERSIONINFO_RC})
   endif()
 endmacro()
