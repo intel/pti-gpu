@@ -3,12 +3,15 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <mutex>
 #include <ostream>
 #include <sycl/sycl.hpp>
 #include <tuple>
 
+#include "pti/pti.h"
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
@@ -21,6 +24,7 @@
 #define MAX_EPS 1.0e-4f
 
 namespace {
+constexpr uint32_t kUrSuccessReturnValue = 0;
 
 size_t requested_buffer_calls = 0;
 size_t rejected_buffer_calls = 0;  // Buffer requests that are called and rejected by the API
@@ -52,6 +56,7 @@ std::set<uint32_t> zecall_corrids_already_seen;
 std::set<uint32_t> zecall_at_gpu_op_corrids_already_seen;
 bool urcall_present = false;
 uint64_t urcall_count = 0;
+size_t urcall_failure_count = 0;
 bool sycl_has_all_records = false;
 uint64_t memory_bytes_copied = 0;
 uint64_t memory_view_record_count = 0;
@@ -222,6 +227,7 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
     zecall_at_gpu_op_corrids_already_seen.clear();
     urcall_present = false;
     urcall_count = 0;
+    urcall_failure_count = 0;
     memory_bytes_copied = 0;
     memory_view_record_count = 0;
     kernel_view_record_count = 0;
@@ -379,9 +385,12 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
           break;
         }
         case pti_view_kind::PTI_VIEW_RUNTIME_API: {
-          pti_view_record_api* rec = reinterpret_cast<pti_view_record_api*>(ptr);
+          const auto* rec = reinterpret_cast<pti_view_record_api*>(ptr);
           urcall_present = true;
           urcall_count++;
+          if (rec->_return_code != kUrSuccessReturnValue) {
+            urcall_failure_count++;
+          }
           const char* api_name = nullptr;
           pti_result status =
               ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, rec->_api_id, &api_name);
@@ -1057,13 +1066,16 @@ TEST_P(MainFixtureTest, ApiCallsGenerationRuntime) {
       // If env var is explicitly 1 -- then ur call count should be more than 1
       //                            -- since the granular apis have no effect
       EXPECT_GE(urcall_count, 2ULL);
+      EXPECT_EQ(urcall_failure_count, 0ULL);
     } else {
       // If env is unset
       std::cout << "Env Unset case-Granular(" << granular_on << "): " << urcall_count << "\n";
       if (granular_on) {                // and granular api is individually on.
         EXPECT_EQ(urcall_count, 1ULL);  // call count should be exactly 1
+        EXPECT_EQ(urcall_failure_count, 0ULL);
       } else {
         EXPECT_GE(urcall_count, 2ULL);  // no granular hence call count should be all calls (> 1)
+        EXPECT_EQ(urcall_failure_count, 0ULL);
       }
     }
   } else {

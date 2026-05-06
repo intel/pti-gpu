@@ -1129,7 +1129,7 @@ inline void OverheadCollectionEvent(void* data, const ZeKernelCommandExecutionRe
 }
 
 inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
-  pti_view_record_api record;
+  pti_view_record_api record{};
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_RUNTIME_API;
   record._api_group = pti_api_group_id::PTI_API_GROUP_SYCL;
 
@@ -1145,6 +1145,7 @@ inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecor
   record._process_id = rec.pid_;
   record._correlation_id = rec.cid_;
   record._api_id = rec.callback_id_;
+  record._return_code = rec.result_;
   // record._name = rec.sycl_func_name_;
   SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, record._correlation_id);
   Instance().InsertRecord(record, record._thread_id);

@@ -411,6 +411,7 @@ inline void DumpRecord(pti_view_record_api* record) {
   std::cout << "Api End Time:       " << AposFormat(record->_end_timestamp) << " ns" << '\n';
   std::cout << "Process Id:     " << record->_process_id << '\n';
   std::cout << "Thread Id:      " << record->_thread_id << '\n';
+  std::cout << "Return Code:      " << record->_return_code << '\n';
 }
 
 inline void DumpRecord(pti_view_record_comms* record) {

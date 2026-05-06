@@ -1230,7 +1230,7 @@ class ZeCollector {
       rec.device_ = command->device;
       rec.memory_route_ = command->props.route;
       rec.num_wait_events_ = command->num_wait_events;
-      rec.result_ = command->result_;
+      rec.result_ = static_cast<uint32_t>(command->result_);
       if (command->props.src_device != nullptr) {
         CopyDeviceUuid(command->props.src_device, static_cast<uint8_t*>(rec.src_device_uuid));
       }
@@ -1740,7 +1740,7 @@ class ZeCollector {
       rec.end_time_ = utils::GetTime();
       rec.event_ = event_h;
       rec.cid_ = synch_corrid;
-      rec.result_ = result;
+      rec.result_ = static_cast<uint32_t>(result);
       rec.callback_id_ = zeEventHostSynchronize_id;
       rec.command_type_ = KernelCommandType::kCommand;
       kcexec.push_back(std::move(rec));
@@ -1791,7 +1791,7 @@ class ZeCollector {
       rec.end_time_ = utils::GetTime();
       rec.event_ = nullptr;
       rec.cid_ = synch_corrid;
-      rec.result_ = result;
+      rec.result_ = static_cast<uint32_t>(result);
       rec.callback_id_ = zeCommandListHostSynchronize_id;
       rec.command_type_ = KernelCommandType::kCommand;
       kcexec1.push_back(std::move(rec));
@@ -1878,7 +1878,7 @@ class ZeCollector {
       rec.end_time_ = utils::GetTime();
       rec.event_ = nullptr;
       rec.cid_ = synch_corrid;
-      rec.result_ = result;
+      rec.result_ = static_cast<uint32_t>(result);
       rec.callback_id_ = zeFenceHostSynchronize_id;
       rec.command_type_ = KernelCommandType::kCommand;
       kcexec1.push_back(std::move(rec));
@@ -3045,7 +3045,7 @@ class ZeCollector {
         rec.cid_ = synch_corrid;
         rec.callback_id_ = zeCommandQueueSynchronize_id;
         rec.command_type_ = KernelCommandType::kCommand;
-        rec.result_ = result;
+        rec.result_ = static_cast<uint32_t>(result);
         kcexec1.push_back(std::move(rec));
         collector->acallback_(collector->callback_data_, kcexec1);
       }

@@ -191,6 +191,7 @@ void DumpRecordApi(pti_view_record_api* record) {
   printf("Api Process Id: %u\n", record->_process_id);
   printf("Api Thread Id: %u\n", record->_thread_id);
   printf("Api Correlation Id: %u\n", record->_correlation_id);
+  printf("Api Return: %u\n", record->_return_code);
 }
 
 void DumpRecordSynchronization(pti_view_record_synchronization* record) {

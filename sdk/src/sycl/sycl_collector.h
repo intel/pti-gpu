@@ -214,15 +214,15 @@ class SyclCollector {
 
   static XPTI_CALLBACK_API void TpCallback(uint16_t TraceType, xpti::trace_event_data_t* /*Parent*/,
                                            xpti::trace_event_data_t* Event, uint64_t /*instance*/,
-                                           const void* UserData) {
+                                           const void* user_data) {
     const auto trace_type = static_cast<xpti::trace_point_type_t>(TraceType);
 
     switch (trace_type) {
       case xpti::trace_point_type_t::function_with_args_begin:
-        HandleFunctionWithArgsBegin(UserData);
+        HandleFunctionWithArgsBegin(user_data);
         break;
       case xpti::trace_point_type_t::function_with_args_end:
-        HandleFunctionWithArgsEnd(UserData);
+        HandleFunctionWithArgsEnd(user_data);
         break;
       case xpti::trace_point_type_t::task_begin:
         HandleTaskBegin(Event);
@@ -238,14 +238,14 @@ class SyclCollector {
   }
 
  private:
-  static void HandleFunctionWithArgsBegin(const void* UserData) {
+  static void HandleFunctionWithArgsBegin(const void* user_data) {
     sycl_data_kview.cid_ = UniCorrId::GetUniCorrId();
     sycl_data_mview.cid_ = sycl_data_kview.cid_;
     SyclCollector::Instance().sycl_runtime_rec_.cid_ = sycl_data_kview.cid_;
 
-    if (!UserData) return;
+    if (!user_data) return;
 
-    const auto* args = static_cast<const xpti::function_with_args_t*>(UserData);
+    const auto* args = static_cast<const xpti::function_with_args_t*>(user_data);
     const auto api_id = static_cast<pti_api_id_runtime_sycl>(args->function_id);
 
     auto& runtime_rec = SyclCollector::Instance().sycl_runtime_rec_;
@@ -263,12 +263,15 @@ class SyclCollector {
     }
   }
 
-  static void HandleFunctionWithArgsEnd(const void* UserData) {
-    if (!UserData) return;
+  static void HandleFunctionWithArgsEnd(const void* user_data) {
+    // TODO(PTI): we may want to split this into a separate callback for
+    // function start/end to avoid measuring callback overhead.
+    const auto time = utils::GetTime();
 
-    const auto* args = static_cast<const xpti::function_with_args_t*>(UserData);
+    if (!user_data) return;
+
+    const auto* args = static_cast<const xpti::function_with_args_t*>(user_data);
     const auto api_id = static_cast<pti_api_id_runtime_sycl>(args->function_id);
-    auto time = utils::GetTime();
 
     const ApiType api_type = GetApiType(api_id);
     auto& runtime_rec = SyclCollector::Instance().sycl_runtime_rec_;
@@ -279,7 +282,9 @@ class SyclCollector {
       runtime_rec.kid_ = sycl_data_mview.kid_;
       runtime_rec.tid_ = sycl_data_mview.tid_;
     }
-
+    if (args->ret_data) {
+      runtime_rec.result_ = *static_cast<uint32_t*>(args->ret_data);
+    }
     runtime_rec.end_time_ = time;
 
     // Check callback and invoke if needed

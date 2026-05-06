@@ -88,7 +88,7 @@ struct ZeKernelCommandExecutionRecord {
   uint64_t api_start_time_;
   uint64_t api_end_time_;
   uint64_t num_wait_events_ = 0;  // tracks wait event count for synchronization activity commands
-  ze_result_t result_;
+  uint32_t result_ = 0;
 };
 
 struct CommunicationRecord {
