@@ -832,7 +832,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     buffer_size_atleast_largest_record = (*buf_size) >= sizeof(pti_view_record_memory_copy_type);
   }
   static void BufferRequested(unsigned char** buf, size_t* buf_size) {
-    *buf_size = sizeof(pti_view_record_kernel_type);
+    *buf_size = pti::test::utils::SizeOfLargestViewRecord();
     void* ptr = ::operator new(*buf_size);
     requested_buffer_calls += 1;
     ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);

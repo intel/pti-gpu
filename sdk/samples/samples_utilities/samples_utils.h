@@ -178,34 +178,8 @@ inline void DumpRecord(pti_view_record_kernel* record) {
 
 inline void DumpRecord(pti_view_record_kernel_v2* record) {
   if (nullptr == record) return;
-
-  std::cout << "Kernel Name: " << record->_name << '\n';
-  std::cout << "Kernel Execution Time: "
-            << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
-  std::cout << "               Ze Kernel Append Time: " << AposFormat(record->_append_timestamp)
-            << " ns" << '\n';
-  std::cout << "               Ze Kernel Submit Time: " << AposFormat(record->_submit_timestamp)
-            << " ns" << '\n';
-  std::cout << "                Ze Kernel Start Time: " << AposFormat(record->_start_timestamp)
-            << " ns" << '\n';
-  std::cout << "                  Ze Kernel End Time: " << AposFormat(record->_end_timestamp)
-            << " ns" << '\n';
-  std::cout << "Kernel Queue Handle: " << record->_queue_handle << '\n';
-  std::cout << "Kernel Queue ID: " << record->_sycl_queue_id << '\n';
-  std::cout << "Kernel CommandList Context Handle: " << record->_context_handle << '\n';
-  std::cout << "Kernel Id: " << std::dec << record->_kernel_id << '\n';
-  std::cout << "Correlation Id: " << std::dec << record->_correlation_id << '\n';
-  std::cout << "Kernel Thread Id: " << std::dec << record->_thread_id << '\n';
-  std::cout << "         Sycl Kernel Task Begin Time: " << std::dec
-            << record->_sycl_task_begin_timestamp << " ns" << '\n';
-  std::cout << "Sycl Kernel EnqueueKernel Begin Time: " << std::dec
-            << record->_sycl_enqk_begin_timestamp << " ns" << '\n';
-  std::cout << "Kernel File Name: " << record->_source_file_name << ":"
-            << record->_source_line_number << '\n';
-  std::cout << "Kernel Device: " << record->_pci_address << '\n';
-  PrintUuid(record->_device_uuid, "Kernel Device UUID: ");
-  std::cout << "Kernel NodeID:InvocationID " << record->_sycl_node_id << ':'
-            << record->_sycl_invocation_id << '\n';
+  DumpRecord(reinterpret_cast<pti_view_record_kernel*>(record));
+  std::cout << "Device Handle: " << record->_device_handle << '\n';
   std::cout << "Kernel engine ordinal: " << record->_engine_ordinal << '\n';
   std::cout << "Kernel engine index: " << record->_engine_index << '\n';
 }
@@ -243,33 +217,8 @@ inline void DumpRecord(pti_view_record_memory_copy* record) {
 
 inline void DumpRecord(pti_view_record_memory_copy_v2* record) {
   if (nullptr == record) return;
-
-  std::cout << "Memory Op: " << record->_name << '\n';
-  std::cout << "Memory Device: " << record->_pci_address << '\n';
-  PrintUuid(record->_device_uuid, "Memory Device UUID: ");
-  std::cout << "Memory Op Execution Time: "
-            << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
-  std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
-            << " ns" << '\n';
-  std::cout << "               Memory Op Submit Time: " << AposFormat(record->_submit_timestamp)
-            << " ns" << '\n';
-  std::cout << "                Memory Op Start Time: " << AposFormat(record->_start_timestamp)
-            << " ns" << '\n';
-  std::cout << "                  Memory Op End Time: " << AposFormat(record->_end_timestamp)
-            << " ns" << '\n';
-  std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
-  std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
-  std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
-  std::cout << "Memory Op Id: " << std::dec << record->_mem_op_id << '\n';
-  std::cout << "Memory Bytes Copied: " << std::dec << record->_bytes << '\n';
-  std::cout << "Memory Op Thread Id: " << std::dec << record->_thread_id << '\n';
-  std::cout << "Correlation Id: " << std::dec << record->_correlation_id << '\n';
-  std::cout << "Memory Copy Type: " << std::dec << ptiViewMemcpyTypeToString(record->_memcpy_type)
-            << '\n';
-  std::cout << "Memory Copy Source: " << std::dec << ptiViewMemoryTypeToString(record->_mem_src)
-            << '\n';
-  std::cout << "Memory Copy Destination: " << std::dec
-            << ptiViewMemoryTypeToString(record->_mem_dst) << '\n';
+  DumpRecord(reinterpret_cast<pti_view_record_memory_copy*>(record));
+  std::cout << "Device Handle: " << record->_device_handle << '\n';
   std::cout << "Memory Copy engine ordinal: " << record->_engine_ordinal << '\n';
   std::cout << "Memory Copy engine index: " << record->_engine_index << '\n';
 }
@@ -309,42 +258,15 @@ inline void DumpRecord(pti_view_record_memory_copy_p2p* record) {
 
 inline void DumpRecord(pti_view_record_memory_copy_p2p_v2* record) {
   if (nullptr == record) return;
-
-  std::cout << "Memory Op: " << record->_name << '\n';
-  std::cout << "Memory Source Device: " << record->_src_pci_address << '\n';
-  std::cout << "Memory Destination Device: " << record->_dst_pci_address << '\n';
-  PrintUuid(record->_src_uuid, "Memory Source Device UUID: ");
-  PrintUuid(record->_dst_uuid, "Memory Destination Device UUID: ");
-  std::cout << "Memory Op Execution Time: " << record->_end_timestamp - record->_start_timestamp
-            << " ns" << '\n';
-  std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
-            << " ns" << '\n';
-  std::cout << "               Memory Op Submit Time: " << AposFormat(record->_submit_timestamp)
-            << " ns" << '\n';
-  std::cout << "                Memory Op Start Time: " << AposFormat(record->_start_timestamp)
-            << " ns" << '\n';
-  std::cout << "                  Memory Op End Time: " << AposFormat(record->_end_timestamp)
-            << " ns" << '\n';
-  std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
-  std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
-  std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
-  std::cout << "Memory Op Id: " << std::dec << record->_mem_op_id << '\n';
-  std::cout << "Memory Bytes Copied: " << std::dec << record->_bytes << '\n';
-  std::cout << "Memory Op Thread Id: " << std::dec << record->_thread_id << '\n';
-  std::cout << "Correlation Id: " << std::dec << record->_correlation_id << '\n';
-  std::cout << "Memory Copy Type: " << std::dec << ptiViewMemcpyTypeToString(record->_memcpy_type)
-            << '\n';
-  std::cout << "Memory Copy Source: " << std::dec << ptiViewMemoryTypeToString(record->_mem_src)
-            << '\n';
-  std::cout << "Memory Copy Destination: " << std::dec
-            << ptiViewMemoryTypeToString(record->_mem_dst) << '\n';
+  DumpRecord(reinterpret_cast<pti_view_record_memory_copy_p2p*>(record));
+  std::cout << "Source Device Handle: " << record->_src_device_handle << '\n';
+  std::cout << "Destination Device Handle: " << record->_dst_device_handle << '\n';
   std::cout << "Memory Copy engine ordinal: " << record->_engine_ordinal << '\n';
   std::cout << "Memory Copy engine index: " << record->_engine_index << '\n';
 }
 
 inline void DumpRecord(pti_view_record_memory_fill* record) {
   if (nullptr == record) return;
-
   std::cout << "Memory Op: " << record->_name << '\n';
   std::cout << "Memory Device: " << record->_pci_address << '\n';
   PrintUuid(record->_device_uuid, "Memory Device UUID: ");
@@ -371,29 +293,8 @@ inline void DumpRecord(pti_view_record_memory_fill* record) {
 
 inline void DumpRecord(pti_view_record_memory_fill_v2* record) {
   if (nullptr == record) return;
-
-  std::cout << "Memory Op: " << record->_name << '\n';
-  std::cout << "Memory Device: " << record->_pci_address << '\n';
-  PrintUuid(record->_device_uuid, "Memory Device UUID: ");
-  std::cout << "Memory Op Execution Time: "
-            << AposFormat(record->_end_timestamp - record->_start_timestamp) << " ns" << '\n';
-  std::cout << "               Memory Op Append Time: " << AposFormat(record->_append_timestamp)
-            << " ns" << '\n';
-  std::cout << "               Memory Op Submit Time: " << AposFormat(record->_submit_timestamp)
-            << " ns" << '\n';
-  std::cout << "               Memory Op Start Time: " << AposFormat(record->_start_timestamp)
-            << " ns" << '\n';
-  std::cout << "                  Memory Op End Time: " << AposFormat(record->_end_timestamp)
-            << " ns" << '\n';
-  std::cout << "Memory Op Queue Handle: " << record->_queue_handle << '\n';
-  std::cout << "Memory Op Queue ID: " << record->_sycl_queue_id << '\n';
-  std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
-  std::cout << "Memory Op Id: " << std::dec << record->_mem_op_id << '\n';
-  std::cout << "Memory Op Thread Id: " << std::dec << record->_thread_id << '\n';
-  std::cout << "Memory Bytes Transfered: " << record->_bytes << '\n';
-  std::cout << "Memory Value for Set: " << record->_value_for_set << '\n';
-  std::cout << "Correlation Id: " << std::dec << record->_correlation_id << '\n';
-  std::cout << "Memory Fill Type: " << std::dec << record->_mem_type << '\n';
+  DumpRecord(reinterpret_cast<pti_view_record_memory_fill*>(record));
+  std::cout << "Device Handle: " << record->_device_handle << '\n';
   std::cout << "Memory Fill engine ordinal: " << record->_engine_ordinal << '\n';
   std::cout << "Memory Fill engine index: " << record->_engine_index << '\n';
 }

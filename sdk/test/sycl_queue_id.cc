@@ -48,7 +48,7 @@ void StopTracing() {
 }
 
 static void BufferRequested(unsigned char **buf, size_t *buf_size) {
-  *buf_size = sizeof(pti_view_record_kernel_type);
+  *buf_size = pti::test::utils::SizeOfLargestViewRecord();
   void *ptr = ::operator new(*buf_size);
   ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
   *buf = static_cast<unsigned char *>(ptr);

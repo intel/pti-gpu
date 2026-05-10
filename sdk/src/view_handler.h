@@ -1058,6 +1058,8 @@ inline void DoCommonMemCopy(T& record, const ZeKernelCommandExecutionRecord& rec
   record._thread_id = rec.tid_;
   record._mem_op_id = rec.kid_;
   record._correlation_id = rec.cid_;
+  record._engine_ordinal = rec.engine_ordinal_;
+  record._engine_index = rec.engine_index_;
 }
 
 inline void MemCopyP2PEvent(const ZeKernelCommandExecutionRecord& rec) {
@@ -1065,21 +1067,17 @@ inline void MemCopyP2PEvent(const ZeKernelCommandExecutionRecord& rec) {
   DoCommonMemCopy(record, rec);
   SetMemCpyIdsP2P(record, rec);
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P;
-
-  record._engine_ordinal = rec.engine_ordinal_;
-  record._engine_index = rec.engine_index_;
+  record._src_device_handle = static_cast<pti_device_handle_t>(rec.device_);
+  record._dst_device_handle = static_cast<pti_device_handle_t>(rec.dst_device_);
   Instance().InsertRecord(record, record._thread_id);
 }
 
 inline void MemCopyEvent(const ZeKernelCommandExecutionRecord& rec) {
   pti_view_record_memory_copy_v2 record;
-
   DoCommonMemCopy(record, rec);
   SetMemCpyIds(record, rec);
-
   record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_COPY;
-  record._engine_ordinal = rec.engine_ordinal_;
-  record._engine_index = rec.engine_index_;
+  record._device_handle = static_cast<pti_device_handle_t>(rec.device_);
   Instance().InsertRecord(record, record._thread_id);
 }
 
@@ -1113,6 +1111,7 @@ inline void MemFillEvent(const ZeKernelCommandExecutionRecord& rec) {
   // for MemoryFill op the reported device is the destination device, where fill happens
   std::copy_n(rec.dst_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
 
+  record._device_handle = static_cast<pti_device_handle_t>(rec.device_);
   record._engine_ordinal = rec.engine_ordinal_;
   record._engine_index = rec.engine_index_;
   Instance().InsertRecord(record, record._thread_id);
@@ -1297,6 +1296,7 @@ inline void KernelEvent(const ZeKernelCommandExecutionRecord& rec) {
   GetDeviceId(record._pci_address, rec.pci_prop_);
   std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
 
+  record._device_handle = static_cast<pti_device_handle_t>(rec.device_);
   record._engine_ordinal = rec.engine_ordinal_;
   record._engine_index = rec.engine_index_;
   Instance().InsertRecord(record, record._thread_id);

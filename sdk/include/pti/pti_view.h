@@ -20,6 +20,23 @@ extern "C" {
 #endif
 
 /**
+ * @brief ABI compatibility static asserts for pti_view_record types
+ *
+ * If any of these assertions fail, it indicates an ABI-breaking change.
+ */
+#if defined(__cplusplus)
+#define PTI_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#define PTI_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
+#else
+/* Fallback for pre-C11: generates a compile error if condition is false */
+#define PTI_STATIC_ASSERT_CONCAT_(a, b) a##b
+#define PTI_STATIC_ASSERT_CONCAT(a, b) PTI_STATIC_ASSERT_CONCAT_(a, b)
+#define PTI_STATIC_ASSERT(cond, msg) \
+    typedef char PTI_STATIC_ASSERT_CONCAT(pti_static_assertion_, __LINE__)[(cond) ? 1 : -1]
+#endif
+
+/**
  * @brief const defines.
  */
 #define PTI_MAX_PCI_ADDRESS_SIZE 16                         //!< Size of pci address array.
@@ -225,11 +242,13 @@ typedef struct pti_view_record_kernel_v2 {
   uint64_t _sycl_node_id;                           //!< SYCL Node ID
   uint64_t _sycl_queue_id;                          //!< Device front-end queue id
   uint32_t _sycl_invocation_id;                     //!< SYCL Invocation ID
-
+  pti_device_handle_t _device_handle;               //!< Device handle on which kernel was executed
   uint32_t _engine_ordinal;                         //!< Device engine ordinal on which kernel was executed
   uint32_t _engine_index;                           //!< Device engine index on which kernel was executed
 } pti_view_record_kernel_v2;
 
+PTI_STATIC_ASSERT(offsetof(pti_view_record_kernel_v2, _device_handle) == sizeof(pti_view_record_kernel),
+     "pti_view_record_kernel_v2 must be an extension of pti_view_record_kernel");
 
 /**
  * @brief Synchronization View record type
@@ -310,10 +329,13 @@ typedef struct pti_view_record_memory_copy_v2 {
                                                     //!< to device, ns
   uint64_t _bytes;                                  //!< number of bytes copied
   uint64_t _sycl_queue_id;                          //!< Device front-end queue id
-
+  pti_device_handle_t _device_handle;               //!< Device handle on which copy was executed
   uint32_t _engine_ordinal;                         //!< Device engine ordinal on which copy was executed
   uint32_t _engine_index;                           //!< Device engine index on which copy was executed
 } pti_view_record_memory_copy_v2;
+
+PTI_STATIC_ASSERT(offsetof(pti_view_record_memory_copy_v2, _device_handle) == sizeof(pti_view_record_memory_copy),
+     "pti_view_record_memory_copy_v2 must be an extension of pti_view_record_memory_copy");
 
 /**
  * @brief Peer to Peer Memory Copy Operation View record type
@@ -373,10 +395,14 @@ typedef struct pti_view_record_memory_copy_p2p_v2 {
                                                     //!< to device, ns
   uint64_t _bytes;                                  //!< number of bytes copied
   uint64_t _sycl_queue_id;                          //!< Device front-end queue id
-
+  pti_device_handle_t _src_device_handle;           //!< Device handle of source memory
+  pti_device_handle_t _dst_device_handle;           //!< Device handle of destination memory
   uint32_t _engine_ordinal;                         //!< Source device engine ordinal on which copy was executed
   uint32_t _engine_index;                           //!< Source device engine index on which copy was executed
 } pti_view_record_memory_copy_p2p_v2;
+
+PTI_STATIC_ASSERT(offsetof(pti_view_record_memory_copy_p2p_v2, _src_device_handle) == sizeof(pti_view_record_memory_copy_p2p),
+     "pti_view_record_memory_copy_p2p_v2 must be an extension of pti_view_record_memory_copy_p2p");
 
 /**
  * @brief Device Memory Fill operation View record type
@@ -430,10 +456,13 @@ typedef struct pti_view_record_memory_fill_v2 {
   uint64_t _bytes;                                  //!< Number of bytes filled
   uint64_t _value_for_set;                          //!< Value filled
   uint64_t _sycl_queue_id;                          //!< Device front-end queue id
-
+  pti_device_handle_t _device_handle;               //!< Device handle on which fill was executed
   uint32_t _engine_ordinal;                         //!< Device engine ordinal on which fill was performed
   uint32_t _engine_index;                           //!< Device engine index on which fill was performed
 } pti_view_record_memory_fill_v2;
+
+PTI_STATIC_ASSERT(offsetof(pti_view_record_memory_fill_v2, _device_handle) == sizeof(pti_view_record_memory_fill),
+     "pti_view_record_memory_fill_v2 must be an extension of pti_view_record_memory_fill");
 
 /**
  * @brief External Correlation View record type

@@ -1,6 +1,8 @@
 #ifndef TEST_UTILS_TEST_HELPERS_H_
 #define TEST_UTILS_TEST_HELPERS_H_
 
+#include <algorithm>
+#include <array>
 #include <cstring>
 #include <functional>
 #include <initializer_list>
@@ -109,6 +111,22 @@ constexpr std::size_t ValidateTimestamps(T... args) {
       }(),
       ...);
   return found_issues;
+}
+
+inline constexpr auto SizeOfLargestViewRecord() {
+  constexpr std::array view_size_lookup_table{
+      sizeof(pti_view_record_kernel_v2),             // PTI_VIEW_DEVICE_GPU_KERNEL
+      sizeof(pti_view_record_api),                   // PTI_VIEW_LEVEL_ZERO_CALLS
+      sizeof(pti_view_record_overhead),              // PTI_VIEW_COLLECTION_OVERHEAD
+      sizeof(pti_view_record_api),                   // PTI_VIEW_SYCL_RUNTIME_CALLS
+      sizeof(pti_view_record_external_correlation),  // PTI_VIEW_EXTERNAL_CORRELATION
+      sizeof(pti_view_record_memory_copy_v2),        // PTI_VIEW_DEVICE_GPU_MEM_COPY
+      sizeof(pti_view_record_memory_fill_v2),        // PTI_VIEW_DEVICE_GPU_MEM_FILL
+      sizeof(pti_view_record_memory_copy_p2p_v2),    // PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P
+      sizeof(pti_view_record_synchronization),       // PTI_VIEW_DEVICE_SYNCHRONIZATION
+      sizeof(pti_view_record_comms),                 // PTI_VIEW_COMMUNICATION
+  };
+  return *std::max_element(view_size_lookup_table.begin(), view_size_lookup_table.end());
 }
 
 constexpr int ValidateNoBigGapBetweenTimestampsNs(uint64_t gap_in_ns,
