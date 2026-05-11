@@ -264,32 +264,44 @@ cl_int clEnqueueMemFillINTEL(cl_command_queue command_queue, void* dst_ptr, cons
 template <cl_device_type device_type>
 cl_int clMemBlockingFreeINTEL( cl_context context, void* ptr);
 
+inline std::string PadLeft(const std::string& str, size_t width) {
+  if (str.length() >= width) return str;
+  return std::string(width - str.length(), ' ') + str;
+}
+
+inline std::string FormatFloat(float value, int precision = 2) {
+  std::string result = std::to_string(value);
+  size_t dot_pos = result.find('.');
+  if ((dot_pos != std::string::npos) && (dot_pos + precision + 1 < result.length())) {
+    result = result.substr(0, dot_pos + precision + 1);
+  }
+  return result;
+}
+
 inline std::string GetVerboseName(const ClKernelProps* props) {
   PTI_ASSERT(props != nullptr);
   PTI_ASSERT(!props->name.empty());
 
-  std::stringstream sstream;
-  sstream << props->name;
+  std::string result = props->name;
   if (props->simd_width > 0) {
-    sstream << "[SIMD";
+    result += "[SIMD";
     if (props->simd_width == 1) {
-      sstream << "_ANY";
+      result += "_ANY";
     } else {
-      sstream << props->simd_width;
+      result += std::to_string(props->simd_width);
     }
-    sstream << " {" <<
-      props->global_size[0] << "; " <<
-      props->global_size[1] << "; " <<
-      props->global_size[2] << "} {" <<
-      props->local_size[0] << "; " <<
-      props->local_size[1] << "; " <<
-      props->local_size[2] << "}]";
+    result += " {" +
+      std::to_string(props->global_size[0]) + "; " +
+      std::to_string(props->global_size[1]) + "; " +
+      std::to_string(props->global_size[2]) + "} {" +
+      std::to_string(props->local_size[0]) + "; " +
+      std::to_string(props->local_size[1]) + "; " +
+      std::to_string(props->local_size[2]) + "}]";
   } else if (props->bytes_transferred > 0) {
-    sstream << "[" <<
-      std::to_string(props->bytes_transferred) << "]";
+    result += "[" + std::to_string(props->bytes_transferred) + "]";
   }
 
-  return sstream.str();
+  return result;
 }
 
 inline std::string GetClKernelCommandName(uint64_t id) {
@@ -453,14 +465,14 @@ class ClCollector {
       return;
     }
 
-    std::stringstream stream;
-    stream << std::setw(max_name_length) << "Kernel" << "," <<
-      std::setw(kCallsLength) << "Calls" << "," <<
-      std::setw(kTimeLength) << "Time (ns)" << "," <<
-      std::setw(kPercentLength) << "Time (%)" << "," <<
-      std::setw(kTimeLength) << "Average (ns)" << "," <<
-      std::setw(kTimeLength) << "Min (ns)" << "," <<
-      std::setw(kTimeLength) << "Max (ns)" << std::endl;
+    std::string output = "";
+    output += PadLeft("Kernel", max_name_length) + "," +
+              PadLeft("Calls", kCallsLength) + "," +
+              PadLeft("Time (ns)", kTimeLength) + "," +
+              PadLeft("Time (%)", kPercentLength) + "," +
+              PadLeft("Average (ns)", kTimeLength) + "," +
+              PadLeft("Min (ns)", kTimeLength) + "," +
+              PadLeft("Max (ns)", kTimeLength) + '\n';
 
     for (auto& value : sorted_list) {
       const std::string& function = value.first;
@@ -470,17 +482,16 @@ class ClCollector {
       uint64_t min_duration = value.second.min_time;
       uint64_t max_duration = value.second.max_time;
       float percent_duration = 100.0f * duration / total_duration;
-      stream << std::setw(max_name_length) << function << "," <<
-        std::setw(kCallsLength) << call_count << "," <<
-        std::setw(kTimeLength) << duration << "," <<
-        std::setw(kPercentLength) << std::setprecision(2) <<
-          std::fixed << percent_duration << "," <<
-        std::setw(kTimeLength) << avg_duration << "," <<
-        std::setw(kTimeLength) << min_duration << "," <<
-        std::setw(kTimeLength) << max_duration << std::endl;
+      output += PadLeft(function, max_name_length) + "," +
+                PadLeft(std::to_string(call_count), kCallsLength) + "," +
+                PadLeft(std::to_string(duration), kTimeLength) + "," +
+                PadLeft(FormatFloat(percent_duration), kPercentLength) + "," +
+                PadLeft(std::to_string(avg_duration), kTimeLength) + "," +
+                PadLeft(std::to_string(min_duration), kTimeLength) + "," +
+                PadLeft(std::to_string(max_duration), kTimeLength) + '\n';
     }
 
-    logger_->Log(stream.str());
+    logger_->Log(output);
   }
 
   void PrintSubmissionTable() const {
@@ -505,15 +516,15 @@ class ClCollector {
       return;
     }
 
-    std::stringstream stream;
-    stream << std::setw(max_name_length) << "Kernel" << "," <<
-      std::setw(kCallsLength) << "Calls" << "," <<
-      std::setw(kTimeLength) << "Queued (ns)" << "," <<
-      std::setw(kPercentLength) << "Queued (%)" << "," <<
-      std::setw(kTimeLength) << "Submit (ns)" << "," <<
-      std::setw(kPercentLength) << "Submit (%)" << "," <<
-      std::setw(kTimeLength) << "Execute (ns)" << "," <<
-      std::setw(kPercentLength) << "Execute (%)" << "," << std::endl;
+    std::string output = "";
+    output += PadLeft("Kernel", max_name_length) + "," +
+              PadLeft("Calls", kCallsLength) + "," +
+              PadLeft("Queued (ns)", kTimeLength) + "," +
+              PadLeft("Queued (%)", kPercentLength) + "," +
+              PadLeft("Submit (ns)", kTimeLength) + "," +
+              PadLeft("Submit (%)", kPercentLength) + "," +
+              PadLeft("Execute (ns)", kTimeLength) + "," +
+              PadLeft("Execute (%)", kPercentLength) + '\n';
 
     for (auto& value : sorted_list) {
       const std::string& function = value.first;
@@ -527,20 +538,17 @@ class ClCollector {
       uint64_t execute_duration = value.second.execute_time;
       float execute_percent =
         100.0f * execute_duration / total_execute_duration;
-      stream << std::setw(max_name_length) << function << "," <<
-        std::setw(kCallsLength) << call_count << "," <<
-        std::setw(kTimeLength) << queued_duration << "," <<
-        std::setw(kPercentLength) << std::setprecision(2) <<
-          std::fixed << queued_percent << "," <<
-        std::setw(kTimeLength) << submit_duration << "," <<
-        std::setw(kPercentLength) << std::setprecision(2) <<
-          std::fixed << submit_percent << "," <<
-        std::setw(kTimeLength) << execute_duration << "," <<
-        std::setw(kPercentLength) << std::setprecision(2) <<
-          std::fixed << execute_percent << "," << std::endl;
+      output += PadLeft(function, max_name_length) + "," +
+                PadLeft(std::to_string(call_count), kCallsLength) + "," +
+                PadLeft(std::to_string(queued_duration), kTimeLength) + "," +
+                PadLeft(FormatFloat(queued_percent), kPercentLength) + "," +
+                PadLeft(std::to_string(submit_duration), kTimeLength) + "," +
+                PadLeft(FormatFloat(submit_percent), kPercentLength) + "," +
+                PadLeft(std::to_string(execute_duration), kTimeLength) + "," +
+                PadLeft(FormatFloat(execute_percent), kPercentLength) + '\n';
     }
 
-    logger_->Log(stream.str());
+    logger_->Log(output);
   }
 
   const ClFunctionInfoMap& GetFunctionInfoMap() const {
@@ -581,14 +589,14 @@ class ClCollector {
       return;
     }
 
-    std::stringstream stream;
-    stream << std::setw(max_name_length) << "Function" << "," <<
-      std::setw(kCallsLength) << "Calls" << "," <<
-      std::setw(kTimeLength) << "Time (ns)" << "," <<
-      std::setw(kPercentLength) << "Time (%)" << "," <<
-      std::setw(kTimeLength) << "Average (ns)" << "," <<
-      std::setw(kTimeLength) << "Min (ns)" << "," <<
-      std::setw(kTimeLength) << "Max (ns)" << std::endl;
+    std::string output;
+    output += PadLeft("Function", max_name_length) + "," +
+              PadLeft("Calls", kCallsLength) + "," +
+              PadLeft("Time (ns)", kTimeLength) + "," +
+              PadLeft("Time (%)", kPercentLength) + "," +
+              PadLeft("Average (ns)", kTimeLength) + "," +
+              PadLeft("Min (ns)", kTimeLength) + "," +
+              PadLeft("Max (ns)", kTimeLength) + '\n';
 
     for (auto& value : sorted_list) {
       const std::string& function = value.first;
@@ -598,17 +606,16 @@ class ClCollector {
       uint64_t min_duration = value.second.min_time;
       uint64_t max_duration = value.second.max_time;
       float percent_duration = 100.0f * duration / total_duration;
-      stream << std::setw(max_name_length) << function << "," <<
-        std::setw(kCallsLength) << call_count << "," <<
-        std::setw(kTimeLength) << duration << "," <<
-        std::setw(kPercentLength) << std::setprecision(2) <<
-          std::fixed << percent_duration << "," <<
-        std::setw(kTimeLength) << avg_duration << "," <<
-        std::setw(kTimeLength) << min_duration << "," <<
-        std::setw(kTimeLength) << max_duration << std::endl;
+      output += PadLeft(function, max_name_length) + "," +
+                PadLeft(std::to_string(call_count), kCallsLength) + "," +
+                PadLeft(std::to_string(duration), kTimeLength) + "," +
+                PadLeft(FormatFloat(percent_duration), kPercentLength) + "," +
+                PadLeft(std::to_string(avg_duration), kTimeLength) + "," +
+                PadLeft(std::to_string(min_duration), kTimeLength) + "," +
+                PadLeft(std::to_string(max_duration), kTimeLength) + '\n';
     }
 
-    logger_->Log(stream.str());
+    logger_->Log(output);
   }
 
   static ClCollector *GetCollector(cl_device_type device_type) {
@@ -999,14 +1006,14 @@ class ClCollector {
   }
 
   void PrintOutOffloadedCommand(std::string& name, cl_device_id& device, uint64_t appended, uint64_t submitted, uint64_t kernel_start, uint64_t kernel_end) {
-    std::stringstream stream;
-    stream << "Thread " << utils::GetTid() << " Device " << device <<
-      " : " << name << " [ns] " <<
-      appended << " (append) " <<
-      submitted << " (submit) " <<
-      kernel_start << " (start) " <<
-      kernel_end << " (end)" << std::endl;
-    logger_->Log(stream.str());
+    std::string output = "Thread " + std::to_string(utils::GetTid()) +
+                         " Device " + std::to_string(reinterpret_cast<uintptr_t>(device)) +
+                         " : " + name + " [ns] " +
+                         std::to_string(appended) + " (append) " +
+                         std::to_string(submitted) + " (submit) " +
+                         std::to_string(kernel_start) + " (start) " +
+                         std::to_string(kernel_end) + " (end)" + '\n';
+    logger_->Log(output);
   }
 
   inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {

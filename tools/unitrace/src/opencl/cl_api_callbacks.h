@@ -7,8 +7,6 @@
 #ifndef PTI_TOOLS_UNITRACE_CL_API_CALLBACKS_H_
 #define PTI_TOOLS_UNITRACE_CL_API_CALLBACKS_H_
 
-#include <sstream>
-
 static thread_local cl_int current_error = CL_SUCCESS;
 
 static void clGetSupportedImageFormatsOnEnter(
@@ -19,50 +17,49 @@ static void clGetSupportedImageFormatsOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " imageType = " << *(params->imageType);
-  stream << " numEntries = " << *(params->numEntries);
-  stream << " imageFormats = " << *(params->imageFormats);
-  stream << " numImageFormats = " << *(params->numImageFormats);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " imageType = " + std::to_string(*(params->imageType));
+  log_msg += " numEntries = " + std::to_string(*(params->numEntries));
+  log_msg += " imageFormats = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageFormats)));
+  log_msg += " numImageFormats = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numImageFormats)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetSupportedImageFormatsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string(end - start) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetKernelInfoOnEnter(
@@ -73,49 +70,48 @@ static void clGetKernelInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " kernel = " << *(params->kernel);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetKernelInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string(end - start) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCompileProgramOnEnter(
@@ -126,59 +122,58 @@ static void clCompileProgramOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " program = " << *(params->program);
-  stream << " numDevices = " << *(params->numDevices);
-  stream << " deviceList = " << *(params->deviceList);
+  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " numDevices = " + std::to_string(*(params->numDevices));
+  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
   if (*(params->options) == nullptr) {
-    stream << " options = " << "0";
+    log_msg += " options = 0";
   } else if (strlen(*(params->options)) == 0) {
-    stream << " options = \"\"";
+    log_msg += " options = \"\"";
   } else {
-    stream << " options = \"" << *(params->options) << "\"";
+    log_msg += " options = \"" + std::string(*(params->options)) + "\"";
   }
-  stream << " numInputHeaders = " << *(params->numInputHeaders);
-  stream << " inputHeaders = " << *(params->inputHeaders);
-  stream << " headerIncludeNames = " << *(params->headerIncludeNames);
-  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
-  stream << " userData = " << *(params->userData);
-  stream << std::endl;
+  log_msg += " numInputHeaders = " + std::to_string(*(params->numInputHeaders));
+  log_msg += " inputHeaders = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->inputHeaders)));
+  log_msg += " headerIncludeNames = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->headerIncludeNames)));
+  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCompileProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string(end - start) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetEventCallbackOnEnter(
@@ -189,49 +184,48 @@ static void clSetEventCallbackOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " event = " << *(params->event);
-  stream << " commandExecCallbackType = " <<
-    *(params->commandExecCallbackType);
-  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
-  stream << " userData = " << *(params->userData);
-  stream << std::endl;
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " commandExecCallbackType = " +
+    std::to_string(*(params->commandExecCallbackType));
+  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetEventCallbackOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string(end - start) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clUnloadPlatformCompilerOnEnter(
@@ -242,45 +236,44 @@ static void clUnloadPlatformCompilerOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " platform = " << *(params->platform);
-  stream << std::endl;
+  log_msg += " platform = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platform)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clUnloadPlatformCompilerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetPlatformIDsOnEnter(
@@ -291,47 +284,46 @@ static void clGetPlatformIDsOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " numEntries = " << *(params->numEntries);
-  stream << " platforms = " << *(params->platforms);
-  stream << " numPlatforms = " << *(params->numPlatforms);
-  stream << std::endl;
+  log_msg += " numEntries = " + std::to_string(*(params->numEntries));
+  log_msg += " platforms = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platforms)));
+  log_msg += " numPlatforms = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numPlatforms)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetPlatformIDsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clUnloadCompilerOnEnter(
@@ -342,44 +334,43 @@ static void clUnloadCompilerOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << std::endl;
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clUnloadCompilerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueBarrierWithWaitListOnEnter(
@@ -390,48 +381,47 @@ static void clEnqueueBarrierWithWaitListOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueBarrierWithWaitListOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueMapBufferOnEnter(
@@ -442,29 +432,28 @@ static void clEnqueueMapBufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " buffer = " << *(params->buffer);
-  stream << " blockingMap = " << *(params->blockingMap);
-  stream << " mapFlags = " << *(params->mapFlags);
-  stream << " offset = " << *(params->offset);
-  stream << " cb = " << *(params->cb);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " blockingMap = " + std::to_string(*(params->blockingMap));
+  log_msg += " mapFlags = " + std::to_string(*(params->mapFlags));
+  log_msg += " offset = " + std::to_string(*(params->offset));
+  log_msg += " cb = " + std::to_string(*(params->cb));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -475,16 +464,15 @@ static void clEnqueueMapBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clEnqueueMapBuffer* params =
     reinterpret_cast<const cl_params_clEnqueueMapBuffer*>(
@@ -494,14 +482,15 @@ static void clEnqueueMapBufferOnExit(
   void ** result =
     reinterpret_cast<void **>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateImage3DOnEnter(
@@ -512,29 +501,28 @@ static void clCreateImage3DOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " imageFormat = " << *(params->imageFormat);
-  stream << " imageWidth = " << *(params->imageWidth);
-  stream << " imageHeight = " << *(params->imageHeight);
-  stream << " imageDepth = " << *(params->imageDepth);
-  stream << " imageRowPitch = " << *(params->imageRowPitch);
-  stream << " imageSlicePitch = " << *(params->imageSlicePitch);
-  stream << " hostPtr = " << *(params->hostPtr);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " imageFormat = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageFormat)));
+  log_msg += " imageWidth = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageWidth)));
+  log_msg += " imageHeight = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageHeight)));
+  log_msg += " imageDepth = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageDepth)));
+  log_msg += " imageRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageRowPitch)));
+  log_msg += " imageSlicePitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageSlicePitch)));
+  log_msg += " hostPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -545,16 +533,15 @@ static void clCreateImage3DOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateImage3D* params =
     reinterpret_cast<const cl_params_clCreateImage3D*>(
@@ -564,14 +551,15 @@ static void clCreateImage3DOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetKernelArgInfoOnEnter(
@@ -582,50 +570,49 @@ static void clGetKernelArgInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " kernel = " << *(params->kernel);
-  stream << " argIndx = " << *(params->argIndx);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " argIndx = " + std::to_string(*(params->argIndx));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetKernelArgInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMFreeOnEnter(
@@ -636,52 +623,51 @@ static void clEnqueueSVMFreeOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " numSvmPointers = " << *(params->numSvmPointers);
-  stream << " svmPointers = " << *(params->svmPointers);
-  stream << " pfnFreeFunc = " << *reinterpret_cast<decltype(params->pfnFreeFunc)*>(params->pfnFreeFunc);
-  stream << " userData = " << *(params->userData);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " numSvmPointers = " + std::to_string(*(params->numSvmPointers));
+  log_msg += " svmPointers = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPointers)));
+  log_msg += " pfnFreeFunc = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->pfnFreeFunc)*>(params->pfnFreeFunc)));
+  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMFreeOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyImageToBufferOnEnter(
@@ -692,53 +678,52 @@ static void clEnqueueCopyImageToBufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " srcImage = " << *(params->srcImage);
-  stream << " dstBuffer = " << *(params->dstBuffer);
-  stream << " srcOrigin = " << *(params->srcOrigin);
-  stream << " region = " << *(params->region);
-  stream << " dstOffset = " << *(params->dstOffset);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcImage = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcImage)));
+  log_msg += " dstBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstBuffer)));
+  log_msg += " srcOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcOrigin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " dstOffset = " + std::to_string(*(params->dstOffset));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyImageToBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetContextInfoOnEnter(
@@ -749,49 +734,48 @@ static void clGetContextInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetContextInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainCommandQueueOnEnter(
@@ -802,45 +786,44 @@ static void clRetainCommandQueueOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainCommandQueueOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueWriteImageOnEnter(
@@ -851,55 +834,54 @@ static void clEnqueueWriteImageOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " image = " << *(params->image);
-  stream << " blockingWrite = " << *(params->blockingWrite);
-  stream << " origin = " << *(params->origin);
-  stream << " region = " << *(params->region);
-  stream << " inputRowPitch = " << *(params->inputRowPitch);
-  stream << " inputSlicePitch = " << *(params->inputSlicePitch);
-  stream << " ptr = " << *(params->ptr);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " blockingWrite = " + std::to_string(*(params->blockingWrite));
+  log_msg += " origin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->origin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " inputRowPitch = " + std::to_string(*(params->inputRowPitch));
+  log_msg += " inputSlicePitch = " + std::to_string(*(params->inputSlicePitch));
+  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueWriteImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueWaitForEventsOnEnter(
@@ -910,47 +892,46 @@ static void clEnqueueWaitForEventsOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " numEvents = " << *(params->numEvents);
-  stream << " eventList = " << *(params->eventList);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " numEvents = " + std::to_string(*(params->numEvents));
+  log_msg += " eventList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventList)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueWaitForEventsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMUnmapOnEnter(
@@ -961,49 +942,48 @@ static void clEnqueueSVMUnmapOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " svmPtr = " << *(params->svmPtr);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " svmPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPtr)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMUnmapOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateProgramWithBinaryOnEnter(
@@ -1014,26 +994,25 @@ static void clCreateProgramWithBinaryOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " numDevices = " << *(params->numDevices);
-  stream << " deviceList = " << *(params->deviceList);
-  stream << " lengths = " << *(params->lengths);
-  stream << " binaries = " << *(params->binaries);
-  stream << " binaryStatus = " << *(params->binaryStatus);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " numDevices = " + std::to_string(*(params->numDevices));
+  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
+  log_msg += " lengths = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->lengths)));
+  log_msg += " binaries = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->binaries)));
+  log_msg += " binaryStatus = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->binaryStatus)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -1044,16 +1023,15 @@ static void clCreateProgramWithBinaryOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateProgramWithBinary* params =
     reinterpret_cast<const cl_params_clCreateProgramWithBinary*>(
@@ -1063,14 +1041,15 @@ static void clCreateProgramWithBinaryOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueFillImageOnEnter(
@@ -1081,52 +1060,51 @@ static void clEnqueueFillImageOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " image = " << *(params->image);
-  stream << " fillColor = " << *(params->fillColor);
-  stream << " origin = " << *(params->origin);
-  stream << " region = " << *(params->region);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " fillColor = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->fillColor)));
+  log_msg += " origin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->origin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueFillImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateFromGLTexture2DOnEnter(
@@ -1137,25 +1115,24 @@ static void clCreateFromGLTexture2DOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " target = " << *(params->target);
-  stream << " miplevel = " << *(params->miplevel);
-  stream << " texture = " << *(params->texture);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " target = " + std::to_string(*(params->target));
+  log_msg += " miplevel = " + std::to_string(*(params->miplevel));
+  log_msg += " texture = " + std::to_string(*(params->texture));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -1166,16 +1143,15 @@ static void clCreateFromGLTexture2DOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateFromGLTexture2D* params =
     reinterpret_cast<const cl_params_clCreateFromGLTexture2D*>(
@@ -1185,14 +1161,15 @@ static void clCreateFromGLTexture2DOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetKernelExecInfoOnEnter(
@@ -1203,48 +1180,47 @@ static void clSetKernelExecInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " kernel = " << *(params->kernel);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << std::endl;
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetKernelExecInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueReleaseGLObjectsOnEnter(
@@ -1255,50 +1231,49 @@ static void clEnqueueReleaseGLObjectsOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " numObjects = " << *(params->numObjects);
-  stream << " memObjects = " << *(params->memObjects);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " numObjects = " + std::to_string(*(params->numObjects));
+  log_msg += " memObjects = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memObjects)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueReleaseGLObjectsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetDeviceIDsOnEnter(
@@ -1309,49 +1284,48 @@ static void clGetDeviceIDsOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " platform = " << *(params->platform);
-  stream << " deviceType = " << *(params->deviceType);
-  stream << " numEntries = " << *(params->numEntries);
-  stream << " devices = " << *(params->devices);
-  stream << " numDevices = " << *(params->numDevices);
-  stream << std::endl;
+  log_msg += " platform = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platform)));
+  log_msg += " deviceType = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceType)));
+  log_msg += " numEntries = " + std::to_string(*(params->numEntries));
+  log_msg += " devices = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->devices)));
+  log_msg += " numDevices = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numDevices)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetDeviceIDsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseMemObjectOnEnter(
@@ -1362,45 +1336,44 @@ static void clReleaseMemObjectOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " memobj = " << *(params->memobj);
-  stream << std::endl;
+  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseMemObjectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetGLObjectInfoOnEnter(
@@ -1411,47 +1384,46 @@ static void clGetGLObjectInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " memobj = " << *(params->memobj);
-  stream << " glObjectType = " << *(params->glObjectType);
-  stream << " glObjectName = " << *(params->glObjectName);
-  stream << std::endl;
+  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " glObjectType = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->glObjectType)));
+  log_msg += " glObjectName = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->glObjectName)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetGLObjectInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateFromGLRenderbufferOnEnter(
@@ -1462,23 +1434,22 @@ static void clCreateFromGLRenderbufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " renderbuffer = " << *(params->renderbuffer);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " renderbuffer = " + std::to_string(*(params->renderbuffer));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -1489,16 +1460,15 @@ static void clCreateFromGLRenderbufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateFromGLRenderbuffer* params =
     reinterpret_cast<const cl_params_clCreateFromGLRenderbuffer*>(
@@ -1508,14 +1478,15 @@ static void clCreateFromGLRenderbufferOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseContextOnEnter(
@@ -1526,45 +1497,44 @@ static void clReleaseContextOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseContextOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueUnmapMemObjectOnEnter(
@@ -1575,50 +1545,49 @@ static void clEnqueueUnmapMemObjectOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " memobj = " << *(params->memobj);
-  stream << " mappedPtr = " << *(params->mappedPtr);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " mappedPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->mappedPtr)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueUnmapMemObjectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateContextOnEnter(
@@ -1629,25 +1598,24 @@ static void clCreateContextOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " properties = " << *(params->properties);
-  stream << " numDevices = " << *(params->numDevices);
-  stream << " devices = " << *(params->devices);
-  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
-  stream << " userData = " << *(params->userData);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " numDevices = " + std::to_string(*(params->numDevices));
+  log_msg += " devices = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->devices)));
+  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -1658,16 +1626,15 @@ static void clCreateContextOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateContext* params =
     reinterpret_cast<const cl_params_clCreateContext*>(
@@ -1677,14 +1644,15 @@ static void clCreateContextOnExit(
   cl_context* result =
     reinterpret_cast<cl_context*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetHostTimerOnEnter(
@@ -1695,46 +1663,45 @@ static void clGetHostTimerOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " device = " << *(params->device);
-  stream << " hostTimestamp = " << *(params->hostTimestamp);
-  stream << std::endl;
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " hostTimestamp = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostTimestamp)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetHostTimerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetPipeInfoOnEnter(
@@ -1745,49 +1712,48 @@ static void clGetPipeInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " pipe = " << *(params->pipe);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " pipe = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->pipe)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetPipeInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueAcquireGLObjectsOnEnter(
@@ -1798,50 +1764,49 @@ static void clEnqueueAcquireGLObjectsOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " numObjects = " << *(params->numObjects);
-  stream << " memObjects = " << *(params->memObjects);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " numObjects = " + std::to_string(*(params->numObjects));
+  log_msg += " memObjects = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memObjects)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueAcquireGLObjectsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetKernelWorkGroupInfoOnEnter(
@@ -1852,50 +1817,49 @@ static void clGetKernelWorkGroupInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " kernel = " << *(params->kernel);
-  stream << " device = " << *(params->device);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetKernelWorkGroupInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateImage2DOnEnter(
@@ -1906,27 +1870,26 @@ static void clCreateImage2DOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " imageFormat = " << *(params->imageFormat);
-  stream << " imageWidth = " << *(params->imageWidth);
-  stream << " imageHeight = " << *(params->imageHeight);
-  stream << " imageRowPitch = " << *(params->imageRowPitch);
-  stream << " hostPtr = " << *(params->hostPtr);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " imageFormat = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageFormat)));
+  log_msg += " imageWidth = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageWidth)));
+  log_msg += " imageHeight = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageHeight)));
+  log_msg += " imageRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageRowPitch)));
+  log_msg += " hostPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -1937,16 +1900,15 @@ static void clCreateImage2DOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateImage2D* params =
     reinterpret_cast<const cl_params_clCreateImage2D*>(
@@ -1956,14 +1918,15 @@ static void clCreateImage2DOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateContextFromTypeOnEnter(
@@ -1974,24 +1937,23 @@ static void clCreateContextFromTypeOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " properties = " << *(params->properties);
-  stream << " deviceType = " << *(params->deviceType);
-  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
-  stream << " userData = " << *(params->userData);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " deviceType = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceType)));
+  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -2002,16 +1964,15 @@ static void clCreateContextFromTypeOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateContextFromType* params =
     reinterpret_cast<const cl_params_clCreateContextFromType*>(
@@ -2021,14 +1982,15 @@ static void clCreateContextFromTypeOnExit(
   cl_context* result =
     reinterpret_cast<cl_context*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainProgramOnEnter(
@@ -2039,45 +2001,44 @@ static void clRetainProgramOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " program = " << *(params->program);
-  stream << std::endl;
+  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateProgramWithSourceOnEnter(
@@ -2088,24 +2049,23 @@ static void clCreateProgramWithSourceOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " count = " << *(params->count);
-  stream << " strings = " << *(params->strings);
-  stream << " lengths = " << *(params->lengths);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " count = " + std::to_string(*(params->count));
+  log_msg += " strings = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->strings)));
+  log_msg += " lengths = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->lengths)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -2116,16 +2076,15 @@ static void clCreateProgramWithSourceOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateProgramWithSource* params =
     reinterpret_cast<const cl_params_clCreateProgramWithSource*>(
@@ -2135,14 +2094,15 @@ static void clCreateProgramWithSourceOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetMemObjectInfoOnEnter(
@@ -2153,49 +2113,48 @@ static void clGetMemObjectInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " memobj = " << *(params->memobj);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetMemObjectInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clLinkProgramOnEnter(
@@ -2206,34 +2165,33 @@ static void clLinkProgramOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " numDevices = " << *(params->numDevices);
-  stream << " deviceList = " << *(params->deviceList);
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " numDevices = " + std::to_string(*(params->numDevices));
+  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
   if (*(params->options) == nullptr) {
-    stream << " options = " << "0";
+    log_msg += " options = 0";
   } else if (strlen(*(params->options)) == 0) {
-    stream << " options = \"\"";
+    log_msg += " options = \"\"";
   } else {
-    stream << " options = \"" << *(params->options) << "\"";
+    log_msg += " options = \"" + std::string(*(params->options)) + "\"";
   }
-  stream << " numInputPrograms = " << *(params->numInputPrograms);
-  stream << " inputPrograms = " << *(params->inputPrograms);
-  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
-  stream << " userData = " << *(params->userData);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " numInputPrograms = " + std::to_string(*(params->numInputPrograms));
+  log_msg += " inputPrograms = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->inputPrograms)));
+  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -2244,16 +2202,15 @@ static void clLinkProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clLinkProgram* params =
     reinterpret_cast<const cl_params_clLinkProgram*>(
@@ -2263,14 +2220,15 @@ static void clLinkProgramOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateSamplerWithPropertiesOnEnter(
@@ -2281,22 +2239,21 @@ static void clCreateSamplerWithPropertiesOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " samplerProperties = " << *(params->samplerProperties);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " samplerProperties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->samplerProperties)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -2307,16 +2264,15 @@ static void clCreateSamplerWithPropertiesOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateSamplerWithProperties* params =
     reinterpret_cast<const cl_params_clCreateSamplerWithProperties*>(
@@ -2326,14 +2282,15 @@ static void clCreateSamplerWithPropertiesOnExit(
   cl_sampler* result =
     reinterpret_cast<cl_sampler*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainSamplerOnEnter(
@@ -2344,45 +2301,44 @@ static void clRetainSamplerOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " sampler = " << *(params->sampler);
-  stream << std::endl;
+  log_msg += " sampler = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sampler)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainSamplerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateFromGLTexture3DOnEnter(
@@ -2393,25 +2349,24 @@ static void clCreateFromGLTexture3DOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " target = " << *(params->target);
-  stream << " miplevel = " << *(params->miplevel);
-  stream << " texture = " << *(params->texture);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " target = " + std::to_string(*(params->target));
+  log_msg += " miplevel = " + std::to_string(*(params->miplevel));
+  log_msg += " texture = " + std::to_string(*(params->texture));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -2422,16 +2377,15 @@ static void clCreateFromGLTexture3DOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateFromGLTexture3D* params =
     reinterpret_cast<const cl_params_clCreateFromGLTexture3D*>(
@@ -2441,14 +2395,15 @@ static void clCreateFromGLTexture3DOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueMapImageOnEnter(
@@ -2459,31 +2414,30 @@ static void clEnqueueMapImageOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " image = " << *(params->image);
-  stream << " blockingMap = " << *(params->blockingMap);
-  stream << " mapFlags = " << *(params->mapFlags);
-  stream << " origin = " << *(params->origin);
-  stream << " region = " << *(params->region);
-  stream << " imageRowPitch = " << *(params->imageRowPitch);
-  stream << " imageSlicePitch = " << *(params->imageSlicePitch);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " blockingMap = " + std::to_string(*(params->blockingMap));
+  log_msg += " mapFlags = " + std::to_string(*(params->mapFlags));
+  log_msg += " origin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->origin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " imageRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageRowPitch)));
+  log_msg += " imageSlicePitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageSlicePitch)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -2494,16 +2448,15 @@ static void clEnqueueMapImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clEnqueueMapImage* params =
     reinterpret_cast<const cl_params_clEnqueueMapImage*>(
@@ -2513,14 +2466,15 @@ static void clEnqueueMapImageOnExit(
   void ** result =
     reinterpret_cast<void **>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueWriteBufferOnEnter(
@@ -2531,28 +2485,27 @@ static void clEnqueueWriteBufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " buffer = " << *(params->buffer);
-  stream << " blockingWrite = " << *(params->blockingWrite);
-  stream << " offset = " << *(params->offset);
-  stream << " cb = " << *(params->cb);
-  stream << " ptr = " << *(params->ptr);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " blockingWrite = " + std::to_string(*(params->blockingWrite));
+  log_msg += " offset = " + std::to_string(*(params->offset));
+  log_msg += " cb = " + std::to_string(*(params->cb));
+  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueWriteBufferOnExit(
@@ -2560,25 +2513,25 @@ static void clEnqueueWriteBufferOnExit(
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
 
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyImageOnEnter(
@@ -2589,53 +2542,52 @@ static void clEnqueueCopyImageOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " srcImage = " << *(params->srcImage);
-  stream << " dstImage = " << *(params->dstImage);
-  stream << " srcOrigin = " << *(params->srcOrigin);
-  stream << " dstOrigin = " << *(params->dstOrigin);
-  stream << " region = " << *(params->region);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcImage = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcImage)));
+  log_msg += " dstImage = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstImage)));
+  log_msg += " srcOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcOrigin)));
+  log_msg += " dstOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstOrigin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetExtensionFunctionAddressOnEnter(
@@ -2646,50 +2598,48 @@ static void clGetExtensionFunctionAddressOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
   if (*(params->funcName) == nullptr) {
-    stream << " funcName = " << "0";
+    log_msg += " funcName = 0";
   } else if (strlen(*(params->funcName)) == 0) {
-    stream << " funcName = \"\"";
+    log_msg += " funcName = \"\"";
   } else {
-    stream << " funcName = \"" << *(params->funcName) << "\"";
+    log_msg += " funcName = \"" + std::string(*(params->funcName)) + "\"";
   }
-  stream << std::endl;
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetExtensionFunctionAddressOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   void** result =
     reinterpret_cast<void**>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
-  stream << std::endl;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueReadBufferRectOnEnter(
@@ -2700,58 +2650,57 @@ static void clEnqueueReadBufferRectOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " buffer = " << *(params->buffer);
-  stream << " blockingRead = " << *(params->blockingRead);
-  stream << " bufferOrigin = " << *(params->bufferOrigin);
-  stream << " hostOrigin = " << *(params->hostOrigin);
-  stream << " region = " << *(params->region);
-  stream << " bufferRowPitch = " << *(params->bufferRowPitch);
-  stream << " bufferSlicePitch = " << *(params->bufferSlicePitch);
-  stream << " hostRowPitch = " << *(params->hostRowPitch);
-  stream << " hostSlicePitch = " << *(params->hostSlicePitch);
-  stream << " ptr = " << *(params->ptr);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " blockingRead = " + std::to_string(*(params->blockingRead));
+  log_msg += " bufferOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferOrigin)));
+  log_msg += " hostOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostOrigin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " bufferRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferRowPitch)));
+  log_msg += " bufferSlicePitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferSlicePitch)));
+  log_msg += " hostRowPitch = " + std::to_string(*(params->hostRowPitch));
+  log_msg += " hostSlicePitch = " + std::to_string(*(params->hostSlicePitch));
+  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueReadBufferRectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateSubDevicesOnEnter(
@@ -2762,49 +2711,48 @@ static void clCreateSubDevicesOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " inDevice = " << *(params->inDevice);
-  stream << " properties = " << *(params->properties);
-  stream << " numDevices = " << *(params->numDevices);
-  stream << " outDevices = " << *(params->outDevices);
-  stream << " numDevicesRet = " << *(params->numDevicesRet);
-  stream << std::endl;
+  log_msg += " inDevice = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->inDevice)));
+  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " numDevices = " + std::to_string(*(params->numDevices));
+  log_msg += " outDevices = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->outDevices)));
+  log_msg += " numDevicesRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numDevicesRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateSubDevicesOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetDeviceAndHostTimerOnEnter(
@@ -2815,47 +2763,46 @@ static void clGetDeviceAndHostTimerOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " device = " << *(params->device);
-  stream << " deviceTimestamp = " << *(params->deviceTimestamp);
-  stream << " hostTimestamp = " << *(params->hostTimestamp);
-  stream << std::endl;
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " deviceTimestamp = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceTimestamp)));
+  log_msg += " hostTimestamp = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostTimestamp)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetDeviceAndHostTimerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseSamplerOnEnter(
@@ -2866,45 +2813,44 @@ static void clReleaseSamplerOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " sampler = " << *(params->sampler);
-  stream << std::endl;
+  log_msg += " sampler = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sampler)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseSamplerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueTaskOnEnter(
@@ -2915,56 +2861,55 @@ static void clEnqueueTaskOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " kernel = " << *(params->kernel);
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
   if (*(params->kernel) != nullptr) {
     std::string kernel_name = utils::cl::GetKernelName(
         *(params->kernel), collector->Demangle());
     if (!kernel_name.empty()) {
-      stream << " (" << kernel_name << ")";
+      log_msg += " (" + kernel_name + ")";
     }
   }
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueTaskOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clFinishOnEnter(
@@ -2975,45 +2920,44 @@ static void clFinishOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clFinishOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetEventInfoOnEnter(
@@ -3024,49 +2968,48 @@ static void clGetEventInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " event = " << *(params->event);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetEventInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetEventProfilingInfoOnEnter(
@@ -3077,49 +3020,48 @@ static void clGetEventProfilingInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " event = " << *(params->event);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetEventProfilingInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetKernelArgSVMPointerOnEnter(
@@ -3130,47 +3072,46 @@ static void clSetKernelArgSVMPointerOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " kernel = " << *(params->kernel);
-  stream << " argIndex = " << *(params->argIndex);
-  stream << " argValue = " << *(params->argValue);
-  stream << std::endl;
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " argIndex = " + std::to_string(*(params->argIndex));
+  log_msg += " argValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->argValue)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetKernelArgSVMPointerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateImageOnEnter(
@@ -3181,25 +3122,24 @@ static void clCreateImageOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " imageFormat = " << *(params->imageFormat);
-  stream << " imageDesc = " << *(params->imageDesc);
-  stream << " hostPtr = " << *(params->hostPtr);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " imageFormat = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageFormat)));
+  log_msg += " imageDesc = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageDesc)));
+  log_msg += " hostPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -3210,16 +3150,15 @@ static void clCreateImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateImage* params =
     reinterpret_cast<const cl_params_clCreateImage*>(
@@ -3229,14 +3168,15 @@ static void clCreateImageOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMMemcpyOnEnter(
@@ -3247,52 +3187,51 @@ static void clEnqueueSVMMemcpyOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " blockingCopy = " << *(params->blockingCopy);
-  stream << " dstPtr = " << *(params->dstPtr);
-  stream << " srcPtr = " << *(params->srcPtr);
-  stream << " size = " << *(params->size);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " blockingCopy = " + std::to_string(*(params->blockingCopy));
+  log_msg += " dstPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstPtr)));
+  log_msg += " srcPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcPtr)));
+  log_msg += " size = " + std::to_string(*(params->size));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMMemcpyOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseKernelOnEnter(
@@ -3303,45 +3242,44 @@ static void clReleaseKernelOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " kernel = " << *(params->kernel);
-  stream << std::endl;
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueNativeKernelOnEnter(
@@ -3352,54 +3290,53 @@ static void clEnqueueNativeKernelOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " userFunc = " << *reinterpret_cast<decltype(params->userFunc)*>(params->userFunc);
-  stream << " args = " << *(params->args);
-  stream << " cbArgs = " << *(params->cbArgs);
-  stream << " numMemObjects = " << *(params->numMemObjects);
-  stream << " memList = " << *(params->memList);
-  stream << " argsMemLoc = " << *(params->argsMemLoc);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " userFunc = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->userFunc)*>(params->userFunc)));
+  log_msg += " args = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->args)));
+  log_msg += " cbArgs = " + std::to_string(*(params->cbArgs));
+  log_msg += " numMemObjects = " + std::to_string(*(params->numMemObjects));
+  log_msg += " memList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memList)));
+  log_msg += " argsMemLoc = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->argsMemLoc)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueNativeKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateKernelsInProgramOnEnter(
@@ -3410,48 +3347,47 @@ static void clCreateKernelsInProgramOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " program = " << *(params->program);
-  stream << " numKernels = " << *(params->numKernels);
-  stream << " kernels = " << *(params->kernels);
-  stream << " numKernelsRet = " << *(params->numKernelsRet);
-  stream << std::endl;
+  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " numKernels = " + std::to_string(*(params->numKernels));
+  log_msg += " kernels = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernels)));
+  log_msg += " numKernelsRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numKernelsRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateKernelsInProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetCommandQueuePropertyOnEnter(
@@ -3462,48 +3398,47 @@ static void clSetCommandQueuePropertyOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " properties = " << *(params->properties);
-  stream << " enable = " << *(params->enable);
-  stream << " oldProperties = " << *(params->oldProperties);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " enable = " + std::to_string(*(params->enable));
+  log_msg += " oldProperties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->oldProperties)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetCommandQueuePropertyOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetDeviceInfoOnEnter(
@@ -3514,49 +3449,48 @@ static void clGetDeviceInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " device = " << *(params->device);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetDeviceInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueNDRangeKernelOnEnter(
@@ -3567,56 +3501,55 @@ static void clEnqueueNDRangeKernelOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " kernel = " << *(params->kernel);
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
   if (*(params->kernel) != nullptr) {
     std::string kernel_name = utils::cl::GetKernelName(
         *(params->kernel), collector->Demangle());
     if (!kernel_name.empty()) {
-      stream << " (" << kernel_name << ")";
+      log_msg += " (" + kernel_name + ")";
     }
   }
-  stream << " workDim = " << *(params->workDim);
-  stream << " globalWorkOffset = " << *(params->globalWorkOffset);
+  log_msg += " workDim = " + std::to_string(*(params->workDim));
+  log_msg += " globalWorkOffset = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->globalWorkOffset)));
   if (*(params->globalWorkOffset) != nullptr && *(params->workDim) > 0) {
-    stream << " {" << (*(params->globalWorkOffset))[0];
+    log_msg += " {" + std::to_string((*(params->globalWorkOffset))[0]);
     for (cl_uint i = 1; i < *(params->workDim); ++i) {
-      stream << ", " << (*(params->globalWorkOffset))[i];
+      log_msg += ", " + std::to_string((*(params->globalWorkOffset))[i]);
     }
-    stream << "}";
+    log_msg += "}";
   }
-  stream << " globalWorkSize = " << *(params->globalWorkSize);
+  log_msg += " globalWorkSize = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->globalWorkSize)));
   if (*(params->globalWorkSize) != nullptr && *(params->workDim) > 0) {
-    stream << " {" << (*(params->globalWorkSize))[0];
+    log_msg += " {" + std::to_string((*(params->globalWorkSize))[0]);
     for (cl_uint i = 1; i < *(params->workDim); ++i) {
-      stream << ", " << (*(params->globalWorkSize))[i];
+      log_msg += ", " + std::to_string((*(params->globalWorkSize))[i]);
     }
-    stream << "}";
+    log_msg += "}";
   }
-  stream << " localWorkSize = " << *(params->localWorkSize);
+  log_msg += " localWorkSize = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->localWorkSize)));
   if (*(params->localWorkSize) != nullptr && *(params->workDim) > 0) {
-    stream << " {" << (*(params->localWorkSize))[0];
+    log_msg += " {" + std::to_string((*(params->localWorkSize))[0]);
     for (cl_uint i = 1; i < *(params->workDim); ++i) {
-      stream << ", " << (*(params->localWorkSize))[i];
+      log_msg += ", " + std::to_string((*(params->localWorkSize))[i]);
     }
-    stream << "}";
+    log_msg += "}";
   }
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueNDRangeKernelOnExit(
@@ -3624,25 +3557,25 @@ static void clEnqueueNDRangeKernelOnExit(
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
 
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseProgramOnEnter(
@@ -3653,45 +3586,44 @@ static void clReleaseProgramOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " program = " << *(params->program);
-  stream << std::endl;
+  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateFromGLBufferOnEnter(
@@ -3702,23 +3634,22 @@ static void clCreateFromGLBufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " bufobj = " << *(params->bufobj);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " bufobj = " + std::to_string(*(params->bufobj));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -3729,16 +3660,15 @@ static void clCreateFromGLBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateFromGLBuffer* params =
     reinterpret_cast<const cl_params_clCreateFromGLBuffer*>(
@@ -3748,14 +3678,15 @@ static void clCreateFromGLBufferOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetGLTextureInfoOnEnter(
@@ -3766,49 +3697,48 @@ static void clGetGLTextureInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " memobj = " << *(params->memobj);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetGLTextureInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetDefaultDeviceCommandQueueOnEnter(
@@ -3819,47 +3749,46 @@ static void clSetDefaultDeviceCommandQueueOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " device = " << *(params->device);
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetDefaultDeviceCommandQueueOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreatePipeOnEnter(
@@ -3870,25 +3799,24 @@ static void clCreatePipeOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " pipePacketSize = " << *(params->pipePacketSize);
-  stream << " pipeMaxPackets = " << *(params->pipeMaxPackets);
-  stream << " properties = " << *(params->properties);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " pipePacketSize = " + std::to_string(*(params->pipePacketSize));
+  log_msg += " pipeMaxPackets = " + std::to_string(*(params->pipeMaxPackets));
+  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -3899,16 +3827,15 @@ static void clCreatePipeOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreatePipe* params =
     reinterpret_cast<const cl_params_clCreatePipe*>(
@@ -3918,14 +3845,15 @@ static void clCreatePipeOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetPlatformInfoOnEnter(
@@ -3936,49 +3864,48 @@ static void clGetPlatformInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " platform = " << *(params->platform);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " platform = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platform)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetPlatformInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueReadBufferOnEnter(
@@ -3989,28 +3916,27 @@ static void clEnqueueReadBufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " buffer = " << *(params->buffer);
-  stream << " blockingRead = " << *(params->blockingRead);
-  stream << " offset = " << *(params->offset);
-  stream << " cb = " << *(params->cb);
-  stream << " ptr = " << *(params->ptr);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " blockingRead = " + std::to_string(*(params->blockingRead));
+  log_msg += " offset = " + std::to_string(*(params->offset));
+  log_msg += " cb = " + std::to_string(*(params->cb));
+  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueReadBufferOnExit(
@@ -4018,25 +3944,25 @@ static void clEnqueueReadBufferOnExit(
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
 
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetMemObjectDestructorCallbackOnEnter(
@@ -4047,47 +3973,46 @@ static void clSetMemObjectDestructorCallbackOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " memobj = " << *(params->memobj);
-  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
-  stream << " userData = " << *(params->userData);
-  stream << std::endl;
+  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetMemObjectDestructorCallbackOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetKernelSubGroupInfoOnEnter(
@@ -4098,52 +4023,51 @@ static void clGetKernelSubGroupInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " kernel = " << *(params->kernel);
-  stream << " device = " << *(params->device);
-  stream << " paramName = " << *(params->paramName);
-  stream << " inputValueSize = " << *(params->inputValueSize);
-  stream << " inputValue = " << *(params->inputValue);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " inputValueSize = " + std::to_string(*(params->inputValueSize));
+  log_msg += " inputValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->inputValue)));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetKernelSubGroupInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyBufferRectOnEnter(
@@ -4154,57 +4078,56 @@ static void clEnqueueCopyBufferRectOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " srcBuffer = " << *(params->srcBuffer);
-  stream << " dstBuffer = " << *(params->dstBuffer);
-  stream << " srcOrigin = " << *(params->srcOrigin);
-  stream << " dstOrigin = " << *(params->dstOrigin);
-  stream << " region = " << *(params->region);
-  stream << " srcRowPitch = " << *(params->srcRowPitch);
-  stream << " srcSlicePitch = " << *(params->srcSlicePitch);
-  stream << " dstRowPitch = " << *(params->dstRowPitch);
-  stream << " dstSlicePitch = " << *(params->dstSlicePitch);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcBuffer)));
+  log_msg += " dstBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstBuffer)));
+  log_msg += " srcOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcOrigin)));
+  log_msg += " dstOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstOrigin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " srcRowPitch = " + std::to_string(*(params->srcRowPitch));
+  log_msg += " srcSlicePitch = " + std::to_string(*(params->srcSlicePitch));
+  log_msg += " dstRowPitch = " + std::to_string(*(params->dstRowPitch));
+  log_msg += " dstSlicePitch = " + std::to_string(*(params->dstSlicePitch));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyBufferRectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clWaitForEventsOnEnter(
@@ -4215,46 +4138,45 @@ static void clWaitForEventsOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " numEvents = " << *(params->numEvents);
-  stream << " eventList = " << *(params->eventList);
-  stream << std::endl;
+  log_msg += " numEvents = " + std::to_string(*(params->numEvents));
+  log_msg += " eventList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventList)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clWaitForEventsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMMigrateMemOnEnter(
@@ -4265,52 +4187,51 @@ static void clEnqueueSVMMigrateMemOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " numSvmPointers = " << *(params->numSvmPointers);
-  stream << " svmPointers = " << *(params->svmPointers);
-  stream << " sizes = " << *(params->sizes);
-  stream << " flags = " << *(params->flags);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " numSvmPointers = " + std::to_string(*(params->numSvmPointers));
+  log_msg += " svmPointers = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPointers)));
+  log_msg += " sizes = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sizes)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMMigrateMemOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainKernelOnEnter(
@@ -4321,45 +4242,44 @@ static void clRetainKernelOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " kernel = " << *(params->kernel);
-  stream << std::endl;
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateCommandQueueWithPropertiesOnEnter(
@@ -4370,23 +4290,22 @@ static void clCreateCommandQueueWithPropertiesOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " device = " << *(params->device);
-  stream << " properties = " << *(params->properties);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -4397,16 +4316,15 @@ static void clCreateCommandQueueWithPropertiesOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateCommandQueueWithProperties* params =
     reinterpret_cast<const cl_params_clCreateCommandQueueWithProperties*>(
@@ -4416,14 +4334,15 @@ static void clCreateCommandQueueWithPropertiesOnExit(
   cl_command_queue* result =
     reinterpret_cast<cl_command_queue*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateProgramWithBuiltInKernelsOnEnter(
@@ -4434,30 +4353,29 @@ static void clCreateProgramWithBuiltInKernelsOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " numDevices = " << *(params->numDevices);
-  stream << " deviceList = " << *(params->deviceList);
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " numDevices = " + std::to_string(*(params->numDevices));
+  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
   if (*(params->kernelNames) == nullptr) {
-    stream << " kernelNames = " << "0";
+    log_msg += " kernelNames = 0";
   } else if (strlen(*(params->kernelNames)) == 0) {
-    stream << " kernelNames = \"\"";
+    log_msg += " kernelNames = \"\"";
   } else {
-    stream << " kernelNames = \"" << *(params->kernelNames) << "\"";
+    log_msg += " kernelNames = \"" + std::string(*(params->kernelNames)) + "\"";
   }
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -4468,16 +4386,15 @@ static void clCreateProgramWithBuiltInKernelsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateProgramWithBuiltInKernels* params =
     reinterpret_cast<const cl_params_clCreateProgramWithBuiltInKernels*>(
@@ -4487,14 +4404,15 @@ static void clCreateProgramWithBuiltInKernelsOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateBufferOnEnter(
@@ -4505,24 +4423,23 @@ static void clCreateBufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " size = " << *(params->size);
-  stream << " hostPtr = " << *(params->hostPtr);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " size = " + std::to_string(*(params->size));
+  log_msg += " hostPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -4533,16 +4450,15 @@ static void clCreateBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateBuffer* params =
     reinterpret_cast<const cl_params_clCreateBuffer*>(
@@ -4552,14 +4468,15 @@ static void clCreateBufferOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetProgramBuildInfoOnEnter(
@@ -4570,50 +4487,49 @@ static void clGetProgramBuildInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " program = " << *(params->program);
-  stream << " device = " << *(params->device);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetProgramBuildInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueFillBufferOnEnter(
@@ -4624,53 +4540,52 @@ static void clEnqueueFillBufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " buffer = " << *(params->buffer);
-  stream << " pattern = " << *(params->pattern);
-  stream << " patternSize = " << *(params->patternSize);
-  stream << " offset = " << *(params->offset);
-  stream << " size = " << *(params->size);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " pattern = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->pattern)));
+  log_msg += " patternSize = " + std::to_string(*(params->patternSize));
+  log_msg += " offset = " + std::to_string(*(params->offset));
+  log_msg += " size = " + std::to_string(*(params->size));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueFillBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueReadImageOnEnter(
@@ -4681,55 +4596,54 @@ static void clEnqueueReadImageOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " image = " << *(params->image);
-  stream << " blockingRead = " << *(params->blockingRead);
-  stream << " origin = " << *(params->origin);
-  stream << " region = " << *(params->region);
-  stream << " rowPitch = " << *(params->rowPitch);
-  stream << " slicePitch = " << *(params->slicePitch);
-  stream << " ptr = " << *(params->ptr);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " blockingRead = " + std::to_string(*(params->blockingRead));
+  log_msg += " origin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->origin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " rowPitch = " + std::to_string(*(params->rowPitch));
+  log_msg += " slicePitch = " + std::to_string(*(params->slicePitch));
+  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueReadImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueWriteBufferRectOnEnter(
@@ -4740,58 +4654,57 @@ static void clEnqueueWriteBufferRectOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " buffer = " << *(params->buffer);
-  stream << " blockingWrite = " << *(params->blockingWrite);
-  stream << " bufferOrigin = " << *(params->bufferOrigin);
-  stream << " hostOrigin = " << *(params->hostOrigin);
-  stream << " region = " << *(params->region);
-  stream << " bufferRowPitch = " << *(params->bufferRowPitch);
-  stream << " bufferSlicePitch = " << *(params->bufferSlicePitch);
-  stream << " hostRowPitch = " << *(params->hostRowPitch);
-  stream << " hostSlicePitch = " << *(params->hostSlicePitch);
-  stream << " ptr = " << *(params->ptr);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " blockingWrite = " + std::to_string(*(params->blockingWrite));
+  log_msg += " bufferOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferOrigin)));
+  log_msg += " hostOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostOrigin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " bufferRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferRowPitch)));
+  log_msg += " bufferSlicePitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferSlicePitch)));
+  log_msg += " hostRowPitch = " + std::to_string(*(params->hostRowPitch));
+  log_msg += " hostSlicePitch = " + std::to_string(*(params->hostSlicePitch));
+  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueWriteBufferRectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyBufferToImageOnEnter(
@@ -4802,53 +4715,52 @@ static void clEnqueueCopyBufferToImageOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " srcBuffer = " << *(params->srcBuffer);
-  stream << " dstImage = " << *(params->dstImage);
-  stream << " srcOffset = " << *(params->srcOffset);
-  stream << " dstOrigin = " << *(params->dstOrigin);
-  stream << " region = " << *(params->region);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcBuffer)));
+  log_msg += " dstImage = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstImage)));
+  log_msg += " srcOffset = " + std::to_string(*(params->srcOffset));
+  log_msg += " dstOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstOrigin)));
+  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyBufferToImageOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetExtensionFunctionAddressForPlatformOnEnter(
@@ -4860,51 +4772,49 @@ static void clGetExtensionFunctionAddressForPlatformOnEnter(
           data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " platform = " << *(params->platform);
+  log_msg += " platform = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platform)));
   if (*(params->funcName) == nullptr) {
-    stream << " funcName = " << "0";
+    log_msg += " funcName = 0";
   } else if (strlen(*(params->funcName)) == 0) {
-    stream << " funcName = \"\"";
+    log_msg += " funcName = \"\"";
   } else {
-    stream << " funcName = \"" << *(params->funcName) << "\"";
+    log_msg += " funcName = \"" + std::string(*(params->funcName)) + "\"";
   }
-  stream << std::endl;
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetExtensionFunctionAddressForPlatformOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   void** result =
     reinterpret_cast<void**>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
-  stream << std::endl;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetKernelArgOnEnter(
@@ -4915,48 +4825,47 @@ static void clSetKernelArgOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " kernel = " << *(params->kernel);
-  stream << " argIndex = " << *(params->argIndex);
-  stream << " argSize = " << *(params->argSize);
-  stream << " argValue = " << *(params->argValue);
-  stream << std::endl;
+  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " argIndex = " + std::to_string(*(params->argIndex));
+  log_msg += " argSize = " + std::to_string(*(params->argSize));
+  log_msg += " argValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->argValue)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetKernelArgOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseDeviceOnEnter(
@@ -4967,45 +4876,44 @@ static void clReleaseDeviceOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " device = " << *(params->device);
-  stream << std::endl;
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseDeviceOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateSubBufferOnEnter(
@@ -5016,24 +4924,23 @@ static void clCreateSubBufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " buffer = " << *(params->buffer);
-  stream << " flags = " << *(params->flags);
-  stream << " bufferCreateType = " << *(params->bufferCreateType);
-  stream << " bufferCreateInfo = " << *(params->bufferCreateInfo);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " bufferCreateType = " + std::to_string(*(params->bufferCreateType));
+  log_msg += " bufferCreateInfo = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferCreateInfo)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -5044,16 +4951,15 @@ static void clCreateSubBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateSubBuffer* params =
     reinterpret_cast<const cl_params_clCreateSubBuffer*>(
@@ -5063,14 +4969,15 @@ static void clCreateSubBufferOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueMigrateMemObjectsOnEnter(
@@ -5081,51 +4988,50 @@ static void clEnqueueMigrateMemObjectsOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " numMemObjects = " << *(params->numMemObjects);
-  stream << " memObjects = " << *(params->memObjects);
-  stream << " flags = " << *(params->flags);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " numMemObjects = " + std::to_string(*(params->numMemObjects));
+  log_msg += " memObjects = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memObjects)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueMigrateMemObjectsOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateCommandQueueOnEnter(
@@ -5136,23 +5042,22 @@ static void clCreateCommandQueueOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " device = " << *(params->device);
-  stream << " properties = " << *(params->properties);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -5163,16 +5068,15 @@ static void clCreateCommandQueueOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateCommandQueue* params =
     reinterpret_cast<const cl_params_clCreateCommandQueue*>(
@@ -5182,14 +5086,15 @@ static void clCreateCommandQueueOnExit(
   cl_command_queue* result =
     reinterpret_cast<cl_command_queue*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMMemFillOnEnter(
@@ -5200,52 +5105,51 @@ static void clEnqueueSVMMemFillOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " svmPtr = " << *(params->svmPtr);
-  stream << " pattern = " << *(params->pattern);
-  stream << " patternSize = " << *(params->patternSize);
-  stream << " size = " << *(params->size);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " svmPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPtr)));
+  log_msg += " pattern = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->pattern)));
+  log_msg += " patternSize = " + std::to_string(*(params->patternSize));
+  log_msg += " size = " + std::to_string(*(params->size));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMMemFillOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseCommandQueueOnEnter(
@@ -5256,45 +5160,44 @@ static void clReleaseCommandQueueOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseCommandQueueOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyBufferOnEnter(
@@ -5305,53 +5208,52 @@ static void clEnqueueCopyBufferOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " srcBuffer = " << *(params->srcBuffer);
-  stream << " dstBuffer = " << *(params->dstBuffer);
-  stream << " srcOffset = " << *(params->srcOffset);
-  stream << " dstOffset = " << *(params->dstOffset);
-  stream << " cb = " << *(params->cb);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcBuffer)));
+  log_msg += " dstBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstBuffer)));
+  log_msg += " srcOffset = " + std::to_string(*(params->srcOffset));
+  log_msg += " dstOffset = " + std::to_string(*(params->dstOffset));
+  log_msg += " cb = " + std::to_string(*(params->cb));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueCopyBufferOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetCommandQueueInfoOnEnter(
@@ -5362,49 +5264,48 @@ static void clGetCommandQueueInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetCommandQueueInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clBuildProgramOnEnter(
@@ -5415,56 +5316,55 @@ static void clBuildProgramOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " program = " << *(params->program);
-  stream << " numDevices = " << *(params->numDevices);
-  stream << " deviceList = " << *(params->deviceList);
+  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " numDevices = " + std::to_string(*(params->numDevices));
+  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
   if (*(params->options) == nullptr) {
-    stream << " options = " << "0";
+    log_msg += " options = 0";
   } else if (strlen(*(params->options)) == 0) {
-    stream << " options = \"\"";
+    log_msg += " options = \"\"";
   } else {
-    stream << " options = \"" << *(params->options) << "\"";
+    log_msg += " options = \"" + std::string(*(params->options)) + "\"";
   }
-  stream << " funcNotify = " << *reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify);
-  stream << " userData = " << *(params->userData);
-  stream << std::endl;
+  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clBuildProgramOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainContextOnEnter(
@@ -5475,45 +5375,44 @@ static void clRetainContextOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainContextOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueBarrierOnEnter(
@@ -5524,45 +5423,44 @@ static void clEnqueueBarrierOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueBarrierOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainDeviceOnEnter(
@@ -5573,45 +5471,44 @@ static void clRetainDeviceOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " device = " << *(params->device);
-  stream << std::endl;
+  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainDeviceOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMMapOnEnter(
@@ -5622,52 +5519,51 @@ static void clEnqueueSVMMapOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " blockingMap = " << *(params->blockingMap);
-  stream << " mapFlags = " << *(params->mapFlags);
-  stream << " svmPtr = " << *(params->svmPtr);
-  stream << " size = " << *(params->size);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " blockingMap = " + std::to_string(*(params->blockingMap));
+  log_msg += " mapFlags = " + std::to_string(*(params->mapFlags));
+  log_msg += " svmPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPtr)));
+  log_msg += " size = " + std::to_string(*(params->size));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueSVMMapOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainMemObjectOnEnter(
@@ -5678,45 +5574,44 @@ static void clRetainMemObjectOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " memobj = " << *(params->memobj);
-  stream << std::endl;
+  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainMemObjectOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetUserEventStatusOnEnter(
@@ -5727,46 +5622,45 @@ static void clSetUserEventStatusOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " event = " << *(params->event);
-  stream << " executionStatus = " << *(params->executionStatus);
-  stream << std::endl;
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " executionStatus = " + std::to_string(*(params->executionStatus));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSetUserEventStatusOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateUserEventOnEnter(
@@ -5777,21 +5671,20 @@ static void clCreateUserEventOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -5802,16 +5695,15 @@ static void clCreateUserEventOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateUserEvent* params =
     reinterpret_cast<const cl_params_clCreateUserEvent*>(
@@ -5821,14 +5713,15 @@ static void clCreateUserEventOnExit(
   cl_event* result =
     reinterpret_cast<cl_event*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetSamplerInfoOnEnter(
@@ -5839,49 +5732,48 @@ static void clGetSamplerInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " sampler = " << *(params->sampler);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " sampler = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sampler)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetSamplerInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueMarkerOnEnter(
@@ -5892,46 +5784,45 @@ static void clEnqueueMarkerOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueMarkerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateKernelOnEnter(
@@ -5942,31 +5833,30 @@ static void clCreateKernelOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " program = " << *(params->program);
+  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
   if (*(params->kernelName) == nullptr) {
-    stream << " kernelName = " << "0";
+    log_msg += " kernelName = 0";
   } else if (strlen(*(params->kernelName)) == 0) {
-    stream << " kernelName = \"\"";
+    log_msg += " kernelName = \"\"";
   } else {
-    stream << " kernelName = \"" << *(params->kernelName) << "\"";
+    log_msg += " kernelName = \"" + std::string(*(params->kernelName)) + "\"";
     if (collector->Demangle()) {
-      stream << " (" << utils::Demangle(*(params->kernelName)) << ")";
+      log_msg += " (" + utils::Demangle(*(params->kernelName)) + ")";
     }
   }
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -5977,16 +5867,15 @@ static void clCreateKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateKernel* params =
     reinterpret_cast<const cl_params_clCreateKernel*>(
@@ -5996,14 +5885,15 @@ static void clCreateKernelOnExit(
   cl_kernel* result =
     reinterpret_cast<cl_kernel*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetProgramInfoOnEnter(
@@ -6014,49 +5904,48 @@ static void clGetProgramInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " program = " << *(params->program);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetProgramInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSVMAllocOnEnter(
@@ -6067,48 +5956,46 @@ static void clSVMAllocOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " size = " << *(params->size);
-  stream << " alignment = " << *(params->alignment);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " size = " + std::to_string(*(params->size));
+  log_msg += " alignment = " + std::to_string(*(params->alignment));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSVMAllocOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   void ** result =
     reinterpret_cast<void **>(
         data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
-  stream << std::endl;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainEventOnEnter(
@@ -6119,45 +6006,44 @@ static void clRetainEventOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clRetainEventOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCloneKernelOnEnter(
@@ -6168,21 +6054,20 @@ static void clCloneKernelOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " sourceKernel = " << *(params->sourceKernel);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " sourceKernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sourceKernel)));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -6193,16 +6078,15 @@ static void clCloneKernelOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCloneKernel* params =
     reinterpret_cast<const cl_params_clCloneKernel*>(
@@ -6212,14 +6096,15 @@ static void clCloneKernelOnExit(
   cl_kernel* result =
     reinterpret_cast<cl_kernel*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetImageInfoOnEnter(
@@ -6230,49 +6115,48 @@ static void clGetImageInfoOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " image = " << *(params->image);
-  stream << " paramName = " << *(params->paramName);
-  stream << " paramValueSize = " << *(params->paramValueSize);
-  stream << " paramValue = " << *(params->paramValue);
-  stream << " paramValueSizeRet = " << *(params->paramValueSizeRet);
-  stream << std::endl;
+  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " paramName = " + std::to_string(*(params->paramName));
+  log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
+  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clGetImageInfoOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clFlushOnEnter(
@@ -6283,45 +6167,44 @@ static void clFlushOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clFlushOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueMarkerWithWaitListOnEnter(
@@ -6332,48 +6215,47 @@ static void clEnqueueMarkerWithWaitListOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " commandQueue = " << *(params->commandQueue);
-  stream << " numEventsInWaitList = " << *(params->numEventsInWaitList);
-  stream << " eventWaitList = " << *(params->eventWaitList);
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
+  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clEnqueueMarkerWithWaitListOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateProgramWithILOnEnter(
@@ -6384,23 +6266,22 @@ static void clCreateProgramWithILOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " il = " << *(params->il);
-  stream << " length = " << *(params->length);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " il = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->il)));
+  log_msg += " length = " + std::to_string(*(params->length));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -6411,16 +6292,15 @@ static void clCreateProgramWithILOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateProgramWithIL* params =
     reinterpret_cast<const cl_params_clCreateProgramWithIL*>(
@@ -6430,14 +6310,15 @@ static void clCreateProgramWithILOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateSamplerOnEnter(
@@ -6448,24 +6329,23 @@ static void clCreateSamplerOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " normalizedCoords = " << *(params->normalizedCoords);
-  stream << " addressingMode = " << *(params->addressingMode);
-  stream << " filterMode = " << *(params->filterMode);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " normalizedCoords = " + std::to_string(*(params->normalizedCoords));
+  log_msg += " addressingMode = " + std::to_string(*(params->addressingMode));
+  log_msg += " filterMode = " + std::to_string(*(params->filterMode));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -6476,16 +6356,15 @@ static void clCreateSamplerOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateSampler* params =
     reinterpret_cast<const cl_params_clCreateSampler*>(
@@ -6495,14 +6374,15 @@ static void clCreateSamplerOnExit(
   cl_sampler* result =
     reinterpret_cast<cl_sampler*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clCreateFromGLTextureOnEnter(
@@ -6513,25 +6393,24 @@ static void clCreateFromGLTextureOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " flags = " << *(params->flags);
-  stream << " target = " << *(params->target);
-  stream << " miplevel = " << *(params->miplevel);
-  stream << " texture = " << *(params->texture);
-  stream << " errcodeRet = " << *(params->errcodeRet);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " flags = " + std::to_string(*(params->flags));
+  log_msg += " target = " + std::to_string(*(params->target));
+  log_msg += " miplevel = " + std::to_string(*(params->miplevel));
+  log_msg += " texture = " + std::to_string(*(params->texture));
+  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 
   if (*(params->errcodeRet) == nullptr) {
     *(params->errcodeRet) = &current_error;
@@ -6542,16 +6421,15 @@ static void clCreateFromGLTextureOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   const cl_params_clCreateFromGLTexture* params =
     reinterpret_cast<const cl_params_clCreateFromGLTexture*>(
@@ -6561,14 +6439,15 @@ static void clCreateFromGLTextureOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  stream << " result = " << *result;
+  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
-  stream << " -> " << utils::cl::GetErrorString(**(params->errcodeRet));
-  stream << " (" << **(params->errcodeRet) << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(**(params->errcodeRet));
+  log_msg += " (" + std::to_string(**(params->errcodeRet)) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSVMFreeOnEnter(
@@ -6579,41 +6458,39 @@ static void clSVMFreeOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " context = " << *(params->context);
-  stream << " svmPointer = " << *(params->svmPointer);
-  stream << std::endl;
+  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " svmPointer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPointer)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clSVMFreeOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
-  stream << std::endl;
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseEventOnEnter(
@@ -6624,45 +6501,44 @@ static void clReleaseEventOnEnter(
         data->functionParams);
   PTI_ASSERT(params != nullptr);
 
-  std::stringstream stream;
-  stream << ">>>> [" << start << "] ";
+  std::string log_msg = ">>>> [" + std::to_string(start) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName << ":";
+  log_msg += std::string(data->functionName) + ":";
 
-  stream << " event = " << *(params->event);
-  stream << std::endl;
+  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 static void clReleaseEventOnExit(
     cl_callback_data* data, uint64_t start, uint64_t end,
     ClCollector* collector) {
   PTI_ASSERT(collector != nullptr);
-  std::stringstream stream;
-  stream << "<<<< [" << end << "] ";
+  std::string log_msg = "<<<< [" + std::to_string(end) + "] ";
   if (collector->NeedPid()) {
-    stream << "<PID:" << utils::GetPid() << "> ";
+    log_msg += "<PID:" + std::to_string(utils::GetPid()) + "> ";
   }
   if (collector->NeedTid()) {
-    stream << "<TID:" << utils::GetTid() << "> ";
+    log_msg += "<TID:" + std::to_string(utils::GetTid()) + "> ";
   }
-  stream << data->functionName;
-  stream << " [" << (end - start) << " ns]";
+  log_msg += std::string(data->functionName);
+  log_msg += " [" + std::to_string((end - start)) + " ns]";
 
   cl_int* error = reinterpret_cast<cl_int*>(data->functionReturnValue);
   PTI_ASSERT(error != nullptr);
 
-  stream << " -> " << utils::cl::GetErrorString(*error);
-  stream << " (" << *error << ")";
-  stream << std::endl;
+  log_msg += " -> ";
+  log_msg += utils::cl::GetErrorString(*error);
+  log_msg += " (" + std::to_string(*error) + ")";
+  log_msg += "\n";
 
-  collector->Log(stream.str());
+  collector->Log(log_msg);
 }
 
 void OnEnterFunction(
