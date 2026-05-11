@@ -319,6 +319,13 @@ ITT_EXTERN_C void ITTAPI __itt_task_begin(const __itt_domain *domain, __itt_id /
   }
 
   ThreadTaskDescriptor desc;
+
+  desc.metadata_args.count = 0;
+  desc.metadata_args.key = nullptr;
+  desc.metadata_args.next = nullptr;
+  desc.metadata_args.isIndirectData = false;
+  desc.metadata_args.type = __itt_metadata_unknown;
+
 #ifdef _WIN32
   if (domain && domain->nameA) {
     strncpy_s(desc.domain, sizeof(desc.domain), domain->nameA, sizeof(desc.domain) - 2);
