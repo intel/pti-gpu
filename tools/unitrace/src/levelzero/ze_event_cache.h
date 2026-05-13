@@ -29,6 +29,11 @@ class ZeEventCache {
   ZeEventCache& operator=(const ZeEventCache& that) = delete;
 
   ~ZeEventCache() {
+#ifdef _WIN32
+    // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may have undefined behavior
+    // hence skipping all destroy calls and returning early.
+    return;
+#else /* _WIN32 */
     bool destroyed = true;
     const std::lock_guard<std::shared_mutex> lock(lock_);
 
@@ -42,11 +47,7 @@ class ZeEventCache {
       }
     }
     if (!destroyed) {
-#ifndef _WIN32
-      // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
-      // so ignore the error
       std::cerr << "[WARNING] Event in event cache is not destroyed" << std::endl;
-#endif /* _WIN32 */
     }
     destroyed = true;
     for (auto& value : event_pools_) {
@@ -58,12 +59,9 @@ class ZeEventCache {
       }
     }
     if (!destroyed) {
-#ifndef _WIN32
-      // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
-      // so ignore the error
       std::cerr << "[WARNING] Event pool in event cache is not destroyed" << std::endl;
-#endif /* _WIN32 */
     }
+#endif /* _WIN32 */
   }
 
   bool QueryEvent(ze_event_handle_t event) {

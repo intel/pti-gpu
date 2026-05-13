@@ -81,17 +81,18 @@ struct ZeMetricQueryPools {
   ZeMetricQueryPools& operator=(const struct ZeMetricQueryPools& that) = delete;
 
   ~ZeMetricQueryPools() {
+#ifdef _WIN32
+    // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may have undefined behavior
+    // hence skipping all destroy calls and returning early.
+    return;
+#else /* _WIN32 */
     ze_result_t status;
 
     const std::lock_guard<std::mutex> lock(query_pool_mutex_);
     for (auto it = query_pool_map_.begin(); it != query_pool_map_.end(); it++) {
       status = ZE_FUNC(zetMetricQueryDestroy)(it->first);
       if (status != ZE_RESULT_SUCCESS) {
-#ifndef _WIN32
-        // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
-        // so ignore the error
         std::cerr << "[WARNING] Failed to destroy metric query (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
-#endif /* _WIN32 */
       }
     }
     query_pool_map_.clear();
@@ -99,17 +100,14 @@ struct ZeMetricQueryPools {
     for (auto it = pools_.begin(); it != pools_.end(); it++) {
       status = ZE_FUNC(zetMetricQueryPoolDestroy)(*it);
       if (status != ZE_RESULT_SUCCESS) {
-#ifndef _WIN32
-        // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
-        // so ignore the error
         std::cerr << "[WARNING] Failed to destroy metric query pool (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
-#endif /* _WIN32 */
       }
     }
 
     pools_.clear();
 
     free_pool_.clear();
+#endif /* _WIN32 */
   }
 
   zet_metric_query_handle_t
@@ -1657,9 +1655,9 @@ class ZeCollector {
   }
 
   void DisableTracing() {
-    ze_result_t status = ZE_FUNC(zelTracerSetEnabled)(tracer_, false);
-    // For Windows, level-zero might have been unloaded by now hence status can be ZE_RESULT_ERROR_UNINITIALIZED
+    // For Windows, level-zero might have been unloaded hence calling zelTracerSetEnabled may have undefined behavior, so skip calling it.
 #ifndef _WIN32
+    ze_result_t status = ZE_FUNC(zelTracerSetEnabled)(tracer_, false);
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 #endif /* _WIN32 */
   }
