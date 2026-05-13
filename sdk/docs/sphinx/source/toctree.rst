@@ -1,26 +1,8 @@
 .. toctree::
-   :caption: About
    :maxdepth: 2
+   :titlesonly:
 
-   intro
-   whatsnew
-   systemreqs
-   knownissues
-   license
-
-.. toctree::
-   :caption: Get Started
-   :maxdepth: 3
-
-   build
-   install
-   linking
-   quickstart
-   samples
-
-.. toctree::
-   :caption: Developer Guide
-   :maxdepth: 2
-
-   devguide
+   about
+   get_started
+   api_reference
 

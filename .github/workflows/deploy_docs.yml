@@ -1,0 +1,100 @@
+name: Deploy Documentation to GitHub Pages
+
+on:
+  push:
+    tags:
+      - 'pti-*'                 # Build and deploy on version tags (for production)
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'sdk/docs/**'
+      - 'sdk/include/**'
+      - '.github/workflows/deploy_docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages-${{ github.repository }}"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Documentation
+    runs-on: ${{ contains(github.repository, 'pti-gpu') && 'ubuntu-latest' || vars.DIND_ARC_RUNNER_GITHUB }}
+    container: ${{ contains(github.repository, 'pti-gpu') && 'ubuntu:24.04' || vars.PTI_BARE_UBUNTU_24_04 }}
+    
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          apt-get update && apt-get install -y \
+            lsb-release \
+            doxygen \
+            graphviz \
+            cmake \
+            make \
+            ninja-build \
+            g++ \
+            git
+
+      - name: Python Environment Setup
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.11'
+          activate-environment: true
+          cache-local-path: ${{ github.workspace }}/.cache/uv
+
+      - name: Install Python dependencies
+        run: |
+          uv pip install --upgrade pip
+          uv pip install -r sdk/docs/requirements.txt
+
+      - name: Build documentation with CMake
+        working-directory: sdk
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DPTI_BUILD_TESTING=OFF \
+            -DPTI_BUILD_SAMPLES=OFF
+          cmake --build build --target docs
+
+      - name: Add .nojekyll file
+        run: |
+          # Prevent Jekyll processing on GitHub Pages
+          touch sdk/build/docs/sphinx/build/html/.nojekyll
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: sdk/build/docs/sphinx/build/html
+
+  deploy:
+    name: Deploy to GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ${{ contains(github.repository, 'pti-gpu') && 'ubuntu-latest' || vars.DIND_ARC_RUNNER_GITHUB }}
+    needs: build
+
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/pti-')) || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Deployment Summary
+        run: |
+          echo "Documentation deployed successfully"
+          echo "Repository: ${{ github.repository }}"
+          echo "Tag: ${{ github.ref_name }}"
+          echo "Deployment URL: ${{ steps.deployment.outputs.page_url }}"

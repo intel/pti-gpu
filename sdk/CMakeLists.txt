@@ -345,6 +345,10 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
   include(cmake/coverage.cmake)
 endif()
 
+if(PROJECT_IS_TOP_LEVEL)
+  include(cmake/docs.cmake)
+endif()
+
 # Targets / Install phase
 export(
   TARGETS pti_all pti pti_view

@@ -184,3 +184,7 @@ Note:
 
 - Before `ptiViewEnable()` is called, please define
 callbacks and register them with `ptiViewSetCallbacks()`.
+
+---
+
+Intel and the Intel logo are trademarks of Intel Corporation or its subsidiaries in the U.S. and/or other countries. Other names and brands may be claimed as the property of others.

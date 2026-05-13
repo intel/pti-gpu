@@ -17,13 +17,13 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'PTI Library'
-copyright = '2024, Intel Corporation'
+project = 'PTI'
+copyright = '2026, Intel Corporation'
 author = 'Intel Corporation'
 
-# The full version, including alpha/beta/rc tags
-versionfile = open('../../../VERSION')
-release = versionfile.readline()
+with open('../../../VERSION') as versionfile:
+    release = versionfile.readline().strip()
+    version = '.'.join(release.split('.')[:2])
 
 # -- General configuration ---------------------------------------------------
 
@@ -69,6 +69,9 @@ html_theme_options = {
 html_logo = '_static/oneAPI-rgb-rev-100.png'
 html_favicon = '_static/favicons.png'
 
+# Override title to hide version from header (per oneAPI guidelines)
+html_title = "PTI Documentation"
+
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -81,11 +84,7 @@ highlight_language = 'c'
 
 # -- Extension configuration -------------------------------------------------
 
-import subprocess
-subprocess.call('make clean', shell=True)
-subprocess.call('cd ../../doxygen ; doxygen ', shell=True)
-
-breathe_projects = { "ptilib": "../../doxygen/build/xml/" }
+breathe_projects = { "ptilib": "../../../build/docs/doxygen/xml/" }
 breathe_default_project = "ptilib"
 #exhale_args = {
 #   "containmentFolder":    "./api",
