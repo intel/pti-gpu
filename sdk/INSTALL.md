@@ -229,4 +229,4 @@ g++ -I<install-prefix>/include \
 
 ---
 
-For more information, see the [PTI SDK Documentation](https://intel.github.io/pti-gpu/sdk/).
+For more information, see the [PTI SDK Documentation](https://intel.github.io/pti-gpu/).
