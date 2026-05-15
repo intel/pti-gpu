@@ -10,6 +10,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include <atomic>
 #include <memory>
 
 #include "pti/pti.h"
@@ -63,6 +64,10 @@ void PtiSetXPTIEnvironmentDetails(bool is_foreign_subscriber, bool is_likely_uni
 
 class PtiLibHandler {
  public:
+  static bool IsSuccessfullyInitialized() {
+    return successfully_initialized_instance_.load(std::memory_order_acquire) != nullptr;
+  }
+
   static auto& Instance() {
     static PtiLibHandler instance{};
     return instance;
@@ -179,6 +184,7 @@ class PtiLibHandler {
     } catch (const std::exception& e) {
       SPDLOG_ERROR("Unable to load {} because {}", strings::kPtiViewLib, e.what());
       pti_view_lib_ = nullptr;
+      // Do NOT mark as successfully initialized on failure - ITT calls will safely no-op
       return;
     }
 #define PTI_VIEW_GET_SYMBOL(X) X##_ = pti_view_lib_->GetSymbol<decltype(&X)>(#X)  // NOLINT
@@ -249,7 +255,12 @@ class PtiLibHandler {
 
 #undef PTI_VIEW_GET_SYMBOL
     CommunicateForeignXPTISubscriber();
+
+    // Mark as fully initialized at the very end
+    successfully_initialized_instance_.store(this, std::memory_order_release);
   }
+
+  static inline std::atomic<PtiLibHandler*> successfully_initialized_instance_{nullptr};
   std::unique_ptr<LibraryLoader> pti_view_lib_ = nullptr;
 };
 }  // namespace pti

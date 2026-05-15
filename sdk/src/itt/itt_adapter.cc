@@ -10,24 +10,84 @@
 #include <ittnotify.h>
 #include <ittnotify_config.h>
 
+#include <atomic>
+#include <cstring>
+#include <string_view>
 #include <unordered_map>
+#include <utility>
 
 #include "pti_lib_handler.h"
 #include "utils/utils.h"
 
+// Helper template to forward ITT calls through handler
+template <typename Func, typename... Args>
+static void ForwardIttCall(Func handler_member_ptr, Args &&...args) {
+  if (pti::PtiLibHandler::IsSuccessfullyInitialized()) {
+    auto &handler = pti::PtiLibHandler::Instance();
+    auto func = handler.*handler_member_ptr;
+    if (func) {
+      func(std::forward<Args>(args)...);
+    }
+  }
+}
+
+// Helper template to forward ITT calls with return values through handler
+template <typename ReturnType, typename Func, typename... Args>
+static ReturnType ForwardIttCallWithReturn(Func handler_member_ptr, Args &&...args) {
+  ReturnType result = nullptr;
+
+  if (pti::PtiLibHandler::IsSuccessfullyInitialized()) {
+    auto &handler = pti::PtiLibHandler::Instance();
+    auto func = handler.*handler_member_ptr;
+    if (func) {
+      result = func(std::forward<Args>(args)...);
+    }
+  }
+
+  return result;
+}
+
+// Adapter functions that wrap handler calls
+static void ITTAPI itt_task_begin_adapter(const __itt_domain *domain, __itt_id taskid,
+                                          __itt_id parentid, __itt_string_handle *name) {
+  ForwardIttCall(&pti::PtiLibHandler::__itt_task_begin_, domain, taskid, parentid, name);
+}
+
+static void ITTAPI itt_task_end_adapter(const __itt_domain *domain) {
+  ForwardIttCall(&pti::PtiLibHandler::__itt_task_end_, domain);
+}
+
+static void ITTAPI itt_metadata_add_adapter(const __itt_domain *domain, __itt_id id,
+                                            __itt_string_handle *key, __itt_metadata_type type,
+                                            size_t count, void *data) {
+  ForwardIttCall(&pti::PtiLibHandler::__itt_metadata_add_, domain, id, key, type, count, data);
+}
+
+static __itt_string_handle *ITTAPI itt_string_handle_create_adapter(const char *name) {
+  return ForwardIttCallWithReturn<__itt_string_handle *>(
+      &pti::PtiLibHandler::__itt_string_handle_create_, name);
+}
+
+static __itt_domain *ITTAPI itt_domain_create_adapter(const char *name) {
+  return ForwardIttCallWithReturn<__itt_domain *>(&pti::PtiLibHandler::__itt_domain_create_, name);
+}
+
+static void ITTAPI itt_api_init_adapter(__itt_global *p, __itt_group_id init_groups) {
+  ForwardIttCall(&pti::PtiLibHandler::__itt_api_init_, p, init_groups);
+}
+
 static void FillFuncPtrPerLib(__itt_global *p) {
   SPDLOG_TRACE("{}() Adapter:", __FUNCTION__);
   __itt_api_info *api_list = static_cast<__itt_api_info *>(p->api_list_ptr);
-  auto &handler = pti::PtiLibHandler::Instance();
 
-  // Static lookup table for ITT function mappings
+  // Static lookup table for ITT function mappings to adapter functions
   static const std::unordered_map<std::string_view, void *> itt_function_map = {
-      {"__itt_task_begin", reinterpret_cast<void *>(handler.__itt_task_begin_)},
-      {"__itt_task_end", reinterpret_cast<void *>(handler.__itt_task_end_)},
-      {"__itt_string_handle_create", reinterpret_cast<void *>(handler.__itt_string_handle_create_)},
-      {"__itt_metadata_add", reinterpret_cast<void *>(handler.__itt_metadata_add_)},
-      {"__itt_domain_create", reinterpret_cast<void *>(handler.__itt_domain_create_)},
-      {"__itt_api_init", reinterpret_cast<void *>(handler.__itt_api_init_)}};
+      {"__itt_task_begin", reinterpret_cast<void *>(&itt_task_begin_adapter)},
+      {"__itt_task_end", reinterpret_cast<void *>(&itt_task_end_adapter)},
+      {"__itt_string_handle_create", reinterpret_cast<void *>(&itt_string_handle_create_adapter)},
+      {"__itt_metadata_add", reinterpret_cast<void *>(&itt_metadata_add_adapter)},
+      {"__itt_domain_create", reinterpret_cast<void *>(&itt_domain_create_adapter)},
+      {"__itt_api_init", reinterpret_cast<void *>(&itt_api_init_adapter)}};
 
   for (int i = 0; api_list[i].name != NULL; i++) {
     void *func_ptr = nullptr;
@@ -92,9 +152,11 @@ static void IttDomainClearFlags(__itt_global *p) {
 
 ITT_EXTERN_C void ITTAPI __itt_api_init(__itt_global *p, __itt_group_id init_groups) {
   SPDLOG_DEBUG("{}() Adapter: {}", __FUNCTION__, p ? "non-NULL" : "NULL");
-  if (p != NULL) {
-    FillFuncPtrPerLib(p);
-    pti::PtiLibHandler::Instance().__itt_api_init_(p, init_groups);
-    IttDomainClearFlags(p);
+  if (p == nullptr) {
+    return;
   }
+
+  FillFuncPtrPerLib(p);
+  itt_api_init_adapter(p, init_groups);
+  IttDomainClearFlags(p);
 }
