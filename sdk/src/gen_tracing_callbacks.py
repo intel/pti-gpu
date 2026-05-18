@@ -387,7 +387,7 @@ def generate_api_file_portion(
 
 def generate_cb_api_file_info(cb_api_file, callbacks, category, api_group, regen=True):
     cb_api_file.write(
-        "inline static std::map<uint32_t, const char*> pti_api_id_"
+        "inline static std::unordered_map<uint32_t, const char*> pti_api_id_"
         + category
         + "_"
         + api_group
@@ -430,7 +430,7 @@ def generate_state_file_info(
 ):
     api_state_file.write("std::mutex " + api_group + "_set_granularity_map_mtx;\n")
     api_state_file.write(
-        "inline static std::map<uint32_t, uint32_t> pti_api_id_"
+        "inline static std::unordered_map<uint32_t, uint32_t> pti_api_id_"
         + category
         + "_"
         + api_group
@@ -1095,7 +1095,7 @@ def main():
     api_state_file = open(api_state_file_with_path, "wt", opener=default_file_opener)
 
     gen_apiid_header(api_state_file, "STATE_MAPS", ())
-    api_state_file.write("#include <map>\n")
+    api_state_file.write("#include <unordered_map>\n")
     api_state_file.write("#include <mutex>")
     api_state_file.write("\n\n")
 

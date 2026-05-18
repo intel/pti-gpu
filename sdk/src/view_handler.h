@@ -649,7 +649,7 @@ struct PtiViewRecordHandler {
   //   -- set the state of the api to the new_value for all apis in the class_ops array.
   template <typename T, size_t N>
   inline pti_result SetGranularApis(uint32_t new_value, const std::array<T, N>& class_ops,
-                                    std::map<uint32_t, uint32_t>& state_map) {
+                                    std::unordered_map<uint32_t, uint32_t>& state_map) {
     for (const auto& sycl_ops_id : class_ops) {
       if (state_map.find(sycl_ops_id) != state_map.end()) {
         state_map.at(sycl_ops_id) = new_value;
