@@ -5,6 +5,7 @@
 // =============================================================
 #include <iostream>
 #include <vector>
+#include <atomic>
 #include <sycl/sycl.hpp>
 
 #include "queue.h"
@@ -15,6 +16,9 @@
 #include "operation_onednn.h"
 #include "pti/pti_view.h"
 #include "samples_utils.h"
+
+// Global counter for GPU kernel records
+std::atomic<uint64_t> g_gpu_kernel_count{0};
 
 void PrintUsage()
 {
@@ -40,7 +44,7 @@ void PrintUsage()
   std::cout << std::endl;
 }
 
-void run(sycl::queue *q)
+void run(sycl::queue *q, size_t iterations)
 {
   // shape of model input (NCHW)
   size_t n = 1, c = 3, h = 224, w = 224;
@@ -56,7 +60,7 @@ void run(sycl::queue *q)
   onednn_prepare_weights(oc, c, ks, q);
 
   // current usage without sycl graph
-  for (int i = 0; i < 100; ++i) {
+  for (size_t i = 0; i < iterations; ++i) {
     // Host2Device for model input
     TinyTensor inp(n, c, h, w);
     q->memcpy(inp.data, inp_h, inp.count() * sizeof(float));
@@ -124,15 +128,14 @@ int main()
 {
   int exit_code = EXIT_SUCCESS;
   uint64_t eid = 21;
-  PrintUsage();
-  // Xunsong: Enable PTI at here
 
-  ptiViewSetCallbacks(
+  PrintUsage();
+
+  pti_result result = ptiViewSetCallbacks(
       [](auto **buf, auto *buf_size) {
-        *buf_size = sizeof(pti_view_record_kernel);
-        void *ptr = ::operator new(*buf_size);
-        ptr = std::align(8, sizeof(unsigned char), ptr, *buf_size);
-        *buf = reinterpret_cast<unsigned char *>(ptr);
+        static constexpr size_t kBufferSize = 1000;
+        *buf_size = kBufferSize;
+        *buf = reinterpret_cast<unsigned char *>(::operator new(*buf_size));
         if (!*buf) {
           std::abort();
         }
@@ -140,8 +143,8 @@ int main()
       },
       [](auto *buf, auto buf_size, auto valid_buf_size) {
         if (!buf || !valid_buf_size || !buf_size) {
-          // std::cerr << "Received empty buffer" << '\n';
-          if (valid_buf_size) {
+          std::cerr << "Received empty buffer" << '\n';
+          if (buf) {
             ::operator delete(buf);
           }
           return;
@@ -214,6 +217,7 @@ int main()
             }
             case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
               pti_view_record_kernel* rec = reinterpret_cast<pti_view_record_kernel*>(ptr);
+              g_gpu_kernel_count++;
               std::cout << "---------------------------------------------------"
                            "-----------------------------"
                         << '\n';
@@ -254,6 +258,10 @@ int main()
         }
         ::operator delete(buf);
       });
+  if (result != pti_result::PTI_SUCCESS) {
+    std::cerr << "Failed to set PTI View callbacks" << '\n';
+    return EXIT_FAILURE;
+  }
   StartTracing();
   ptiViewPushExternalCorrelationId(
       pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, eid);
@@ -261,15 +269,15 @@ int main()
   auto q = CreateQueue();
   if (q == NULL) {
     std::cout << "failed to create sycl queue." << std::endl;
-    return 1;
+    return EXIT_FAILURE;
   }
 
   GlobalDeviceMemoryManager().init(q.get());
 
-  // Xunsong: Start PTI trace at here
   // execute the model (we are now focus on training)
+  const size_t iterations = 100;
   try {
-    run(q.get());
+    run(q.get(), iterations);
   } catch (const sycl::exception &e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';
     std::cerr << "\tError code: " << e.code().value()
@@ -286,7 +294,7 @@ int main()
 
   // make sure all the GPU tasks are done when cleanup
   q->wait();
-  // Xunsong: Stop PTI trace at here
+
   StopTracing();
 
   GlobalDeviceMemoryManager().deinit();
@@ -300,5 +308,30 @@ int main()
   }
 
   ptiViewPopExternalCorrelationId(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, &eid);
+
+  // Validate that "many" GPU_KERNEL records were captured,
+  // the exact count depends on the number of iterations in run() and
+  // the number of kernels in run_model_mixedprogramming(), which depends on runtime and platform,
+  // so just check if the actual count is greater than number of iterations
+  uint64_t min_kernel_count = iterations;
+  uint64_t actual_kernel_count = g_gpu_kernel_count.load();
+
+  std::cout << std::endl;
+  std::cout << "================================================" << std::endl;
+  std::cout << "GPU Kernel Record Validation:" << std::endl;
+  std::cout << "  Expected > " << min_kernel_count << std::endl;
+  std::cout << "  Actual:     " << actual_kernel_count << std::endl;
+
+  if (actual_kernel_count > min_kernel_count) {
+    std::cout << "  Status:     PASS" << std::endl;
+    std::cout << "================================================" << std::endl;
+  } else {
+    std::cout << "  Status:     FAIL" << std::endl;
+    std::cout << "================================================" << std::endl;
+    std::cerr << "ERROR: Expected more than " << min_kernel_count
+              << " GPU kernel records but got " << actual_kernel_count << std::endl;
+    exit_code = EXIT_FAILURE;
+  }
+
   return exit_code;
 }
