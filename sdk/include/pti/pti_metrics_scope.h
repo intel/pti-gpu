@@ -64,6 +64,8 @@ typedef enum _pti_metrics_scope_mode_t {
     PTI_METRICS_SCOPE_MODE_FORCE_UINT32 = 0x7fffffff
 } pti_metrics_scope_mode_t;
 
+PTI_STATIC_ASSERT(sizeof(pti_metrics_scope_mode_t) == sizeof(uint32_t), "pti_metrics_scope_mode_t enum should be equal to size of uint32_t");
+
 /**
  * @brief Collection Buffer properties structure
  */

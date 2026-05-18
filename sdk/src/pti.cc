@@ -41,6 +41,9 @@ const char* ptiResultTypeToString(pti_result result_value) {
     PTI_CASE_ENUM_TO_STRING(PTI_ERROR_TRACING_NOT_INITIALIZED)
     PTI_CASE_ENUM_TO_STRING(PTI_STATUS_END_OF_BUFFER)
     PTI_CASE_ENUM_TO_STRING(PTI_SUCCESS)
+    case PTI_RESULT_FORCE_UINT32:
+    default:
+      break;
   }
 
   return "INVALID";

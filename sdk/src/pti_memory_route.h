@@ -41,6 +41,8 @@ struct PtiMemoryCommandRoute {
       case pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_DEVICE:
       case pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_SHARED:
         return static_cast<std::size_t>(mem_type);
+      case pti_view_memory_type::PTI_VIEW_MEMORY_TYPE_FORCE_UINT32:
+        break;
     }
     return 0;
   }

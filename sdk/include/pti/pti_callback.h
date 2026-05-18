@@ -66,6 +66,8 @@ typedef enum _pti_callback_domain {
   PTI_CB_DOMAIN_MAX                             = 0x7fffffff
 } pti_callback_domain;
 
+PTI_STATIC_ASSERT(sizeof(pti_callback_domain) == sizeof(uint32_t), "pti_callback_domain enum should be equal to size of uint32_t");
+
 typedef enum _pti_callback_phase {
   PTI_CB_PHASE_INVALID                 = 0,
   PTI_CB_PHASE_API_ENTER               = 1,
@@ -77,6 +79,8 @@ typedef enum _pti_callback_phase {
   PTI_CB_PHASE_MAX                     = 0x7fffffff
 } pti_callback_phase;
 
+PTI_STATIC_ASSERT(sizeof(pti_callback_phase) == sizeof(uint32_t), "pti_callback_phase enum should be equal to size of uint32_t");
+
 typedef enum _pti_backend_command_list_type {
   PTI_BACKEND_COMMAND_LIST_TYPE_UNKNOWN   = (1<<0),
   PTI_BACKEND_COMMAND_LIST_TYPE_IMMEDIATE = (1<<1),
@@ -84,6 +88,8 @@ typedef enum _pti_backend_command_list_type {
 
   PTI_BACKEND_COMMAND_LIST_TYPE_MAX       = 0x7fffffff
 } pti_backend_command_list_type;
+
+PTI_STATIC_ASSERT(sizeof(pti_backend_command_list_type) == sizeof(uint32_t), "pti_backend_command_list_type enum should be equal to size of uint32_t");
 
 /**
  * A user can subscribe to notifications about non-standard situations from PTI
@@ -98,6 +104,8 @@ typedef enum _pti_internal_event_type {
   PTI_INTERNAL_EVENT_TYPE_MAX        = 0x7fffffff
 } pti_internal_event_type;
 
+PTI_STATIC_ASSERT(sizeof(pti_internal_event_type) == sizeof(uint32_t), "pti_internal_event_type enum should be equal to size of uint32_t");
+
 typedef enum _pti_gpu_operation_kind {
   PTI_GPU_OPERATION_KIND_INVALID         = 0,
   PTI_GPU_OPERATION_KIND_KERNEL          = 1,
@@ -106,6 +114,8 @@ typedef enum _pti_gpu_operation_kind {
 
   PTI_GPU_OPERATION_KIND_MAX             = 0x7fffffff
 } pti_gpu_operation_kind;
+
+PTI_STATIC_ASSERT(sizeof(pti_gpu_operation_kind) == sizeof(uint32_t), "pti_gpu_operation_kind enum should be equal to size of uint32_t");
 
 typedef struct _pti_gpu_op_details {
   pti_gpu_operation_kind             _operation_kind; //<! Kind of the operation: kernel, mem op

@@ -58,6 +58,8 @@ typedef enum _pti_metric_value_type {
   PTI_METRIC_VALUE_TYPE_FORCE_UINT32 = 0x7fffffff
 } pti_metric_value_type;
 
+PTI_STATIC_ASSERT(sizeof(pti_metric_value_type) == sizeof(uint32_t), "pti_metric_value_type enum should be equal to size of uint32_t");
+
 /// @brief Metric types
 typedef enum _pti_metric_type {
   PTI_METRIC_TYPE_DURATION = 0,                  //!< duration
@@ -73,6 +75,8 @@ typedef enum _pti_metric_type {
   PTI_METRIC_TYPE_FORCE_UINT32 = 0x7fffffff
 
 } pti_metric_type;
+
+PTI_STATIC_ASSERT(sizeof(pti_metric_type) == sizeof(uint32_t), "pti_metric_type enum should be equal to size of uint32_t");
 
 typedef union _pti_value_t {
     uint32_t ui32;                               //!< 32-bit unsigned-integer

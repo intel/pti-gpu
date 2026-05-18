@@ -19,6 +19,24 @@ extern "C" {
 #define PTI_MAX_DEVICE_UUID_SIZE  16
 
 /**
+ * @brief ABI compatibility/static assert helper for public PTI types
+ *
+ * If any of these assertions fail, it indicates an ABI-breaking change
+ * in a public PTI API type or definition.
+ */
+#if defined(__cplusplus)
+#define PTI_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#define PTI_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
+#else
+/* Fallback for pre-C11: generates a compile error if condition is false */
+#define PTI_STATIC_ASSERT_CONCAT_(a, b) a##b
+#define PTI_STATIC_ASSERT_CONCAT(a, b) PTI_STATIC_ASSERT_CONCAT_(a, b)
+#define PTI_STATIC_ASSERT(cond, msg) \
+    typedef char PTI_STATIC_ASSERT_CONCAT(pti_static_assertion_, __LINE__)[(cond) ? 1 : -1]
+#endif
+
+/**
  * @brief Return/Error codes
  */
 typedef enum {
@@ -59,8 +77,12 @@ typedef enum {
   PTI_ERROR_METRICS_SCOPE_INVALID_COLLECTION_BUFFER = 156,  //!< Invalid collection buffer in metrics scope
   PTI_WARN_METRICS_SCOPE_PARTIAL_BUFFER = 157,  //!< Warning: partial buffer populated in metrics scope
 
-  PTI_ERROR_INTERNAL = 200  //!< internal error
+  PTI_ERROR_INTERNAL = 200,  //!< internal error
+
+  PTI_RESULT_FORCE_UINT32 = 0x7fffffff
 } pti_result;
+
+PTI_STATIC_ASSERT(sizeof(pti_result) == sizeof(uint32_t), "pti_result enum should be equal to size of uint32_t");
 
 /**
  * @brief Helper function to return stringified enum members for pti_result

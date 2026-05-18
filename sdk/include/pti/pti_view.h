@@ -20,23 +20,6 @@ extern "C" {
 #endif
 
 /**
- * @brief ABI compatibility static asserts for pti_view_record types
- *
- * If any of these assertions fail, it indicates an ABI-breaking change.
- */
-#if defined(__cplusplus)
-#define PTI_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
-#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
-#define PTI_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
-#else
-/* Fallback for pre-C11: generates a compile error if condition is false */
-#define PTI_STATIC_ASSERT_CONCAT_(a, b) a##b
-#define PTI_STATIC_ASSERT_CONCAT(a, b) PTI_STATIC_ASSERT_CONCAT_(a, b)
-#define PTI_STATIC_ASSERT(cond, msg) \
-    typedef char PTI_STATIC_ASSERT_CONCAT(pti_static_assertion_, __LINE__)[(cond) ? 1 : -1]
-#endif
-
-/**
  * @brief const defines.
  */
 #define PTI_MAX_PCI_ADDRESS_SIZE 16                         //!< Size of pci address array.
@@ -60,7 +43,10 @@ typedef enum _pti_view_kind {
   PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P = 10,     //!< Peer to Peer Memory copies between Devices.
   PTI_VIEW_DEVICE_SYNCHRONIZATION = 11,      //!< Synchronization operations on host and GPU.
   PTI_VIEW_COMMUNICATION = 12,               //!< Communication records via oneCCL. Only for Linux.
+  PTI_VIEW_KIND_FORCE_UINT32 = 0x7fffffff
 } pti_view_kind;
+
+PTI_STATIC_ASSERT(sizeof(pti_view_kind) == sizeof(uint32_t), "pti_view_kind enum should be equal to size of uint32_t");
 
 /**
  * @brief Synchronization types:
@@ -75,7 +61,10 @@ typedef enum _pti_view_synchronization_type {
   PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_EVENT = 4,               //!< Event host synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_LIST = 5,        //!< Commandlist host synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_QUEUE = 6,       //!< CommandQueue host synchronization type
+  PTI_VIEW_SYNCHRONIZATION_TYPE_FORCE_UINT32 = 0x7fffffff
 } pti_view_synchronization_type;
+
+PTI_STATIC_ASSERT(sizeof(pti_view_synchronization_type) == sizeof(uint32_t), "pti_view_synchronization_type enum should be equal to size of uint32_t");
 
 /**
  * @brief Memory types
@@ -85,7 +74,10 @@ typedef enum _pti_view_memory_type {
   PTI_VIEW_MEMORY_TYPE_HOST = 1,    //!< Host memory (driver allocated)
   PTI_VIEW_MEMORY_TYPE_DEVICE = 2,  //!< Device memory
   PTI_VIEW_MEMORY_TYPE_SHARED = 3,  //!< Shared memory
+  PTI_VIEW_MEMORY_TYPE_FORCE_UINT32 = 0x7fffffff
 } pti_view_memory_type;
+
+PTI_STATIC_ASSERT(sizeof(pti_view_memory_type) == sizeof(uint32_t), "pti_view_memory_type enum should be equal to size of uint32_t");
 
 /**
  * @brief Memory copy types
@@ -111,7 +103,11 @@ typedef enum _pti_view_memcpy_type {
   PTI_VIEW_MEMCPY_TYPE_S2H = 13,    //!< Shared to Host type
   PTI_VIEW_MEMCPY_TYPE_S2D = 14,    //!< Shared to Device type
   PTI_VIEW_MEMCPY_TYPE_S2S = 15,    //!< Shared to Shared type
+
+  PTI_VIEW_MEMCPY_TYPE_FORCE_UINT32 = 0x7fffffff
 } pti_view_memcpy_type;
+
+PTI_STATIC_ASSERT(sizeof(pti_view_memcpy_type) == sizeof(uint32_t), "pti_view_memcpy_type enum should be equal to size of uint32_t");
 
 /**
  *  @brief External correlation kinds
@@ -123,7 +119,10 @@ typedef enum _pti_view_external_kind {
   PTI_VIEW_EXTERNAL_KIND_CUSTOM_1 = 3,  //!< Custom external kind
   PTI_VIEW_EXTERNAL_KIND_CUSTOM_2 = 4,  //!< Custom external kind
   PTI_VIEW_EXTERNAL_KIND_CUSTOM_3 = 5,  //!< Custom external kind
+  PTI_VIEW_EXTERNAL_KIND_FORCE_UINT32 = 0x7fffffff
 } pti_view_external_kind;
+
+PTI_STATIC_ASSERT(sizeof(pti_view_external_kind) == sizeof(uint32_t), "pti_view_external_kind enum should be equal to size of uint32_t");
 
 /**
  *  @brief Collection Overhead kinds
@@ -135,7 +134,10 @@ typedef enum _pti_view_overhead_kind {
   PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,   //!< Overhead due to a buffer flush
   PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,         //!< Overhead due to driver
   PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to L0 api processing time
+  PTI_VIEW_OVERHEAD_KIND_FORCE_UINT32 = 0x7fffffff
 } pti_view_overhead_kind;
+
+PTI_STATIC_ASSERT(sizeof(pti_view_overhead_kind) == sizeof(uint32_t), "pti_view_overhead_kind enum should be equal to size of uint32_t");
 
 /**
  * @brief api_group types
@@ -152,6 +154,8 @@ typedef enum _pti_api_group_id {
                                                    // -- you will get all *groups* now and in the *future*!
 } pti_api_group_id;
 
+PTI_STATIC_ASSERT(sizeof(pti_api_group_id) == sizeof(uint32_t), "pti_api_group_id enum should be equal to size of uint32_t");
+
 /**
  * @brief API Classes across API groups, used for coarse-grain filtering of traced APIs,
  *                   serve only as input to PTI functions
@@ -166,6 +170,8 @@ typedef enum _pti_api_group_id {
                                                            //!< Be careful using CLASS_ALL in api calls
                                                            //!< -- you will get all classes *now* and in the *future*!
  } pti_api_class;
+
+ PTI_STATIC_ASSERT(sizeof(pti_api_class) == sizeof(uint32_t), "pti_api_class enum should be equal to size of uint32_t");
 
 /**
  * @brief Base View record type

@@ -226,6 +226,8 @@ const char* ptiViewOverheadKindToString(pti_view_overhead_kind type) {
       return kOverheadKindType[4];
     case PTI_VIEW_OVERHEAD_KIND_TIME:
       return kOverheadKindType[5];
+    case PTI_VIEW_OVERHEAD_KIND_FORCE_UINT32:
+      break;
   }
   return kOverheadKindType[0];
 }
@@ -242,6 +244,8 @@ const char* ptiViewMemoryTypeToString(pti_view_memory_type type) {
       return "Device";
     case PTI_VIEW_MEMORY_TYPE_SHARED:
       return "Shared";
+    case PTI_VIEW_MEMORY_TYPE_FORCE_UINT32:
+      break;
   }
   return "INVALID";
 }
@@ -287,6 +291,8 @@ const char* ptiViewMemcpyTypeToString(pti_view_memcpy_type type) {
       return kMemcpyType[15];
     case PTI_VIEW_MEMCPY_TYPE_S2S:
       return kMemcpyType[16];
+    case PTI_VIEW_MEMCPY_TYPE_FORCE_UINT32:
+      break;
   }
   return kMemcpyType[0];
 }
