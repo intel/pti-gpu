@@ -5778,7 +5778,7 @@ typedef struct _zex_kernel_register_file_size_exp_t {
 
       ze_kernel_properties_t kprops{};
 
-      zex_kernel_register_file_size_exp_t regsize{};
+      zex_kernel_register_file_size_exp_t regsize{ZEX_STRUCTURE_KERNEL_REGISTER_FILE_SIZE_EXP, nullptr, 0};
       kprops.pNext = (void *)&regsize;
 
       status = ZE_FUNC(zeKernelGetProperties)(kernel, &kprops);
