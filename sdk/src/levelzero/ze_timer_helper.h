@@ -13,28 +13,33 @@
 #include "pti_assert.h"
 
 struct CPUGPUTimeInterpolationHelper {
-  constexpr static uint64_t kSyncDeltaDefault = 1;  // 1 ns
+  constexpr static uint64_t kSyncDeltaDefault = 300000;  // 300000 ns == 300 us == 0.3 ms
   ze_device_handle_t device_;
-  uint32_t gpu_freq_;
+
+  // It is not GPU core or any other clock frequency,
+  // this is the frequency of the GPU timer used for profiling needs,
+  // expected that it is several MHz, e.g 12.5 MHz on PVC.
+  // It is not expected to be higher than 500 MHz
+  uint32_t gpu_timer_freq_hz_;
   uint64_t gpu_timer_mask_;
   uint64_t cpu_timestamp_;
   uint64_t gpu_timestamp_;
   uint64_t delta_ = kSyncDeltaDefault;
   uint64_t coeff_;
-  CPUGPUTimeInterpolationHelper(ze_device_handle_t device, uint32_t gpu_freq,
+  CPUGPUTimeInterpolationHelper(ze_device_handle_t device, uint32_t gpu_timer_freq_hz,
                                 uint64_t gpu_timer_mask, uint64_t sync_delta)
       : device_(device),
-        gpu_freq_(gpu_freq),
+        gpu_timer_freq_hz_(gpu_timer_freq_hz),
         gpu_timer_mask_(gpu_timer_mask),
         cpu_timestamp_(0),
         gpu_timestamp_(0) {
     PTI_ASSERT(device_ != nullptr);
-    PTI_ASSERT(gpu_freq != 0ULL);
+    PTI_ASSERT(gpu_timer_freq_hz != 0ULL);
     PTI_ASSERT(gpu_timer_mask != 0ULL);
     if (sync_delta != 0ULL) {
       delta_ = sync_delta;
     }
-    coeff_ = 1'000'000'000 / gpu_freq_;
+    coeff_ = 1'000'000'000 / gpu_timer_freq_hz_;
   }
 };
 

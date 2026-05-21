@@ -283,12 +283,12 @@ class ZeCollector {
    * especially in profiler
    *
    * The current implementation calls zeDeviceGetGlobalTimestamp less often:
-   * once in ~ dozens (or hundreds) of milliseconds
+   * once in  ~ hundreds of microseconds (and maybe even less often...)
    * (see CPUGPUTimeInterpolationHelper.delta) - for sync CPU/GPU point
    * per thread per device. (per thread - to avoid any synchronization between threads)
-   * The delta between sync points is selected  empirically, but it is important keep in mind that
-   * on systems with 32 GPU time counter - this counter would wrap around every few seconds.
-   * The delta should be less than this wrap around time.
+   * The delta between sync points is selected  empirically, but it is important to keep in mind
+   * that on systems with 32-bit GPU time counter - this counter would wrap around every few
+   * seconds. The delta should be less than this wrap around time.
    *
    * Another change - the GPU timer frequency is not interpolated anymore but rather
    * taken from the device descriptor. This assumes that it is constant.
@@ -299,49 +299,79 @@ class ZeCollector {
    * If CPU time, from the recent sync point, exceeded delta - makes a new sync point.
    * The sync point data are returned to a caller. The caller uses the sync point data
    * to convert GPU cycles to CPU time or do other ops with them.
-   *
    */
   ze_result_t GetDeviceTimestamps(ze_device_handle_t device, uint64_t* host_time,
                                   uint64_t* device_time) {
-    ze_result_t res = utils::ze::GetDeviceTimestamps(device, host_time, device_time);
-    return res;
-
-    // TODO(PTI-336): Temporarily disabled optimization due to observed
-    // instability on some platforms. Restore later.
-#if 0  // NOLINT
+    // PTI-336 talks about Interpolation approach.
+    // At the moment of this change - all tests on real devices are passing.
+    // If any issues - they need to be carefully investigated prior to disabling this pass.
+    //
+    // Frequent calls of high latency zeDeviceGetGlobalTimestamps()
+    // not only introduce CPU overhead, but also skews the workload behaviour,
+    // so that PTI ends up profiling a different workload than the original one.
+    // This is especially true when a workload submits many short running kernels with high density.
+    //
+    // If this solution doesn't work for simulator - the suggested change should not harm
+    // the profiling workloads running on real silicon.
     PTI_ASSERT(device != nullptr);
     PTI_ASSERT(host_time != nullptr);
     PTI_ASSERT(device_time != nullptr);
-    if (timer_helpers.find(device) == timer_helpers.end()) {
-      timer_helpers[device] = std::make_unique<CPUGPUTimeInterpolationHelper>(
-          device, device_descriptors_[device].device_timer_frequency,
-          device_descriptors_[device].device_timer_mask,
-          device_descriptors_[device].device_sync_delta);
-    }
-    uint64_t anchor_host_time = 0;
-    uint64_t anchor_device_time = 0;
-    auto helper = timer_helpers[device].get();
-    uint64_t current_host_time = utils::GetTime();
-    if (current_host_time - helper->cpu_timestamp_ > helper->delta_) {
-      ze_result_t res =
-          utils::ze::GetDeviceTimestamps(device, &anchor_host_time, &anchor_device_time);
-      PTI_ASSERT(res == ZE_RESULT_SUCCESS);
-      helper->cpu_timestamp_ = anchor_host_time;
-      helper->gpu_timestamp_ = anchor_device_time;
+
+    if (device_descriptors_.find(device) != device_descriptors_.end()) {
+      if (timer_helpers.find(device) == timer_helpers.end()) {
+        SPDLOG_DEBUG(
+            "Creating new CPUGPUTimeInterpolationHelper for device {}, "
+            "device_timer_frequency: {}, device_timer_mask: {}, device_sync_delta: {}",
+            static_cast<void*>(device), device_descriptors_[device].device_timer_frequency,
+            device_descriptors_[device].device_timer_mask,
+            device_descriptors_[device].device_sync_delta);
+
+        timer_helpers[device] = std::make_unique<CPUGPUTimeInterpolationHelper>(
+            device, device_descriptors_[device].device_timer_frequency,
+            device_descriptors_[device].device_timer_mask,
+            device_descriptors_[device].device_sync_delta);
+      }
+
+      uint64_t anchor_host_time = 0;
+      uint64_t anchor_device_time = 0;
+
+      auto helper = timer_helpers[device].get();
+      uint64_t current_host_time = utils::GetTime();
+
+      // Why integer arithmetic below:
+      // 1. Avoids any precision issues with floating point arithmetic,
+      //    as here dealing with large numbers (nanoseconds and GPU ticks) - conversion to/from FP
+      //    can cause significant precision loss in the last decimal digits, we care about
+      // 2. Avoids any performance issues with floating point arithmetic,
+      //    (this is in the critical path)
+      //    especially, denormals etc. - which are costly from a performance perspective,
+      // 3. Reproducibility - with FP can get different results on different runs
+      //    + dependence on what FP instructions code compiled - x87, SSE, AVX..
+      //    can contribute to issues with reproducibility and precision.
+
+      if (current_host_time - helper->cpu_timestamp_ > helper->delta_) {
+        auto res = utils::ze::GetDeviceTimestamps(device, &anchor_host_time, &anchor_device_time);
+        PTI_ASSERT(res == ZE_RESULT_SUCCESS);
+        helper->cpu_timestamp_ = anchor_host_time;
+        helper->gpu_timestamp_ = anchor_device_time;
+      } else {
+        anchor_host_time = helper->cpu_timestamp_;
+        anchor_device_time = helper->gpu_timestamp_;
+      }
+      current_host_time = utils::GetTime();
+
+      uint64_t current_device_time = anchor_device_time + ((current_host_time - anchor_host_time) /
+                                                           timer_helpers[device]->coeff_);
+
+      *host_time = current_host_time;
+      *device_time = current_device_time;
     } else {
-      anchor_host_time = helper->cpu_timestamp_;
-      anchor_device_time = helper->gpu_timestamp_;
+      SPDLOG_WARN("Device {} not found in device_descriptors. Fallback to old GPU timing method.",
+                  static_cast<void*>(device));
+      auto res = utils::ze::GetDeviceTimestamps(device, host_time, device_time);
+      PTI_ASSERT(res == ZE_RESULT_SUCCESS);
     }
-    current_host_time = utils::GetTime();
-
-    uint64_t current_device_time = anchor_device_time + ((current_host_time - anchor_host_time) /
-                                                         timer_helpers[device]->coeff_);
-
-    *host_time = current_host_time;
-    *device_time = current_device_time;
-
     return ZE_RESULT_SUCCESS;
-#endif
   }
 
   static ZeCollectionMode SelectZeCollectionMode(bool introspection_capable, bool& disabled_mode,
@@ -3222,7 +3252,7 @@ class ZeCollector {
   ZeImageSizeMap image_size_map_;
   ZeKernelGroupSizeMap kernel_group_size_map_;
   ZeDeviceMap device_map_;
-  std::map<ze_device_handle_t, ZeDeviceDescriptor> device_descriptors_;
+  std::unordered_map<ze_device_handle_t, ZeDeviceDescriptor> device_descriptors_;
 
   ZeEventCache event_cache_;
 

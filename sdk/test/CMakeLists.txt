@@ -777,6 +777,25 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   endif()
 
   add_test(NAME run-dlworkload COMMAND dlworkload)
+
+  # Profile Time Difference test for dlworkload
+  add_test(
+    NAME prof-time-diff-dlworkload
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/prof_time_diff/prof_time_diff.py
+      $<TARGET_FILE:dlworkload>
+# allow here absolute time difference of 4 us (4000 ns) which should be acceptable
+# for long running kernels, and for ~ usec duration short ones - this is measurement error
+      -da 4000
+# skip first 50 kernels as warm-up
+      -s 50
+# set delta for the second run to 50 us, much smaller than default 300 us
+      -e2 PTI_DEVICE_SYNC_DELTA=50000
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  )
+  set_tests_properties(
+    prof-time-diff-dlworkload PROPERTIES LABELS "functional;prof-time-diff")
+
   add_test(NAME run-dpc_gemm COMMAND dpc_gemm)
   add_test(NAME run-onemkl_gemm_exe COMMAND onemkl_gemm_exe)
   add_test(NAME run-vec_sqadd COMMAND vec_sqadd)
