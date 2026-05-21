@@ -498,7 +498,6 @@ typedef struct pti_view_record_overhead {
                                             //!< interval between the observation region
                                             //!< start and the end
   pti_view_overhead_kind  _overhead_kind;   //!< Type of overhead
-  uint32_t _correlation_id;                 //!< Id correlating this call with other views, eg: memfill, memcpy and kernel GPU activity
 } pti_view_record_overhead;
 
 /**
