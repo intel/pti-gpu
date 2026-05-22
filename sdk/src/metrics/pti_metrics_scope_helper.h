@@ -350,7 +350,8 @@ inline pti_result ResolveGroupFromMetricNames(
   pti_result result = GetMetricGroups(device_handle, groups);
   if (result != PTI_SUCCESS) return result;
 
-  uint32_t metric_count = scope_collection_handle->requested_metric_properties_.size();
+  uint32_t metric_count =
+      static_cast<uint32_t>(scope_collection_handle->requested_metric_properties_.size());
   scope_collection_handle->requested_metric_indices_.resize(metric_count, -1);
   scope_collection_handle->requested_value_types_.resize(metric_count);
   scope_collection_handle->requested_metric_names_.resize(metric_count);
@@ -464,7 +465,8 @@ inline uint8_t* ProcessMetricValues(pti_scope_collection_handle_t scope_collecti
   }
 
   // Store only requested metric values
-  uint32_t requested_count = scope_collection_handle->requested_metric_properties_.size();
+  uint32_t requested_count =
+      static_cast<uint32_t>(scope_collection_handle->requested_metric_properties_.size());
   record->_metrics_values = reinterpret_cast<pti_value_t*>(current_pos);
 
   for (uint32_t j = 0; j < requested_count; ++j) {

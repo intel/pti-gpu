@@ -74,8 +74,8 @@ inline void Init() {
     map_overhead_per_kind[{pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME}] = overhead_rec;
   }
 
-  uint64_t tid = PidTidInfo::Get().tid;
-  uint64_t start_time_ns = utils::GetTime();
+  auto tid = PidTidInfo::Get().tid;
+  auto start_time_ns = utils::GetTime();
   auto overhead_it =
       map_overhead_per_kind.find({pti_view_overhead_kind::PTI_VIEW_OVERHEAD_KIND_TIME});
   init_ref_count++;

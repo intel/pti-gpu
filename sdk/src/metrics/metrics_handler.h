@@ -1,3 +1,4 @@
+
 // ==============================================================
 // Copyright (C) Intel Corporation
 //
@@ -745,7 +746,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
       std::vector<uint8_t> raw_metrics(file_size);
 
       inf.read(reinterpret_cast<char *>(raw_metrics.data()), file_size);
-      int raw_size = inf.gcount();
+      auto raw_size = static_cast<size_t>(inf.gcount());
       if (raw_size > 0) {
         uint32_t num_reports = 0;
         uint32_t total_values_count = 0;
@@ -801,7 +802,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
         std::string group_name = group_props.name;
 
         // Get the index of the start timestamp from the metric list
-        uint32_t ts_idx = utils::ze::GetMetricId(metric_list, kTimeStampMetric);
+        auto ts_idx = utils::ze::GetMetricId(metric_list, kTimeStampMetric);
         timestamp_metric_found = (ts_idx < metric_list.size());
         if (!timestamp_metric_found) {
           // no QueryBeginTime metric, this is not expected for stream metrics groups
@@ -811,7 +812,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
               " unable to capture timestamps for the metrics values");
         }
         // Get the index of ReportReason metric from the metric list
-        uint32_t report_reason_idx = utils::ze::GetMetricId(metric_list, kReportReasonMetric);
+        auto report_reason_idx = utils::ze::GetMetricId(metric_list, kReportReasonMetric);
         report_reason_metric_found = (report_reason_idx < metric_list.size());
         if (!report_reason_metric_found) {
           // no ReportReason metric, this is not expected for stream metrics
@@ -852,7 +853,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
         while (!inf.eof()) {
           inf.read(reinterpret_cast<char *>(raw_metrics.data()), file_size);
 
-          int raw_size = inf.gcount();
+          auto raw_size = static_cast<size_t>(inf.gcount());
           if (raw_size > 0) {
             // first call to Calculate metrics to capture the size of reports and values
             // buffers
@@ -888,9 +889,9 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
             const zet_typed_value_t *value = values.data();
             for (uint32_t i = 0; i < num_reports; ++i) {
               uint32_t per_report_values_count = reports[i];
-              uint32_t num_samples = per_report_values_count / metric_list.size();
+              auto num_samples = per_report_values_count / metric_list.size();
 
-              for (uint32_t j = 0; j < num_samples; ++j) {
+              for (size_t j = 0; j < num_samples; ++j) {
                 // v is array of metric_count values
                 const zet_typed_value_t *v = value + j * metric_list.size();
 
@@ -939,7 +940,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
                 str += " {\n\t\t\"args\": {\n";
 
                 // Walk through the metric list and add metric values to output buffer
-                for (uint32_t k = 0; k < metric_list.size(); k++) {
+                for (size_t k = 0; k < metric_list.size(); k++) {
                   if (timestamp_metric_found && k == ts_idx) {
                     metrics_values_buffer[buffer_idx++].ui64 = ts;
                   } else {
@@ -947,7 +948,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
                   }
                 }
                 // Walk through the metric list and log the metric parameters and values
-                for (uint32_t k = 0; k < metric_list.size(); k++) {
+                for (size_t k = 0; k < metric_list.size(); k++) {
                   // Skip the timestamp, it is logged separately
                   if (k == ts_idx) {
                     continue;
@@ -2353,7 +2354,7 @@ class PtiMetricsCollectorHandler {
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
-    *device_count = devices_.size();
+    *device_count = static_cast<uint32_t>(devices_.size());
 
     return PTI_SUCCESS;
   }
@@ -2367,7 +2368,7 @@ class PtiMetricsCollectorHandler {
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
-    uint32_t num_devices = devices_.size();
+    uint32_t num_devices = static_cast<uint32_t>(devices_.size());
     if (num_devices < *device_count) {
       SPDLOG_DEBUG("Device buffer size too small. Device count is {}", num_devices);
       *device_count = num_devices;
@@ -2459,7 +2460,8 @@ class PtiMetricsCollectorHandler {
     }
 
     auto it = metric_groups_.find(device);
-    *metrics_group_count = (it != metric_groups_.end()) ? it->second.size() : 0;
+    *metrics_group_count =
+        (it != metric_groups_.end()) ? static_cast<uint32_t>(it->second.size()) : 0;
 
     return PTI_SUCCESS;
   }
@@ -2489,7 +2491,7 @@ class PtiMetricsCollectorHandler {
     }
 
     const auto &device_metric_groups = it->second;
-    uint32_t group_count = device_metric_groups.size();
+    uint32_t group_count = static_cast<uint32_t>(device_metric_groups.size());
 
     if (group_count < *metrics_group_count) {
       SPDLOG_DEBUG("Metric Group buffer size too small. Group count is {}", group_count);

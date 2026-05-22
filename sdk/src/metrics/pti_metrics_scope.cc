@@ -870,7 +870,7 @@ pti_result ptiMetricsScopeQueryMetricsBufferSize(
       if (!kernel_data) continue;
 
       // Space for metric values array
-      uint32_t num_metrics = scope_collection_handle->requested_metric_properties_.size();
+      auto num_metrics = scope_collection_handle->requested_metric_properties_.size();
       if (num_metrics > 0) {
         size_t values_size = num_metrics * sizeof(pti_value_t);
         total_size += AlignUp(values_size, 8);
