@@ -46,6 +46,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -211,15 +212,13 @@ inline pti::utils::filesystem::path CreateTempDirectory() {
   return path;
 }
 
-inline std::string GetFilePath(const std::string& filename) {
-  PTI_ASSERT(!filename.empty());
-
-  size_t pos = filename.find_last_of("/\\");
-  if (pos == std::string::npos) {
+inline std::string GetFilePath(std::string_view filename) {
+  auto pos = filename.find_last_of("/\\");
+  if (pos == std::string_view::npos) {
     return "";
   }
 
-  return filename.substr(0, pos + 1);
+  return std::string{filename.substr(0, pos + 1)};
 }
 
 inline std::string GetExecutablePath() {

@@ -30,32 +30,19 @@
 
 namespace pti {
 
-#if defined(_WIN32)
-inline std::string MoveUpOneDirectory(std::string_view dir) {
-  auto path_pos = dir.find_last_of("\\");
-  if (path_pos == std::string_view::npos) {
-    return "";
-  }
-  return std::string{dir.substr(0, path_pos)};
-}
+inline std::string GetPathToPtiModule() {
+  auto pti_dir = ::utils::GetPathToSharedObject(GetPathToPtiModule);
 
-inline std::string GetPathToWindowsLibraryDirectory() {
-  auto pti_dir = ::utils::GetPathToSharedObject(GetPathToWindowsLibraryDirectory);
-
-  pti_dir = MoveUpOneDirectory(pti_dir);
-  if (pti_dir.empty()) {
-    return pti_dir;
-  }
-  pti_dir = MoveUpOneDirectory(pti_dir);
+  pti_dir = ::utils::GetFilePath(pti_dir);
   if (pti_dir.empty()) {
     return pti_dir;
   }
 
-  pti_dir += "\\lib\\";
+  pti_dir += pti::strings::kModuleSubdir;
+  pti_dir += pti::strings::kOsPathSeparator;
 
   return pti_dir;
 }
-#endif
 
 // API implemented in PTI Core library
 // to pass from PTI Interface library status of detected "foreign" XPTI subscribers,
@@ -175,10 +162,7 @@ class PtiLibHandler {
       }
       ::utils::SetGlobalSpdLogPattern();
 
-      std::string pti_dir;
-#if defined(_WIN32)
-      pti_dir += GetPathToWindowsLibraryDirectory();
-#endif
+      auto pti_dir = GetPathToPtiModule();
       pti_dir += strings::kPtiViewLib;
       pti_view_lib_ = std::make_unique<LibraryLoader>(pti_dir);
     } catch (const std::exception& e) {

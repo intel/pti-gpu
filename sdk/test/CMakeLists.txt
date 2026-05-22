@@ -882,7 +882,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
      lib_load_suite
      DISCOVERY_TIMEOUT 60
      PROPERTIES
-        ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Pti::pti_view>:$ENV{LD_LIBRARY_PATH}"
+        ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Pti::pti_view>:$<TARGET_FILE_DIR:Pti::pti>:$ENV{LD_LIBRARY_PATH}"
         LABELS "unit"
         LABELS "libload"
         LABELS "itt")
