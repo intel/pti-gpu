@@ -269,29 +269,29 @@ def perform_behavioral_checks(ret1, ret2, stdout_analysis, stderr_analysis):
         print("FAIL: No Found Sycl Runtime Record found in clean run")
         test_passed = False
 
-    # Check 3: Foreign subscriber run should have fewer Sycl Runtime Records than clean run
+    # Check 3: Foreign subscriber run should have zero Sycl Runtime Records
     sycl_count_clean = stdout_analysis["record_counts_1"]["Found Sycl Runtime Record"]
     sycl_count_foreign = stdout_analysis["record_counts_2"]["Found Sycl Runtime Record"]
     kernel_count_foreign = stdout_analysis["record_counts_2"]["Found Kernel Record"]
 
-    if sycl_count_foreign < sycl_count_clean and sycl_count_foreign > 0:
+    if sycl_count_foreign == 0 and sycl_count_clean > 0:
         print(
-            f"PASS: Found Sycl Runtime Record count reduced in foreign run ({sycl_count_clean} -> {sycl_count_foreign})"
+            f"PASS: No SYCL Runtime Records in foreign run as expected (Clean:{sycl_count_clean}, Foreign:{sycl_count_foreign})"
         )
     else:
         print(
-            f"FAIL: Expected fewer Found Sycl Runtime Record in foreign run - Clean:{sycl_count_clean}, Foreign:{sycl_count_foreign}"
+            f"FAIL: Expected zero SYCL Runtime Records in foreign run - Clean:{sycl_count_clean}, Foreign:{sycl_count_foreign}"
         )
         test_passed = False
 
-    # Check 4: Foreign subscriber Sycl Runtime Record count should equal Kernel Record count
-    if sycl_count_foreign == kernel_count_foreign:
+    # Check 4: Foreign subscriber run should still have kernel records
+    if kernel_count_foreign > 0:
         print(
-            f"PASS: Found Sycl Runtime Record count equals Found Kernel Record count in foreign run ({sycl_count_foreign})"
+            f"PASS: Kernel records still captured in foreign run ({kernel_count_foreign})"
         )
     else:
         print(
-            f"FAIL: Found Sycl Runtime Record count ({sycl_count_foreign}) != Found Kernel Record count ({kernel_count_foreign}) in foreign run"
+            f"FAIL: No kernel records found in foreign run (expected > 0)"
         )
         test_passed = False
 
@@ -348,12 +348,9 @@ def perform_behavioral_checks(ret1, ret2, stdout_analysis, stderr_analysis):
         test_passed = False
 
     # Check 8: Summary of expected behavior
-    if (
-        sycl_count_clean > sycl_count_foreign > 0
-        and sycl_count_foreign == kernel_count_foreign
-    ):
+    if sycl_count_clean > 0 and sycl_count_foreign == 0 and kernel_count_foreign > 0:
         print(
-            f"PASS: PTI correctly detected foreign subscriber - reduced SYCL runtime tracing ({sycl_count_clean} -> {sycl_count_foreign})"
+            f"PASS: PTI correctly detected foreign subscriber - disabled SYCL runtime tracing (Clean:{sycl_count_clean} -> Foreign:{sycl_count_foreign}), kernel tracing still works"
         )
     else:
         print(f"FAIL: Unexpected interoperability behavior pattern")

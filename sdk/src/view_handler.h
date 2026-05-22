@@ -15,7 +15,6 @@
 #include <cstdio>
 #include <cstring>
 #include <functional>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -741,17 +740,6 @@ struct PtiViewRecordHandler {
   inline pti_result GetState() { return view_state_.GetState(); }
   inline void SetState(pti_result new_state) { view_state_.SetState(new_state); }
 
-  inline SpecialCallsData& GetSpecialCallsData(const uint32_t& corrId) {
-    const std::lock_guard<std::mutex> lock(set_special_calls_map_mtx_);
-    return map_spcalls_suppression_[corrId];
-  }
-
-  inline void SetSpecialCallsData(const uint32_t& corrId,
-                                  const SpecialCallsData& special_rec_data) {
-    const std::lock_guard<std::mutex> lock(set_special_calls_map_mtx_);
-    map_spcalls_suppression_[corrId] = special_rec_data;
-  }
-
   inline pti_result GPULocalAvailable() {
     if (collector_) {
       if (collector_->IsIntrospectionCapable() && collector_->IsDynamicTracingCapable()) {
@@ -890,7 +878,6 @@ struct PtiViewRecordHandler {
   mutable std::mutex timestamp_api_mtx_;
   mutable std::mutex insert_record_mtx_;  // protecting writing to buffers, as different threads
                                           // might be writing to the same buffer
-  mutable std::mutex set_special_calls_map_mtx_;
   mutable std::mutex map_granularity_set_mtx_;
 
   KernelNameStorageQueue kernel_name_storage_;
@@ -906,7 +893,6 @@ struct PtiViewRecordHandler {
                          // overridden by the env variable PTI_CONV_CLOCK_SYNC_TIME_NS.
   std::atomic<bool> deinit_ = false;
 
-  std::map<uint32_t, SpecialCallsData> map_spcalls_suppression_;
   std::map<pti_api_group_id, std::atomic<bool>>
       map_granularity_set_;  // Are we in granular (individual api) mode for this api_group?
 };
@@ -1148,17 +1134,6 @@ inline void SyclRuntimeEvent(void* /*data*/, const ZeKernelCommandExecutionRecor
   // record._name = rec.sycl_func_name_;
   SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, record._correlation_id);
   Instance().InsertRecord(record, record._thread_id);
-  const char* api_id_name = nullptr;
-  if (ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_SYCL, record._api_id, &api_id_name) ==
-      pti_result::PTI_SUCCESS) {
-    std::string a_string(api_id_name);
-    // std::string a_string = record._name;
-    if (a_string.find("EnqueueKernelLaunch") != std::string::npos) {
-      SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
-      special_rec_data.sycl_rec_present = 1;
-      Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
-    }
-  }
 }
 
 inline void CommonSynchEvent(pti_view_record_synchronization& record,
@@ -1262,36 +1237,6 @@ inline void KernelEvent(const ZeKernelCommandExecutionRecord& rec) {
   record._sycl_enqk_begin_timestamp = ApplyTimeShift(rec.sycl_enqk_begin_time_, ts_shift);
   record._sycl_task_begin_timestamp = ApplyTimeShift(rec.sycl_task_begin_time_, ts_shift);
 
-#if defined(PTI_TRACE_SYCL)
-  SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
-  // We generate special sycl record corresponding to L0 api call --
-  // zeCommandListAppendLaunchKernel *only* when
-  //     ZECALL is disabled, SYCL is enabled, GPU_KERNEL is enabled
-  //     and
-  //     no corresponding sycl record is present for the kernel launch captured here.
-
-  if (special_rec_data.sycl_rec_present == 0 && special_rec_data.zecall_disabled &&
-      SyclCollector::Instance().Enabled()) {  // generate special record only if no sycl rec
-                                              // (sycl_rec_present is 0) and sycl enabled and
-                                              // zecalls disabled and kernel is enabled.
-    pti_view_record_api special_rec;
-    special_rec._view_kind._view_kind = pti_view_kind::PTI_VIEW_RUNTIME_API;
-    // special_rec._name = "zeCommandListAppendLaunchKernel";
-    special_rec._start_timestamp = ApplyTimeShift(rec.api_start_time_, ts_shift);
-    special_rec._end_timestamp = ApplyTimeShift(rec.api_end_time_, ts_shift);
-    special_rec._thread_id = rec.tid_;
-    special_rec._process_id = rec.pid_;
-    special_rec._correlation_id = rec.cid_;
-    // special_rec._api_id = pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id;
-    special_rec._api_id = pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernel_id;
-    special_rec._api_group = pti_api_group_id::PTI_API_GROUP_HYBRID_SYCL_LEVELZERO;
-    if (external_collection_enabled) {
-      GenerateExternalCorrelationRecords(rec);  // use rec since only corrid is needed from it.
-    }
-
-    Instance().InsertRecord(special_rec, special_rec._thread_id);
-  }
-#endif
   // Update PCI and UUID info here
   GetDeviceId(record._pci_address, rec.pci_prop_);
   std::copy_n(rec.src_device_uuid, PTI_MAX_DEVICE_UUID_SIZE, record._device_uuid);
@@ -1416,10 +1361,6 @@ inline void ZeApiCallsCallback([[maybe_unused]] void* data,
                                [[maybe_unused]] ZeKernelCommandExecutionRecord& rec) {
   if (GetApiViewState(pti_view_kind::PTI_VIEW_DRIVER_API)) {
     ZeDriverEvent(data, rec);
-    // Assume zecalls are disabled unless we know it is not so.
-    SpecialCallsData special_rec_data = Instance().GetSpecialCallsData(rec.cid_);
-    special_rec_data.zecall_disabled = false;
-    Instance().SetSpecialCallsData(rec.cid_, special_rec_data);
   }
 }
 

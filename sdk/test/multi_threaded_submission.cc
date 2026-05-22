@@ -217,6 +217,9 @@ void EnableIndividualRuntimeApis(bool useClassApi = false, bool useAllGroups = f
     PTI_CHECK_SUCCESS(
         ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
                                 pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id));
+    PTI_CHECK_SUCCESS(
+        ptiViewEnableRuntimeApi(1, pti_api_group_id::PTI_API_GROUP_SYCL,
+                                pti_api_id_runtime_sycl::urEnqueueKernelLaunchWithArgsExp_id));
   }
 }
 

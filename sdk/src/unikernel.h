@@ -115,25 +115,6 @@ struct PidTidInfo {
   }
 };
 
-// clang-format off
-// Below table highlights when we will emit special record.  Special records are in api records with hybrid api_groups
-// PTI_VIEW_RUNTIME_API		PTI_VIEW_DEVICE_GPU_KERNEL	PTI_VIEW_DRIVER_API	Generate Special Hybrid Rec.
-//------------------------------------------------------------------------------------------------------------------------
-// on                                   on                              off                      if no sycl rec present:yes
-// off                                  on                              on                       no
-// on                                   on                              on                       no
-// on                                   off                             on                       no
-// off                                  off                             on                       no
-// off                                  on                              off                      no
-// on                                   off                             off                      no
-// off                                  off                             off                      no
-//------------------------------------------------------------------------------------------------------------------------
-// clang-format on
-struct SpecialCallsData {
-  uint32_t sycl_rec_present = 0;  // sycl runtime rec is not present.
-  bool zecall_disabled = true;    // zecalls disabled?
-};
-
 //
 // TODO -- refactor 2nd level callbacks so that callbacks are not bound to
 // ZeKernelCommandExecutionRecord but flexible to handle various smaller structures -- for now

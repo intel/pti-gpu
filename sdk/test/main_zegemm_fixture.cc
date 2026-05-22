@@ -42,7 +42,6 @@ constexpr size_t kPtiDeviceId = 0;  // run on first device
 constexpr float kExpectedHeuristicMaxRelativeTimeDifference = 2.f;
 
 uint64_t eid_ = 11;
-const uint64_t kCommandListAppendLaunchKernelId = 55;  // apiid of zeCommandListAppendLaunchKernel
 size_t requested_buffer_calls = 0;
 size_t rejected_buffer_calls = 0;  // Buffer requests that are called and rejected by the API
 size_t completed_buffer_calls = 0;
@@ -85,7 +84,7 @@ uint32_t synch_input_event_number = 0;
 [[maybe_unused]] uint32_t synchronization_record_number = 0;
 bool sycl_runtime_launch_seen = false;
 bool zecall_record_seen = false;
-bool external_corrid_special_record_seen = false;
+bool external_corrid_record_seen = false;
 uint32_t num_special_records = 0;
 uint32_t num_sycl_runtime_launch_records = 0;
 uint64_t corrid_in_special_record = 0;
@@ -609,7 +608,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     barrier_mem_ranges_api_name = nullptr;
     fence_api_name = nullptr;
     zecall_record_seen = false;
-    external_corrid_special_record_seen = false;
+    external_corrid_record_seen = false;
     num_special_records = 0;
     num_sycl_runtime_launch_records = 0;
     corrid_in_special_record = 0;
@@ -742,7 +741,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
         case pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION: {
           pti_view_record_external_correlation* aExtRec =
               reinterpret_cast<pti_view_record_external_correlation*>(ptr);
-          external_corrid_special_record_seen = true;
+          external_corrid_record_seen = true;
           if (!special_record_seen) external_corrid_in_ext_rec = aExtRec->_correlation_id;
           break;
         }
@@ -1088,7 +1087,7 @@ TEST_F(MainZeFixtureTest, AllSynchronizationRelated) {
   EXPECT_EQ(synchronization_record_cqueue_seen, true);
   // Since 0.15.1+ ExternalCorrelation records generated for both Sycl and Level-Zero runtime.
   if (sycl || zecalls) {
-    EXPECT_EQ(external_corrid_special_record_seen, true);
+    EXPECT_EQ(external_corrid_record_seen, true);
   }
 }
 
@@ -1096,12 +1095,18 @@ TEST_F(MainZeFixtureTest, SyclBasedAndZeBasedKernelLaunchesPresent) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   // Enable sycl and kernel view kinds only. Additionally run Sycl based launch kernel.
   EXPECT_EQ(RunGemm(false, true, false, true, true), 0);
-  EXPECT_EQ(special_record_seen, true);
-  EXPECT_EQ(kernel_launch_id, kCommandListAppendLaunchKernelId);  // zeCommandListAppendLaunchKernel
-  EXPECT_EQ(num_special_records, repeat_count);
+
+  // Special records feature removed - no longer generated
+  EXPECT_EQ(special_record_seen, false);
+  EXPECT_EQ(num_special_records, 0);
+
+  // SYCL runtime records still captured for SYCL-based kernel launches
   EXPECT_EQ(sycl_runtime_launch_seen, true);
   EXPECT_EQ(num_sycl_runtime_launch_records, repeat_count);
-  EXPECT_EQ(num_sycl_runtime_launch_records + num_special_records, kernel_view_record_count);
+
+  // Kernel view shows both SYCL-based and Ze-based launches
+  // But API records only captured for SYCL-based launches (zecalls disabled)
+  EXPECT_EQ(kernel_view_record_count, 2 * repeat_count);
 }
 
 // Zecalls Disabled, Sycl Enabled, no sycl api fires, gpu kernel enabled and fires
@@ -1115,22 +1120,16 @@ TEST_P(MainZeFixtureTest, SpecialRecordPresent) {
   // Polling, sycl, zecalls --- enabled/disabled
   EXPECT_EQ(RunGemm(with_polling, sycl, zecall, kernel, add_sycl, synch), 0);
   if (sycl == true && zecall == false && kernel == true) {
-    EXPECT_EQ(special_record_seen, true);
-    EXPECT_EQ(kernel_launch_id,
-              kCommandListAppendLaunchKernelId);  // zeCommandListAppendLaunchKernel
-    EXPECT_EQ(zecall_record_seen, false);
-    EXPECT_EQ(external_corrid_special_record_seen, true);
-    EXPECT_EQ(corrid_in_special_record, external_corrid_in_ext_rec);
-    EXPECT_GT(corrid_in_special_record, 0UL);
-    EXPECT_EQ(num_special_records, repeat_count);
+    EXPECT_EQ(special_record_seen, false);
+    EXPECT_EQ(zecall_record_seen, zecall);
   } else {
     EXPECT_EQ(special_record_seen, false);
     EXPECT_EQ(zecall_record_seen, zecall);
     // Since 0.15.1+ ExternalCorrelation records generated for both Sycl and Level-Zero runtime
     if (zecall || (sycl && add_sycl)) {
-      EXPECT_EQ(external_corrid_special_record_seen, true);
+      EXPECT_EQ(external_corrid_record_seen, true);
     } else {
-      EXPECT_EQ(external_corrid_special_record_seen, false);
+      EXPECT_EQ(external_corrid_record_seen, false);
       EXPECT_EQ(corrid_in_special_record, external_corrid_in_ext_rec);
       EXPECT_EQ(corrid_in_special_record, 0UL);
     }
