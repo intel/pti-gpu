@@ -12,6 +12,8 @@ import unidiff
 import argparse
 import shutil
 import glob
+from pathlib import Path
+from datetime import datetime
 
 def extract_test_case_output(cmake_root_path, test_case_name, scenario):
     # Construct the path to the expected output file within the "gold" folder
@@ -67,9 +69,7 @@ def contains_non_whitespace(path):
         return any(not ch.isspace() for ch in f.read())
 
 def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_prog, use_mpiexec=False, num_ranks=1, specific_test_case=None):
-    output_dir = cmake_root_path + "/build/results"
     is_python_test = test_case_name.find("python") != -1
-
     if platform.system() == "Windows":
         unitrace_exe = cmake_root_path + "/../../build/unitrace.exe"
         test_case = os.path.join(cmake_root_path, "build", test_case_name, f"{test_case_name}.exe").replace("\\", "/")
@@ -80,15 +80,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
 
     if is_python_test:
         test_case = test_case_name
-
-    # Ensure the output directory exists
-    os.makedirs(output_dir, exist_ok = True)
-
-    # Generate a unique output file name
-    test_output_name = specific_test_case if specific_test_case else os.path.basename(test_case)
-    output_file = f"output{scenarios}_{test_output_name}.txt".replace("--", "_").replace("-", "_").replace(" ","")
-    output_file_path = os.path.join(output_dir, output_file).replace("\\", "/")
-
+    
     # Check if Unitrace executable exists
     if not os.path.exists(unitrace_exe):
         print(f"[ERROR] Unitrace executable not found at {unitrace_exe}", file=sys.stderr)
@@ -98,7 +90,9 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
     if not os.path.exists(test_case):
         print(f"[ERROR] Test case executable not found at {test_case}", file=sys.stderr)
         return 1
-
+    
+    scenario_set = set(scenarios.split(" "))
+    is_result_dir = "--result-dir" in scenario_set
     # Prepare command here
     command = []
     
@@ -107,24 +101,50 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
         command.extend(["mpiexec", "-n", str(num_ranks)])
     
     command.append(unitrace_exe)
-    scenario_set = set(scenarios.split(" "))
+    
     for scenario in scenarios.split(" "):
-        command.append(scenario)
+        if scenario != "--result-dir":
+            command.append(scenario)
 
-    is_chrome_logging_present = False
-    if scenario.startswith("--chrome"):
-        is_chrome_logging_present = True
+    test_output_name = specific_test_case if specific_test_case else os.path.basename(test_case) #graph
+    output_dir = cmake_root_path + "/build/results"
+    
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok = True)
 
-    need_output_directory = False
-    if scenario in ["--chrome-call-logging", "--chrome-device-logging","--chrome-kernel-logging", "--chrome-sycl-logging", "--chrome-itt-logging"]:
-        need_output_directory = True
-
-    if need_output_directory:
-        command += ["--output-dir-path", output_dir]
-    elif scenario in ["-k", "-q"]:
-        command += ["-o", "metric"]
+    if is_result_dir:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        if platform.system() == "Windows":
+            # Windows has limit to MAX_PATH (260 characters)
+            output_result_dir = timestamp
+        else:
+            output_result_dir = f"output{scenarios}_{test_output_name}_{timestamp}".replace("--", "_").replace("-", "_").replace(" ","")
+        output_result_dir_path = os.path.join(output_dir, output_result_dir).replace("\\", "/")
+        os.makedirs(output_result_dir_path, exist_ok = True)
     else:
-        command += ["-o", output_file_path]
+        output_file = f"output{scenarios}_{test_output_name}.txt".replace("--", "_").replace("-", "_").replace(" ","") #output_k_result_dir_graph.txt
+        output_file_path = os.path.join(output_dir, output_file).replace("\\", "/")
+        
+    is_chrome_logging_present = False
+    if is_result_dir:
+        command += ["--result-dir", output_result_dir_path]
+        for scenario in scenarios.split(" "):
+            if scenario.startswith("--chrome"):
+                is_chrome_logging_present = True
+    else:
+        if scenario.startswith("--chrome"):
+            is_chrome_logging_present = True
+
+        need_output_directory = False
+        if scenario in ["--chrome-call-logging", "--chrome-device-logging","--chrome-kernel-logging", "--chrome-sycl-logging", "--chrome-itt-logging"]:
+            need_output_directory = True
+
+        if need_output_directory:
+            command += ["--output-dir-path", output_dir]
+        elif scenario in ["-k", "-q"]:
+            command += ["-o", "metric"]
+        else:
+            command += ["-o", output_file_path]
 
     command += [test_case] + args
 
@@ -142,89 +162,129 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
 
         print(f"[ERROR] Unitrace stderr output: {result.stderr}", file = sys.stderr)
         print(f"[ERROR] Unitrace stdout output: {result.stdout}", file = sys.stderr)
-
-        # Metric logs need to be moved to result folder
-        if scenario in ["-k", "-q"]:
-            if is_python_test and specific_test_case is not None:
-                test_case_path = os.path.join(cmake_root_path, "build", specific_test_case)
-            else:
-                test_case_path = os.path.join(cmake_root_path, "build", test_case_name)
-            # Find all files starting with "metric" in source directory
-            pattern = os.path.join(test_case_path, "metric*")
-            metric_files = glob.glob(pattern)
-            print(f"[INFO] Found metric files: {metric_files}", file = sys.stderr)
-            # Move each file to destination
-            for file_path in metric_files:
-                filename = os.path.basename(file_path)
-                destination_path = os.path.join(output_dir, filename)
-                shutil.move(file_path, destination_path)
-                os.rename(destination_path, output_dir + "/" + filename + "_" + output_file)
-                print(f"[INFO] Moved metric file {file_path} to {destination_path}", file = sys.stderr)
-
-        after_list_of_files = set(os.listdir(output_dir))
-        new_files = list(after_list_of_files - before_list_of_files)
-        # check if scenario is "chrome" logging
-        # then test needs to modify the file name to reflect right test case.
-        if is_chrome_logging_present:
-            min_no_of_lines = 4 # Metric files has initial few lines for headers etc..
-            print(f"[INFO] Chrome logging scenario detected, renaming output files to reflect test case name.", file = sys.stderr)
-            for idx, new_file in enumerate(new_files):
-                new_file = os.path.join(output_dir, new_file)
-                new_file_name = ""
-                if new_file.find("python") != -1 and new_file.find(".json") != -1:
-                    new_file_name = "_" + specific_test_case + ".json"
+        
+        if not is_result_dir:
+            # Metric logs need to be moved to result folder
+            if scenario in ["-k", "-q"]:
+                if is_python_test and specific_test_case is not None:
+                    test_case_path = os.path.join(cmake_root_path, "build", specific_test_case)
                 else:
-                    new_file_name += "_" +os.path.basename(new_file)
-                new_name = os.path.join(output_dir, "output") + scenarios.replace(" ","").replace("--", "_").replace("-", "_").replace(" ","") + new_file_name
-                try:
-                    os.rename(new_file, new_name)
-                except Exception as e:
-                    print(f"[ERROR] Occurred while renaming the output file: {e}", file = sys.stderr)
-                    return 1
-                new_files[idx] = os.path.basename(new_name)
-                print(f"[INFO] Renamed chrome logging output file to {new_name}", file = sys.stderr)
+                    test_case_path = os.path.join(cmake_root_path, "build", test_case_name)
+                # Find all files starting with "metric" in source directory
+                pattern = os.path.join(test_case_path, "metric*")
+                metric_files = glob.glob(pattern)
+                print(f"[INFO] Found metric files: {metric_files}", file = sys.stderr)
+                # Move each file to destination
+                for file_path in metric_files:
+                    filename = os.path.basename(file_path)
+                    destination_path = os.path.join(output_dir, filename)
+                    shutil.move(file_path, destination_path)
+                    os.rename(destination_path, output_dir + "/" + filename + "_" + output_file)
+                    print(f"[INFO] Moved metric file {file_path} to {destination_path}", file = sys.stderr)
+
+            after_list_of_files = set(os.listdir(output_dir))
+            new_files = list(after_list_of_files - before_list_of_files)
+            # check if scenario is "chrome" logging
+            # then test needs to modify the file name to reflect right test case.
+            if is_chrome_logging_present:
+                min_no_of_lines = 4 # Metric files has initial few lines for headers etc..
+                print(f"[INFO] Chrome logging scenario detected, renaming output files to reflect test case name.", file = sys.stderr)
+                for idx, new_file in enumerate(new_files):
+                    new_file = os.path.join(output_dir, new_file)
+                    new_file_name = ""
+                    if new_file.find("python") != -1 and new_file.find(".json") != -1:
+                        new_file_name = "_" + specific_test_case + ".json"
+                    else:
+                        new_file_name += "_" +os.path.basename(new_file)
+                    new_name = os.path.join(output_dir, "output") + scenarios.replace(" ","").replace("--", "_").replace("-", "_").replace(" ","") + new_file_name
+                    try:
+                        os.rename(new_file, new_name)
+                    except Exception as e:
+                        print(f"[ERROR] Occurred while renaming the output file: {e}", file = sys.stderr)
+                        return 1
+                    new_files[idx] = os.path.basename(new_name)
+                    print(f"[INFO] Renamed chrome logging output file to {new_name}", file = sys.stderr)
 
         # Check if the output file is generated
         output_files = []
-        for f in new_files:
-            result_file_pattern = f.split(".")
-            if (is_chrome_logging_present and "chrome" in result_file_pattern[0]
-                and (test_case_name.replace("/","_").split(".")[0] in result_file_pattern[0] or (specific_test_case is not None and specific_test_case in result_file_pattern[0]))
-               ):
-                output_files.append(f)
-            elif scenario in ["-k", "-q"] and f.endswith(output_file) and "metrics" in f:
-                output_files.append(f)
-            elif output_file.startswith(result_file_pattern[0]):
-                output_files.append(f)
-            if len(output_files) > 0 and not use_mpiexec:
-                break
+        if is_result_dir:
+            result_dir = Path(output_result_dir_path)
+            all_files = [str(f.relative_to(result_dir)) for f in result_dir.rglob("*") if f.is_file()]
+            for file in all_files:
+                print(f"[INFO] Found file: {file}")
+            
+            if is_chrome_logging_present:
+                output_files = [str(f.relative_to(result_dir)) for f in result_dir.rglob("chrome_trace.json")]
+                print(f"[INFO] Found chrome_trace.json files: {output_files}")
+            elif scenario in ["-k", "-q"]:
+                output_files = [str(f.relative_to(result_dir)) for f in result_dir.rglob("metrics_*")]
+            else:
+                file_patterns = [
+                    "host_timing.txt",
+                    "device_timing.txt", 
+                    "device_submission.txt",
+                    "trace.txt",
+                    "call_logging.txt",
+                    "device_timeline.txt",
+                    "ccl_summary_report.txt"
+                ]
+                output_files = [str(f.relative_to(result_dir)) 
+                                for pattern in file_patterns 
+                                for f in result_dir.rglob(pattern)]
+                print(f"[INFO] Found timing/trace files: {output_files}")
+        else:
+            for f in new_files:
+                result_file_pattern = f.split(".")
+                if (is_chrome_logging_present and "chrome" in result_file_pattern[0]
+                    and (test_case_name.replace("/","_").split(".")[0] in result_file_pattern[0] or (specific_test_case is not None and specific_test_case in result_file_pattern[0]))
+                ):
+                    output_files.append(f)
+                elif scenario in ["-k", "-q"] and f.endswith(output_file) and "metrics" in f:
+                    output_files.append(f)
+                elif output_file.startswith(result_file_pattern[0]):
+                    output_files.append(f)
+                if len(output_files) > 0 and not use_mpiexec:
+                    break
+
         if output_files:
             if use_mpiexec:
                 print(f"[INFO] MPI Output files generated: {output_files}")
             else:
                 print(f"[INFO] Output file '{output_files[0]}' generated successfully.")
         else:
-            print(f"[ERROR] Output file matching pattern '{output_file}' not found.", file = sys.stderr)
-            return 1  # Returning non-zero indicates failure
+            if not use_mpiexec:
+                if is_result_dir:
+                    print(f"[ERROR] Output file not found.", file = sys.stderr)
+                else:
+                    print(f"[ERROR] Output file matching pattern '{output_file}' not found.", file = sys.stderr)
+                return 1  # Returning non-zero indicates failure
+            return 0
 
         # Validating the test output
         # Check if the output file contains '[ERROR]'
         # TODO: we will keep output in the buffer
-        with open(os.path.join(output_dir, output_files[0]), "r") as outfile:
+        if is_result_dir:
+            output_file_full_path = os.path.join(output_result_dir_path, output_files[0])
+        else:
+            output_file_full_path = os.path.join(output_dir, output_files[0])
+        with open(output_file_full_path, "r") as outfile:
             output_content = outfile.read()
             if "[ERROR]" in output_content:
-                print(f"[ERROR] found in output file '{output_file}'.", file = sys.stderr)
+                print(f"[ERROR] found in output file '{output_file_full_path}'.", file = sys.stderr)
                 return 1  # Indicate failure due to ERROR in output
 
         if extra_test_prog != None:
             print("[INFO] Test has custom checker, going to use it for validation.", file = sys.stderr)
             # obtain list of generated files from unitrace stderr output
             full_path_output_files = []
-            err_lines = result.stderr.splitlines()
-            for line in err_lines:
-                i = line.find("is stored in")
-                if i > 0:
-                    full_path_output_files.append(line[i+13:].strip())
+            if is_result_dir:
+                full_path_output_files = [str(f) for f in result_dir.rglob("*") if f.is_file()]
+            else:
+                err_lines = result.stderr.splitlines()
+                for line in err_lines:
+                    i = line.find("is stored in")
+                    if i > 0:
+                        full_path_output_files.append(line[i+13:].strip()) 
             
             # execute provided test with list of files as arguments
             if extra_test_prog.endswith(".py"):
@@ -243,7 +303,8 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
         elif not scenario_set.isdisjoint(set(["-k", "-q"])):
             min_no_of_lines = 4 # Metric files has initial few lines for headers etc..
             for output_file in output_files:
-                with open(os.path.join(output_dir, output_file), 'r') as outfile:
+                root_dir = result_dir if is_result_dir else output_dir
+                with open(os.path.join(root_dir, output_file), 'r') as outfile:
                     # Check to make sure file has counter values generated.
                     if len(outfile.readlines()) <= min_no_of_lines:
                         print(f"[ERROR] Metric file '{output_file}' is not having counters present.")
@@ -301,30 +362,37 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                 for rank in ranks_list:
                     rank_output_file = None
                     for of in output_files:
-                        # Extract rank from filename before .txt extension
-                        if of.endswith('.txt'):
-                            # Get the part before .txt
-                            filename_without_ext = of[:-4]
-                            # Split by '.' and get the last part which should be the rank
-                            parts = filename_without_ext.split('.')
-                            if parts and parts[-1].isdigit() and int(parts[-1]) == rank:
+                        if is_result_dir:
+                            substr = f"rank_{rank}"
+                            if substr in of:
                                 rank_output_file = of
                                 break
+                        else:
+                            # Extract rank from filename before .txt extension
+                            if of.endswith('.txt'):
+                                # Get the part before .txt
+                                filename_without_ext = of[:-4]
+                                # Split by '.' and get the last part which should be the rank
+                                parts = filename_without_ext.split('.')
+                                if parts and parts[-1].isdigit() and int(parts[-1]) == rank:
+                                    rank_output_file = of
+                                    break
                     if rank_output_file is None:
-                        print(f"[ERROR] Output file for rank {rank} not found among generated files.", file = sys.stderr)
-                        all_passed = False
+                        if rank in ranks_sampled and device_sampled:
+                            print(f"[ERROR] Output file for rank {rank} not found among generated files.", file = sys.stderr)
+                            all_passed = False
                         continue
-
+                    root_dir = result_dir if is_result_dir else output_dir  
                     if rank in ranks_sampled and device_sampled:
                         # Call unidiff comparison
-                        comparison_result = call_unidiff(scenario_d_or_t, output_dir, rank_output_file, expected_output_file)
+                        comparison_result = call_unidiff(scenario_d_or_t, root_dir, rank_output_file, expected_output_file)
                         if comparison_result != 0:
                             print(f"[ERROR] Unidiff comparison failed for rank {rank}.", file = sys.stderr)
                             all_passed = False
                             break
                     else:
                         # check if rank_output_file is empty file or not
-                        output_file_with_path = os.path.join(output_dir, rank_output_file)
+                        output_file_with_path = os.path.join(root_dir, rank_output_file)
                          # check if file has any character in it (not space)
                         if contains_non_whitespace(output_file_with_path) == False:
                             print(f"[INFO] Output file for rank {rank} is empty as expected since it is not sampled.")
@@ -344,11 +412,11 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
             else:
                 gold_file_to_compare = specific_test_case if specific_test_case is not None else test_case_name
                 expected_output_file = extract_test_case_output(cmake_root_path, gold_file_to_compare, scenario_d_or_t)
-
-                output_file_with_pid = max(output_files, key = lambda f: os.path.getmtime(os.path.join(output_dir, f)))
+                root_dir = result_dir if is_result_dir else output_dir  
+                output_file_with_pid = max(output_files, key = lambda f: os.path.getmtime(os.path.join(root_dir, f)))
 
                 # Call unidiff comparison
-                comparison_result = call_unidiff(scenario_d_or_t, output_dir, output_file_with_pid, expected_output_file)
+                comparison_result = call_unidiff(scenario_d_or_t, root_dir, output_file_with_pid, expected_output_file)
                 if comparison_result != 0:
                     print(f"[ERROR] Unidiff comparison failed.", file = sys.stderr)
                     return 1

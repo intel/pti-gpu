@@ -40,6 +40,7 @@
 
 #include "ze_loader.h"
 #include "common_header.gen"
+#include "logger_factory.h"
 
 struct ZeMetricQueryPoolKey {
   ze_context_handle_t context_;
@@ -1327,7 +1328,6 @@ class ZeCollector {
  public: // Interface
 
   static ZeCollector* Create(
-      Logger *logger,
       CollectorOptions options,
       OnZeKernelFinishCallback kcallback = nullptr,
       OnZeFunctionFinishCallback fcallback = nullptr,
@@ -1336,8 +1336,6 @@ class ZeCollector {
     PTI_ASSERT(
         ZE_MAJOR_VERSION(version) >= 1 &&
         ZE_MINOR_VERSION(version) >= 2);
-
-    PTI_ASSERT(logger != nullptr);
 
     if (!SampleThisRank()) {
       return nullptr;
@@ -1375,7 +1373,7 @@ class ZeCollector {
     );
 
     ZeCollector* collector = new ZeCollector(
-        logger, options, kcallback, fcallback, callback_data, data_dir_name, reset_event_on_device, include_kernels_vec, exclude_kernels_vec);
+      options, kcallback, fcallback, callback_data, data_dir_name, reset_event_on_device, include_kernels_vec, exclude_kernels_vec);
 
     UniMemory::ExitIfOutOfMemory((void *)(collector));
 
@@ -1472,7 +1470,7 @@ class ZeCollector {
     return total_time;
   }
 
-  void PrintKernelsTable() const {
+  void PrintKernelsTable(std::shared_ptr<Logger> logger) const {
     uint64_t total_time = 0;
     std::vector<std::string> knames;
     size_t max_name_size = 0;
@@ -1508,7 +1506,7 @@ class ZeCollector {
       std::string(std::max(int(kTimeLength - sizeof("Average (ns)") + 1), 0), ' ') + "Average (ns), " +
       std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') + "Min (ns), " +
       std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') + "Max (ns)\n";
-      logger_->Log(str);
+      logger->Log(str);
       int i = 0;
       for (auto& it : sorted_list) {
         uint64_t call_count = it.second.call_count_;
@@ -1527,7 +1525,7 @@ class ZeCollector {
         std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
         std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
         std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
-        logger_->Log(str);
+        logger->Log(str);  
         i++;
       }
 
@@ -1535,7 +1533,7 @@ class ZeCollector {
       str = "\n\n=== Kernel Properties ===\n\n";
       str = str + std::string(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ') +
         "Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread\n";
-      logger_->Log(str);
+      logger->Log(str);
 
       i = -1;
       for (auto& it : sorted_list) {
@@ -1572,7 +1570,7 @@ class ZeCollector {
           str += std::string(sizeof("Register File Size Per Thread") - sizeof("unknown") + 1, ' ') +
                  "unknown\n";
         }
-        logger_->Log(str);
+        logger->Log(str);
       }
     }
 
@@ -1580,7 +1578,7 @@ class ZeCollector {
 
   }
 
-  void PrintSubmissionTable() const {
+  void PrintSubmissionTable(std::shared_ptr<Logger> logger) const {
     uint64_t total_submit_time = 0;
     uint64_t total_append_time = 0;
     uint64_t total_device_time = 0;
@@ -1622,8 +1620,8 @@ class ZeCollector {
              "Submit (ns),  Submit (%), " +
              std::string(std::max(int(kTimeLength - sizeof("Execute (ns)") + 1), 0), ' ') +
              "Execute (ns),  Execute (%)\n";
-
-      logger_->Log(str);
+     
+      logger->Log(str);
 
       int i = 0;
       for (auto& it : sorted_list) {
@@ -1645,7 +1643,7 @@ class ZeCollector {
                std::to_string(it.second.execute_time_) + ", " +
                std::string(std::max(int(sizeof("Execute (%)") - std::to_string(device_percent).length()), 0), ' ') +
                std::to_string(device_percent) + "\n";
-        logger_->Log(str);
+        logger->Log(str);
         i++;
       }
     }
@@ -1675,7 +1673,7 @@ class ZeCollector {
     return total_time;
   }
 
-  void PrintFunctionsTable() const {
+  void PrintFunctionsTable(std::shared_ptr<Logger> logger) const {
     global_host_time_stats_mutex_.lock();
     std::set<std::pair<uint32_t, ZeFunctionTime>, utils::Comparator> sorted_list(
       global_host_time_stats_->begin(), global_host_time_stats_->end());
@@ -1697,7 +1695,7 @@ class ZeCollector {
              "Average (ns), " + std::string(std::max(int(kTimeLength - sizeof("Min (ns)") + 1), 0), ' ') +
              "Min (ns), " + std::string(std::max(int(kTimeLength - sizeof("Max (ns)") + 1), 0), ' ') +
              "Max (ns)\n";
-      logger_->Log(str);
+      logger->Log(str);
       for (auto& stat : sorted_list) {
         const std::string function = get_symbol(API_TRACING_ID(stat.first));
         uint64_t time = stat.second.total_time_;
@@ -1714,8 +1712,7 @@ class ZeCollector {
               std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
               std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
               std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
-        logger_->Log(str);
-
+        logger->Log(str);
       }
     }
     global_host_time_stats_mutex_.unlock();
@@ -1837,7 +1834,6 @@ class ZeCollector {
  private: // Implementation
 
   ZeCollector(
-      Logger *logger,
       CollectorOptions options,
       OnZeKernelFinishCallback kcallback,
       OnZeFunctionFinishCallback fcallback,
@@ -1846,7 +1842,7 @@ class ZeCollector {
       bool reset_event_on_device,
       const std::vector<std::string>& include_kernels = {},
       const std::vector<std::string>& exclude_kernels = {})
-      : logger_(logger),
+      : logger_factory_(LoggerFactory::Create()),
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
@@ -1855,6 +1851,13 @@ class ZeCollector {
         include_kernels_(include_kernels),
         exclude_kernels_(exclude_kernels) {
     data_dir_name_ = data_dir_name;
+    // Create loggers using the factory
+    if (options_.call_logging) {
+      logger_ = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_CALL_LOGGING);
+    }
+    if (options_.device_timeline) {
+      logger_device_timeline_ = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_DEVICE_TIMELINE);
+    }
     EnumerateAndSetupDevices();
     InitializeKernelCommandProperties();
   }
@@ -2336,29 +2339,32 @@ class ZeCollector {
           dkit->second.insert({it->second.base_addr_, &(it->second)});
         }
       }
-
+      
+      // TODO: add optional argument to control whether to delete.
       for (auto& props : device_kprops) {
-        // kernel properties file path: data_dir/.kprops.<device_id>.<pid>.txt
-        std::string fpath = data_dir_name_ + "/.kprops."  + std::to_string(props.first) + "." + std::to_string(utils::GetPid()) + ".txt";
-        std::ofstream kpfs = std::ofstream(fpath, std::ios::out | std::ios::trunc);
+        std::shared_ptr<Logger> kpfs_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_KPROPS, props.first, true, true);
+        if (kpfs_logger == nullptr) {
+              std::cerr << "[ERROR] Failed to create kernel properties data file" << std::endl;
+              exit(-1);
+        }
         uint64_t prev_base = 0;
         for (auto it = props.second.crbegin(); it != props.second.crend(); it++) {
-          // quote kernel name which may contain ","
-          kpfs << "\"" << utils::Demangle(it->second->name_.c_str()) << "\"" << std::endl;
-          kpfs << std::to_string(it->second->base_addr_) << std::endl;
+          // quote kernel name which may contain "," 
+          kpfs_logger->Log("\"" + utils::Demangle(it->second->name_.c_str()) + "\"\n");
+          kpfs_logger->Log(std::to_string(it->second->base_addr_) + "\n");
           if (prev_base == 0) {
-            kpfs << std::to_string(it->second->size_) << std::endl;
+            kpfs_logger->Log(std::to_string(it->second->size_) + "\n");
           }
           else {
             size_t size = prev_base - it->second->base_addr_;
             if (size > it->second->size_) {
               size = it->second->size_;
             }
-            kpfs << std::to_string(size) << std::endl;
+            kpfs_logger->Log(std::to_string(size) + "\n");
           }
           prev_base = it->second->base_addr_;
         }
-        kpfs.close();
+        kpfs_logger->Flush();
       }
 
       kernel_command_properties_mutex_.unlock();
@@ -2394,21 +2400,22 @@ class ZeCollector {
       devices_mutex_.unlock_shared();
 
       for (auto& profiles : device_kprofiles) {
-        std::ofstream ouf;
-        // kernel instance time file path: <data_dir>/.ktime.<device_id>.<pid>.txt
-        std::string fpath = data_dir_name_ + "/.ktime."  + std::to_string(profiles.first) + "." + std::to_string(utils::GetPid()) + ".txt";
-        ouf = std::ofstream(fpath, std::ios::out | std::ios::trunc);
+        std::shared_ptr<Logger> ktime_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_KTIME, profiles.first, true, true);
+        if (ktime_logger == nullptr) {
+              std::cerr << "[ERROR] Failed to create kernel times data file" << std::endl;
+              exit(-1);
+        }
         for (auto& prof : profiles.second) {
           for (auto& ts : prof->timestamps_) {
             std::string kname = GetZeKernelCommandName(prof->kernel_command_id_, prof->group_count_, prof->mem_size_);
-            ouf << std::to_string(ts.subdevice_id) << std::endl;
-            ouf << std::to_string(prof->instance_id_) << std::endl;
-            ouf << std::to_string(ts.metric_start) << std::endl;
-            ouf << std::to_string(ts.metric_end) << std::endl;
-            ouf << kname << std::endl;
+            ktime_logger->Log(std::to_string(ts.subdevice_id) + "\n");
+            ktime_logger->Log(std::to_string(prof->instance_id_) + "\n");
+            ktime_logger->Log(std::to_string(ts.metric_start) + "\n");
+            ktime_logger->Log(std::to_string(ts.metric_end) + "\n");
+            ktime_logger->Log(kname + "\n");
           }
         }
-        ouf.close();
+        ktime_logger->Flush();
       }
 
       return;
@@ -2426,7 +2433,7 @@ class ZeCollector {
     // The metric data file path: <data_dir>/.metrics.<pid>.q
     // The format of each entry in the file is: device id (int32_t), size of kernel name (size_t), kernel name, instance (uin64_t), size of metric data (uint64_t), metric data
 
-    std::string fpath = data_dir_name_ + "/.metrics." + std::to_string(utils::GetPid()) + ".q";
+    std::string fpath = logger_factory_->GenerateLogFileName(LOGGER_TYPE_METRICS_QUERY_TEMP);
     std::ofstream mf(fpath, std::ios::binary);
 
     if (!mf) {
@@ -2490,32 +2497,8 @@ class ZeCollector {
 
 #else /* _WIN32 */
 
-    std::string logfile = logger_->GetLogFileName();
-    Logger *metric_logger = nullptr;
-    std::string filename;
-    if (logfile.empty()) {
-      metric_logger = logger_;  // output to stdout
-    }
-    else {
-      size_t pos = logfile.find_first_of('.');
-
-      if (pos == std::string::npos) {
-        filename = logfile;
-      } else {
-        filename = logfile.substr(0, pos);
-      }
-
-      filename = filename + ".metrics";
-
-      if (pos != std::string::npos) {
-        filename = filename + logfile.substr(pos);
-      }
-      metric_logger = new Logger(filename, true, true);
-      if (metric_logger == nullptr) {
-        std::cerr << "[ERROR] Failed to create metric data file" << std::endl;
-        exit(-1);
-      }
-    }
+    std::shared_ptr<Logger> metric_logger = nullptr;
+    
     while (1) {
       if (global_kernel_profiles_.empty()) {
         break;  // done
@@ -2550,7 +2533,17 @@ class ZeCollector {
           group = it2->second.metric_group_;
           metric_names = GetMetricNames(it2->second.metric_group_);
           PTI_ASSERT(!metric_names.empty());
-          metric_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
+
+          metric_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_METRICS_QUERY, did, true, true);
+          if (metric_logger == nullptr) {
+            std::cerr << "[ERROR] Failed to create metric query data file" << std::endl;
+            exit(-1);
+          }
+
+          if (logger_factory_->IsLegacy()) {
+            metric_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
+          }
+          
           std::string header("\nKernel,GlobalInstanceId,SubDeviceId");
           for (auto& metric : metric_names) {
             header += "," + metric;
@@ -2611,12 +2604,12 @@ class ZeCollector {
           std::cerr << "[WARNING] Not able to calculate metrics" << std::endl;
         }
         it = global_kernel_profiles_.erase(it);
+        metric_logger->Flush();
       }
     }
 
-    if (metric_logger != logger_) {
-      std::cerr << "[INFO] Kernel metrics are stored in " << filename << std::endl;
-      delete metric_logger; // close metric data file
+    if (logger_factory_->IsLegacy() && metric_logger->IsLogToFile()) {
+      std::cerr << "[INFO] Kernel metrics are stored in " << metric_logger->GetLogFileName() << std::endl;
     }
 #endif /* _WIN32 */
   }
@@ -2755,7 +2748,7 @@ class ZeCollector {
       std::to_string(command->submit_time_) + " (submit) " +
       std::to_string(kernel_start) + " (start) " +
       std::to_string(kernel_end) + " (end)\n";
-    logger_->Log(str);
+    logger_device_timeline_->Log(str);
   }
 
   inline void LogCommandCompleted(const ZeCommand *command, const ze_kernel_timestamp_result_t& timestamp, int tile) {
@@ -6083,7 +6076,9 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   }
 
  private: // Data
-  Logger *logger_ = nullptr;
+  LoggerFactory* logger_factory_;
+  std::shared_ptr<Logger> logger_;
+  std::shared_ptr<Logger> logger_device_timeline_;
   CollectorOptions options_;
   OnZeKernelFinishCallback kcallback_ = nullptr;
   OnZeFunctionFinishCallback fcallback_ = nullptr;

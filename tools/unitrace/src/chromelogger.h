@@ -24,6 +24,7 @@
 #include "unikernel.h"
 #include "unievent.h"
 #include "unimemory.h"
+#include "logger_factory.h"
 #include "utils_host.h"
 
 #include "common_header.gen"
@@ -72,7 +73,7 @@ std::string GetClKernelCommandName(uint64_t id);
 std::string GetZeDeviceName(ze_device_handle_t device);
 std::string GetZeEngineName(ze_device_handle_t device, uint32_t ordinal);
 
-static Logger* logger_ = nullptr;
+static std::shared_ptr<Logger> logger_ = nullptr;
 
 std::recursive_mutex logger_lock_; //lock to synchronize file write
 
@@ -1494,49 +1495,19 @@ thread_local ClTraceBuffer cl_thread_local_buffer_;
 
 class ChromeLogger {
   private:
-    TraceOptions options_;
-    bool filtering_on_ = true;
-    bool filter_in_ = false;  // --filter-in suggests only include/collect these kernel names in output (filter-out is reverse of this and excludes/drops these)
-    std::set<std::string> filter_strings_set_;
+    LoggerFactory* logger_factory_;
     std::string process_name_;
-    std::string chrome_trace_file_name_;
-    std::iostream::pos_type data_start_pos_;
     double process_start_time_;
 
-    ChromeLogger(const TraceOptions& options, const char* filename) : options_(options) {
+    ChromeLogger(const char* process_name)
+      : logger_factory_(LoggerFactory::Create())
+    {
       process_start_time_ = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
-      process_name_ = filename;
-      chrome_trace_file_name_ = TraceOptions::GetChromeTraceFileName(filename);
-      if (this->CheckOption(TRACE_OUTPUT_DIR_PATH)) {
-          std::string dir = utils::GetEnv("UNITRACE_TraceOutputDir");
-          chrome_trace_file_name_ = (dir + '/' + chrome_trace_file_name_);
+      process_name_ = process_name;
+      logger_ = logger_factory_->GetLogger(LOGGER_TYPE_CHROME_TRACE_UNITRACE, true, true);
+      if (!logger_) {
+        UniMemory::ExitIfOutOfMemory((void *)(logger_.get()));
       }
-
-      if (this->CheckOption(TRACE_KERNEL_NAME_FILTER)) {
-        if (this->CheckOption(TRACE_K_NAME_FILTER_IN)) {
-          filter_in_ = true;
-        }
-        std::string tmpString;
-        tmpString = utils::GetEnv("UNITRACE_TraceKernelString");
-        filter_strings_set_.insert(std::move(tmpString));
-      } else if (this->CheckOption(TRACE_K_NAME_FILTER_FILE)) {
-        if (this->CheckOption(TRACE_K_NAME_FILTER_IN)) {
-          filter_in_ = true;
-        }
-        std::string kernel_file =  utils::GetEnv("UNITRACE_TraceKernelFilePath");
-        std::ifstream kfile(kernel_file, std::ios::in);
-        PTI_ASSERT(kfile.fail() != 1 && kfile.eof() != 1);
-        while (!kfile.eof()) {
-          std::string tmpString;
-          kfile >> tmpString;
-          filter_strings_set_.insert(std::move(tmpString));
-        }
-      } else {
-        filtering_on_ = false;
-        filter_strings_set_.insert("ALL");
-      }
-      logger_ = new Logger(chrome_trace_file_name_.c_str(), true, true);
-      UniMemory::ExitIfOutOfMemory((void *)(logger_));
 
       logger_->Log("{ \"traceEvents\":[\n");
 
@@ -1555,8 +1526,7 @@ class ChromeLogger {
       }
 
       logger_->Log(str);
-      logger_->Flush();
-      data_start_pos_ = logger_->GetLogFilePosition();
+      logger_->SetEmptyPosition();
     }
 
   public:
@@ -1565,6 +1535,7 @@ class ChromeLogger {
 
     ~ChromeLogger() {
       if (logger_ != nullptr) {
+        std::string chrome_trace_file_name_ = logger_->GetLogFileName();
         logger_lock_.lock();
         if (trace_buffers_) {
           for (auto it = trace_buffers_->begin(); it != trace_buffers_->end();) {
@@ -1584,32 +1555,21 @@ class ChromeLogger {
 
         logger_lock_.unlock();
 
-        if (logger_->GetLogFilePosition() == data_start_pos_) {
-          // no data has been logged
-          // remove the log file, but close it first
-          delete logger_;
-          if (std::remove(chrome_trace_file_name_.c_str()) == 0) {
-            std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
-          } else {
-            std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ") in file " << chrome_trace_file_name_ << std::endl;
-          }
+        if (logger_->IsEmpty()) {
+          // no data has been logged 
+          std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
         } else {
           std::string str = "\n]\n}\n";
           logger_->Log(str);
-          delete logger_;
           std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
         }
       }
     }
 
-    static ChromeLogger* Create(const TraceOptions& options, const char* filename) {
-      ChromeLogger *chrome_logger  = new ChromeLogger(options, filename);
+    static ChromeLogger* Create(const char* process_name) {
+      ChromeLogger *chrome_logger  = new ChromeLogger(process_name);
       UniMemory::ExitIfOutOfMemory((void *)(chrome_logger));
       return chrome_logger;
-    }
-
-    bool CheckOption(uint32_t option) {
-      return options_.CheckFlag(option);
     }
 
     static void XptiLoggingCallback(EVENT_TYPE etype, const char *name, uint64_t start_ts, uint64_t end_ts) {

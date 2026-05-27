@@ -33,8 +33,17 @@ class Logger {
 
   ~Logger() {
     if (file_.is_open()) {
-      file_ << std::flush;
-      file_.close();
+      // Only flush and close if something was written
+      if (IsEmpty()) {
+        // If the file is empty, we can just close it without flushing
+        file_.close();
+        // Remove the empty log file
+        std::remove(log_file_name_.c_str());
+      }
+      else {
+        file_ << std::flush;
+        file_.close();
+      }
     }
   }
 
@@ -83,10 +92,29 @@ class Logger {
     return file_.tellp();
   }
 
+  void SetEmptyPosition() {
+    if (file_.is_open()) {
+      empty_pos_ = file_.tellp();
+    }
+  }
+
+  bool IsEmpty() {
+    if (file_.is_open()) {
+      return file_.tellp() == empty_pos_;
+    }
+    return true;
+  }
+
+  // Returns true if logging to file, false if logging to screen
+  bool IsLogToFile() const {
+    return file_.is_open();
+  }
+
  private:
   std::string log_file_name_;
   std::mutex lock_;
   std::ofstream file_;
+  std::iostream::pos_type empty_pos_ = 0;
   bool lazy_flush_;
   bool lock_free_;	// caller deal with concurrency?
 };

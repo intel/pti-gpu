@@ -3,7 +3,11 @@
         {
             "name": "default",
             "platform": ["Windows", "Linux"],
-            "scenarios": ["-c", "-h", "-d", "-t", "-s", "--chrome-call-logging --chrome-kernel-logging", "--chrome-device-logging", "-q"]
+            "scenarios": ["-c", "-h", "-d", "-t", "-s", "--chrome-call-logging --chrome-kernel-logging", "--chrome-device-logging", "-q",
+						  	"-c --result-dir", "-h --result-dir", "-d --result-dir", "-t --result-dir",
+                         	"-s --result-dir", "--chrome-call-logging --chrome-kernel-logging --result-dir",
+                            "--chrome-device-logging --result-dir", "-q --result-dir"]
+
         },
     "test_configuration": [
         {
@@ -83,9 +87,19 @@
             "scenarios": ["-d --ranks-to-sample 0,2"]
         },
         {
+            "name": "mpi_test_4_ranks_filter_0_2",
+            "platform": ["Linux"],
+            "scenarios": ["-d --ranks-to-sample 0,2", "-d --ranks-to-sample 0,2 --result-dir"]
+        },
+        {
             "name": "mpi_test_1_rank_sample_device_0",
             "platform": ["Linux"],
             "scenarios": ["-d --devices-to-sample 0"]
+        },
+        {
+            "name": "mpi_test_1_rank_sample_device_0",
+            "platform": ["Linux"],
+            "scenarios": ["-d --devices-to-sample 0", "-d --devices-to-sample 0 --result-dir"]
         },
         {
             "name": "mpi_test_1_rank_sample_device_256",

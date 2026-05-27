@@ -30,6 +30,7 @@
 #include "utils.h"
 #include "utils_ze.h"
 #include "pti_assert.h"
+#include "logger_factory.h"
 #include "unicontrol.h"
 #include <inttypes.h>
 
@@ -210,10 +211,6 @@ class ZeMetricProfiler {
   ~ZeMetricProfiler() {
     StopProfilingMetrics();
     ComputeMetricsSampled();
-    delete logger_;
-    if (!log_name_.empty()) {
-      std::cerr << "[INFO] Device metrics are stored in " << log_name_ << std::endl;
-    }
   }
 
   ZeMetricProfiler(const ZeMetricProfiler& that) = delete;
@@ -308,42 +305,15 @@ class ZeMetricProfiler {
       }
     }
 
-    // derive computed metrics file name from the log file name if "-o" option is present, otherwise output to stdout
-    std::string  log_file_name = utils::GetEnv("UNITRACE_LogFilename");
-    Logger *metrics_logger = nullptr;
-    std::string computed_metrics_file_name;
-    if (log_file_name.empty()) {
-      metrics_logger = new Logger(log_file_name);  // output to stdout
-    }
-    else {
-      size_t pos = log_file_name.find_first_of('.');
-
-      if (pos == std::string::npos) {
-        computed_metrics_file_name = log_file_name;
-      } else {
-        computed_metrics_file_name = log_file_name.substr(0, pos);
-      }
-
-      computed_metrics_file_name = computed_metrics_file_name + ".metrics." + std::to_string(pid);      // embed the target process id in the final data file
-
-      std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-      if (!rank.empty()) {
-        computed_metrics_file_name = computed_metrics_file_name + "." + rank;
-      }
-
-      if (pos != std::string::npos) {
-        computed_metrics_file_name = computed_metrics_file_name + log_file_name.substr(pos);
-      }
-
-      metrics_logger = new Logger(computed_metrics_file_name, true, true);
-      if (metrics_logger == nullptr) {
-        std::cerr << "[ERROR] Failed to create metric data file" << std::endl;
-      }
+    LoggerFactory* logger_factory = LoggerFactory::Create();
+    std::pair<std::string, std::string> metrics_files = logger_factory->SearchRawMetricFiles(pid);
+    std::string metrics_file_name = metrics_files.first;
+    std::shared_ptr<Logger> metrics_logger = std::make_shared<Logger>(metrics_files.second);
+    if (metrics_logger == nullptr) {
+      std::cerr << "[ERROR] Failed to create metric data file" << std::endl;
     }
 
     // raw metrics data is stored in ".metrics.<pid>.q" in the folder stored in UNITRACE_DataDir
-    std::string data_dir = utils::GetEnv("UNITRACE_DataDir");
-    std::string metrics_file_name = data_dir + "/.metrics." + std::to_string(pid) + ".q";
     std::ifstream mf(metrics_file_name, std::ios::binary);
     if (!mf) {
       std::cerr << "[ERROR] Could not open the metric data file" << std::endl;
@@ -396,7 +366,11 @@ class ZeMetricProfiler {
         group = groups[device];
         metric_names = GetMetricNames(groups[device]);
         PTI_ASSERT(!metric_names.empty());
-        metrics_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
+
+        if (logger_factory->IsLegacy()) {
+           metrics_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
+        }
+       
         std::string header("\nKernel,GlobalInstanceId,SubDeviceId");
         for (auto& metric : metric_names) {
           header += "," + metric;
@@ -450,10 +424,9 @@ class ZeMetricProfiler {
       }
     }
 
-    if (!log_file_name.empty()) {
-      std::cerr << "[INFO] Kernel metrics are stored in " << computed_metrics_file_name << std::endl;
+    if (logger_factory->IsLegacy() && !metrics_logger->GetLogFileName().empty()) {
+      std::cerr << "[INFO] Kernel metrics are stored in " << metrics_logger->GetLogFileName() << std::endl;
     }
-    delete metrics_logger; // close metric data file
   }
 #endif /* _WIN32 */
 
@@ -462,37 +435,10 @@ class ZeMetricProfiler {
 
   ZeMetricProfiler(uint32_t app_pid, char *dir, std::string& logfile, bool idle_sampling, std::string &devices_to_sample) {
     data_dir_name_ = std::string(dir);
-    if (!logfile.empty()) {
-      size_t pos = logfile.find_first_of('.');
-
-      std::string filename;
-      if (pos == std::string::npos) {
-        filename = logfile;
-      } else {
-        filename = logfile.substr(0, pos);
-      }
-
-      filename = filename + ".metrics." + std::to_string(app_pid);
-
-      std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-      if (!rank.empty()) {
-        filename = filename + "." + rank;
-      }
-
-      if (pos != std::string::npos) {
-        filename = filename + logfile.substr(pos);
-      }
-
-      log_name_ = std::move(filename);
-    }
-    else {
-      log_name_ = logfile;
-    }
-
+    
     idle_sampling_ = idle_sampling;
-
-    logger_ = new Logger(log_name_, true, true);
-
+    logger_factory_ = LoggerFactory::Create(app_pid);
+    
     GetZeDevicesStringToSet(devices_to_sample_, devices_to_sample);
 
     EnumerateDevices(app_pid, dir);
@@ -596,7 +542,7 @@ class ZeMetricProfiler {
         desc->profiling_thread_ = nullptr;
         desc->profiling_state_.store(PROFILER_DISABLED, std::memory_order_release);
 
-        desc->metric_file_name_ = std::string(dir) + "/." + std::to_string(global_dev_cnt) + "." + metric_group + "." + std::to_string(utils::GetPid()) + ".t";
+        desc->metric_file_name_ = logger_factory_->GenerateLogFileName(LOGGER_TYPE_METRICS_SAMPLING_TEMP, global_dev_cnt);
 
         desc->metric_file_stream_ = std::ofstream(desc->metric_file_name_, std::ios::out | std::ios::trunc | std::ios::binary);
 
@@ -715,52 +661,54 @@ class ZeMetricProfiler {
     auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
 
+    std::shared_ptr<Logger> metric_logger = nullptr;
+
     for (auto [handle, device] : device_descriptors_) {
       if (device->parent_device_ != nullptr) {
         // subdevice
         continue;
       }
 
+      metric_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_METRICS_SAMPLING, device->device_id_, true, true);
       if (device->stall_sampling_) {
         std::map<uint64_t, std::pair<std::string, size_t>> kprops;
         size_t max_kname_size = 0;
         // enumerate all kernel property files
-        for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir_name_))) {
+        std::vector<std::string> kprops_file_paths = logger_factory_->SearchFilesByType(LOGGER_TYPE_KPROPS, device->device_id_);
+        for (const auto& kprop_path: kprops_file_paths) {
           // kernel properties file path: <data_dir>/.kprops.<device_id>.<pid>.txt
-          if (e.path().filename().string().find(".kprops." + std::to_string(device->device_id_)) == 0) {
-            std::ifstream kpf = std::ifstream(e.path());
-            if (!kpf.is_open()) {
-              continue;
-            }
-
-            while (!kpf.eof()) {
-              std::string kname;
-              std::string line;
-              size_t size;
-              uint64_t base_addr;
-
-              std::getline(kpf, kname);
-              if (kpf.eof()) {
-                break;
-              }
-
-              std::getline(kpf, line);
-              if (kpf.eof()) {
-                break;
-              }
-              base_addr = std::strtol(line.c_str(), nullptr, 0);
-
-              line.clear();
-              std::getline(kpf, line);
-              size = std::strtol(line.c_str(), nullptr, 0);
-
-              if (kname.size() > max_kname_size) {
-                max_kname_size = kname.size();
-              }
-              kprops.insert({base_addr, {std::move(kname), size}});
-            }
-            kpf.close();
+          std::ifstream kpf = std::ifstream(kprop_path);
+          if (!kpf.is_open()) {
+            continue;
           }
+
+          while (!kpf.eof()) {
+            std::string kname;
+            std::string line;
+            size_t size;
+            uint64_t base_addr;
+
+            std::getline(kpf, kname);
+            if (kpf.eof()) {
+              break;
+            }
+
+            std::getline(kpf, line);
+            if (kpf.eof()) {
+              break;
+            }
+            base_addr = std::strtol(line.c_str(), nullptr, 0);
+
+            line.clear();
+            std::getline(kpf, line);
+            size = std::strtol(line.c_str(), nullptr, 0);
+
+            if (kname.size() > max_kname_size) {
+              max_kname_size = kname.size();
+            }
+            kprops.insert({base_addr, {std::move(kname), size}});
+          }
+          kpf.close();
         }
         if (kprops.size() == 0) {
           continue;
@@ -875,14 +823,17 @@ class ZeMetricProfiler {
           continue;
         }
 
-        std::string header("\n=== Device #");
-
-        header += std::to_string(device->device_id_) + " Metrics ===\n\n";
+        std::string header;
+        if (logger_factory_->IsLegacy()) {
+          header = "\n=== Device #";
+          header += std::to_string(device->device_id_) + " Metrics ===\n\n";
+        }
+        
         int field_sizes[11];
         field_sizes[0] = max_kname_size;
         field_sizes[1] = std::max(sizeof("0x00000000") - 1, metric_list[0].size());
         header += std::string(std::max(int(field_sizes[0] + 1 - sizeof("Kernel")), 0), ' ') + "Kernel, ";
-        logger_->Log(header);  // in case the kernel name is too long
+        metric_logger->Log(header);  // in case the kernel name is too long 
         header = std::string(std::max(int(field_sizes[1] - metric_list[0].length()), 0), ' ') + metric_list[0];
         for (size_t i = 1; i <  metric_list.size(); i++) {
           field_sizes[i + 1] = metric_list[i].size();
@@ -890,7 +841,7 @@ class ZeMetricProfiler {
         }
 
         header += "\n";
-        logger_->Log(header);
+        metric_logger->Log(header);
 
         for (auto [ip, stall] : eustalls) {
           for (auto rit = kprops.crbegin(); rit != kprops.crend(); ++rit) {
@@ -901,7 +852,7 @@ class ZeMetricProfiler {
               snprintf(offset, sizeof(offset), "%" PRIx64, (ip - rit->first));
               line = std::string(std::max(int(field_sizes[0] - rit->second.first.length()), 0), ' ') +
                      rit->second.first + ", ";
-              logger_->Log(line);
+              metric_logger->Log(line);
               line = std::string(std::max(int(field_sizes[1] - std::string(offset).length()), 0), ' ') +
                      std::string(offset) + ", ";
               // the last stall type is processed after this loop
@@ -912,7 +863,7 @@ class ZeMetricProfiler {
               // do not forget the last stall type
               line += std::string(std::max(int(field_sizes[metric_list.size() - 2] - std::to_string(stall[metric_list.size() - 2]).length()), 0), ' ') +
                       std::to_string(stall[metric_list.size() - 2]) + "\n";
-              logger_->Log(line);
+              metric_logger->Log(line);
               break;
             }
           }
@@ -925,74 +876,72 @@ class ZeMetricProfiler {
         double metric_ns_per_cycle = (static_cast<double>(NSEC_IN_SEC) / static_cast<double>(device->metric_timer_frequency_));
 
         // enumerate all kernel time files
-        for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir_name_))) {
-          // kernel properties file path: <data_dir>/.ktime.<device_id>.<pid>.txt
-          if (e.path().filename().string().find(".ktime." + std::to_string(device->device_id_)) == 0) {
-            std::ifstream kf = std::ifstream(e.path());
-            if (!kf.is_open()) {
-              continue;
-            }
-
-            while (!kf.eof()) {
-              ZeKernelInfo info;
-              std::string line;
-
-              std::getline(kf, line);
-              if (kf.eof()) {
-                break;
-              }
-              info.subdevice_id = std::strtol(line.c_str(), nullptr, 0);
-              line.clear();
-              std::getline(kf, line);
-              if (kf.eof()) {
-                break;
-              }
-              info.global_instance_id = std::strtoll(line.c_str(), nullptr, 0);
-              if (info.global_instance_id > max_global_instance_id) {
-                max_global_instance_id = info.global_instance_id;
-              }
-              line.clear();
-
-              std::getline(kf, line);
-              if (kf.eof()) {
-                break;
-              }
-              info.metric_start = std::strtoll(line.c_str(), nullptr, 0);
-              line.clear();
-
-              std::getline(kf, line);
-              if (kf.eof()) {
-                break;
-              }
-              info.metric_end = std::strtoll(line.c_str(), nullptr, 0);
-
-              uint64_t kstart;
-              uint64_t kend;
-              uint64_t elapsed;
-
-              kstart = info.metric_start & device->device_timer_mask_;
-              kstart = static_cast<double>(kstart) * device_ns_per_cycle;
-
-              kend = info.metric_end & device->device_timer_mask_;
-              kend = static_cast<double>(kend) * device_ns_per_cycle;
-
-              while (kend <= kstart) {
-                kend += static_cast<double>(device->device_timer_mask_ + 1UL) * device_ns_per_cycle;
-              }
-              elapsed = kend - kstart;
-
-              info.metric_start = info.metric_start & device->metric_timer_mask_;
-              info.metric_start = static_cast<double>(info.metric_start) * metric_ns_per_cycle;
-
-              info.metric_end = info.metric_start + elapsed;
-
-              std::getline(kf, info.kernel_name);
-              if ((info.metric_start != 0) && (info.metric_end != 0) && (!info.kernel_name.empty())) {
-                kinfo.push_back(std::move(info));
-              }
-            }
-            kf.close();
+        std::vector<std::string> ktime_file_paths = logger_factory_->SearchFilesByType(LOGGER_TYPE_KTIME, device->device_id_);
+        for (const auto& ktime_path: ktime_file_paths) {
+          std::ifstream kf = std::ifstream(ktime_path);
+          if (!kf.is_open()) {
+            continue;
           }
+
+          while (!kf.eof()) {
+            ZeKernelInfo info;
+            std::string line;
+
+            std::getline(kf, line);
+            if (kf.eof()) {
+              break;
+            }
+            info.subdevice_id = std::strtol(line.c_str(), nullptr, 0);
+            line.clear();
+            std::getline(kf, line);
+            if (kf.eof()) {
+              break;
+            }
+            info.global_instance_id = std::strtoll(line.c_str(), nullptr, 0);
+            if (info.global_instance_id > max_global_instance_id) {
+              max_global_instance_id = info.global_instance_id;
+            }
+            line.clear();
+
+            std::getline(kf, line);
+            if (kf.eof()) {
+              break;
+            }
+            info.metric_start = std::strtoll(line.c_str(), nullptr, 0);
+            line.clear();
+
+            std::getline(kf, line);
+            if (kf.eof()) {
+              break;
+            }
+            info.metric_end = std::strtoll(line.c_str(), nullptr, 0);
+            
+            uint64_t kstart;
+            uint64_t kend;
+            uint64_t elapsed;
+
+            kstart = info.metric_start & device->device_timer_mask_;
+            kstart = static_cast<double>(kstart) * device_ns_per_cycle;
+
+            kend = info.metric_end & device->device_timer_mask_;
+            kend = static_cast<double>(kend) * device_ns_per_cycle;
+
+            while (kend <= kstart) {
+              kend += static_cast<double>(device->device_timer_mask_ + 1UL) * device_ns_per_cycle;
+            }
+            elapsed = kend - kstart;
+
+            info.metric_start = info.metric_start & device->metric_timer_mask_;
+            info.metric_start = static_cast<double>(info.metric_start) * metric_ns_per_cycle;
+
+            info.metric_end = info.metric_start + elapsed;
+
+            std::getline(kf, info.kernel_name);
+            if ((info.metric_start != 0) && (info.metric_end != 0) && (!info.kernel_name.empty())) {
+              kinfo.push_back(std::move(info));
+            }
+          }
+          kf.close();
         }
 
         if (kinfo.empty()) {
@@ -1017,10 +966,12 @@ class ZeMetricProfiler {
           continue;
         }
 
-        std::string header("\n=== Device #");
-
-        header += std::to_string(device->device_id_) + " Metrics ===\n";
-        logger_->Log(header);
+        std::string header;
+        if (logger_factory_->IsLegacy()) {
+          header = "\n=== Device #";
+          header += std::to_string(device->device_id_) + " Metrics ===\n";
+          metric_logger->Log(header);
+        }
 
         header = "\nKernel, GlobalInstanceId";
         for (size_t i = 0; i <  metric_list.size(); i++) {
@@ -1028,7 +979,7 @@ class ZeMetricProfiler {
         }
 
         header += "\n";
-        logger_->Log(header);
+        metric_logger->Log(header);
 
         uint64_t dummy_global_instance_id = max_global_instance_id + min_dummy_instance_id;  // for samples that do not belong to any kernel
 
@@ -1098,14 +1049,14 @@ class ZeMetricProfiler {
                 cur_sampling_ts = ts;
                 if ((ts >= kit->metric_start) && (ts <= kit->metric_end)) {
                   if (idle) {
-                    logger_->Log("\n");  // separate from samples that do not belong to any kernels/commands
+                    metric_logger->Log("\n");	// separate from samples that do not belong to any kernels/commands
                     idle = false;
                   }
 
                   // belong to this kernel
                   kernelsampled = true;
                   str = kit->kernel_name + ", ";
-                  logger_->Log(str);  // in case the kernel name is too long
+                  metric_logger->Log(str);	// in case the kernel name is too long
                   str = std::to_string(kit->global_instance_id);
                   for (size_t k = 0; k < metric_list.size(); k++) {
                     str += ", ";
@@ -1117,13 +1068,13 @@ class ZeMetricProfiler {
                     }
                   }
                   str += "\n";
-                  logger_->Log(str);
+                  metric_logger->Log(str);
                 }
                 else {
                   if (ts > kit->metric_end) {
                     if (kernelsampled) {
-                      logger_->Log("\n");
-                      kernelsampled = false;  // reset for next kernel
+                      metric_logger->Log("\n");
+                      kernelsampled = false;	// reset for next kernel
                     }
                     kit++;  // move to next kernel
                     dummy_global_instance_id++;
@@ -1141,7 +1092,7 @@ class ZeMetricProfiler {
                       else {
                         str = "\"NoKernel\", ";
                       }
-                      logger_->Log(str);  // in case the kernel name is too long
+                      metric_logger->Log(str);	// in case the kernel name is too long
                       str = std::to_string(dummy_global_instance_id);
                       for (size_t k = 0; k < metric_list.size(); k++) {
                         str += ", ";
@@ -1153,7 +1104,7 @@ class ZeMetricProfiler {
                         }
                       }
                       str += "\n";
-                      logger_->Log(str);
+                      metric_logger->Log(str);
                       idle = true;
                     }
                   }
@@ -1165,8 +1116,12 @@ class ZeMetricProfiler {
         }
         inf.close();
       }
+      metric_logger->Flush();
     }
     free (raw_metrics);
+    if (logger_factory_->IsLegacy() && !metric_logger->GetLogFileName().empty()) {
+      std::cerr << "[INFO] Device metrics are stored in " << metric_logger->GetLogFileName() << std::endl;
+    }
   }
 
   static std::vector<std::string> GetMetricNames(zet_metric_group_handle_t group) {
@@ -1409,10 +1364,8 @@ class ZeMetricProfiler {
   std::vector<ze_context_handle_t> metric_contexts_;
   std::map<ze_device_handle_t, ZeDeviceDescriptor *> device_descriptors_;
   std::string data_dir_name_;
-  Logger* logger_;
-  std::string log_name_;
+  LoggerFactory* logger_factory_;
   bool idle_sampling_;
 };
 
 #endif // PTI_TOOLS_UNITRACE_LEVEL_ZERO_METRICS_H_
-

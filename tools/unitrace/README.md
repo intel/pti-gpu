@@ -10,7 +10,7 @@ Intel(R) GPU applications.
 - Linux
 - Windows
 - Intel(R) oneAPI Base Toolkits
-- Intel(R) GPUs including Intel(R) Data Center GPU Max Series
+- Intel(R) GPUs
 
 ## Requirements
 
@@ -174,7 +174,8 @@ The options can be one or more of the following:
 --output [-o] <filename>                      Output profiling result to file
 --conditional-collection                      Enable conditional collection. This option is deprecated. Use --start-paused instead
 --start-paused                                Start the tool with tracing and profiling paused
---output-dir-path <path>                      Output directory path for result files
+--output-dir-path <path>                      Output result to a flat directory
+--result-dir <path>                           Output result to a hierarchical directory
 --metric-query [-q]                           Query hardware metrics for each kernel instance (Level Zero only)
 --metric-sampling [-k]                        Sample hardware performance metrics for each kernel instance in time-based mode
 --group [-g] <metric-group>                   Hardware metric group (ComputeBasic by default)
@@ -194,9 +195,9 @@ The options can be one or more of the following:
 --resume <session>                            Resume session <session>. The argument <session> must be the same session named with --session option
 --stop <session>                              Stop session <session>. The argument <session> must be the same session named with --session option
 --chrome-kmd-logging <script>                 Trace OS/KMD activities. The argument <script> file defines the OS kernel or device driver activities to trace
---include-kernels <kernel-filters>            Include kernels with names containing any of the kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings.
+--include-kernels <kernel-filters>            Include kernels with names containing any of the kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings
 --include-kernels-file <kernel-filter-file>   Include kernels with names containing any of the kernel filter strings in the <kernel-filter-file>.
---exclude-kernels <kernel-filters>            Exclude kernels with names containing any of the kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings.
+--exclude-kernels <kernel-filters>            Exclude kernels with names containing any of the kernel filter strings. The argument <kernel-filters> is a comma-separated list of strings
 --exclude-kernels-file <kernel-filter-file>   Exclude kernels with names containing any of the kernel filter strings in the <kernel-filter-file>.
 --chrome-kmd-logging <script>                 Trace OS/KMD activities. The argument <script> file defines the OS kernel or device driver activities to trace
 --version                                     Print version
@@ -457,7 +458,7 @@ The **tid** is the kernel thread identifier; the **event** is the name of the ev
 
 The **data** is optional. If it is present, it will be treated as a string argument of the **event** in the trace file. As an example, the [script](/tools/unitrace/examples/kmdprobes/probes_extra.bt) shows extra timestamp data of a probe.
 
-The trace is stored in file **oskmd.0.json**.
+The trace is stored in file **oskmd.json**.
 
 The **--chrome-kmd-logging** can be used together with other options, for example, **--chrome-kernel-logging**, to trace user space and kernel space events at the same time, for example:
 
@@ -466,28 +467,72 @@ The **--chrome-kmd-logging** can be used together with other options, for exampl
      ... ...
 
      [INFO] Timeline is stored in testapp.1092793.json
-     [INFO] KMD profiling data are stored in oskmd.0.json
+     [INFO] KMD profiling data are stored in oskmd.json
     ```
 
 To view events in both the user space and kernel space, you need to merge them into a single trace: 
 
     ```sh
-     python mergetrace.py -o output.json testapp.1092793.json oskmd.0.json
+     python mergetrace.py -o output.json testapp.1092793.json oskmd.json
     ```
  
 ![KMD Logging!](/tools/unitrace/doc/images/kmd-logging.png)
 
 ### Location of Output
 
-By default, all output profile data are written to files in the current working directory. You can use the **--output-dir-path** option to specify a different location:
+By default, the host and device profile data are printed to the standard output, and if one or more of **--chrome-** options are present, the tracing data is written to a .json file in the current working directory.
 
+Following flags can be used to control output destination:
+
+#### Redirect Standard Output to File (--output or -o)
+You can use the **--output [-o]** option to redirect the profiling data output to a file instead of the standard output, for example:
+```sh
+unitrace -d -o myapp_device_timing myapp
 ```
+The device timing summary is written to file **myapp_device_timing.<pid>** instead of the standard output.
+
+#### Output .JSON Tracing Data to A Flat Directory (--output-dir-path)
+You can use the **--output-dir-path** option to specify a directory for the .json output file, for example:
+
+```sh
 unitrace --chrome-kernel-logging --output-dir-path /tmp/unitrace-result myapp
 ```
 
-The output profile data are written to files in **/tmp/unitrace-result**.
+The output .json trace file is written to **/tmp/unitrace-result** instead of the current working directory.
 
-This option is especially useful when the application is a distributed workload.
+#### Output All Result Data to A Hierarchical Directory (--result-dir)
+The **--result-dir** option creates a new directory if it does not exist and stores all profiling data files in the directory in a hierarchical manner.
+
+> [!NOTE]
+> If the given directory already exists and the directory is not empty, the new output files will be mixed with the existing files. To avoid this, please specify a new directory or make sure the exisitng directory is empty.
+
+The output files are organized in a hierarchical manner with a sub-directory for each unitrace launcher and a sub-directory for each application process. The sub-directory is named with the pattern of **\<appname\>.\<pid\>**. For example, if the application name is **myapp** and the process id is 12345, the sub-directory is **myapp.12345**. This layout ensures that the output files are well organized and not mixed up.
+
+> [!NOTE]
+> The sub-directoy name may have a prefix of "rank_\<rank\>." if the application is an MPI application, where \<rank\> is the MPI rank number. For example, if the process with pid 12345 is rank 0, the sub-directory name is **rank_0.myapp.12345**.
+
+
+Different profiling data is stored in different files. The table below shows the file name corresponding to the command line option(s):
+
+| Options | File Name |
+|---------------------|-----------|
+| --chrome-*-logging (except --chrome-kmd-logging) | chrome_trace.json |
+| -h | host_timing.txt |
+| -d | device_timing.txt |
+| -s | device_submission.txt |
+| -c | call_logging.txt |
+| --ccl-summary-report | ccl_summary_report.txt |
+| -t | device_timeline.txt |
+| -k/-q/--stall-sampling | metrics_<device_id>.csv |
+| --chrome-kmd-logging | oskmd.json |
+
+> [!NOTE]
+> Metrics data files are stored under the application's process sub-directoy when query mode metric profiling is used, and under the unitrace launcher sub-directory when time-based or stall sampling mode metric profiling is used.
+
+A metadata file is created under the unitrace launcher sub-directory with the name **run_config.json**, this file contains the configuration of the unitrace run, including the options used and the command line of the application.
+
+> [!NOTE]
+> The **--result-dir** option cannot be used together with **--output-dir-path** or **--output** option.
 
 ### Hardware Performance Metrics
 

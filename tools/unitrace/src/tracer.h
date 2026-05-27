@@ -36,6 +36,7 @@
 #include "chromelogger.h"
 #include "unimemory.h"
 #include "ze_loader.h"
+#include "logger_factory.h"
 
 static std::string GetChromeTraceFileName(void) {
 #ifdef _WIN32
@@ -193,7 +194,7 @@ class UniTracer {
         cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
 
         if (cl_cpu_device != nullptr) {
-          cl_cpu_collector = ClCollector::Create(cl_cpu_device, &tracer->logger_, collector_options, cl_kcallback, cl_fcallback, tracer);
+          cl_cpu_collector = ClCollector::Create(cl_cpu_device, collector_options, cl_kcallback, cl_fcallback, tracer);
           if (cl_cpu_collector == nullptr) {
             std::cerr <<
               "[WARNING] Unable to create kernel collector for CL CPU backend" <<
@@ -203,7 +204,7 @@ class UniTracer {
         }
 
         if (cl_gpu_device != nullptr) {
-          cl_gpu_collector = ClCollector::Create(cl_gpu_device, &tracer->logger_, collector_options, cl_kcallback, cl_fcallback, tracer);
+          cl_gpu_collector = ClCollector::Create(cl_gpu_device, collector_options, cl_kcallback, cl_fcallback, tracer);
           if (cl_gpu_collector == nullptr) {
             std::cerr << "[WARNING] Unable to create kernel collector for CL GPU backend" << std::endl;
           }
@@ -217,7 +218,7 @@ class UniTracer {
         }
       }
 #endif /* BUILD_WITH_OPENCL */
-      ze_collector = ZeCollector::Create(&tracer->logger_, collector_options, ze_kcallback, ze_fcallback, tracer);
+      ze_collector = ZeCollector::Create(collector_options, ze_kcallback, ze_fcallback, tracer);
       tracer->ze_collector_ = ze_collector;
     }
 
@@ -248,14 +249,18 @@ class UniTracer {
       // If CCL summary is not enabled summary string will be empty
       std::string summary = itt_collector->CclSummaryReport();
       if (summary.size() > 0){
-        logger_.Log(summary);
+        std::shared_ptr<Logger> logger_ccl_summary = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_CCL_SUMMARY_REPORT);
+        logger_ccl_summary->Log(summary);
       }
       delete itt_collector;
     }
 #endif /* BUILD_WITH_ITT */
     if (CheckOption(TRACE_LOG_TO_FILE)) {
-      std::cerr << "[INFO] Log is stored in " <<
-        options_.GetLogFileName() << std::endl;
+      std::shared_ptr<Logger> logger = logger_factory_->GetLogger(LOGGER_TYPE_LEGACY_SHARED_TRACE);
+      if (logger && !logger->IsEmpty()) {
+        std::cerr << "[INFO] Log is stored in " <<
+          logger->GetLogFileName() << std::endl;
+      }
     }
 
     if (ze_collector_ != nullptr) {
@@ -284,12 +289,10 @@ class UniTracer {
  private:
   UniTracer(const TraceOptions& options)
       : options_(options),
-        logger_(options.GetLogFileName(),
-        CheckOption(TRACE_CONDITIONAL_COLLECTION)) {
-
+        logger_factory_(LoggerFactory::Create()) {
     start_time_ = utils::GetSystemTime();
     if (CheckOption(TRACE_CHROME_CALL_LOGGING) || CheckOption(TRACE_CHROME_KERNEL_LOGGING) || CheckOption(TRACE_CHROME_DEVICE_LOGGING) || CheckOption(TRACE_CHROME_SYCL_LOGGING) || CheckOption(TRACE_CHROME_ITT_LOGGING)) {
-      chrome_logger_ = ChromeLogger::Create(options, GetChromeTraceFileName().c_str());
+      chrome_logger_ = ChromeLogger::Create(GetChromeTraceFileName().c_str());
     }
 
   }
@@ -332,7 +335,7 @@ class UniTracer {
   }
 #endif /* BUILD_WITH_OPENCL */
 
-  void PrintFunctionTable(
+  void PrintFunctionTable(std::shared_ptr<Logger> logger,
       const ZeCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
@@ -341,12 +344,12 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      logger_.Log(str);
-      collector->PrintFunctionsTable();
+      logger->Log(str);
+      collector->PrintFunctionsTable(logger);
     }
   }
 
-  void PrintKernelTable(
+  void PrintKernelTable(std::shared_ptr<Logger> logger,
       const ZeCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
@@ -355,12 +358,12 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      logger_.Log(str);
-      collector->PrintKernelsTable();
+      logger->Log(str);
+      collector->PrintKernelsTable(logger);
     }
   }
 
-  void PrintSubmissionTable(
+  void PrintSubmissionTable(std::shared_ptr<Logger> logger,
       const ZeCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
@@ -369,13 +372,13 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      logger_.Log(str);
-      collector->PrintSubmissionTable();
+      logger->Log(str);
+      collector->PrintSubmissionTable(logger);
     }
   }
 
 #if BUILD_WITH_OPENCL
-  void PrintFunctionTable(
+  void PrintFunctionTable(std::shared_ptr<Logger> logger,
       const ClCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
@@ -384,12 +387,12 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      logger_.Log(str);
-      collector->PrintFunctionsTable();
+      logger->Log(str);
+      collector->PrintFunctionsTable(logger);
     }
   }
 
-  void PrintKernelTable(
+  void PrintKernelTable(std::shared_ptr<Logger> logger,
       const ClCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
@@ -398,12 +401,12 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      logger_.Log(str);
-      collector->PrintKernelsTable();
+      logger->Log(str);
+      collector->PrintKernelsTable(logger);
     }
   }
 
-  void PrintSubmissionTable(
+  void PrintSubmissionTable(std::shared_ptr<Logger> logger,
       const ClCollector* collector, const char* device_type) {
     PTI_ASSERT(collector != nullptr);
     PTI_ASSERT(device_type != nullptr);
@@ -412,8 +415,8 @@ class UniTracer {
     if (total_duration > 0) {
       std::string str("\n== ");
       str += std::string(device_type) + " Backend ==\n\n";
-      logger_.Log(str);
-      collector->PrintSubmissionTable();
+      logger->Log(str);
+      collector->PrintSubmissionTable(logger);
     }
   }
 #endif /* BUILD_WITH_OPENCL */
@@ -496,35 +499,38 @@ class UniTracer {
       }
     }
 #endif /* BUILD_WITH_OPENCL */
-    logger_.Log(str);
+    std::shared_ptr<Logger> timing_logger = (stype == "API") ? 
+                              logger_factory_->GetLogger(LOGGER_TYPE_TRACE_HOST_TIMING) :
+                              logger_factory_->GetLogger(LOGGER_TYPE_TRACE_DEVICE_TIMING);
+    timing_logger->Log(str);
 
     if (ze_collector != nullptr) {
       if (stype == "API") {
-        PrintFunctionTable(ze_collector, "L0");
+        PrintFunctionTable(timing_logger, ze_collector, "L0");
       }
       if (stype == "Device") {
-        PrintKernelTable(ze_collector, "L0");
+        PrintKernelTable(timing_logger, ze_collector, "L0");
       }
     }
 #if BUILD_WITH_OPENCL
     if (cl_cpu_collector != nullptr) {
       if (stype == "API") {
-        PrintFunctionTable(cl_cpu_collector, "CL CPU");
+        PrintFunctionTable(timing_logger, cl_cpu_collector, "CL CPU");
       }
       if (stype == "Device") {
-        PrintKernelTable(cl_cpu_collector, "CL CPU");
+        PrintKernelTable(timing_logger, cl_cpu_collector, "CL CPU");
       }
     }
     if (cl_gpu_collector != nullptr) {
       if (stype == "API") {
-        PrintFunctionTable(cl_gpu_collector, "CL GPU");
+        PrintFunctionTable(timing_logger, cl_gpu_collector, "CL GPU");
       }
       if (stype == "Device") {
-        PrintKernelTable(cl_gpu_collector, "CL GPU");
+        PrintKernelTable(timing_logger, cl_gpu_collector, "CL GPU");
       }
     }
 #endif /* BUILD_WITH_OPENCL */
-    logger_.Log("\n");
+    timing_logger->Log("\n\n");
   }
 
   void ReportKernelSubmission(
@@ -581,21 +587,22 @@ class UniTracer {
     }
 #endif /* BUILD_WITH_OPENCL */
 
-    logger_.Log(str);
+    std::shared_ptr<Logger> submission_logger = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_DEVICE_SUBMISSION);
+    submission_logger->Log(str);
 
     if (ze_collector != nullptr) {
-      PrintSubmissionTable(ze_collector, "L0");
+      PrintSubmissionTable(submission_logger, ze_collector, "L0");
     }
 #if BUILD_WITH_OPENCL
     if (cl_cpu_collector != nullptr) {
-      PrintSubmissionTable(cl_cpu_collector, "CL CPU");
+      PrintSubmissionTable(submission_logger, cl_cpu_collector, "CL CPU");
     }
     if (cl_gpu_collector != nullptr) {
-      PrintSubmissionTable(cl_gpu_collector, "CL GPU");
+      PrintSubmissionTable(submission_logger, cl_gpu_collector, "CL GPU");
     }
 #endif /* BUILD_WITH_OPENCL */
 
-    logger_.Log("\n");
+    submission_logger->Log("\n\n");
   }
 
   void Report() {
@@ -644,13 +651,12 @@ class UniTracer {
           "Device");
     }
 #endif /* BUILD_WITH_OPENCL */
-    logger_.Log("\n");
   }
 
  private:
   TraceOptions options_;
 
-  Logger logger_;
+  LoggerFactory* logger_factory_;
   uint64_t start_time_;
   uint64_t total_execution_time_ = 0;
 

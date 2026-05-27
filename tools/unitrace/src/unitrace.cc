@@ -41,6 +41,7 @@
 #include "version.h"
 #include "unitrace_commit_hash.h"
 #include "unicontrol.h"
+#include "logger_factory.h"
 #include "unitimer.h"
 #include "utils_host.h"
 
@@ -183,11 +184,15 @@ void Usage(char * progname) {
     std::endl;
   std::cout <<
     "--output-dir-path <path>         " <<
-    "Output directory path for result files" <<
+    "Output result to a flat directory" <<
+    std::endl;
+  std::cout <<
+    "--result-dir <path>              " <<
+    "Output result to a hierarchical directory" <<
     std::endl;
   std::cout <<
     "--metric-query [-q]              " <<
-    "Query hardware metrics for each kernel instance is enabled for level-zero" <<
+    "Query hardware metrics for each kernel instance (Level Zero)" <<
     std::endl;
   std::cout <<
     "--metric-sampling [-k]           " <<
@@ -423,6 +428,11 @@ int ParseArgs(int argc, char* argv[]) {
       ++i;
       utils::SetEnv("UNITRACE_TraceOutputDirPath", "1");
       utils::SetEnv("UNITRACE_TraceOutputDir", argv[i]);
+      app_index += 2;
+    } else if (strcmp(argv[i], "--result-dir") == 0) {
+      ++i;
+      utils::SetEnv("UNITRACE_UseResultDirectory", "1");
+      utils::SetEnv("UNITRACE_ResultDirectory", argv[i]);
       app_index += 2;
     } else if (strcmp(argv[i], "--metric-query") == 0 || strcmp(argv[i], "-q") == 0) {
       utils::SetEnv("UNITRACE_MetricQuery", "1");
@@ -745,7 +755,15 @@ int ParseArgs(int argc, char* argv[]) {
   if (utils::GetEnv("UNITRACE_ChromeEventBufferSize").empty()) {
     utils::SetEnv("UNITRACE_ChromeEventBufferSize", "-1");  // does not hurt to set to default even if chrome logging is not enabled
   }
-  std::string include_kernels_file = utils::GetEnv("git addFile");
+
+  if (!utils::GetEnv("UNITRACE_UseResultDirectory").empty() && utils::GetEnv("UNITRACE_UseResultDirectory") == "1") {
+    if ((!utils::GetEnv("UNITRACE_TraceOutputDirPath").empty()) || !utils::GetEnv("UNITRACE_LogToFile").empty()) {
+        std::cerr << "[ERROR] Option --result-dir cannot be used together with --output-dir-path or --output." << std::endl;
+      return 1;
+    }
+  }
+
+  std::string include_kernels_file = utils::GetEnv("UNITRACE_IncludeKernelsFile");
   if (!include_kernels_file.empty()) {
       if (!CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(include_kernels_file))) {
           std::cerr << "[ERROR] Include kernels file does not exist: " << include_kernels_file << std::endl;
@@ -806,7 +824,34 @@ void CleanUp(int /* sig */) {
   _Exit(-1);
 }
 
-#define KMD_TRACE_FILE_BASE_NAME "oskmd"
+std::string StringifyJsonArray(const char* label, char* const* arr, size_t start_idx = 0) {
+  std::string json = std::string("  \"") + label + "\": [";
+  bool first = true;
+  for (size_t i = start_idx; arr[i] != nullptr; ++i) {
+    if (!first) json += ", ";
+    json += "\"" + std::string(arr[i]) + "\"";
+    first = false;
+  }
+  json += "],\n";
+  return json;
+}
+
+void CreateConfigLog(const std::string& unitrace_version, const std::vector<char*>& unitrace_args, const std::vector<char*>& app_args) {
+  std::string value = utils::GetEnv("UNITRACE_UseResultDirectory");
+  if (!value.empty() && value == "1") {
+    LoggerFactory* logger_factory = LoggerFactory::Create();
+    std::shared_ptr<Logger> config_logger = logger_factory->GetLogger(LOGGER_TYPE_CONFIG, true, true);
+
+    config_logger->Log("{ \"unitrace version\": \"" + unitrace_version + "\",\n");
+    config_logger->Log("  \"app\": \"" + std::string(app_args[0]) + "\",\n");
+    config_logger->Log(StringifyJsonArray("unitrace_args", unitrace_args.data()));
+    config_logger->Log(StringifyJsonArray("app_args", app_args.data(), 1));
+    config_logger->Log("  \"Host\": \"" + GetHostName() + "\",\n");
+    config_logger->Log("  \"pid\": \"" + std::to_string(utils::GetPid()) + "\"\n");
+    config_logger->Log("}\n");
+    config_logger->Flush();
+  }
+}
 
 static void DumpKmdTraceData(std::string& raw_data_file) {
   std::ifstream inf = std::ifstream(raw_data_file);
@@ -817,17 +862,8 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
 
   UniTimer::StartUniTimer();  // need the timer to get the epoch time of system boot and difference between boot time and monotonic time
 
-  std::string out_trace_file_name(KMD_TRACE_FILE_BASE_NAME);
-
-  std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-  if (!rank.empty()) {
-    out_trace_file_name += ".0." + rank + ".json";
-  }
-  else {
-    out_trace_file_name += ".0.json";
-  }
-
-  auto oskmd_logger = new Logger(out_trace_file_name, true, true);
+  LoggerFactory* logger_factory = LoggerFactory::Create();
+  std::shared_ptr<Logger> oskmd_logger = logger_factory->GetLogger(LOGGER_TYPE_KMD_TRACE, true, true);
   if (oskmd_logger == nullptr) {
     std::cerr << "[ERROR] Failed to create kernel/kmd trace file" << std::endl;
     return;
@@ -841,11 +877,11 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
 
   std::string host = GetHostName();
 
-  if (rank.empty()) {
+  if (logger_factory->GetRank().empty()) {
     str += "HOST-OS-KMD<" + host + ">\"}}";
   }
   else {
-    str += "RANK " + rank + " HOST-OS-KMD<" + host + ">\"}}";
+    str += "RANK " + logger_factory->GetRank() + " HOST-OS-KMD<" + host + ">\"}}";
   }
 
   oskmd_logger->Log(str);
@@ -913,9 +949,7 @@ static void DumpKmdTraceData(std::string& raw_data_file) {
   oskmd_logger->Log("\n]}");
   oskmd_logger->Flush();
 
-  delete oskmd_logger;
-
-  std::cerr << "[INFO] KMD profiling data are stored in " << out_trace_file_name << std::endl;
+  std::cerr << "[INFO] KMD profiling data are stored in " << oskmd_logger->GetLogFileName() << std::endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -1011,19 +1045,25 @@ int main(int argc, char *argv[]) {
     return app_index? 1 : 0;
   }
 
+  std::vector<char*> app_args;
+  std::vector<char*> unitrace_args;
+
+  for (int i = 1; i < app_index; ++i) {
+    unitrace_args.push_back(argv[i]);
+  }
+  unitrace_args.push_back(nullptr);
+
+  for (int i = app_index; i < argc; ++i) {
+    app_args.push_back(argv[i]);
+  }
+  app_args.push_back(nullptr);
+
   if (!utils::GetEnv("UNITRACE_Session").empty()) {
     UniController::CreateTemporalControl(utils::GetEnv("UNITRACE_Session").c_str());
     if (!utils::GetEnv("UNITRACE_StartPaused").empty()) {
       UniController::TemporalPause(utils::GetEnv("UNITRACE_Session").c_str());
     }
   }
-
-  std::vector<char*> app_args;
-
-  for (int i = app_index; i < argc; ++i) {
-    app_args.push_back(argv[i]);
-  }
-  app_args.push_back(nullptr);
 
   std::string preload = utils::GetEnv("LD_PRELOAD");
   utils::SetEnv("UNITRACE_LD_PRELOAD_OLD", preload.c_str());
@@ -1114,6 +1154,9 @@ int main(int argc, char *argv[]) {
       SetProfilingEnvironment();
     }
 
+    utils::SetEnv("UNITRACE_DataDir", data_dir);
+    CreateConfigLog(unitrace_version, unitrace_args, app_args);
+
     int child;
 
     child = fork();
@@ -1162,8 +1205,9 @@ int main(int argc, char *argv[]) {
       }
     } else if (child > 0) {
       // parent process
+      
       if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
-
+        
         metric_profiler = EnableProfiling(child, data_dir, logfile, idle_sampling);
 
         // create a latch file to notify the application process to proceed
@@ -1212,6 +1256,7 @@ int main(int argc, char *argv[]) {
     }
   }
   else {
+    CreateConfigLog(unitrace_version, unitrace_args, app_args);
     if (execvp(app_args[0], app_args.data())) {
       std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
       Usage(argv[0]);
@@ -1269,6 +1314,7 @@ int main(int argc, char *argv[]) {
   STARTUPINFO si = {0};
   si.cb = sizeof(si);
 
+  CreateConfigLog(unitrace_version, unitrace_args, app_args);
   if (CreateProcessA(app_args[0], LPSTR(cmdline.c_str()), nullptr, nullptr, false, CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {
     BOOL success = FALSE;
     do {

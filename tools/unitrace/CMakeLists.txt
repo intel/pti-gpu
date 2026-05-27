@@ -134,7 +134,9 @@ endif()
 
 
 add_library(unitrace_tool SHARED
-  "${PROJECT_SOURCE_DIR}/src/tracer.cc")
+  "${PROJECT_SOURCE_DIR}/src/tracer.cc"
+  "${PROJECT_SOURCE_DIR}/src/utils/logger_factory.cc"
+)
 link_directories(${ONEAPI_COMPILER_HOME}/lib)
 
 if (BUILD_WITH_XPTI)
@@ -204,7 +206,10 @@ target_include_directories(unitrace_tool PRIVATE "${L0_INC_PATH}")
 
 # Loader
 
-add_executable(unitrace "${PROJECT_SOURCE_DIR}/src/unitrace.cc")
+add_executable(unitrace
+  "${PROJECT_SOURCE_DIR}/src/unitrace.cc"
+  "${PROJECT_SOURCE_DIR}/src/utils/logger_factory.cc"
+)
 # unitrace to depend on gen_l0_loader_header to ensure that it exists
 add_dependencies(unitrace gen_l0_loader_header)
 # unitrace_tool to depend on unitrace to build unitrace first and then we can

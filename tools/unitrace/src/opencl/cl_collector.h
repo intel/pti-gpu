@@ -312,18 +312,16 @@ class ClCollector {
  public: // Interface
   static ClCollector* Create(
       cl_device_id device,
-      Logger *logger,
       CollectorOptions options,
       OnClKernelFinishCallback kcallback = nullptr,
       OnClFunctionFinishCallback fcallback = nullptr,
       void* callback_data = nullptr) {
     PTI_ASSERT(device != nullptr);
-    PTI_ASSERT(logger != nullptr);
 
     std::string data_dir_name = utils::GetEnv("UNITRACE_DataDir");
 
     ClCollector* collector = new ClCollector(
-        device, logger, options, kcallback, fcallback, callback_data, data_dir_name);
+        device, options, kcallback, fcallback, callback_data, data_dir_name);
     PTI_ASSERT(collector != nullptr);
 
     collector->SetKernelTracingPoints();
@@ -447,7 +445,7 @@ class ClCollector {
     return kernel_mem_info_map_;
   }
 
-  void PrintKernelsTable() const {
+  void PrintKernelsTable(std::shared_ptr<Logger> logger) const {
     std::set< std::pair<std::string, ClKernelInfo>,
               utils::Comparator > sorted_list(
         kernel_info_map_.begin(), kernel_info_map_.end());
@@ -491,10 +489,10 @@ class ClCollector {
                 PadLeft(std::to_string(max_duration), kTimeLength) + '\n';
     }
 
-    logger_->Log(output);
+    logger->Log(output);
   }
 
-  void PrintSubmissionTable() const {
+  void PrintSubmissionTable(std::shared_ptr<Logger> logger) const {
     std::set< std::pair<std::string, ClKernelInfo>,
               utils::Comparator > sorted_list(
         kernel_info_map_.begin(), kernel_info_map_.end());
@@ -547,8 +545,8 @@ class ClCollector {
                 PadLeft(std::to_string(execute_duration), kTimeLength) + "," +
                 PadLeft(FormatFloat(execute_percent), kPercentLength) + '\n';
     }
-
-    logger_->Log(output);
+    
+    logger->Log(output);
   }
 
   const ClFunctionInfoMap& GetFunctionInfoMap() const {
@@ -571,7 +569,7 @@ class ClCollector {
     logger_->Log(text);
   }
 
-  void PrintFunctionsTable() const {
+  void PrintFunctionsTable(std::shared_ptr<Logger> logger) const {
     std::set< std::pair<std::string, ClFunction>,
               utils::Comparator > sorted_list(
         function_info_map_.begin(), function_info_map_.end());
@@ -614,8 +612,8 @@ class ClCollector {
                 PadLeft(std::to_string(min_duration), kTimeLength) + "," +
                 PadLeft(std::to_string(max_duration), kTimeLength) + '\n';
     }
-
-    logger_->Log(output);
+    
+    logger->Log(output);
   }
 
   static ClCollector *GetCollector(cl_device_type device_type) {
@@ -712,20 +710,26 @@ class ClCollector {
  private: // Implementation Details
   ClCollector(
       cl_device_id device,
-      Logger *logger,
       CollectorOptions options,
       OnClKernelFinishCallback kcallback,
       OnClFunctionFinishCallback fcallback,
       void* /* callback_data */,
       std::string& data_dir_name)
       : device_(device),
-        logger_(logger),
         options_(options),
         kcallback_(kcallback),
         fcallback_(fcallback),
         data_dir_name_(data_dir_name) {
     PTI_ASSERT(device_ != nullptr);
-    PTI_ASSERT(logger_ != nullptr);
+
+    // Create LoggerFactory singleton and loggers
+    logger_factory_ = LoggerFactory::Create();
+    if (options_.call_logging) {
+      logger_ = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_CALL_LOGGING);
+    }
+    if (options_.device_timeline) {
+      logger_device_timeline_ = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_DEVICE_TIMELINE);
+    }
 
     device_type_ = utils::cl::GetDeviceType(device);
     PTI_ASSERT(device_type_ == CL_DEVICE_TYPE_CPU || device_type_ == CL_DEVICE_TYPE_GPU);
@@ -1013,7 +1017,7 @@ class ClCollector {
                          std::to_string(submitted) + " (submit) " +
                          std::to_string(kernel_start) + " (start) " +
                          std::to_string(kernel_end) + " (end)" + '\n';
-    logger_->Log(output);
+    logger_device_timeline_->Log(output);
   }
 
   inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
@@ -1969,7 +1973,9 @@ class ClCollector {
   inline static thread_local bool trace_now_ = false; // prevent recursive tracing
 
   cl_device_id device_ = nullptr;
-  Logger *logger_ = nullptr;
+  LoggerFactory* logger_factory_ = nullptr;
+  std::shared_ptr<Logger> logger_ = nullptr;
+  std::shared_ptr<Logger> logger_device_timeline_ = nullptr;
   CollectorOptions options_;
   ClApiTracer* tracer_ = nullptr;
 
