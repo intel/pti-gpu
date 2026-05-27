@@ -180,7 +180,6 @@ void RunGemm(unsigned size = 1024, unsigned repeat_count = 1) {
     throw;
   }
 }
-
 }  // namespace
 
 class GemmMetricsScopeFixtureTest : public ::testing::Test {
@@ -655,7 +654,7 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeConfigureNullDevice) {
 
   EXPECT_EQ(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, nullptr, 1,
                                      kMetricNames.data(), metric_count),
-            PTI_ERROR_NOT_IMPLEMENTED);
+            PTI_ERROR_BAD_ARGUMENT);
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
 }
@@ -670,6 +669,40 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeConfigureZeroDevices) {
 
   EXPECT_EQ(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 0,
                                      kMetricNames.data(), metric_count),
+            PTI_ERROR_BAD_ARGUMENT);
+
+  EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
+}
+
+TEST_F(GemmMetricsScopeFixtureTest, ScopeConfigureAutoDetect_NullMetricNames_Rejected) {
+  // ValidateConfigurationArguments rejects metric_names == nullptr, including in
+  // auto-detect mode (device_count=0).
+
+  pti_scope_collection_handle_t scope_handle = nullptr;
+  EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
+
+  // Auto-detect mode: devices_to_profile=nullptr, device_count=0, metric_names=nullptr.
+  EXPECT_EQ(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
+                                     /*devices=*/nullptr, /*device_count=*/0,
+                                     /*metric_names=*/nullptr, /*metric_count=*/1),
+            PTI_ERROR_BAD_ARGUMENT);
+
+  EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
+}
+
+TEST_F(GemmMetricsScopeFixtureTest, ScopeConfigureAutoDetect_ZeroMetrics_Rejected) {
+  // ValidateConfigurationArguments rejects metric_count == 0, including in
+  // auto-detect mode (device_count=0).
+
+  pti_scope_collection_handle_t scope_handle = nullptr;
+  EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
+
+  auto kMetricNames = std::array{"GpuTime"};
+
+  // Auto-detect mode: devices=nullptr, device_count=0, metrics_count=0.
+  EXPECT_EQ(ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
+                                     /*devices=*/nullptr, /*device_count=*/0, kMetricNames.data(),
+                                     /*metric_count=*/0),
             PTI_ERROR_BAD_ARGUMENT);
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
@@ -1173,6 +1206,79 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeInvalidBufferIndex) {
         ptiMetricsScopeGetCollectionBuffer(scope_handle, buffer_count + 10, &buffer, &buffer_size),
         PTI_ERROR_BAD_ARGUMENT);
   }
+
+  EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
+}
+
+TEST_F(GemmMetricsScopeFixtureTest, ScopeReconfigure_DifferentMetricCount_Succeeds) {
+  // Re-calling ptiMetricsScopeConfigure on the same handle with a different metric_count
+  // must reset internal per-config vectors. Otherwise stale data or out-of-bounds writes occur.
+
+  pti_scope_collection_handle_t scope_handle = nullptr;
+  EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
+
+  if (devices.empty()) {
+    GTEST_SKIP() << "No devices available for metrics collection";
+  }
+  pti_device_handle_t device = devices[0]._handle;
+
+  // First Configure: 2 metrics
+  auto kFirstMetrics = std::array{"GpuTime", "GpuCoreClocks"};
+  EXPECT_EQ(
+      ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
+                               kFirstMetrics.data(), static_cast<uint32_t>(kFirstMetrics.size())),
+      PTI_SUCCESS);
+
+  // Second Configure: 1 metric (smaller count)
+  auto kSecondMetrics = std::array{"GpuTime"};
+  EXPECT_EQ(
+      ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
+                               kSecondMetrics.data(), static_cast<uint32_t>(kSecondMetrics.size())),
+      PTI_SUCCESS);
+
+  // Verify the second config is active: metadata should show only 1 metric
+  pti_metrics_scope_record_metadata_t metadata = {};
+  metadata._struct_size = sizeof(metadata);
+  EXPECT_EQ(ptiMetricsScopeGetMetricsMetadata(scope_handle, &metadata), PTI_SUCCESS);
+  EXPECT_EQ(metadata._metrics_count, 1u)
+      << "After re-Configure with 1 metric, metadata still reports stale count";
+
+  EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
+}
+
+TEST_F(GemmMetricsScopeFixtureTest, ScopeReconfigure_LargerMetricCount_NoOutOfBounds) {
+  // First Configure with N metrics, then Configure with M > N.
+  // Without state reset, ResolveGroupFromMetricNames sees non-empty vectors of size N
+  // and indexes up to M-1 → out-of-bounds write into requested_metric_names_, etc.
+
+  pti_scope_collection_handle_t scope_handle = nullptr;
+  EXPECT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
+
+  if (devices.empty()) {
+    GTEST_SKIP() << "No devices available for metrics collection";
+  }
+  pti_device_handle_t device = devices[0]._handle;
+
+  // First Configure: 1 metric
+  auto kFirstMetrics = std::array{"GpuTime"};
+  EXPECT_EQ(
+      ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
+                               kFirstMetrics.data(), static_cast<uint32_t>(kFirstMetrics.size())),
+      PTI_SUCCESS);
+
+  // Second Configure: 2 metrics (larger count)
+  auto kSecondMetrics = std::array{"GpuTime", "GpuCoreClocks"};
+  EXPECT_EQ(
+      ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 1,
+                               kSecondMetrics.data(), static_cast<uint32_t>(kSecondMetrics.size())),
+      PTI_SUCCESS);
+
+  // Verify the second config is active: metadata should show 2 metrics
+  pti_metrics_scope_record_metadata_t metadata = {};
+  metadata._struct_size = sizeof(metadata);
+  EXPECT_EQ(ptiMetricsScopeGetMetricsMetadata(scope_handle, &metadata), PTI_SUCCESS);
+  EXPECT_EQ(metadata._metrics_count, 2u)
+      << "After re-Configure with 2 metrics, metadata reports wrong count";
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
 }
@@ -2390,4 +2496,68 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeWithOverheadTracking) {
   EXPECT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), PTI_SUCCESS);
 
   std::cout << "\n=== Overhead tracking test completed ===" << std::endl;
+}
+
+// ============================================================================
+// Multi-Device Feature Tests
+// ============================================================================
+
+// Test: Configuration validation for multi-device and auto-detect modes
+TEST_F(GemmMetricsScopeFixtureTest, MultiDeviceConfigurationValidation) {
+  if (devices.size() < 1) GTEST_SKIP() << "Need at least 1 device";
+
+  pti_scope_collection_handle_t handle;
+  ASSERT_EQ(PTI_SUCCESS, ptiMetricsScopeEnable(&handle));
+
+  const char* metrics[] = {"GpuTime"};
+
+  // Auto-detect mode
+  pti_result result =
+      ptiMetricsScopeConfigure(handle, PTI_METRICS_SCOPE_AUTO_KERNEL, nullptr, 0, metrics, 1);
+  EXPECT_TRUE(result == PTI_SUCCESS || result == PTI_ERROR_METRICS_SCOPE_DEVICE_TYPE_NOT_UNIFORM)
+      << "Auto-detect mode returned unexpected result: " << result;
+
+  // Invalid combination - auto-detect with non-null devices
+  pti_device_handle_t device = devices[0]._handle;
+  result = ptiMetricsScopeConfigure(handle, PTI_METRICS_SCOPE_AUTO_KERNEL, &device, 0, metrics, 1);
+  EXPECT_EQ(PTI_ERROR_BAD_ARGUMENT, result)
+      << "Auto-detect mode with non-null devices should return BAD_ARGUMENT";
+
+  // Invalid combination - null devices with explicit count
+  result = ptiMetricsScopeConfigure(handle, PTI_METRICS_SCOPE_AUTO_KERNEL, nullptr, 1, metrics, 1);
+  EXPECT_EQ(PTI_ERROR_BAD_ARGUMENT, result)
+      << "Null devices with explicit count should return BAD_ARGUMENT";
+
+  ASSERT_EQ(PTI_SUCCESS, ptiMetricsScopeDisable(handle));
+}
+
+// Test: Multi-device configuration with uniform devices (no collection yet)
+TEST_F(GemmMetricsScopeFixtureTest, MultiDeviceConfigurationUniform) {
+  if (devices.size() < 2) GTEST_SKIP() << "Need at least 2 devices";
+
+  pti_scope_collection_handle_t handle;
+  ASSERT_EQ(PTI_SUCCESS, ptiMetricsScopeEnable(&handle));
+
+  std::cout << "\n=== Multi-Device Configuration Test ===" << std::endl;
+  std::cout << "Device information:" << std::endl;
+  std::cout << "  Device[0]: " << devices[0]._model_name << std::endl;
+  std::cout << "  Device[1]: " << devices[1]._model_name << std::endl;
+
+  // Configure multiple devices
+  std::vector<pti_device_handle_t> device_handles = {devices[0]._handle, devices[1]._handle};
+  const char* metrics[] = {"GpuTime"};
+
+  pti_result result = ptiMetricsScopeConfigure(handle, PTI_METRICS_SCOPE_AUTO_KERNEL,
+                                               device_handles.data(), 2, metrics, 1);
+
+  if (result == PTI_SUCCESS) {
+    std::cout << "Configuration succeeded" << std::endl;
+
+  } else if (result == PTI_ERROR_METRICS_SCOPE_DEVICE_TYPE_NOT_UNIFORM) {
+    std::cout << "Devices type not uniform, profiling stopped." << std::endl;
+  } else {
+    ADD_FAILURE() << "Unexpected error: " << result;
+  }
+
+  ASSERT_EQ(PTI_SUCCESS, ptiMetricsScopeDisable(handle));
 }

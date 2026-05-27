@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "metrics_handler.h"
@@ -41,15 +42,23 @@ struct _pti_scope_collection_handle_t {
   _pti_scope_collection_handle_t(_pti_scope_collection_handle_t&&) = delete;
   _pti_scope_collection_handle_t& operator=(_pti_scope_collection_handle_t&&) = delete;
 
-  pti_device_handle_t device_handle_ = nullptr;
-  const char* collected_metrics_group_name_ = nullptr;
-  pti_metrics_group_handle_t metrics_group_handle_ = nullptr;
-  std::unique_ptr<PtiQueryMetricsProfiler> query_profiler_;
+  // Multi-device support
+  std::unordered_set<pti_device_handle_t> requested_devices_;  // Devices requested to profile
+  std::unordered_set<pti_device_handle_t> active_devices_;     // Successfully configured devices
+  std::unordered_set<pti_device_handle_t> failed_devices_;     // Failed devices
+  bool auto_detect_mode_ =
+      false;  // True when using auto-detect mode (devices=nullptr, device_count=0)
 
-  std::vector<int32_t> requested_metric_indices_;
+  // Per-device resources
+  std::unordered_map<pti_device_handle_t, pti_metrics_group_handle_t> metrics_group_handles_;
+  std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiQueryMetricsProfiler>>
+      query_profilers_;
+  std::unordered_map<pti_device_handle_t, uint64_t> next_buffer_ids_;
+
+  // Shared across all devices
+  const char* collected_metrics_group_name_ = nullptr;  // Single group name for all devices
+  std::vector<int32_t> requested_metric_indices_;       // Single set of indices for all devices
   std::vector<pti_metric_properties_t> requested_metric_properties_;
-
-  // Needed for Metadata
   std::vector<pti_metric_value_type> requested_value_types_;
   std::vector<const char*> requested_metric_names_;
   std::vector<const char*> requested_metric_units_;
@@ -58,30 +67,30 @@ struct _pti_scope_collection_handle_t {
   std::atomic<bool> is_collection_active_ = false;
 
   pti_callback_subscriber_handle callback_subscriber_ = 0;
-  std::mutex data_mutex_;  // Thread safety for callback access
+  std::mutex data_mutex_;       // Thread safety for callback access
+  std::mutex buffer_id_mutex_;  // Guards next_buffer_ids_ only
 
-  std::unique_ptr<PtiMetricsScopeBufferHandle> buffer_manager_;
+  std::unique_ptr<PtiMetricsScopeBufferHandler<PtiMetricsScopeBuffer>> buffer_manager_;
   size_t configured_buffer_size_ = 0;
-  uint64_t next_buffer_id_ = 0;
 
   // Destructor to handle cleanup
   ~_pti_scope_collection_handle_t() {
     try {
-      // Move current buffer to collection if it has data
-      if (buffer_manager_ && buffer_manager_->HasCurrentBufferWithData()) {
-        pti_result result = buffer_manager_->FinalizeCurrentBuffer();
-        if (result != PTI_SUCCESS) {
-          SPDLOG_WARN("Failed to finalize current buffer during destruction: {}",
-                      static_cast<int>(result));
-        }
+      // Finalize all device buffers
+      if (buffer_manager_) {
+        buffer_manager_->FinalizeAllCurrentBuffers();
       }
 
-      // Stop profiling if configured
-      if (is_configured_ && query_profiler_) {
-        pti_result stop_profiler_result = query_profiler_->StopProfiling();
-        if (stop_profiler_result != PTI_SUCCESS) {
-          SPDLOG_WARN("Failed to stop query profiler during destruction: {}",
-                      static_cast<int>(stop_profiler_result));
+      // Stop all device profilers
+      if (is_configured_) {
+        for (auto& [device, profiler] : query_profilers_) {
+          if (profiler) {
+            pti_result stop_result = profiler->StopProfiling();
+            if (stop_result != PTI_SUCCESS) {
+              SPDLOG_WARN("Failed to stop profiler for device {}: {}", static_cast<void*>(device),
+                          static_cast<int>(stop_result));
+            }
+          }
         }
       }
 
@@ -93,16 +102,51 @@ struct _pti_scope_collection_handle_t {
 
       // Clean up collected data
       requested_metric_properties_.clear();
+      query_profilers_.clear();
 
       SPDLOG_TRACE("Scope metrics collection handle destroyed");
     } catch (const std::exception& e) {
-      // Log but don't throw from destructor
       SPDLOG_DEBUG("Exception during scope handle destruction: {}", e.what());
     } catch (...) {
       SPDLOG_DEBUG("Unknown exception during scope handle destruction");
     }
   }
 };
+
+/**
+ * @brief Helper to get all system devices
+ * This function retrieves all devices available on the machine.
+ * @param[out] devices Vector to store device properties
+ * @return PTI_SUCCESS if devices retrieved, error code otherwise
+ */
+inline pti_result GetAllAvailableDevices(std::vector<pti_device_properties_t>& devices) {
+  uint32_t device_count = 0;
+  pti_result result = ptiMetricsGetDevices(nullptr, &device_count);
+  if (result != PTI_SUCCESS) {
+    SPDLOG_DEBUG(
+        "GetAllAvailableDevices: Failed to enumerate devices (error: {}). "
+        "Ensure Level Zero drivers are properly installed",
+        static_cast<int>(result));
+    return result;
+  }
+
+  if (device_count == 0) {
+    SPDLOG_DEBUG(
+        "GetAllAvailableDevices: No devices available for metrics collection. "
+        "Ensure ZET_ENABLE_METRICS=1 and compatible GPU hardware is present");
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  devices.resize(device_count);
+  result = ptiMetricsGetDevices(devices.data(), &device_count);
+  if (result != PTI_SUCCESS) {
+    SPDLOG_DEBUG("GetAllAvailableDevices: Failed to get device properties (error: {})",
+                 static_cast<int>(result));
+    return result;
+  }
+
+  return PTI_SUCCESS;
+}
 
 /**
  * @brief Validate configuration arguments for metrics scope setup
@@ -118,16 +162,6 @@ struct _pti_scope_collection_handle_t {
 inline pti_result ValidateConfigurationArguments(pti_device_handle_t* devices_to_profile,
                                                  uint32_t device_count, const char** metric_names,
                                                  size_t metrics_count) {
-  if (devices_to_profile == nullptr) {
-    SPDLOG_DEBUG("{}: Device array is null", __func__);
-    return PTI_ERROR_NOT_IMPLEMENTED;
-  }
-
-  if (device_count == 0) {
-    SPDLOG_DEBUG("{}: No devices provided for configuration", __func__);
-    return PTI_ERROR_BAD_ARGUMENT;
-  }
-
   if (metric_names == nullptr) {
     SPDLOG_DEBUG("{}: Metric names array is null", __func__);
     return PTI_ERROR_BAD_ARGUMENT;
@@ -138,10 +172,20 @@ inline pti_result ValidateConfigurationArguments(pti_device_handle_t* devices_to
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  if (device_count != 1) {
-    SPDLOG_WARN("{}: Collection on all devices or on multiple devices is not implemented",
-                __func__);
-    return PTI_ERROR_NOT_IMPLEMENTED;
+  // Auto detect mode
+  if (device_count == 0) {
+    if (devices_to_profile != nullptr) {
+      SPDLOG_DEBUG("{}: Auto-detect mode requires devices_to_profile == nullptr", __func__);
+      return PTI_ERROR_BAD_ARGUMENT;
+    }
+    // Valid auto mode
+    return PTI_SUCCESS;
+  }
+
+  // Explicit mode validation
+  if (devices_to_profile == nullptr) {
+    SPDLOG_DEBUG("{}: devices_to_profile cannot be nullptr with explicit device_count", __func__);
+    return PTI_ERROR_BAD_ARGUMENT;
   }
 
   return PTI_SUCCESS;
@@ -157,42 +201,10 @@ inline pti_result ValidateConfigurationArguments(pti_device_handle_t* devices_to
  *
  * @return PTI_SUCCESS if device is valid and supports metrics, error code otherwise
  */
-inline pti_result ValidateTargetDevice(pti_device_handle_t target_device) {
-  // Get all available devices to validate against
-  uint32_t available_device_count = 0;
-  pti_result validation_result = ptiMetricsGetDevices(nullptr, &available_device_count);
-  if (validation_result != PTI_SUCCESS) {
-    SPDLOG_DEBUG(
-        "ValidateTargetDevice: Failed to enumerate devices (error: {}). "
-        "Ensure Level Zero drivers are properly installed",
-        static_cast<int>(validation_result));
-    return PTI_ERROR_BAD_ARGUMENT;
-  }
-
-  if (available_device_count == 0) {
-    SPDLOG_DEBUG(
-        "ValidateTargetDevice: No devices available for metrics collection. "
-        "Ensure ZET_ENABLE_METRICS=1 and compatible GPU hardware is present");
-    return PTI_ERROR_BAD_ARGUMENT;
-  }
-
-  std::vector<pti_device_properties_t> available_devices(available_device_count);
-  validation_result = ptiMetricsGetDevices(available_devices.data(), &available_device_count);
-  if (validation_result != PTI_SUCCESS) {
-    SPDLOG_DEBUG("ValidateTargetDevice: Failed to get device properties");
-    return PTI_ERROR_BAD_ARGUMENT;
-  }
-
-  // Check if target device is in the list of available devices
-  bool device_found = false;
-  for (const auto& device_props : available_devices) {
-    if (device_props._handle == target_device) {
-      device_found = true;
-      break;
-    }
-  }
-
-  if (!device_found) {
+inline pti_result ValidateTargetDevice(
+    pti_device_handle_t target_device,
+    const std::unordered_set<pti_device_handle_t>& available_device_handles) {
+  if (available_device_handles.find(target_device) == available_device_handles.end()) {
     SPDLOG_DEBUG(
         "ValidateTargetDevice: Specified device handle is not valid or not available for metrics "
         "collection");
@@ -246,6 +258,61 @@ inline pti_result SetupMetricProperties(pti_scope_collection_handle_t scope_coll
     scope_collection_handle->requested_metric_properties_.push_back(prop);
   }
 
+  return PTI_SUCCESS;
+}
+
+/**
+ * @brief Validate that all devices are the same type
+ * This ensures all devices have the same model name, which means they share
+ * identical metric groups and indices.
+ *
+ * @param devices_to_validate Set of device handles to validate for uniformity
+ * @return PTI_SUCCESS if all devices are uniform,
+ *         PTI_ERROR_METRICS_SCOPE_DEVICE_TYPE_NOT_UNIFORM if mixed types
+ */
+inline pti_result ValidateDevicesUniform(
+    const std::unordered_set<pti_device_handle_t>& devices_to_validate,
+    const std::vector<pti_device_properties_t>& all_devices) {
+  if (devices_to_validate.empty()) return PTI_ERROR_BAD_ARGUMENT;
+  if (devices_to_validate.size() == 1) return PTI_SUCCESS;  // Single device always uniform
+
+  // Create lookup map for requested devices
+  std::unordered_map<pti_device_handle_t, const char*> device_models;
+  for (const auto& device : all_devices) {
+    if (devices_to_validate.find(device._handle) != devices_to_validate.end()) {
+      device_models[device._handle] = device._model_name;
+    }
+  }
+
+  // Get reference model from first device
+  auto reference_device = *devices_to_validate.begin();
+  auto it = device_models.find(reference_device);
+  if (it == device_models.end()) {
+    SPDLOG_DEBUG("Reference device handle {} not found in available devices",
+                 static_cast<void*>(reference_device));
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+  const char* reference_model = it->second;
+
+  // Compare all other devices
+  for (auto device : devices_to_validate) {
+    if (device == reference_device) continue;
+
+    auto it = device_models.find(device);
+    if (it == device_models.end()) {
+      SPDLOG_DEBUG("Device handle {} not found in available devices", static_cast<void*>(device));
+      return PTI_ERROR_BAD_ARGUMENT;
+    }
+
+    if (std::strcmp(it->second, reference_model) != 0) {
+      SPDLOG_DEBUG("Device type mismatch: reference='{}', device='{}'", reference_model,
+                   it->second);
+      return PTI_ERROR_METRICS_SCOPE_DEVICE_TYPE_NOT_UNIFORM;
+    }
+  }
+
+  SPDLOG_DEBUG("All {} devices are uniform (model: {})", devices_to_validate.size(),
+               reference_model);
   return PTI_SUCCESS;
 }
 
@@ -304,6 +371,7 @@ inline bool CheckMetricsInGroup(pti_scope_collection_handle_t scope_collection_h
       const char* n = group_props._metric_properties[k]._name;
       if (n != nullptr && std::strcmp(n, name) == 0) {
         found_in_current_group = true;
+
         scope_collection_handle->requested_metric_indices_[mi] = k;
         scope_collection_handle->requested_metric_properties_[mi] =
             group_props._metric_properties[k];
@@ -338,16 +406,22 @@ inline pti_result ValidateMetricAvailability(pti_scope_collection_handle_t scope
  * @param[in] scope_collection_handle    Scope collection handle containing device and metric names
  * @return pti_result
  */
-inline pti_result ResolveGroupFromMetricNames(
-    pti_scope_collection_handle_t scope_collection_handle) {
+inline pti_result ResolveGroupFromMetricNames(pti_scope_collection_handle_t scope_collection_handle,
+                                              pti_device_handle_t device) {
   if (scope_collection_handle == nullptr) return PTI_ERROR_BAD_ARGUMENT;
 
-  pti_device_handle_t device_handle = scope_collection_handle->device_handle_;
+  if (scope_collection_handle->requested_devices_.find(device) ==
+      scope_collection_handle->requested_devices_.end()) {
+    SPDLOG_DEBUG("ResolveGroupFromMetricNames: Device {} not in requested_devices_",
+                 static_cast<void*>(device));
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
   pti_metrics_group_handle_t found_group = nullptr;
 
   // Get all metric groups for the device
   std::vector<pti_metrics_group_properties_t> groups;
-  pti_result result = GetMetricGroups(device_handle, groups);
+  pti_result result = GetMetricGroups(device, groups);
   if (result != PTI_SUCCESS) return result;
 
   uint32_t metric_count =
@@ -361,7 +435,9 @@ inline pti_result ResolveGroupFromMetricNames(
   for (auto& group_props : groups) {
     if (CheckMetricsInGroup(scope_collection_handle, group_props, metric_count)) {
       found_group = group_props._handle;
-      scope_collection_handle->collected_metrics_group_name_ = group_props._name;
+      if (scope_collection_handle->collected_metrics_group_name_ == nullptr) {
+        scope_collection_handle->collected_metrics_group_name_ = group_props._name;
+      }
       break;  // Choose the first matched group
     }
   }
@@ -373,16 +449,18 @@ inline pti_result ResolveGroupFromMetricNames(
     return ValidateMetricAvailability(scope_collection_handle, metric_count);
   }
 
-  scope_collection_handle->metrics_group_handle_ = found_group;
+  scope_collection_handle->metrics_group_handles_[device] = found_group;
 
   // Fill other requested properties
-  for (size_t i = 0; i < metric_count; ++i) {
-    scope_collection_handle->requested_metric_names_[i] =
-        scope_collection_handle->requested_metric_properties_[i]._name;
-    scope_collection_handle->requested_value_types_[i] =
-        scope_collection_handle->requested_metric_properties_[i]._value_type;
-    scope_collection_handle->requested_metric_units_[i] =
-        scope_collection_handle->requested_metric_properties_[i]._units;
+  if (scope_collection_handle->requested_metric_names_[0] == nullptr) {
+    for (size_t i = 0; i < metric_count; ++i) {
+      scope_collection_handle->requested_metric_names_[i] =
+          scope_collection_handle->requested_metric_properties_[i]._name;
+      scope_collection_handle->requested_value_types_[i] =
+          scope_collection_handle->requested_metric_properties_[i]._value_type;
+      scope_collection_handle->requested_metric_units_[i] =
+          scope_collection_handle->requested_metric_properties_[i]._units;
+    }
   }
 
   return PTI_SUCCESS;
@@ -562,10 +640,18 @@ inline std::unique_ptr<kernel_metric_data> CreateKernelMetricData(
 /**
  * @brief Create a new metrics collection buffer
  */
-inline pti_result CreateNewBuffer(pti_scope_collection_handle_t scope_collection_handle) {
+inline pti_result CreateNewBuffer(pti_scope_collection_handle_t scope_collection_handle,
+                                  pti_device_handle_t device) {
+  SPDLOG_TRACE(
+      "CreateNewBuffer: Creating new buffer for device {} About to acquire buffer_id_mutex_",
+      static_cast<void*>(device));
+  uint64_t buffer_id;
+  {
+    std::lock_guard<std::mutex> lock(scope_collection_handle->buffer_id_mutex_);
+    buffer_id = scope_collection_handle->next_buffer_ids_[device]++;
+  }
   return scope_collection_handle->buffer_manager_->CreateBuffer(
-      scope_collection_handle->configured_buffer_size_, scope_collection_handle->device_handle_,
-      scope_collection_handle->next_buffer_id_++);
+      scope_collection_handle->configured_buffer_size_, device, buffer_id);
 }
 
 // Helper function to extract GPU operation context data
@@ -653,6 +739,8 @@ inline bool ValidateQueryAndEvent(zet_metric_query_handle_t query,
  */
 inline bool GetRawMetricData(zet_metric_query_handle_t query, std::vector<uint8_t>& raw_data,
                              [[maybe_unused]] const char* kernel_name) {
+  SPDLOG_TRACE("GetRawMetricData: Attempting to retrieve raw metric data for kernel: {}",
+               kernel_name);
   size_t raw_data_size = 0;
   ze_result_t status = zetMetricQueryGetData(query, &raw_data_size, nullptr);
   if (status != ZE_RESULT_SUCCESS) {
@@ -660,6 +748,7 @@ inline bool GetRawMetricData(zet_metric_query_handle_t query, std::vector<uint8_
                  static_cast<uint64_t>(status));
     return false;
   }
+  SPDLOG_TRACE("GetRawMetricData: Raw data size {} bytes", raw_data_size);
 
   if (raw_data_size == 0) {
     SPDLOG_TRACE("GetRawMetricData: No metric data available for kernel: {}", kernel_name);
@@ -672,6 +761,7 @@ inline bool GetRawMetricData(zet_metric_query_handle_t query, std::vector<uint8_
     SPDLOG_TRACE("GetRawMetricData: Failed to get query data: {}", static_cast<uint64_t>(status));
     return false;
   }
+  SPDLOG_TRACE("GetRawMetricData: Successfully retrieved Query raw data");
 
   return true;
 }
@@ -688,25 +778,31 @@ inline bool GetRawMetricData(zet_metric_query_handle_t query, std::vector<uint8_
  * @return true if data was successfully stored, false otherwise
  */
 inline bool StoreKernelData(pti_scope_collection_handle_t scope_collection_handle,
+                            pti_device_handle_t device,
                             std::unique_ptr<kernel_metric_data> kernel_data, size_t raw_data_size) {
+  SPDLOG_DEBUG("StoreKernelData: Storing data for kernel ID: {}, raw data size: {} bytes",
+               kernel_data->kernel_id, raw_data_size);
   PtiMetricsScopeBuffer* current_buffer =
-      scope_collection_handle->buffer_manager_->GetCurrentBuffer();
+      scope_collection_handle->buffer_manager_->GetCurrentBuffer(device);
 
   // Check if current buffer has space
   size_t required_space = raw_data_size + sizeof(struct kernel_metric_data);
   if (!current_buffer || !current_buffer->HasSpace(required_space)) {
     // Current buffer is full, finalize it and create new one
     if (current_buffer) {
-      scope_collection_handle->buffer_manager_->FinalizeCurrentBuffer();
+      scope_collection_handle->buffer_manager_->FinalizeCurrentBuffer(device);
     }
 
     // Create new buffer
-    pti_result result = CreateNewBuffer(scope_collection_handle);
+    SPDLOG_DEBUG(
+        "StoreKernelData: Current buffer full or not found for device {}, creating new buffer",
+        static_cast<void*>(device));
+    pti_result result = CreateNewBuffer(scope_collection_handle, device);
     if (result != PTI_SUCCESS) {
       return false;
     }
 
-    current_buffer = scope_collection_handle->buffer_manager_->GetCurrentBuffer();
+    current_buffer = scope_collection_handle->buffer_manager_->GetCurrentBuffer(device);
   }
 
   // Add data to current buffer
@@ -743,11 +839,13 @@ inline bool ValidateAppendedOperation(pti_callback_gpu_op_data* callback_data,
 void CollectQueryDataForKernel(pti_scope_collection_handle_t scope_collection_handle,
                                uint64_t kernel_id, const char* kernel_name,
                                ze_context_handle_t context, ze_command_queue_handle_t queue,
-                               pti_backend_command_list_type submit_type);
+                               pti_backend_command_list_type submit_type,
+                               pti_device_handle_t device);
 
 inline void HandleGpuOperationCompleted(pti_scope_collection_handle_t scope_collection_handle,
                                         pti_callback_gpu_op_data* callback_data,
-                                        const GpuOperationContext& ctx) {
+                                        const GpuOperationContext& ctx,
+                                        [[maybe_unused]] pti_device_handle_t device) {
   SPDLOG_TRACE("GPU OP COMPLETED");
   SPDLOG_TRACE("\tSubmit type: {}", static_cast<int>(ctx.submit_type));
 
@@ -765,7 +863,8 @@ inline void HandleGpuOperationCompleted(pti_scope_collection_handle_t scope_coll
 
       // Collect query data for this completed kernel
       CollectQueryDataForKernel(scope_collection_handle, kernel_id, kernel_name, ctx.context,
-                                ctx.queue, ctx.submit_type);
+                                ctx.queue, ctx.submit_type,
+                                static_cast<pti_device_handle_t>(ctx.device));
     }
   }
 }
@@ -773,8 +872,16 @@ inline void HandleGpuOperationCompleted(pti_scope_collection_handle_t scope_coll
 inline void HandleGpuOperationAppended(pti_scope_collection_handle_t scope_collection_handle,
                                        pti_callback_gpu_op_data* callback_data,
                                        pti_gpu_op_details* op_details,
-                                       const GpuOperationContext& ctx) {
+                                       const GpuOperationContext& ctx, pti_device_handle_t device) {
   SPDLOG_TRACE("GPU OP APPENDED");
+
+  auto profiler_it = scope_collection_handle->query_profilers_.find(device);
+  if (profiler_it == scope_collection_handle->query_profilers_.end() || !profiler_it->second) {
+    SPDLOG_WARN("HandleGpuOperationAppended: No profiler for device {}",
+                static_cast<void*>(device));
+    return;
+  }
+  auto& profiler = profiler_it->second;
 
   // Get kernel ID from operation details
   uint64_t kernel_id = 0;
@@ -794,12 +901,10 @@ inline void HandleGpuOperationAppended(pti_scope_collection_handle_t scope_colle
 
   if (callback_data->_phase == PTI_CB_PHASE_API_ENTER) {
     SPDLOG_TRACE("API Enter phase - injecting query begin");
-    scope_collection_handle->query_profiler_->HandleKernelAppendEnter(ctx.cmd_list, ctx.device,
-                                                                      kernel_id);
+    profiler->HandleKernelAppendEnter(ctx.cmd_list, ctx.device, kernel_id);
   } else if (callback_data->_phase == PTI_CB_PHASE_API_EXIT) {
     SPDLOG_TRACE("API Exit phase - injecting query end");
-    scope_collection_handle->query_profiler_->HandleKernelAppendExit(ctx.cmd_list, ctx.device,
-                                                                     kernel_id);
+    profiler->HandleKernelAppendExit(ctx.cmd_list, ctx.device, kernel_id);
   }
 }
 
@@ -819,17 +924,19 @@ inline void HandleKernelEvent(pti_scope_collection_handle_t scope_collection_han
   LogGpuOperationContext(ctx);
 
   // Validate device here
-  if (ctx.device != static_cast<ze_device_handle_t>(scope_collection_handle->device_handle_)) {
-    SPDLOG_TRACE("Callback device ({}) doesn't match configured device ({}), skipping",
-                 static_cast<void*>(ctx.device),
-                 static_cast<void*>(scope_collection_handle->device_handle_));
+  pti_device_handle_t callback_device = static_cast<pti_device_handle_t>(ctx.device);
+  if (scope_collection_handle->active_devices_.find(callback_device) ==
+      scope_collection_handle->active_devices_.end()) {
+    SPDLOG_TRACE("Callback device ({}) not in active_devices, skipping",
+                 static_cast<void*>(callback_device));
     return;
   }
 
   if (domain == PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED) {
-    HandleGpuOperationCompleted(scope_collection_handle, callback_data, ctx);
+    HandleGpuOperationCompleted(scope_collection_handle, callback_data, ctx, callback_device);
   } else if (domain == PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED) {
-    HandleGpuOperationAppended(scope_collection_handle, callback_data, op_details, ctx);
+    HandleGpuOperationAppended(scope_collection_handle, callback_data, op_details, ctx,
+                               static_cast<pti_device_handle_t>(ctx.device));
   }
 }
 

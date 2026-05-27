@@ -194,6 +194,16 @@ if(HAVE_SYCL)
   target_link_libraries(metrics_scope_gemm_suite PUBLIC spdlog::spdlog
     GTest::gtest_main Pti::pti_view ${FS_LIB})
 
+  add_executable(metrics_scope_buffer_handler_suite metrics_scope_buffer_handler.cc)
+  target_include_directories(
+    metrics_scope_buffer_handler_suite
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_link_libraries(metrics_scope_buffer_handler_suite PUBLIC spdlog::spdlog
+    GTest::gtest_main Pti::pti_view ${FS_LIB})
+
   add_executable(metrics_scope_parallel metrics_scope_parallel.cc)
   target_include_directories(
     metrics_scope_parallel
@@ -477,6 +487,15 @@ if(HAVE_SYCL)
        LABELS "functional"
        LABELS "metrics"
        LABELS "hw-metrics-scope")
+
+  gtest_discover_tests(
+    metrics_scope_buffer_handler_suite
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES
+       LABELS "functional"
+       LABELS "metrics"
+       LABELS "hw-metrics-scope"
+       LABELS "buffer-handler")
 
   gtest_discover_tests(
     metrics_scope_parallel

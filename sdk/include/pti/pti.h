@@ -76,6 +76,8 @@ typedef enum {
   PTI_ERROR_METRICS_SCOPE_INSUFFICIENT_BUFFER = 155, //!< Insufficient buffer for metrics scope operation
   PTI_ERROR_METRICS_SCOPE_INVALID_COLLECTION_BUFFER = 156,  //!< Invalid collection buffer in metrics scope
   PTI_WARN_METRICS_SCOPE_PARTIAL_BUFFER = 157,  //!< Warning: partial buffer populated in metrics scope
+  PTI_WARN_BUFFER_NOT_FINALIZED = 158, //!< Warning: current buffer not finalized, cannot create new buffer
+  PTI_ERROR_METRICS_SCOPE_DEVICE_TYPE_NOT_UNIFORM = 159, //!< Requested devices are not the same type
 
   PTI_ERROR_INTERNAL = 200,  //!< internal error
 
