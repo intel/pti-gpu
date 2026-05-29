@@ -378,6 +378,21 @@ if(HAVE_SYCL)
   target_link_libraries(callback_api_test PUBLIC GTest::gtest_main spdlog::spdlog
                                           PRIVATE Pti::pti_view LevelZero::level-zero)
 
+  add_executable(callback_kernel_lifecycle_test callback_kernel_lifecycle_test.cc)
+
+  target_include_directories(
+    callback_kernel_lifecycle_test
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+        "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+      PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_compile_options(callback_kernel_lifecycle_test PUBLIC -fsycl)
+  target_link_options(callback_kernel_lifecycle_test PUBLIC -fsycl)
+
+  target_link_libraries(callback_kernel_lifecycle_test
+    PUBLIC GTest::gtest_main spdlog::spdlog
+    PRIVATE Pti::pti_view LevelZero::level-zero)
+
   add_executable(dpc_gemm_threaded_profiled perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_baseline perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_linkonly perf_dpc_gemm_threaded.cc)
@@ -546,6 +561,14 @@ if(HAVE_SYCL)
   gtest_discover_tests(
     callback_api_test
     PROPERTIES LABELS "functional")
+
+  gtest_discover_tests(
+    callback_kernel_lifecycle_test
+    PROPERTIES LABELS "functional")
+
+  if(TARGET copy_test_spv)
+    add_dependencies(callback_kernel_lifecycle_test copy_test_spv)
+  endif()
 
   RequirePythonInterp()
 

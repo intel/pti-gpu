@@ -1157,6 +1157,7 @@ def main():
         "zeImageCreate",
         "zeImageDestroy",
         "zeKernelSetGroupSize",
+        "zeKernelCreate",
         "zeKernelDestroy",
         "zeEventHostSynchronize",
         "zeFenceCreate",
@@ -1164,6 +1165,8 @@ def main():
         "zeEventQueryStatus",
         "zeCommandListHostSynchronize",
         "zeContextDestroy",
+        "zeModuleCreate",
+        "zeModuleDestroy",
     ]
 
     ze_gen_func_list = [

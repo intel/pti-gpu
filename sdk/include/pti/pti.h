@@ -111,6 +111,10 @@ typedef void* pti_backend_evt_t;    //!< Backend event handle
 
 typedef void* pti_backend_command_list_t; //!< Backend command list handle
 
+typedef void* pti_backend_kernel_t; //!< Backend kernel object handle
+
+typedef void* pti_backend_module_t; //!< Backend module object handle
+
 
 #if defined(__cplusplus)
 }

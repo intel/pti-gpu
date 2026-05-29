@@ -56,6 +56,14 @@ typedef enum _pti_callback_domain {
   PTI_CB_DOMAIN_DRIVER_HOST_SYNCHRONIZATION        = 7, //!< Not implemented yet
                                                      //!< attempt to enable it will return PTI_ERROR_NOT_IMPLEMENTED
 
+  PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED              = 8, //!< Synchronous callback fired around
+                                                     //!< kernel creation. Carries the freshly created
+                                                     //!< kernel handle, owning module, and kernel name.
+
+  PTI_CB_DOMAIN_DRIVER_KERNEL_DESTROYED            = 9, //!< Synchronous callback fired around
+                                                     //!< kernel destruction. Carries the kernel handle being
+                                                     //!< destroyed.
+
   PTI_CB_DOMAIN_DRIVER_API                         = 1023, //!< Not implemented yet,
                                                         //!< attempt to enable it will return PTI_ERROR_NOT_IMPLEMENTED
                                                         //!< Callback created for all Driver APIs
@@ -146,6 +154,24 @@ typedef struct _pti_callback_gpu_op_data {
   uint32_t                  _operation_count;   //!< number of operations appended or dispatched to the GPU
   pti_gpu_op_details*       _operation_details; //!< pointer to details of operation(s) appended, dispatched or completed
 } pti_callback_gpu_op_data;
+
+typedef struct _pti_callback_kernel_data {
+  pti_callback_domain  _domain;          //!< PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED or
+                                         //!< PTI_CB_DOMAIN_DRIVER_KERNEL_DESTROYED
+  pti_callback_phase   _phase;           //!< PTI_CB_PHASE_API_ENTER / PTI_CB_PHASE_API_EXIT
+  uint32_t             _return_code;     //!< Driver return code; valid only on EXIT phase, 0 otherwise
+  uint32_t             _correlation_id;  //!< Correlation id matching driver API view records
+  pti_backend_kernel_t _device_kernel_handle; //!< Per device kernel object handle.
+                                         //!<   - CREATED, ENTER : nullptr (not yet created)
+                                         //!<   - CREATED, EXIT  : non-null on success, nullptr otherwise
+                                         //!<   - DESTROYED, ENTER/EXIT : the handle being destroyed
+  pti_device_handle_t _device_handle;    //!< Device handle associated with the kernel
+  pti_backend_module_t _module_handle;   //!< Owning module handle. Populated for KERNEL_CREATED,
+                                         //!< nullptr for KERNEL_DESTROYED.
+  const char*          _name;            //!< Kernel name (lifetime: valid only during the callback).
+                                         //!< Populated for KERNEL_CREATED (from kernel descriptor).
+                                         //!< nullptr for KERNEL_DESTROYED.
+} pti_callback_kernel_data;
 
 typedef struct _pti_internal_callback_data {
   pti_callback_domain  _domain;       //!< domain of the callback

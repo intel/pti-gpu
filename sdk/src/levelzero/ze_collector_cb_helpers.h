@@ -79,7 +79,9 @@ class ZeCollectorCBSubscriber {
   pti_result EnableDomain(pti_callback_domain domain, uint32_t enter_cb, uint32_t exit_cb) {
     // for now only few specific domains supported
     if (domain != PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED &&
-        domain != PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED) {
+        domain != PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED &&
+        domain != PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED &&
+        domain != PTI_CB_DOMAIN_DRIVER_KERNEL_DESTROYED) {
       return PTI_ERROR_NOT_IMPLEMENTED;
     }
 

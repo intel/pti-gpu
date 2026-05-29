@@ -592,9 +592,6 @@ class ZeCollector {
                  kcexecrec.size());
     if (IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED, 1) &&
         kcexecrec.size() > 0) {
-      // Call the callback with the collected records for all active subscribers
-      std::shared_lock<std::shared_mutex> lock(subscribers_mutex_);
-
       ExecRecordsMap record_map;
       ZeCollectorCBSubscriber::MapRecordsByContextAndDevice(kcexecrec, record_map);
       SPDLOG_TRACE("\trecord map size: {}", record_map.size());
@@ -613,18 +610,9 @@ class ZeCollector {
             PTI_CB_PHASE_API_EXIT, 0, 0, static_cast<uint32_t>(op_details.size()),
             op_details.data()};
 
-        for (auto& subscriber_handle : cb_subscribers_collection_) {
-          auto subscriber = cb_subscribers_collection_.GetSubscriber(subscriber_handle);
-          PTI_ASSERT(subscriber != nullptr);
-          if (subscriber->IsEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED, 1)) {
-            thread_local_is_within_subscriber_callback = true;
-            subscriber->GetCallback()(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED,
-                                      PTI_API_GROUP_LEVELZERO, ze_instance_data.callback_id_,
-                                      context, &callback_data, subscriber->GetUserData(),
-                                      subscriber->GetPtrForInstanceUserData());
-            thread_local_is_within_subscriber_callback = false;
-          }
-        }
+        InvokeCallbacksForSubscribers(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_COMPLETED,
+                                      PTI_CB_PHASE_API_EXIT, ze_instance_data.callback_id_, context,
+                                      &callback_data);
       }
     }
   }
@@ -638,27 +626,59 @@ class ZeCollector {
           MakeGPUOpData(*command, phase, return_code, &op_details);
 
       // Invoke callbacks for all subscribers with this domain enabled
-      std::shared_lock<std::shared_mutex> lock(subscribers_mutex_);
       // TODO: Make correct order for different phases:
       // ENTER - forward, EXIT -> backward
-      for (const auto& subscriber_handle : cb_subscribers_collection_) {
-        auto subscriber = cb_subscribers_collection_.GetSubscriber(subscriber_handle);
-        PTI_ASSERT(subscriber != nullptr);
-        if (subscriber->IsEnabled(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED,
-                                  PTI_CB_PHASE_API_ENTER) &&
-            subscriber->GetCallback()) {
-          thread_local_is_within_subscriber_callback = true;
-          subscriber->GetCallback()(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED,
-                                    PTI_API_GROUP_LEVELZERO, ze_instance_data.callback_id_,
-                                    command->context, &callback_data, subscriber->GetUserData(),
-                                    subscriber->GetPtrForInstanceUserData());
-          thread_local_is_within_subscriber_callback = false;
-        }
-      }
+      InvokeCallbacksForSubscribers(PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED, phase,
+                                    ze_instance_data.callback_id_, command->context,
+                                    &callback_data);
     }
     SPDLOG_TRACE(
         "\tCallback calls completed in domain: "
         "PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED");
+  }
+
+  void InvokeCallbacksForSubscribers(pti_callback_domain domain, pti_callback_phase phase,
+                                     uint32_t api_id, pti_backend_ctx_t context,
+                                     void* callback_data) {
+    std::shared_lock<std::shared_mutex> lock(subscribers_mutex_);
+    for (const auto& subscriber_handle : cb_subscribers_collection_) {
+      auto subscriber = cb_subscribers_collection_.GetSubscriber(subscriber_handle);
+      PTI_ASSERT(subscriber != nullptr);
+      if (subscriber->IsEnabled(domain, phase) && subscriber->GetCallback()) {
+        thread_local_is_within_subscriber_callback = true;
+        subscriber->GetCallback()(domain, PTI_API_GROUP_LEVELZERO, api_id, context, callback_data,
+                                  subscriber->GetUserData(),
+                                  subscriber->GetPtrForInstanceUserData());
+        thread_local_is_within_subscriber_callback = false;
+      }
+    }
+  }
+
+  void DoCallbackOnKernelLifecycle(pti_callback_domain domain, pti_callback_phase phase,
+                                   ze_context_handle_t context, ze_kernel_handle_t kernel_handle,
+                                   ze_module_handle_t module_handle,
+                                   ze_device_handle_t device_handle, const char* kernel_name,
+                                   ze_result_t return_code, uint32_t api_id) {
+    SPDLOG_TRACE("In {} domain {} phase {}", __func__, static_cast<uint32_t>(domain),
+                 static_cast<uint32_t>(phase));
+    if (domain != PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED &&
+        domain != PTI_CB_DOMAIN_DRIVER_KERNEL_DESTROYED) {
+      return;
+    }
+    if (!IsCallbackDomainEnabled(domain, phase)) {
+      return;
+    }
+    pti_callback_kernel_data callback_data = {};
+    callback_data._domain = domain;
+    callback_data._phase = phase;
+    callback_data._return_code =
+        (phase == PTI_CB_PHASE_API_EXIT) ? static_cast<uint32_t>(return_code) : 0u;
+    callback_data._device_kernel_handle = static_cast<pti_backend_kernel_t>(kernel_handle);
+    callback_data._module_handle = static_cast<pti_backend_module_t>(module_handle);
+    callback_data._name = kernel_name;
+    callback_data._device_handle = static_cast<pti_device_handle_t>(device_handle);
+
+    InvokeCallbacksForSubscribers(domain, phase, api_id, context, &callback_data);
   }
 
  private:  // Implementation
@@ -3151,12 +3171,125 @@ class ZeCollector {
     }
   }
 
+  static void OnEnterModuleCreate([[maybe_unused]] ze_module_create_params_t* params,
+                                  [[maybe_unused]] void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    // No need to do anything here now
+  }
+
+  static void OnExitModuleCreate(ze_module_create_params_t* params, ze_result_t result,
+                                 void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+    if (result != ZE_RESULT_SUCCESS) {
+      return;
+    }
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+    ze_module_handle_t module_handle =
+        (params && params->pphModule && *(params->pphModule)) ? **(params->pphModule) : nullptr;
+    ze_device_handle_t device = (params && params->phDevice) ? *(params->phDevice) : nullptr;
+    if (module_handle != nullptr && device != nullptr) {
+      std::unique_lock<std::shared_mutex> lock(collector->module_to_device_map_lock_);
+      collector->module_to_device_map_[module_handle] = device;
+    }
+  }
+
+  static void OnEnterModuleDestroy([[maybe_unused]] ze_module_destroy_params_t* params,
+                                   void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+    ze_module_handle_t module_handle = (params && params->phModule) ? *(params->phModule) : nullptr;
+    if (module_handle != nullptr) {
+      std::unique_lock<std::shared_mutex> lock(collector->module_to_device_map_lock_);
+      collector->module_to_device_map_.erase(module_handle);
+    }
+  }
+
+  static void OnExitModuleDestroy([[maybe_unused]] ze_module_destroy_params_t* params,
+                                  [[maybe_unused]] ze_result_t result,
+                                  [[maybe_unused]] void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+  }
+
+  static void OnEnterKernelCreate(ze_kernel_create_params_t* params, void* global_data,
+                                  void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+    ze_device_handle_t device = nullptr;
+    if (collector->IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED,
+                                           PTI_CB_PHASE_API_ENTER)) {
+      const ze_kernel_desc_t* desc = (params && params->pdesc) ? *(params->pdesc) : nullptr;
+      const char* kname = (desc != nullptr) ? desc->pKernelName : nullptr;
+      ze_module_handle_t module_handle =
+          (params && params->phModule) ? *(params->phModule) : nullptr;
+      {
+        std::shared_lock<std::shared_mutex> lock(collector->module_to_device_map_lock_);
+        auto device_handle_it = collector->module_to_device_map_.find(module_handle);
+        if (device_handle_it != collector->module_to_device_map_.end()) {
+          device = device_handle_it->second;
+        }
+      }
+      collector->DoCallbackOnKernelLifecycle(
+          PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED, PTI_CB_PHASE_API_ENTER,
+          /*context*/ nullptr,
+          /*kernel*/ nullptr, module_handle, device, kname, ZE_RESULT_SUCCESS, zeKernelCreate_id);
+    }
+  }
+
+  static void OnExitKernelCreate(ze_kernel_create_params_t* params, ze_result_t result,
+                                 void* global_data, void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+    if (collector->IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED,
+                                           PTI_CB_PHASE_API_EXIT)) {
+      const ze_kernel_desc_t* desc = (params && params->pdesc) ? *(params->pdesc) : nullptr;
+      const char* kname = (desc != nullptr) ? desc->pKernelName : nullptr;
+      ze_module_handle_t module_handle =
+          (params && params->phModule) ? *(params->phModule) : nullptr;
+      ze_kernel_handle_t kernel = nullptr;
+      if (result == ZE_RESULT_SUCCESS && params && params->pphKernel && *(params->pphKernel)) {
+        kernel = **(params->pphKernel);
+      }
+      ze_device_handle_t device = nullptr;
+      {
+        std::shared_lock<std::shared_mutex> lock(collector->module_to_device_map_lock_);
+        auto device_handle_it = collector->module_to_device_map_.find(module_handle);
+        if (device_handle_it != collector->module_to_device_map_.end()) {
+          device = device_handle_it->second;
+        }
+      }
+      collector->DoCallbackOnKernelLifecycle(
+          PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED, PTI_CB_PHASE_API_EXIT,
+          /*context*/ nullptr, kernel, module_handle, device, kname, result, zeKernelCreate_id);
+    }
+  }
+
+  static void OnEnterKernelDestroy(ze_kernel_destroy_params_t* params, void* global_data,
+                                   void** /*instance_data*/) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+    if (collector->IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_KERNEL_DESTROYED,
+                                           PTI_CB_PHASE_API_ENTER)) {
+      ze_kernel_handle_t kernel = (params && params->phKernel) ? *(params->phKernel) : nullptr;
+      collector->DoCallbackOnKernelLifecycle(PTI_CB_DOMAIN_DRIVER_KERNEL_DESTROYED,
+                                             PTI_CB_PHASE_API_ENTER,
+                                             /*context*/ nullptr, kernel, nullptr, nullptr, nullptr,
+                                             ZE_RESULT_SUCCESS, zeKernelDestroy_id);
+    }
+  }
+
   static void OnExitKernelDestroy(ze_kernel_destroy_params_t* params, ze_result_t result,
                                   void* global_data, void** /*instance_data*/) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
-      ZeCollector* collector = static_cast<ZeCollector*>(global_data);
       collector->RemoveKernelGroupSize(*(params->phKernel));
+    }
+    if (collector->IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_KERNEL_DESTROYED,
+                                           PTI_CB_PHASE_API_EXIT)) {
+      ze_kernel_handle_t kernel = (params && params->phKernel) ? *(params->phKernel) : nullptr;
+      collector->DoCallbackOnKernelLifecycle(
+          PTI_CB_DOMAIN_DRIVER_KERNEL_DESTROYED, PTI_CB_PHASE_API_EXIT,
+          /*context*/ nullptr, kernel, nullptr, nullptr, nullptr, result, zeKernelDestroy_id);
     }
   }
 
@@ -3253,6 +3386,8 @@ class ZeCollector {
   ZeKernelGroupSizeMap kernel_group_size_map_;
   ZeDeviceMap device_map_;
   std::unordered_map<ze_device_handle_t, ZeDeviceDescriptor> device_descriptors_;
+  std::unordered_map<ze_module_handle_t, ze_device_handle_t> module_to_device_map_;
+  std::shared_mutex module_to_device_map_lock_;
 
   ZeEventCache event_cache_;
 
