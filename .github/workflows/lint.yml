@@ -31,20 +31,25 @@ jobs:
 
     steps:
       - name: Clean
-        run: rm -rf ./*
+        run: |
+          rm -rf ./*
+          rm -rf ./.venv
+          rm -rf ./.cache
 
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Python Environment Setup
-        uses: actions/setup-python@v5
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.11'
+          activate-environment: true
+          cache-local-path: ${{ github.workspace }}/.cache/uv
 
       - name: Install Dependencies
         run: |
-          python -m pip install --upgrade setuptools wheel pip
-          python -m pip install "clang-format>=18,<19" # Ubuntu 24.04 ships with clang-format 18
+          uv pip install "clang-format>=18,<19"
+          uv pip install ruff==0.15.15
 
       - name: Check SDK Format
         working-directory: sdk

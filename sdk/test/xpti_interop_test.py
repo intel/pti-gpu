@@ -290,9 +290,7 @@ def perform_behavioral_checks(ret1, ret2, stdout_analysis, stderr_analysis):
             f"PASS: Kernel records still captured in foreign run ({kernel_count_foreign})"
         )
     else:
-        print(
-            f"FAIL: No kernel records found in foreign run (expected > 0)"
-        )
+        print(f"FAIL: No kernel records found in foreign run (expected > 0)")
         test_passed = False
 
     # Check 5: All other record types should be identical

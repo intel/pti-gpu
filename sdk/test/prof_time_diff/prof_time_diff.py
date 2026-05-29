@@ -45,6 +45,7 @@ from typing import List, Tuple, Optional
 
 class KernelRecord:
     """Represents a single kernel execution record."""
+
     def __init__(self, name: str, duration_ns: int, position: int):
         self.name = name
         self.duration_ns = duration_ns
@@ -56,8 +57,16 @@ class KernelRecord:
 
 class Violation:
     """Represents a kernel duration violation."""
-    def __init__(self, position: int, name: str, duration1_ns: int, duration2_ns: int,
-                 diff_percent: float, diff_abs: int):
+
+    def __init__(
+        self,
+        position: int,
+        name: str,
+        duration1_ns: int,
+        duration2_ns: int,
+        diff_percent: float,
+        diff_abs: int,
+    ):
         self.position = position
         self.name = name
         self.duration1_ns = duration1_ns
@@ -66,9 +75,11 @@ class Violation:
         self.diff_abs = diff_abs
 
     def __repr__(self):
-        return (f"Violation at position {self.position}: {self.name}\n"
-                f"  Run1: {self.duration1_ns:,}ns, Run2: {self.duration2_ns:,}ns, "
-                f"Diff: {self.diff_percent:.2f}% ({self.diff_abs:,}ns)")
+        return (
+            f"Violation at position {self.position}: {self.name}\n"
+            f"  Run1: {self.duration1_ns:,}ns, Run2: {self.duration2_ns:,}ns, "
+            f"Diff: {self.diff_percent:.2f}% ({self.diff_abs:,}ns)"
+        )
 
 
 def parse_kernel_records(output: str) -> List[KernelRecord]:
@@ -85,7 +96,7 @@ def parse_kernel_records(output: str) -> List[KernelRecord]:
         List of KernelRecord objects in order of appearance.
     """
     records = []
-    lines = output.split('\n')
+    lines = output.split("\n")
     i = 0
     position = 0
 
@@ -103,12 +114,14 @@ def parse_kernel_records(output: str) -> List[KernelRecord]:
                 curr_line = lines[j].strip()
 
                 # Extract kernel name
-                name_match = re.match(r'Kernel Name:\s*(.+)$', curr_line)
+                name_match = re.match(r"Kernel Name:\s*(.+)$", curr_line)
                 if name_match:
                     kernel_name = name_match.group(1).strip()
 
                 # Extract duration (format: "Kernel Execution Time: 1'234'567 ns")
-                duration_match = re.match(r"Kernel Execution Time:\s*([\d']+)\s*ns", curr_line)
+                duration_match = re.match(
+                    r"Kernel Execution Time:\s*([\d']+)\s*ns", curr_line
+                )
                 if duration_match:
                     # Remove apostrophes (thousands separator) and convert to int
                     duration_str = duration_match.group(1).replace("'", "")
@@ -128,7 +141,9 @@ def parse_kernel_records(output: str) -> List[KernelRecord]:
     return records
 
 
-def run_target_binary(binary_path: str, output_file: str, env_vars: Optional[dict] = None) -> Tuple[int, str]:
+def run_target_binary(
+    binary_path: str, output_file: str, env_vars: Optional[dict] = None
+) -> Tuple[int, str]:
     """
     Run target binary and capture output.
 
@@ -155,31 +170,38 @@ def run_target_binary(binary_path: str, output_file: str, env_vars: Optional[dic
             stderr=subprocess.STDOUT,
             text=True,
             timeout=300,  # 5 minute timeout
-            env=env
+            env=env,
         )
 
         # All output is now in stdout with correct chronological order
         full_output = result.stdout
 
         # Save to file
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             f.write(full_output)
 
         return result.returncode, full_output
 
     except subprocess.TimeoutExpired:
-        print(f"ERROR: Target binary '{binary_name}' execution timed out after 300 seconds", file=sys.stderr)
+        print(
+            f"ERROR: Target binary '{binary_name}' execution timed out after 300 seconds",
+            file=sys.stderr,
+        )
         return -1, ""
     except Exception as e:
-        print(f"ERROR: Failed to run target binary '{binary_name}': {e}", file=sys.stderr)
+        print(
+            f"ERROR: Failed to run target binary '{binary_name}': {e}", file=sys.stderr
+        )
         return -1, ""
 
 
-def compare_kernel_durations(run1_records: List[KernelRecord],
-                             run2_records: List[KernelRecord],
-                             threshold_percent: Optional[float] = None,
-                             threshold_abs: Optional[int] = None,
-                             skip_first: int = 0) -> Tuple[List[Violation], List[str]]:
+def compare_kernel_durations(
+    run1_records: List[KernelRecord],
+    run2_records: List[KernelRecord],
+    threshold_percent: Optional[float] = None,
+    threshold_abs: Optional[int] = None,
+    skip_first: int = 0,
+) -> Tuple[List[Violation], List[str]]:
     """
     Compare kernel durations between two runs.
 
@@ -200,7 +222,9 @@ def compare_kernel_durations(run1_records: List[KernelRecord],
 
     # Check if kernel counts match
     if len(run1_records) != len(run2_records):
-        errors.append(f"Kernel count mismatch: Run1={len(run1_records)}, Run2={len(run2_records)}")
+        errors.append(
+            f"Kernel count mismatch: Run1={len(run1_records)}, Run2={len(run2_records)}"
+        )
         # Continue comparison up to the shorter list
 
     # Compare kernels sequentially, starting after skip_first
@@ -208,7 +232,9 @@ def compare_kernel_durations(run1_records: List[KernelRecord],
 
     # Check if skip_first is valid
     if skip_first >= min_count:
-        errors.append(f"skip_first ({skip_first}) is >= total kernels ({min_count}), no kernels to compare")
+        errors.append(
+            f"skip_first ({skip_first}) is >= total kernels ({min_count}), no kernels to compare"
+        )
         return violations, errors
 
     for i in range(skip_first, min_count):
@@ -217,7 +243,9 @@ def compare_kernel_durations(run1_records: List[KernelRecord],
 
         # Check if kernel names match
         if kernel1.name != kernel2.name:
-            errors.append(f"Position {i}: Kernel name mismatch - Run1='{kernel1.name}', Run2='{kernel2.name}'")
+            errors.append(
+                f"Position {i}: Kernel name mismatch - Run1='{kernel1.name}', Run2='{kernel2.name}'"
+            )
             continue
 
         # Calculate differences
@@ -236,14 +264,16 @@ def compare_kernel_durations(run1_records: List[KernelRecord],
             violates = True
 
         if violates:
-            violations.append(Violation(
-                position=i,
-                name=kernel1.name,
-                duration1_ns=kernel1.duration_ns,
-                duration2_ns=kernel2.duration_ns,
-                diff_percent=diff_percent,
-                diff_abs=diff_ns
-            ))
+            violations.append(
+                Violation(
+                    position=i,
+                    name=kernel1.name,
+                    duration1_ns=kernel1.duration_ns,
+                    duration2_ns=kernel2.duration_ns,
+                    diff_percent=diff_percent,
+                    diff_abs=diff_ns,
+                )
+            )
 
     return violations, errors
 
@@ -263,7 +293,10 @@ def validate_threshold(value: Optional[float], name: str) -> bool:
         return True
 
     if not math.isfinite(value):
-        print(f"ERROR: {name} must be a finite number (not NaN or infinity)", file=sys.stderr)
+        print(
+            f"ERROR: {name} must be a finite number (not NaN or infinity)",
+            file=sys.stderr,
+        )
         return False
 
     if value <= 0:
@@ -290,12 +323,18 @@ def parse_env_vars(env_list: Optional[List[str]], run_name: str) -> dict:
     env_vars = {}
     if env_list:
         for env_spec in env_list:
-            if '=' not in env_spec:
-                print(f"ERROR: Invalid environment variable format for {run_name}: '{env_spec}'. Must be VAR=VALUE", file=sys.stderr)
+            if "=" not in env_spec:
+                print(
+                    f"ERROR: Invalid environment variable format for {run_name}: '{env_spec}'. Must be VAR=VALUE",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
-            key, value = env_spec.split('=', 1)
+            key, value = env_spec.split("=", 1)
             if not key:
-                print(f"ERROR: Invalid environment variable format for {run_name}: '{env_spec}'. Variable name cannot be empty", file=sys.stderr)
+                print(
+                    f"ERROR: Invalid environment variable format for {run_name}: '{env_spec}'. Variable name cannot be empty",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             env_vars[key] = value
     return env_vars
@@ -304,11 +343,11 @@ def parse_env_vars(env_list: Optional[List[str]], run_name: str) -> dict:
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(
-        description='Test script to validate that kernel durations between two consecutive runs '
-                    'of an application differ by no more than a specified threshold percentage '
-                    'or/and absolute value of nanoseconds.',
+        description="Test script to validate that kernel durations between two consecutive runs "
+        "of an application differ by no more than a specified threshold percentage "
+        "or/and absolute value of nanoseconds.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='''
+        epilog="""
 Examples:
   %(prog)s /path/to/application
   %(prog)s /path/to/application -dp 25.0
@@ -320,53 +359,54 @@ Examples:
   %(prog)s /path/to/application -e1 SYCL_DEVICE_FILTER=level_zero:gpu
   %(prog)s /path/to/application -e1 VAR1=value1 -e2 VAR1=value2
   %(prog)s /path/to/application -e1 A=1 -e1 B=2 -e2 A=3 -e2 B=4
-        '''
+        """,
     )
 
     parser.add_argument(
-        'binary',
-        metavar='BINARY_PATH',
-        help='Path to the target executable'
+        "binary", metavar="BINARY_PATH", help="Path to the target executable"
     )
 
     parser.add_argument(
-        '-dp', '--diff-percent',
+        "-dp",
+        "--diff-percent",
         type=float,
-        metavar='PERCENT',
-        dest='diff_percent',
-        help='Maximum allowed duration difference in percent'
+        metavar="PERCENT",
+        dest="diff_percent",
+        help="Maximum allowed duration difference in percent",
     )
 
     parser.add_argument(
-        '-da', '--diff-abs',
+        "-da",
+        "--diff-abs",
         type=int,
-        metavar='NANOSECONDS',
-        dest='diff_abs',
-        help='Maximum allowed duration difference in nanoseconds'
+        metavar="NANOSECONDS",
+        dest="diff_abs",
+        help="Maximum allowed duration difference in nanoseconds",
     )
 
     parser.add_argument(
-        '-s', '--skip',
+        "-s",
+        "--skip",
         type=int,
         default=0,
-        metavar='COUNT',
-        help='Number of first kernels to skip (warmup kernels) (default: 0)'
+        metavar="COUNT",
+        help="Number of first kernels to skip (warmup kernels) (default: 0)",
     )
 
     parser.add_argument(
-        '-e1',
-        action='append',
-        metavar='VAR=VALUE',
-        dest='env1',
-        help='Environment variable for run 1 in format VAR=VALUE (can be specified multiple times)'
+        "-e1",
+        action="append",
+        metavar="VAR=VALUE",
+        dest="env1",
+        help="Environment variable for run 1 in format VAR=VALUE (can be specified multiple times)",
     )
 
     parser.add_argument(
-        '-e2',
-        action='append',
-        metavar='VAR=VALUE',
-        dest='env2',
-        help='Environment variable for run 2 in format VAR=VALUE (can be specified multiple times)'
+        "-e2",
+        action="append",
+        metavar="VAR=VALUE",
+        dest="env2",
+        help="Environment variable for run 2 in format VAR=VALUE (can be specified multiple times)",
     )
 
     # Parse arguments
@@ -406,9 +446,9 @@ Examples:
         print(f"ERROR: Binary is not executable: {binary_path}", file=sys.stderr)
         return 1
 
-    print("="*80)
+    print("=" * 80)
     print("Profile Time Difference Test (prof_time_diff)")
-    print("="*80)
+    print("=" * 80)
     print(f"Binary: {binary_path}")
 
     # Display threshold(s)
@@ -436,7 +476,9 @@ Examples:
 
     # Run binary twice
     print(f"Running {binary_name} (Run 1)...")
-    ret1, output1 = run_target_binary(binary_path, str(run1_file), env_vars=env1_vars if env1_vars else None)
+    ret1, output1 = run_target_binary(
+        binary_path, str(run1_file), env_vars=env1_vars if env1_vars else None
+    )
     if ret1 != 0:
         print(f"ERROR: Run 1 failed with return code {ret1}", file=sys.stderr)
         print(f"Output saved to: {run1_file}")
@@ -444,7 +486,9 @@ Examples:
     print(f"  Completed. Output saved to: {run1_file}")
 
     print(f"\nRunning {binary_name} (Run 2)...")
-    ret2, output2 = run_target_binary(binary_path, str(run2_file), env_vars=env2_vars if env2_vars else None)
+    ret2, output2 = run_target_binary(
+        binary_path, str(run2_file), env_vars=env2_vars if env2_vars else None
+    )
     if ret2 != 0:
         print(f"ERROR: Run 2 failed with return code {ret2}", file=sys.stderr)
         print(f"Output saved to: {run2_file}")
@@ -480,7 +524,10 @@ Examples:
             zero_duration_kernels.append(f"Run 2, Position {i}: {kernel.name}")
 
     if zero_duration_kernels:
-        print(f"\nERROR: Found {len(zero_duration_kernels)} kernel(s) with zero duration:", file=sys.stderr)
+        print(
+            f"\nERROR: Found {len(zero_duration_kernels)} kernel(s) with zero duration:",
+            file=sys.stderr,
+        )
         for kernel_info in zero_duration_kernels:
             print(f"  - {kernel_info}", file=sys.stderr)
         print("\nThis indicates a timing or instrumentation issue.", file=sys.stderr)
@@ -492,22 +539,28 @@ Examples:
     min_count = min(len(run1_records), len(run2_records))
     if skip_first > 0:
         if skip_first >= min_count:
-            print(f"\nERROR: skip_first ({skip_first}) is >= total kernels ({min_count})", file=sys.stderr)
+            print(
+                f"\nERROR: skip_first ({skip_first}) is >= total kernels ({min_count})",
+                file=sys.stderr,
+            )
             return 1
         print(f"  Skipping first {skip_first} kernel(s) (warmup)")
         print(f"  Comparing {min_count - skip_first} kernel(s)")
 
     # Compare kernel durations
     print("\nComparing kernel durations...")
-    violations, errors = compare_kernel_durations(run1_records, run2_records,
-                                                   threshold_percent=threshold_percent,
-                                                   threshold_abs=threshold_abs,
-                                                   skip_first=skip_first)
+    violations, errors = compare_kernel_durations(
+        run1_records,
+        run2_records,
+        threshold_percent=threshold_percent,
+        threshold_abs=threshold_abs,
+        skip_first=skip_first,
+    )
 
     # Report results
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("RESULTS")
-    print("="*80)
+    print("=" * 80)
 
     # Report errors first
     if errors:
@@ -525,7 +578,9 @@ Examples:
             threshold_desc.append(f"{threshold_abs:,}ns")
         threshold_str = " or ".join(threshold_desc)
 
-        print(f"\nVIOLATIONS: {len(violations)} kernel(s) exceeded threshold ({threshold_str}):")
+        print(
+            f"\nVIOLATIONS: {len(violations)} kernel(s) exceeded threshold ({threshold_str}):"
+        )
         print()
         for v in violations:
             print(f"  Position {v.position}: {v.name}")
@@ -541,12 +596,14 @@ Examples:
         if threshold_abs is not None:
             threshold_desc.append(f"{threshold_abs:,}ns")
         threshold_str = " and ".join(threshold_desc)
-        print(f"\nNo violations found. All kernels are within threshold ({threshold_str}).")
+        print(
+            f"\nNo violations found. All kernels are within threshold ({threshold_str})."
+        )
 
     # Summary
-    print("="*80)
+    print("=" * 80)
     print("SUMMARY")
-    print("="*80)
+    print("=" * 80)
     total_kernels = min(len(run1_records), len(run2_records))
     kernels_compared = total_kernels - skip_first
     if skip_first > 0:
@@ -580,7 +637,7 @@ Examples:
             "count_mismatch": 0,
             "name_mismatch": 0,
             "zero_duration": 0,
-            "skip_first": 0
+            "skip_first": 0,
         }
         for err in errors:
             if "Kernel count mismatch" in err:
@@ -616,7 +673,9 @@ Examples:
         print(f"  Kernel: {max_violation.name}")
         print(f"  Run 1: {max_violation.duration1_ns:,} ns")
         print(f"  Run 2: {max_violation.duration2_ns:,} ns")
-        print(f"  Difference: {max_violation.diff_percent:.2f}% ({max_violation.diff_abs:,} ns)")
+        print(
+            f"  Difference: {max_violation.diff_percent:.2f}% ({max_violation.diff_abs:,} ns)"
+        )
 
     # Determine exit code
     if errors or violations:

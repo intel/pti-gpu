@@ -153,9 +153,9 @@ def get_apiids_per_category(src_path, category_dict):
                         apiids_dict["next_elem_index"] = max(apiids_set) + 1
                         apiids_counter += 1
                         # print(items, apiids_counter, id[0], len(apiids_set))
-                        assert apiids_counter == len(
-                            apiids_set
-                        ), "Duplicated api_id found in existing"
+                        assert apiids_counter == len(apiids_set), (
+                            "Duplicated api_id found in existing"
+                        )
 
             # print(apiids_dict["next_elem_index"])
             apiids_dict_per_category[cat_key] = apiids_dict.copy()
@@ -349,9 +349,9 @@ def generate_api_file_portion(
             id_counter += 1
             id_set.add(apiid)
 
-            assert (
-                len(id_set) == id_counter
-            ), "Duplicated api id generated or found when creating from existing"
+            assert len(id_set) == id_counter, (
+                "Duplicated api id generated or found when creating from existing"
+            )
             dst_validation_file.write(
                 "PTI_CHECK_SUCCESS(ptiViewGetApiIdName(pti_api_group_id::PTI_API_GROUP_"
                 + api_group.upper()
