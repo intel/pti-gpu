@@ -428,9 +428,11 @@ def generate_cb_api_file_info(cb_api_file, callbacks, category, api_group, regen
 def generate_state_file_info(
     api_state_file, callbacks, category, api_group, regen=True
 ):
-    api_state_file.write("std::mutex " + api_group + "_set_granularity_map_mtx;\n")
     api_state_file.write(
-        "inline static std::unordered_map<uint32_t, uint32_t> pti_api_id_"
+        "inline std::mutex " + api_group + "_set_granularity_map_mtx;\n"
+    )
+    api_state_file.write(
+        "inline std::unordered_map<uint32_t, uint32_t> pti_api_id_"
         + category
         + "_"
         + api_group
@@ -1097,6 +1099,9 @@ def main():
     gen_apiid_header(api_state_file, "STATE_MAPS", ())
     api_state_file.write("#include <unordered_map>\n")
     api_state_file.write("#include <mutex>")
+    api_state_file.write("\n\n")
+    api_state_file.write('#include "pti/pti_driver_levelzero_api_ids.h"\n')
+    api_state_file.write('#include "pti/pti_runtime_sycl_api_ids.h"')
     api_state_file.write("\n\n")
 
     pti_inc_path = sys.argv[4]

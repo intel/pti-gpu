@@ -199,6 +199,7 @@ add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                        "${PROJECT_SOURCE_DIR}/src/metrics/pti_metrics_scope.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
                        "${PROJECT_SOURCE_DIR}/src/overhead_kinds.cc"
+                       "$<$<TARGET_EXISTS:Xpti::xpti>:${PROJECT_SOURCE_DIR}/src/sycl/sycl_collector.cc>"
                        "${PTI_ITT_COLLECTOR_FILE}")
 
 # We might want to make our own, but for now use CMake's

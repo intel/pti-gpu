@@ -31,9 +31,11 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -55,6 +57,10 @@
 #include "ze_timer_helper.h"
 #include "ze_utils.h"
 #include "ze_wrappers.h"
+
+#if defined(PTI_TRACE_SYCL)
+#include "sycl_collector.h"
+#endif
 
 struct CallbacksEnabled {
   std::atomic<bool> acallback = false;
@@ -263,8 +269,8 @@ class ZeCollector {
       tracer_ = nullptr;
     }
   }
-  enum class ZeCollectionMode { Full = 0, Hybrid = 1, Local = 2 };
-  enum class ZeCollectionState { Normal = 0, Abnormal = 1 };
+  enum class ZeCollectionMode { kFull = 0, kHybrid = 1, kLocal = 2 };
+  enum class ZeCollectionState { kNormal = 0, kAbnormal = 1 };
 
   /**
    * \internal
@@ -376,7 +382,7 @@ class ZeCollector {
 
   static ZeCollectionMode SelectZeCollectionMode(bool introspection_capable, bool& disabled_mode,
                                                  bool& hybrid_mode) {
-    ZeCollector::ZeCollectionMode mode = ZeCollectionMode::Full;
+    ZeCollector::ZeCollectionMode mode = ZeCollectionMode::kFull;
     disabled_mode = false;
     hybrid_mode = false;
     SPDLOG_TRACE("In {}", __FUNCTION__);
@@ -394,7 +400,7 @@ class ZeCollector {
             SPDLOG_INFO("\tForced Full collection");
             disabled_mode = false;
             hybrid_mode = false;
-            mode = ZeCollectionMode::Full;
+            mode = ZeCollectionMode::kFull;
             break;
           case 1:  // Asking for Hybrid collection mode
             if (introspection_capable) {
@@ -402,7 +408,7 @@ class ZeCollector {
                   "\tLevel-Zero Introspection API available: Forced fallback to hybrid mode.");
               disabled_mode = false;
               hybrid_mode = true;
-              mode = ZeCollectionMode::Hybrid;
+              mode = ZeCollectionMode::kHybrid;
               break;
             } else {
               SPDLOG_WARN("\tLevel-Zero Introspection API not available: Cannot do Hybrid mode.");
@@ -413,7 +419,7 @@ class ZeCollector {
               SPDLOG_INFO("\tForced fallback to Local mode.");
               disabled_mode = true;
               hybrid_mode = false;
-              mode = ZeCollectionMode::Local;
+              mode = ZeCollectionMode::kLocal;
             } else {
               SPDLOG_WARN("\tLevel-Zero Introspection API not available: Cannot do Local mode.");
             }
@@ -421,7 +427,7 @@ class ZeCollector {
         }
       } else {
         if (introspection_capable) {
-          mode = ZeCollectionMode::Local;
+          mode = ZeCollectionMode::kLocal;
           disabled_mode = true;
           hybrid_mode = false;
         }
@@ -429,11 +435,11 @@ class ZeCollector {
     } catch (std::invalid_argument const& /*ex*/) {
       hybrid_mode = false;
       disabled_mode = false;
-      mode = ZeCollectionMode::Full;
+      mode = ZeCollectionMode::kFull;
     } catch (std::out_of_range const& /*ex*/) {
       hybrid_mode = false;
       disabled_mode = false;
-      mode = ZeCollectionMode::Full;
+      mode = ZeCollectionMode::kFull;
     }
     return mode;
   }
@@ -469,7 +475,7 @@ class ZeCollector {
     ze_result_t status = l0_wrapper_.w_zelDisableTracingLayer();
     if (ZE_RESULT_SUCCESS == status) {
       global_ref_count--;
-      collection_state_ = ZeCollectionState::Abnormal;
+      collection_state_ = ZeCollectionState::kAbnormal;
 
       PTI_ASSERT(global_ref_count == 0);
       SPDLOG_DEBUG("In {}, L0 Tracing OFF, tid: {}", __FUNCTION__, PidTidInfo::Get().tid);
@@ -1477,7 +1483,7 @@ class ZeCollector {
   void CleanEventsAssociatedWithCommandsInList(
       std::vector<std::shared_ptr<ZeKernelCommand>>& commands) {
     for (auto& cmd : commands) {
-      if (collection_mode_ != ZeCollectionMode::Local) {
+      if (collection_mode_ != ZeCollectionMode::kLocal) {
         event_cache_.ReleaseEvent(cmd->event_self);
       }
     }
@@ -1655,7 +1661,7 @@ class ZeCollector {
       return;
     }
     auto* collector = static_cast<ZeCollector*>(global_data);
-    if (collector->collection_mode_ == ZeCollectionMode::Local) {
+    if (collector->collection_mode_ == ZeCollectionMode::kLocal) {
       return;
     }
 
@@ -1731,7 +1737,7 @@ class ZeCollector {
       collector->ProcessEventAndReturnCommandExecutionsRecordsToUser(*(params->phEvent), kids);
 
       // only events that managed by collector should be taken care
-      if (ZeCollectionMode::Local == collector->collection_mode_) {
+      if (ZeCollectionMode::kLocal == collector->collection_mode_) {
         const std::lock_guard<std::mutex> lock(collector->lock_);
         collector->destroyed_events_.insert(*(params->phEvent));
       }
@@ -2118,7 +2124,7 @@ class ZeCollector {
                                      std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, command: {}, kernel name {}", __FUNCTION__,
                  static_cast<const void*>(command), command->props.name.c_str());
-    if (ZeCollectionState::Abnormal == collection_state_) {
+    if (ZeCollectionState::kAbnormal == collection_state_) {
       return;
     }
     PTI_ASSERT(command != nullptr);
@@ -2188,11 +2194,11 @@ class ZeCollector {
                        static_cast<const void*>(command->props.src_device),
                        static_cast<const void*>(command->props.dst_device));
 
-          auto buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
+          auto* buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
           PTI_ASSERT(buffer != nullptr);
           append_res = A2AppendBridgeMemoryCopyOrFillEx(command->command_list, command->event_self,
                                                         command->event_swap.Get(), buffer,
-                                                        device_buffer_pool_.buffer_size_);
+                                                        A2DeviceBufferPool::kBufferSize);
         } else if (command->props.type == KernelCommandType::kCommand) {
           append_res = A2AppendBridgeBarrier(command->command_list, command->event_self,
                                              command->event_swap.Get());
@@ -2317,7 +2323,7 @@ class ZeCollector {
                  bytes_transferred: {}, pattern_size: {}",
         __FUNCTION__, (void*)command_list, (void*)signal_event, dst, src, bytes_transferred,
         pattern_size);
-    if (ZeCollectionState::Abnormal == collection_state_) {
+    if (ZeCollectionState::kAbnormal == collection_state_) {
       return;
     }
     PTI_ASSERT(command_list != nullptr);
@@ -2376,7 +2382,7 @@ class ZeCollector {
     command->props = GetTransferProps(command_name, bytes_transferred, context, src, context, dst);
 
     // TODO implement image copy support in Local collection model
-    if (collection_mode_ != ZeCollectionMode::Local) {
+    if (collection_mode_ != ZeCollectionMode::kLocal) {
       PostAppendKernelCommandCommon(command, signal_event, command_list_info, kids);
     }
   }
@@ -2385,7 +2391,7 @@ class ZeCollector {
                          ze_command_list_handle_t command_list, void** instance_data,
                          std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}", __FUNCTION__);
-    if (ZeCollectionState::Abnormal == collection_state_) {
+    if (ZeCollectionState::kAbnormal == collection_state_) {
       return;
     }
     PTI_ASSERT(command_list != nullptr);
@@ -2925,7 +2931,7 @@ class ZeCollector {
       }
 
       // TODO implement image copy support in Local collection model
-      if (collector->collection_mode_ != ZeCollectionMode::Local) {
+      if (collector->collection_mode_ != ZeCollectionMode::kLocal) {
         collector->PostAppendMemoryCommand(collector, "zeCommandListAppendImageCopyFromMemory",
                                            bytes_transferred, *(params->psrcptr), nullptr,
                                            *(params->phSignalEvent), *(params->phCommandList),
@@ -3367,7 +3373,7 @@ class ZeCollector {
 #include <tracing.gen>  // Auto-generated callbacks
 
   // mode=0 implies full apis; mode=1 implies hybrid apis only (eventpool); mode=2 is Local
-  ZeCollectionMode collection_mode_ = ZeCollectionMode::Full;
+  ZeCollectionMode collection_mode_ = ZeCollectionMode::kFull;
 
   // Owns swap events. To ensure proper destruction order, event_pool_manager_ should be declared
   // before other members that may use it, so they can release the events
@@ -3413,7 +3419,7 @@ class ZeCollector {
   SubscribersCollection cb_subscribers_collection_;
   mutable std::shared_mutex subscribers_mutex_;
 
-  std::atomic<ZeCollectionState> collection_state_ = ZeCollectionState::Normal;
+  std::atomic<ZeCollectionState> collection_state_ = ZeCollectionState::kNormal;
 
   // pointer to state of an object that created ZeCollector
   // a way to communicate abnormal situations
@@ -3442,7 +3448,7 @@ class ZeCollector {
       }
       parent_collector_->cb_enabled_.acallback = true;
       parent_collector_->cb_enabled_.fcallback = true;
-      if (ZeCollectionMode::Hybrid == parent_collector_->collection_mode_)
+      if (ZeCollectionMode::kHybrid == parent_collector_->collection_mode_)
         parent_collector_->options_.hybrid_mode = false;
       ref_count++;
       return ref_count;
@@ -3475,7 +3481,7 @@ class ZeCollector {
         }
       }
       parent_collector_->cb_enabled_.fcallback = false;
-      if (ZeCollectionMode::Hybrid == parent_collector_->collection_mode_)
+      if (ZeCollectionMode::kHybrid == parent_collector_->collection_mode_)
         parent_collector_->options_.hybrid_mode = true;
       return ref_count;
     }

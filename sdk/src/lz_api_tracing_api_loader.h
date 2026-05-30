@@ -18,7 +18,6 @@
 #include <memory>
 
 #include "utils/library_loader.h"
-#include "utils/platform_strings.h"
 #include "utils/utils.h"
 
 namespace pti {

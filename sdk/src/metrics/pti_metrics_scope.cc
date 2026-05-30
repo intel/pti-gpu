@@ -572,7 +572,7 @@ pti_result ptiMetricsScopeSetCollectionBufferSize(
     }
     pti_result last_error = PTI_SUCCESS;
     for (auto device : scope_collection_handle->active_devices_) {
-      uint64_t buffer_id;
+      uint64_t buffer_id = 0;
       {
         std::lock_guard<std::mutex> lock(scope_collection_handle->buffer_id_mutex_);
         buffer_id = scope_collection_handle->next_buffer_ids_[device]++;

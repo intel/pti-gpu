@@ -7,10 +7,16 @@
 #ifndef SRC_API_PTI_METRICS_SCOPE_BUFFER_H_
 #define SRC_API_PTI_METRICS_SCOPE_BUFFER_H_
 
+#include <level_zero/ze_api.h>
+
 #include <cstdlib>
 #include <cstring>
+#include <memory>
+#include <vector>
 
 #include "pti/pti.h"
+#include "pti/pti_callback.h"
+
 namespace {
 
 // Key constants limiting sizes of Metrics Scope buffers

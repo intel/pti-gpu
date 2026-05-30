@@ -11,10 +11,8 @@
 #include <level_zero/ze_api.h>
 #include <spdlog/spdlog.h>
 
+#include <map>
 #include <mutex>
-#include <shared_mutex>
-#include <unordered_map>
-#include <unordered_set>
 
 #include "overhead_kinds.h"
 #include "pti_assert.h"
@@ -32,8 +30,9 @@
 //
 // However, these APIs do not exist yet.
 // This code only works for in_order command lists.
-bool A2AppendWaitAndSignalEvent(ze_command_list_handle_t command_list,
-                                ze_event_handle_t signal_event, ze_event_handle_t wait_event) {
+inline bool A2AppendWaitAndSignalEvent(ze_command_list_handle_t command_list,
+                                       ze_event_handle_t signal_event,
+                                       ze_event_handle_t wait_event) {
   SPDLOG_DEBUG(" --- In: {}, CmdList: {}, Signal event: {}, Wait event: {}", __FUNCTION__,
                static_cast<const void*>(command_list), static_cast<const void*>(signal_event),
                static_cast<const void*>(wait_event));
@@ -62,8 +61,8 @@ bool A2AppendWaitAndSignalEvent(ze_command_list_handle_t command_list,
  * As of April 11'24 - it is the first implementation - so issues are possible
  */
 
-bool A2AppendBridgeKernel(ze_kernel_handle_t kernel, ze_command_list_handle_t command_list,
-                          ze_event_handle_t signal_event, ze_event_handle_t wait_event) {
+inline bool A2AppendBridgeKernel(ze_kernel_handle_t kernel, ze_command_list_handle_t command_list,
+                                 ze_event_handle_t signal_event, ze_event_handle_t wait_event) {
   PTI_ASSERT(command_list != nullptr);
   PTI_ASSERT(wait_event != nullptr);
   PTI_ASSERT(kernel != nullptr);
@@ -88,9 +87,9 @@ bool A2AppendBridgeKernel(ze_kernel_handle_t kernel, ze_command_list_handle_t co
  * \internal
  * ze..MemoryFill still has smaller latency than ze..MemoryCopy. So we use it to lower the overhead
  */
-bool A2AppendBridgeMemoryCopyOrFillEx(ze_command_list_handle_t command_list,
-                                      ze_event_handle_t signal_event, ze_event_handle_t wait_event,
-                                      void* dst, size_t size) {
+inline bool A2AppendBridgeMemoryCopyOrFillEx(ze_command_list_handle_t command_list,
+                                             ze_event_handle_t signal_event,
+                                             ze_event_handle_t wait_event, void* dst, size_t size) {
   PTI_ASSERT(command_list != nullptr);
   PTI_ASSERT(wait_event != nullptr);
 
@@ -113,8 +112,8 @@ bool A2AppendBridgeMemoryCopyOrFillEx(ze_command_list_handle_t command_list,
   return result == ZE_RESULT_SUCCESS;
 }
 
-bool A2AppendBridgeBarrier(ze_command_list_handle_t command_list, ze_event_handle_t signal_event,
-                           ze_event_handle_t wait_event) {
+inline bool A2AppendBridgeBarrier(ze_command_list_handle_t command_list,
+                                  ze_event_handle_t signal_event, ze_event_handle_t wait_event) {
   PTI_ASSERT(command_list != nullptr);
   PTI_ASSERT(wait_event != nullptr);
 
@@ -132,9 +131,6 @@ bool A2AppendBridgeBarrier(ze_command_list_handle_t command_list, ze_event_handl
 
 class A2BridgeKernelPool {
  public:
-  A2BridgeKernelPool() {}
-  ~A2BridgeKernelPool() {}
-
   ze_kernel_handle_t GetMarkKernel(ze_context_handle_t context, ze_device_handle_t device) {
     PTI_ASSERT(context != nullptr);
     PTI_ASSERT(device != nullptr);
@@ -152,15 +148,15 @@ class A2BridgeKernelPool {
                                       (uint8_t*)(kKernelBinary.data()),
                                       nullptr,
                                       nullptr};
-      ze_module_handle_t module = nullptr;
+      ze_module_handle_t module_handle = nullptr;
       overhead::Init();
-      ze_result_t status = zeModuleCreate(context, device, &module_desc, &module, nullptr);
+      ze_result_t status = zeModuleCreate(context, device, &module_desc, &module_handle, nullptr);
       overhead_fini(zeModuleCreate_id);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS && module != nullptr);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS && module_handle != nullptr);
 
       ze_kernel_desc_t kernel_desc = {ZE_STRUCTURE_TYPE_KERNEL_DESC, nullptr, 0, "empty"};
       overhead::Init();
-      status = zeKernelCreate(module, &kernel_desc, &kernel);
+      status = zeKernelCreate(module_handle, &kernel_desc, &kernel);
       overhead_fini(zeKernelCreate_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS && kernel != nullptr);
       kernel_map_.insert({std::pair(context, device), kernel});
@@ -174,7 +170,7 @@ class A2BridgeKernelPool {
   // Commands to get spv of the kernel at empty.cl
   // clang -cc1 -triple spir empty.cl -O2 -finclude-default-header -emit-llvm-bc -o empty.bc
   // llvm-spirv empty.bc -o empty.spv
-  inline static constexpr std::array<uint16_t, 86> kKernelBinary{
+  static constexpr std::array<uint16_t, 86> kKernelBinary{
       0x0203, 0x0723, 0x0000, 0x0001, 0x000e, 0x0006, 0x0006, 0x0000, 0x0000, 0x0000, 0x0011,
       0x0002, 0x0004, 0x0000, 0x0011, 0x0002, 0x0006, 0x0000, 0x000b, 0x0005, 0x0001, 0x0000,
       0x704f, 0x6e65, 0x4c43, 0x732e, 0x6474, 0x0000, 0x000e, 0x0003, 0x0001, 0x0000, 0x0002,
@@ -190,7 +186,8 @@ class A2BridgeKernelPool {
 
 class A2DeviceBufferPool {
  public:
-  A2DeviceBufferPool() {}
+  static constexpr size_t kBufferSize = 64;
+  static constexpr size_t kAlignment = 64;
 
   void* GetBuffers(ze_context_handle_t context, ze_device_handle_t device) {
     PTI_ASSERT(context != nullptr);
@@ -201,17 +198,17 @@ class A2DeviceBufferPool {
       ze_device_mem_alloc_desc_t alloc_desc = {ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC, nullptr, 0,
                                                0};
       overhead::Init();
-      ze_result_t status = zeMemAllocDevice(context, &alloc_desc, buffer_size_, 64, device, &buff);
+      ze_result_t status =
+          zeMemAllocDevice(context, &alloc_desc, kBufferSize, kAlignment, device, &buff);
       overhead_fini(zeMemAllocDevice_id);
       PTI_ASSERT(status == ZE_RESULT_SUCCESS);
       buffer_map_[std::pair(context, device)] = buff;
       SPDLOG_TRACE("Device buffers created in {} for context: {}, device: {}, buff {}, size: {} ",
                    __FUNCTION__, static_cast<void*>(context), static_cast<void*>(device),
-                   static_cast<void*>(buff), buffer_size_);
+                   static_cast<void*>(buff), kBufferSize);
     }
     return buffer_map_[std::pair(context, device)];
   }
-  const size_t buffer_size_ = 64;
 
  private:
   std::mutex mutex_;

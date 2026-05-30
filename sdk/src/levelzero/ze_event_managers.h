@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include "overhead_kinds.h"

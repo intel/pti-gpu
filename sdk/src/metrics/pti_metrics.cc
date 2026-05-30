@@ -5,8 +5,6 @@
 // =============================================================
 #include "pti/pti_metrics.h"
 
-#include <mutex>
-
 #include "metrics_handler.h"
 
 namespace {

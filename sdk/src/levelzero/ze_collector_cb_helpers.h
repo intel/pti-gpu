@@ -9,12 +9,14 @@
 
 #include <spdlog/spdlog.h>
 
-#include <atomic>
 #include <cstdint>
 #include <list>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
-#include <unordered_set>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "pti/pti_callback.h"
 #include "unikernel.h"
