@@ -1529,13 +1529,14 @@ class ZeCollector {
         i++;
       }
 
-
       str = "\n\n=== Kernel Properties ===\n\n";
       str = str + std::string(std::max(int(max_name_size - sizeof("Kernel") + 1), 0), ' ') +
         "Kernel, Compiled, SIMD, Number of Arguments, SLM Per Work Group, Private Memory Per Thread, Spill Memory Per Thread, Register File Size Per Thread\n";
       logger->Log(str);
 
       i = -1;
+      kernel_command_properties_mutex_.lock_shared();
+      
       for (auto& it : sorted_list) {
         ++i;
         auto kit = kernel_command_properties_->find(it.first.kernel_command_id_);
@@ -1572,6 +1573,7 @@ class ZeCollector {
         }
         logger->Log(str);
       }
+      kernel_command_properties_mutex_.unlock_shared();
     }
 
     global_device_time_stats_mutex_.unlock();
@@ -2608,7 +2610,7 @@ class ZeCollector {
       }
     }
 
-    if (logger_factory_->IsLegacy() && metric_logger->IsLogToFile()) {
+    if (logger_factory_->IsLegacy() && metric_logger && metric_logger->IsLogToFile()) {
       std::cerr << "[INFO] Kernel metrics are stored in " << metric_logger->GetLogFileName() << std::endl;
     }
 #endif /* _WIN32 */

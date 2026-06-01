@@ -1119,7 +1119,7 @@ class ZeMetricProfiler {
       metric_logger->Flush();
     }
     free (raw_metrics);
-    if (logger_factory_->IsLegacy() && !metric_logger->GetLogFileName().empty()) {
+    if (logger_factory_->IsLegacy() && metric_logger && !metric_logger->GetLogFileName().empty()) {
       std::cerr << "[INFO] Device metrics are stored in " << metric_logger->GetLogFileName() << std::endl;
     }
   }
