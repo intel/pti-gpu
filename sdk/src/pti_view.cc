@@ -17,7 +17,7 @@
 #include "view_handler.h"
 
 namespace {
-// TODO: maybe_unused because SPDLOG_ERROR not guarenteed to be there on release builds
+// TODO: maybe_unused because SPDLOG_ERROR not guaranteed to be there on release builds
 void LogException([[maybe_unused]] const std::exception& excep) {
   SPDLOG_ERROR("Caught exception before return: {}", excep.what());
 }

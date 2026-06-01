@@ -7,7 +7,7 @@
 // Propagation
 //
 // ISO3DFD is a finite difference stencil kernel for solving the 3D acoustic
-// isotropic wave equation which can be used as a proxy for propogating a
+// isotropic wave equation which can be used as a proxy for propagating a
 // seismic wave. Kernels in this sample are implemented as 16th order in space,
 // with symmetric coefficients, and 2nd order in time scheme without boundary
 // conditions.. Using Data Parallel C++, the sample can explicitly run on the
@@ -117,7 +117,7 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev, float *
 
   // front and back temporary arrays are used to ensure
   // the grid values in z-dimension are read once, shifted in
-  // these array and re-used multiple times before being discarded
+  // these array and reused multiple times before being discarded
   //
   // This is an optimization technique to enable data-reuse and
   // improve overall FLOPS to BYTES read ratio
@@ -242,7 +242,7 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev, cons
 
   // front and back temporary arrays are used to ensure
   // the grid values in z-dimension are read once, shifted in
-  // these array and re-used multiple times before being discarded
+  // these array and reused multiple times before being discarded
   //
   // This is an optimization technique to enable data-reuse and
   // improve overall FLOPS to BYTES read ratio
@@ -314,7 +314,7 @@ void Iso3dfdIterationGlobal(sycl::nd_item<3> &it, float *next, float *prev, cons
  *
  * Driver function for ISO3DFD SYCL code
  * Uses ptr_next and ptr_prev as ping-pong buffers to achieve
- * accelerated wave propogation
+ * accelerated wave propagation
  *
  * This function uses SYCL buffers to facilitate host to device
  * buffer copies

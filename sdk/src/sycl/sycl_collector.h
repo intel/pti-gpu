@@ -178,7 +178,7 @@ class SyclCollector {
 
   void EnableTracing() {
     // Do not change the behaviour here depending on foreign_subscriber_!
-    // The current behavior ensures that in the absense of XPTI subscription (and Sycl records)
+    // The current behavior ensures that in the absence of XPTI subscription (and Sycl records)
     // PTI generates to-called Special Records
     // About Special Records: see comments in unitrace.h
     enabled_ = true;

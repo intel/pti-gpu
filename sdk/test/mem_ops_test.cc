@@ -355,7 +355,7 @@ TEST_F(MemoryOperationFixtureTest, P2PMemoryCopyRecords) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   P2pTest();
   if (!atleast_2_devices)
-    GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
+    GTEST_SKIP() << "This system does not have at least 2 Level0 gpu devices for P2P tests\n";
   if (!p2p_device_access)
     GTEST_SKIP() << "This system does not have a direct p2p connection between devices\n";
   ASSERT_EQ(p2p_d2d_record, true);
@@ -368,7 +368,7 @@ TEST_F(MemoryOperationFixtureTest, P2PuuidUniqueEachDevicePerP2P) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   P2pTest();
   if (!atleast_2_devices)
-    GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
+    GTEST_SKIP() << "This system does not have at least 2 Level0 gpu devices for P2P tests\n";
   if (!p2p_device_access)
     GTEST_SKIP() << "This system does not have a direct p2p connection between devices\n";
   ASSERT_EQ(uuid_non_unique, false);
@@ -448,7 +448,7 @@ TEST_F(MemoryOperationFixtureTest, P2PD2DStringified) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   P2pTest();
   if (!atleast_2_devices)
-    GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
+    GTEST_SKIP() << "This system does not have at least 2 Level0 gpu devices for P2P tests\n";
   ASSERT_EQ(memcopy_type_p2p_stringified, true);
   ASSERT_EQ(memory_src_type_p2p_stringified, true);
   ASSERT_EQ(memory_dst_type_p2p_stringified, true);
@@ -458,7 +458,7 @@ TEST_F(MemoryOperationFixtureTest, P2PQueueIdPresent) {
   EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
   P2pTest();
   if (!atleast_2_devices)
-    GTEST_SKIP() << "This system does not have atleast 2 Level0 gpu devices for P2P tests\n";
+    GTEST_SKIP() << "This system does not have at least 2 Level0 gpu devices for P2P tests\n";
   ASSERT_EQ(queue_id_memp2p_records, true);
 }
 

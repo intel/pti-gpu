@@ -16,7 +16,7 @@ include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fsycl" has_sycl)
 
 if(NOT has_sycl)
-  message(WARNING "${PROJECT_NAME} requres a sycl compatible compiler")
+  message(WARNING "${PROJECT_NAME} requires a sycl compatible compiler")
   return()
 endif()
 

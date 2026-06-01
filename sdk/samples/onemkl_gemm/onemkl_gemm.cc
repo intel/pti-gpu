@@ -254,28 +254,28 @@ int main() {
           ::operator delete(buf);
         }));
 
-    // Initate PTI Tracing
+    // Initiate PTI Tracing
     StartTracing();
     // Invoke SGEMM
     MklGemm<float>();
     // Stop PTI tracing
     StopTracing();
 
-    // Initate PTI Tracing
+    // Initiate PTI Tracing
     StartTracing();
     // Invoke DGEMM
     MklGemm<double>();
     // Stop PTI tracing
     StopTracing();
 
-    // Initate PTI Tracing
+    // Initiate PTI Tracing
     StartTracing();
     // Invoke CGEMM
     MklGemm<std::complex<float>>();
     // Stop PTI tracing
     StopTracing();
 
-    // Initate PTI Tracing
+    // Initiate PTI Tracing
     StartTracing();
     // Invoke ZGEMM
     MklGemm<std::complex<double>>();

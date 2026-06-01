@@ -866,7 +866,7 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
               continue;
             }
 
-            // alllocate buffers for reports and values with required sizes
+            // allocate buffers for reports and values with required sizes
             std::vector<uint32_t> reports(num_reports);
             std::vector<zet_typed_value_t> values(total_values_count);
 
@@ -1556,7 +1556,7 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
 // have a suitable loader version with these symbols.
 // We are attempting to hook the symbols dynamically to decide whether we can use the trace metrics
 // functionality or not without causing compilation errors.
-// Essentially, having a built in backwards compilability mechanism
+// Essentially, having a built in backwards compatibility mechanism
 using importTracerCreatePtrFnt = ze_result_t (*)(
     zet_context_handle_t context_handle, zet_device_handle_t device_handle, uint32_t,
     zet_metric_group_handle_t *metric_group_handle,

@@ -914,7 +914,7 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
  * 2) destroying events as soon as they are signaled
  * and such case is not handled by Full API Profiling mode implementation so far -
  * as Full API Profiling mode doesn't create any special events but rather relies on
- * intercepting EventPool creation and so makeing all events with Timestamp property
+ * intercepting EventPool creation and so making all events with Timestamp property
  *
  */
 TEST_F(MainZeFixtureTest, ProfilingSucceededWhenEventPolling) {

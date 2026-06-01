@@ -166,7 +166,7 @@ void ZeDriverInit::InitSysmanDrivers() {
   //
   // zesInit is only supported on platforms newer than PVC.
   //
-  // See specifics regarding Sysman / zes* compatiblity below:
+  // See specifics regarding Sysman / zes* compatibility below:
   // https://github.com/intel/compute-runtime/blob/master/programmers-guide/SYSMAN.md
   bool call_zesinit = false;
   if (!call_zesinit_env) {

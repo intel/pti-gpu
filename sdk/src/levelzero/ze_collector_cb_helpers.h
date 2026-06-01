@@ -185,7 +185,7 @@ class ZeCollectorCBSubscriber {
 
   static pti_gpu_operation_kind GetGPUOperationKind(const KernelCommandType& type) {
     // Map KernelCommandType to pti_gpu_operation_kind
-    // TODO: consider to use the same enum, make it external and then this funcion not needed
+    // TODO: consider to use the same enum, make it external and then this function not needed
     switch (type) {
       case KernelCommandType::kKernel:
         return PTI_GPU_OPERATION_KIND_KERNEL;

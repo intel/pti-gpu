@@ -207,7 +207,7 @@ struct ViewRecordBufferQueue {
 
 /**
  * \internal
- * \brief An hash map class with a mutex. Thread safety not guarenteed.
+ * \brief A hash map class with a mutex. Thread safety not guaranteed.
  *
  * This is not a perfect abstraction. It may not make complete sense. There are
  * several places we want something like this though. If you add a member

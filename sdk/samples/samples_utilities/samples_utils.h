@@ -285,7 +285,7 @@ inline void DumpRecord(pti_view_record_memory_fill* record) {
   std::cout << "Memory Op CommandList Context Handle: " << record->_context_handle << '\n';
   std::cout << "Memory Op Id: " << std::dec << record->_mem_op_id << '\n';
   std::cout << "Memory Op Thread Id: " << std::dec << record->_thread_id << '\n';
-  std::cout << "Memory Bytes Transfered: " << record->_bytes << '\n';
+  std::cout << "Memory Bytes Transferred: " << record->_bytes << '\n';
   std::cout << "Memory Value for Set: " << record->_value_for_set << '\n';
   std::cout << "Correlation Id: " << std::dec << record->_correlation_id << '\n';
   std::cout << "Memory Fill Type: " << std::dec << record->_mem_type << '\n';

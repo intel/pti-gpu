@@ -196,10 +196,10 @@ endmacro()
 
 macro(CheckSOVersion PROJ_SOVERSION)
   # Not automatically set because this should be done intentionally.
-  # PTI's rules for backwords compatibility should be re-evaluated upon first
+  # PTI's rules for backwards compatibility should be re-evaluated upon first
   # major / production release.
   # PTI is following [semver](https://semver.org/) versioning and we are using
-  # the SOVERSION to denote backword compatibility.
+  # the SOVERSION to denote backward compatibility.
   if ("${PROJECT_VERSION}" VERSION_GREATER_EQUAL "1.0.0")
     if("${PROJ_SOVERSION}" STREQUAL "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
       message(AUTHOR_WARNING "${PROJECT_NAME} currently has the SOVERSION: "

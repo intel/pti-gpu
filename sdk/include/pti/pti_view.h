@@ -271,7 +271,7 @@ typedef struct pti_view_record_synchronization {
                                                     //!< For gpu synchronization types: synch complete timestamp on device
   uint32_t _thread_id;                              //!< Thread ID of function call
   uint32_t _correlation_id;                         //!< ID that correlates this record with records of other Views
-  uint32_t _number_wait_events;                     //!< For relevent event synch types (eg. Barriers)
+  uint32_t _number_wait_events;                     //!< For relevant event synch types (eg. Barriers)
   uint32_t _return_code;                            //!< L0/OCL synch api onexit return type - cast to specific driver code type
   uint32_t _api_id;                                 //!< Id of this synch api call
   pti_api_group_id _api_group;                      //!< Defines api api_group this record was collected in (L0,Sycl,OCL, etc).

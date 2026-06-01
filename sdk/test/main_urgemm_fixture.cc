@@ -51,7 +51,7 @@
 // but not defined in any of header files.
 //
 // However, for Open Source compiler there is still no reliable solution -
-// as we found no macro defintion from which compiler version could be derived and
+// as we found no macro definition from which compiler version could be derived and
 // so UR API signatures derived.
 // The solution in such case - disable building this test at configuring build
 // - providing to cmake "-DPTI_BUILD_URGEMM=OFF"

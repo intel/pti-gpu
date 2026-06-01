@@ -104,7 +104,7 @@ inline pti_device_handle_t GetDevice(uint32_t device_id) {
   uint32_t device_count = 0;
   pti_result result = ptiMetricsGetDevices(nullptr, &device_count);
   if (result != PTI_SUCCESS || device_count == 0) {
-    std::cerr << "Failed to discover supportted devices" << std::endl;
+    std::cerr << "Failed to discover supported devices" << std::endl;
     return nullptr;  // exit function
   }
 
@@ -113,7 +113,7 @@ inline pti_device_handle_t GetDevice(uint32_t device_id) {
 
   result = ptiMetricsGetDevices(device_buffer.data(), &device_count);
   if (result != PTI_SUCCESS || device_buffer.empty()) {
-    std::cerr << "Failed to discover supportted devices" << std::endl;
+    std::cerr << "Failed to discover supported devices" << std::endl;
     return nullptr;  // exit function
   }
 
@@ -244,7 +244,7 @@ class MetricsProfiler {
     groups_.clear();
   }
 
-  // Initializes the metric collection by dicovering devices the metrics
+  // Initializes the metric collection by discovering devices that the metrics
   // collection can be done on, the metric groups that each device supports
   // and metrics in each metric group
   // If log_metrics is true,
@@ -257,7 +257,7 @@ class MetricsProfiler {
     uint32_t device_count = 0;
     pti_result result = ptiMetricsGetDevices(nullptr, &device_count);
     if (result != PTI_SUCCESS || device_count == 0) {
-      std::cerr << "Failed to discover supportted devices" << std::endl;
+      std::cerr << "Failed to discover supported devices" << std::endl;
       return false;
     }
 
@@ -267,7 +267,7 @@ class MetricsProfiler {
 
     result = ptiMetricsGetDevices(device_buffer.data(), &device_count);
     if (result != PTI_SUCCESS || device_buffer.empty()) {
-      std::cerr << "Failed to discover supportted devices" << std::endl;
+      std::cerr << "Failed to discover supported devices" << std::endl;
       return false;
     }
 
@@ -357,7 +357,7 @@ class MetricsProfiler {
 
   // configure the metric groups for collection
   //  if log_data is true,
-  //  if filename is specified, then the library will log calculated data to the specificed file
+  //  if filename is specified, then the library will log calculated data to the specified file
   //  name when Calculate API is called if filename is not specified, the the library will log
   //  calculated data to console when calculate API is called
   bool ConfigureMetricGroups(std::string &group_name, pti_metrics_group_type group_type,

@@ -341,7 +341,7 @@ struct PtiViewRecordHandler {
           sizeof(T), buffer.FreeBytes());
     }
 
-    static_assert(SizeOfLargestViewRecord() != 0, "Largest record not avaiable on compile time");
+    static_assert(SizeOfLargestViewRecord() != 0, "Largest record not available at compile time");
     if (buffer.FreeBytes() >= SizeOfLargestViewRecord()) {
       // There's space to insert more records. No need for swap.
       return;

@@ -118,7 +118,7 @@ struct PidTidInfo {
 //
 // TODO -- refactor 2nd level callbacks so that callbacks are not bound to
 // ZeKernelCommandExecutionRecord but flexible to handle various smaller structures -- for now
-// side-back smaller structres via void*data in the callbacks.
+// side-back smaller structures via void*data in the callbacks.
 //
 inline thread_local ZeKernelCommandExecutionRecord
     overhead_data;  // Placeholder till we refactor the 2nd level callbacks.

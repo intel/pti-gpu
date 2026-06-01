@@ -30,7 +30,7 @@ inline static constexpr const char* const kLevelZeroDriverName =
                            // * libze_intel_gpu.so.1 on Linux
 
 /*
- * Wrappers for L0 Instrospection APIs and for Loader Enable/Disable Tracing.
+ * Wrappers for L0 Introspection APIs and for Loader Enable/Disable Tracing.
  * They enable graceful handling (starting from library loading)
  * when L0 on the system doesn't have
  * the Introspection API implementation or Dynamic Tracing Enable/Disable

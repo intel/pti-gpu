@@ -993,7 +993,7 @@ def append_undefined_functions(func_list, func_dictionary):
     However, for Local profiling, PTI relies on these functions being present in the
     L0 that is installed on the system.
     We add these functions to the list of functions that are used to generate ApiId.
-    ApiIds are needed for overhead measurments.
+    ApiIds are needed for overhead measurements.
     We generate ApiIds for the tracing API functions as well. These functions also
     contribute to the overhead.
     """

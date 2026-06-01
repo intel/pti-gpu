@@ -9,7 +9,7 @@
 
 /*
  * Level zero collection methods:  hook into the level zero api to capture
- * kernel/memory movement, collect relevent timing and handles key structures
+ * kernel/memory movement, collect relevant timing and handles key structures
  * and issue callbacks to buffer,etc interfaces to capture this data in view
  * records.
  */
@@ -104,7 +104,7 @@ struct ZeKernelCommandProps {
   std::byte* value_array;
   ze_device_handle_t src_device = nullptr;  // Device for p2p memcpy, source of copy data
   ze_device_handle_t dst_device = nullptr;  // Device for p2p memcpy, destination of copy data
-  void* dst = nullptr;                      // Addressess for MemoryCopy or Fill
+  void* dst = nullptr;                      // Addresses for MemoryCopy or Fill
   void* src = nullptr;
 };
 
@@ -2709,7 +2709,7 @@ class ZeCollector {
     } else {
       // Process generation of synch record even if result is not successful.
       // TODO barrier sync based on api start/end times here if needed.  For now no gen if result
-      // shows unsuccess. rec.name_ = "zeCommandListAppendBarrier";
+      // shows unsuccessful. rec.name_ = "zeCommandListAppendBarrier";
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -2739,7 +2739,7 @@ class ZeCollector {
     } else {
       // Process generation of synch record even if result is not successful.
       // TODO barrier sync based on api start/end times here if needed.  For now no gen if result
-      // shows unsuccess. rec.name_ = "zeCommandListAppendMemoryRangesBarrier";
+      // shows unsuccessful. rec.name_ = "zeCommandListAppendMemoryRangesBarrier";
       collector->event_cache_.ReleaseEvent(*(params->phSignalEvent));
     }
   }
@@ -3468,7 +3468,7 @@ class ZeCollector {
       // ref_count hit 0 -- we need to ensure tracing is fully disabled
       if (parent_collector_->options_.disabled_mode) {
         // no any collector ProcessCalls or similar here -
-        // all finsihed tasks data should be captured and handled by proper callbacks by this point
+        // all finished tasks data should be captured and handled by proper callbacks by this point
         ze_result_t status = parent_collector_->l0_wrapper_.w_zelDisableTracingLayer();
         // Clear observed event pools info as tracing is being disabled
         // even it will be further enabled - collector is blind to what happen in-between

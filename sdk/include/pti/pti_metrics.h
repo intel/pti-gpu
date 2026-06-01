@@ -117,9 +117,9 @@ typedef struct _pti_metrics_group_properties_t {
   uint32_t _metric_count;                        //!< Number of metrics in the metric group
   pti_metric_properties_t* _metric_properties;   //!< Convenience pointer to buffer where metric properties in the metric group can be saved
                                                  // The pointer is initialized to null. User is responsible for allocating buffer of size _metric_count
-                                                 // and calling the ptiMetricsGetMetricsProperties function to get the metric properties polulated
-                                                 // This pointer does not need to be used, it is part of the pti_metrics_group_preperties_t for convinience
-                                                 // only. It is usefull when traversing the buffer of metric group properties and then metric properties in
+                                                 // and calling the ptiMetricsGetMetricsProperties function to get the metric properties populated
+                                                 // This pointer does not need to be used, it is part of the pti_metrics_group_properties_t for convenience
+                                                 // only. It is useful when traversing the buffer of metric group properties and then metric properties in
                                                  // each group without needing to keep additional maps. User may choose to use a different pointer for metric
                                                  // properties.
   const char* _name;                             //!< Name of the metric group

@@ -106,7 +106,7 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
       sycl::ext::oneapi::experimental::graph_state::executable>;
   static constexpr std::size_t kExpectedKernelsPerExecution = kDefaultUsmKernelNumber;
   // Given that a timestamp conversion is being done after record generation and before buffer
-  // insertion, some tolerence is needed due to timestamp drift.
+  // insertion, some tolerance is needed due to timestamp drift.
   // This could be mitigated in the environment with PTI_CONV_CLOCK_SYNC_TIME_NS=1000000000.
   // However, that is fragile as well.
   static constexpr auto kTimestampEqualityTolerance = std::chrono::nanoseconds(5);

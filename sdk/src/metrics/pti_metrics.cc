@@ -9,7 +9,7 @@
 
 namespace {
 
-// TODO: maybe_unused because SPDLOG_ERROR not guarenteed to be there on release builds
+// TODO: maybe_unused because SPDLOG_ERROR not guaranteed to be there on release builds
 void LogException([[maybe_unused]] const std::exception& excep) {
   SPDLOG_ERROR("Caught exception before return: {}", excep.what());
 }
@@ -85,7 +85,7 @@ pti_result ptiMetricsGetDevices(pti_device_properties_t* devices, uint32_t* devi
  * metrics_group_count 3- Call ptiMetricsGetMetricGroups(device_handle, metrics_groups,
  * metrics_group_count) again to get the properties of the discovered metric groups written to
  * the supplied buffer WARNING: It is expected that metrics_groups is sufficiently large to hold
- * propertied for all discovered metric groups. Passing in a buffer that is not suffiently large
+ * properties for all discovered metric groups. Passing in a buffer that is not sufficiently large
  * will result in a buffer overrun
  *
  * @param[in] device_handle                      Device handle

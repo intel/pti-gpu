@@ -38,7 +38,7 @@ void PrintUsage()
   std::cout << "-) lock device memory used within graph internals" << std::endl;
   std::cout << "-) oneDNN, oneMKL etc might create USM internally" << std::endl;
   std::cout << "-) integrate into deep learning framework (python code)" << std::endl;
-  std::cout << "-) ITEX uses eigen instead of oneDPL for fuctions such as cos." << std::endl;
+  std::cout << "-) ITEX uses eigen instead of oneDPL for functions such as cos." << std::endl;
   std::cout << std::endl;
   std::cout << "It is supposed that this application will be updated frequently, so this might be not the latest one." << std::endl;
   std::cout << std::endl;

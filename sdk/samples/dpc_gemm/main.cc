@@ -265,10 +265,10 @@ int main(int argc, char *argv[]) {
   PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
   StartTracing();
   // start tracing early enables to capture nodes creation at piProgramCreate
-  //  and Kernel Task sycl file/line info is captured, as exampple shows at a Node Creation
+  //  and Kernel Task sycl file/line info is captured, as example shows at a Node Creation
   // Emit external correlation id records by marking section of code by
   // ptiViewPushExternalCorrelationId / ptiViewPopExternalCorrelationId
-  //   Each of the enabled activity view records (sycl runtime, kernel launches) will be *preceeded*
+  //   Each of the enabled activity view records (sycl runtime, kernel launches) will be *preceded*
   //   by 1 external correlation id record per kind.
   PTI_CHECK_SUCCESS(ptiViewPushExternalCorrelationId(
       pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid));

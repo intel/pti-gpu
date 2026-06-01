@@ -168,7 +168,7 @@ void DumpRecordMemoryFill(pti_view_record_memory_fill* record) {
   printf("Memory Op CommandList Context Handle: %p\n", record->_context_handle);
   printf("Memory Op Id: %" PRIu64 "\n", record->_mem_op_id);
   printf("Memory Op Thread Id: %u\n", record->_thread_id);
-  printf("Memory Bytes Transfered: %" PRIu64 "\n", record->_bytes);
+  printf("Memory Bytes Transferred: %" PRIu64 "\n", record->_bytes);
   printf("Memory Value for Set: %" PRIu64 "\n", record->_value_for_set);
   printf("Correlation Id: %u\n", record->_correlation_id);
   printf("Memory Fill Type: %u\n", record->_mem_type);

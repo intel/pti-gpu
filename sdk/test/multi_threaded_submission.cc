@@ -103,12 +103,12 @@ constexpr auto kRequestedBufferSize = kRequestedRecordCount * sizeof(pti_view_re
  *
  * But view_kind is too coarse -
  * e.g. any runtime API record has PTI_VIEW_RUNTIME_API view_kind
- * But as we want to do detail comparision - we need more specific info - e.g. ID of the API.
+ * But as we want to do detail comparison - we need more specific info - e.g. ID of the API.
  * Or for a memory transfer a view_kind is PTI_VIEW_DEVICE_GPU_MEM_COPY.
- * But again - for the detail comparision we need to know the type of the transfer it is -
+ * But again - for the detail comparison we need to know the type of the transfer it is -
  * e.g. host to device or device to host, read or write, etc.
  *
- * So we define a sub_kind field to hold that additional infomation where we put
+ * So we define a sub_kind field to hold that additional information where we put
  * either the ID of the API or a type of the transfer, or any other enum value converted to
  * uint32_t.
  *

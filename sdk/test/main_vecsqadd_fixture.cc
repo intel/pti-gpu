@@ -81,7 +81,7 @@ template <typename T>
 void VecPassThroughToVecSq(sycl::queue &q, const std::vector<T> &a_vector,
                            const std::vector<T> &b_vector) {
   uint64_t ret_eid = 0;
-  // This external id(21) is ignored due to overriding push in the VecSq call it preceeds.
+  // This external id(21) is ignored due to overriding push in the VecSq call it precedes.
   ASSERT_EQ(ptiViewPushExternalCorrelationId(
                 pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3, eid + 10),
             pti_result::PTI_SUCCESS);

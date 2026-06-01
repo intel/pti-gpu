@@ -143,7 +143,7 @@ void Iso3dfdIteration(float* ptr_next_base, float* ptr_prev_base,
  * Host-Code
  * Driver function for ISO3DFD OpenMP code
  * Uses ptr_next and ptr_prev as ping-pong buffers to achieve
- * accelerated wave propogation
+ * accelerated wave propagation
  */
 void Iso3dfd(float* ptr_next, float* ptr_prev, float* ptr_vel, float* coeff,
              const size_t n1, const size_t n2, const size_t n3,
@@ -281,7 +281,7 @@ int main(int argc, char* argv[]) {
 
     // Start timer
     dpc_common::TimeInterval t_ser;
-    // Invoke the driver function to perform 3D wave propogation
+    // Invoke the driver function to perform 3D wave propagation
     // using OpenMP/Serial version
     Iso3dfd(next_base, prev_base, vel_base, coeff, n1, n2, n3, num_iterations,
             n1_block, n2_block, n3_block);
@@ -346,7 +346,7 @@ int main(int argc, char* argv[]) {
       // Start timer
       dpc_common::TimeInterval t_dpc;
 
-      // Invoke the driver function to perform 3D wave propogation
+      // Invoke the driver function to perform 3D wave propagation
       // using SYCL version on the selected device
       Iso3dfdDevice(q, next_base, prev_base, vel_base, coeff, n1, n2, n3,
                     n1_block, n2_block, n3_block, n3 - kHalfLength,

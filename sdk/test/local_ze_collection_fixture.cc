@@ -129,7 +129,7 @@ class LocalModeZeGemmTest : public testing::Test {
     ASSERT_EQ(status, ZE_RESULT_SUCCESS);
   }
 
-  void InitializeLists(bool sychronous) {
+  void InitializeLists(bool synchronous) {
     ze_command_queue_desc_t cmd_queue_desc = {ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
                                               nullptr,
                                               0,
@@ -137,7 +137,7 @@ class LocalModeZeGemmTest : public testing::Test {
                                               ZE_COMMAND_QUEUE_FLAG_IN_ORDER,
                                               ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS,
                                               ZE_COMMAND_QUEUE_PRIORITY_NORMAL};
-    if (sychronous) {
+    if (synchronous) {
       cmd_queue_desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
     }
     uint32_t compute_queue_ordinal = 0;

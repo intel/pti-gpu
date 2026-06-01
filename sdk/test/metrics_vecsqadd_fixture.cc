@@ -55,7 +55,7 @@ void VecSq(sycl::queue &q, const std::vector<T> &a_vector, const std::vector<T> 
 template <typename T>
 void VecPassThroughToVecSq(sycl::queue &q, const std::vector<T> &a_vector,
                            const std::vector<T> &b_vector) {
-  // This external id(21) is ignored due to overriding push in the VecSq call it preceeds.
+  // This external id(21) is ignored due to overriding push in the VecSq call it precedes.
   VecSq(q, a_vector, b_vector);
 }
 
@@ -677,7 +677,7 @@ TEST_F(VecsqaddMetricsFixtureTest, CalculateWithInvalidMetricGroup) {
   pti_device_handle_t device =
       metrics_utils::MetricsProfiler::MetricsProfilerInstance().GetConfiguredDeviceHandle();
 
-  // test calculate with invalid metric group, use device handle instad of metric group handle
+  // test calculate with invalid metric group, use device handle instead of metric group handle
   uint32_t metrics_values_count;
   EXPECT_EQ(ptiMetricsGetCalculatedData(device, static_cast<pti_metrics_group_handle_t>(device),
                                         nullptr, &metrics_values_count),
