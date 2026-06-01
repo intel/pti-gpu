@@ -732,6 +732,16 @@ target_include_directories(
 target_link_libraries(view_gpu_local_test PUBLIC spdlog::spdlog Pti::pti_view
   GTest::gtest_main)
 
+add_executable(pc_sampling_test pc_sampling/pc_sampling_test.cc)
+
+target_include_directories(
+  pc_sampling_test
+  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+
+target_link_libraries(pc_sampling_test PUBLIC spdlog::spdlog Pti::pti_view
+  GTest::gtest_main)
+
 add_executable(pti_assert_test pti_assert_test.cc)
 
 target_include_directories(pti_assert_test PUBLIC
@@ -780,6 +790,11 @@ gtest_discover_tests(
   view_gpu_local_test
   DISCOVERY_TIMEOUT 60
   PROPERTIES LABELS "functional")
+
+gtest_discover_tests(
+  pc_sampling_test
+  DISCOVERY_TIMEOUT 60
+  PROPERTIES LABELS "unit")
 
 # TODO: Organize this better? Where to put
 # functional tests?

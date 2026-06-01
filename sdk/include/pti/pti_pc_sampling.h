@@ -128,7 +128,10 @@ typedef struct _pti_pc_sampling_device_status_t {
  *
  * @param[out] handle            Pointer to store the created handle
  *
- * @return pti_result
+ * @return PTI_SUCCESS on successful handle creation
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
+ * @return PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED if another PC sampling handle is still enabled
+ * @return PTI_ERROR_INTERNAL if PTI cannot allocate the collection handle
  */
 pti_result PTI_EXPORT
 ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle);
@@ -139,9 +142,12 @@ ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle);
  * @param[in] handle               Collection handle
  * @param[in] devices              Device filter; NULL profiles all available devices
  * @param[in] device_count         Number of entries in devices; ignored when devices is NULL
- * @param[in] sampling_period_ns   Sampling period in nanoseconds for all selected devices; 0 lets PTI select the default period
+ * @param[in] sampling_period_ns   Sampling period in nanoseconds for all selected devices; 0 makes PTI use the default period of 100000 ns
  *
- * @return pti_result
+ * @return PTI_SUCCESS on successful configuration
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
+ * @return PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED if handle is already configured or otherwise not in the initial state required for configuration
+ * @return PTI_ERROR_NOT_IMPLEMENTED if a device-filtered configuration is requested
  */
 pti_result PTI_EXPORT
 ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
@@ -155,7 +161,7 @@ ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
  * @param[in]  handle          Collection handle
  * @param[out] buffer_size     Pointer to store the collection buffer size in bytes; cannot be NULL
  *
- * @return pti_result
+ * @return PTI_ERROR_NOT_IMPLEMENTED
  */
 pti_result PTI_EXPORT
 ptiPcSamplingQueryCollectionBufferSize(pti_pc_sampling_handle_t handle,
@@ -167,7 +173,7 @@ ptiPcSamplingQueryCollectionBufferSize(pti_pc_sampling_handle_t handle,
  * @param[in] handle          Collection handle
  * @param[in] buffer_size     Collection buffer size in bytes for all configured devices
  *
- * @return pti_result
+ * @return PTI_ERROR_NOT_IMPLEMENTED
  */
 pti_result PTI_EXPORT
 ptiPcSamplingSetCollectionBufferSize(pti_pc_sampling_handle_t handle,
@@ -178,7 +184,11 @@ ptiPcSamplingSetCollectionBufferSize(pti_pc_sampling_handle_t handle,
  *
  * @param[in] handle             Collection handle
  *
- * @return pti_result
+ * @return PTI_SUCCESS when collection is started
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
+ * @return PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED if collection is not in the configured state yet
+ * @return PTI_ERROR_PC_SAMPLING_ALREADY_STARTED if collection is already running
+ * @return PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED if collection was already stopped
  */
 pti_result PTI_EXPORT
 ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle);
@@ -188,7 +198,10 @@ ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle);
  *
  * @param[in] handle             Collection handle
  *
- * @return pti_result
+ * @return PTI_SUCCESS when collection is successfully finished
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
+ * @return PTI_ERROR_PC_SAMPLING_NOT_STARTED if collection has not started yet
+ * @return PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED if collection was already stopped
  */
 pti_result PTI_EXPORT
 ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle);
@@ -204,7 +217,9 @@ ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle);
  * @param[in,out] reasons        Caller-allocated array of *reason_count elements; set to NULL to query the required count
  * @param[in,out] reason_count   In: size of reasons array; Out: required or actual number of reasons; cannot be NULL
  *
- * @return pti_result
+ * @return PTI_SUCCESS after successful retrieval of reason information for a stopped collection
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or reason_count is NULL
+ * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetStallReasons(pti_pc_sampling_handle_t handle,
@@ -226,7 +241,9 @@ ptiPcSamplingGetStallReasons(pti_pc_sampling_handle_t handle,
  * @param[in,out] devices        Caller-allocated array of *device_count elements; set to NULL to query the required count
  * @param[in,out] device_count   In: size of devices array; Out: required or actual number of devices; cannot be NULL
  *
- * @return pti_result
+ * @return PTI_SUCCESS after successful retrieval of profiled device information for a stopped collection
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or device_count is NULL
+ * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetProfiledDevices(pti_pc_sampling_handle_t handle,
@@ -245,7 +262,9 @@ ptiPcSamplingGetProfiledDevices(pti_pc_sampling_handle_t handle,
  * @param[in,out] kernel_handles   Caller-allocated array of *kernel_count elements; set to NULL to query the required count
  * @param[in,out] kernel_count     In: size of kernel_handles array; Out: required or actual number of kernel handles; cannot be NULL
  *
- * @return pti_result
+ * @return PTI_SUCCESS after successful retrieval of kernel handles for a stopped collection
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, kernel_count is NULL, or device does not match the configured device
+ * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetObservedKernelHandles(pti_pc_sampling_handle_t handle,
@@ -265,7 +284,9 @@ ptiPcSamplingGetObservedKernelHandles(pti_pc_sampling_handle_t handle,
  * @param[in]     kernel_handle   Kernel handle returned by ptiPcSamplingGetObservedKernelHandles
  * @param[in,out] kernel_info     Caller-allocated kernel info structure;
  *
- * @return pti_result
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, device does not match the configured device, kernel_info is NULL, or kernel_info->_struct_size is too small
+ * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
+ * @return PTI_ERROR_NOT_IMPLEMENTED in the current implementation after validation because kernel metadata retrieval is not implemented yet
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetObservedKernelInfo(pti_pc_sampling_handle_t handle,
@@ -291,7 +312,9 @@ ptiPcSamplingGetObservedKernelInfo(pti_pc_sampling_handle_t handle,
  * @param[out]    samples_buffer           Caller-allocated flattened sample-count buffer
  * @param[in]     samples_buffer_count     Size of samples_buffer array
  *
- * @return pti_result
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or device does not match the configured device
+ * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
+ * @return PTI_ERROR_NOT_IMPLEMENTED in the current implementation after validation because instruction-level sample retrieval is not implemented yet
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetSamplesPerInstruction(pti_pc_sampling_handle_t handle,
@@ -312,7 +335,7 @@ ptiPcSamplingGetSamplesPerInstruction(pti_pc_sampling_handle_t handle,
  * @param[in]     device            Profiled device handle
  * @param[in,out] device_status     Caller-allocated device status structure; set _struct_size
  *
- * @return pti_result
+ * @return PTI_ERROR_NOT_IMPLEMENTED
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t handle,
@@ -324,7 +347,8 @@ ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t handle,
  *
  * @param[in] handle    Collection handle
  *
- * @return pti_result
+ * @return PTI_SUCCESS on successful cleanup
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
  */
 pti_result PTI_EXPORT
 ptiPcSamplingDisable(pti_pc_sampling_handle_t handle);

@@ -17,6 +17,7 @@
 #include "pti/pti_callback.h"
 #include "pti/pti_metrics.h"
 #include "pti/pti_metrics_scope.h"
+#include "pti/pti_pc_sampling.h"
 #include "pti/pti_view.h"
 #include "utils/library_loader.h"
 #include "utils/platform_strings.h"
@@ -128,6 +129,25 @@ class PtiLibHandler {
   decltype(&ptiMetricsScopeGetMetricsMetadata) ptiMetricsScopeGetMetricsMetadata_ =
       nullptr;  // NOLINT
 
+  decltype(&ptiPcSamplingEnable) ptiPcSamplingEnable_ = nullptr;        // NOLINT
+  decltype(&ptiPcSamplingConfigure) ptiPcSamplingConfigure_ = nullptr;  // NOLINT
+  decltype(&ptiPcSamplingQueryCollectionBufferSize) ptiPcSamplingQueryCollectionBufferSize_ =
+      nullptr;  // NOLINT
+  decltype(&ptiPcSamplingSetCollectionBufferSize) ptiPcSamplingSetCollectionBufferSize_ =
+      nullptr;                                                                            // NOLINT
+  decltype(&ptiPcSamplingStartCollection) ptiPcSamplingStartCollection_ = nullptr;        // NOLINT
+  decltype(&ptiPcSamplingStopCollection) ptiPcSamplingStopCollection_ = nullptr;          // NOLINT
+  decltype(&ptiPcSamplingGetStallReasons) ptiPcSamplingGetStallReasons_ = nullptr;        // NOLINT
+  decltype(&ptiPcSamplingGetProfiledDevices) ptiPcSamplingGetProfiledDevices_ = nullptr;  // NOLINT
+  decltype(&ptiPcSamplingGetObservedKernelHandles) ptiPcSamplingGetObservedKernelHandles_ =
+      nullptr;  // NOLINT
+  decltype(&ptiPcSamplingGetObservedKernelInfo) ptiPcSamplingGetObservedKernelInfo_ =
+      nullptr;  // NOLINT
+  decltype(&ptiPcSamplingGetSamplesPerInstruction) ptiPcSamplingGetSamplesPerInstruction_ =
+      nullptr;                                                                      // NOLINT
+  decltype(&ptiPcSamplingGetDeviceStatus) ptiPcSamplingGetDeviceStatus_ = nullptr;  // NOLINT
+  decltype(&ptiPcSamplingDisable) ptiPcSamplingDisable_ = nullptr;                  // NOLINT
+
   decltype(&__itt_api_init) __itt_api_init_ = nullptr;                          // NOLINT
   decltype(&__itt_domain_create) __itt_domain_create_ = nullptr;                // NOLINT
   decltype(&__itt_task_begin) __itt_task_begin_ = nullptr;                      // NOLINT
@@ -228,6 +248,20 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeCalculateMetrics);
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeQueryMetricsBufferSize);
     PTI_VIEW_GET_SYMBOL(ptiMetricsScopeGetMetricsMetadata);
+
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingEnable);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingConfigure);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingQueryCollectionBufferSize);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingSetCollectionBufferSize);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingStartCollection);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingStopCollection);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingGetStallReasons);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingGetProfiledDevices);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingGetObservedKernelHandles);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingGetObservedKernelInfo);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingGetSamplesPerInstruction);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingGetDeviceStatus);
+    PTI_VIEW_GET_SYMBOL(ptiPcSamplingDisable);
 
 #define PTI_VIEW_GET_ITT_SYMBOL(X) X##_ = pti_view_lib_->GetSymbol<decltype(&X)>(#X "_impl")
     PTI_VIEW_GET_ITT_SYMBOL(__itt_api_init);

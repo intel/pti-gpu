@@ -81,6 +81,14 @@ typedef enum {
 
   PTI_ERROR_INTERNAL = 200,  //!< internal error
 
+  PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED = 250,  //!< another PC sampling handle is already enabled
+  PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED = 251,  //!< handle is not in the required configuration state
+  PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED = 252,  //!< handle is already configured - not in the initial state for configuration
+  PTI_ERROR_PC_SAMPLING_ALREADY_STARTED = 253,  //!< collection is already running
+  PTI_ERROR_PC_SAMPLING_NOT_STARTED = 254,  //!< collection has not started yet
+  PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED = 255,  //!< collection is already stopped
+  PTI_ERROR_PC_SAMPLING_NOT_STOPPED = 256,  //!< collection is not stopped yet
+
   PTI_RESULT_FORCE_UINT32 = 0x7fffffff
 } pti_result;
 

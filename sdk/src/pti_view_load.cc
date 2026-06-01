@@ -11,6 +11,7 @@
 #include "pti/pti.h"
 #include "pti/pti_metrics.h"
 #include "pti/pti_metrics_scope.h"
+#include "pti/pti_pc_sampling.h"
 #include "pti/pti_view.h"
 #include "pti_lib_handler.h"
 
@@ -697,6 +698,241 @@ pti_result ptiMetricsScopeQueryMetricsBufferSize(
 
     return pti::PtiLibHandler::Instance().ptiMetricsScopeQueryMetricsBufferSize_(
         scope_collection_handle, collection_buffer, required_metrics_buffer_size, records_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingEnable_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingEnable_(handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
+                                  const pti_device_handle_t* devices, size_t device_count,
+                                  uint32_t sampling_period_ns) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingConfigure_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingConfigure_(handle, devices, device_count,
+                                                                  sampling_period_ns);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingQueryCollectionBufferSize(pti_pc_sampling_handle_t handle,
+                                                  size_t* buffer_size) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingQueryCollectionBufferSize_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingQueryCollectionBufferSize_(handle,
+                                                                                  buffer_size);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingSetCollectionBufferSize(pti_pc_sampling_handle_t handle,
+                                                size_t buffer_size) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingSetCollectionBufferSize_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingSetCollectionBufferSize_(handle,
+                                                                                buffer_size);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingStartCollection_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingStartCollection_(handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingStopCollection_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingStopCollection_(handle);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingGetStallReasons(pti_pc_sampling_handle_t handle,
+                                        pti_pc_sampling_stall_reason_info_t* reasons,
+                                        size_t* reason_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingGetStallReasons_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingGetStallReasons_(handle, reasons,
+                                                                        reason_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingGetProfiledDevices(pti_pc_sampling_handle_t handle,
+                                           pti_device_handle_t* devices, size_t* device_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingGetProfiledDevices_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingGetProfiledDevices_(handle, devices,
+                                                                           device_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingGetObservedKernelHandles(pti_pc_sampling_handle_t handle,
+                                                 pti_device_handle_t device,
+                                                 uint64_t* kernel_handles, size_t* kernel_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingGetObservedKernelHandles_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingGetObservedKernelHandles_(
+        handle, device, kernel_handles, kernel_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingGetObservedKernelInfo(pti_pc_sampling_handle_t handle,
+                                              pti_device_handle_t device, uint64_t kernel_handle,
+                                              pti_pc_sampling_kernel_info_t* kernel_info) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingGetObservedKernelInfo_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingGetObservedKernelInfo_(
+        handle, device, kernel_handle, kernel_info);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingGetSamplesPerInstruction(pti_pc_sampling_handle_t handle,
+                                                 pti_device_handle_t device, uint64_t kernel_handle,
+                                                 pti_pc_sampling_instruction_t* instruction_buffer,
+                                                 size_t instruction_buffer_count,
+                                                 uint64_t* samples_buffer,
+                                                 size_t samples_buffer_count) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingGetSamplesPerInstruction_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingGetSamplesPerInstruction_(
+        handle, device, kernel_handle, instruction_buffer, instruction_buffer_count, samples_buffer,
+        samples_buffer_count);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t handle, pti_device_handle_t device,
+                                        pti_pc_sampling_device_status_t* device_status) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingGetDeviceStatus_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingGetDeviceStatus_(handle, device,
+                                                                        device_status);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiPcSamplingDisable(pti_pc_sampling_handle_t handle) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiPcSamplingDisable_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiPcSamplingDisable_(handle);
   } catch (...) {
     return pti_result::PTI_ERROR_INTERNAL;
   }
