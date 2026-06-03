@@ -201,18 +201,18 @@ jobs:
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
           REM TODO(PTI-88): OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
-          ctest --output-on-failure --preset ${{ matrix.preset }} -LE performance ^
+          ctest --output-on-failure --preset ${{ matrix.preset }} -LE "performance|quarantine" ^
             -E "MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords"
 
-      - name: Quarantined tests # flaky tests
+      - name: Quarantined tests # performance and flaky tests
         continue-on-error: true
         run: |
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          ctest --output-on-failure --preset ${{ matrix.preset }} -L performance
+          ctest --output-on-failure --preset ${{ matrix.preset }} -L "performance|quarantine"
           if %ERRORLEVEL% NEQ 0 (
-            echo ::warning::Quarantined performance tests step failed.
+            echo ::warning::Quarantined tests step failed.
           )
           exit /b 0 ::always exit 0 to keep the green check mark going
 

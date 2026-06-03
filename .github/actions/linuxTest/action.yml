@@ -20,19 +20,19 @@ runs:
       run: |
         source /opt/intel/oneapi/setvars.sh
 
-        ctest --output-on-failure --preset ${{ inputs.preset }} -LE performance
+        ctest --output-on-failure --preset ${{ inputs.preset }} -LE 'performance|quarantine'
 
-    - name: Quarantined tests # flaky tests
+    - name: Quarantined tests # performance and flaky tests
       continue-on-error: true
       working-directory: ${{ inputs.wdir }}
       shell: bash
       run: |
         source /opt/intel/oneapi/setvars.sh
 
-        if ctest --output-on-failure --preset ${{ inputs.preset }} -L performance; then
+        if ctest --output-on-failure --preset ${{ inputs.preset }} -L 'performance|quarantine'; then
           echo "Test status: 0"
-          echo "Performance tests pass"
+          echo "Quarantined tests pass"
         else
           echo "Test status: 1"
-          echo "::warning::Performance tests failed"
+          echo "::warning::Quarantined tests failed"
         fi

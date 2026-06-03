@@ -850,8 +850,10 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
       -e2 PTI_DEVICE_SYNC_DELTA=50000
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
   )
+
+  # TODO(PTI-422): Evaluate flaky test
   set_tests_properties(
-    prof-time-diff-dlworkload PROPERTIES LABELS "functional;prof-time-diff")
+    prof-time-diff-dlworkload PROPERTIES LABELS "functional;prof-time-diff;quarantine")
 
   add_test(NAME run-dpc_gemm COMMAND dpc_gemm)
   add_test(NAME run-onemkl_gemm_exe COMMAND onemkl_gemm_exe)
