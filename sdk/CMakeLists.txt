@@ -160,6 +160,8 @@ if(NOT TARGET LevelZero::level-zero)
   GetLevelZero(${PTI_L0_LOADER} ${PTI_L0_LOADER_COMMIT_HASH})
 endif()
 
+GetLevelZeroExtensions()
+
 get_itt()
 
 find_package(Threads REQUIRED)
@@ -287,7 +289,6 @@ if(PROJECT_IS_TOP_LEVEL)
 endif()
 
 # Library that loads core (pti). User links to this one.
-# pti_metrics
 add_library(pti_view SHARED "${PROJECT_SOURCE_DIR}/src/xpti_adapter.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti.cc"
                             "${PROJECT_SOURCE_DIR}/src/pti_version.cc"

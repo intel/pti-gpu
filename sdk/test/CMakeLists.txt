@@ -47,6 +47,8 @@ if (NOT TARGET Xpti::xpti)
                  " built.")
 endif()
 
+GetLevelZeroExtensions()
+
 # Multi-config generators not supported yet, this is an incomplete bandage.
 set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin")
 get_property(PTI_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)

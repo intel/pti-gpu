@@ -1,0 +1,8 @@
+repo: https://github.com/intel/compute-runtime.git
+commit: 555fab6499111abdc712ce423fe9ec2b20ee27db
+reprod:
+  - git clone ${repo}
+  - cd compute-runtime
+  - git checkout ${commit}
+  - cd ..
+  - cp -r compute-runtime/level_zero/include/level_zero/* level_zero/include/level_zero/

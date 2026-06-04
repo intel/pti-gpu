@@ -51,7 +51,7 @@ macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET
   endif()
 
   # Fake file path until we stop generating code on each build.
-  set(UR_HEADER_PATH "${PROJECT_SOURCE_DIR}/third_party/ur_api.h")
+  set(UR_HEADER_PATH "${PROJECT_SOURCE_DIR}/third-party/unified-runtime/include/unified-runtime/ur_api.h")
   if (TARGET unified-runtime::loader)
     get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
   endif()
@@ -637,3 +637,15 @@ function(GetCurrentGitCommit COMMIT_OUTPUT_VAR)
     endif()
   endif()
 endfunction()
+
+macro(GetLevelZeroExtensions)
+  if (NOT TARGET LevelZero::level-zero-ext)
+    add_library(level-zero-ext INTERFACE)
+    add_library(LevelZero::level-zero-ext ALIAS level-zero-ext)
+
+    target_include_directories(level-zero-ext SYSTEM INTERFACE
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third-party/compute-runtime/level_zero/include>)
+
+    target_link_libraries(level-zero-ext INTERFACE LevelZero::headers)
+  endif()
+endmacro()
