@@ -3,7 +3,11 @@
 #
 # SPDX-License-Identifier: MIT
 # =============================================================
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 include(macros)
+include(add_spirv)
+
 RemoveNDebugFlag() # For SYCL Function Name
 CheckExperimentalFilesystem()
 CheckIfSyclIsAvailable()
@@ -50,23 +54,6 @@ if(PTI_IS_MULTI_CONFIG)
   set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}")
 endif()
 
-set(PTI_TEST_SPV_SRC ${PROJECT_SOURCE_DIR}/test/gemm.spv)
-set(PTI_TEST_SPV_TEST ${PTI_TEST_BIN_DIR}/gemm.spv)
-
-if(TARGET LevelZero::level-zero OR TARGET unified-runtime::loader)
-  add_custom_command(
-    OUTPUT ${PTI_TEST_SPV_TEST}
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${PTI_TEST_SPV_SRC} ${PTI_TEST_SPV_TEST}
-    DEPENDS ${PTI_TEST_SPV_SRC})
-
-  add_custom_target(
-    copy_test_spv
-    DEPENDS ${PTI_TEST_SPV_TEST}
-  )
-endif()
-
 if (TARGET LevelZero::level-zero)
   add_executable(ze_event_manager_tests ze_event_manager_tests.cc)
   target_include_directories(
@@ -97,7 +84,8 @@ if (TARGET LevelZero::level-zero)
    target_link_libraries(local_ze_collection_suite PUBLIC GTest::gmock
      GTest::gtest_main LevelZero::level-zero spdlog::spdlog Pti::pti_view)
 
-   add_dependencies(local_ze_collection_suite copy_test_spv)
+   add_spirv(local_ze_collection_suite gemm)
+
    gtest_discover_tests(
       local_ze_collection_suite
       DISCOVERY_TIMEOUT 60
@@ -331,6 +319,7 @@ if(HAVE_SYCL)
                                             GTest::gmock
                                             LevelZero::level-zero
                                             ${FS_LIB})
+  add_spirv(zegemm_suite gemm)
 
   add_executable(init_tests init_tests.cc)
 
@@ -392,6 +381,8 @@ if(HAVE_SYCL)
   target_link_libraries(callback_kernel_lifecycle_test
     PUBLIC GTest::gtest_main spdlog::spdlog
     PRIVATE Pti::pti_view LevelZero::level-zero)
+
+  add_spirv(callback_kernel_lifecycle_test gemm)
 
   add_executable(dpc_gemm_threaded_profiled perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_baseline perf_dpc_gemm_threaded.cc)
@@ -544,8 +535,6 @@ if(HAVE_SYCL)
     TEST_LIST ZEGEMM_SUITE_TEST_LIST
     PROPERTIES LABELS "unit")
 
-  add_dependencies(zegemm_suite copy_test_spv)
-
   gtest_discover_tests(
     init_tests
     DISCOVERY_TIMEOUT 60
@@ -565,10 +554,6 @@ if(HAVE_SYCL)
   gtest_discover_tests(
     callback_kernel_lifecycle_test
     PROPERTIES LABELS "functional")
-
-  if(TARGET copy_test_spv)
-    add_dependencies(callback_kernel_lifecycle_test copy_test_spv)
-  endif()
 
   RequirePythonInterp()
 
@@ -659,7 +644,7 @@ if (HAVE_SYCL AND TARGET unified-runtime::loader)
       TEST_LIST URGEMM_SUITE_TEST_LIST
       PROPERTIES LABELS "unit" "sycl" "unified-runtime")
 
-    add_dependencies(urgemm_suite copy_test_spv)
+    add_spirv(urgemm_suite gemm)
   endif()
 
   RequirePythonInterp()
