@@ -423,8 +423,7 @@ typedef struct pti_view_record_memory_fill {
   uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Device uuid
   uint64_t _mem_op_id;                              //!< Memory operation ID,
                                                     //!< unique among all memory operations instances
-  uint32_t _correlation_id;                         //!< ID provided by user, marking some external
-                                                    //!< to PTI operations
+  uint32_t _correlation_id;                         //!< ID that correlates this record with records of other Views
   uint32_t _thread_id;                              //!< Thread ID from which operation submitted
   uint64_t _append_timestamp;                       //!< Timestamp of memory fill appending
                                                     //!< to back-end command list, ns
@@ -450,8 +449,7 @@ typedef struct pti_view_record_memory_fill_v2 {
   uint8_t _device_uuid[PTI_MAX_DEVICE_UUID_SIZE];   //!< Device uuid
   uint64_t _mem_op_id;                              //!< Memory operation ID,
                                                     //!< unique among all memory operations instances
-  uint32_t _correlation_id;                         //!< ID provided by user, marking some external
-                                                    //!< to PTI operations
+  uint32_t _correlation_id;                         //!< ID that correlates this record with records of other Views
   uint32_t _thread_id;                              //!< Thread ID from which operation submitted
   uint64_t _append_timestamp;                       //!< Timestamp of memory fill appending
                                                     //!< to back-end command list, ns
