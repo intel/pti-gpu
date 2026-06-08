@@ -9,9 +9,11 @@
 #include <cstddef>
 #include <sycl/sycl.hpp>
 
-inline static constexpr auto kDefaultAlpha = 1.0F;
-inline static constexpr auto kDefaultBeta = 2.0F;
-inline static constexpr auto kDefaultGamma = 3.0F;
+#include "graph_dotproduct_scalars.h"
+
+inline static constexpr auto kDefaultAlpha = PTI_TEST_GRAPH_DOTPRODUCT_ALPHA;
+inline static constexpr auto kDefaultBeta = PTI_TEST_GRAPH_DOTPRODUCT_BETA;
+inline static constexpr auto kDefaultGamma = PTI_TEST_GRAPH_DOTPRODUCT_GAMMA;
 
 template <typename T>
 struct InitDotProductVectors {

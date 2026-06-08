@@ -93,6 +93,18 @@ inline bool IsDriverExtensionSupported(ze_driver_handle_t driver, std::string_vi
                      });
 }
 
+inline void* GetExtensionFunctionAddr(ze_driver_handle_t driver, const char* function_name) {
+  PTI_ASSERT(driver != nullptr);
+  PTI_ASSERT(function_name != nullptr);
+  void* function_addr = nullptr;
+  overhead::ScopedOverheadCollector overhead_collector(zeDriverGetExtensionFunctionAddress_id);
+  ze_result_t status = zeDriverGetExtensionFunctionAddress(driver, function_name, &function_addr);
+  if (status != ZE_RESULT_SUCCESS) {
+    return nullptr;
+  }
+  return function_addr;
+}
+
 inline std::vector<ze_device_handle_t> GetDeviceList(ze_driver_handle_t driver) {
   PTI_ASSERT(driver != nullptr);
   ze_result_t status = ZE_RESULT_SUCCESS;

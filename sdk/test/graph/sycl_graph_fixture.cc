@@ -17,57 +17,13 @@
 #include <sycl/sycl.hpp>
 #include <vector>
 
+#include "graph_dotproduct_workload_info.h"
+#include "graph_record_validation.h"
 #include "pti/pti_view.h"
 #include "sycl_graph_test_kernels.h"
 #include "sycl_graph_workloads.h"
 #include "utils/pti_record_collection_fixture.h"
 #include "utils/sycl_usm_helper.h"
-
-namespace {
-
-template <typename T>
-std::string FormatRecord(const T* record) {
-  auto result = fmt::format(
-      "Name: {} \nDuration (ns): {}\nStart Time (ns): {}\nEnd Time (ns): {}\nThread ID: {}\n",
-      record->_name, record->_end_timestamp - record->_start_timestamp, record->_start_timestamp,
-      record->_end_timestamp, record->_thread_id);
-
-  if constexpr (std::is_same_v<T, pti_view_record_kernel>) {
-    result += fmt::format("Submit Time: {}\n", record->_submit_timestamp);
-    result += fmt::format("Append Time: {}\n", record->_append_timestamp);
-    result += fmt::format("Correlation ID: {}\n", record->_correlation_id);
-    result += fmt::format("SYCL Enqueue Begin Time (ns): {}\n", record->_sycl_enqk_begin_timestamp);
-    result += fmt::format("SYCL Task Begin ID (ns): {}\n", record->_sycl_task_begin_timestamp);
-    result += fmt::format("SYCL Queue ID: {}\n", record->_sycl_queue_id);
-  }
-
-  return result;
-}
-
-template <typename T>
-void ValidateView(const T* record) {
-  EXPECT_NE(record->_start_timestamp,
-            (std::numeric_limits<decltype(record->_start_timestamp)>::min)())
-      << "Failing record: " << FormatRecord(record);
-  EXPECT_NE(record->_start_timestamp,
-            (std::numeric_limits<decltype(record->_start_timestamp)>::max)())
-      << "Failing record: " << FormatRecord(record);
-  EXPECT_NE(record->_end_timestamp, (std::numeric_limits<decltype(record->_end_timestamp)>::min)())
-      << "Failing record: " << FormatRecord(record);
-  EXPECT_NE(record->_end_timestamp, (std::numeric_limits<decltype(record->_end_timestamp)>::max)())
-      << "Failing record: " << FormatRecord(record);
-  EXPECT_LE(record->_start_timestamp, record->_end_timestamp)
-      << "Failing record: " << FormatRecord(record);
-}
-
-template <typename T>
-void ValidateViewTimestamps(const std::vector<T*>& records) {
-  for (const auto* record : records) {
-    ValidateView(record);
-  }
-}
-
-}  // namespace
 
 class SyclGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
  protected:
@@ -91,20 +47,19 @@ class SyclGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
     }
   }
 
+  using Workload = DotProductWorkload<float>;
+
   sycl::queue queue_;
-  constexpr static std::size_t kMaxRecordsInBuffer = 10;
-  constexpr static std::size_t kRequestedBufferSize =
-      kMaxRecordsInBuffer * sizeof(pti_view_record_kernel);
 };
 
 class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
                                        public testing::WithParamInterface<std::tuple<std::size_t>> {
  protected:
-  using UnderlyingType = float;
+  using UnderlyingType = Workload::DefaultVectorDataType;
   using FloatVec = pti::test::utils::SyclUsmVector<UnderlyingType>;
   using FinalizedGraphType = sycl::ext::oneapi::experimental::command_graph<
       sycl::ext::oneapi::experimental::graph_state::executable>;
-  static constexpr std::size_t kExpectedKernelsPerExecution = kDefaultUsmKernelNumber;
+  static constexpr std::size_t kExpectedKernelsPerExecution = Workload::kDefaultKernelNumber;
   // Given that a timestamp conversion is being done after record generation and before buffer
   // insertion, some tolerance is needed due to timestamp drift.
   // This could be mitigated in the environment with PTI_CONV_CLOCK_SYNC_TIME_NS=1000000000.
@@ -134,7 +89,7 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
   void SetUp() override {
     SyclGraphTestSuite::SetUp();
     std::tie(dot_product_, x_vector_, y_vector_, z_vector_) =
-        CreateUsmDotProductVectors<UnderlyingType>(queue_, kDefaultUsmVectorSize);
+        CreateUsmDotProductVectors<UnderlyingType>(queue_, Workload::kDefaultVectorSize);
   }
 
   void TearDown() override { SyclGraphTestSuite::TearDown(); }
@@ -274,23 +229,23 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
 };
 
 TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecution) {
-  using UnderlyingType = float;
+  using UnderlyingType = Workload::DefaultVectorDataType;
   auto [dot_product, x_vector, y_vector, z_vector] =
-      CreateUsmDotProductVectors<UnderlyingType>(queue_, kDefaultUsmVectorSize);
+      CreateUsmDotProductVectors<UnderlyingType>(queue_, Workload::kDefaultVectorSize);
 
   ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
 
-  auto graph = CreateUsmDotProductGraph(queue_, kDefaultUsmVectorSize, dot_product.get(),
+  auto graph = CreateUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product.get(),
                                         x_vector.get(), y_vector.get(), z_vector.get());
 
   const auto exec = graph.finalize();
   queue_.ext_oneapi_graph(exec).wait_and_throw();
-  EXPECT_FLOAT_EQ(*dot_product, CalculateHostDotProduct<UnderlyingType>(kDefaultUsmVectorSize));
+  EXPECT_FLOAT_EQ(*dot_product, Workload::Result());
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   ParseAllBuffers();
-  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{kDefaultUsmKernelNumber});
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{Workload::kDefaultKernelNumber});
   ValidateViewTimestamps(record_storage_.kernel_records);
 }
 
@@ -373,7 +328,7 @@ TEST_F(SyclGraphTestSuite, TestSyclBuffersGraphExecution) {
 }
 
 TEST_F(SyclGraphTestSuite, TestSyclUsmTwoGraphsReplay) {
-  using UnderlyingType = float;
+  using UnderlyingType = Workload::DefaultVectorDataType;
   constexpr auto kNumberOfReplaysPerGraph = 2;
   constexpr auto kNumberOfGraphs = 2;
 
@@ -381,14 +336,14 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmTwoGraphsReplay) {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
 
   auto [dot_product_a, x_vector_a, y_vector_a, z_vector_a] =
-      CreateUsmDotProductVectors<UnderlyingType>(queue_, kDefaultUsmVectorSize);
-  auto graph_a = CreateUsmDotProductGraph(queue_, kDefaultUsmVectorSize, dot_product_a.get(),
+      CreateUsmDotProductVectors<UnderlyingType>(queue_, Workload::kDefaultVectorSize);
+  auto graph_a = CreateUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product_a.get(),
                                           x_vector_a.get(), y_vector_a.get(), z_vector_a.get());
   const auto exec_a = graph_a.finalize();
 
   auto [dot_product_b, x_vector_b, y_vector_b, z_vector_b] =
-      CreateUsmDotProductVectors<UnderlyingType>(queue_, kDefaultUsmVectorSize);
-  auto graph_b = CreateUsmDotProductGraph(queue_, kDefaultUsmVectorSize, dot_product_b.get(),
+      CreateUsmDotProductVectors<UnderlyingType>(queue_, Workload::kDefaultVectorSize);
+  auto graph_b = CreateUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product_b.get(),
                                           x_vector_b.get(), y_vector_b.get(), z_vector_b.get());
   const auto exec_b = graph_b.finalize();
 
@@ -397,8 +352,7 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmTwoGraphsReplay) {
   queue_.ext_oneapi_graph(exec_a).wait_and_throw();
   queue_.ext_oneapi_graph(exec_b).wait_and_throw();
 
-  const auto expected_per_graph =
-      CalculateHostDotProduct<UnderlyingType>(kDefaultUsmVectorSize) * kNumberOfReplaysPerGraph;
+  const auto expected_per_graph = Workload::Result() * kNumberOfReplaysPerGraph;
   EXPECT_FLOAT_EQ(*dot_product_a, expected_per_graph);
   EXPECT_FLOAT_EQ(*dot_product_b, expected_per_graph);
 
@@ -406,15 +360,16 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmTwoGraphsReplay) {
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   ParseAllBuffers();
 
-  EXPECT_EQ(std::size(record_storage_.kernel_records),
-            std::size_t{kDefaultUsmKernelNumber * kNumberOfGraphs * kNumberOfReplaysPerGraph});
+  EXPECT_EQ(
+      std::size(record_storage_.kernel_records),
+      std::size_t{Workload::kDefaultKernelNumber * kNumberOfGraphs * kNumberOfReplaysPerGraph});
   ValidateViewTimestamps(record_storage_.kernel_records);
 }
 
 TEST_P(SyclUsmGraphExecutionTestSuite, TestArbitraryReplays) {
   InitializeTracing();
   EnableTracing();
-  auto graph = CreateUsmDotProductGraph(queue_, kDefaultUsmVectorSize, dot_product_.get(),
+  auto graph = CreateUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product_.get(),
                                         x_vector_.get(), y_vector_.get(), z_vector_.get());
   graph_.emplace(graph.finalize());
 
@@ -423,9 +378,8 @@ TEST_P(SyclUsmGraphExecutionTestSuite, TestArbitraryReplays) {
     queue_.ext_oneapi_graph(*graph_).wait_and_throw();
   }
   FinalizeTracing();
-  const auto expected_result = (CalculateHostDotProduct<UnderlyingType>(kDefaultUsmVectorSize) *
-                                static_cast<UnderlyingType>(replays_)) +
-                               CalculateHostDotProduct<UnderlyingType>(kDefaultUsmVectorSize);
+  const auto expected_result =
+      (Workload::Result() * static_cast<UnderlyingType>(replays_)) + Workload::Result();
   EXPECT_FLOAT_EQ(*dot_product_, expected_result);
   EXPECT_EQ(std::size(record_storage_.kernel_records),
             (replays_ + 1) * kExpectedKernelsPerExecution);
