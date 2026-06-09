@@ -88,6 +88,7 @@ typedef enum {
   PTI_ERROR_PC_SAMPLING_NOT_STARTED = 254,  //!< collection has not started yet
   PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED = 255,  //!< collection is already stopped
   PTI_ERROR_PC_SAMPLING_NOT_STOPPED = 256,  //!< collection is not stopped yet
+  PTI_ERROR_PC_SAMPLING_UNSUPPORTED = 257,  //!< PC sampling is not supported on the current system configuration (e.g. no devices with EUStallSampling support found)
 
   PTI_RESULT_FORCE_UINT32 = 0x7fffffff
 } pti_result;

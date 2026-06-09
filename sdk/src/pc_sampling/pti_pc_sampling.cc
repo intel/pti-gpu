@@ -22,27 +22,59 @@ pti_result ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
     return handle_status;
   }
 
-  if (handle->state != pti_pc_sampling_state::PTI_PC_SAMPLING_INITIALIZED) {
+  if (handle->state_ != pti::pc_sampling::PcSamplingState::kEnabled) {
     SPDLOG_ERROR(
         "{}: cannot configure PC sampling because handle is not in the initial state for "
         "configuration, "
         "current state is {}",
-        __FUNCTION__, pti::pc_sampling::PtiPcSamplingStateToString(handle->state));
+        __FUNCTION__, pti::pc_sampling::PcSamplingStateToString(handle->state_));
     return PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED;
   }
 
-  if (devices != nullptr || device_count != 0) {
+  if (devices != nullptr && device_count == 0) {
     SPDLOG_ERROR(
-        "{}: device-filtered PC sampling configuration is not implemented; "
-        "pass devices == nullptr and device_count == 0",
-        __FUNCTION__);
-    return PTI_ERROR_NOT_IMPLEMENTED;
+        "{}: Invalid PC sampling configuration parameters passed, devices = {} device_count = {}",
+        __FUNCTION__, static_cast<const void*>(devices), device_count);
+    return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  handle->configured_devices.clear();
-  handle->sampling_period_ns =
-      (sampling_period_ns == 0) ? kDefaultSamplingPeriodNs : sampling_period_ns;
-  handle->state = pti_pc_sampling_state::PTI_PC_SAMPLING_CONFIGURED;
+  // Find out list of supported devices
+  handle->configured_devices_.clear();
+
+  if (devices == nullptr) {
+    // all supported devices will be profiled if no device filter is provided
+    auto supported_devices = pti::pc_sampling::GetAllDevices();
+    if (supported_devices.empty()) {
+      SPDLOG_ERROR("{}: No supported devices found for PC sampling", __FUNCTION__);
+      return PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED;
+    }
+    const size_t devices_to_copy =
+        (std::min)(supported_devices.size(), pti::pc_sampling::kMaxConfiguredDevices);
+    handle->configured_devices_.reserve(devices_to_copy);
+    std::copy_n(supported_devices.begin(), devices_to_copy,
+                std::back_inserter(handle->configured_devices_));
+  } else {
+    for (size_t i = 0; i < device_count; ++i) {
+      if (pti::pc_sampling::IsPCSamplingSupportedDevice(devices[i])) {
+        handle->configured_devices_.push_back(devices[i]);
+        if (handle->configured_devices_.size() >= pti::pc_sampling::kMaxConfiguredDevices) {
+          break;
+        }
+      } else {
+        SPDLOG_WARN("{}: device {} does not support PC sampling and will be ignored", __FUNCTION__,
+                    static_cast<const void*>(devices[i]));
+      }
+    }
+  }
+
+  if (handle->configured_devices_.empty()) {
+    SPDLOG_ERROR("{}: None of the provided device(s) support PC sampling", __FUNCTION__);
+    return PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED;
+  }
+
+  handle->sampling_period_ns_ =
+      (sampling_period_ns == 0) ? pti::pc_sampling::kDefaultSamplingPeriodNs : sampling_period_ns;
+  handle->state_ = pti::pc_sampling::PcSamplingState::kConfigured;
   return PTI_SUCCESS;
 }
 
@@ -60,7 +92,7 @@ pti_result ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle) {
     return configured_status;
   }
 
-  handle->state = pti_pc_sampling_state::PTI_PC_SAMPLING_STARTED;
+  handle->state_ = pti::pc_sampling::PcSamplingState::kStarted;
   return PTI_SUCCESS;
 }
 
@@ -70,18 +102,18 @@ pti_result ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle) {
     return handle_status;
   }
 
-  if (handle->state == pti_pc_sampling_state::PTI_PC_SAMPLING_STOPPED) {
+  if (handle->state_ == pti::pc_sampling::PcSamplingState::kStopped) {
     SPDLOG_ERROR("{}: PC sampling is already stopped", __FUNCTION__);
     return PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED;
   }
 
-  if (handle->state != pti_pc_sampling_state::PTI_PC_SAMPLING_STARTED) {
+  if (handle->state_ != pti::pc_sampling::PcSamplingState::kStarted) {
     SPDLOG_ERROR("{}: cannot stop PC sampling on not running collection, current state is {}",
-                 __FUNCTION__, pti::pc_sampling::PtiPcSamplingStateToString(handle->state));
+                 __FUNCTION__, pti::pc_sampling::PcSamplingStateToString(handle->state_));
     return PTI_ERROR_PC_SAMPLING_NOT_STARTED;
   }
 
-  handle->state = pti_pc_sampling_state::PTI_PC_SAMPLING_STOPPED;
+  handle->state_ = pti::pc_sampling::PcSamplingState::kStopped;
   return PTI_SUCCESS;
 }
 
@@ -114,18 +146,20 @@ pti_result ptiPcSamplingGetProfiledDevices(pti_pc_sampling_handle_t handle,
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  if (handle->state != pti_pc_sampling_state::PTI_PC_SAMPLING_STOPPED) {
+  if (handle->state_ != pti::pc_sampling::PcSamplingState::kStopped) {
     SPDLOG_ERROR("{}: profiled devices can be queried only after collection is stopped",
                  __FUNCTION__);
     return PTI_ERROR_PC_SAMPLING_NOT_STOPPED;
   }
 
-  const size_t configured_device_count = handle->configured_devices.size();
+  const size_t configured_device_count = handle->configured_devices_.size();
   if (devices != nullptr && configured_device_count != 0 && *device_count != 0) {
-    const size_t copied_device_count = std::min(*device_count, configured_device_count);
-    std::copy_n(handle->configured_devices.begin(), copied_device_count, devices);
+    const size_t copied_device_count = (std::min)(*device_count, configured_device_count);
+    std::copy_n(handle->configured_devices_.begin(), copied_device_count, devices);
+    *device_count = copied_device_count;
+  } else {
+    *device_count = configured_device_count;
   }
-  *device_count = configured_device_count;
   return PTI_SUCCESS;
 }
 
@@ -195,14 +229,20 @@ pti_result ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t, pti_device_han
 }
 
 pti_result ptiPcSamplingDisable(pti_pc_sampling_handle_t handle) {
-  const pti_result handle_status = pti::pc_sampling::ValidateHandle(handle);
+  pti_result handle_status = pti::pc_sampling::ValidateHandle(handle);
   if (handle_status != PTI_SUCCESS) {
     return handle_status;
   }
 
-  if (handle->state != pti_pc_sampling_state::PTI_PC_SAMPLING_STOPPED) {
+  if (handle->state_ != pti::pc_sampling::PcSamplingState::kStopped) {
     SPDLOG_WARN("{}: destroying PC sampling handle while collection state is {}", __FUNCTION__,
-                pti::pc_sampling::PtiPcSamplingStateToString(handle->state));
+                pti::pc_sampling::PcSamplingStateToString(handle->state_));
+    // Attempt to stop collection if it's still running before destroying handle
+    handle_status = ptiPcSamplingStopCollection(handle);
+    if (handle_status != PTI_SUCCESS) {
+      SPDLOG_WARN("{}: failed to stop collection before destroying handle, status: {:#x}",
+                  __FUNCTION__, static_cast<uint32_t>(handle_status));
+    }
   }
 
   return pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().Destroy(handle);

@@ -724,10 +724,10 @@ add_executable(pc_sampling_test pc_sampling/pc_sampling_test.cc)
 target_include_directories(
   pc_sampling_test
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/utils")
 
 target_link_libraries(pc_sampling_test PUBLIC spdlog::spdlog Pti::pti_view
-  GTest::gtest_main)
+  GTest::gtest_main LevelZero::level-zero)
 
 add_executable(pti_assert_test pti_assert_test.cc)
 
@@ -781,7 +781,11 @@ gtest_discover_tests(
 gtest_discover_tests(
   pc_sampling_test
   DISCOVERY_TIMEOUT 60
-  PROPERTIES LABELS "unit")
+  PROPERTIES
+    ENVIRONMENT ZET_ENABLE_METRICS=1
+    LABELS "functional"
+    LABELS "metrics"
+    LABELS "hw-metrics")
 
 # TODO: Organize this better? Where to put
 # functional tests?
