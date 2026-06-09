@@ -602,10 +602,10 @@ struct PtiViewRecordHandler {
     SPDLOG_TRACE("In {}, ext_id: {}, ext_kind: {}", __FUNCTION__, external_id,
                  static_cast<uint32_t>(external_kind));
 
-    pti_view_record_external_correlation ext_corr_rec = pti_view_record_external_correlation();
-    ext_corr_rec._external_id = external_id;
-    ext_corr_rec._external_kind = external_kind;
-    thread_local_map_ext_corrid_vectors[{external_kind}].push(ext_corr_rec);
+    pti_view_record_external_correlation record{};
+    record._external_id = external_id;
+    record._external_kind = external_kind;
+    thread_local_map_ext_corrid_vectors[{external_kind}].push(record);
 
     return result;
   }
@@ -615,20 +615,36 @@ struct PtiViewRecordHandler {
     auto result = pti_result::PTI_SUCCESS;
     auto it = thread_local_map_ext_corrid_vectors.find({external_kind});
     if (it != thread_local_map_ext_corrid_vectors.cend()) {
-      pti_view_record_external_correlation ext_record = it->second.top();
-      SPDLOG_TRACE("In {}, ext_id: {} ext_kind: {}", __FUNCTION__, ext_record._external_id,
-                   static_cast<uint32_t>(external_kind));
-      if (p_external_id != nullptr) {
-        *p_external_id = ext_record._external_id;
-      }
-      it->second.pop();
-      if (!it->second.size()) {
-        if (thread_local_is_within_subscriber_callback) {
-          SPDLOG_TRACE("In {}, Deferring erase of External Kind: {}, id: {}", __func__,
-                       static_cast<uint32_t>(external_kind), ext_record._external_id);
-          thread_local_map_ext_corrid_vectors_deferred_erase[{external_kind}].push(ext_record);
+      // Optimization: Only copy full record if we'll need it for deferred_erase (rare case)
+      // Check before pop if stack will be empty AND we're in subscriber callback
+      const bool will_need_full_record =
+          (it->second.size() == 1) && thread_local_is_within_subscriber_callback;
+
+      if (will_need_full_record) {
+        // RARE case: Make full copy for deferred_erase
+        const auto ext_record = it->second.top();
+        SPDLOG_TRACE("In {}, ext_id: {} ext_kind: {}", __FUNCTION__, ext_record._external_id,
+                     static_cast<uint32_t>(external_kind));
+        if (p_external_id != nullptr) {
+          *p_external_id = ext_record._external_id;
         }
+        it->second.pop();
+        SPDLOG_TRACE("In {}, Deferring erase of External Kind: {}, id: {}", __func__,
+                     static_cast<uint32_t>(external_kind), ext_record._external_id);
+        thread_local_map_ext_corrid_vectors_deferred_erase[{external_kind}].push(ext_record);
         thread_local_map_ext_corrid_vectors.erase(it);
+      } else {
+        // TYPICAL case: Only extract the ID field we need (avoids copying full record)
+        const uint64_t external_id = it->second.top()._external_id;
+        SPDLOG_TRACE("In {}, ext_id: {} ext_kind: {}", __FUNCTION__, external_id,
+                     static_cast<uint32_t>(external_kind));
+        if (p_external_id != nullptr) {
+          *p_external_id = external_id;
+        }
+        it->second.pop();
+        if (it->second.empty()) {
+          thread_local_map_ext_corrid_vectors.erase(it);
+        }
       }
     } else {
       SPDLOG_TRACE("In {}, External ID Queue is empty", __FUNCTION__);
@@ -963,9 +979,10 @@ inline void GetDeviceId(char* buf, const ze_pci_ext_properties_t& pci_prop_) {
 }
 
 inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRecord& rec) {
-  for (auto it = thread_local_map_ext_corrid_vectors.cbegin();
-       it != thread_local_map_ext_corrid_vectors.cend(); it++) {
-    pti_view_record_external_correlation ext_record = it->second.top();
+  // Process active external correlation stacks
+  for (const auto& kv : thread_local_map_ext_corrid_vectors) {
+    const auto& stack = kv.second;
+    auto ext_record = stack.top();  // copy for modification
     ext_record._correlation_id = rec.cid_;
     ext_record._view_kind._view_kind = pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION;
     SPDLOG_TRACE("In {}, ext_id: {}, ext_kind: {}, corr_id: {}", __FUNCTION__,
@@ -974,12 +991,13 @@ inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRec
     Instance().InsertRecord(ext_record, rec.tid_);
   }
 
-  for (auto it = thread_local_map_ext_corrid_vectors_deferred_erase.cbegin();
-       it != thread_local_map_ext_corrid_vectors_deferred_erase.cend(); it++) {
-    if (it->second.empty()) {
+  // Process deferred-erase external correlation stacks
+  for (const auto& kv : thread_local_map_ext_corrid_vectors_deferred_erase) {
+    const auto& stack = kv.second;
+    if (stack.empty()) {
       continue;
     }
-    auto ext_record = it->second.top();
+    auto ext_record = stack.top();  // copy for modification
     ext_record._correlation_id = rec.cid_;
     ext_record._view_kind._view_kind = pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION;
     SPDLOG_TRACE("In {}, processing deferred ext records pop - External Kind: {}, id: {}", __func__,

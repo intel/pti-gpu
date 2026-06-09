@@ -129,7 +129,7 @@ struct ExternalCorrIdKey {
 
 struct ExternalKeyCompare {
   bool operator()(const ExternalCorrIdKey& lhs, const ExternalCorrIdKey& rhs) const {
-    return (std::memcmp((char*)(&lhs), (char*)(&rhs), sizeof(ExternalCorrIdKey)) < 0);
+    return lhs._external_kind < rhs._external_kind;
   }
 };
 

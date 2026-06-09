@@ -76,6 +76,25 @@ if (TARGET LevelZero::level-zero)
       DISCOVERY_TIMEOUT 60
       PROPERTIES LABELS "unit")
 
+  add_executable(ze_kernel_name_cache_test ze_kernel_name_cache_test.cc)
+  target_include_directories(
+    ze_kernel_name_cache_test
+    PUBLIC "${PROJECT_SOURCE_DIR}/src/levelzero"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src"
+            "${PROJECT_SOURCE_DIR}/src/utils"
+            "${PROJECT_SOURCE_DIR}/include"
+            ${PROJECT_BINARY_DIR}
+            "${PROJECT_BINARY_DIR}/include"
+  )
+
+  target_link_libraries(ze_kernel_name_cache_test PUBLIC
+    GTest::gtest_main LevelZero::level-zero spdlog::spdlog fmt::fmt)
+
+  gtest_discover_tests(
+    ze_kernel_name_cache_test
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS "unit")
+
   add_executable(local_ze_collection_suite local_ze_collection_fixture.cc)
 
   target_include_directories(

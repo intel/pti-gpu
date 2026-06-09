@@ -53,6 +53,7 @@
 #include "ze_event_cache.h"
 #include "ze_event_managers.h"
 #include "ze_events_and_pools_observer.h"
+#include "ze_kernel_name_cache.h"
 #include "ze_local_collection_helpers.h"
 #include "ze_timer_helper.h"
 #include "ze_utils.h"
@@ -2277,7 +2278,7 @@ class ZeCollector {
 
     ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
 
-    command->props.name = utils::ze::GetKernelName(kernel, options_.demangle);
+    command->props.name = kernel_name_cache_.GetKernelName(kernel, options_.demangle);
     command->props.type = KernelCommandType::kKernel;
     command->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(kernel);
     command->props.bytes_transferred = 0;
@@ -3289,6 +3290,7 @@ class ZeCollector {
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     if (result == ZE_RESULT_SUCCESS) {
       collector->RemoveKernelGroupSize(*(params->phKernel));
+      collector->kernel_name_cache_.RemoveKernel(*(params->phKernel));
     }
     if (collector->IsCallbackDomainEnabled(PTI_CB_DOMAIN_DRIVER_KERNEL_DESTROYED,
                                            PTI_CB_PHASE_API_EXIT)) {
@@ -3390,6 +3392,7 @@ class ZeCollector {
   ZeCommandListMap command_list_map_;
   ZeImageSizeMap image_size_map_;
   ZeKernelGroupSizeMap kernel_group_size_map_;
+  ZeKernelNameCache<> kernel_name_cache_;
   ZeDeviceMap device_map_;
   std::unordered_map<ze_device_handle_t, ZeDeviceDescriptor> device_descriptors_;
   std::unordered_map<ze_module_handle_t, ze_device_handle_t> module_to_device_map_;
