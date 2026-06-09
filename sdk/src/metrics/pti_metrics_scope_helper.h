@@ -803,6 +803,8 @@ inline bool StoreKernelData(pti_scope_collection_handle_t scope_collection_handl
     }
 
     current_buffer = scope_collection_handle->buffer_manager_->GetCurrentBuffer(device);
+    SPDLOG_DEBUG("StoreKernelData: After CreateNewBuffer, GetCurrentBuffer -> {}",
+                 static_cast<void*>(current_buffer));
   }
 
   // Add data to current buffer

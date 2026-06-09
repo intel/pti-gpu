@@ -8,6 +8,7 @@
 #define SRC_API_PTI_METRICS_SCOPE_BUFFER_H_
 
 #include <level_zero/ze_api.h>
+#include <spdlog/spdlog.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -133,12 +134,24 @@ class PtiMetricsScopeBuffer {
 
   // Record management
   bool AddKernelRecord(std::unique_ptr<kernel_metric_data> kernel_data) {
-    if (!kernel_data || is_finalized_) {
+    if (!kernel_data) {
+      SPDLOG_DEBUG("AddKernelRecord: REJECT null kernel_data");
+      return false;
+    }
+    if (is_finalized_) {
+      SPDLOG_DEBUG(
+          "AddKernelRecord: REJECT buffer is_finalized, kernel_id={}, buffer_id={}, device={}",
+          kernel_data->kernel_id, buffer_id_, static_cast<void*>(device_handle_));
       return false;
     }
 
     size_t required_space = kernel_data->data_size + sizeof(kernel_metric_data);
     if (!HasSpace(required_space)) {
+      SPDLOG_DEBUG(
+          "AddKernelRecord: REJECT no space (used={}, cap={}, required={}, data_size={}), "
+          "kernel_id={}, buffer_id={}",
+          used_size_, capacity_, required_space, kernel_data->data_size, kernel_data->kernel_id,
+          buffer_id_);
       return false;
     }
 

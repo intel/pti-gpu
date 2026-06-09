@@ -8,15 +8,26 @@
  * @file main_metrics_scope.cc
  * @brief Example usage of PTI Metrics Scopes library
  *
- * This example demonstrates how to use the PTI Metrics Scope library.
+ * Demonstrates two modes of metrics scope collection:
+ *   - Auto-detect (default, or `--devices=auto`): every available level_zero GPU is profiled.
+ *   - Explicit (`--devices=0,2,3`): only the listed device indices are profiled.
+ *
+ * The GEMM workload runs on exactly the set of devices being profiled.
  */
 
-#include <string.h>
-
+#include <algorithm>
+#include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <set>
 #include <stdexcept>
+#include <string>
+#include <sycl/ext/oneapi/backend/level_zero.hpp>
 #include <sycl/sycl.hpp>
+#include <vector>
 
 #include "client.h"
 
@@ -97,11 +108,87 @@ const unsigned max_size = 8192;
 const unsigned min_size = 32;
 
 void Usage(const char *name) {
-  std::cout << " Calculating floating point matrix multiply on gpu. Usage:\n";
-  std::cout << name << " [matrix size] [repetition count]\n"
-            << "\t - matrix size, default=1024, max=" << max_size << "\n"
-            << "\t - repetition count, default=1 \n";
+  std::cout << " Calculating floating point matrix multiply on selected GPU(s).\n"
+            << "  Usage " << name << "  [ options ]\n";
+  std::cout << "--devices [-d]  string         "
+            << "Comma-separated indices (e.g. 0,2,3) or \"auto\" to profile every GPU. "
+               "Default: auto\n";
+  std::cout << "--size [-s]     integer        "
+            << "Matrix size. Default: 1024 (max " << max_size << ")\n";
+  std::cout << "--repeat [-r]   integer        "
+            << "Repetition count per device. Default: 1\n";
+  std::cout << "--help [-h]                    Print this help message.\n";
 }
+
+static std::vector<sycl::device> EnumerateLevelZeroGpuDevices() {
+  std::vector<sycl::device> all_devices;
+  for (auto &platform : sycl::platform::get_platforms()) {
+    if (platform.get_backend() != sycl::backend::ext_oneapi_level_zero) {
+      continue;
+    }
+    for (auto &dev : platform.get_devices(sycl::info::device_type::gpu)) {
+      all_devices.push_back(dev);
+    }
+  }
+  return all_devices;
+}
+
+// Map a sycl::device on the level_zero backend to its native L0 handle, which
+// equals the pti_device_handle_t the metrics scope API expects.
+static pti_device_handle_t GetPtiHandleFromSyclDevice(const sycl::device &dev) {
+  auto native = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(dev);
+  return static_cast<pti_device_handle_t>(native);
+}
+
+namespace {
+
+// Result of parsing a comma-separated index list. Success when `error` is empty.
+struct ParsedDeviceIndices {
+  std::vector<unsigned> indices;
+  std::string error;
+};
+
+// Parse a comma-separated list of indices into a sorted, deduped vector.
+static ParsedDeviceIndices ParseDeviceIndices(const std::string &csv, size_t num_available) {
+  ParsedDeviceIndices result;
+  std::set<unsigned> unique_indices;
+  size_t pos = 0;
+  while (pos <= csv.size()) {
+    size_t comma = csv.find(',', pos);
+    std::string token =
+        csv.substr(pos, (comma == std::string::npos) ? std::string::npos : comma - pos);
+    if (token.empty()) {
+      result.error = "empty device index in --devices=" + csv;
+      return result;
+    }
+    try {
+      size_t consumed = 0;
+      unsigned long parsed = std::stoul(token, &consumed);
+      if (consumed != token.size()) {
+        result.error = "non-numeric device index '" + token + "' in --devices=" + csv;
+        return result;
+      }
+      if (parsed >= num_available) {
+        result.error = "device index " + token + " out of range (have " +
+                       std::to_string(num_available) + " device(s), valid: 0.." +
+                       std::to_string(num_available - 1) + ")";
+        return result;
+      }
+      unique_indices.insert(static_cast<unsigned>(parsed));
+    } catch (const std::exception &) {
+      result.error = "could not parse device index '" + token + "' in --devices=" + csv;
+      return result;
+    }
+    if (comma == std::string::npos) {
+      break;
+    }
+    pos = comma + 1;
+  }
+  result.indices.assign(unique_indices.begin(), unique_indices.end());
+  return result;
+}
+
+}  // namespace
 
 int main(int argc, char *argv[]) {
   std::cout << "PTI Metrics Scope Example\n";
@@ -112,63 +199,108 @@ int main(int argc, char *argv[]) {
   _putenv_s("ZET_ENABLE_METRICS", "1");
 #endif
 
-  int exit_code = EXIT_SUCCESS;
-  StartProfiling();
-
-  // Run GPU workload
-  std::cout << "Simulating GPU work...\n";
-  // Simulate GEMM
-  std::cout << "Running GEMM workload...\n";
-
-  unsigned repeat_count = 5;
   unsigned size = 1024;
-  sycl::device dev;
+  unsigned repeat_count = 1;
+  std::string devices_arg = "auto";
 
   try {
-    dev = sycl::device(sycl::gpu_selector_v);
-
-    if (argc > 1) {
-      unsigned temp = std::stoul(argv[1]);
-      size = (temp < min_size) ? min_size : (temp > max_size) ? max_size : temp;
+    for (int i = 1; i < argc; i++) {
+      if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+        Usage(argv[0]);
+        return EXIT_SUCCESS;
+      } else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--size") == 0) {
+        i++;
+        auto temp = std::stoul(argv[i]);
+        size = (temp < min_size) ? min_size : (temp > max_size) ? max_size : temp;
+      } else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--repeat") == 0) {
+        i++;
+        repeat_count = std::stoul(argv[i]);
+      } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--devices") == 0) {
+        i++;
+        devices_arg = argv[i];
+      } else {
+        std::cerr << "Error: Unknown option: " << argv[i] << '\n';
+        Usage(argv[0]);
+        return EXIT_FAILURE;
+      }
     }
-
-    if (argc > 2) {
-      repeat_count = std::stoul(argv[2]);
-    }
-  } catch (std::invalid_argument const &e) {
-    std::cerr << "Error: Invalid argument when processing command line " << e.what() << '\n';
-    Usage(argv[0]);
-    return EXIT_FAILURE;
-  } catch (std::out_of_range const &e) {
-    std::cerr << "Error: Out-of-range when processing command line " << e.what() << '\n';
-    Usage(argv[0]);
-    return EXIT_FAILURE;
   } catch (...) {
-    std::cerr << "Error: Unknown exception caught." << '\n';
+    std::cerr << "Error: Failed to parse command line arguments\n";
     Usage(argv[0]);
     return EXIT_FAILURE;
   }
 
-  sycl::property_list prop_list{sycl::property::queue::in_order()};
-  sycl::queue queue(dev, sycl::async_handler{}, prop_list);  // Main runandcheck kernel
+  // Enumerate available L0 GPUs first so we can validate --devices indices.
+  std::vector<sycl::device> all_sycl_devices = EnumerateLevelZeroGpuDevices();
+  if (all_sycl_devices.empty()) {
+    std::cerr << "Error: No level_zero GPU devices found.\n";
+    return EXIT_FAILURE;
+  }
 
+  // Decide profiling/workload device set.
+  // - Auto-detect: empty pti_handles, GEMM loops over every L0 GPU.
+  // - Explicit:    pti_handles holds the chosen handles, GEMM loops over the matching subset.
+  std::vector<pti_device_handle_t> pti_handles;
+  std::vector<sycl::device> selected_sycl_devices;
+
+  const bool auto_mode = (devices_arg == "auto");
+
+  if (auto_mode) {
+    selected_sycl_devices = all_sycl_devices;
+    // pti_handles stays empty; client.cc treats empty as auto-detect.
+  } else {
+    ParsedDeviceIndices parsed = ParseDeviceIndices(devices_arg, all_sycl_devices.size());
+    if (!parsed.error.empty()) {
+      std::cerr << "Error: " << parsed.error << '\n';
+      Usage(argv[0]);
+      return EXIT_FAILURE;
+    }
+    pti_handles.reserve(parsed.indices.size());
+    selected_sycl_devices.reserve(parsed.indices.size());
+    for (unsigned idx : parsed.indices) {
+      selected_sycl_devices.push_back(all_sycl_devices[idx]);
+      pti_handles.push_back(GetPtiHandleFromSyclDevice(all_sycl_devices[idx]));
+    }
+  }
+
+  std::cout << "Discovered " << all_sycl_devices.size() << " GPU device(s):\n";
+  for (size_t i = 0; i < all_sycl_devices.size(); ++i) {
+    std::cout << "  [" << i << "] " << all_sycl_devices[i].get_info<sycl::info::device::name>()
+              << "\n";
+  }
+  std::cout << (auto_mode ? "Auto-detect mode: profiling all available devices.\n"
+                          : "Explicit mode: profiling " + std::to_string(pti_handles.size()) +
+                                " selected device(s).\n");
+
+  int exit_code = EXIT_SUCCESS;
+  StartProfiling(pti_handles);
+
+  std::cout << "Simulating GPU work...\n";
+  std::cout << "Running GEMM workload on selected GPU(s)...\n";
   std::cout << "DPC++ Matrix Multiplication (matrix size: " << size << " x " << size << ", repeats "
-            << repeat_count << " times)" << std::endl;
-  std::cout << "Target device: "
-            << queue.get_info<sycl::info::queue::device>().get_info<sycl::info::device::name>()
-            << std::endl;
+            << repeat_count << " times per device)\n";
 
   std::vector<float> a(size * size, A_VALUE);
   std::vector<float> b(size * size, B_VALUE);
   std::vector<float> c(size * size, 0.0f);
 
+  sycl::property_list prop_list{sycl::property::queue::in_order()};
+
   try {
     auto start = std::chrono::steady_clock::now();
     float expected_result = A_VALUE * B_VALUE * size;
-    Compute(queue, a, b, c, size, repeat_count, expected_result);
+    for (size_t i = 0; i < selected_sycl_devices.size(); ++i) {
+      std::cout << "\n--- Running GEMM on device [" << i
+                << "]: " << selected_sycl_devices[i].get_info<sycl::info::device::name>()
+                << " ---\n";
+      sycl::queue queue(selected_sycl_devices[i], sycl::async_handler{}, prop_list);
+      // Reset c each iteration so the correctness check applies cleanly to this device's output.
+      std::fill(c.begin(), c.end(), 0.0f);
+      Compute(queue, a, b, c, size, repeat_count, expected_result);
+    }
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
-    std::cout << "Total execution time: " << time.count() << " sec" << std::endl;
+    std::cout << "Total execution time across all devices: " << time.count() << " sec" << std::endl;
 
   } catch (const sycl::exception &e) {
     std::cerr << "Error: Exception while executing SYCL " << e.what() << '\n';

@@ -627,12 +627,6 @@ pti_result ptiMetricsScopeStartCollection(pti_scope_collection_handle_t scope_co
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
 
-    // TODO: Will be removed in later PRs when collection for multi-devices is implemented
-    if (scope_collection_handle->active_devices_.size() > 1) {
-      SPDLOG_WARN("Collection for multiple devices not yet implemented");
-      return PTI_ERROR_NOT_IMPLEMENTED;
-    }
-
     if (scope_collection_handle->is_collection_active_) {
       SPDLOG_DEBUG("ptiMetricsScopeStartCollection: Collection already active");
       return PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED;

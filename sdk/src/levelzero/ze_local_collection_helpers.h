@@ -36,19 +36,27 @@ inline bool A2AppendWaitAndSignalEvent(ze_command_list_handle_t command_list,
   SPDLOG_DEBUG(" --- In: {}, CmdList: {}, Signal event: {}, Wait event: {}", __FUNCTION__,
                static_cast<const void*>(command_list), static_cast<const void*>(signal_event),
                static_cast<const void*>(wait_event));
-  overhead::Init();
-  if (zeCommandListAppendWaitOnEvents(command_list, 1U, &wait_event) != ZE_RESULT_SUCCESS) {
-    SPDLOG_ERROR("In {}, zeCommandListAppendWaitOnEvents failed", __FUNCTION__);
+  ze_result_t wait_res = ZE_RESULT_SUCCESS;
+  {
+    overhead::ScopedOverheadCollector overhead_collector{zeCommandListAppendWaitOnEvents_id};
+    wait_res = zeCommandListAppendWaitOnEvents(command_list, 1U, &wait_event);
+  }
+  if (wait_res != ZE_RESULT_SUCCESS) {
+    SPDLOG_ERROR("In {}, zeCommandListAppendWaitOnEvents failed: 0x{:x}", __FUNCTION__,
+                 static_cast<uint32_t>(wait_res));
     return false;
   }
-  overhead_fini(zeCommandListAppendWaitOnEvents_id);
 
-  overhead::Init();
-  if (zeCommandListAppendSignalEvent(command_list, signal_event) != ZE_RESULT_SUCCESS) {
-    SPDLOG_ERROR("In {}, zeCommandListAppendSignalEvent failed", __FUNCTION__);
+  ze_result_t signal_res = ZE_RESULT_SUCCESS;
+  {
+    overhead::ScopedOverheadCollector overhead_collector{zeCommandListAppendSignalEvent_id};
+    signal_res = zeCommandListAppendSignalEvent(command_list, signal_event);
+  }
+  if (signal_res != ZE_RESULT_SUCCESS) {
+    SPDLOG_ERROR("In {}, zeCommandListAppendSignalEvent failed: 0x{:x}", __FUNCTION__,
+                 static_cast<uint32_t>(signal_res));
     return false;
   }
-  overhead_fini(zeCommandListAppendSignalEvent_id);
 
   return true;
 }
