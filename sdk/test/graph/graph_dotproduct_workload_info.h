@@ -14,9 +14,7 @@
 // Shape: Diamond
 //
 //      *
-//     / \
 //    *   *
-//     \ /
 //      *
 //
 // This workload is duplicated in two places (SYCL, Level Zero) to test both the L0 graph API and
