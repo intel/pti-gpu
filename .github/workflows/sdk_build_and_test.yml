@@ -15,6 +15,8 @@ on:
       - release/**
     paths:
       - sdk/**
+      - .github/workflows/**
+      - .github/actions/**
   workflow_dispatch:
   schedule:
     - cron: '30 5 * * *' # Daily 5:30 AM UTC / 12:30 AM EST
@@ -36,7 +38,7 @@ jobs:
     strategy:
       matrix:
         include:
-          
+
           # 4/3/2026
           # Client uses Kobuk build process for both Ubuntu-25.10
           # while PVC does not. Client packages are identical across versions.
@@ -61,11 +63,10 @@ jobs:
     if: vars.PTI_RUN_LINUX_TESTS == 1
 
     steps:
-      - name: Clean-up
-        run:  rm -rf *
-
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Build
         working-directory: sdk
