@@ -738,15 +738,58 @@ target_include_directories(
 target_link_libraries(view_gpu_local_test PUBLIC spdlog::spdlog Pti::pti_view
   GTest::gtest_main)
 
-add_executable(pc_sampling_test pc_sampling/pc_sampling_test.cc)
+add_executable(pc_sampling_basic_test pc_sampling/pc_sampling_basic_test.cc)
 
 target_include_directories(
-  pc_sampling_test
+  pc_sampling_basic_test
   PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/utils")
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+          "${PROJECT_SOURCE_DIR}/src/utils"
+          "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
 
-target_link_libraries(pc_sampling_test PUBLIC spdlog::spdlog Pti::pti_view
+target_link_libraries(pc_sampling_basic_test PUBLIC spdlog::spdlog Pti::pti_view
   GTest::gtest_main LevelZero::level-zero)
+
+add_executable(pc_sampling_feature_test pc_sampling/pc_sampling_feature_test.cc)
+
+add_executable(pc_sampling_functional_test pc_sampling/pc_sampling_functional_test.cc)
+
+target_include_directories(
+  pc_sampling_feature_test
+  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+          "${PROJECT_SOURCE_DIR}/src/utils"
+          "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
+
+target_include_directories(
+  pc_sampling_functional_test
+  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+  PRIVATE "${PROJECT_SOURCE_DIR}/src"
+          "${PROJECT_SOURCE_DIR}/src/utils"
+          "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
+
+target_link_libraries(pc_sampling_feature_test PUBLIC spdlog::spdlog Pti::pti_view
+  GTest::gtest_main LevelZero::level-zero)
+
+target_link_libraries(pc_sampling_functional_test PUBLIC spdlog::spdlog Pti::pti_view
+  GTest::gtest_main LevelZero::level-zero)
+
+if(HAVE_SYCL)
+  add_executable(pc_sampling_sycl_test pc_sampling/pc_sampling_sycl_test.cc)
+
+  target_include_directories(
+    pc_sampling_sycl_test
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src"
+            "${PROJECT_SOURCE_DIR}/src/utils"
+            "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
+
+  target_compile_options(pc_sampling_sycl_test PRIVATE -fsycl)
+  target_link_options(pc_sampling_sycl_test PRIVATE -fsycl)
+
+  target_link_libraries(pc_sampling_sycl_test PUBLIC spdlog::spdlog Pti::pti_view
+    GTest::gtest_main LevelZero::level-zero)
+endif()
 
 add_executable(pti_assert_test pti_assert_test.cc)
 
@@ -798,13 +841,38 @@ gtest_discover_tests(
   PROPERTIES LABELS "functional")
 
 gtest_discover_tests(
-  pc_sampling_test
+  pc_sampling_basic_test
+  DISCOVERY_TIMEOUT 60
+  PROPERTIES
+    ENVIRONMENT ZET_ENABLE_METRICS=1
+    LABELS "unit")
+
+gtest_discover_tests(
+  pc_sampling_feature_test
+  DISCOVERY_TIMEOUT 60
+  PROPERTIES
+    ENVIRONMENT ZET_ENABLE_METRICS=1
+    LABELS "unit")
+
+gtest_discover_tests(
+  pc_sampling_functional_test
   DISCOVERY_TIMEOUT 60
   PROPERTIES
     ENVIRONMENT ZET_ENABLE_METRICS=1
     LABELS "functional"
     LABELS "metrics"
     LABELS "hw-metrics")
+
+if(HAVE_SYCL)
+  gtest_discover_tests(
+    pc_sampling_sycl_test
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES
+      ENVIRONMENT ZET_ENABLE_METRICS=1
+      LABELS "functional"
+      LABELS "metrics"
+      LABELS "hw-metrics")
+endif()
 
 # TODO: Organize this better? Where to put
 # functional tests?

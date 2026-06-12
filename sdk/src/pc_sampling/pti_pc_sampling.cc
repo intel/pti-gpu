@@ -8,7 +8,41 @@
 
 #include <algorithm>
 
+#include "pc_sampling/pti_pc_sampling_aggregator.h"
+#include "pc_sampling/pti_pc_sampling_collector.h"
 #include "pc_sampling/pti_pc_sampling_internal.h"
+
+namespace pti::pc_sampling {
+
+pti_result EnsureAggregatedDeviceData(pti_pc_sampling_handle_t handle) {
+  if (handle == nullptr || !handle->profiled_device_data.empty()) {
+    return PTI_SUCCESS;
+  }
+
+  pti_device_handle_t configured_device = nullptr;
+  const pti_result configured_device_status = GetConfiguredDevice(handle, &configured_device);
+  if (configured_device_status != PTI_SUCCESS) {
+    return configured_device_status;
+  }
+
+  return AggregateCollectedData(configured_device, handle->collected_metric_group_,
+                                handle->samples_dropped_, handle->collected_raw_data_,
+                                &handle->profiled_device_data);
+}
+
+void ResetCollectionSession(pti_pc_sampling_handle_t handle) {
+  if (handle == nullptr) {
+    return;
+  }
+
+  ClearProfiledDeviceData(handle);
+  handle->collector.reset();
+  handle->collected_metric_group_ = nullptr;
+  handle->collected_raw_data_.Reset();
+  handle->samples_dropped_ = false;
+}
+
+}  // namespace pti::pc_sampling
 
 pti_result ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle) {
   return pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().Create(handle);
@@ -92,6 +126,41 @@ pti_result ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle) {
     return configured_status;
   }
 
+  pti::pc_sampling::ResetCollectionSession(handle);
+
+  pti_device_handle_t profiling_device = nullptr;
+  const pti_result configured_device_status =
+      pti::pc_sampling::GetConfiguredDevice(handle, &profiling_device);
+  if (configured_device_status != PTI_SUCCESS) {
+    return configured_device_status;
+  }
+
+  ze_driver_handle_t driver =
+      pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().GetDriver(profiling_device);
+  zet_metric_group_handle_t metric_group =
+      pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().GetMetricGroup(profiling_device);
+  if (driver == nullptr || metric_group == nullptr) {
+    SPDLOG_ERROR("{}: configured device {} is missing PC sampling configuration", __FUNCTION__,
+                 static_cast<const void*>(profiling_device));
+    return PTI_ERROR_INTERNAL;
+  }
+
+  handle->collector.reset(new (std::nothrow) pti::pc_sampling::PtiPcSamplingDataCollector(
+      profiling_device, driver, metric_group, handle->collected_raw_data_,
+      handle->samples_dropped_));
+  if (handle->collector == nullptr) {
+    SPDLOG_ERROR("{}: collector creation returned null", __FUNCTION__);
+    return PTI_ERROR_INTERNAL;
+  }
+
+  handle->collected_metric_group_ = metric_group;
+
+  const pti_result start_status = handle->collector->Start(handle->sampling_period_ns_);
+  if (start_status != PTI_SUCCESS) {
+    pti::pc_sampling::ResetCollectionSession(handle);
+    return start_status;
+  }
+
   handle->state_ = pti::pc_sampling::PcSamplingState::kStarted;
   return PTI_SUCCESS;
 }
@@ -113,6 +182,17 @@ pti_result ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle) {
     return PTI_ERROR_PC_SAMPLING_NOT_STARTED;
   }
 
+  if (handle->collector == nullptr) {
+    SPDLOG_ERROR("{}: collector is missing while collection is running", __FUNCTION__);
+    return PTI_ERROR_INTERNAL;
+  }
+
+  const pti_result stop_status = handle->collector->Stop();
+  if (stop_status != PTI_SUCCESS) {
+    return stop_status;
+  }
+
+  handle->collector.reset();
   handle->state_ = pti::pc_sampling::PcSamplingState::kStopped;
   return PTI_SUCCESS;
 }
@@ -223,9 +303,38 @@ pti_result ptiPcSamplingGetSamplesPerInstruction(pti_pc_sampling_handle_t handle
   return PTI_ERROR_NOT_IMPLEMENTED;
 }
 
-pti_result ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t, pti_device_handle_t,
-                                        pti_pc_sampling_device_status_t*) {
-  return PTI_ERROR_NOT_IMPLEMENTED;
+pti_result ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t handle, pti_device_handle_t device,
+                                        pti_pc_sampling_device_status_t* device_status) {
+  const pti_result handle_status = pti::pc_sampling::ValidateStoppedCollectionHandle(handle);
+  if (handle_status != PTI_SUCCESS) {
+    return handle_status;
+  }
+
+  if (device == nullptr || device_status == nullptr ||
+      device_status->_struct_size < sizeof(pti_pc_sampling_device_status_t)) {
+    SPDLOG_ERROR("{}: device status output is invalid", __FUNCTION__);
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  const pti_result aggregate_status = pti::pc_sampling::EnsureAggregatedDeviceData(handle);
+  if (aggregate_status != PTI_SUCCESS) {
+    return aggregate_status;
+  }
+
+  auto it = std::find_if(handle->profiled_device_data.begin(), handle->profiled_device_data.end(),
+                         [device](const pti_pc_sampling_device_status_t& device_data) {
+                           return device_data._device == device;
+                         });
+  if (it == handle->profiled_device_data.end()) {
+    SPDLOG_ERROR("{}: device does not match the profiled PC sampling device", __FUNCTION__);
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  device_status->_device = it->_device;
+  device_status->_samples_dropped = it->_samples_dropped;
+  device_status->_total_sample_count = it->_total_sample_count;
+  device_status->_total_pc_count = it->_total_pc_count;
+  return PTI_SUCCESS;
 }
 
 pti_result ptiPcSamplingDisable(pti_pc_sampling_handle_t handle) {
@@ -244,6 +353,8 @@ pti_result ptiPcSamplingDisable(pti_pc_sampling_handle_t handle) {
                   __FUNCTION__, static_cast<uint32_t>(handle_status));
     }
   }
+
+  pti::pc_sampling::ResetCollectionSession(handle);
 
   return pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().Destroy(handle);
 }

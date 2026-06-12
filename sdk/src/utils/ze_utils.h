@@ -319,7 +319,8 @@ inline std::string GetMetricUnits(const char* units) {
   return result;
 }
 
-inline std::vector<std::string> GetMetricList(zet_metric_group_handle_t group) {
+inline std::vector<std::string> GetMetricList(zet_metric_group_handle_t group,
+                                              bool add_units = true) {
   PTI_ASSERT(group != nullptr);
 
   uint32_t metric_count = GetMetricCount(group);
@@ -342,7 +343,7 @@ inline std::vector<std::string> GetMetricList(zet_metric_group_handle_t group) {
 
     std::string name = static_cast<const char*>(metric_props.name);
     std::string units = GetMetricUnits(static_cast<const char*>(metric_props.resultUnits));
-    if (!units.empty()) {
+    if (add_units && !units.empty()) {
       name += "[" + units + "]";
     }
     name_list.emplace_back(std::move(name));

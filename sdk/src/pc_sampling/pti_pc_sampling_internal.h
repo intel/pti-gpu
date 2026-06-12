@@ -18,6 +18,7 @@
 #define PTI_PC_SAMPLING_INTERNAL_H_
 
 #include <level_zero/ze_api.h>
+#include <level_zero/zet_api.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -30,7 +31,9 @@
 
 #include "pti/pti_callback.h"
 #include "pti/pti_pc_sampling.h"
+#include "pti_pc_sampling_collector.h"
 #include "pti_pc_sampling_helper.h"
+#include "pti_pc_sampling_raw_data_file.h"
 
 namespace pti::pc_sampling {
 
@@ -67,6 +70,8 @@ enum class PcSamplingState : uint32_t {
 //-----------------------------------------------------------------------------
 // Data Structures
 //-----------------------------------------------------------------------------
+
+class PtiPcSamplingDataCollector;
 
 /**
  * @brief Information about a kernel binary collected during kernel creation callback.
@@ -123,10 +128,48 @@ inline const char* PcSamplingStateToString(PcSamplingState state) {
 struct _pti_pc_sampling_handle_t {
   pti::pc_sampling::PcSamplingState state_ = pti::pc_sampling::PcSamplingState::kEnabled;
   uint32_t sampling_period_ns_ = pti::pc_sampling::kDefaultSamplingPeriodNs;
+  std::unordered_map<pti_device_handle_t, zet_metric_group_handle_t>
+      supported_device_metric_group_map_;
+  // Supported devices in Level Zero discovery order (zeDriverGet/zeDeviceGet).
+  // Used to pick a deterministic profiling device that matches the one the
+  // runtime (e.g. SYCL gpu_selector) executes kernels on.
+  std::vector<pti_device_handle_t> supported_devices_;
   std::vector<pti_device_handle_t> configured_devices_;
+  std::vector<pti_pc_sampling_device_status_t> profiled_device_data;
+  zet_metric_group_handle_t collected_metric_group_ = nullptr;
+  pti::pc_sampling::TempRawDataFile collected_raw_data_;
+  bool samples_dropped_ = false;
+  std::unique_ptr<pti::pc_sampling::PtiPcSamplingDataCollector> collector;
 };
 
 namespace pti::pc_sampling {
+
+inline void ClearProfiledDeviceData(pti_pc_sampling_handle_t handle) {
+  if (handle == nullptr) {
+    return;
+  }
+
+  handle->profiled_device_data.clear();
+}
+
+inline pti_result GetConfiguredDevice(const pti_pc_sampling_handle_t handle,
+                                      pti_device_handle_t* device) {
+  if (handle == nullptr || device == nullptr) {
+    SPDLOG_ERROR("{}: handle or output device pointer is null", __FUNCTION__);
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  if (handle->configured_devices_.empty()) {
+    SPDLOG_ERROR("{}: no configured device is available on the handle", __FUNCTION__);
+    return PTI_ERROR_INTERNAL;
+  }
+
+  *device = handle->configured_devices_.front();
+  return PTI_SUCCESS;
+}
+
+pti_result EnsureAggregatedDeviceData(pti_pc_sampling_handle_t handle);
+void ResetCollectionSession(pti_pc_sampling_handle_t handle);
 
 //-----------------------------------------------------------------------------
 // Kernel Info Storage (Thread-Safe)
@@ -361,8 +404,52 @@ class PtiPcSamplingHandleStorage {
       return PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED;
     }
 
-    auto supported_devices = GetAllDevicesSupportEUStall();
-    if (supported_devices.empty()) {
+    std::unordered_map<pti_device_handle_t, ze_driver_handle_t> supported_device_driver_map;
+    std::unordered_map<pti_device_handle_t, zet_metric_group_handle_t>
+        supported_device_metric_group_map;
+    std::vector<pti_device_handle_t> supported_devices_ordered;
+
+    // Initialize Level Zero (idempotent if already initialized) and enumerate
+    // drivers/devices through the shared utils so this stays in sync with the
+    // rest of the SDK. Driver enumeration uses zeDriverGet (via GetDriverList)
+    // to match the handles the SYCL runtime collects on.
+    ZeDriverInit init_drivers{};
+    if (!init_drivers.Success()) {
+      SPDLOG_ERROR("{}: failed to initialize Level Zero", __FUNCTION__);
+      return PTI_ERROR_PC_SAMPLING_UNSUPPORTED;
+    }
+
+    for (ze_driver_handle_t driver : ::utils::ze::GetDriverList()) {
+      for (ze_device_handle_t device : ::utils::ze::GetDeviceList(driver)) {
+        ze_device_properties_t props{};
+        props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+
+        ze_result_t status = zeDeviceGetProperties(device, &props);
+        if (status != ZE_RESULT_SUCCESS) {
+          SPDLOG_ERROR("{}: zeDeviceGetProperties failed, status: {:#x}", __FUNCTION__,
+                       static_cast<uint32_t>(status));
+          continue;
+        }
+
+        if (props.type != ZE_DEVICE_TYPE_GPU) {
+          continue;
+        }
+
+        zet_metric_group_handle_t metric_group = FindEUStallMetricGroupHandle(device);
+        if (metric_group == nullptr) {
+          continue;
+        }
+
+        supported_device_driver_map.emplace(reinterpret_cast<pti_device_handle_t>(device), driver);
+        supported_device_metric_group_map.emplace(reinterpret_cast<pti_device_handle_t>(device),
+                                                  metric_group);
+        supported_devices_ordered.push_back(reinterpret_cast<pti_device_handle_t>(device));
+        SPDLOG_INFO("{}: device {} supports {}", __FUNCTION__, props.name,
+                    kPcSamplingMetricGroupName);
+      }
+    }
+
+    if (supported_device_metric_group_map.empty()) {
       SPDLOG_ERROR(
           "{}: no devices with EUStallSampling support found. "
           "Ensure ZET_ENABLE_METRICS=1 and compatible GPU hardware is present",
@@ -377,36 +464,36 @@ class PtiPcSamplingHandleStorage {
       return PTI_ERROR_INTERNAL;
     }
 
+    device_driver_map_ = std::move(supported_device_driver_map);
+    collection_handle->supported_device_metric_group_map_ =
+        std::move(supported_device_metric_group_map);
+    collection_handle->supported_devices_ = std::move(supported_devices_ordered);
+
     pti_pc_sampling_handle_t new_handle = collection_handle.get();
     handle_ = std::move(collection_handle);
 
     // Subscribe to kernel creation callbacks to track kernel binary info
-    pti_result cb_result =
+    pti_result callback_result =
         ptiCallbackSubscribe(&callback_subscriber_, &KernelCreatedCallback, nullptr);
-    if (cb_result != PTI_SUCCESS) {
+    if (callback_result != PTI_SUCCESS) {
       SPDLOG_ERROR("{}: ptiCallbackSubscribe failed with result {}", __FUNCTION__,
-                   static_cast<uint32_t>(cb_result));
+                   static_cast<uint32_t>(callback_result));
       handle_.reset();
-      return cb_result;
+      return callback_result;
     }
 
     // Enable the kernel created domain (EXIT phase only)
-    cb_result = ptiCallbackEnableDomain(callback_subscriber_, PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED,
-                                        0,   // api_enter = false
-                                        1);  // api_exit = true
-    if (cb_result != PTI_SUCCESS) {
+    callback_result =
+        ptiCallbackEnableDomain(callback_subscriber_, PTI_CB_DOMAIN_DRIVER_KERNEL_CREATED,
+                                0,   // api_enter = false
+                                1);  // api_exit = true
+    if (callback_result != PTI_SUCCESS) {
       SPDLOG_ERROR("{}: ptiCallbackEnableDomain failed with result {}", __FUNCTION__,
-                   static_cast<uint32_t>(cb_result));
+                   static_cast<uint32_t>(callback_result));
       ptiCallbackUnsubscribe(callback_subscriber_);
       callback_subscriber_ = nullptr;
       handle_.reset();
-      return cb_result;
-    }
-
-    // Store the device -> metric group mapping
-    {
-      std::lock_guard lock(device_metric_group_map_mutex_);
-      supported_device_metric_group_map_.insert(supported_devices.begin(), supported_devices.end());
+      return callback_result;
     }
 
     *handle = new_handle;
@@ -449,14 +536,20 @@ class PtiPcSamplingHandleStorage {
     // Clear kernel info storage
     KernelInfoStorage::Instance().Clear();
 
-    // Clear device mapping
     {
       std::lock_guard lock(device_metric_group_map_mutex_);
-      supported_device_metric_group_map_.clear();
+      handle_->supported_device_metric_group_map_.clear();
+      device_driver_map_.clear();
     }
 
     handle_.reset();
     return result;
+  }
+
+  ze_driver_handle_t GetDriver(pti_device_handle_t device) const {
+    std::shared_lock lock(device_metric_group_map_mutex_);
+    auto it = device_driver_map_.find(device);
+    return (it != device_driver_map_.end()) ? it->second : nullptr;
   }
 
   /**
@@ -468,23 +561,26 @@ class PtiPcSamplingHandleStorage {
    */
   zet_metric_group_handle_t GetMetricGroup(pti_device_handle_t device) const {
     std::shared_lock lock(device_metric_group_map_mutex_);
-    auto it = supported_device_metric_group_map_.find(device);
-    return (it != supported_device_metric_group_map_.end()) ? it->second : nullptr;
+    if (handle_ == nullptr) {
+      return nullptr;
+    }
+
+    auto it = handle_->supported_device_metric_group_map_.find(device);
+    return (it != handle_->supported_device_metric_group_map_.end()) ? it->second : nullptr;
   }
 
   bool IsSupported(pti_device_handle_t device) const {
     std::shared_lock lock(device_metric_group_map_mutex_);
-    return supported_device_metric_group_map_.find(device) !=
-           supported_device_metric_group_map_.end();
+    return handle_ != nullptr && handle_->supported_device_metric_group_map_.find(device) !=
+                                     handle_->supported_device_metric_group_map_.end();
   }
 
   std::vector<pti_device_handle_t> GetSupportedDevices() const {
     std::shared_lock lock(device_metric_group_map_mutex_);
-    std::vector<pti_device_handle_t> devices;
-    for (const auto& [device, _] : supported_device_metric_group_map_) {
-      devices.push_back(device);
+    if (handle_ == nullptr) {
+      return {};
     }
-    return devices;
+    return handle_->supported_devices_;
   }
 
  private:
@@ -495,9 +591,8 @@ class PtiPcSamplingHandleStorage {
 
   std::unique_ptr<_pti_pc_sampling_handle_t> handle_;
   pti_callback_subscriber_handle callback_subscriber_ = nullptr;
-  std::unordered_map<pti_device_handle_t, zet_metric_group_handle_t>
-      supported_device_metric_group_map_;
   mutable std::shared_mutex device_metric_group_map_mutex_;
+  std::unordered_map<pti_device_handle_t, ze_driver_handle_t> device_driver_map_;
 };
 
 //-----------------------------------------------------------------------------
@@ -539,7 +634,7 @@ inline pti_result ValidateHandle(const pti_pc_sampling_handle_t handle) {
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  if (!IsOurHandle(handle)) {
+  if (!PtiPcSamplingHandleStorage::Instance().Contains(handle)) {
     SPDLOG_ERROR("{}: handle is invalid", __FUNCTION__);
     return PTI_ERROR_BAD_ARGUMENT;
   }

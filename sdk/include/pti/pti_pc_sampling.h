@@ -194,11 +194,14 @@ pti_result PTI_EXPORT
 ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle);
 
 /**
- * @brief Stop collection and finalize all data
+ * @brief Stop collection
+ *
+ * Ends the sampling session and makes post-stop query APIs valid. Raw data
+ * loading and aggregation are deferred until a later query requests them.
  *
  * @param[in] handle             Collection handle
  *
- * @return PTI_SUCCESS when collection is successfully finished
+ * @return PTI_SUCCESS when collection is successfully stopped
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
  * @return PTI_ERROR_PC_SAMPLING_NOT_STARTED if collection has not started yet
  * @return PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED if collection was already stopped
@@ -217,7 +220,7 @@ ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle);
  * @param[in,out] reasons        Caller-allocated array of *reason_count elements; set to NULL to query the required count
  * @param[in,out] reason_count   In: size of reasons array; Out: required or actual number of reasons; cannot be NULL
  *
- * @return PTI_SUCCESS after successful retrieval of reason information for a stopped collection
+ * @return PTI_SUCCESS after successful retrieval of the stall-reason count or entries
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or reason_count is NULL
  * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
  */
@@ -262,7 +265,7 @@ ptiPcSamplingGetProfiledDevices(pti_pc_sampling_handle_t handle,
  * @param[in,out] kernel_handles   Caller-allocated array of *kernel_count elements; set to NULL to query the required count
  * @param[in,out] kernel_count     In: size of kernel_handles array; Out: required or actual number of kernel handles; cannot be NULL
  *
- * @return PTI_SUCCESS after successful retrieval of kernel handles for a stopped collection
+ * @return PTI_SUCCESS after successful retrieval of the kernel-handle count or entries
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, kernel_count is NULL, or device does not match the configured device
  * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
  */
@@ -286,7 +289,7 @@ ptiPcSamplingGetObservedKernelHandles(pti_pc_sampling_handle_t handle,
  *
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, device does not match the configured device, kernel_info is NULL, or kernel_info->_struct_size is too small
  * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
- * @return PTI_ERROR_NOT_IMPLEMENTED in the current implementation after validation because kernel metadata retrieval is not implemented yet
+ * @return PTI_ERROR_NOT_IMPLEMENTED in the current implementation after validation
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetObservedKernelInfo(pti_pc_sampling_handle_t handle,
@@ -314,7 +317,7 @@ ptiPcSamplingGetObservedKernelInfo(pti_pc_sampling_handle_t handle,
  *
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or device does not match the configured device
  * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
- * @return PTI_ERROR_NOT_IMPLEMENTED in the current implementation after validation because instruction-level sample retrieval is not implemented yet
+ * @return PTI_ERROR_NOT_IMPLEMENTED in the current implementation after validation
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetSamplesPerInstruction(pti_pc_sampling_handle_t handle,
@@ -335,7 +338,10 @@ ptiPcSamplingGetSamplesPerInstruction(pti_pc_sampling_handle_t handle,
  * @param[in]     device            Profiled device handle
  * @param[in,out] device_status     Caller-allocated device status structure; set _struct_size
  *
- * @return PTI_ERROR_NOT_IMPLEMENTED
+ * @return PTI_SUCCESS after successful deferred load and status retrieval
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, device is NULL, device_status is NULL, or device_status->_struct_size is too small
+ * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
+ * @return PTI_ERROR_INTERNAL if deferred raw collection data cannot be loaded
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t handle,

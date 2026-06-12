@@ -200,9 +200,12 @@ endif()
 
 # Core implementation loaded by pti_view
 add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
+                       "${PROJECT_SOURCE_DIR}/src/pti.cc"
                        "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_callbacks.cc"
                        "${PROJECT_SOURCE_DIR}/src/pc_sampling/pti_pc_sampling.cc"
+                       "${PROJECT_SOURCE_DIR}/src/pc_sampling/pti_pc_sampling_collector.cc"
+                       "${PROJECT_SOURCE_DIR}/src/pc_sampling/pti_pc_sampling_aggregator.cc"
                        "${PROJECT_SOURCE_DIR}/src/metrics/pti_metrics.cc"
                        "${PROJECT_SOURCE_DIR}/src/metrics/pti_metrics_scope.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_version.cc"
