@@ -67,12 +67,12 @@ TEST_F(PcSamplingTest, RejectsDeviceFilteredConfigurationForUnsupportedDevices) 
   pti_pc_sampling_handle_t handle = nullptr;
   ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
 
-  pti_device_handle_t configured_device = reinterpret_cast<pti_device_handle_t>(0x1);
-  EXPECT_EQ(ptiPcSamplingConfigure(handle, &configured_device, 1, 0),
+  pti_device_handle_t configured_device[1] = {reinterpret_cast<pti_device_handle_t>(0x1)};
+  EXPECT_EQ(ptiPcSamplingConfigure(handle, configured_device, 1, 0),
             PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED);
 
-  handle->configured_devices_.push_back(configured_device);
-  EXPECT_TRUE(pti::pc_sampling::IsConfiguredDevice(handle, configured_device));
+  handle->configured_devices_.push_back(configured_device[0]);
+  EXPECT_TRUE(pti::pc_sampling::IsConfiguredDevice(handle, configured_device[0]));
 
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
 }
@@ -86,9 +86,9 @@ TEST_F(PcSamplingTest, ConfigureUsesDefaultSamplingPeriodWhenZero) {
   ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
 
   size_t device_count = devices_.size() > 0 ? 1 : 0;
-  auto device_handle =
-      (devices_.size() > 0) ? reinterpret_cast<pti_device_handle_t>(devices_[0]) : nullptr;
-  ASSERT_EQ(ptiPcSamplingConfigure(handle, &device_handle, device_count, 0), PTI_SUCCESS);
+  pti_device_handle_t device_handle[1] = {
+      (devices_.size() > 0) ? reinterpret_cast<pti_device_handle_t>(devices_[0]) : nullptr};
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, device_count, 0), PTI_SUCCESS);
   EXPECT_EQ(handle->sampling_period_ns_, pti::pc_sampling::kDefaultSamplingPeriodNs);
 
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
@@ -100,9 +100,9 @@ TEST_F(PcSamplingTest, ConfigurePreservesExplicitSamplingPeriod) {
 
   constexpr uint32_t kExplicitSamplingPeriodNs = 42'000;
   size_t device_count = devices_.size() > 0 ? 1 : 0;
-  auto device_handle =
-      (devices_.size() > 0) ? reinterpret_cast<pti_device_handle_t>(devices_[0]) : nullptr;
-  ASSERT_EQ(ptiPcSamplingConfigure(handle, &device_handle, device_count, kExplicitSamplingPeriodNs),
+  pti_device_handle_t device_handle[1] = {
+      (devices_.size() > 0) ? reinterpret_cast<pti_device_handle_t>(devices_[0]) : nullptr};
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, device_count, kExplicitSamplingPeriodNs),
             PTI_SUCCESS);
   EXPECT_EQ(handle->sampling_period_ns_, kExplicitSamplingPeriodNs);
 
@@ -201,9 +201,9 @@ TEST_F(PcSamplingTest, LifecycleSupportsEmptyQueries) {
   EXPECT_EQ(ptiPcSamplingSetCollectionBufferSize(handle, 4096), PTI_ERROR_NOT_IMPLEMENTED);
 
   size_t device_count = devices_.size() > 0 ? 1 : 0;
-  auto device_handle =
-      (devices_.size() > 0) ? reinterpret_cast<pti_device_handle_t>(devices_[0]) : nullptr;
-  ASSERT_EQ(ptiPcSamplingConfigure(handle, &device_handle, device_count, 0), PTI_SUCCESS);
+  pti_device_handle_t device_handle[1] = {
+      (devices_.size() > 0) ? reinterpret_cast<pti_device_handle_t>(devices_[0]) : nullptr};
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, device_count, 0), PTI_SUCCESS);
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
   ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
 
@@ -260,16 +260,16 @@ TEST_F(PcSamplingTest, RejectsInvalidOrdering) {
   EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED);
   EXPECT_EQ(ptiPcSamplingStopCollection(handle), PTI_ERROR_PC_SAMPLING_NOT_STARTED);
 
-  const auto device_handle = reinterpret_cast<pti_device_handle_t>(devices_.front());
-  EXPECT_EQ(ptiPcSamplingConfigure(handle, &device_handle, 0, 0), PTI_ERROR_BAD_ARGUMENT);
+  pti_device_handle_t device_handle[1] = {reinterpret_cast<pti_device_handle_t>(devices_.front())};
+  EXPECT_EQ(ptiPcSamplingConfigure(handle, device_handle, 0, 0), PTI_ERROR_BAD_ARGUMENT);
 
-  ASSERT_EQ(ptiPcSamplingConfigure(handle, &device_handle, 1, 0), PTI_SUCCESS);
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, 1, 0), PTI_SUCCESS);
 
   size_t device_count = 0;
   EXPECT_EQ(ptiPcSamplingGetProfiledDevices(handle, nullptr, &device_count),
             PTI_ERROR_PC_SAMPLING_NOT_STOPPED);
 
-  EXPECT_EQ(ptiPcSamplingConfigure(handle, &device_handle, 1, 0),
+  EXPECT_EQ(ptiPcSamplingConfigure(handle, device_handle, 1, 0),
             PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED);
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
@@ -293,9 +293,9 @@ TEST_F(PcSamplingTest, ReturnsEmptyAllDeviceQueryAfterStoppedCollection) {
   ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
   ASSERT_NE(handle, nullptr);
   size_t device_count = devices_.size() > 0 ? 1 : 0;
-  auto device_handle =
-      (devices_.size() > 0) ? reinterpret_cast<pti_device_handle_t>(devices_[0]) : nullptr;
-  ASSERT_EQ(ptiPcSamplingConfigure(handle, &device_handle, device_count, 0), PTI_SUCCESS);
+  pti_device_handle_t device_handle[1] = {
+      (devices_.size() > 0) ? reinterpret_cast<pti_device_handle_t>(devices_[0]) : nullptr};
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, device_count, 0), PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
   ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
@@ -311,8 +311,8 @@ TEST_F(PcSamplingTest, ReturnsConfiguredDeviceAfterStoppedCollection) {
   pti_pc_sampling_handle_t handle = nullptr;
   ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
 
-  const auto device_handle = reinterpret_cast<pti_device_handle_t>(devices_.front());
-  ASSERT_EQ(ptiPcSamplingConfigure(handle, &device_handle, 1, 0), PTI_SUCCESS);
+  pti_device_handle_t device_handle[1] = {reinterpret_cast<pti_device_handle_t>(devices_.front())};
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, 1, 0), PTI_SUCCESS);
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
   ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
 
