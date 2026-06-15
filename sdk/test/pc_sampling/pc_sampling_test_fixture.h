@@ -8,11 +8,11 @@
 #define PTI_PC_SAMPLING_TEST_FIXTURE_H_
 
 #include <gtest/gtest.h>
+#include <level_zero/ze_api.h>
 
 #include <cstdlib>
 #include <vector>
 
-#include "pc_sampling/pti_pc_sampling_internal.h"
 #include "pti/pti_pc_sampling.h"
 #include "pti/pti_view.h"
 
@@ -53,7 +53,6 @@ class PcSamplingTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    pti::pc_sampling::KernelInfoStorage::Instance().Clear();
     ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
     ptiFlushAllViews();
   }

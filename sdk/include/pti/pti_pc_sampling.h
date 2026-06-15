@@ -212,6 +212,9 @@ ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle);
 /**
  * @brief Retrieve reason names and descriptions common across all profiled devices
  *
+ * This query is independent of collection lifecycle and may be called immediately after
+ * ptiPcSamplingEnable succeeds.
+ * 
  * Usage: 1- Call ptiPcSamplingGetStallReasons(handle, NULL, reason_count) to discover the required count; the required count will be written to reason_count.
  *        2- Allocate reasons buffer of size sizeof(pti_pc_sampling_stall_reason_info_t) * (*reason_count) and set _struct_size on each element.
  *        3- Call ptiPcSamplingGetStallReasons(handle, reasons, reason_count) again to get the reason information written to the supplied buffer.
@@ -222,7 +225,7 @@ ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle);
  *
  * @return PTI_SUCCESS after successful retrieval of the stall-reason count or entries
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or reason_count is NULL
- * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
+ * @return PTI_ERROR_INTERNAL if a supported metric group or devices are not found for the handle
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetStallReasons(pti_pc_sampling_handle_t handle,

@@ -340,17 +340,18 @@ inline void ReadMetricStreamerData(zet_metric_streamer_handle_t streamer,
 }
 
 /**
- * @brief Get the names and descriptions of all metrics in a metric group.
+ * @brief Get the names and descriptions of all stall metrics in a metric group.
  *
  * Enumerates all metrics within the given metric group and retrieves
  * their name and description properties.
+ * Does not populate an IP metric name as this is not a stall metric name.
  *
  * @param[in] group   Metric group handle to query metrics from
  *
  * @return Vector of pairs where each pair contains (metric_name, metric_description),
  *         empty if the group is invalid or on error
  */
-inline std::vector<std::pair<std::string, std::string>> GetAllSupportedMetricNames(
+inline std::vector<std::pair<std::string, std::string>> GetAllSupportedStallMetricNames(
     zet_metric_group_handle_t group) {
   std::vector<std::pair<std::string, std::string>> metric_names;
   uint32_t metric_count = 0;
@@ -369,6 +370,8 @@ inline std::vector<std::pair<std::string, std::string>> GetAllSupportedMetricNam
     return metric_names;
   }
 
+  SPDLOG_DEBUG("{}: enumerating {} metrics from EuStallSampling group", __FUNCTION__, metric_count);
+
   for (auto metric : metric_list) {
     zet_metric_properties_t metric_props{};
     metric_props.stype = ZET_STRUCTURE_TYPE_METRIC_PROPERTIES;
@@ -379,8 +382,21 @@ inline std::vector<std::pair<std::string, std::string>> GetAllSupportedMetricNam
                    static_cast<uint32_t>(status));
       continue;
     }
+
+    SPDLOG_DEBUG("{}: metric name='{}', description='{}', units='{}', metric_type={}", __FUNCTION__,
+                 metric_props.name, metric_props.description, metric_props.resultUnits,
+                 static_cast<uint32_t>(metric_props.metricType));
+
+    if (metric_props.metricType != ZET_METRIC_TYPE_EVENT) {
+      SPDLOG_DEBUG("{}: skipping metric '{}' because metric_type={} is not EVENT", __FUNCTION__,
+                   metric_props.name, static_cast<uint32_t>(metric_props.metricType));
+      continue;
+    }
+
     metric_names.emplace_back(metric_props.name, metric_props.description);
   }
+
+  SPDLOG_DEBUG("{}: returning {} stall metrics after filtering", __FUNCTION__, metric_names.size());
 
   return metric_names;
 }

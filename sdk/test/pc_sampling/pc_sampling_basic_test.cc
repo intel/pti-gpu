@@ -19,6 +19,17 @@ TEST(PcSamplingBasicTest, EnableRejectsNullHandle) {
   EXPECT_EQ(ptiPcSamplingEnable(nullptr), PTI_ERROR_BAD_ARGUMENT);
 }
 
+TEST(PcSamplingBasicTest, IsConfiguredDeviceRejectsNullHandle) {
+  EXPECT_FALSE(pti::pc_sampling::IsConfiguredDevice(nullptr, nullptr));
+}
+
+TEST(PcSamplingBasicTest, IsConfiguredDeviceRejectsNullDevice) {
+  _pti_pc_sampling_handle_t handle_storage;
+  pti_pc_sampling_handle_t handle = &handle_storage;
+
+  EXPECT_FALSE(pti::pc_sampling::IsConfiguredDevice(handle, nullptr));
+}
+
 TEST(PcSamplingBasicTest, RejectsForeignHandle) {
   _pti_pc_sampling_handle_t foreign_handle;
 

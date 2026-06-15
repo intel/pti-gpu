@@ -198,9 +198,9 @@ pti_result ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle) {
 }
 
 pti_result ptiPcSamplingGetStallReasons(pti_pc_sampling_handle_t handle,
-                                        pti_pc_sampling_stall_reason_info_t*,
+                                        pti_pc_sampling_stall_reason_info_t* reasons,
                                         size_t* reason_count) {
-  const pti_result handle_status = pti::pc_sampling::ValidateStoppedCollectionHandle(handle);
+  const pti_result handle_status = pti::pc_sampling::ValidateHandle(handle);
   if (handle_status != PTI_SUCCESS) {
     return handle_status;
   }
@@ -210,7 +210,47 @@ pti_result ptiPcSamplingGetStallReasons(pti_pc_sampling_handle_t handle,
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  *reason_count = 0;
+  if (handle->supported_devices_.empty()) {
+    SPDLOG_ERROR("{}: no supported devices found for the handle", __FUNCTION__);
+    return PTI_ERROR_INTERNAL;
+  }
+
+  pti_device_handle_t device = handle->supported_devices_.front();
+
+  const zet_metric_group_handle_t group =
+      pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().GetMetricGroup(device);
+
+  if (group == nullptr) {
+    SPDLOG_ERROR("{}: no metric group found for the supported device", __FUNCTION__);
+    return PTI_ERROR_INTERNAL;
+  }
+
+  // Lazily fetch and cache metric names from the metric group
+  static const std::vector<std::pair<std::string, std::string>> kMetricNames =
+      pti::pc_sampling::GetAllSupportedStallMetricNames(group);
+
+  static const size_t totalReasons = kMetricNames.size();
+
+  if (reasons == nullptr) {
+    *reason_count = totalReasons;
+    return PTI_SUCCESS;
+  }
+
+  if (*reason_count > totalReasons) {
+    SPDLOG_WARN(
+        "{}: provided reasons buffer holds {} entries but only {} stall reasons exist; "
+        "the required count will be returned without populating the output buffer",
+        __FUNCTION__, *reason_count, totalReasons);
+    *reason_count = totalReasons;
+    return PTI_SUCCESS;
+  }
+
+  const size_t entriesToCopy = (std::min)(*reason_count, totalReasons);
+  for (size_t i = 0; i < entriesToCopy; ++i) {
+    reasons[i]._name = kMetricNames[i].first.c_str();
+    reasons[i]._description = kMetricNames[i].second.c_str();
+  }
+
   return PTI_SUCCESS;
 }
 
@@ -347,10 +387,12 @@ pti_result ptiPcSamplingDisable(pti_pc_sampling_handle_t handle) {
     SPDLOG_WARN("{}: destroying PC sampling handle while collection state is {}", __FUNCTION__,
                 pti::pc_sampling::PcSamplingStateToString(handle->state_));
     // Attempt to stop collection if it's still running before destroying handle
-    handle_status = ptiPcSamplingStopCollection(handle);
-    if (handle_status != PTI_SUCCESS) {
-      SPDLOG_WARN("{}: failed to stop collection before destroying handle, status: {:#x}",
-                  __FUNCTION__, static_cast<uint32_t>(handle_status));
+    if (handle->state_ == pti::pc_sampling::PcSamplingState::kStarted) {
+      handle_status = ptiPcSamplingStopCollection(handle);
+      if (handle_status != PTI_SUCCESS) {
+        SPDLOG_WARN("{}: failed to stop collection before destroying handle, status: {:#x}",
+                    __FUNCTION__, static_cast<uint32_t>(handle_status));
+      }
     }
   }
 
