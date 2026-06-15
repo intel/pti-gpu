@@ -1169,6 +1169,7 @@ def main():
         "zeFenceHostSynchronize",
         "zeEventQueryStatus",
         "zeCommandListHostSynchronize",
+        "zeDeviceSynchronize",
         "zeContextDestroy",
         "zeModuleCreate",
         "zeModuleDestroy",
@@ -1235,6 +1236,7 @@ def main():
         "zeEventHostSynchronize",
         "zeCommandQueueSynchronize",
         "zeCommandListHostSynchronize",
+        "zeDeviceSynchronize",
     ]
 
     #   There are few level zero APIs which do not return ze_result_t hence need special handling

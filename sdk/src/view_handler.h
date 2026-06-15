@@ -53,6 +53,10 @@ inline void CommandListSynchEvent(void* data, const ZeKernelCommandExecutionReco
 
 inline void CommandQueueSynchEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
+inline void DeviceSynchEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
+inline void UnknownSynchEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
+
 inline void ZeDriverEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
 
 inline void SyclRuntimeEvent(void* data, const ZeKernelCommandExecutionRecord& rec);
@@ -98,6 +102,7 @@ inline static constexpr std::array kPtiClassLzHostSynchOpApis{
     pti_api_id_driver_levelzero::zeEventHostSynchronize_id,
     pti_api_id_driver_levelzero::zeCommandQueueSynchronize_id,
     pti_api_id_driver_levelzero::zeCommandListHostSynchronize_id,
+    pti_api_id_driver_levelzero::zeDeviceSynchronize_id,
 };
 
 inline static constexpr std::array kPtiClassLzGpuOpsCoreApis{
@@ -1206,6 +1211,22 @@ inline void CommandQueueSynchEvent(void* /*data*/, const ZeKernelCommandExecutio
   CommonSynchEvent(record, rec);
 }
 
+inline void DeviceSynchEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, rec.cid_);
+  pti_view_record_synchronization record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION;
+  record._synch_type = pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_DEVICE;
+  CommonSynchEvent(record, rec);
+}
+
+inline void UnknownSynchEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
+  SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, rec.cid_);
+  pti_view_record_synchronization record;
+  record._view_kind._view_kind = pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION;
+  record._synch_type = pti_view_synchronization_type::PTI_VIEW_SYNCHRONIZATION_TYPE_UNKNOWN;
+  CommonSynchEvent(record, rec);
+}
+
 inline void BarrierExecEvent(void* /*data*/, const ZeKernelCommandExecutionRecord& rec) {
   SPDLOG_TRACE("In {}, corr_id: {}", __FUNCTION__, rec.cid_);
   pti_view_record_synchronization record;
@@ -1349,8 +1370,11 @@ inline void ZeCommandRecordHandler(void* data, const ZeKernelCommandExecutionRec
     case pti_api_id_driver_levelzero::zeCommandQueueSynchronize_id:
       CommandQueueSynchEvent(data, rec);
       break;
+    case pti_api_id_driver_levelzero::zeDeviceSynchronize_id:
+      DeviceSynchEvent(data, rec);
+      break;
     default:
-      ZeKernelRecordHandler(data, rec);
+      UnknownSynchEvent(data, rec);
       break;
   }
 }

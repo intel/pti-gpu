@@ -402,6 +402,10 @@ class LocalModeZeGemmTest : public testing::Test {
           LocalModeZeGemmTestData::Instance().num_mem_copies++;
           break;
         }
+        case pti_view_kind::PTI_VIEW_DEVICE_SYNCHRONIZATION: {
+          LocalModeZeGemmTestData::Instance().num_syncs++;
+          break;
+        }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_KERNEL: {
           LocalModeZeGemmTestData::Instance().num_kernels++;
           auto* kernel_record = reinterpret_cast<pti_view_record_kernel_type*>(ptr);
@@ -430,11 +434,13 @@ class LocalModeZeGemmTest : public testing::Test {
       num_ze_records = 0;
       num_kernels = 0;
       num_mem_copies = 0;
+      num_syncs = 0;
     }
 
     size_t num_ze_records = 0;
     size_t num_kernels = 0;
     size_t num_mem_copies = 0;
+    size_t num_syncs = 0;
   };
 
   std::vector<pti_view_kind> enabled_views_;
@@ -858,6 +864,61 @@ TEST_F(LocalModeZeGemmTest,
 
   EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
   EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_mem_copies, static_cast<size_t>(3));
+
+  ValidateGemmKernel();
+}
+
+TEST_F(LocalModeZeGemmTest,
+       TestAsynchInorderQueueImplementationWithImmediateCommandListsDeviceSynch) {
+  constexpr auto kNumberOfEventsRequired = 4;
+  InitializeDrivers();
+  InitializeEvents(kNumberOfEventsRequired);
+  InitializeLists(false);
+  CreateKernel();
+  SetKernelGroupSize();
+  SetKernelArguments();
+  SetKernelGroupCount();
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  EnableView(PTI_VIEW_DEVICE_GPU_MEM_COPY);
+  EnableView(PTI_VIEW_DEVICE_SYNCHRONIZATION);
+
+  auto* memcpy_signal_1 = evts_[0];
+  auto* memcpy_signal_2 = evts_[1];
+  auto* kernel_signal = evts_[2];
+  auto* memcpy_signal_3 = evts_[3];
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, a_buf_, std::data(a_vector_),
+                                          std::size(a_vector_) * sizeof(float), memcpy_signal_1, 0,
+                                          nullptr),
+            ZE_RESULT_SUCCESS);
+
+  ZE_ASSERT_SUCCESS_BUT_SKIP_UNSUPPORTED(zeDeviceSynchronize(dev_));
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, b_buf_, std::data(b_vector_),
+                                          std::size(b_vector_) * sizeof(float), memcpy_signal_2, 0,
+                                          nullptr),
+            ZE_RESULT_SUCCESS);
+
+  ZE_ASSERT_SUCCESS_BUT_SKIP_UNSUPPORTED(zeDeviceSynchronize(dev_));
+
+  ASSERT_EQ(
+      zeCommandListAppendLaunchKernel(compute_cmd_list_, knl_, &dim_, kernel_signal, 0, nullptr),
+      ZE_RESULT_SUCCESS);
+
+  ZE_ASSERT_SUCCESS_BUT_SKIP_UNSUPPORTED(zeDeviceSynchronize(dev_));
+
+  ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, std::data(result_vector_), result_buf_,
+                                          std::size(result_vector_) * sizeof(float),
+                                          memcpy_signal_3, 1, &kernel_signal),
+            ZE_RESULT_SUCCESS);
+
+  ZE_ASSERT_SUCCESS_BUT_SKIP_UNSUPPORTED(zeDeviceSynchronize(dev_));
+
+  DisableAndFlushAllViews();
+
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_mem_copies, static_cast<size_t>(3));
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_syncs, static_cast<size_t>(4));
 
   ValidateGemmKernel();
 }

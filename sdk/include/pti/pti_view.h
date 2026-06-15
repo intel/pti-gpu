@@ -61,9 +61,9 @@ typedef enum _pti_view_synchronization_type {
   PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_EVENT = 4,               //!< Event host synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_LIST = 5,        //!< Commandlist host synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_COMMAND_QUEUE = 6,       //!< CommandQueue host synchronization type
+  PTI_VIEW_SYNCHRONIZATION_TYPE_HOST_DEVICE = 7,              //!< Device host synchronization type
   PTI_VIEW_SYNCHRONIZATION_TYPE_FORCE_UINT32 = 0x7fffffff
 } pti_view_synchronization_type;
-
 PTI_STATIC_ASSERT(sizeof(pti_view_synchronization_type) == sizeof(uint32_t), "pti_view_synchronization_type enum should be equal to size of uint32_t");
 
 /**
@@ -262,9 +262,11 @@ PTI_STATIC_ASSERT(offsetof(pti_view_record_kernel_v2, _device_handle) == sizeof(
 typedef struct pti_view_record_synchronization {
   pti_view_record_base _view_kind;                  //!< Base record
   pti_view_synchronization_type _synch_type;        //!< Synchronization type
-  pti_backend_ctx_t _context_handle;                //!< Context handle
-  pti_backend_queue_t _queue_handle;                //!< Queue handle
-  pti_backend_evt_t _event_handle;                  //!< Event handle synchronization api is called with.
+  pti_backend_ctx_t _context_handle;                //!< Context handle, null if not applicable or not available.
+  pti_backend_queue_t _queue_handle;                //!< Queue handle, null if not applicable or not
+                                                    //!< available.
+  pti_backend_evt_t _event_handle;                  //!< Event handle the synchronization API is called with;
+                                                    //!< null if not applicable or not available.
   uint64_t _start_timestamp;                        //!< For host synchronization types: function enter timestamp
                                                     //!< For gpu synchronization types: synch start timestamp on device
   uint64_t _end_timestamp;                          //!< For host synchronization types: function exit timestamp

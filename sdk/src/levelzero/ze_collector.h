@@ -1654,6 +1654,54 @@ class ZeCollector {
     return kernel_group_size_map_[kernel];
   }
 
+  template <pti_api_id_driver_levelzero E>
+  ZeKernelCommandExecutionRecord MakeSyncRecord(
+      std::string_view name, ze_event_pool_handle_t event_pool, ze_event_handle_t event,
+      ze_context_handle_t context, ze_command_queue_handle_t queue,
+      ze_command_list_handle_t command_list, uint64_t corr_id, ze_result_t result) {
+    ZeKernelCommandExecutionRecord rec = {};
+    if (IsIntrospectionCapable()) {
+      if (event && event_pool == nullptr) {
+        // TODO(PTI): Counter-based events no longer need an event pool, it may be a good idea to
+        // check if the event is counter-based and skip this call in that case.
+        auto status = l0_wrapper_.w_zeEventGetEventPool(event, &event_pool);
+        if (status != ZE_RESULT_SUCCESS) {
+          SPDLOG_DEBUG("Failed to get event pool for event {}, result: {:x}",
+                       static_cast<const void*>(event), static_cast<uint32_t>(status));
+          event_pool = nullptr;
+        }
+      }
+      if (event_pool && context == nullptr) {
+        auto status = l0_wrapper_.w_zeEventPoolGetContextHandle(event_pool, &context);
+        if (status != ZE_RESULT_SUCCESS) {
+          SPDLOG_DEBUG("Failed to get context for event pool {}, result: {:x}",
+                       static_cast<const void*>(event_pool), static_cast<uint32_t>(status));
+          context = nullptr;
+        }
+      }
+      if (command_list && context == nullptr) {
+        auto status = l0_wrapper_.w_zeCommandListGetContextHandle(command_list, &context);
+        if (status != ZE_RESULT_SUCCESS) {
+          SPDLOG_DEBUG("Failed to get context for command list {}, result: {:x}",
+                       static_cast<const void*>(command_list), static_cast<uint32_t>(status));
+          context = nullptr;
+        }
+      }
+    }
+    rec.name_ = name;
+    rec.tid_ = PidTidInfo::Get().tid;
+    rec.start_time_ = ze_instance_data.start_time_host;
+    rec.end_time_ = ze_instance_data.end_time_host;
+    rec.context_ = context;
+    rec.queue_ = queue;
+    rec.event_ = event;
+    rec.cid_ = corr_id;
+    rec.result_ = static_cast<uint32_t>(result);
+    rec.callback_id_ = E;
+    rec.command_type_ = KernelCommandType::kCommand;
+    return rec;
+  }
+
   // Callbacks
   static void OnEnterEventPoolCreate(ze_event_pool_create_params_t* params, void* global_data,
                                      void** instance_data) {
@@ -1767,39 +1815,10 @@ class ZeCollector {
     if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
         collector->acallback_ != nullptr) {
       std::vector<ZeKernelCommandExecutionRecord> kcexec;
-      ZeKernelCommandExecutionRecord rec = {};
       ze_event_handle_t event_h = *params->phEvent;
-      ze_event_pool_handle_t epool_h = nullptr;
-      ze_context_handle_t ctxt_h = nullptr;
-      rec.context_ = nullptr;
-      if (collector->IsIntrospectionCapable()) {
-        auto status = collector->l0_wrapper_.w_zeEventGetEventPool(event_h, &epool_h);
-        if (status == ZE_RESULT_SUCCESS) {
-          if (epool_h != nullptr) {
-            status = collector->l0_wrapper_.w_zeEventPoolGetContextHandle(epool_h, &ctxt_h);
-            if (status == ZE_RESULT_SUCCESS) {
-              rec.context_ = ctxt_h;
-            } else {
-              SPDLOG_DEBUG(
-                  "\tLevel-Zero Introspection API: zeEventPoolGetContextHandle return unsuccessful "
-                  "-- inserting null context handle in synch. record..");
-            }
-          } else {
-            SPDLOG_DEBUG(
-                "\tLevel-Zero Introspection API: zeEventGetEventPool returned null event pool "
-                "-- inserting null context handle in synch. record..");
-          }
-        }
-      }
-      rec.name_ = "zeEventHostSynchronize";
-      rec.tid_ = PidTidInfo::Get().tid;
-      rec.start_time_ = ze_instance_data.start_time_host;
-      rec.end_time_ = utils::GetTime();
-      rec.event_ = event_h;
-      rec.cid_ = synch_corrid;
-      rec.result_ = static_cast<uint32_t>(result);
-      rec.callback_id_ = zeEventHostSynchronize_id;
-      rec.command_type_ = KernelCommandType::kCommand;
+      auto rec = collector->MakeSyncRecord<zeEventHostSynchronize_id>(
+          "zeEventHostSynchronize", nullptr, event_h, nullptr, nullptr, nullptr, synch_corrid,
+          result);
       kcexec.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec);
     }
@@ -1826,31 +1845,9 @@ class ZeCollector {
     if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
         collector->acallback_ != nullptr) {
       std::vector<ZeKernelCommandExecutionRecord> kcexec1;
-      ze_result_t status;
-      ZeKernelCommandExecutionRecord rec = {};
-      ze_command_list_handle_t clist_h = *params->phCommandList;
-      ze_context_handle_t ctxt_h = nullptr;
-      rec.context_ = nullptr;
-      if (collector->IsIntrospectionCapable()) {
-        status = collector->l0_wrapper_.w_zeCommandListGetContextHandle(clist_h, &ctxt_h);
-        if (status == ZE_RESULT_SUCCESS) {
-          rec.context_ = ctxt_h;
-        } else {
-          SPDLOG_WARN(
-              "\tLevel-Zero Introspection API: zeCommandListGetContextHandle return unsuccessful "
-              "-- "
-              "inserting null context handle in synch. record..");
-        }
-      }
-      rec.name_ = "zeCommandListHostSynchronize";
-      rec.tid_ = PidTidInfo::Get().tid;
-      rec.start_time_ = ze_instance_data.start_time_host;
-      rec.end_time_ = utils::GetTime();
-      rec.event_ = nullptr;
-      rec.cid_ = synch_corrid;
-      rec.result_ = static_cast<uint32_t>(result);
-      rec.callback_id_ = zeCommandListHostSynchronize_id;
-      rec.command_type_ = KernelCommandType::kCommand;
+      auto rec = collector->MakeSyncRecord<zeCommandListHostSynchronize_id>(
+          "zeCommandListHostSynchronize", nullptr, nullptr, nullptr, nullptr,
+          *params->phCommandList, synch_corrid, result);
       kcexec1.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec1);
     }
@@ -1917,27 +1914,20 @@ class ZeCollector {
     if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
         collector->acallback_ != nullptr) {
       std::vector<ZeKernelCommandExecutionRecord> kcexec1;
-      ZeKernelCommandExecutionRecord rec = {};
       ze_fence_handle_t fence_h = *params->phFence;
-      rec.context_ = nullptr;
-      rec.queue_ = nullptr;
+      ze_context_handle_t ctxt_h = nullptr;
+      ze_command_queue_handle_t queue_h = nullptr;
       auto it_fence = collector->fence_queue_map_.find(fence_h);
       if (it_fence != collector->fence_queue_map_.end()) {
-        rec.queue_ = it_fence->second;
+        queue_h = it_fence->second;
         auto it = collector->command_queues_.find(it_fence->second);
         if (it != collector->command_queues_.end()) {
-          rec.context_ = it->second.context_;
+          ctxt_h = it->second.context_;
         }
       }
-      rec.name_ = "zeFenceHostSynchronize";
-      rec.tid_ = PidTidInfo::Get().tid;
-      rec.start_time_ = ze_instance_data.start_time_host;
-      rec.end_time_ = utils::GetTime();
-      rec.event_ = nullptr;
-      rec.cid_ = synch_corrid;
-      rec.result_ = static_cast<uint32_t>(result);
-      rec.callback_id_ = zeFenceHostSynchronize_id;
-      rec.command_type_ = KernelCommandType::kCommand;
+      auto rec = collector->MakeSyncRecord<zeFenceHostSynchronize_id>(
+          "zeFenceHostSynchronize", nullptr, nullptr, ctxt_h, queue_h, nullptr, synch_corrid,
+          result);
       kcexec1.push_back(std::move(rec));
       collector->acallback_(collector->callback_data_, kcexec1);
     }
@@ -3074,9 +3064,11 @@ class ZeCollector {
     ZeCollector* collector = static_cast<ZeCollector*>(global_data);
     std::vector<ZeKernelCommandExecutionRecord> kcexec;
     {
-      const std::lock_guard<std::mutex> lock(collector->lock_);
       if (result == ZE_RESULT_SUCCESS) {
-        collector->ProcessCalls(kids, &kcexec);
+        {
+          const std::lock_guard<std::mutex> lock(collector->lock_);
+          collector->ProcessCalls(kids, &kcexec);
+        }
         if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
           collector->acallback_(collector->callback_data_, kcexec);
         }
@@ -3086,26 +3078,44 @@ class ZeCollector {
       if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
           collector->acallback_ != nullptr) {
         std::vector<ZeKernelCommandExecutionRecord> kcexec1;
-        ZeKernelCommandExecutionRecord rec = {};
-        auto it = collector->command_queues_.find(*params->phCommandQueue);
-        rec.context_ = nullptr;
+        ze_command_queue_handle_t queue_h = *params->phCommandQueue;
+        ze_context_handle_t ctxt_h = nullptr;
+        auto it = collector->command_queues_.find(queue_h);
         if (it != collector->command_queues_.end()) {
-          rec.context_ = it->second.context_;
+          ctxt_h = it->second.context_;
         }
-        rec.name_ = "zeCommandQueueSynchronize";
-        rec.tid_ = PidTidInfo::Get().tid;
-        rec.start_time_ = ze_instance_data.start_time_host;
-        rec.end_time_ = ze_instance_data.end_time_host;
-        rec.context_ = nullptr;
-        rec.queue_ = *params->phCommandQueue;
-        rec.event_ = nullptr;
-        rec.cid_ = synch_corrid;
-        rec.callback_id_ = zeCommandQueueSynchronize_id;
-        rec.command_type_ = KernelCommandType::kCommand;
-        rec.result_ = static_cast<uint32_t>(result);
+        auto rec = collector->MakeSyncRecord<zeCommandQueueSynchronize_id>(
+            "zeCommandQueueSynchronize", nullptr, nullptr, ctxt_h, queue_h, nullptr, synch_corrid,
+            result);
         kcexec1.push_back(std::move(rec));
         collector->acallback_(collector->callback_data_, kcexec1);
       }
+    }
+    collector->DoCallbackOnGPUOperationCompletion(kcexec);
+  }
+
+  static void OnExitDeviceSynchronize([[maybe_unused]] ze_device_synchronize_params_t* params,
+                                      ze_result_t result, void* global_data,
+                                      void** /*instance_data*/, uint64_t synch_corrid) {
+    SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, static_cast<uint32_t>(result));
+    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
+    std::vector<ZeKernelCommandExecutionRecord> kcexec;
+    if (result == ZE_RESULT_SUCCESS) {
+      {
+        const std::lock_guard<std::mutex> lock(collector->lock_);
+        collector->ProcessCalls(nullptr, &kcexec);
+      }
+      if (collector->cb_enabled_.acallback && collector->acallback_ != nullptr) {
+        collector->acallback_(collector->callback_data_, kcexec);
+      }
+    }
+    if (collector->cb_enabled_.acallback && collector->options_.lz_enabled_views.synch_enabled &&
+        collector->acallback_ != nullptr) {
+      std::vector<ZeKernelCommandExecutionRecord> kcexec1{
+          collector->MakeSyncRecord<zeDeviceSynchronize_id>("zeDeviceSynchronize", nullptr, nullptr,
+                                                            nullptr, nullptr, nullptr, synch_corrid,
+                                                            result)};
+      collector->acallback_(collector->callback_data_, kcexec1);
     }
     collector->DoCallbackOnGPUOperationCompletion(kcexec);
   }
