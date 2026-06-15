@@ -464,7 +464,10 @@ class PtiPcSamplingHandleStorage {
       return PTI_ERROR_INTERNAL;
     }
 
-    device_driver_map_ = std::move(supported_device_driver_map);
+    {
+      std::lock_guard lock(device_metric_group_map_mutex_);
+      device_driver_map_ = std::move(supported_device_driver_map);
+    }
     collection_handle->supported_device_metric_group_map_ =
         std::move(supported_device_metric_group_map);
     collection_handle->supported_devices_ = std::move(supported_devices_ordered);
