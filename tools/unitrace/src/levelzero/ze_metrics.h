@@ -1290,8 +1290,20 @@ class ZeMetricProfiler {
     zet_metric_streamer_handle_t streamer = nullptr;
     uint32_t interval = std::stoi(utils::GetEnv("UNITRACE_SamplingInterval")) * 1000;  // convert us to ns
 
-    zet_metric_streamer_desc_t streamer_desc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr, max_metric_samples, interval};
-    status = ZE_FUNC(zetMetricStreamerOpen)(context, device, group, &streamer_desc, event, &streamer);
+    // Note: It is a workaround of a driver bug where zetMetricStreamerOpen fails if metric_sample size is out of HW supported range.
+    uint32_t metric_sample_sz = max_metric_samples;
+    while (1) {
+      zet_metric_streamer_desc_t streamer_desc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr, metric_sample_sz, interval};
+      status = ZE_FUNC(zetMetricStreamerOpen)(context, device, group, &streamer_desc, event, &streamer);
+      if (status == ZE_RESULT_SUCCESS) {
+        break;
+      } else {
+        metric_sample_sz = metric_sample_sz >> 2;
+        if (metric_sample_sz < 1024) {
+          break;
+        }
+      }
+    }
     if (status != ZE_RESULT_SUCCESS) {
       std::cerr << "[WARNING] Unable to open metric streamer for sampling (status = 0x" << std::hex << status << std::dec << "). The sampling interval might be too small or another sampling instance is active." << std::endl;
 #ifndef _WIN32

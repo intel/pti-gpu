@@ -1371,7 +1371,7 @@ class ClCollector {
       status = clGetKernelInfo(kernel, CL_KERNEL_BINARY_GPU_ADDRESS_INTEL, size, &base_addr, &size);
 
       PTI_ASSERT(status == CL_SUCCESS);
-      instance->props.base_addr = (base_addr & 0xFFFFFFFF) - 65536;
+      instance->props.base_addr = (base_addr & 0xFFFFFFFF);
       size = 0;
       status = clGetKernelInfo(kernel, CL_KERNEL_BINARY_PROGRAM_INTEL, 0, nullptr, &size);
       PTI_ASSERT(status == CL_SUCCESS);
