@@ -1025,6 +1025,19 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
     endif()
   endif()
 
+  if (TARGET sycl_allreduce_test)
+    find_package(oneCCL 2021.17 QUIET)
+    find_package(MPI QUIET)
+
+    if (TARGET oneCCL AND MPI_FOUND)
+      add_test(NAME sycl_allreduce_test
+              COMMAND ${MPIEXEC_EXECUTABLE} -n 2 $<TARGET_FILE:sycl_allreduce_test> gpu)
+      set_tests_properties(sycl_allreduce_test PROPERTIES
+        ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
+        LABELS "functional;ccl;itt")
+    endif()
+  endif()
+
 endif()
 
 if(PTI_FUZZ)

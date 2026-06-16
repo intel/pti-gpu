@@ -40,21 +40,49 @@ if (NOT TARGET Pti::pti_view)
   find_package(Pti)
 endif()
 
-add_executable(sycl_allreduce_usm_test sycl_allreduce_usm_test.cpp)
+option(PTI_BUILD_SYCL_ALLREDUCE_TEST "Build sycl_allreduce_test sample" ON)
+option(PTI_BUILD_SYCL_ALLREDUCE_USM_TEST "Build sycl_allreduce_usm_test sample" ON)
 
-target_link_options(sycl_allreduce_usm_test PUBLIC -fsycl)
-target_compile_options(sycl_allreduce_usm_test PUBLIC -fsycl)
+if (PTI_BUILD_SYCL_ALLREDUCE_TEST)
+  add_executable(sycl_allreduce_test sycl_allreduce_test.cpp)
 
-target_include_directories(sycl_allreduce_usm_test PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities"
-                                                           "${PROJECT_SOURCE_DIR}/../../src/utils")
+  target_link_options(sycl_allreduce_test PUBLIC -fsycl)
+  target_compile_options(sycl_allreduce_test PUBLIC -fsycl -Wno-unused-parameter)
 
-target_compile_definitions(
-  sycl_allreduce_usm_test
-  PRIVATE $<$<TARGET_EXISTS:Pti::pti_view>:USE_PTI_VIEW>
-)
+  get_target_property(oneCCL_PATH oneCCL INTERFACE_INCLUDE_DIRECTORIES)
+  get_filename_component(oneCCL_ROOT ${oneCCL_PATH} DIRECTORY)
 
-get_target_property(oneCCL_PATH oneCCL INTERFACE_INCLUDE_DIRECTORIES)
-get_filename_component(oneCCL_ROOT ${oneCCL_PATH} DIRECTORY)
+  target_include_directories(sycl_allreduce_test PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities"
+                                                         "${PROJECT_SOURCE_DIR}/../../src/utils"
+                                                         "${PROJECT_SOURCE_DIR}/ccl_helpers")
+  target_include_directories(sycl_allreduce_test SYSTEM PRIVATE ${oneCCL_ROOT}/share/doc/ccl/examples/include)
 
-target_link_libraries(sycl_allreduce_usm_test PUBLIC oneCCL $<TARGET_NAME_IF_EXISTS:Pti::pti_view> ${FS_LIB})
-target_include_directories(sycl_allreduce_usm_test SYSTEM PRIVATE ${oneCCL_ROOT}/share/doc/ccl/examples/include)
+  target_compile_definitions(
+    sycl_allreduce_test
+    PRIVATE $<$<TARGET_EXISTS:Pti::pti_view>:USE_PTI_VIEW>
+  )
+
+  target_link_libraries(sycl_allreduce_test PUBLIC oneCCL MPI::MPI_CXX $<TARGET_NAME_IF_EXISTS:Pti::pti_view> ${FS_LIB})
+endif()
+
+if (PTI_BUILD_SYCL_ALLREDUCE_USM_TEST)
+  add_executable(sycl_allreduce_usm_test sycl_allreduce_usm_test.cpp)
+
+  target_link_options(sycl_allreduce_usm_test PUBLIC -fsycl)
+  target_compile_options(sycl_allreduce_usm_test PUBLIC -fsycl -Wno-unused-parameter)
+
+  target_include_directories(sycl_allreduce_usm_test PRIVATE "${PROJECT_SOURCE_DIR}/../samples_utilities"
+                                                             "${PROJECT_SOURCE_DIR}/../../src/utils"
+                                                             "${PROJECT_SOURCE_DIR}/ccl_helpers")
+
+  target_compile_definitions(
+    sycl_allreduce_usm_test
+    PRIVATE $<$<TARGET_EXISTS:Pti::pti_view>:USE_PTI_VIEW>
+  )
+
+  get_target_property(oneCCL_PATH oneCCL INTERFACE_INCLUDE_DIRECTORIES)
+  get_filename_component(oneCCL_ROOT ${oneCCL_PATH} DIRECTORY)
+
+  target_link_libraries(sycl_allreduce_usm_test PUBLIC oneCCL MPI::MPI_CXX $<TARGET_NAME_IF_EXISTS:Pti::pti_view> ${FS_LIB})
+  target_include_directories(sycl_allreduce_usm_test SYSTEM PRIVATE ${oneCCL_ROOT}/share/doc/ccl/examples/include)
+endif()

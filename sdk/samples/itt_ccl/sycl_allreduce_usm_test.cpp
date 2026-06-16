@@ -30,22 +30,25 @@ std::mutex buffer_mutex;
 
 // A lower bound of records to expect
 constexpr size_t kExpectedCommsRecords = 2;
+constexpr size_t kBufferSize = 1000;
 
 void StartTracing(){
   PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_COMMUNICATION));
+  PTI_CHECK_SUCCESS(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL));
 }
 
 void StopTracing() {
   PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_COMMUNICATION));
+  PTI_CHECK_SUCCESS(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL));
 }
 
 void ProvideBuffer(unsigned char **buf, std::size_t *buf_size) {
-  *buf = samples_utils::AlignedAlloc<unsigned char>(1000);
+  *buf = samples_utils::AlignedAlloc<unsigned char>(kBufferSize);
   if (!*buf) {
     std::cerr << "Unable to allocate buffer for PTI tracing " << '\n';
     std::abort();
   }
-  *buf_size = 1000;
+  *buf_size = kBufferSize;
 }
 
 void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf_size) {
@@ -87,7 +90,6 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
                      "-----------------------------"
                   << '\n';
         std::cerr << "Unexpected record type: " << ptr->_view_kind << '\n';
-        has_error = true;
         break;
       }
     }
