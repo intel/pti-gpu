@@ -359,9 +359,13 @@ class ClCollector {
     }
   }
 
-  void DisableTracing() {
-    PTI_ASSERT(tracer_ != nullptr);
+  void FlushData() {
+    ProcessKernelInstances();
+    DumpKernelProfiles();
+  }
 
+  void DumpKernelProfiles() {
+    const std::lock_guard<std::mutex> lock(lock_);
     if (options_.stall_sampling) {
       std::map<uint32_t, std::map<uint64_t, const ClKernelProps *>> device_kprops;
       for (auto it = kprops_.begin(); it != kprops_.end(); it++) {

@@ -28,7 +28,8 @@ enum SharedMemoryReturnStatus
 {
     SHM_FAILED,
     SHM_SUCCESS,
-    SHM_STOPPED
+    SHM_STOPPED,
+    SHM_ALREADY_EXISTS
 };
 
 enum SharedMemoryOpenMode {
@@ -90,6 +91,7 @@ public:
             return SHM_FAILED;
         }
 
+        bool already_existed = false;
         handle_ = shm_open(shm_name_, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
         if (handle_ == -1) {
             if (errno == EEXIST && force_recreate) {
@@ -98,9 +100,7 @@ public:
                 handle_ = shm_open(shm_name_, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
             } else if (errno == EEXIST) {
                 handle_ = shm_open(shm_name_, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-                if (handle_ != -1) {
-                    std::cerr << "[WARNING] Session " << session << " was not stopped before reusing" << std::endl;
-                }
+                already_existed = true;
             }
             if (handle_ == -1) {
                 std::cerr << "[ERROR] Failed to create shared memory for session " << session << " (" << GetErrorMessage(errno) << ")" << std::endl;
@@ -121,7 +121,7 @@ public:
             return SHM_FAILED;
         }
 
-        return SHM_SUCCESS;
+        return already_existed ? SHM_ALREADY_EXISTS : SHM_SUCCESS;
     }
 
     SharedMemoryReturnStatus AttachWrite(const char* session, size_t size) {
@@ -212,7 +212,8 @@ public:
             }
 
             // unlink the shared memory (delete the memory)
-            if (shm_unlink(shm_name_) != 0) {
+            // ENOENT is OK: the name may have been already unlinked by a stop command
+            if (shm_unlink(shm_name_) != 0 && errno != ENOENT) {
                 std::cerr << "[ERROR] Failed to unlink shared memory " << shm_name_ << " (" << GetErrorMessage(errno) << ")" << std::endl;
                 return SHM_FAILED;
             }
@@ -245,9 +246,7 @@ public:
             return SHM_FAILED;
         }
 
-        if (GetLastError() == ERROR_ALREADY_EXISTS && !force_recreate) {
-            std::cerr << "[WARNING] Session " << session << " was not stopped before reusing" << std::endl;
-        }
+        bool already_exists = (GetLastError() == ERROR_ALREADY_EXISTS);
 
         p_data_ = MapViewOfFile(hMapFile_, FILE_MAP_ALL_ACCESS, 0, 0, shm_size_);
         if (!p_data_) {
@@ -255,6 +254,10 @@ public:
             hMapFile_ = nullptr;
             std::cerr << "[ERROR] Failed to map shared memory for session " << session << " (" << GetErrorMessage(errno) << ")" << std::endl;
             return SHM_FAILED;
+        }
+
+        if (already_exists && !force_recreate) {
+            return SHM_ALREADY_EXISTS;
         }
 
         return SHM_SUCCESS;

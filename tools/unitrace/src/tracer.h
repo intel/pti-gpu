@@ -225,23 +225,52 @@ class UniTracer {
     return tracer;
   }
 
-  ~UniTracer() {
+  void Flush() {
     total_execution_time_ = utils::GetSystemTime() - start_time_;
 
+    if (ze_collector_ != nullptr) {
+      ze_collector_->FlushData();
+    }
+
+#if BUILD_WITH_OPENCL
+    if (cl_cpu_collector_ != nullptr) {
+      cl_cpu_collector_->FlushData();
+    }
+    if (cl_gpu_collector_ != nullptr) {
+      cl_gpu_collector_->FlushData();
+    }
+#endif /* BUILD_WITH_OPENCL */
+
+    Report();
+
+#if BUILD_WITH_ITT
+    if (itt_collector != nullptr) {
+      std::string summary = itt_collector->CclSummaryReport();
+      if (summary.size() > 0) {
+        std::shared_ptr<Logger> logger_ccl_summary = logger_factory_->GetLogger(LOGGER_TYPE_TRACE_CCL_SUMMARY_REPORT);
+        logger_ccl_summary->Log(summary);
+        // Force flush so the summary is durable on abnormal termination (e.g. SIGKILL)
+        logger_ccl_summary->Flush();
+      }
+    }
+#endif /* BUILD_WITH_ITT */
+
+    if (chrome_logger_ != nullptr) {
+      chrome_logger_->Flush();
+    }
+
+    data_flushed_ = true;
+  }
+
+  ~UniTracer() {
     if (ze_collector_ != nullptr) {
       ze_collector_->DisableTracing();
       ze_collector_->Finalize();
     }
 
-    Report();
-#if BUILD_WITH_OPENCL
-    if (cl_cpu_collector_ != nullptr) {
-      cl_cpu_collector_->DisableTracing();
+    if (!data_flushed_) {
+      Flush();
     }
-    if (cl_gpu_collector_ != nullptr) {
-      cl_gpu_collector_->DisableTracing();
-    }
-#endif /* BUILD_WITH_OPENCL */
 
 #if BUILD_WITH_ITT
     if (itt_collector != nullptr){
@@ -659,6 +688,7 @@ class UniTracer {
   LoggerFactory* logger_factory_;
   uint64_t start_time_;
   uint64_t total_execution_time_ = 0;
+  bool data_flushed_ = false;
 
   ZeCollector* ze_collector_ = nullptr;
 

@@ -607,6 +607,12 @@ int ParseArgs(int argc, char* argv[]) {
       app_index += 2;
   #ifndef _WIN32
     } else if (strcmp(argv[i], "--chrome-kmd-logging") == 0) {
+      // NOTE: --chrome-kmd-logging runs the application as a -c grandchild of
+      // bpftrace. This is why session-stop handling treats it as a special
+      // case: stopping the session terminates the bpftrace process, which in
+      // turn exits the application process. See the session-stop wait logic in
+      // main() (the TerminateProcess(bpftrace_pid) call and the post-stop
+      // "wait for the application to complete" loop) for details.
       ++i;
       if (i >= argc) {
         std::cout << "[ERROR] OS kernel probes are missing" << std::endl;
@@ -803,24 +809,84 @@ ZeMetricProfiler *EnableProfiling(uint32_t app_pid, char *dir, std::string& logf
 void DisableProfiling() {
   if (metric_profiler != nullptr) {
     delete metric_profiler;
+    metric_profiler = nullptr;
   }
 }
 
+#ifndef _WIN32
+static void TerminateProcess(pid_t pid) {
+  if (pid <= 0) {
+    return;
+  }
+
+  if (kill(pid, SIGINT) != 0) {
+    // Already terminated
+    return;
+  }
+
+  usleep(1000 * 1000);
+
+  auto r = waitpid(pid, nullptr, WNOHANG);
+  if ((r == pid) || (r == -1)) {
+    // Already terminated
+    return;
+  }
+
+  if (kill(pid, SIGTERM) != 0) {
+    // Already terminated
+    return;
+  }
+
+  usleep(1000 * 1000);
+
+  r = waitpid(pid, nullptr, WNOHANG);
+  if ((r == pid) || (r == -1)) {
+    // Already terminated
+    return;
+  }
+
+  kill(pid, SIGKILL);
+  waitpid(pid, nullptr, 0);
+}
+#endif /* _WIN32 */
+
 static char *data_dir = nullptr;
 
-void CleanUp(int /* sig */) {
+void TearDown() {
   if (data_dir == nullptr) {
     return;
   }
-  for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
-    CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
+  if (CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+    for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+      CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
+    }
+    if (!CXX_STD_FILESYSTEM_NAMESPACE::remove(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
+      std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
+    }
   }
-  if (CXX_STD_FILESYSTEM_NAMESPACE::remove(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
-    std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
+#ifdef _WIN32
+  free(data_dir);
+#endif /* _WIN32 */
+  data_dir = nullptr;
+
+  if (!utils::GetEnv("UNITRACE_Session").empty()) {
+    UniController::ReleaseTemporalControl();
+#ifdef _WIN32
+    if (utils::GetEnv("UNITRACE_KernelMetrics") == "1" || utils::GetEnv("UNITRACE_MetricQuery") == "1") {
+#else /* _WIN32 */
+    if (utils::GetEnv("UNITRACE_KernelMetrics") == "1" || utils::GetEnv("UNITRACE_ChromeKmdLogging") == "1") {
+#endif /* _WIN32 */
+      UniController::ReleaseMetricFlushControl();
+    }
   }
 
-  UniController::ReleaseTemporalControl();
-  UniController::ReleaseMetricSamplingControl();
+  if ((utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
+    UniController::ReleaseMetricSamplingControl();
+  }
+}
+
+void CleanUp(int /* sig */) {
+  TearDown();
   _Exit(-1);
 }
 
@@ -1058,10 +1124,19 @@ int main(int argc, char *argv[]) {
   }
   app_args.push_back(nullptr);
 
+  CreateConfigLog(unitrace_version, unitrace_args, app_args);
+
   if (!utils::GetEnv("UNITRACE_Session").empty()) {
     UniController::CreateTemporalControl(utils::GetEnv("UNITRACE_Session").c_str());
     if (!utils::GetEnv("UNITRACE_StartPaused").empty()) {
       UniController::TemporalPause(utils::GetEnv("UNITRACE_Session").c_str());
+    }
+#ifdef _WIN32
+    if (utils::GetEnv("UNITRACE_KernelMetrics") == "1" || utils::GetEnv("UNITRACE_MetricQuery") == "1") {
+#else /* _WIN32 */
+    if (utils::GetEnv("UNITRACE_KernelMetrics") == "1" || utils::GetEnv("UNITRACE_ChromeKmdLogging") == "1") {
+#endif /* _WIN32 */
+      UniController::CreateMetricFlushControl();
     }
   }
 
@@ -1102,7 +1177,6 @@ int main(int argc, char *argv[]) {
   SetSysmanEnvironment();
 
   if (utils::GetEnv("UNITRACE_MetricQuery") == "1" || utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
-    // UNITRACE_KernelMetrics is not set
     SetProfilingEnvironment();
     if ((utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
         // create shared memory for metric sampling control between the profiler and the application
@@ -1129,6 +1203,7 @@ int main(int argc, char *argv[]) {
 
   utils::SetEnv("LD_PRELOAD", preload.c_str());
 
+
   if (utils::GetEnv("UNITRACE_KernelMetrics") == "1" || !utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
 
     char pattern[] = "/tmp/tmpdir.XXXXXX";
@@ -1149,13 +1224,7 @@ int main(int argc, char *argv[]) {
     std::string latch_file_name = std::string(data_dir) + "/latch.tmp";
     std::string oskmd_data_file_name = std::string(data_dir) + "/.oskmd.csv";
 
-    if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
-      // UNITRACE_MetricQuery is not set
-      SetProfilingEnvironment();
-    }
-
     utils::SetEnv("UNITRACE_DataDir", data_dir);
-    CreateConfigLog(unitrace_version, unitrace_args, app_args);
 
     int child;
 
@@ -1205,7 +1274,11 @@ int main(int argc, char *argv[]) {
       }
     } else if (child > 0) {
       // parent process
-      
+      pid_t bpftrace_pid = 0; // keep bpftrace pid if KMD profiling is enabled
+
+      if (!utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
+        bpftrace_pid = child;
+      }
       if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
         
         metric_profiler = EnableProfiling(child, data_dir, logfile, idle_sampling);
@@ -1220,50 +1293,111 @@ int main(int argc, char *argv[]) {
         }
       }
 
-      // wait for child process to complete
-      while (wait(nullptr) > 0);
+      // Poll for session stop while waiting for child processes.
+      // This allows --stop to trigger metric finalization without waiting
+      // for the application to exit naturally.
+      bool session_stopped = false;
+      if (!utils::GetEnv("UNITRACE_Session").empty()) {
+        // Named session: poll for stop signal
+        while (true) {
+          // Check if child(ren) have exited
+          if (waitpid(-1, nullptr, WNOHANG) < 0) {
+            // No more children (ECHILD) or error
+            break;
+          }
+          if (UniController::IsSessionStopped()) {
+            session_stopped = true;
+            std::cerr << "[INFO] Stop profiling as the session is stopped" << std::endl;
+            break;
+          }
+          // Sleep briefly before polling again
+          usleep(100 * 1000);  // 100ms
+        }
+        if (session_stopped) {
+          // Give child processes some time to flush profile data
+          usleep(1000 * 1000);  // 1000ms
+          // Just like a namesless session if all child processes exited
+          if (waitpid(-1, nullptr, WNOHANG) < 0) {
+             session_stopped = false;
+          }
+          else {
+            // Session was stopped via --stop command
+            // Stop profiling, wait for children to flush data, then compute metrics
+            std::cerr << "[INFO] Wait for child process(es) to flush profile data" << std::endl;
+            constexpr int kTimeoutSeconds = 5;
+            constexpr int kPollIntervalMs = 100;
+            const int max_iters = kTimeoutSeconds * 1000 / kPollIntervalMs;
 
-      if (metric_profiler != nullptr) {
-        DisableProfiling();
+            bool data_ready = false;
+            int elapsed_ms = 0;
+            for (int i = 0; i < max_iters; ++i) {
+              if (waitpid(-1, nullptr, WNOHANG) < 0) {
+                // Just like a namesless session if all child processes exited
+                session_stopped = false;
+                data_ready = true;
+                break;
+              }
+              // IsChildDataReadyTrusted() applies the start-of-flush grace: an early
+              // ready result (the shared flush counters showing no flush in flight)
+              // is not trusted until the grace elapses, so a child that has not yet
+              // observed the stop and begun flushing is not skipped.
+              if (UniController::IsChildDataReadyTrusted(elapsed_ms)) {
+                data_ready = true;
+                break;
+              }
+
+              usleep(kPollIntervalMs * 1000);
+              elapsed_ms += kPollIntervalMs;
+            }
+
+            if (!data_ready) {
+              std::cerr << "[WARNING] Timed out waiting for child process(es) to flush profile data after " << kTimeoutSeconds << "s. Metric output may be incomplete." << std::endl;
+            }
+          }
+          if (bpftrace_pid && session_stopped) {
+            // Exception to the "wait for the application to complete" rule
+            // below: with --chrome-kmd-logging the application runs as a -c
+            // grandchild of bpftrace, so once the session is stopped we stop
+            // the bpftrace process here. Terminating bpftrace propagates the
+            // signal to its -c grandchild, so the application process also
+            // exits as a side effect.
+            TerminateProcess(bpftrace_pid);
+          }
+        }
+      } else {
+        // Not a named session: just wait for all children to exit
+        while (wait(nullptr) > 0);
       }
 
-      if (!utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
+      DisableProfiling();
+      if (bpftrace_pid) {
         DumpKmdTraceData(oskmd_data_file_name);
       }
 
-      if (CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
-        for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
-          CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
-        }
-        if (remove(data_dir)) {
-          std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
-        }
+      if (session_stopped) {
+        // After the session stop is handled we still need to wait for the
+        // parent application process to complete. Otherwise we would let the
+        // application process exit prematurely, which may not be what the user
+        // wants -- stopping the profiling session should not kill the workload.
+        //
+        // One exception: with --chrome-kmd-logging, stopping the session
+        // already terminated the bpftrace process above, and because the
+        // application runs as bpftrace's -c grandchild it exits along with it.
+        // In that case there is nothing left to wait for here.
+        while (wait(nullptr) > 0);
       }
     } else {
       std::cerr << "[ERROR] Failed to create child process" << std::endl;
-      if (metric_profiler != nullptr) {
-        DisableProfiling();
-      }
-
-      if (CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
-        for (const auto& e: CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
-          CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
-        }
-        if (remove(data_dir)) {
-          std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
-        }
-      }
+      DisableProfiling();
     }
   }
   else {
-    CreateConfigLog(unitrace_version, unitrace_args, app_args);
     if (execvp(app_args[0], app_args.data())) {
       std::cerr << "[ERROR] Failed to launch target application: " << app_args[0] << std::endl;
       Usage(argv[0]);
       return 1;
     }
   }
-
 #else /* _WIN32 */
   bool metrics_sampling_enabled = (utils::GetEnv("UNITRACE_KernelMetrics") == "1");
   bool metrics_query_enabled = (utils::GetEnv("UNITRACE_MetricQuery") == "1");
@@ -1314,7 +1448,6 @@ int main(int argc, char *argv[]) {
   STARTUPINFO si = {0};
   si.cb = sizeof(si);
 
-  CreateConfigLog(unitrace_version, unitrace_args, app_args);
   if (CreateProcessA(app_args[0], LPSTR(cmdline.c_str()), nullptr, nullptr, false, CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {
     BOOL success = FALSE;
     do {
@@ -1362,20 +1495,74 @@ int main(int argc, char *argv[]) {
       }
 
       ResumeThread(pi.hThread);
-      WaitForSingleObject(pi.hProcess, INFINITE);
 
-      CloseHandle(pi.hThread);
-      CloseHandle(pi.hProcess);
+      if (metrics_query_enabled || metrics_sampling_enabled) {
+        bool session_stopped = false;
+        if (!utils::GetEnv("UNITRACE_Session").empty()) {
+          constexpr DWORD kPollIntervalMs = 100;
+          while (true) {
+            if (WaitForSingleObject(pi.hProcess, kPollIntervalMs) == WAIT_OBJECT_0) {
+              break;  // application exited
+            }
+            if (UniController::IsSessionStopped()) {
+              session_stopped = true;
+              std::cerr << "[INFO] Stop profiling as the session is stopped" << std::endl;
+              break;
+            }
+          }
+          if (session_stopped) {
+            if (WaitForSingleObject(pi.hProcess, kPollIntervalMs) == WAIT_OBJECT_0) {
+              session_stopped = false;
+            }
+            else {
+              // Session was stopped via --stop command
+              // Stop profiling, wait for children to flush data, then compute metrics
+              // Wait for all child processes to flush their metric data
+              std::cerr << "[INFO] Wait for child process(es) to flush profile data" << std::endl;
+              constexpr int kTimeoutSeconds = 5;
+              const int max_iters = kTimeoutSeconds * 1000 / kPollIntervalMs;
 
-      if (metrics_query_enabled) {
-        // compute metrics
-	ZeMetricProfiler::ComputeMetricsQueried(app_pid);
-      }
+              bool data_ready = false;
+              int elapsed_ms = 0;
+              for (int i = 0; i < max_iters; ++i) {
+                // IsChildDataReadyTrusted() applies the start-of-flush grace: an early
+                // ready result (the shared flush counters showing no flush in flight)
+                // is not trusted until the grace elapses, so a child that has not yet
+                // observed the stop and begun flushing is not skipped.
+                if (UniController::IsChildDataReadyTrusted(elapsed_ms)) {
+                  data_ready = true;
+                  break;
+                }
 
-      if (metrics_sampling_enabled && (metric_profiler != nullptr)) {
+                if (WaitForSingleObject(pi.hProcess, kPollIntervalMs) == WAIT_OBJECT_0) {
+                  session_stopped = false;
+                  data_ready = true;
+                  break;
+                }
+                elapsed_ms += kPollIntervalMs;
+              }
+
+              if (!data_ready) {
+                std::cerr << "[WARNING] Timed out waiting for child process(es) to flush profile data after " << kTimeoutSeconds << "s. Metric profile data may be incomplete." << std::endl;
+              }
+            }
+          }
+        }
+        else {
+          WaitForSingleObject(pi.hProcess, INFINITE);
+        }
         DisableProfiling();
+        if (metrics_query_enabled) {
+          // compute metrics
+	  ZeMetricProfiler::ComputeMetricsQueried(app_pid);
+        }
+        if (session_stopped) {
+          // wait for the application to complete
+          WaitForSingleObject(pi.hProcess, INFINITE);
+        }
+      } else {
+        WaitForSingleObject(pi.hProcess, INFINITE);
       }
-
       success = TRUE;
     }
     while (0);
@@ -1389,25 +1576,9 @@ int main(int argc, char *argv[]) {
     Usage(argv[0]);
     return 1;
   }
-
-  if (metrics_sampling_enabled || metrics_query_enabled) {
-    if (CXX_STD_FILESYSTEM_NAMESPACE::exists(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
-      for (const auto& e : CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir))) {
-        CXX_STD_FILESYSTEM_NAMESPACE::remove_all(e.path());
-      }
-      if (RemoveDirectory(LPCSTR(data_dir)) == 0) {
-        std::cerr << "[WARNING] " << data_dir << " is not removed. Please manually remove it." << std::endl;
-      }
-    }
-  }
-
-  if (data_dir) {
-    free(data_dir);
-  }
 #endif /* _WIN32 */
 
-  UniController::ReleaseTemporalControl();
-  UniController::ReleaseMetricSamplingControl();
+  TearDown();
 
   return 0;
 }

@@ -5,6 +5,7 @@
 // =============================================================
 
 #include <csignal>
+#include <fstream>
 #include <iostream>
 
 #include "tracer.h"
@@ -181,6 +182,7 @@ static SignalHandler siguser_handler = nullptr;
 
 void HandleAbnormalTermination(int sig) {
   Teardown();
+
   switch (sig) {
     case SIGINT:
       if (sigint_handler) {
@@ -220,18 +222,50 @@ void HandleAbnormalTermination(int sig) {
   }
 }
 
+void OnSessionStopped(void) {
+  if (tracer != nullptr) {
+    // Emit a user-facing acknowledgement that the session stop was observed,
+    // BEFORE the (potentially long) flush runs. In metric-query mode there is no
+    // separate parent process that waits and reports on stop: the in-process tool
+    // runs inside the application process itself (launched via execvp), so the
+    // metric data is flushed here and this message must be emitted here too.
+    std::cerr << "[INFO] Flush profile data as the session is stopped" << std::endl;
+
+    // Metric data flush handshake is only active for time-based metric sampling
+    // (UNITRACE_KernelMetrics) and per-kernel metric query (UNITRACE_MetricQuery).
+      const bool metric_handshake =
+        utils::GetEnv("UNITRACE_KernelMetrics") == "1" ||
+        utils::GetEnv("UNITRACE_MetricQuery") == "1";
+
+    // Announce that this child observed the session stop and is about to flush,
+    // BEFORE the flush runs. This increments the shared flush_started_ counter
+    if (metric_handshake) {
+      UniController::SignalChildFlushStarted();
+    }
+    tracer->Flush();
+    // Signal the parent process that child metric data is flushed.
+    // This is needed for both time-based metric sampling (UNITRACE_KernelMetrics)
+    // and per-kernel metric query (UNITRACE_MetricQuery) so the parent can
+    // safely run final post-processing (e.g. ComputeMetricsQueried on Windows)
+    if (metric_handshake) {
+      UniController::SignalChildDataReady();
+    }
+  }
+}
+
 void CONSTRUCTOR Init(void) {
   std::string unitrace_version = utils::GetEnv("UNITRACE_VERSION");
   if (unitrace_version.size() > 0) {
     auto libunitrace_version = get_version();
     if (unitrace_version.compare(libunitrace_version) != 0) {
-      std::cerr << "[ERROR] Versions of unitrace and " << LIB_UNITRACE_TOOL_NAME << " do not match." << std::endl;
+      std::cerr << "[ERROR] Versions of unitrace and " << LIB_UNITRACE_TOOL_NAME << " do not match" << std::endl;
       exit(-1);
     }
   }
 
   if (!utils::GetEnv("UNITRACE_Session").empty()) {
     UniController::AttachTemporalControlRead(utils::GetEnv("UNITRACE_Session").c_str());
+    UniController::SetSessionStoppedCallback(OnSessionStopped);
   }
 
   if (!utils::GetEnv("UNITRACE_TeardownOnSignal").empty()) {

@@ -1498,6 +1498,7 @@ class ChromeLogger {
     LoggerFactory* logger_factory_;
     std::string process_name_;
     double process_start_time_;
+    bool flushed_ = false;  // true once Flush() has drained buffers and written the JSON close
 
     ChromeLogger(const char* process_name)
       : logger_factory_(LoggerFactory::Create())
@@ -1535,6 +1536,10 @@ class ChromeLogger {
 
     ~ChromeLogger() {
       if (logger_ != nullptr) {
+        // Make sure any data that was buffered after the last Flush() (or if Flush() was never
+        // called at all) reaches disk and the JSON is properly closed.
+        Flush();
+
         std::string chrome_trace_file_name_ = logger_->GetLogFileName();
         logger_lock_.lock();
         if (trace_buffers_) {
@@ -1559,8 +1564,6 @@ class ChromeLogger {
           // no data has been logged 
           std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
         } else {
-          std::string str = "\n]\n}\n";
-          logger_->Log(str);
           std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
         }
       }
@@ -1570,6 +1573,35 @@ class ChromeLogger {
       ChromeLogger *chrome_logger  = new ChromeLogger(process_name);
       UniMemory::ExitIfOutOfMemory((void *)(chrome_logger));
       return chrome_logger;
+    }
+
+    void Flush() {
+      if (logger_ != nullptr && !flushed_) {
+        logger_lock_.lock();
+        if (trace_buffers_) {
+          for (auto it = trace_buffers_->begin(); it != trace_buffers_->end(); ++it) {
+            (*it)->FlushDeviceBuffer();
+            (*it)->FlushHostBuffer();
+          }
+        }
+
+#if BUILD_WITH_OPENCL
+        if (cl_trace_buffers_) {
+          for (auto it = cl_trace_buffers_->begin(); it != cl_trace_buffers_->end(); ++it) {
+            (*it)->FlushDeviceBuffer();
+            (*it)->FlushHostBuffer();
+          }
+        }
+#endif /* BUILD_WITH_OPENCL */
+
+        // Write closing brackets so the JSON is valid if the process terminates abnormally
+        if (!logger_->IsEmpty()) {
+          logger_->Log("\n]\n}\n");
+          logger_->Flush();
+        }
+        flushed_ = true;
+        logger_lock_.unlock();
+      }
     }
 
     static void XptiLoggingCallback(EVENT_TYPE etype, const char *name, uint64_t start_ts, uint64_t end_ts) {

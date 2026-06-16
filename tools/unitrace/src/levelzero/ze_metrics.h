@@ -658,6 +658,12 @@ class ZeMetricProfiler {
   }
 
   void ComputeMetricsSampled() {
+    // The .kprops/.ktime files iterated below (and the metric binary blobs)
+    // are written by the instrumented child processes when their tracing
+    // sessions stop. The parent may reach this point as soon as
+    // CheckChildDataReadyState() flips to 1 (or as a fallback when waitpid()
+    // reports no more children). The caller of this function needs make sure 
+    // these files are ready before calling this function
     auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
 
