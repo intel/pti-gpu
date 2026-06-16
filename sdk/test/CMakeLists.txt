@@ -748,7 +748,7 @@ target_include_directories(
           "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
 
 target_link_libraries(pc_sampling_basic_test PUBLIC spdlog::spdlog Pti::pti_view
-  GTest::gtest_main LevelZero::level-zero)
+  GTest::gtest_main LevelZero::level-zero ${FS_LIB})
 
 add_executable(pc_sampling_internal_test pc_sampling/pc_sampling_internal_test.cc)
 
@@ -760,7 +760,7 @@ target_include_directories(
           "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
 
 target_link_libraries(pc_sampling_internal_test PUBLIC spdlog::spdlog Pti::pti_view
-  GTest::gtest_main LevelZero::level-zero)
+  GTest::gtest_main LevelZero::level-zero ${FS_LIB})
 
 if(HAVE_SYCL)
   add_executable(pc_sampling_functional_test pc_sampling/pc_sampling_functional_test.cc)
@@ -769,7 +769,7 @@ if(HAVE_SYCL)
   target_link_options(pc_sampling_functional_test PRIVATE -fsycl)
 
   target_link_libraries(pc_sampling_functional_test PUBLIC spdlog::spdlog Pti::pti_view
-    GTest::gtest_main LevelZero::level-zero)
+    GTest::gtest_main LevelZero::level-zero ${FS_LIB})
 endif()
 
 add_executable(pti_assert_test pti_assert_test.cc)
