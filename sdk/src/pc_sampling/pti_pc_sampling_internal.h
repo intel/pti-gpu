@@ -22,20 +22,28 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cstring>
+#include <limits>
 #include <memory>
 #include <new>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "pti/pti_callback.h"
 #include "pti/pti_pc_sampling.h"
+#include "pti_pc_sampling_aggregator.h"
 #include "pti_pc_sampling_collector.h"
-#include "pti_pc_sampling_helper.h"
+#include "pti_pc_sampling_l0.h"
 #include "pti_pc_sampling_raw_data_file.h"
+#include "utils/pti_string_pool.h"
 
 namespace pti::pc_sampling {
+
+constexpr uint64_t kInstructionPointerAddressMask = 0xFFFFFFFFull;
+constexpr size_t kInvalidMetricIndex = (std::numeric_limits<size_t>::max)();
 
 //-----------------------------------------------------------------------------
 // Constants
@@ -135,11 +143,19 @@ struct _pti_pc_sampling_handle_t {
   // runtime (e.g. SYCL gpu_selector) executes kernels on.
   std::vector<pti_device_handle_t> supported_devices_;
   std::vector<pti_device_handle_t> configured_devices_;
-  std::vector<pti_pc_sampling_device_status_t> profiled_device_data;
   zet_metric_group_handle_t collected_metric_group_ = nullptr;
   pti::pc_sampling::TempRawDataFile collected_raw_data_;
   bool samples_dropped_ = false;
   std::unique_ptr<pti::pc_sampling::PtiPcSamplingDataCollector> collector;
+
+  // Lazily-computed, cached results. Built once on the first results query that
+  // needs them and reused for all subsequent queries (no recalculation).
+  bool aggregated_ = false;
+  pti::pc_sampling::DeviceAggregate device_aggregate_;
+  // Stall reasons in metric-group order, pooled so the pointers stay alive for
+  // the API caller. Size is the stall-reason count (IP metric excluded).
+  std::vector<std::pair<const char*, const char*>> stall_reasons_;
+  size_t ip_metric_index_ = pti::pc_sampling::kInvalidMetricIndex;
 };
 
 namespace pti::pc_sampling {
@@ -149,7 +165,10 @@ inline void ClearProfiledDeviceData(pti_pc_sampling_handle_t handle) {
     return;
   }
 
-  handle->profiled_device_data.clear();
+  handle->device_aggregate_.Clear();
+  handle->stall_reasons_.clear();
+  handle->ip_metric_index_ = pti::pc_sampling::kInvalidMetricIndex;
+  handle->aggregated_ = false;
 }
 
 inline pti_result GetConfiguredDevice(const pti_pc_sampling_handle_t handle,
@@ -160,7 +179,7 @@ inline pti_result GetConfiguredDevice(const pti_pc_sampling_handle_t handle,
   }
 
   if (handle->configured_devices_.empty()) {
-    SPDLOG_ERROR("{}: no configured device is available on the handle", __FUNCTION__);
+    SPDLOG_WARN("{}: no configured device is available on the handle", __FUNCTION__);
     return PTI_ERROR_INTERNAL;
   }
 
@@ -168,7 +187,8 @@ inline pti_result GetConfiguredDevice(const pti_pc_sampling_handle_t handle,
   return PTI_SUCCESS;
 }
 
-pti_result EnsureAggregatedDeviceData(pti_pc_sampling_handle_t handle);
+pti_result EnsureStallReasons(pti_pc_sampling_handle_t handle);
+pti_result EnsureAggregatedResults(pti_pc_sampling_handle_t handle);
 void ResetCollectionSession(pti_pc_sampling_handle_t handle);
 
 //-----------------------------------------------------------------------------
@@ -331,7 +351,7 @@ inline void KernelCreatedCallback(pti_callback_domain domain, pti_api_group_id /
         SPDLOG_WARN("{}: zexKernelGetBaseAddress failed with status {:#x}", __FUNCTION__,
                     static_cast<uint32_t>(status));
       } else {
-        kernel_info.kernel_base_address_ = base_address;
+        kernel_info.kernel_base_address_ = base_address & kInstructionPointerAddressMask;
         SPDLOG_DEBUG("{}: kernel base address {:#x} for '{}'", __FUNCTION__, base_address,
                      kernel_info.kernel_name_);
       }
@@ -604,6 +624,15 @@ class PtiPcSamplingHandleStorage {
   std::unordered_map<pti_device_handle_t, ze_driver_handle_t> device_driver_map_;
 };
 
+inline zet_metric_group_handle_t ResolveCollectedMetricGroup(
+    const pti_pc_sampling_handle_t handle, pti_device_handle_t configured_device) {
+  if (handle->collected_metric_group_ != nullptr) {
+    return handle->collected_metric_group_;
+  }
+
+  return PtiPcSamplingHandleStorage::Instance().GetMetricGroup(configured_device);
+}
+
 //-----------------------------------------------------------------------------
 // Handle Validation Utilities
 //-----------------------------------------------------------------------------
@@ -621,6 +650,100 @@ inline bool IsPCSamplingSupportedDevice(pti_device_handle_t device) {
 
 inline std::vector<pti_device_handle_t> GetAllDevices() {
   return PtiPcSamplingHandleStorage::Instance().GetSupportedDevices();
+}
+
+class StringCache {
+ public:
+  static StringCache& Instance() {
+    static StringCache cache;
+    return cache;
+  }
+
+  const char* Get(const std::string& value) { return string_pool_.Get(value); }
+
+ private:
+  StringCache() = default;
+  ~StringCache() = default;
+  StringCache(const StringCache&) = delete;
+  StringCache& operator=(const StringCache&) = delete;
+
+  StringPool string_pool_;
+};
+
+inline pti_result EnsureStallReasons(pti_pc_sampling_handle_t handle) {
+  if (handle == nullptr) {
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  if (handle->ip_metric_index_ != pti::pc_sampling::kInvalidMetricIndex) {
+    return PTI_SUCCESS;
+  }
+
+  pti_device_handle_t configured_device = nullptr;
+  if (GetConfiguredDevice(handle, &configured_device) != PTI_SUCCESS) {
+    configured_device =
+        handle->supported_devices_.empty() ? nullptr : handle->supported_devices_.front();
+  }
+  const zet_metric_group_handle_t metric_group =
+      ResolveCollectedMetricGroup(handle, configured_device);
+
+  if (metric_group == nullptr) {
+    // No collection happened; an empty reason table is valid.
+    handle->ip_metric_index_ = 0;
+    return PTI_SUCCESS;
+  }
+
+  size_t ip_metric_index = pti::pc_sampling::kInvalidMetricIndex;
+  std::vector<std::pair<std::string, std::string>> metric_names =
+      GetAllSupportedStallMetricNames(metric_group, &ip_metric_index);
+  if (metric_names.empty()) {
+    handle->ip_metric_index_ = pti::pc_sampling::kInvalidMetricIndex;
+    handle->stall_reasons_.clear();
+    SPDLOG_ERROR("{}: failed to collect metric names", __FUNCTION__);
+    return PTI_ERROR_INTERNAL;
+  }
+
+  std::vector<std::pair<const char*, const char*>> stall_reasons;
+  stall_reasons.reserve(metric_names.size());
+  for (const auto& [name, description] : metric_names) {
+    stall_reasons.emplace_back(StringCache::Instance().Get(name),
+                               StringCache::Instance().Get(description));
+  }
+
+  handle->stall_reasons_ = std::move(stall_reasons);
+  handle->ip_metric_index_ = ip_metric_index;
+
+  return PTI_SUCCESS;
+}
+
+inline pti_result EnsureAggregatedResults(pti_pc_sampling_handle_t handle) {
+  if (handle->aggregated_) {
+    return PTI_SUCCESS;
+  }
+
+  const pti_result reasons_status = EnsureStallReasons(handle);
+  if (reasons_status != PTI_SUCCESS) {
+    return reasons_status;
+  }
+
+  pti_device_handle_t configured_device = nullptr;
+  const pti_result configured_device_status = GetConfiguredDevice(handle, &configured_device);
+  if (configured_device_status != PTI_SUCCESS) {
+    return configured_device_status;
+  }
+
+  const zet_metric_group_handle_t metric_group =
+      ResolveCollectedMetricGroup(handle, configured_device);
+  const size_t reason_count = handle->stall_reasons_.size();
+  const pti_result aggregate_status = AggregateCollectedData(
+      configured_device, metric_group, handle->samples_dropped_, handle->collected_raw_data_,
+      handle->ip_metric_index_, reason_count, &handle->device_aggregate_);
+  if (aggregate_status != PTI_SUCCESS) {
+    return aggregate_status;
+  }
+
+  handle->aggregated_ = true;
+  return PTI_SUCCESS;
 }
 
 /**
@@ -694,6 +817,152 @@ inline pti_result ValidateStoppedCollectionHandle(const pti_pc_sampling_handle_t
     SPDLOG_ERROR("{}: collection must be stopped, current state is {}", __FUNCTION__,
                  PcSamplingStateToString(handle->state_));
     return PTI_ERROR_PC_SAMPLING_NOT_STOPPED;
+  }
+
+  return PTI_SUCCESS;
+}
+
+inline pti_result ValidateConfiguredProfiledDevice(const pti_pc_sampling_handle_t handle,
+                                                   pti_device_handle_t device) {
+  if (!IsConfiguredDevice(handle, device)) {
+    SPDLOG_ERROR("{}: device does not match the configured PC sampling device", __FUNCTION__);
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  return PTI_SUCCESS;
+}
+
+inline pti_result FindKernelAggregate(const pti_pc_sampling_handle_t handle, uint64_t kernel_handle,
+                                      const KernelAggregate** kernel_aggregate) {
+  if (kernel_aggregate == nullptr) {
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  auto it = handle->device_aggregate_.kernels.find(kernel_handle);
+  if (it == handle->device_aggregate_.kernels.end()) {
+    SPDLOG_ERROR("{}: kernel handle {:#x} was not observed during collection", __FUNCTION__,
+                 kernel_handle);
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  *kernel_aggregate = &it->second;
+  return PTI_SUCCESS;
+}
+
+inline pti_result FillProfiledDevices(const pti_pc_sampling_handle_t handle,
+                                      pti_device_handle_t* devices, size_t* device_count) {
+  const size_t configured_device_count = handle->configured_devices_.size();
+  if (devices != nullptr && configured_device_count != 0 && *device_count != 0) {
+    const size_t copied_device_count = (std::min)(*device_count, configured_device_count);
+    std::copy_n(handle->configured_devices_.begin(), copied_device_count, devices);
+    *device_count = copied_device_count;
+  } else {
+    *device_count = configured_device_count;
+  }
+  return PTI_SUCCESS;
+}
+
+inline pti_result FillObservedKernelHandles(const pti_pc_sampling_handle_t handle,
+                                            uint64_t* kernel_handles, size_t* kernel_count) {
+  const auto& kernels = handle->device_aggregate_.kernels;
+  const size_t available_count = kernels.size();
+  if (kernel_handles == nullptr || *kernel_count == 0) {
+    *kernel_count = available_count;
+    return PTI_SUCCESS;
+  }
+
+  const size_t copy_count = (std::min)(*kernel_count, available_count);
+  size_t index = 0;
+  for (const auto& entry : kernels) {
+    if (index >= copy_count) {
+      break;
+    }
+    kernel_handles[index++] = entry.first;
+  }
+  *kernel_count = copy_count;
+  return PTI_SUCCESS;
+}
+
+inline pti_result FillObservedKernelInfo(pti_device_handle_t device,
+                                         const pti_pc_sampling_handle_t handle,
+                                         uint64_t kernel_handle,
+                                         pti_pc_sampling_kernel_info_t* kernel_info) {
+  const KernelAggregate* kernel_aggregate = nullptr;
+  const pti_result kernel_status = FindKernelAggregate(handle, kernel_handle, &kernel_aggregate);
+  if (kernel_status != PTI_SUCCESS) {
+    return kernel_status;
+  }
+
+  kernel_info->_device = device;
+  kernel_info->_kernel_handle = kernel_aggregate->kernel_handle;
+  kernel_info->_kernel_name = kernel_aggregate->kernel_name_.c_str();
+  kernel_info->_reason_count = kernel_aggregate->reason_count;
+  kernel_info->_instructions_with_samples_count = kernel_aggregate->instruction_count;
+
+  if (kernel_info->_aggregated_samples != nullptr) {
+    const size_t copy_count =
+        (std::min)(kernel_aggregate->reason_count, kernel_aggregate->aggregated_samples.size());
+    std::copy_n(kernel_aggregate->aggregated_samples.begin(), copy_count,
+                kernel_info->_aggregated_samples);
+  }
+
+  return PTI_SUCCESS;
+}
+
+inline pti_result FillSamplesPerInstruction(const pti_pc_sampling_handle_t handle,
+                                            uint64_t kernel_handle,
+                                            pti_pc_sampling_instruction_t* instruction_buffer,
+                                            size_t instruction_buffer_count,
+                                            uint64_t* samples_buffer, size_t samples_buffer_count) {
+  const KernelAggregate* kernel_aggregate = nullptr;
+  const pti_result kernel_status = FindKernelAggregate(handle, kernel_handle, &kernel_aggregate);
+  if (kernel_status != PTI_SUCCESS) {
+    return kernel_status;
+  }
+
+  const size_t persisted_instruction_count = kernel_aggregate->instruction_count;
+  const size_t reason_count = kernel_aggregate->reason_count;
+  const size_t offsets_bytes = persisted_instruction_count * sizeof(uint64_t);
+  if (reason_count != 0 &&
+      persisted_instruction_count > ((std::numeric_limits<size_t>::max)() / reason_count)) {
+    SPDLOG_ERROR("{}: sample matrix size overflows for kernel handle {:#x}", __FUNCTION__,
+                 kernel_aggregate->kernel_handle);
+    return PTI_ERROR_INTERNAL;
+  }
+
+  const size_t sample_count = persisted_instruction_count * reason_count;
+  const size_t samples_bytes = sample_count * sizeof(uint64_t);
+  const size_t expected_size = offsets_bytes + samples_bytes;
+  if (expected_size != kernel_aggregate->samples_file.size()) {
+    SPDLOG_ERROR("{}: kernel samples file size is invalid for kernel handle {:#x}", __FUNCTION__,
+                 kernel_aggregate->kernel_handle);
+    return PTI_ERROR_INTERNAL;
+  }
+
+  const size_t instruction_count =
+      (std::min)(instruction_buffer_count, persisted_instruction_count);
+  std::vector<uint64_t> instruction_offsets(instruction_count);
+  if (instruction_count != 0 &&
+      !kernel_aggregate->samples_file.ReadRange(0, instruction_count * sizeof(uint64_t),
+                                                instruction_offsets.data())) {
+    SPDLOG_ERROR("{}: failed to read instruction offsets for kernel handle {:#x}", __FUNCTION__,
+                 kernel_aggregate->kernel_handle);
+    return PTI_ERROR_INTERNAL;
+  }
+
+  for (size_t i = 0; i < instruction_count; ++i) {
+    instruction_buffer[i]._instruction_offset = instruction_offsets[i];
+    instruction_buffer[i]._source_info = nullptr;
+  }
+
+  const size_t returned_sample_count = instruction_count * reason_count;
+  const size_t copied_sample_count = (std::min)(samples_buffer_count, returned_sample_count);
+  if (copied_sample_count != 0 &&
+      !kernel_aggregate->samples_file.ReadRange(
+          offsets_bytes, copied_sample_count * sizeof(*samples_buffer), samples_buffer)) {
+    SPDLOG_ERROR("{}: failed to read instruction samples for kernel handle {:#x}", __FUNCTION__,
+                 kernel_aggregate->kernel_handle);
+    return PTI_ERROR_INTERNAL;
   }
 
   return PTI_SUCCESS;

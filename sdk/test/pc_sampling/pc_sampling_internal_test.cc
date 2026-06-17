@@ -126,42 +126,6 @@ TEST_F(PcSamplingTest, ConfigurePreservesExplicitSamplingPeriod) {
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
 }
 
-//-----------------------------------------------------------------------------
-// Kernel Info Query Tests
-//-----------------------------------------------------------------------------
-
-TEST_F(PcSamplingTest, GetObservedKernelInfoReturnsNotImplementedAfterValidation) {
-  pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
-
-  pti_device_handle_t configured_device = reinterpret_cast<pti_device_handle_t>(0x1);
-  handle->state_ = pti::pc_sampling::PcSamplingState::kStopped;
-  handle->configured_devices_.push_back(configured_device);
-
-  pti_pc_sampling_kernel_info_t kernel_info{};
-  kernel_info._struct_size = sizeof(kernel_info);
-
-  EXPECT_EQ(ptiPcSamplingGetObservedKernelInfo(handle, configured_device, 1, &kernel_info),
-            PTI_ERROR_NOT_IMPLEMENTED);
-
-  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
-}
-
-TEST_F(PcSamplingTest, GetSamplesPerInstructionReturnsNotImplementedAfterValidation) {
-  pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
-
-  pti_device_handle_t configured_device = reinterpret_cast<pti_device_handle_t>(0x1);
-  handle->state_ = pti::pc_sampling::PcSamplingState::kStopped;
-  handle->configured_devices_.push_back(configured_device);
-
-  EXPECT_EQ(
-      ptiPcSamplingGetSamplesPerInstruction(handle, configured_device, 1, nullptr, 0, nullptr, 0),
-      PTI_ERROR_NOT_IMPLEMENTED);
-
-  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
-}
-
 TEST_F(PcSamplingTest, GetStallReasons) {
   pti_pc_sampling_handle_t handle = nullptr;
   ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
@@ -257,6 +221,33 @@ TEST_F(PcSamplingTest, GetStallReasonsMultipleCallsReturnSamePointers) {
   EXPECT_EQ(reasons[0]._description, reasons2[0]._description);
 
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+TEST_F(PcSamplingTest, GetStallReasonsPointersRemainValidAfterDisable) {
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+
+  const auto expected_reasons = GetExpectedStallReasonsFromL0(handle);
+  ASSERT_FALSE(expected_reasons.empty());
+
+  size_t reason_count = expected_reasons.size();
+  std::vector<pti_pc_sampling_stall_reason_info_t> reasons(reason_count);
+  for (auto& reason : reasons) {
+    reason._struct_size = sizeof(pti_pc_sampling_stall_reason_info_t);
+  }
+
+  ASSERT_EQ(ptiPcSamplingGetStallReasons(handle, reasons.data(), &reason_count), PTI_SUCCESS);
+  ASSERT_EQ(reason_count, expected_reasons.size());
+
+  const char* first_name = reasons[0]._name;
+  const char* first_description = reasons[0]._description;
+  ASSERT_NE(first_name, nullptr);
+  ASSERT_NE(first_description, nullptr);
+
+  ASSERT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+
+  EXPECT_STREQ(first_name, expected_reasons[0].first.c_str());
+  EXPECT_STREQ(first_description, expected_reasons[0].second.c_str());
 }
 
 TEST_F(PcSamplingTest, GetProfiledDevicesReturnsConfiguredSingleDevice) {

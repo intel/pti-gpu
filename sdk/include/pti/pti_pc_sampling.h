@@ -225,7 +225,7 @@ ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle);
  *
  * @return PTI_SUCCESS after successful retrieval of the stall-reason count or entries
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or reason_count is NULL
- * @return PTI_ERROR_INTERNAL if a supported metric group or devices are not found for the handle
+ * @return PTI_ERROR_INTERNAL if stall-reason metadata cannot be derived from the configured metric group
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetStallReasons(pti_pc_sampling_handle_t handle,
@@ -271,6 +271,7 @@ ptiPcSamplingGetProfiledDevices(pti_pc_sampling_handle_t handle,
  * @return PTI_SUCCESS after successful retrieval of the kernel-handle count or entries
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, kernel_count is NULL, or device does not match the configured device
  * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
+ * @return PTI_ERROR_INTERNAL if cannot collect the kernel-handle count or entries
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetObservedKernelHandles(pti_pc_sampling_handle_t handle,
@@ -290,9 +291,11 @@ ptiPcSamplingGetObservedKernelHandles(pti_pc_sampling_handle_t handle,
  * @param[in]     kernel_handle   Kernel handle returned by ptiPcSamplingGetObservedKernelHandles
  * @param[in,out] kernel_info     Caller-allocated kernel info structure;
  *
+ * @return PTI_SUCCESS after successful retrieval of the observed-kernel metadata
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, device does not match the configured device, kernel_info is NULL, or kernel_info->_struct_size is too small
  * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
- * @return PTI_ERROR_NOT_IMPLEMENTED in the current implementation after validation
+ * @return PTI_ERROR_BAD_ARGUMENT if kernel_handle was not observed during the collection
+ * @return PTI_ERROR_INTERNAL if cannot collect the observed-kernel metadata
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetObservedKernelInfo(pti_pc_sampling_handle_t handle,
@@ -318,9 +321,11 @@ ptiPcSamplingGetObservedKernelInfo(pti_pc_sampling_handle_t handle,
  * @param[out]    samples_buffer           Caller-allocated flattened sample-count buffer
  * @param[in]     samples_buffer_count     Size of samples_buffer array
  *
- * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or device does not match the configured device
+ * @return PTI_SUCCESS after successful retrieval of the persisted instruction offsets and sample counts
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, device is NULL, samples_buffer is NULL, instruction_buffer is NULL,
+ *                                or device does not match the configured device
  * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
- * @return PTI_ERROR_NOT_IMPLEMENTED in the current implementation after validation
+ * @return PTI_ERROR_INTERNAL if cannot collect the persisted instruction offsets and sample counts
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetSamplesPerInstruction(pti_pc_sampling_handle_t handle,
@@ -341,10 +346,11 @@ ptiPcSamplingGetSamplesPerInstruction(pti_pc_sampling_handle_t handle,
  * @param[in]     device            Profiled device handle
  * @param[in,out] device_status     Caller-allocated device status structure; set _struct_size
  *
- * @return PTI_SUCCESS after successful deferred load and status retrieval
- * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, device is NULL, device_status is NULL, or device_status->_struct_size is too small
+ * @return PTI_SUCCESS after successful status retrieval
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL, device is NULL, device_status is NULL,
+ *                                or device does not match the configured PC sampling device
  * @return PTI_ERROR_PC_SAMPLING_NOT_STOPPED if collection has not reached the stopped state yet
- * @return PTI_ERROR_INTERNAL if deferred raw collection data cannot be loaded
+ * @return PTI_ERROR_INTERNAL if cannot collect device status
  */
 pti_result PTI_EXPORT
 ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t handle,

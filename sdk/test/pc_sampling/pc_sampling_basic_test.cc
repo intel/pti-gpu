@@ -95,3 +95,20 @@ TEST(PcSamplingBasicTest, TempRawDataFileRoundTripsAndRemovesTempFile) {
   EXPECT_EQ(raw_data.size(), 0U);
   EXPECT_FALSE(pti::utils::filesystem::exists(path));
 }
+
+TEST(PcSamplingBasicTest, TempRawDataFileReadRangeReadsRequestedSlice) {
+  pti::pc_sampling::TempRawDataFile raw_data;
+  ASSERT_TRUE(raw_data.OpenTemp());
+
+  constexpr std::array<uint8_t, 8> full = {5, 6, 7, 8, 9, 10, 11, 12};
+  ASSERT_TRUE(raw_data.Append(full.data(), full.size()));
+  ASSERT_TRUE(raw_data.Finalize());
+
+  std::array<uint8_t, 3> slice = {};
+  ASSERT_TRUE(raw_data.ReadRange(2, slice.size(), slice.data()));
+  EXPECT_EQ(slice, (std::array<uint8_t, 3>{7, 8, 9}));
+
+  EXPECT_TRUE(raw_data.ReadRange(full.size(), 0, nullptr));
+  EXPECT_FALSE(raw_data.ReadRange(full.size() - 1, 2, slice.data()));
+  EXPECT_FALSE(raw_data.ReadRange(0, 1, nullptr));
+}

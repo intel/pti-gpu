@@ -41,6 +41,7 @@ namespace pti::pc_sampling {
 constexpr size_t kMinMetricStreamerReadSize = 4 * 1024;
 /** Name of the EU Stall Sampling metric group used for PC sampling */
 constexpr const char* kPcSamplingMetricGroupName = "EuStallSampling";
+constexpr const char* kInstructionPointerMetricName = "IP";
 
 inline void DestroyMetricStreamerContext(ze_context_handle_t* context);
 
@@ -340,20 +341,25 @@ inline void ReadMetricStreamerData(zet_metric_streamer_handle_t streamer,
 }
 
 /**
- * @brief Get the names and descriptions of all stall metrics in a metric group.
+ * @brief Get the stall-reason metrics from a metric group and report the IP metric index.
  *
- * Enumerates all metrics within the given metric group and retrieves
- * their name and description properties.
- * Does not populate an IP metric name as this is not a stall metric name.
+ * Enumerates all metrics within the given metric group, finds the IP metric,
+ * and returns the remaining metrics as stall reasons in metric-group order.
  *
- * @param[in] group   Metric group handle to query metrics from
+ * @param[in] group             Metric group handle to query metrics from
+ * @param[out] ip_metric_index  Index of the IP metric within the full metric order
  *
  * @return Vector of pairs where each pair contains (metric_name, metric_description),
  *         empty if the group is invalid or on error
  */
 inline std::vector<std::pair<std::string, std::string>> GetAllSupportedStallMetricNames(
-    zet_metric_group_handle_t group) {
+    zet_metric_group_handle_t group, size_t* ip_metric_index) {
   std::vector<std::pair<std::string, std::string>> metric_names;
+  if (ip_metric_index == nullptr) {
+    return metric_names;
+  }
+
+  *ip_metric_index = 0;
   uint32_t metric_count = 0;
   ze_result_t status = zetMetricGet(group, &metric_count, nullptr);
   if (status != ZE_RESULT_SUCCESS || metric_count == 0) {
@@ -371,8 +377,9 @@ inline std::vector<std::pair<std::string, std::string>> GetAllSupportedStallMetr
   }
 
   SPDLOG_DEBUG("{}: enumerating {} metrics from EuStallSampling group", __FUNCTION__, metric_count);
-
-  for (auto metric : metric_list) {
+  *ip_metric_index = metric_count;
+  for (uint32_t metric_index = 0; metric_index < metric_count; ++metric_index) {
+    auto metric = metric_list[metric_index];
     zet_metric_properties_t metric_props{};
     metric_props.stype = ZET_STRUCTURE_TYPE_METRIC_PROPERTIES;
 
@@ -382,10 +389,14 @@ inline std::vector<std::pair<std::string, std::string>> GetAllSupportedStallMetr
                    static_cast<uint32_t>(status));
       continue;
     }
-
     SPDLOG_DEBUG("{}: metric name='{}', description='{}', units='{}', metric_type={}", __FUNCTION__,
                  metric_props.name, metric_props.description, metric_props.resultUnits,
                  static_cast<uint32_t>(metric_props.metricType));
+
+    if (std::string(metric_props.name) == kInstructionPointerMetricName) {
+      *ip_metric_index = metric_index;
+      continue;
+    }
 
     if (metric_props.metricType != ZET_METRIC_TYPE_EVENT) {
       SPDLOG_DEBUG("{}: skipping metric '{}' because metric_type={} is not EVENT", __FUNCTION__,
@@ -397,6 +408,11 @@ inline std::vector<std::pair<std::string, std::string>> GetAllSupportedStallMetr
   }
 
   SPDLOG_DEBUG("{}: returning {} stall metrics after filtering", __FUNCTION__, metric_names.size());
+
+  if (*ip_metric_index >= metric_count) {
+    SPDLOG_ERROR("{}: failed to locate IP metric in EU stall sampling group", __FUNCTION__);
+    metric_names.clear();
+  }
 
   return metric_names;
 }

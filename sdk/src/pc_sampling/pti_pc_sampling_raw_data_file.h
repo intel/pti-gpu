@@ -3,6 +3,12 @@
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
+//
+// Temporary raw byte buffer for PC sampling payloads.
+// Stores exactly what callers append (no headers or record framing).
+// Any semantic layout is defined by higher-level PC sampling code.
+//
+// =============================================================
 
 #ifndef PTI_PC_SAMPLING_RAW_DATA_FILE_H_
 #define PTI_PC_SAMPLING_RAW_DATA_FILE_H_
@@ -39,19 +45,7 @@ class TempRawDataFile {
     other.size_ = 0;
   }
 
-  TempRawDataFile& operator=(TempRawDataFile&& other) noexcept {
-    if (this == &other) {
-      return *this;
-    }
-
-    Reset();
-    stream_ = std::move(other.stream_);
-    path_ = std::move(other.path_);
-    size_ = other.size_;
-    other.path_.clear();
-    other.size_ = 0;
-    return *this;
-  }
+  TempRawDataFile& operator=(TempRawDataFile&& other) = delete;
 
   bool OpenTemp() {
     Reset();
@@ -116,17 +110,51 @@ class TempRawDataFile {
       return true;
     }
 
+    raw_data->resize(size_);
+    if (!ReadRange(0, size_, raw_data->data())) {
+      raw_data->clear();
+      return false;
+    }
+
+    return true;
+  }
+
+  bool ReadRange(size_t offset, size_t data_size, void* out) const {
+    if (out == nullptr && data_size != 0) {
+      return false;
+    }
+
+    if (data_size == 0) {
+      return offset <= size_;
+    }
+
+    if (path_.empty()) {
+      SPDLOG_ERROR("{}: raw data file path is empty", __FUNCTION__);
+      return false;
+    }
+
+    if (offset > size_ || data_size > size_ - offset) {
+      SPDLOG_ERROR("{}: requested range [{}:{}) exceeds file size {} for {}", __FUNCTION__, offset,
+                   offset + data_size, size_, path_);
+      return false;
+    }
+
     std::ifstream input(path_, std::ios::binary);
     if (!input.is_open()) {
       SPDLOG_ERROR("{}: failed to open raw data file {}", __FUNCTION__, path_);
       return false;
     }
 
-    raw_data->resize(size_);
-    input.read(reinterpret_cast<char*>(raw_data->data()), size_);
-    if (!input || static_cast<size_t>(input.gcount()) != size_) {
-      SPDLOG_ERROR("{}: failed to read {} bytes from {}", __FUNCTION__, size_, path_);
-      raw_data->clear();
+    input.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+    if (!input) {
+      SPDLOG_ERROR("{}: failed to seek to offset {} in {}", __FUNCTION__, offset, path_);
+      return false;
+    }
+
+    input.read(reinterpret_cast<char*>(out), data_size);
+    if (!input || static_cast<size_t>(input.gcount()) != data_size) {
+      SPDLOG_ERROR("{}: failed to read {} bytes at offset {} from {}", __FUNCTION__, data_size,
+                   offset, path_);
       return false;
     }
 

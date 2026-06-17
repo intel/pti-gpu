@@ -8,27 +8,10 @@
 
 #include <algorithm>
 
-#include "pc_sampling/pti_pc_sampling_aggregator.h"
 #include "pc_sampling/pti_pc_sampling_collector.h"
 #include "pc_sampling/pti_pc_sampling_internal.h"
 
 namespace pti::pc_sampling {
-
-pti_result EnsureAggregatedDeviceData(pti_pc_sampling_handle_t handle) {
-  if (handle == nullptr || !handle->profiled_device_data.empty()) {
-    return PTI_SUCCESS;
-  }
-
-  pti_device_handle_t configured_device = nullptr;
-  const pti_result configured_device_status = GetConfiguredDevice(handle, &configured_device);
-  if (configured_device_status != PTI_SUCCESS) {
-    return configured_device_status;
-  }
-
-  return AggregateCollectedData(configured_device, handle->collected_metric_group_,
-                                handle->samples_dropped_, handle->collected_raw_data_,
-                                &handle->profiled_device_data);
-}
 
 void ResetCollectionSession(pti_pc_sampling_handle_t handle) {
   if (handle == nullptr) {
@@ -210,45 +193,32 @@ pti_result ptiPcSamplingGetStallReasons(pti_pc_sampling_handle_t handle,
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  if (handle->supported_devices_.empty()) {
-    SPDLOG_ERROR("{}: no supported devices found for the handle", __FUNCTION__);
-    return PTI_ERROR_INTERNAL;
+  const pti_result stall_reasons_status = pti::pc_sampling::EnsureStallReasons(handle);
+  if (stall_reasons_status != PTI_SUCCESS) {
+    return stall_reasons_status;
   }
 
-  pti_device_handle_t device = handle->supported_devices_.front();
-
-  const zet_metric_group_handle_t group =
-      pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().GetMetricGroup(device);
-
-  if (group == nullptr) {
-    SPDLOG_ERROR("{}: no metric group found for the supported device", __FUNCTION__);
-    return PTI_ERROR_INTERNAL;
-  }
-
-  // Lazily fetch and cache metric names from the metric group
-  static const std::vector<std::pair<std::string, std::string>> kMetricNames =
-      pti::pc_sampling::GetAllSupportedStallMetricNames(group);
-
-  static const size_t totalReasons = kMetricNames.size();
+  const size_t total_reasons = handle->stall_reasons_.size();
 
   if (reasons == nullptr) {
-    *reason_count = totalReasons;
+    *reason_count = total_reasons;
     return PTI_SUCCESS;
   }
 
-  if (*reason_count > totalReasons) {
+  if (*reason_count > total_reasons) {
     SPDLOG_WARN(
         "{}: provided reasons buffer holds {} entries but only {} stall reasons exist; "
         "the required count will be returned without populating the output buffer",
-        __FUNCTION__, *reason_count, totalReasons);
-    *reason_count = totalReasons;
+        __FUNCTION__, *reason_count, total_reasons);
+    *reason_count = total_reasons;
     return PTI_SUCCESS;
   }
 
-  const size_t entriesToCopy = (std::min)(*reason_count, totalReasons);
-  for (size_t i = 0; i < entriesToCopy; ++i) {
-    reasons[i]._name = kMetricNames[i].first.c_str();
-    reasons[i]._description = kMetricNames[i].second.c_str();
+  const size_t entries_to_copy = (std::min)(*reason_count, total_reasons);
+  *reason_count = entries_to_copy;
+  for (size_t i = 0; i < entries_to_copy; ++i) {
+    reasons[i]._name = handle->stall_reasons_[i].first;
+    reasons[i]._description = handle->stall_reasons_[i].second;
   }
 
   return PTI_SUCCESS;
@@ -272,20 +242,12 @@ pti_result ptiPcSamplingGetProfiledDevices(pti_pc_sampling_handle_t handle,
     return PTI_ERROR_PC_SAMPLING_NOT_STOPPED;
   }
 
-  const size_t configured_device_count = handle->configured_devices_.size();
-  if (devices != nullptr && configured_device_count != 0 && *device_count != 0) {
-    const size_t copied_device_count = (std::min)(*device_count, configured_device_count);
-    std::copy_n(handle->configured_devices_.begin(), copied_device_count, devices);
-    *device_count = copied_device_count;
-  } else {
-    *device_count = configured_device_count;
-  }
-  return PTI_SUCCESS;
+  return pti::pc_sampling::FillProfiledDevices(handle, devices, device_count);
 }
 
 pti_result ptiPcSamplingGetObservedKernelHandles(pti_pc_sampling_handle_t handle,
-                                                 pti_device_handle_t device, uint64_t*,
-                                                 size_t* kernel_count) {
+                                                 pti_device_handle_t device,
+                                                 uint64_t* kernel_handles, size_t* kernel_count) {
   const pti_result handle_status = pti::pc_sampling::ValidateStoppedCollectionHandle(handle);
   if (handle_status != PTI_SUCCESS) {
     return handle_status;
@@ -296,17 +258,22 @@ pti_result ptiPcSamplingGetObservedKernelHandles(pti_pc_sampling_handle_t handle
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  if (!pti::pc_sampling::IsConfiguredDevice(handle, device)) {
-    SPDLOG_ERROR("{}: device does not match the configured PC sampling device", __FUNCTION__);
-    return PTI_ERROR_BAD_ARGUMENT;
+  const pti_result device_status =
+      pti::pc_sampling::ValidateConfiguredProfiledDevice(handle, device);
+  if (device_status != PTI_SUCCESS) {
+    return device_status;
   }
 
-  *kernel_count = 0;
-  return PTI_SUCCESS;
+  const pti_result aggregate_status = pti::pc_sampling::EnsureAggregatedResults(handle);
+  if (aggregate_status != PTI_SUCCESS) {
+    return aggregate_status;
+  }
+
+  return pti::pc_sampling::FillObservedKernelHandles(handle, kernel_handles, kernel_count);
 }
 
 pti_result ptiPcSamplingGetObservedKernelInfo(pti_pc_sampling_handle_t handle,
-                                              pti_device_handle_t device, uint64_t,
+                                              pti_device_handle_t device, uint64_t kernel_handle,
                                               pti_pc_sampling_kernel_info_t* kernel_info) {
   const pti_result handle_status = pti::pc_sampling::ValidateStoppedCollectionHandle(handle);
   if (handle_status != PTI_SUCCESS) {
@@ -318,29 +285,50 @@ pti_result ptiPcSamplingGetObservedKernelInfo(pti_pc_sampling_handle_t handle,
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  if (!pti::pc_sampling::IsConfiguredDevice(handle, device)) {
-    SPDLOG_ERROR("{}: device does not match the configured PC sampling device", __FUNCTION__);
-    return PTI_ERROR_BAD_ARGUMENT;
+  const pti_result device_status =
+      pti::pc_sampling::ValidateConfiguredProfiledDevice(handle, device);
+  if (device_status != PTI_SUCCESS) {
+    return device_status;
   }
 
-  return PTI_ERROR_NOT_IMPLEMENTED;
+  const pti_result aggregate_status = pti::pc_sampling::EnsureAggregatedResults(handle);
+  if (aggregate_status != PTI_SUCCESS) {
+    return aggregate_status;
+  }
+
+  return pti::pc_sampling::FillObservedKernelInfo(device, handle, kernel_handle, kernel_info);
 }
 
 pti_result ptiPcSamplingGetSamplesPerInstruction(pti_pc_sampling_handle_t handle,
-                                                 pti_device_handle_t device, uint64_t,
-                                                 pti_pc_sampling_instruction_t*, size_t, uint64_t*,
-                                                 size_t) {
+                                                 pti_device_handle_t device, uint64_t kernel_handle,
+                                                 pti_pc_sampling_instruction_t* instruction_buffer,
+                                                 size_t instruction_buffer_count,
+                                                 uint64_t* samples_buffer,
+                                                 size_t samples_buffer_count) {
   const pti_result handle_status = pti::pc_sampling::ValidateStoppedCollectionHandle(handle);
   if (handle_status != PTI_SUCCESS) {
     return handle_status;
   }
 
-  if (!pti::pc_sampling::IsConfiguredDevice(handle, device)) {
-    SPDLOG_ERROR("{}: device does not match the configured PC sampling device", __FUNCTION__);
+  if (instruction_buffer == nullptr || samples_buffer == nullptr) {
+    SPDLOG_ERROR("{}: instruction_buffer or samples_buffer is null", __FUNCTION__);
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  return PTI_ERROR_NOT_IMPLEMENTED;
+  const pti_result device_status =
+      pti::pc_sampling::ValidateConfiguredProfiledDevice(handle, device);
+  if (device_status != PTI_SUCCESS) {
+    return device_status;
+  }
+
+  const pti_result aggregate_status = pti::pc_sampling::EnsureAggregatedResults(handle);
+  if (aggregate_status != PTI_SUCCESS) {
+    return aggregate_status;
+  }
+
+  return pti::pc_sampling::FillSamplesPerInstruction(handle, kernel_handle, instruction_buffer,
+                                                     instruction_buffer_count, samples_buffer,
+                                                     samples_buffer_count);
 }
 
 pti_result ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t handle, pti_device_handle_t device,
@@ -350,30 +338,25 @@ pti_result ptiPcSamplingGetDeviceStatus(pti_pc_sampling_handle_t handle, pti_dev
     return handle_status;
   }
 
+  const size_t expected_struct_size = sizeof(pti_pc_sampling_device_status_t);
   if (device == nullptr || device_status == nullptr ||
-      device_status->_struct_size < sizeof(pti_pc_sampling_device_status_t)) {
+      device_status->_struct_size != expected_struct_size) {
     SPDLOG_ERROR("{}: device status output is invalid", __FUNCTION__);
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  const pti_result aggregate_status = pti::pc_sampling::EnsureAggregatedDeviceData(handle);
+  const pti_result aggregate_status = pti::pc_sampling::EnsureAggregatedResults(handle);
   if (aggregate_status != PTI_SUCCESS) {
     return aggregate_status;
   }
 
-  auto it = std::find_if(handle->profiled_device_data.begin(), handle->profiled_device_data.end(),
-                         [device](const pti_pc_sampling_device_status_t& device_data) {
-                           return device_data._device == device;
-                         });
-  if (it == handle->profiled_device_data.end()) {
+  const pti_pc_sampling_device_status_t& device_data = handle->device_aggregate_.status;
+  if (device_data._device != device) {
     SPDLOG_ERROR("{}: device does not match the profiled PC sampling device", __FUNCTION__);
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  device_status->_device = it->_device;
-  device_status->_samples_dropped = it->_samples_dropped;
-  device_status->_total_sample_count = it->_total_sample_count;
-  device_status->_total_pc_count = it->_total_pc_count;
+  *device_status = device_data;
   return PTI_SUCCESS;
 }
 
