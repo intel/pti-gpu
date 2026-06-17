@@ -450,10 +450,16 @@ class PtiPcSamplingHandleStorage {
     }
 
     if (supported_device_metric_group_map.empty()) {
+      std::string err_msg = "";
+#ifndef _WIN32
+      err_msg +=
+          "/proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid is set "
+          "to 0 and";
+#endif /* _WIN32 */
       SPDLOG_ERROR(
           "{}: no devices with EUStallSampling support found. "
-          "Ensure ZET_ENABLE_METRICS=1 and compatible GPU hardware is present",
-          __FUNCTION__);
+          "Ensure {} ZET_ENABLE_METRICS=1 is set in the environment for PC sampling to work.",
+          __FUNCTION__, err_msg);
       return PTI_ERROR_PC_SAMPLING_UNSUPPORTED;
     }
 
