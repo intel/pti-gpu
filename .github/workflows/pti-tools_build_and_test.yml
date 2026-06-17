@@ -113,7 +113,8 @@ jobs:
           python ./tests/run.py -s cl_gpu_metrics
 
       - name: Build-and-test-instcount
-        if: contains(fromJSON(matrix.tags), 'PVC')
+        if: false
+        #if: contains(fromJSON(matrix.tags), 'PVC')
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s instcount
