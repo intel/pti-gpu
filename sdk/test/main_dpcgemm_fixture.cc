@@ -25,6 +25,7 @@
 
 namespace {
 constexpr uint32_t kUrSuccessReturnValue = 0;
+constexpr uint32_t kUrUnsupportedFeatureReturnValue = 44;
 
 size_t requested_buffer_calls = 0;
 size_t rejected_buffer_calls = 0;  // Buffer requests that are called and rejected by the API
@@ -388,7 +389,8 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
           const auto* rec = reinterpret_cast<pti_view_record_api*>(ptr);
           urcall_present = true;
           urcall_count++;
-          if (rec->_return_code != kUrSuccessReturnValue) {
+          if (rec->_return_code != kUrSuccessReturnValue &&
+              rec->_return_code != kUrUnsupportedFeatureReturnValue) {
             urcall_failure_count++;
           }
           const char* api_name = nullptr;
