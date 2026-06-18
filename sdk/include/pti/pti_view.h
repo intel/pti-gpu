@@ -528,7 +528,6 @@ typedef struct pti_view_record_comms {
   uint64_t _metadata_size;         //!< Size of metadata attached to this communication record
   uint64_t _communicator_id;       //!< Communicator ID of the operation
   const char *_name;               //!< Operation name
-  uint32_t _correlation_id;        //!< Id correlating this call with other views, eg: memfill, memcpy and kernel GPU activity
 } pti_view_record_comms;
 
 /**
