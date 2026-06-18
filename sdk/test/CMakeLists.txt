@@ -233,6 +233,19 @@ if(HAVE_SYCL)
   target_link_libraries(metrics_scope_parallel PUBLIC spdlog::spdlog
     GTest::gtest_main Pti::pti_view ${FS_LIB})
 
+  
+  if(PTI_BUILD_SAMPLES AND TARGET metrics_scope)
+    add_test(NAME metrics_scope_multiprocess
+      COMMAND ${Python_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_metrics_scope_multiprocess.py
+        --sample-binary $<TARGET_FILE:metrics_scope>)
+    set_tests_properties(metrics_scope_multiprocess PROPERTIES
+      ENVIRONMENT ZET_ENABLE_METRICS=1
+      # 77 is the GNU Autotools / CTest convention for "test skipped".
+      SKIP_RETURN_CODE 77
+      TIMEOUT 360
+      LABELS "functional;metrics;hw-metrics-scope;multiprocess")
+  endif()
 
   # Add the multi-threaded test
   add_executable(

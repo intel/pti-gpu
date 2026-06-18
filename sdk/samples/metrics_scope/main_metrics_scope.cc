@@ -9,10 +9,18 @@
  * @brief Example usage of PTI Metrics Scopes library
  *
  * Demonstrates two modes of metrics scope collection:
- *   - Auto-detect (default, or `--devices=auto`): every available level_zero GPU is profiled.
+ *   - Auto-detect (default, or `--devices=auto`): a profiler is lazily created
+ *     for each level_zero GPU the workload actually uses.
  *   - Explicit (`--devices=0,2,3`): only the listed device indices are profiled.
  *
- * The GEMM workload runs on exactly the set of devices being profiled.
+ * By default the GEMM workload runs on the same devices being profiled.
+ * `--workload`/`-w` decouples the two so the workload can target a different
+ * GPU subset (e.g. profile auto, run only on GPU 1) -- used by the
+ * multi-process test driver to exercise auto-detect lazy construction.
+ *
+ * Wall-clock markers and a GPU count line are emitted on stdout (prefixed
+ * with [PTI_MP]) so external test drivers can verify collection windows
+ * overlap across processes.
  */
 
 #include <algorithm>
@@ -35,6 +43,11 @@
 #define A_VALUE 0.128f
 #define B_VALUE 0.256f
 #define MAX_EPS 1.0e-4f
+
+static uint64_t WallClockNs() {
+  using namespace std::chrono;
+  return duration_cast<nanoseconds>(system_clock::now().time_since_epoch()).count();
+}
 
 static float Check(const std::vector<float> &a, float value) {
   assert(value > MAX_EPS);
@@ -110,14 +123,18 @@ const unsigned min_size = 32;
 void Usage(const char *name) {
   std::cout << " Calculating floating point matrix multiply on selected GPU(s).\n"
             << "  Usage " << name << "  [ options ]\n";
-  std::cout << "--devices [-d]  string         "
-            << "Comma-separated indices (e.g. 0,2,3) or \"auto\" to profile every GPU. "
-               "Default: auto\n";
-  std::cout << "--size [-s]     integer        "
+  std::cout
+      << "--devices  [-d]  string         "
+      << "Comma-separated indices (e.g. 0,2,3) or \"auto\" to profile GPU(s) the workload uses. "
+         "Default: auto\n";
+  std::cout << "--workload [-w]  string         "
+            << "Comma-separated indices or \"auto\". Selects which GPU(s) the GEMM runs on. "
+               "Default: matches --devices\n";
+  std::cout << "--size     [-s]  integer        "
             << "Matrix size. Default: 1024 (max " << max_size << ")\n";
-  std::cout << "--repeat [-r]   integer        "
+  std::cout << "--repeat   [-r]  integer        "
             << "Repetition count per device. Default: 1\n";
-  std::cout << "--help [-h]                    Print this help message.\n";
+  std::cout << "--help     [-h]                 Print this help message.\n";
 }
 
 static std::vector<sycl::device> EnumerateLevelZeroGpuDevices() {
@@ -202,6 +219,7 @@ int main(int argc, char *argv[]) {
   unsigned size = 1024;
   unsigned repeat_count = 1;
   std::string devices_arg = "auto";
+  std::string workload_arg;  // empty = inherit from devices_arg
 
   try {
     for (int i = 1; i < argc; i++) {
@@ -218,6 +236,9 @@ int main(int argc, char *argv[]) {
       } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--devices") == 0) {
         i++;
         devices_arg = argv[i];
+      } else if (strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--workload") == 0) {
+        i++;
+        workload_arg = argv[i];
       } else {
         std::cerr << "Error: Unknown option: " << argv[i] << '\n';
         Usage(argv[0]);
@@ -230,6 +251,10 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+  if (workload_arg.empty()) {
+    workload_arg = devices_arg;
+  }
+
   // Enumerate available L0 GPUs first so we can validate --devices indices.
   std::vector<sycl::device> all_sycl_devices = EnumerateLevelZeroGpuDevices();
   if (all_sycl_devices.empty()) {
@@ -237,18 +262,10 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  // Decide profiling/workload device set.
-  // - Auto-detect: empty pti_handles, GEMM loops over every L0 GPU.
-  // - Explicit:    pti_handles holds the chosen handles, GEMM loops over the matching subset.
+  // Resolve --devices into pti_handles passed to StartProfiling.
   std::vector<pti_device_handle_t> pti_handles;
-  std::vector<sycl::device> selected_sycl_devices;
-
-  const bool auto_mode = (devices_arg == "auto");
-
-  if (auto_mode) {
-    selected_sycl_devices = all_sycl_devices;
-    // pti_handles stays empty; client.cc treats empty as auto-detect.
-  } else {
+  const bool profile_auto = (devices_arg == "auto");
+  if (!profile_auto) {
     ParsedDeviceIndices parsed = ParseDeviceIndices(devices_arg, all_sycl_devices.size());
     if (!parsed.error.empty()) {
       std::cerr << "Error: " << parsed.error << '\n';
@@ -256,26 +273,53 @@ int main(int argc, char *argv[]) {
       return EXIT_FAILURE;
     }
     pti_handles.reserve(parsed.indices.size());
-    selected_sycl_devices.reserve(parsed.indices.size());
     for (unsigned idx : parsed.indices) {
-      selected_sycl_devices.push_back(all_sycl_devices[idx]);
       pti_handles.push_back(GetPtiHandleFromSyclDevice(all_sycl_devices[idx]));
     }
   }
 
+  // Resolve --workload into the SYCL device set the GEMM loop runs on.
+  std::vector<sycl::device> workload_sycl_devices;
+  const bool workload_auto = (workload_arg == "auto");
+  if (workload_auto) {
+    workload_sycl_devices = all_sycl_devices;
+  } else {
+    ParsedDeviceIndices parsed = ParseDeviceIndices(workload_arg, all_sycl_devices.size());
+    if (!parsed.error.empty()) {
+      std::cerr << "Error: " << parsed.error << '\n';
+      Usage(argv[0]);
+      return EXIT_FAILURE;
+    }
+    workload_sycl_devices.reserve(parsed.indices.size());
+    for (unsigned idx : parsed.indices) {
+      workload_sycl_devices.push_back(all_sycl_devices[idx]);
+    }
+  }
+
+  std::cout << "[PTI_MP] gpu_count=" << all_sycl_devices.size() << '\n';
+  for (size_t i = 0; i < workload_sycl_devices.size(); ++i) {
+    std::cout << "[PTI_MP] workload_device_handle[" << i
+              << "]=" << GetPtiHandleFromSyclDevice(workload_sycl_devices[i]) << '\n';
+  }
   std::cout << "Discovered " << all_sycl_devices.size() << " GPU device(s):\n";
   for (size_t i = 0; i < all_sycl_devices.size(); ++i) {
     std::cout << "  [" << i << "] " << all_sycl_devices[i].get_info<sycl::info::device::name>()
               << "\n";
   }
-  std::cout << (auto_mode ? "Auto-detect mode: profiling all available devices.\n"
-                          : "Explicit mode: profiling " + std::to_string(pti_handles.size()) +
-                                " selected device(s).\n");
+  std::cout << (profile_auto ? "Auto-detect mode: profiling all available devices.\n"
+                             : "Explicit mode: profiling " + std::to_string(pti_handles.size()) +
+                                   " selected device(s).\n");
+  std::cout << (workload_auto ? "Workload: GEMM on every available GPU.\n"
+                              : "Workload: GEMM on " +
+                                    std::to_string(workload_sycl_devices.size()) + " device(s).\n");
 
   int exit_code = EXIT_SUCCESS;
   StartProfiling(pti_handles);
 
-  std::cout << "Simulating GPU work...\n";
+  uint64_t collection_start_wall_ns = WallClockNs();
+  std::cout << "[PTI_MP] collection_window_start_ns=" << collection_start_wall_ns << '\n';
+  std::cout.flush();
+
   std::cout << "Running GEMM workload on selected GPU(s)...\n";
   std::cout << "DPC++ Matrix Multiplication (matrix size: " << size << " x " << size << ", repeats "
             << repeat_count << " times per device)\n";
@@ -289,12 +333,11 @@ int main(int argc, char *argv[]) {
   try {
     auto start = std::chrono::steady_clock::now();
     float expected_result = A_VALUE * B_VALUE * size;
-    for (size_t i = 0; i < selected_sycl_devices.size(); ++i) {
+    for (size_t i = 0; i < workload_sycl_devices.size(); ++i) {
       std::cout << "\n--- Running GEMM on device [" << i
-                << "]: " << selected_sycl_devices[i].get_info<sycl::info::device::name>()
+                << "]: " << workload_sycl_devices[i].get_info<sycl::info::device::name>()
                 << " ---\n";
-      sycl::queue queue(selected_sycl_devices[i], sycl::async_handler{}, prop_list);
-      // Reset c each iteration so the correctness check applies cleanly to this device's output.
+      sycl::queue queue(workload_sycl_devices[i], sycl::async_handler{}, prop_list);
       std::fill(c.begin(), c.end(), 0.0f);
       Compute(queue, a, b, c, size, repeat_count, expected_result);
     }
@@ -316,6 +359,10 @@ int main(int argc, char *argv[]) {
   }
 
   std::cout << "GPU workload completed\n";
+
+  uint64_t collection_stop_wall_ns = WallClockNs();
+  std::cout << "[PTI_MP] collection_window_stop_ns=" << collection_stop_wall_ns << '\n';
+  std::cout.flush();
 
   StopProfiling();
 

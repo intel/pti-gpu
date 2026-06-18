@@ -111,8 +111,8 @@ void CollectQueryDataForKernel(pti_scope_collection_handle_t scope_collection_ha
 
   auto profiler_it = scope_collection_handle->query_profilers_.find(device);
   if (profiler_it == scope_collection_handle->query_profilers_.end() || !profiler_it->second) {
-    SPDLOG_WARN("CollectQueryDataForKernel: No profiler found for device {}",
-                static_cast<void*>(device));
+    SPDLOG_TRACE("CollectQueryDataForKernel: no profiler for device {}, skipping",
+                 static_cast<void*>(device));
     return;
   }
 
@@ -156,6 +156,11 @@ void CollectQueryDataForKernel(pti_scope_collection_handle_t scope_collection_ha
     SPDLOG_TRACE(
         "CollectQueryDataForKernel: Successfully collected {} bytes of metric data for kernel: {}",
         raw_data.size(), kernel_name);
+  } else {
+    SPDLOG_WARN(
+        "CollectQueryDataForKernel: Failed to store metric data for kernel ID {} on device {}; "
+        "record dropped",
+        kernel_id, static_cast<void*>(device));
   }
 
   // Clean up
@@ -197,82 +202,6 @@ pti_result ptiMetricsScopeEnable(pti_scope_collection_handle_t* scope_collection
     *scope_collection_handle = new_handle;
 
     SPDLOG_TRACE("ptiMetricsScopeEnable: Scope metrics collection handle enabled");
-    return PTI_SUCCESS;
-  } catch (const std::exception& e) {
-    LogException(e);
-    return PTI_ERROR_INTERNAL;
-  } catch (...) {
-    return PTI_ERROR_INTERNAL;
-  }
-}
-
-/**
- * @brief Configure scope collection for a single device
- * This function resolves the metric group from metric names and initializes the query profiler
- *
- * @param[in] scope_collection_handle    Scope collection handle to configure
- *
- * @return pti_result
- */
-pti_result ptiMetricsScopeConfigureSingleDevice(
-    pti_scope_collection_handle_t scope_collection_handle, pti_device_handle_t device) {
-  try {
-    if (scope_collection_handle == nullptr) {
-      SPDLOG_DEBUG("MScopeConfigOneDevice: scope_collection_handle is null");
-      return PTI_ERROR_BAD_ARGUMENT;
-    }
-
-    if (!IsOurHandle(scope_collection_handle)) {
-      SPDLOG_DEBUG("{}: could not find a scope_collection_handle", __func__);
-      return PTI_ERROR_BAD_ARGUMENT;
-    }
-
-    // Validate that device belongs to this handle
-    if (scope_collection_handle->requested_devices_.find(device) ==
-        scope_collection_handle->requested_devices_.end()) {
-      SPDLOG_DEBUG("MScopeConfigOneDevice: Device {} not in requested_devices_",
-                   static_cast<void*>(device));
-      return PTI_ERROR_BAD_ARGUMENT;
-    }
-
-    pti_result res = ResolveGroupFromMetricNames(scope_collection_handle, device);
-    if (res != PTI_SUCCESS) {
-      SPDLOG_DEBUG(
-          "ptiMetricsScopeConfigureSingleDevice: Failed to resolve metric group from names");
-      return res;
-    }
-
-    // Create the query profiler for this device/group
-    scope_collection_handle->query_profilers_[device] = std::make_unique<PtiQueryMetricsProfiler>(
-        device, scope_collection_handle->metrics_group_handles_[device]);
-
-    SPDLOG_TRACE("Created query profiler:");
-    SPDLOG_TRACE("---------------------------------");
-    SPDLOG_TRACE("device handle: {}", static_cast<void*>(device));
-    SPDLOG_TRACE("group handle: {}",
-                 static_cast<void*>(scope_collection_handle->metrics_group_handles_[device]));
-    std::string metric_names_str;
-    for (size_t i = 0; i < scope_collection_handle->requested_metric_properties_.size(); ++i) {
-      metric_names_str += GetMetricName(scope_collection_handle, i);
-      metric_names_str += " ";
-    }
-    SPDLOG_TRACE("metric names: {}", metric_names_str);
-    SPDLOG_TRACE("---------------------------------");
-
-    // Initialize the profiler
-    pti_result start_res = scope_collection_handle->query_profilers_[device]->StartProfiling(false);
-    if (start_res != PTI_SUCCESS) {
-      SPDLOG_DEBUG(
-          "ptiMetricsScopeConfigureSingleDevice: Failed to initialize query profiler for device "
-          "{}: {}",
-          static_cast<void*>(device), static_cast<int>(start_res));
-      scope_collection_handle->query_profilers_[device].reset();
-      return start_res;
-    }
-
-    scope_collection_handle->buffer_manager_->RegisterDevice(device);
-    scope_collection_handle->next_buffer_ids_[device] = 0;
-
     return PTI_SUCCESS;
   } catch (const std::exception& e) {
     LogException(e);
@@ -339,7 +268,6 @@ pti_result ptiMetricsScopeConfigure(pti_scope_collection_handle_t scope_collecti
 
     // Set up the scope collection handle with all requested devices
     scope_collection_handle->requested_devices_.clear();
-    scope_collection_handle->active_devices_.clear();
     scope_collection_handle->failed_devices_.clear();
     scope_collection_handle->metrics_group_handles_.clear();
 
@@ -366,27 +294,39 @@ pti_result ptiMetricsScopeConfigure(pti_scope_collection_handle_t scope_collecti
     scope_collection_handle->buffer_manager_ =
         std::make_unique<PtiMetricsScopeBufferHandler<PtiMetricsScopeBuffer>>();
 
-    // Auto mode: profile on all available devices
+    // Auto mode: lazy-create profilers on whichever devices the workload
+    // actually touches. requested_devices_ stays empty.
     if (device_count == 0) {
       scope_collection_handle->auto_detect_mode_ = true;
-      scope_collection_handle->requested_devices_ = available_device_handles;
     } else {  // Explicit mode: profile only on specified devices
       scope_collection_handle->auto_detect_mode_ = false;
       for (uint32_t i = 0; i < device_count; ++i) {
+        result = ValidateTargetDevice(devices_to_profile[i], available_device_handles);
+        if (result != PTI_SUCCESS) {
+          SPDLOG_DEBUG("ptiMetricsScopeConfigure: Device validation failed for device {}: {}",
+                       static_cast<void*>(devices_to_profile[i]), static_cast<int>(result));
+          return result;
+        }
         scope_collection_handle->requested_devices_.insert(devices_to_profile[i]);
       }
     }
 
-    // Validate device uniformity
-    if (scope_collection_handle->requested_devices_.size() > 1) {
-      result = ValidateDevicesUniform(scope_collection_handle->requested_devices_, all_devices);
+    // Pick the device set for uniformity check + representative metadata
+    // resolution: explicit list in explicit mode, all enumerated devices in
+    // auto mode.
+    const std::unordered_set<pti_device_handle_t>& candidate_devices =
+        scope_collection_handle->auto_detect_mode_ ? available_device_handles
+                                                   : scope_collection_handle->requested_devices_;
+
+    if (candidate_devices.size() > 1) {
+      result = ValidateDevicesUniform(candidate_devices, all_devices);
       if (result != PTI_SUCCESS) {
         SPDLOG_DEBUG("Device uniformity validation failed: {}", static_cast<int>(result));
         return result;
       }
     }
 
-    // Set up shared metric properties (once for all devices)
+    // Set up requested metric properties (once for all devices)
     result = SetupMetricProperties(scope_collection_handle, metric_names, metric_count);
     if (result != PTI_SUCCESS) {
       return result;
@@ -398,57 +338,27 @@ pti_result ptiMetricsScopeConfigure(pti_scope_collection_handle_t scope_collecti
       return PTI_ERROR_NOT_IMPLEMENTED;
     }
 
-    std::unordered_map<pti_device_handle_t, const char*> device_models;
-    device_models.reserve(all_devices.size());
-    for (const auto& device : all_devices) {
-      device_models[device._handle] = device._model_name;
-    }
-
-    // Configure each device
-    pti_result last_error = PTI_ERROR_INTERNAL;
-    for (auto device : scope_collection_handle->requested_devices_) {
-      auto model_it = device_models.find(device);
-      const char* model = (model_it != device_models.end()) ? model_it->second : "unknown";
-
-      // Validate device
-      result = ValidateTargetDevice(device, available_device_handles);
+    // Resolve metric group on a representative device so metadata is
+    // queryable before the first kernel append. Pure enumeration, no L0
+    // claim; uniformity guarantees the resolution applies to all devices.
+    if (!candidate_devices.empty()) {
+      pti_device_handle_t representative = *candidate_devices.begin();
+      result = ResolveGroupFromMetricNames(scope_collection_handle, representative);
       if (result != PTI_SUCCESS) {
-        SPDLOG_ERROR("ptiMetricsScopeConfigure: Device validation failed for device {} ({}): {}",
-                     static_cast<void*>(device), model, static_cast<int>(result));
-        scope_collection_handle->failed_devices_.insert(device);
-        last_error = result;
-        continue;
-      }
-
-      // Configure this device
-      result = ptiMetricsScopeConfigureSingleDevice(scope_collection_handle, device);
-
-      if (result != PTI_SUCCESS) {
-        SPDLOG_ERROR("ptiMetricsScopeConfigure: Configuration failed for device {} ({}): {}",
-                     static_cast<void*>(device), model, static_cast<int>(result));
-        scope_collection_handle->failed_devices_.insert(device);
-        last_error = result;
-      } else {
-        scope_collection_handle->active_devices_.insert(device);
-        SPDLOG_DEBUG("ptiMetricsScopeConfigure: Successfully configured device {} ({})",
-                     static_cast<void*>(device), model);
+        SPDLOG_DEBUG("ptiMetricsScopeConfigure: failed to resolve metric group for metadata: {}",
+                     static_cast<int>(result));
+        return result;
       }
     }
 
-    // Check if any devices succeeded
-    if (scope_collection_handle->active_devices_.empty()) {
-      SPDLOG_DEBUG("All devices failed to configure");
-      return last_error;
+    // Default buffer size when caller doesn't set one explicitly.
+    // ptiMetricsScopeSetCollectionBufferSize can override; calling it is optional.
+    if (scope_collection_handle->configured_buffer_size_ == 0) {
+      scope_collection_handle->configured_buffer_size_ = kMinCollectionBufferSize;
     }
+
+    // Profilers/buffers are built lazily on first kernel append per device.
     scope_collection_handle->is_configured_ = true;
-
-    // Log summary
-    if (!scope_collection_handle->failed_devices_.empty()) {
-      SPDLOG_WARN("Partial success: {} devices configured, {} devices failed",
-                  scope_collection_handle->active_devices_.size(),
-                  scope_collection_handle->failed_devices_.size());
-    }
-
     return PTI_SUCCESS;
 
   } catch (const std::exception& e) {
@@ -544,59 +454,17 @@ pti_result ptiMetricsScopeSetCollectionBufferSize(
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
 
-    if (buffer_size == 0) {
-      // Auto-calculate reasonable default
-      size_t default_size = 0;
-      pti_result est_result = ptiMetricsScopeQueryCollectionBufferSize(
-          scope_collection_handle, 10, &default_size);  // Default for 10 kernels
-      if (est_result == PTI_SUCCESS) {
-        buffer_size = default_size;
-        SPDLOG_WARN(
-            "ptiMetricsScopeSetCollectionBufferSize: Zero buffer size specified, "
-            "using auto-calculated size: {} bytes",
-            buffer_size);
-      } else {
-        buffer_size = 4096;  // Fallback minimum
-        SPDLOG_WARN(
-            "ptiMetricsScopeSetCollectionBufferSize: Zero buffer size specified, "
-            "using fallback size: {} bytes",
-            buffer_size);
-      }
+    if (buffer_size < kMinCollectionBufferSize) {
+      SPDLOG_WARN(
+          "ptiMetricsScopeSetCollectionBufferSize: requested size {} below minimum {}, "
+          "clamping",
+          buffer_size, kMinCollectionBufferSize);
+      buffer_size = kMinCollectionBufferSize;
     }
 
+    // Profilers and per-device buffers are created lazily on first kernel
+    // append, so there's nothing to pre-allocate here.
     scope_collection_handle->configured_buffer_size_ = buffer_size;
-    // Pre-allocate the first collection buffer for each active device
-    if (scope_collection_handle->active_devices_.empty()) {
-      SPDLOG_DEBUG("ptiMetricsScopeSetCollectionBufferSize: No active devices available");
-      return PTI_ERROR_BAD_ARGUMENT;
-    }
-    pti_result last_error = PTI_SUCCESS;
-    for (auto device : scope_collection_handle->active_devices_) {
-      uint64_t buffer_id = 0;
-      {
-        std::lock_guard<std::mutex> lock(scope_collection_handle->buffer_id_mutex_);
-        buffer_id = scope_collection_handle->next_buffer_ids_[device]++;
-      }
-      pti_result result =
-          scope_collection_handle->buffer_manager_->CreateBuffer(buffer_size, device, buffer_id);
-      if (result == PTI_SUCCESS) {
-        continue;
-      }
-      if (result == PTI_WARN_BUFFER_NOT_FINALIZED) {
-        SPDLOG_DEBUG(
-            "ptiMetricsScopeSetCollectionBufferSize: Pre-allocation skipped for device {} because "
-            "an existing buffer is still available: {}",
-            static_cast<void*>(device), static_cast<int>(result));
-        continue;
-      }
-      SPDLOG_DEBUG(
-          "ptiMetricsScopeSetCollectionBufferSize: Failed to pre-allocate buffer for device {}: {}",
-          static_cast<void*>(device), static_cast<int>(result));
-      last_error = result;
-    }
-    if (last_error != PTI_SUCCESS) {
-      return last_error;
-    }
     return PTI_SUCCESS;
   } catch (const std::exception& e) {
     LogException(e);
@@ -626,6 +494,8 @@ pti_result ptiMetricsScopeStartCollection(pti_scope_collection_handle_t scope_co
       SPDLOG_DEBUG("{}: Scope collection handle not configured", __func__);
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
+
+    PTI_ASSERT(scope_collection_handle->configured_buffer_size_ >= kMinCollectionBufferSize);
 
     if (scope_collection_handle->is_collection_active_) {
       SPDLOG_DEBUG("ptiMetricsScopeStartCollection: Collection already active");

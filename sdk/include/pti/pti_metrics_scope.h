@@ -31,8 +31,9 @@ extern "C" {
  *   1. Call ptiMetricsScopeEnable to create a scope collection handle
  *   2. Call ptiMetricsGetDevices to get available devices (defined in pti_metrics.h)
  *   3. Call ptiMetricsScopeConfigure to pass desired metrics for a specific device
- *   4. Call ptiMetricsScopeQueryCollectionBufferSize to query the estimated buffer size
- *   5. Call ptiMetricsScopeSetCollectionBufferSize to set the desired collection buffer size
+ *   4. (optional) Call ptiMetricsScopeQueryCollectionBufferSize to query the estimated buffer size
+ *   5. (optional) Call ptiMetricsScopeSetCollectionBufferSize to set the desired collection buffer size;
+ *                 a default of 2048 bytes is used if this is skipped
  *
  * Collection is initiated by calling ptiMetricsScopeStartCollection
  * and ended by calling ptiMetricsScopeStopCollection.
@@ -160,6 +161,8 @@ ptiMetricsScopeQueryCollectionBufferSize(pti_scope_collection_handle_t scope_col
 /**
  * @brief Set the collection buffer size to be used during collection
  * Note: As soon as the first such buffer is full, PTI will allocate a second one and so on.
+ * Calling this is optional; a default of 2048 bytes is used otherwise.
+ * Values below 2048 bytes (including 0) are clamped up to 2048.
  *
  * @param[in] scope_collection_handle        Scope collection handle
  * @param[in] buffer_size                    Size of the collection buffer in bytes for later allocation

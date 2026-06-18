@@ -172,6 +172,8 @@ void DisableViews() {
 }  // namespace
 
 void StartProfiling(const std::vector<pti_device_handle_t>& device_handles) {
+  samples_utils::CheckEnvVarOrSuggest("ZET_ENABLE_METRICS", "1");
+
   // For now, need ptiView to enable ptiCallback
   auto dummy_provide = [](unsigned char** buf, std::size_t* buf_size) {
     *buf_size = sizeof(pti_view_record_kernel) * 100;

@@ -547,5 +547,22 @@ inline std::string GetEnv(const char* name) {
 #endif
 }
 
+inline bool CheckEnvVarOrSuggest(const char* name, const char* expected_value) {
+  if (name == nullptr || expected_value == nullptr) {
+    return false;
+  }
+  if (GetEnv(name) == expected_value) {
+    return true;
+  }
+  std::cerr << "WARNING: " << name << " is not set to " << expected_value
+            << ". Suggest to set it:\n";
+#if defined(_WIN32)
+  std::cerr << "  set " << name << "=" << expected_value << "\n";
+#else
+  std::cerr << "  export " << name << "=" << expected_value << "\n";
+#endif
+  return false;
+}
+
 }  // namespace samples_utils
 #endif
