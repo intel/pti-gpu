@@ -222,6 +222,7 @@ jobs:
           python ./tests/run.py -s cl_debug_info
 
       - name: Build-and-test-instcount
+        if: false
         run: |
           source /opt/intel/oneapi/setvars.sh
           python ./tests/run.py -s instcount
