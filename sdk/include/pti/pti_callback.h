@@ -161,6 +161,9 @@ typedef struct _pti_callback_kernel_data {
   pti_callback_phase   _phase;           //!< PTI_CB_PHASE_API_ENTER / PTI_CB_PHASE_API_EXIT
   uint32_t             _return_code;     //!< Driver return code; valid only on EXIT phase, 0 otherwise
   uint32_t             _correlation_id;  //!< Correlation id matching driver API view records
+  uint64_t             _kernel_handle;   //!< a handle uniquely identifying kernel object as
+                                         //!< contained in the module at the specific offset
+                                         //!< it will be zero in case of not implemented yet
   pti_backend_kernel_t _device_kernel_handle; //!< Per device kernel object handle.
                                          //!<   - CREATED, ENTER : nullptr (not yet created)
                                          //!<   - CREATED, EXIT  : non-null on success, nullptr otherwise
