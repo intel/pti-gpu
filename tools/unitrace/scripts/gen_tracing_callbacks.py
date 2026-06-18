@@ -926,7 +926,7 @@ def gen_extension_params_struct(f, func: FunctionDecl):
     f.write("    " + param.type + "* " + ptr_name + ";\n")
   f.write("} " + struct_name + ";\n\n")
 
-def gen_extension_callback(f, func: FunctionDecl):
+def gen_extension_callback(f, func: FunctionDecl, submission_func_list):
   """Generate OnEnter and OnExit callbacks for an extension function."""
   struct_name = get_ext_param_struct_name(func.name)
   tracing_id = func.name + "TracingId"
@@ -944,13 +944,14 @@ def gen_extension_callback(f, func: FunctionDecl):
   gen_enter_callback(f, func.name, [], params)
   f.write("}\n\n")
 
-  # OnExit callback
+  # OnExit callback. submission_func_list is forwarded so extension APIs that
+  # submit kernels (e.g. zeCommandListAppendGraphExp) emit FLOW_H2D links.
   f.write("static void " + func.name + "OnExit(\n")
   f.write("    [[maybe_unused]] " + struct_name + "* params,\n")
   f.write("    ze_result_t result,\n")
   f.write("    void* global_user_data,\n")
   f.write("    [[maybe_unused]] void** instance_user_data) {\n")
-  gen_exit_callback(f, func.name, "ze_result_t", [], [], [], params, tracing_id=tracing_id)
+  gen_exit_callback(f, func.name, "ze_result_t", submission_func_list, [], [], params, tracing_id=tracing_id)
   f.write("}\n\n")
 
 def gen_extension_wrapper(f, func: FunctionDecl):
@@ -1015,7 +1016,7 @@ def gen_extension_interception(f, ext_funcs: List[FunctionDecl]):
   f.write("  return false;\n")
   f.write("}\n\n")
 
-def gen_extension_api_tracing(f, types_f, ext_funcs: List[FunctionDecl]):
+def gen_extension_api_tracing(f, types_f, ext_funcs: List[FunctionDecl], submission_func_list):
   """Generate all extension API tracing code."""
   if not ext_funcs:
     return
@@ -1036,7 +1037,7 @@ def gen_extension_api_tracing(f, types_f, ext_funcs: List[FunctionDecl]):
   # Generate OnEnter/OnExit callbacks
   f.write("// Extension API callbacks\n")
   for func in filtered_funcs:
-    gen_extension_callback(f, func)
+    gen_extension_callback(f, func, submission_func_list)
 
   # Generate wrapper functions
   f.write("// Extension API wrappers\n")
@@ -1155,6 +1156,9 @@ def main():
     
   submission_func_list = command_list_func_list.copy()
   submission_func_list.append("zeCommandQueueExecuteCommandLists")
+  # AppendGraphExp replays captured commands; treat as a submission API so
+  # FLOW_H2D links are drawn into the replayed kernel records.
+  submission_func_list.append("zeCommandListAppendGraphExp")
 
   synchronize_func_list_on_enter = [
       "zeEventDestroy",
@@ -1185,7 +1189,7 @@ def main():
 
   types_file = open(types_file_path, "wt")
   if ext_funcs:
-    gen_extension_api_tracing(dst_file, types_file, ext_funcs)
+    gen_extension_api_tracing(dst_file, types_file, ext_funcs, submission_func_list)
 
   types_file.close()
   l0_exp_file.close()

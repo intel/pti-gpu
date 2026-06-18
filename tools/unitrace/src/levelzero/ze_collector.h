@@ -1530,7 +1530,7 @@ class ZeCollector {
         std::string(std::max(int(kTimeLength - std::to_string(avg_time).length()), 0), ' ') + std::to_string(avg_time) + ", " +
         std::string(std::max(int(kTimeLength - std::to_string(min_time).length()), 0), ' ') + std::to_string(min_time) + ", " +
         std::string(std::max(int(kTimeLength - std::to_string(max_time).length()), 0), ' ') + std::to_string(max_time) + "\n";
-        logger->Log(str);  
+        logger->Log(str);
         i++;
       }
 
@@ -1541,7 +1541,7 @@ class ZeCollector {
 
       i = -1;
       kernel_command_properties_mutex_.lock_shared();
-      
+
       for (auto& it : sorted_list) {
         ++i;
         auto kit = kernel_command_properties_->find(it.first.kernel_command_id_);
@@ -1627,7 +1627,7 @@ class ZeCollector {
              "Submit (ns),  Submit (%), " +
              std::string(std::max(int(kTimeLength - sizeof("Execute (ns)") + 1), 0), ' ') +
              "Execute (ns),  Execute (%)\n";
-     
+
       logger->Log(str);
 
       int i = 0;
@@ -2354,7 +2354,7 @@ class ZeCollector {
           dkit->second.insert({it->second.base_addr_, &(it->second)});
         }
       }
-      
+
       // TODO: add optional argument to control whether to delete.
       for (auto& props : device_kprops) {
         std::shared_ptr<Logger> kpfs_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_KPROPS, props.first, true, true);
@@ -2364,7 +2364,7 @@ class ZeCollector {
         }
         uint64_t prev_base = 0;
         for (auto it = props.second.crbegin(); it != props.second.crend(); it++) {
-          // quote kernel name which may contain "," 
+          // quote kernel name which may contain ","
           kpfs_logger->Log("\"" + utils::Demangle(it->second->name_.c_str()) + "\"\n");
           kpfs_logger->Log(std::to_string(it->second->base_addr_) + "\n");
           if (prev_base == 0) {
@@ -2516,7 +2516,7 @@ class ZeCollector {
 #else /* LINUX */
 
     std::shared_ptr<Logger> metric_logger = nullptr;
-    
+
     while (1) {
       if (global_kernel_profiles_.empty()) {
         break;  // done
@@ -2564,7 +2564,7 @@ class ZeCollector {
           if (logger_factory_->IsLegacy()) {
             metric_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
           }
-          
+
           std::string header("\nKernel,GlobalInstanceId,SubDeviceId");
           for (auto& metric : metric_names) {
             header += "," + metric;
@@ -4498,6 +4498,43 @@ class ZeCollector {
     }
   }
 
+  // True if the cmdlist is currently inside a graph capture. Used so the
+  // append callbacks keep capturing into the graph even when collection is
+  // paused.
+  bool IsCommandListGraphCapturing(ze_command_list_handle_t command_list) {
+    std::shared_lock<std::shared_mutex> lock(command_lists_mutex_);
+    auto it = command_lists_.find(command_list);
+    return (it != command_lists_.end() && it->second->graph_capturing_);
+  }
+
+  // True if any wait event is a fork-signal of an active graph capture.
+  // Lets the very first append on a fork cmdlist through while collection
+  // is paused, before its graph_capturing_ flag has been flipped.
+  bool WouldTriggerGraphCapture(uint32_t num_wait_events,
+                                ze_event_handle_t* wait_events) {
+    if (wait_events == nullptr || num_wait_events == 0) return false;
+    std::shared_lock<std::shared_mutex> lock(graphs_mutex_);
+    for (auto& [gh, ginfo] : graphs_) {
+      for (uint32_t i = 0; i < num_wait_events; ++i) {
+        if (ginfo->event_to_cmdlist_.count(wait_events[i])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Whether an append on this command list should be instrumented. Always
+  // true when collection is enabled; while paused, still true if the list is
+  // mid graph-capture, so the captured graph is populated for later replay.
+  bool ShouldCaptureAppend(ze_command_list_handle_t command_list,
+                           uint32_t num_wait_events,
+                           ze_event_handle_t* wait_events) {
+    return UniController::IsCollectionEnabled() ||
+           IsCommandListGraphCapturing(command_list) ||
+           WouldTriggerGraphCapture(num_wait_events, wait_events);
+  }
+
   // Release all resources owned by a ZeGraph (events, metric queries, commands)
   void ReleaseGraphResources(ZeGraph& graph_info) {
     for (auto* cmd : graph_info.commands_) {
@@ -4700,7 +4737,37 @@ class ZeCollector {
       return;
     }
 
-    ProcessAllCommandsSubmitted(nullptr);	// make sure commands submitted last time are processed
+    // The graph's captured commands reuse the same physical events on every
+    // replay. If a previous replay's clones are still in flight, this replay
+    // would reset those events before their timestamps are read, dropping the
+    // prior replay's records. A previous replay may have been appended to a
+    // different command list, so wait on every command list that currently
+    // has an in-flight clone carrying one of this graph's events,
+    // then process the drained commands before staging this replay.
+    {
+      std::set<ze_event_handle_t> graph_events;
+      graphs_mutex_.lock_shared();
+      for (auto cmd : graph_info->commands_) {
+        if (cmd->event_ != nullptr) {
+          graph_events.insert(cmd->event_);
+        }
+      }
+      graphs_mutex_.unlock_shared();
+
+      std::set<ze_command_list_handle_t> lists_to_wait;
+      global_device_submissions_mutex_.lock_shared();
+      for (auto cmd : local_device_submissions_.commands_submitted_) {
+        if (cmd->command_list_ != nullptr && graph_events.count(cmd->event_)) {
+          lists_to_wait.insert(cmd->command_list_);
+        }
+      }
+      global_device_submissions_mutex_.unlock_shared();
+
+      for (auto list : lists_to_wait) {
+        ZE_FUNC(zeCommandListHostSynchronize)(list, UINT64_MAX);
+      }
+    }
+    ProcessAllCommandsSubmitted(nullptr);
 
     // Get timestamp for submit time
     uint64_t host_timestamp = 0;
@@ -4732,6 +4799,9 @@ class ZeCollector {
       cmd->submit_time_ = host_timestamp;		//in ns
       cmd->submit_time_device_ = device_timestamp;	//in ticks
       cmd->tid_ = utils::GetTid();
+      // Record the command list this replay runs on, so a later replay can
+      // host-synchronize on it before reusing the shared captured events.
+      cmd->command_list_ = command_list;
 
       local_device_submissions_.StageKernelCommand(cmd);
 
@@ -4759,8 +4829,10 @@ class ZeCollector {
     // in-flight GPU submission (seen as UR_RESULT_ERROR_UNKNOWN on queue wait).
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
           *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -4798,8 +4870,10 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
           *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -4832,8 +4906,10 @@ class ZeCollector {
       void* global_data, void** instance_data) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
           *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -4866,8 +4942,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
           *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -4897,8 +4975,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), true, *(params->phKernel),
           *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5025,8 +5105,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5052,8 +5134,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5079,8 +5163,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5106,8 +5192,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5132,8 +5220,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5168,8 +5258,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5196,8 +5288,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5223,8 +5317,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5250,8 +5346,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5277,8 +5375,10 @@ class ZeCollector {
       void* global_data, void** /* instance_data */) {
     ze_instance_data.instrument_ = false;
     ze_instance_data.query_ = nullptr;
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumWaitEvents),
+                                       *(params->pphWaitEvents))) {
       PrepareToAppendKernelCommand(collector, *(params->phSignalEvent), *(params->phCommandList), false,
           nullptr, *(params->pnumWaitEvents), *(params->pphWaitEvents));
     }
@@ -5451,8 +5551,9 @@ class ZeCollector {
   static void OnExitCommandListAppendSignalEvent(
       ze_command_list_append_signal_event_params_t* params,
       ze_result_t /* result */, void* global_data, void** /* instance_data */) {
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (UniController::IsCollectionEnabled() ||
+        collector->IsCommandListGraphCapturing(*(params->phCommandList))) {
       // Track this as a potential fork signal event during graph capture
       std::shared_lock<std::shared_mutex> lock(collector->command_lists_mutex_);
       auto it = collector->command_lists_.find(*(params->phCommandList));
@@ -5468,8 +5569,10 @@ class ZeCollector {
   static void OnEnterCommandListAppendWaitOnEvents(
       ze_command_list_append_wait_on_events_params_t* params,
       void* global_data, void** /* instance_data */) {
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    if (collector->ShouldCaptureAppend(*(params->phCommandList),
+                                       *(params->pnumEvents),
+                                       *(params->pphEvents))) {
       // Check for fork/join transitions based on wait events
       collector->CheckAndApplyForkTransition(
           *(params->phCommandList),
@@ -6012,14 +6115,17 @@ typedef struct _zex_kernel_register_file_size_exp_t {
 
   static void OnExitCommandListAppendGraphExp(
       ze_command_list_append_graph_exp_params_t* params,
-      ze_result_t result, void* global_data, void** /* instance_data */) {
+      ze_result_t result, void* global_data, void** /* instance_data */,
+      std::vector<uint64_t> *kids) {
     if (result != ZE_RESULT_SUCCESS) {
       local_device_submissions_.RevertStagedKernelCommandAndMetricQueries();
       return;
     }
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     if (UniController::IsCollectionEnabled()) {
-      local_device_submissions_.SubmitStagedKernelCommandAndMetricQueries(collector->event_cache_, nullptr);
+      // Pass kids so the host-side flow callback emits FLOW_H2D from this call
+      // to each replayed kernel record.
+      local_device_submissions_.SubmitStagedKernelCommandAndMetricQueries(collector->event_cache_, kids);
     } else {
       local_device_submissions_.RevertStagedKernelCommandAndMetricQueries();
     }
