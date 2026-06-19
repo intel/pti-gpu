@@ -13,10 +13,11 @@
  *   2. Enable PC sampling
  *   3. Configure PC sampling with devices and sampling period
  *   4. Start PC sampling collection
- *   5. Run compute workload (GEMM kernel)
+ *   5. Run compute workloads (two GEMM kernels)
  *   6. Stop PC sampling collection
- *   7. Disable PC sampling
- *   8. Cleanup environment
+ *   7. Print collected stall data
+ *   8. Disable PC sampling
+ *   9. Cleanup environment
  *
  * The PC sampling API calls are separated into pc_sampling_client.h/pc_sampling_client.cc
  * to demonstrate how users can integrate metric collection into their applications.
@@ -47,6 +48,9 @@ constexpr unsigned kMaxRepeatCount = 100;
 constexpr uint32_t kDefaultSamplingPeriodNs = 50'000;  // 50 µs sampling period
 constexpr uint32_t kMinSamplingPeriodNs = 1'000;       // 1 µs minimum
 constexpr uint32_t kMaxSamplingPeriodNs = 10'000'000;  // 10 ms maximum
+
+class PrimaryGEMMKernel;
+class SecondaryGEMMKernel;
 
 //-----------------------------------------------------------------------------
 // GEMM Kernel Implementation
@@ -79,6 +83,7 @@ static float CheckResults(const std::vector<float>& c, float expected_value) {
 /**
  * @brief Run GEMM kernel and verify results.
  */
+template <typename KernelName>
 static bool RunGEMM(sycl::queue& queue, const std::vector<float>& a, const std::vector<float>& b,
                     std::vector<float>& c, unsigned size, float expected_result) {
   try {
@@ -91,7 +96,7 @@ static bool RunGEMM(sycl::queue& queue, const std::vector<float>& a, const std::
       auto b_acc = b_buf.get_access<sycl::access::mode::read>(cgh);
       auto c_acc = c_buf.get_access<sycl::access::mode::write>(cgh);
 
-      cgh.parallel_for<class GEMM_Kernel>(sycl::range<2>(size, size), [=](sycl::id<2> id) {
+      cgh.parallel_for<KernelName>(sycl::range<2>(size, size), [=](sycl::id<2> id) {
         auto a_ptr = a_acc.get_multi_ptr<sycl::access::decorated::no>();
         auto b_ptr = b_acc.get_multi_ptr<sycl::access::decorated::no>();
         auto c_ptr = c_acc.get_multi_ptr<sycl::access::decorated::no>();
@@ -115,16 +120,33 @@ static bool RunGEMM(sycl::queue& queue, const std::vector<float>& a, const std::
 /**
  * @brief Run GEMM kernel multiple times.
  */
-static void RunGEMMMultiple(sycl::queue& queue, const std::vector<float>& a,
+template <typename KernelName>
+static bool RunGEMMMultiple(sycl::queue& queue, const std::vector<float>& a,
                             const std::vector<float>& b, std::vector<float>& c, unsigned size,
                             unsigned repeat_count, float expected_result) {
   for (unsigned i = 0; i < repeat_count; ++i) {
     std::cout << "  Iteration " << (i + 1) << "/" << repeat_count << ": ";
-    if (!RunGEMM(queue, a, b, c, size, expected_result)) {
+    if (!RunGEMM<KernelName>(queue, a, b, c, size, expected_result)) {
       std::cerr << "GEMM execution failed at iteration " << (i + 1) << std::endl;
-      break;
+      return false;
     }
   }
+
+  return true;
+}
+
+template <typename KernelName>
+static bool RunGEMMWorkload(sycl::queue& queue, unsigned size, unsigned repeat_count,
+                            const char* workload_name) {
+  std::cout << workload_name << " kernel " << repeat_count << " time(s) (matrix size: " << size
+            << "x" << size << ")..." << std::endl;
+
+  std::vector<float> a(size * size, kAValue);
+  std::vector<float> b(size * size, kBValue);
+  std::vector<float> c(size * size, 0.0f);
+  float expected_result = kAValue * kBValue * size;
+
+  return RunGEMMMultiple<KernelName>(queue, a, b, c, size, repeat_count, expected_result);
 }
 
 //-----------------------------------------------------------------------------
@@ -161,7 +183,7 @@ void Usage(const char* name) {
   std::cout << "\nOptions:" << std::endl;
   std::cout << "  --size [-s]     <size>     Matrix size (default: " << kDefaultMatrixSize
             << ", range: " << kMinMatrixSize << "-" << kMaxMatrixSize << ")" << std::endl;
-  std::cout << "  --repeat [-r]   <count>    Number of times to run GEMM kernel (default: "
+  std::cout << "  --repeat [-r]   <count>    Number of times to run each GEMM kernel (default: "
             << kDefaultRepeatCount << ", max: " << kMaxRepeatCount << ")" << std::endl;
   std::cout << "  --period [-p]   <ns>       Sampling period in nanoseconds (default: "
             << kDefaultSamplingPeriodNs << ", range: " << kMinSamplingPeriodNs << "-"
@@ -256,7 +278,7 @@ int main(int argc, char* argv[]) {
   std::cout << "========================================" << std::endl;
   std::cout << "Configuration:" << std::endl;
   std::cout << "  Matrix size: " << config.matrix_size << "x" << config.matrix_size << std::endl;
-  std::cout << "  Repeat count: " << config.repeat_count << std::endl;
+  std::cout << "  Repeat count per kernel: " << config.repeat_count << std::endl;
   std::cout << "  Sampling period: " << config.sampling_period_ns << " ns ("
             << (config.sampling_period_ns / 1000.0f) << " µs)" << std::endl;
 
@@ -305,26 +327,36 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  // Step 5: Run compute workload (GEMM kernel)
+  // Step 5: Run compute workloads (two GEMM kernels)
+  // Run the same kernels but with different names so they will be identified as different kernels
+  // in the profiling data.
   std::cout << "\n=== Running Compute Workload ===" << std::endl;
-  std::cout << "Executing GEMM kernel " << config.repeat_count
-            << " time(s) (matrix size: " << config.matrix_size << "x" << config.matrix_size
-            << ")..." << std::endl;
+  std::cout << "Executing two GEMM kernels with matrix size " << config.matrix_size << "x"
+            << config.matrix_size << std::endl;
 
   // Create SYCL queue
   sycl::property_list props{sycl::property::queue::in_order()};
   sycl::queue queue(device, sycl::async_handler{}, props);
 
-  // Prepare matrices
-  std::vector<float> a(config.matrix_size * config.matrix_size, kAValue);
-  std::vector<float> b(config.matrix_size * config.matrix_size, kBValue);
-  std::vector<float> c(config.matrix_size * config.matrix_size, 0.0f);
-  float expected_result = kAValue * kBValue * config.matrix_size;
+  if (!RunGEMMWorkload<PrimaryGEMMKernel>(queue, config.matrix_size, config.repeat_count,
+                                          "Primary GEMM")) {
+    std::cerr << "Primary GEMM workload failed" << std::endl;
+    StopPcSamplingCollection();
+    DisablePcSampling();
+    CleanupProfilingEnvironment();
+    return EXIT_FAILURE;
+  }
 
-  // Execute GEMM kernel multiple times
-  RunGEMMMultiple(queue, a, b, c, config.matrix_size, config.repeat_count, expected_result);
+  if (!RunGEMMWorkload<SecondaryGEMMKernel>(queue, config.matrix_size, config.repeat_count,
+                                            "Secondary GEMM")) {
+    std::cerr << "Secondary GEMM workload failed" << std::endl;
+    StopPcSamplingCollection();
+    DisablePcSampling();
+    CleanupProfilingEnvironment();
+    return EXIT_FAILURE;
+  }
 
-  std::cout << "GEMM kernel execution completed" << std::endl;
+  std::cout << "GEMM kernel executions completed" << std::endl;
 
   // Step 6: Stop PC sampling collection (ptiPcSamplingStopCollection)
   if (!StopPcSamplingCollection()) {
@@ -334,14 +366,22 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  // Step 7: Disable PC sampling (ptiPcSamplingDisable)
+  // Step 7: Print collected stall data before releasing the handle
+  if (!PrintPcSamplingData()) {
+    std::cerr << "Failed to print stall data" << std::endl;
+    DisablePcSampling();
+    CleanupProfilingEnvironment();
+    return EXIT_FAILURE;
+  }
+
+  // Step 8: Disable PC sampling (ptiPcSamplingDisable)
   if (!DisablePcSampling()) {
     std::cerr << "Failed to disable PC sampling" << std::endl;
     CleanupProfilingEnvironment();
     return EXIT_FAILURE;
   }
 
-  // Step 8: Cleanup environment (PTI view cleanup)
+  // Step 9: Cleanup environment (PTI view cleanup)
   CleanupProfilingEnvironment();
 
   std::cout << "\n========================================" << std::endl;

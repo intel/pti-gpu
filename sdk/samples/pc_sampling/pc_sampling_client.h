@@ -47,6 +47,12 @@ bool StopPcSamplingCollection();
 // Must be called after StopPcSamplingCollection().
 bool DisablePcSampling();
 
+// Retrieve and print PC sampling data collected during the last sampling session.
+// Must be called after StopPcSamplingCollection() and before DisablePcSampling().
+// Prints stall reason descriptions, per-device collection statistics, per-kernel
+// aggregated stall counts, and per-instruction stall breakdowns.
+bool PrintPcSamplingData();
+
 // Cleanup PTI view subsystem.
 // Should be called at the end of the program.
 void CleanupProfilingEnvironment();
