@@ -81,7 +81,7 @@ for (uint32_t gid = 0; gid < group_count; ++gid) {
 ### Continuous Collection
 The process of metrics collection in continuous mode assumes that there is an infinite loop in a separate thread, where one asks for collected samples periodically, read the data for a chunk of samples and store them into some memory or file (one sample contains all the metrics from a metric group).
 
-First one should choose a metric group to collect, that can be done e.g. while enumeration phase (see above). To activate it, one should call `zetContextActivateMetricGroups` function that will set up the hardware:
+First one should choose a metric group to collect, that can be done e.g. while in the enumeration phase (see above). To activate it, one should call `zetContextActivateMetricGroups` function that will set up the hardware:
 ```cpp
 status = zetContextActivateMetricGroups(context, device, 1, &group);
 assert(status == ZE_RESULT_SUCCESS);
