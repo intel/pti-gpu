@@ -104,8 +104,7 @@ inline void PrintMetricList(uint32_t device_id) {
   auto status = ZE_FUNC(zetMetricGroupGet)(device, &group_count, nullptr);
   if (status != ZE_RESULT_SUCCESS || group_count == 0) {
     std::cerr << "[WARNING] No metrics found (status = 0x" << std::hex << status << std::dec << ") group_count = " << group_count << std::endl;
-	std::cerr << "[INFO] Please make sure the intel-metrics-discovery and intel-metrics-library packages are installed." << std::endl;
-
+    std::cerr << "[INFO] Please make sure the intel-metrics-discovery and intel-metrics-library packages are installed." << std::endl;
     return;
   }
 
@@ -504,8 +503,8 @@ class ZeMetricProfiler {
 
         zet_metric_group_handle_t group = FindMetricGroup (device, metric_group, ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED);
         if (group == nullptr) {
-          std::cerr << "[ERROR] Invalid metric group " << metric_group << std::endl;
-          exit(-1);
+          std::cerr << "[WARNING] Metric group " << metric_group << " is not found on device : " << desc->device_id_ << std::endl;
+          continue;
         }
 
         zet_metric_group_properties_t metric_group_prop;
@@ -592,6 +591,10 @@ class ZeMetricProfiler {
         } // subdevices list
       } // devices list
     } // drivers list
+    if (device_descriptors_.empty()) {
+      std::cerr << "[ERROR] No supported device found for the metric group " << metric_group << std::endl;;
+      exit(-1);
+    }
   }
 
   int GetDeviceId(ze_device_handle_t sub_device) const {
