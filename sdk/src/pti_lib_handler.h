@@ -24,10 +24,17 @@
 #include "utils/utils.h"
 #include "xpti_adapter.h"
 
+#if defined(PTI_CCL_ITT_COMPILE)
 #define INTEL_NO_MACRO_BODY
 #define INTEL_ITTNOTIFY_API_PRIVATE
 
-#include "itt/itt_pti_exports.h"
+#include <ittnotify.h>
+#include <ittnotify_config.h>
+
+#include "itt/itt_adapter.h"
+#include "itt/itt_metadata.h"
+
+#endif  // PTI_CCL_ITT_COMPILE
 
 namespace pti {
 
@@ -49,8 +56,11 @@ inline std::string GetPathToPtiModule() {
 // to pass from PTI Interface library status of detected "foreign" XPTI subscribers,
 // if such were detected at the library load time
 void PtiSetXPTIEnvironmentDetails(bool is_foreign_subscriber, bool is_likely_unitrace_subscriber);
-
 class PtiLibHandler {
+#if defined(PTI_CCL_ITT_COMPILE)
+  using IttCollectorSetCclGlobalAndDomainFn = void(ITTAPI*)(__itt_global*, const __itt_domain*);
+#endif  // PTI_CCL_ITT_COMPILE
+
  public:
   static bool IsSuccessfullyInitialized() {
     return successfully_initialized_instance_.load(std::memory_order_acquire) != nullptr;
@@ -148,12 +158,12 @@ class PtiLibHandler {
   decltype(&ptiPcSamplingGetDeviceStatus) ptiPcSamplingGetDeviceStatus_ = nullptr;  // NOLINT
   decltype(&ptiPcSamplingDisable) ptiPcSamplingDisable_ = nullptr;                  // NOLINT
 
-  decltype(&__itt_api_init) __itt_api_init_ = nullptr;                          // NOLINT
-  decltype(&__itt_domain_create) __itt_domain_create_ = nullptr;                // NOLINT
-  decltype(&__itt_task_begin) __itt_task_begin_ = nullptr;                      // NOLINT
-  decltype(&__itt_task_end) __itt_task_end_ = nullptr;                          // NOLINT
-  decltype(&__itt_string_handle_create) __itt_string_handle_create_ = nullptr;  // NOLINT
-  decltype(&__itt_metadata_add) __itt_metadata_add_ = nullptr;                  // NOLINT
+#if defined(PTI_CCL_ITT_COMPILE)
+  decltype(&__itt_task_begin) itt_task_begin_ = nullptr;                             // NOLINT
+  decltype(&__itt_task_end) itt_task_end_ = nullptr;                                 // NOLINT
+  decltype(&__itt_metadata_add) itt_metadata_add_ = nullptr;                         // NOLINT
+  IttCollectorSetCclGlobalAndDomainFn IttCollectorSetCclGlobalAndDomain_ = nullptr;  // NOLINT
+#endif  // PTI_CCL_ITT_COMPILE
 
   // Forward to implementation in core library
   decltype(&xptiQuerySubscriberStreamDetailLevel) xptiQuerySubscriberStreamDetailLevel_ =  // NOLINT
@@ -263,13 +273,33 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiPcSamplingGetDeviceStatus);
     PTI_VIEW_GET_SYMBOL(ptiPcSamplingDisable);
 
-#define PTI_VIEW_GET_ITT_SYMBOL(X) X##_ = pti_view_lib_->GetSymbol<decltype(&X)>(#X "_impl")
-    PTI_VIEW_GET_ITT_SYMBOL(__itt_api_init);
-    PTI_VIEW_GET_ITT_SYMBOL(__itt_task_begin);
-    PTI_VIEW_GET_ITT_SYMBOL(__itt_task_end);
-    PTI_VIEW_GET_ITT_SYMBOL(__itt_string_handle_create);
-    PTI_VIEW_GET_ITT_SYMBOL(__itt_metadata_add);
-    PTI_VIEW_GET_ITT_SYMBOL(__itt_domain_create);
+#if defined(PTI_CCL_ITT_COMPILE)
+#define PTI_VIEW_GET_ITT_SYMBOL(X) \
+  X##_ = pti_view_lib_->GetSymbol<decltype(&__##X)>(#X "_collector")
+    PTI_VIEW_GET_ITT_SYMBOL(itt_task_begin);
+    PTI_VIEW_GET_ITT_SYMBOL(itt_task_end);
+    PTI_VIEW_GET_ITT_SYMBOL(itt_metadata_add);
+
+    IttCollectorSetCclGlobalAndDomain_ =
+        pti_view_lib_->GetSymbol<IttCollectorSetCclGlobalAndDomainFn>(
+            "IttCollectorSetCclGlobalAndDomain");
+
+    SPDLOG_DEBUG("{}() IttCollectorSetCclGlobalAndDomain_: {}", __FUNCTION__,
+                 IttCollectorSetCclGlobalAndDomain_ != nullptr ? "available" : "not available");
+    // If __itt_api_init fired before PtiLibHandler was constructed,
+    // seed the collector's ITT Global that CCL domain belongs to and CCL domain now
+    // Both could be nulls, but in that case it is not a problem,
+    // as the collector will be able to set them later when they become available
+    if (IttCollectorSetCclGlobalAndDomain_ != nullptr) {
+      auto* g = GetIttGlobalOfCclDomainAdapter();
+      auto* domain = GetIttCclDomainAdapter();
+      SPDLOG_DEBUG("{}() IttGlobalCollector: {}, CCL domain: {}", __FUNCTION__,
+                   static_cast<void*>(g), static_cast<const void*>(domain));
+      IttCollectorSetCclGlobalAndDomain_(g, domain);
+    }
+
+#undef PTI_VIEW_GET_ITT_SYMBOL
+#endif  // PTI_CCL_ITT_COMPILE
 
 #undef PTI_VIEW_GET_SYMBOL
     CommunicateForeignXPTISubscriber();

@@ -233,7 +233,7 @@ if(HAVE_SYCL)
   target_link_libraries(metrics_scope_parallel PUBLIC spdlog::spdlog
     GTest::gtest_main Pti::pti_view ${FS_LIB})
 
-  
+
   if(PTI_BUILD_SAMPLES AND TARGET metrics_scope)
     add_test(NAME metrics_scope_multiprocess
       COMMAND ${Python_EXECUTABLE}
@@ -992,6 +992,9 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
         ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
         LABELS "unit"
         LABELS "itt")
+
+  # CCL ITT shared libraries test
+  add_subdirectory(ccl_itt_shared_libs)
 
   # Library loading regression tests (standalone executable)
   add_executable(lib_load_suite lib_load_suite.cc)

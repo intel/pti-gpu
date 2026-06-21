@@ -326,7 +326,8 @@ inline void DumpRecord(pti_view_record_comms* record) {
   std::cout << "Api End Time: " << AposFormat(record->_end_timestamp) << " ns" << '\n';
   std::cout << "Process Id: " << record->_process_id << '\n';
   std::cout << "Thread Id: " << record->_thread_id << '\n';
-  std::cout << "Metadata_size: " << record->_metadata_size << '\n';
+  std::cout << "Send_size: " << record->_send_size << '\n';
+  std::cout << "Recv_size: " << record->_recv_size << '\n';
   std::cout << "Communicator Id: " << record->_communicator_id << '\n';
   std::cout << "ITT CMD: <" << record->_name << ">\n";
 }

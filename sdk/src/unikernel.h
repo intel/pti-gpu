@@ -97,7 +97,8 @@ struct CommunicationRecord {
   uint32_t tid_;
   uint64_t start_time_;
   uint64_t end_time_;
-  uint64_t metadata_size_;
+  uint64_t send_size_;
+  uint64_t recv_size_;
   uint64_t communicator_id_;
   const char* name_;
 };

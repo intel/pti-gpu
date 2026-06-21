@@ -1418,7 +1418,8 @@ inline void CommunicationEvent([[maybe_unused]] void* data, CommunicationRecord&
   record_comms._start_timestamp = ApplyTimeShift(rec.start_time_, ts_shift);
   record_comms._end_timestamp = ApplyTimeShift(rec.end_time_, ts_shift);
 
-  record_comms._metadata_size = rec.metadata_size_;
+  record_comms._send_size = rec.send_size_;
+  record_comms._recv_size = rec.recv_size_;
   record_comms._communicator_id = rec.communicator_id_;
 
   record_comms._name = rec.name_;

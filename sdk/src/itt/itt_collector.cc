@@ -6,9 +6,9 @@
 
 #include "itt_collector.h"
 
+#include <ittnotify_config.h>
 #include <spdlog/spdlog.h>
 
-#include <atomic>
 #include <cstddef>
 #include <cstdio>
 #include <stack>
@@ -17,11 +17,21 @@
 
 #include "utils.h"
 
-// String constants for specific handle identification
-static constexpr const char *kSendSizeString = "send_size";
-static std::atomic<__itt_string_handle *> send_size_handle{nullptr};
-static constexpr const char *kCommIdString = "comm_id";
-static std::atomic<__itt_string_handle *> comm_id_handle{nullptr};
+namespace {
+static std::atomic<__itt_global *> g_itt_global_of_ccl_domain_adaptor{nullptr};
+static std::atomic<const __itt_domain *> g_ccl_domain_adaptor{nullptr};
+
+inline const __itt_domain *GetCacheCclDomainCollector(const __itt_domain *domain) {
+  static const char *const kCclDomain = "oneCCL::API";
+  const __itt_domain *cached = g_ccl_domain_adaptor.load(std::memory_order_relaxed);
+  if (cached != nullptr) return cached;
+  if (domain != nullptr && domain->nameA != nullptr && !std::strcmp(domain->nameA, kCclDomain)) {
+    g_ccl_domain_adaptor.store(domain, std::memory_order_relaxed);
+    return domain;
+  }
+  return nullptr;
+}
+}  // namespace
 
 // Static method definitions
 std::string IttCollector::DumpTaskDescriptor() noexcept {
@@ -52,141 +62,43 @@ std::string IttCollector::DumpTaskDescriptor() noexcept {
   return result;
 }
 
-static __itt_global *itt_global = nullptr;
-ITT_EXTERN_C void ITTAPI __itt_api_init_impl(__itt_global *p,
-                                             [[maybe_unused]] __itt_group_id init_groups) {
-  SPDLOG_DEBUG("{}() - Collector: {}", __FUNCTION__, p ? "non-NULL" : "NULL");
-  if (p != nullptr) {
-    itt_global = p;
+ITT_EXTERN_C void ITTAPI IttCollectorSetCclGlobalAndDomain(__itt_global *g,
+                                                           const __itt_domain *domain) {
+  SPDLOG_DEBUG("{}() domain: {}", __FUNCTION__, static_cast<const void *>(domain));
+  std::lock_guard<std::mutex> lock(IttCollector::Instance().initialization_mutex_);
+
+  g_ccl_domain_adaptor.store(domain, std::memory_order_release);
+  g_itt_global_of_ccl_domain_adaptor.store(g, std::memory_order_release);
+  if (g != nullptr && domain != nullptr) {
+    auto *mutable_domain = const_cast<__itt_domain *>(domain);
+    __itt_mutex_lock(&(g->mutex));
+    mutable_domain->flags = IttCollector::Instance().IsCollectionEnabled() ? 1 : 0;
+    __itt_mutex_unlock(&(g->mutex));
   }
 }
 
-[[maybe_unused]] static std::string __itt_domain_dump() {
-  if (itt_global == nullptr) {
-    return "itt_global is NULL";
-  }
-
-  std::string result = "\nDomain list:\n";
-  __itt_mutex_lock(&(itt_global->mutex));
-
-  int count = 0;
-  for (__itt_domain *h = itt_global->domain_list; h != nullptr; h = h->next) {
-    result += "  [" + std::to_string(count) + "] " + (h->nameA ? h->nameA : "NULL") +
-              " <flag: " + std::to_string(h->flags) + ">\n";
-    count++;
-  }
-
-  if (count == 0) {
-    result += "(empty)\n";
-  } else {
-    result += "  Total domains: " + std::to_string(count);
-  }
-
-  __itt_mutex_unlock(&(itt_global->mutex));
-  return result;
-}
-
-ITT_EXTERN_C __itt_domain *ITTAPI __itt_domain_create_impl(const char *name) {
-  SPDLOG_DEBUG("{}() Collector - name: {}", __FUNCTION__, name ? name : "NULL");
-  if (itt_global == NULL || name == nullptr) {
-    return NULL;
-  }
-
-  __itt_domain *h_tail = NULL, *h = NULL;
-
-  __itt_mutex_lock(&(itt_global->mutex));
-  for (h_tail = NULL, h = itt_global->domain_list; h != NULL; h_tail = h, h = h->next) {
-    if (h->nameA != NULL && !__itt_fstrcmp(h->nameA, name)) break;
-  }
-  if (h == NULL) {
-    NEW_DOMAIN_A(itt_global, h, h_tail, name);
-    // Turn off all domains except oneCCL:API
-    h->flags = IttCollector::Instance().GetCclDomain(h) == h;
-  }
-  __itt_mutex_unlock(&(itt_global->mutex));
-
-  return h;
-}
-
-[[maybe_unused]] static std::string __itt_string_handle_dump() {
-  if (itt_global == nullptr) {
-    return "itt_global is NULL";
-  }
-
-  std::string result = "\nString handle list:\n";
-  __itt_mutex_lock(&(itt_global->mutex));
-
-  int count = 0;
-  for (__itt_string_handle *h = itt_global->string_list; h != nullptr; h = h->next) {
-    result += "  [" + std::to_string(count) + "] " + (h->strA ? h->strA : "NULL") + "\n";
-    count++;
-  }
-
-  if (count == 0) {
-    result += "  (empty string handle list)\n";
-  } else {
-    result += "  Total string handles: " + std::to_string(count);
-  }
-
-  __itt_mutex_unlock(&(itt_global->mutex));
-  return result;
-}
-
-ITT_EXTERN_C __itt_string_handle *ITTAPI __itt_string_handle_create_impl(const char *name) {
-  SPDLOG_DEBUG("{}() - name: {}", __FUNCTION__, name ? name : "NULL");
-
-  if (itt_global == nullptr) {
-    SPDLOG_WARN("{}(): itt_global is NULL", __FUNCTION__);
-    return nullptr;
-  }
-
-  __itt_string_handle *h_tail = nullptr, *h = nullptr;
-
-  __itt_mutex_lock(&(itt_global->mutex));
-  for (h_tail = nullptr, h = itt_global->string_list; h != nullptr; h_tail = h, h = h->next) {
-    if (h->strA != nullptr && !__itt_fstrcmp(h->strA, name)) break;
-  }
-  if (h == nullptr) {
-    NEW_STRING_HANDLE_A(itt_global, h, h_tail, name);
-
-    // Capture pointer address for specific strings
-    if (name != nullptr) {
-      if (!__itt_fstrcmp(name, kSendSizeString)) {
-        send_size_handle.store(h);
-      } else if (!__itt_fstrcmp(name, kCommIdString)) {
-        comm_id_handle.store(h);
-      }
-    }
-  }
-  __itt_mutex_unlock(&(itt_global->mutex));
-
-  SPDLOG_DEBUG("{}() {}", __FUNCTION__, __itt_string_handle_dump());
-  return h;
-}
-
-ITT_EXTERN_C void ITTAPI __itt_task_begin_impl(const __itt_domain *domain,
-                                               [[maybe_unused]] __itt_id taskid,
-                                               [[maybe_unused]] __itt_id parentid,
-                                               __itt_string_handle *name) {
+ITT_EXTERN_C void ITTAPI itt_task_begin_collector(const __itt_domain *domain,
+                                                  [[maybe_unused]] __itt_id taskid,
+                                                  [[maybe_unused]] __itt_id parentid,
+                                                  __itt_string_handle *name) {
   SPDLOG_DEBUG("{}() Collector - domain: {}, name: {}", __FUNCTION__,
                domain ? domain->nameA : "NULL", name ? name->strA : "NULL");
 
-  if ((domain == nullptr) || (IttCollector::Instance().GetCclDomain(domain) != domain)) {
+  if (!IttCollector::Instance().IsCollectionEnabled() || (domain == nullptr) ||
+      (GetCacheCclDomainCollector(domain) != domain)) {
     return;
   }
-
-  SPDLOG_DEBUG("{}() {}", __FUNCTION__, __itt_domain_dump());
-  SPDLOG_DEBUG("{}() {}", __FUNCTION__, __itt_string_handle_dump());
 
   IttCollector::task_desc_.push(ThreadTaskDescriptor(domain, name, utils::GetTime()));
 
   SPDLOG_DEBUG("{}() {}", __FUNCTION__, IttCollector::DumpTaskDescriptor());
 }
 
-ITT_EXTERN_C void ITTAPI __itt_task_end_impl(const __itt_domain *domain) {
+ITT_EXTERN_C void ITTAPI itt_task_end_collector(const __itt_domain *domain) {
   SPDLOG_DEBUG("{}() Collector - domain: {}", __FUNCTION__, domain ? domain->nameA : "NULL");
 
-  if ((domain == nullptr) || (IttCollector::Instance().GetCclDomain(domain) != domain)) {
+  if (!IttCollector::Instance().IsCollectionEnabled() || (domain == nullptr) ||
+      (GetCacheCclDomainCollector(domain) != domain)) {
     return;
   }
 
@@ -201,18 +113,37 @@ ITT_EXTERN_C void ITTAPI __itt_task_end_impl(const __itt_domain *domain) {
   auto task = IttCollector::task_desc_.top();
   IttCollector::task_desc_.pop();
 
-  SPDLOG_DEBUG("{}() line {} - {}::{}, start: {}, end: {}, metadata_size: {:#x}", __FUNCTION__,
-               __LINE__, task.domain_ ? task.domain_->nameA : "NULL",
-               task.name_ ? task.name_->strA : "NULL", task.start_time_, end, task.metadata_size_);
+  SPDLOG_DEBUG("{}() line {} - {}::{}, start: {}, end: {}, send_size: {:#x}, recv_size: {:#x}",
+               __FUNCTION__, __LINE__, task.domain_ ? task.domain_->nameA : "NULL",
+               task.name_ ? task.name_->strA : "NULL", task.start_time_, end, task.send_size_,
+               task.recv_size_);
 
   IttCollector::Instance().CallbackUser(task, end);
 }
-ITT_EXTERN_C void ITTAPI __itt_metadata_add_impl(const __itt_domain *domain,
-                                                 [[maybe_unused]] __itt_id id,
-                                                 [[maybe_unused]] __itt_string_handle *key,
-                                                 __itt_metadata_type type, size_t count,
-                                                 void *data) {
-  if ((domain == nullptr) || (IttCollector::Instance().GetCclDomain(domain) != domain)) {
+
+// Design note: why pointer-based caching of __itt_string_handle is safe here.
+//
+// Every .so that links ittnotify statically gets its own __itt_global. Our
+// collector's __itt_api_init is therefore called once per static part (p_sycl,
+// p_tbb, p_ccl, ...). Each library creates its domains and string handles
+// exclusively through its own p, so they accumulate in that p's lists.
+//
+// The key guarantee: __itt_metadata_add is always downstream of domain
+// creation. oneCCL must create "oneCCL::API" before it can annotate any
+// metadata. It also creates its metadata key strings ("send_size", "recv_size",
+// "comm_id") through the same p_ccl. All three therefore live in p_ccl's
+// string_list at the time we discover the domain in p_ccl->domain_list.
+//
+// Any other string handles from other libraries are irrelevant to our collector.
+// So there is no need to track them.
+//
+ITT_EXTERN_C void ITTAPI itt_metadata_add_collector(const __itt_domain *domain,
+                                                    [[maybe_unused]] __itt_id id,
+                                                    [[maybe_unused]] __itt_string_handle *key,
+                                                    __itt_metadata_type type, size_t count,
+                                                    void *data) {
+  if (!IttCollector::Instance().IsCollectionEnabled() || (domain == nullptr) ||
+      (GetCacheCclDomainCollector(domain) != domain)) {
     return;
   }
 
@@ -245,9 +176,12 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add_impl(const __itt_domain *domain,
       return false;
     };
 
-    if (check_and_capture(send_size_handle, kSendSizeString)) {
-      IttCollector::task_desc_.top().metadata_size_ = *static_cast<uint64_t *>(data);
-    } else if (check_and_capture(comm_id_handle, kCommIdString)) {
+    if (check_and_capture(itt_metadata::GetSendSizeHandle(), itt_metadata::kSendSizeString)) {
+      IttCollector::task_desc_.top().send_size_ = *static_cast<uint64_t *>(data);
+    } else if (check_and_capture(itt_metadata::GetRecvSizeHandle(),
+                                 itt_metadata::kRecvSizeString)) {
+      IttCollector::task_desc_.top().recv_size_ = *static_cast<uint64_t *>(data);
+    } else if (check_and_capture(itt_metadata::GetCommIdHandle(), itt_metadata::kCommIdString)) {
       IttCollector::task_desc_.top().communicator_id_ = *static_cast<uint64_t *>(data);
     }
     return;
@@ -255,28 +189,40 @@ ITT_EXTERN_C void ITTAPI __itt_metadata_add_impl(const __itt_domain *domain,
   SPDLOG_DEBUG("{}() Collector - NOT FOUND!!", __FUNCTION__);
 }
 
-void IttEnableCclDomain(void) {
+void IttCollector::EnableCollection() {
   SPDLOG_DEBUG("{}() Collector", __FUNCTION__);
-  if (itt_global == nullptr) {
-    return;
+
+  auto *domain = const_cast<__itt_domain *>(GetCacheCclDomainCollector(nullptr));
+  if (domain == nullptr) {
+    SPDLOG_DEBUG("{}() Collector: oneCCL domain not yet cached", __FUNCTION__);
+  } else {
+    auto *g = g_itt_global_of_ccl_domain_adaptor.load(std::memory_order_acquire);
+    if (g != nullptr) {
+      __itt_mutex_lock(&(g->mutex));
+      domain->flags = 1;
+      __itt_mutex_unlock(&(g->mutex));
+    }  // else - don't know global for Ccl domain -
+       // so rely only on collection_state_ flag to enable collection
   }
-  __itt_mutex_lock(&(itt_global->mutex));
-  auto cclDomain = IttCollector::Instance().GetCclDomain(nullptr);
-  if (cclDomain != nullptr) {
-    const_cast<__itt_domain *>(cclDomain)->flags = 1;
-  }
-  __itt_mutex_unlock(&(itt_global->mutex));
+
+  collection_state_.store(CollectionState::kEnabled, std::memory_order_release);
 }
 
-void IttDisableCclDomain(void) {
+void IttCollector::DisableCollection() {
   SPDLOG_DEBUG("{}() Collector", __FUNCTION__);
-  if (itt_global == nullptr) {
+
+  collection_state_.store(CollectionState::kDisabled, std::memory_order_release);
+
+  auto *domain = const_cast<__itt_domain *>(GetCacheCclDomainCollector(nullptr));
+  if (domain == nullptr) {
+    SPDLOG_DEBUG("{}() Collector: oneCCL domain not yet cached", __FUNCTION__);
     return;
   }
-  __itt_mutex_lock(&(itt_global->mutex));
-  auto cclDomain = IttCollector::Instance().GetCclDomain(nullptr);
-  if (cclDomain != nullptr) {
-    const_cast<__itt_domain *>(cclDomain)->flags = 0;
-  }
-  __itt_mutex_unlock(&(itt_global->mutex));
+  auto *g = g_itt_global_of_ccl_domain_adaptor.load(std::memory_order_acquire);
+  if (g != nullptr) {
+    __itt_mutex_lock(&(g->mutex));
+    domain->flags = 0;
+    __itt_mutex_unlock(&(g->mutex));
+  }  // else - don't know global for Ccl domain -
+     // so rely only on collection_state_ flag to disable collection
 }

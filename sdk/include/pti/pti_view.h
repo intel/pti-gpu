@@ -525,7 +525,8 @@ typedef struct pti_view_record_comms {
   uint64_t _end_timestamp;         //!< Operation end timestamp, ns
   uint32_t _process_id;            //!< Process ID of where the operation observed
   uint32_t _thread_id;             //!< Thread ID of where the operation observed
-  uint64_t _metadata_size;         //!< Size of metadata attached to this communication record
+  uint64_t _send_size;             //!< Send buffer size of the communication operation
+  uint64_t _recv_size;             //!< Receive buffer size of the communication operation
   uint64_t _communicator_id;       //!< Communicator ID of the operation
   const char *_name;               //!< Operation name
 } pti_view_record_comms;
