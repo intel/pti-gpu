@@ -224,6 +224,37 @@ inline ze_device_handle_t GetGpuDevice(std::size_t pti_device_id) {
   return device_list[pti_device_id];
 }
 
+inline ze_device_handle_t GetGpuDevice(const std::vector<ze_driver_handle_t>& drivers,
+                                       std::size_t pti_device_id) {
+  std::vector<ze_device_handle_t> device_list;
+
+  for (auto* driver : drivers) {
+    for (auto* device : GetDeviceList(driver)) {
+      ze_device_properties_t props;
+      std::memset(&props, 0, sizeof(props));
+      props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+      props.pNext = nullptr;
+      overhead::Init();
+      ze_result_t status = zeDeviceGetProperties(device, &props);
+      overhead_fini(zeDeviceGetProperties_id);
+      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+      if (props.type == ZE_DEVICE_TYPE_GPU) {
+        device_list.push_back(device);
+      }
+    }
+  }
+
+  if (device_list.empty()) {
+    return nullptr;
+  }
+
+  if (pti_device_id >= device_list.size()) {
+    return nullptr;
+  }
+
+  return device_list[pti_device_id];
+}
+
 inline ze_device_handle_t GetGpuDevice(std::size_t pti_device_id, std::size_t pti_sub_device_id) {
   auto* device_handle = GetGpuDevice(pti_device_id);
 

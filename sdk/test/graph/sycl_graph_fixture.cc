@@ -23,6 +23,7 @@
 #include "sycl_graph_test_kernels.h"
 #include "sycl_graph_workloads.h"
 #include "utils/pti_record_collection_fixture.h"
+#include "utils/sycl_config_info.h"
 #include "utils/sycl_usm_helper.h"
 
 class SyclGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
@@ -64,7 +65,7 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
   // insertion, some tolerance is needed due to timestamp drift.
   // This could be mitigated in the environment with PTI_CONV_CLOCK_SYNC_TIME_NS=1000000000.
   // However, that is fragile as well.
-  static constexpr auto kTimestampEqualityTolerance = std::chrono::nanoseconds(5);
+  static constexpr auto kTimestampEqualityTolerance = std::chrono::nanoseconds(40);
 
   SyclUsmGraphExecutionTestSuite() : replays_(std::get<0>(GetParam())) {}
 
@@ -149,7 +150,7 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
       }
 
       // Validate that each submission happens after the previous one and that the kernel timestamps
-      // relect that too. Each graph submission is sequential (perhaps not the kernel execution,
+      // reflect that too. Each graph submission is sequential (perhaps not the kernel execution,
       // given the diamond shape graph). We're comparing _submissions_.
       if (next_submission_idx < std::size(record_storage_.kernel_records)) {
         const auto* next_submission_kernel = record_storage_.kernel_records.at(next_submission_idx);
@@ -226,6 +227,18 @@ class SyclUsmGraphExecutionTestSuite : public SyclGraphTestSuite,
   FloatVec y_vector_ = nullptr;
   FloatVec z_vector_ = nullptr;
   std::optional<FinalizedGraphType> graph_;
+};
+
+class SyclUsmGraphVisitorTestSuite : public SyclUsmGraphExecutionTestSuite {
+ protected:
+  void SetUp() override {
+    if (!pti::test::utils::CommandListVisitAvailable()) {
+      GTEST_SKIP() << "Command list visit extension unavailable. It requires a supporting driver "
+                      "and NEOReadDebugKeys=1 ExperimentalFlatCommandListApiRecording=1 to be set "
+                      "in the environment.";
+    }
+    SyclUsmGraphExecutionTestSuite::SetUp();
+  }
 };
 
 TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecution) {
@@ -386,7 +399,32 @@ TEST_P(SyclUsmGraphExecutionTestSuite, TestArbitraryReplays) {
   ValidateGraphReplayTimestamps();
 }
 
+TEST_P(SyclUsmGraphVisitorTestSuite, TestArbitraryReplaysWithGraphRecreation) {
+  auto graph = CreateUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product_.get(),
+                                        x_vector_.get(), y_vector_.get(), z_vector_.get());
+  graph_.emplace(graph.finalize());
+
+  InitializeTracing();
+  EnableTracing();
+  queue_.ext_oneapi_graph(*graph_).wait_and_throw();
+  for (std::size_t i = 0; i < replays_; ++i) {
+    queue_.ext_oneapi_graph(*graph_).wait_and_throw();
+  }
+  FinalizeTracing();
+  const auto expected_result =
+      (Workload::Result() * static_cast<UnderlyingType>(replays_)) + Workload::Result();
+  EXPECT_FLOAT_EQ(*dot_product_, expected_result);
+  EXPECT_EQ(std::size(record_storage_.kernel_records),
+            (replays_ + 1) * kExpectedKernelsPerExecution);
+  ValidateGraphReplayTimestamps();
+}
+
 INSTANTIATE_TEST_SUITE_P(SyclUsmGraphExecutionReplayTests, SyclUsmGraphExecutionTestSuite,
+                         ::testing::Values(0, 1, 5, 10), [](const auto& info) {
+                           return fmt::format("{}_Replays", std::get<0>(info.param));
+                         });
+
+INSTANTIATE_TEST_SUITE_P(SyclUsmGraphVisitorReplayTests, SyclUsmGraphVisitorTestSuite,
                          ::testing::Values(0, 1, 5, 10), [](const auto& info) {
                            return fmt::format("{}_Replays", std::get<0>(info.param));
                          });

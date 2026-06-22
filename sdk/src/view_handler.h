@@ -95,7 +95,8 @@ inline static constexpr std::array kPtiClassSyclGpuOpsCoreApis{
     pti_api_id_runtime_sycl::urUSMHostAlloc_id,
     pti_api_id_runtime_sycl::urUSMSharedAlloc_id,
     pti_api_id_runtime_sycl::urUSMDeviceAlloc_id,
-};
+    pti_api_id_runtime_sycl::urEnqueueCommandBufferExp_id,
+    pti_api_id_runtime_sycl::urEnqueueGraphExp_id};
 
 inline static constexpr std::array kPtiClassLzHostSynchOpApis{
     pti_api_id_driver_levelzero::zeFenceHostSynchronize_id,
@@ -990,9 +991,6 @@ inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRec
     auto ext_record = stack.top();  // copy for modification
     ext_record._correlation_id = rec.cid_;
     ext_record._view_kind._view_kind = pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION;
-    SPDLOG_TRACE("In {}, ext_id: {}, ext_kind: {}, corr_id: {}", __FUNCTION__,
-                 ext_record._external_id, static_cast<uint32_t>(ext_record._external_kind),
-                 ext_record._correlation_id);
     Instance().InsertRecord(ext_record, rec.tid_);
   }
 

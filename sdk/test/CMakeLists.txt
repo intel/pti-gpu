@@ -68,7 +68,7 @@ if (TARGET LevelZero::level-zero)
             "${PROJECT_BINARY_DIR}/include"
   )
 
-   target_link_libraries(ze_event_manager_tests PUBLIC GTest::gmock
+  target_link_libraries(ze_event_manager_tests PUBLIC GTest::gmock
      GTest::gtest_main LevelZero::level-zero spdlog::spdlog fmt::fmt)
 
    gtest_discover_tests(
@@ -84,8 +84,7 @@ if (TARGET LevelZero::level-zero)
             "${PROJECT_SOURCE_DIR}/src/utils"
             "${PROJECT_SOURCE_DIR}/include"
             ${PROJECT_BINARY_DIR}
-            "${PROJECT_BINARY_DIR}/include"
-  )
+            "${PROJECT_BINARY_DIR}/include")
 
   target_link_libraries(ze_kernel_name_cache_test PUBLIC
     GTest::gtest_main LevelZero::level-zero spdlog::spdlog fmt::fmt)
@@ -102,12 +101,13 @@ if (TARGET LevelZero::level-zero)
     PUBLIC  "${PROJECT_SOURCE_DIR}/include"
             "${PROJECT_SOURCE_DIR}/src"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
-   target_link_libraries(local_ze_collection_suite PUBLIC GTest::gmock
-     GTest::gtest_main LevelZero::level-zero spdlog::spdlog Pti::pti_view)
 
-   add_spirv(local_ze_collection_suite gemm)
+  target_link_libraries(local_ze_collection_suite PUBLIC GTest::gmock
+     GTest::gtest_main LevelZero::level-zero LevelZero::level-zero-ext spdlog::spdlog Pti::pti_view)
 
-   gtest_discover_tests(
+  add_spirv(local_ze_collection_suite gemm)
+
+  gtest_discover_tests(
       local_ze_collection_suite
       DISCOVERY_TIMEOUT 60
       PROPERTIES LABELS "functional")
@@ -717,7 +717,8 @@ target_include_directories(
   PUBLIC "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src")
 
-target_link_libraries(assert_exception_test PUBLIC spdlog::spdlog GTest::gtest_main)
+target_link_libraries(assert_exception_test PUBLIC spdlog::spdlog
+  GTest::gtest_main LevelZero::headers)
 
 add_executable(subscribers_unit_test subscribers_unit_test.cc)
 
@@ -761,7 +762,7 @@ target_include_directories(
           "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
 
 target_link_libraries(pc_sampling_basic_test PUBLIC spdlog::spdlog Pti::pti_view
-  GTest::gtest_main LevelZero::level-zero ${FS_LIB})
+  GTest::gtest_main LevelZero::level-zero LevelZero::level-zero-ext ${FS_LIB})
 
 add_executable(pc_sampling_internal_test pc_sampling/pc_sampling_internal_test.cc)
 
@@ -773,7 +774,7 @@ target_include_directories(
           "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
 
 target_link_libraries(pc_sampling_internal_test PUBLIC spdlog::spdlog Pti::pti_view
-  GTest::gtest_main LevelZero::level-zero ${FS_LIB})
+GTest::gtest_main LevelZero::level-zero LevelZero::level-zero-ext ${FS_LIB})
 
 if(HAVE_SYCL)
   add_executable(pc_sampling_functional_test pc_sampling/pc_sampling_functional_test.cc)
@@ -782,7 +783,7 @@ if(HAVE_SYCL)
   target_link_options(pc_sampling_functional_test PRIVATE -fsycl)
 
   target_link_libraries(pc_sampling_functional_test PUBLIC spdlog::spdlog Pti::pti_view
-    GTest::gtest_main LevelZero::level-zero ${FS_LIB})
+    GTest::gtest_main LevelZero::level-zero LevelZero::level-zero-ext ${FS_LIB})
 endif()
 
 add_executable(pti_assert_test pti_assert_test.cc)

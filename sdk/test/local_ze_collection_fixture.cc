@@ -1,5 +1,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <level_zero/driver_experimental/zex_visit.h>
 #include <level_zero/ze_api.h>
 
 #include <chrono>
@@ -79,6 +80,8 @@ class LocalModeZeGemmTest : public testing::Test {
     auto status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     ASSERT_EQ(status, ZE_RESULT_SUCCESS);
     drv_ = utils::ze::GetGpuDriver(kPtiDeviceId);
+    command_list_visit_supported_ =
+        ::utils::ze::IsDriverExtensionSupported(drv_, ZE_COMMAND_VISIT_EXT_NAME);
     dev_ = utils::ze::GetGpuDevice(kPtiDeviceId);
     ASSERT_NE(drv_, nullptr);
     ctx_ = utils::ze::GetContext(drv_);
@@ -122,6 +125,10 @@ class LocalModeZeGemmTest : public testing::Test {
 
     if (kInorderQueue) {
       cmd_list_desc.flags |= ZE_COMMAND_LIST_FLAG_IN_ORDER;
+    }
+
+    if (command_list_visit_supported_) {
+      cmd_list_desc.flags |= ZE_COMMAND_LIST_FLAG_ENABLE_CMD_VISITING;
     }
 
     status = zeCommandListCreate(ctx_, dev_, &cmd_list_desc, &cmd_list_);
@@ -450,6 +457,7 @@ class LocalModeZeGemmTest : public testing::Test {
   std::vector<float> a_vector_;
   std::vector<float> b_vector_;
   std::vector<float> result_vector_;
+  bool command_list_visit_supported_ = false;
   ze_driver_handle_t drv_ = nullptr;
   ze_device_handle_t dev_ = nullptr;
   ze_context_handle_t ctx_ = nullptr;
@@ -490,7 +498,14 @@ TEST_F(LocalModeZeGemmTest, TestStartTracingExecuteCommandQueue) {
   DisableAndFlushAllViews();
 
   EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_ze_records, static_cast<size_t>(2));
-  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(0));
+
+  if (command_list_visit_supported_) {
+    EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(1));
+    SUCCEED()
+        << "Command List Visiting is supported, expected 2 driver API records and 1 kernel record.";
+  } else {
+    EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(0));
+  }
 
   ValidateGemmKernel();
 }
@@ -849,7 +864,7 @@ TEST_F(LocalModeZeGemmTest,
       zeCommandListAppendLaunchKernel(compute_cmd_list_, knl_, &dim_, kernel_signal, 0, nullptr),
       ZE_RESULT_SUCCESS);
 
-  // TODO: Investate why this doesn't work in FULL mode (i.e., PTI_COLLECTION_MODE=0)
+  // TODO(PTI): Investigate why this doesn't work in FULL mode (i.e., PTI_COLLECTION_MODE=0)
   // ASSERT_EQ(SpinBlockEvent(kernel_signal), ZE_RESULT_SUCCESS);
 
   ASSERT_EQ(zeCommandListAppendMemoryCopy(copy_cmd_list_, std::data(result_vector_), result_buf_,

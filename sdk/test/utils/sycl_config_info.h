@@ -27,6 +27,10 @@ namespace pti::test::utils {
   return result;
 }
 
+[[nodiscard]] inline bool CommandListVisitAvailable() {
+  return level_zero::CommandListVisitAvailable();
+}
+
 }  // namespace pti::test::utils
 
 #endif  // TEST_UTILS_SYCL_CONFIG_INFO_H_

@@ -4,13 +4,17 @@
 #include <level_zero/loader/ze_loader.h>
 #include <level_zero/ze_api.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "pti_assert.h"
+#include "test_helpers.h"
+#include "utils/ze_utils.h"
 
 inline bool operator>=(const zel_version_t& left, const zel_version_t& right) {
   bool same_major_version = left.major == right.major;
@@ -21,9 +25,27 @@ inline bool operator>=(const zel_version_t& left, const zel_version_t& right) {
 
 namespace pti::test::utils::level_zero {
 
-constexpr zel_version_t kProperLoaderVersionForZeInitDrivers = {1, 19, 2};
-constexpr zel_version_t kProperLoaderVersionForZesInit = {1, 16, 0};
-constexpr uint32_t kBmgIpVersion = 0x05004000;
+inline constexpr zel_version_t kProperLoaderVersionForZeInitDrivers = {1, 19, 2};
+inline constexpr zel_version_t kProperLoaderVersionForZesInit = {1, 16, 0};
+inline constexpr uint32_t kBmgIpVersion = 0x05004000;
+inline constexpr std::string_view kCommandVisitExtName = "ZE_extension_command_visit";
+
+[[nodiscard]] inline bool FlatCommandListRecordingEnabled() {
+  static constexpr std::string_view kPositiveValue = "1";
+  return GetEnv("NEOReadDebugKeys") == kPositiveValue &&
+         GetEnv("ExperimentalFlatCommandListApiRecording") == kPositiveValue;
+}
+
+[[nodiscard]] inline bool CommandListVisitSupported() {
+  const auto drivers = ::utils::ze::GetDriverList();
+  return std::any_of(std::cbegin(drivers), std::cend(drivers), [](auto* const driver) {
+    return ::utils::ze::IsDriverExtensionSupported(driver, kCommandVisitExtName);
+  });
+}
+
+[[nodiscard]] inline bool CommandListVisitAvailable() {
+  return FlatCommandListRecordingEnabled() && CommandListVisitSupported();
+}
 
 [[nodiscard]] inline bool CheckIntegratedGraphics(ze_device_handle_t device) {
   ze_device_properties_t device_props{};
@@ -33,10 +55,7 @@ constexpr uint32_t kBmgIpVersion = 0x05004000;
         "Failed to get device properties, device returned: " + std::to_string(return_cd);
     throw std::runtime_error(err_msg);
   }
-  if (device_props.flags & ZE_DEVICE_PROPERTY_FLAG_INTEGRATED) {
-    return true;
-  }
-  return false;
+  return static_cast<bool>(device_props.flags & ZE_DEVICE_PROPERTY_FLAG_INTEGRATED);
 }
 
 [[nodiscard]] inline int GetGroupOrdinals(ze_device_handle_t device, uint32_t& compute_ordinal,

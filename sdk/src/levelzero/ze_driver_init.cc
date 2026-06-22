@@ -11,7 +11,9 @@
 #include <level_zero/zes_api.h>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <optional>
+#include <tuple>
 #include <vector>
 
 #include "lz_api_tracing_api_loader.h"
@@ -60,6 +62,7 @@ inline bool operator>=(const zel_version_t& left, const zel_version_t& right) {
 ze_result_t ZeInitDrivers(uint32_t* driver_count, ze_driver_handle_t* drivers,
                           ze_init_driver_type_desc_t* desc) {
   if (pti::PtiLzTracerLoader::Instance().zeInitDrivers_) {
+    overhead::ScopedOverheadCollector scoped_collector(zeInitDrivers_id);
     return pti::PtiLzTracerLoader::Instance().zeInitDrivers_(driver_count, drivers, desc);
   }
   return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
@@ -108,6 +111,7 @@ ZeDriverInit::ZeDriverInit() : init_success_(InitLegacyDrivers()) {
   if (init_success_) {
     InitSysmanDrivers();
   }
+  CollectExtensions(drivers_);
 }
 
 bool ZeDriverInit::Success() const { return init_success_; }
@@ -122,9 +126,7 @@ bool ZeDriverInit::InitDrivers() {
   desc.stype = ZE_STRUCTURE_TYPE_INIT_DRIVER_TYPE_DESC;
   desc.flags = ZE_INIT_DRIVER_TYPE_FLAG_GPU;
   desc.pNext = nullptr;
-  overhead::Init();
   auto status = ZeInitDrivers(&drv_cnt, nullptr, &desc);
-  overhead_fini(zeInitDrivers_id);
 
   bool result = (status == ZE_RESULT_SUCCESS);
 
@@ -135,9 +137,7 @@ bool ZeDriverInit::InitDrivers() {
 
   std::vector<ze_driver_handle_t> driver_list(static_cast<size_t>(drv_cnt));
 
-  overhead::Init();
   status = ZeInitDrivers(&drv_cnt, driver_list.data(), &desc);
-  overhead_fini(zeInitDrivers_id);
   result = (status == ZE_RESULT_SUCCESS);
 
   if (!result) {
@@ -187,5 +187,19 @@ void ZeDriverInit::InitSysmanDrivers() {
           "zesInit failed, tracing state might be disabled after another call to a oneAPI "
           "component or driver");
     }
+  }
+}
+
+template <typename T>
+void ProcessExt(ze_driver_handle_t driver, T& ext) {
+  ext = T::value_type::Load(driver);
+}
+
+void ZeDriverInit::CollectExtensions(const std::vector<ze_driver_handle_t>& drivers) {
+  for (auto* driver : drivers) {
+    ZeExts exts{};
+    std::apply([driver](auto&... args) { (ProcessExt(driver, args), ...); }, exts.extensions);
+
+    driver_extension_fns_[driver] = exts;
   }
 }

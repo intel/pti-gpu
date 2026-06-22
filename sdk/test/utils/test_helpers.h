@@ -1,8 +1,11 @@
 #ifndef TEST_UTILS_TEST_HELPERS_H_
 #define TEST_UTILS_TEST_HELPERS_H_
 
+#include <stdlib.h>
+
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <initializer_list>
@@ -113,8 +116,8 @@ constexpr std::size_t ValidateTimestamps(T... args) {
   return found_issues;
 }
 
-inline constexpr auto SizeOfLargestViewRecord() {
-  constexpr std::array view_size_lookup_table{
+constexpr auto SizeOfLargestViewRecord() {
+  constexpr std::array kViewSizeLookupTable{
       sizeof(pti_view_record_kernel_v2),             // PTI_VIEW_DEVICE_GPU_KERNEL
       sizeof(pti_view_record_api),                   // PTI_VIEW_LEVEL_ZERO_CALLS
       sizeof(pti_view_record_overhead),              // PTI_VIEW_COLLECTION_OVERHEAD
@@ -126,7 +129,7 @@ inline constexpr auto SizeOfLargestViewRecord() {
       sizeof(pti_view_record_synchronization),       // PTI_VIEW_DEVICE_SYNCHRONIZATION
       sizeof(pti_view_record_comms),                 // PTI_VIEW_COMMUNICATION
   };
-  return *std::max_element(view_size_lookup_table.begin(), view_size_lookup_table.end());
+  return *std::max_element(kViewSizeLookupTable.begin(), kViewSizeLookupTable.end());
 }
 
 constexpr int ValidateNoBigGapBetweenTimestampsNs(uint64_t gap_in_ns,
@@ -147,6 +150,29 @@ constexpr int ValidateNoBigGapBetweenTimestampsNs(uint64_t gap_in_ns,
     prev_stamp = next_stamp;
   }
   return found_issues;
+}
+
+[[nodiscard]] inline std::string GetEnv(const char* name) {
+  if (name == nullptr) {
+    return std::string();
+  }
+#if defined(_WIN32)
+  char* value = nullptr;
+  size_t env_buf_size = 0;
+  auto status = _dupenv_s(&value, &env_buf_size, name);
+  std::unique_ptr<std::remove_pointer_t<decltype(value)>, decltype(&free)> value_buf(value, &free);
+  if (status || value == nullptr || env_buf_size == 0) {
+    return std::string();
+  }
+  auto result = std::string(value_buf.get(), env_buf_size - 1);
+  return result;
+#else
+  const char* value = getenv(name);
+  if (value == nullptr) {
+    return std::string();
+  }
+  return std::string(value);
+#endif
 }
 
 inline constexpr auto kDefaultPtiBufferAlignment = std::align_val_t{1};

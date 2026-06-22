@@ -892,9 +892,13 @@ def gen_exit_callback(
             f.write(
                 "           //   this would require instead of one collector->options_.kernel_tracing option field - have several ones\n"
             )
+            f.write("           if (*instance_user_data != nullptr) {\n")
             f.write(
-                "           rec.cid_ = (static_cast<ZeKernelCommand*>(*instance_user_data))->corr_id_;\n"
+                "             rec.cid_ = (static_cast<ZeKernelCommand*>(*instance_user_data))->corr_id_;\n"
             )
+            f.write("           } else {\n")
+            f.write("             rec.cid_ = UniCorrId::GetUniCorrId();\n")
+            f.write("           }\n")
             f.write("          } else {\n")
             f.write("           rec.cid_ = UniCorrId::GetUniCorrId();\n")
             f.write("          }\n")

@@ -202,6 +202,7 @@ endif()
 add_library(pti MODULE "${PROJECT_SOURCE_DIR}/src/pti_view.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti.cc"
                        "${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc"
+                       "${PROJECT_SOURCE_DIR}/src/levelzero/ze_command_visitor.cc"
                        "${PROJECT_SOURCE_DIR}/src/pti_callbacks.cc"
                        "${PROJECT_SOURCE_DIR}/src/pc_sampling/pti_pc_sampling.cc"
                        "${PROJECT_SOURCE_DIR}/src/pc_sampling/pti_pc_sampling_collector.cc"
@@ -265,9 +266,12 @@ endif()
 set(XPTI_FRAMEWORK_DISPATCHER_NAME_DEFINE
   $<$<TARGET_EXISTS:Xpti::xpti>:$<$<CONFIG:Debug>:PTI_XPTI_FRAMEWORK_DISPATCHER_NAME=$<TARGET_FILE_NAME:Xpti::xpti>>>)
 
+# XPTI needs NOMINMAX defined on Windows to avoid conflicts with numerical
+# limits.
 target_compile_definitions(
   pti
   PRIVATE $<$<TARGET_EXISTS:Xpti::xpti>:PTI_TRACE_SYCL>
+          $<$<AND:$<TARGET_EXISTS:Xpti::xpti>,$<PLATFORM_ID:Windows>>:NOMINMAX>
           ${XPTI_FRAMEWORK_DISPATCHER_NAME_DEFINE}
           $<$<TARGET_EXISTS:LevelZero::level-zero>:PTI_LEVEL_ZERO=1>
           $<IF:$<BOOL:${PTI_ENABLE_LOGGING}>,
@@ -281,6 +285,7 @@ target_link_libraries(
   PUBLIC Threads::Threads
   PRIVATE $<TARGET_NAME_IF_EXISTS:Xpti::xpti>
           LevelZero::level-zero
+          LevelZero::level-zero-ext
           spdlog::spdlog
           ${CMAKE_DL_LIBS}
           ${FS_LIB}

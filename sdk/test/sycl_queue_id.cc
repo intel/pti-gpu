@@ -384,6 +384,11 @@ int RunSyclQueueIdMtTests(bool use_immediate_command_list, bool stacked_q = fals
   }
 
   StopTracing();
+  auto res = ptiFlushAllViews();
+  if (res != pti_result::PTI_SUCCESS) {
+    std::cerr << "Error flushing PTI views" << '\n';
+    exit_code = EXIT_FAILURE;
+  }
   return exit_code;
 }
 
@@ -400,6 +405,11 @@ int RunSyclQueueIdTests(bool use_immediate_command_lists, bool use_same_q = fals
       InitKernelAStackedQ(use_immediate_command_lists, a, size);
     }
     StopTracing();
+    auto res = ptiFlushAllViews();
+    if (res != pti_result::PTI_SUCCESS) {
+      std::cerr << "Error flushing PTI views" << '\n';
+      exit_code = EXIT_FAILURE;
+    }
     return exit_code;
   }
   StartTracing();

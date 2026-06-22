@@ -57,7 +57,7 @@ inline constexpr static std::array<const char* const, 13> kSTraceType = {
     "FunctionWithArgsEnd", "Metadata",    "WaitBegin", "WaitEnd",    "FunctionBegin",
     "FunctionEnd",         "QueueCreate", "Other"};
 
-enum class ApiType { kInvalid = 0, kKernel = 1, kMemory = 2 };
+enum class ApiType { kInvalid = 0, kKernel = 1, kMemory = 2, kGraph = 3 };
 
 inline static const std::unordered_map<pti_api_id_runtime_sycl, ApiType> kCoreApis = {
     {pti_api_id_runtime_sycl::urEnqueueUSMFill_id, ApiType::kMemory},
@@ -79,7 +79,9 @@ inline static const std::unordered_map<pti_api_id_runtime_sycl, ApiType> kCoreAp
     {pti_api_id_runtime_sycl::urEnqueueMemBufferCopy_id, ApiType::kMemory},
     {pti_api_id_runtime_sycl::urUSMHostAlloc_id, ApiType::kMemory},
     {pti_api_id_runtime_sycl::urUSMSharedAlloc_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urUSMDeviceAlloc_id, ApiType::kMemory}};
+    {pti_api_id_runtime_sycl::urUSMDeviceAlloc_id, ApiType::kMemory},
+    {pti_api_id_runtime_sycl::urEnqueueCommandBufferExp_id, ApiType::kGraph},
+    {pti_api_id_runtime_sycl::urEnqueueGraphExp_id, ApiType::kGraph}};
 
 inline const char* GetTracePointTypeString(xpti::trace_point_type_t trace_type) {
   switch (trace_type) {
@@ -123,14 +125,6 @@ inline std::string Truncate(const std::string& name) {
 inline ApiType GetApiType(const pti_api_id_runtime_sycl api_id) noexcept {
   const auto it = kCoreApis.find(api_id);
   return (it != kCoreApis.end()) ? it->second : ApiType::kInvalid;
-}
-
-inline bool InKernelCoreApis(const pti_api_id_runtime_sycl api_id) noexcept {
-  return GetApiType(api_id) == ApiType::kKernel;
-}
-
-inline bool InMemoryCoreApis(const pti_api_id_runtime_sycl api_id) noexcept {
-  return GetApiType(api_id) == ApiType::kMemory;
 }
 
 // Metadata key classification enum and cache
@@ -246,7 +240,9 @@ class SyclCollector {
     sycl_data_mview.cid_ = sycl_data_kview.cid_;
     SyclCollector::Instance().sycl_runtime_rec_.cid_ = sycl_data_kview.cid_;
 
-    if (!user_data) return;
+    if (!user_data) {
+      return;
+    }
 
     const auto* args = static_cast<const xpti::function_with_args_t*>(user_data);
     const auto api_id = static_cast<pti_api_id_runtime_sycl>(args->function_id);
@@ -263,6 +259,11 @@ class SyclCollector {
       sycl_data_kview.sycl_enqk_begin_time_ = runtime_rec.start_time_;
     } else if (api_type == ApiType::kMemory) {
       sycl_data_mview.sycl_task_begin_time_ = runtime_rec.start_time_;
+    } else if (api_type == ApiType::kGraph) {
+      sycl_data_kview.sycl_task_begin_time_ = runtime_rec.start_time_;
+      sycl_data_mview.sycl_task_begin_time_ = runtime_rec.start_time_;
+      sycl_data_kview.sycl_enqk_begin_time_ = runtime_rec.start_time_;
+      sycl_data_mview.sycl_enqk_begin_time_ = runtime_rec.start_time_;
     }
   }
 
@@ -271,7 +272,9 @@ class SyclCollector {
     // function start/end to avoid measuring callback overhead.
     const auto time = utils::GetTime();
 
-    if (!user_data) return;
+    if (!user_data) {
+      return;
+    }
 
     const auto* args = static_cast<const xpti::function_with_args_t*>(user_data);
     const auto api_id = static_cast<pti_api_id_runtime_sycl>(args->function_id);
@@ -315,7 +318,9 @@ class SyclCollector {
   }
 
   static void HandleTaskBegin(xpti::trace_event_data_t* Event) {
-    if (!Event) return;
+    if (!Event) {
+      return;
+    }
 
     const uint64_t ID = Event->unique_id;
     const uint64_t Instance_ID = Event->instance_id;
@@ -352,7 +357,9 @@ class SyclCollector {
   }
 
   static void HandleNodeCreate(xpti::trace_event_data_t* Event) {
-    if (!Event) return;
+    if (!Event) {
+      return;
+    }
 
     const uint64_t ID = Event->unique_id;
     char* stashed_key = nullptr;
@@ -481,7 +488,7 @@ class XptiStreamRegistrationHandler {
       SyclCollector::Instance().StreamsInitialized();
       if (!SyclCollector::Instance().Enabled()) {
         SyclCollector::Instance().DisableTracing();
-        // To remove effects of first callabacks that Sycl collector gets
+        // To remove effects of first callbacks that Sycl collector gets
         // until all streams registered
         // Zeroing cid_ -s is particularly important for correlation_id fields correctness
         sycl_data_kview.kid_ = 0;
