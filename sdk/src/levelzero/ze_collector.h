@@ -368,7 +368,7 @@ class ZeCollector {
       current_host_time = utils::GetTime();
 
       uint64_t current_device_time = anchor_device_time + ((current_host_time - anchor_host_time) /
-                                                           timer_helpers[device]->coeff_);
+                                                           helper->GetNsecInGPUTimerTick());
 
       *host_time = current_host_time;
       *device_time = current_device_time;
@@ -1224,10 +1224,25 @@ class ZeCollector {
       // then it recalculated to CPU timescale units
       uint64_t time_shift = 0;
 
+      // TODO - investigate more and submit bug to driver
+      if (device_start <= device_submit_time && device_mask == 0xFFFFFFFFFFFFFFFFULL &&  // 64 bits
+          device_submit_time - device_start < CPUGPUTimeInterpolationHelper::kThresholdForMissync) {
+        SPDLOG_DEBUG("In {} detected suspicious case, device_start: {}, device_submit_time: {}",
+                     __func__, utils::AposFormat(device_start),
+                     utils::AposFormat(device_submit_time));
+        // to avoid negative time_shift and wrong start/end times in CPU timescale
+        if (device_start > 2) {
+          device_submit_time = device_start - 2;
+        }
+      }
+
       if (device_start > device_submit_time) {
         time_shift = (device_start - device_submit_time) * NSEC_IN_SEC / device_freq;
       } else {
         // overflow
+        SPDLOG_DEBUG("In {} detected overflow case, device_start: {}, device_submit_time: {}",
+                     __func__, utils::AposFormat(device_start),
+                     utils::AposFormat(device_submit_time));
         time_shift =
             (device_mask - device_submit_time + 1 + device_start) * NSEC_IN_SEC / device_freq;
       }
