@@ -185,11 +185,11 @@ ptiMetricsGetMetricsProperties(pti_metrics_group_handle_t metrics_group_handle,
                                 pti_metric_properties_t* metrics);
 
 typedef struct _pti_metrics_group_collection_params_t {
-  size_t _struct_size;                            //!< [in] Size of the pti_metirc_config_collection_params struct used for backwards compatibility
+  size_t _struct_size;                            //!< [in] Size of the pti_metrics_group_collection_params_t struct used for backwards compatibility
   pti_metrics_group_handle_t _group_handle;       //!< [in] Metric group handle.
   uint32_t _sampling_interval;                    //!< [in] Set the sampling interval in nsec.
                                                   //!<      This field is applicable for PTI_METRIC_GROUP_TYPE_TIME_BASED metrics groups only.
-  uint32_t _time_aggr_window;                     //!< [in] Set the time aggregation window in nsec.
+  uint64_t _time_aggr_window;                     //!< [in] Set the time aggregation window in nsec.
                                                   //!<      This field is applicable for PTI_METRIC_GROUP_TYPE_TRACE_BASED metrics groups only.
 } pti_metrics_group_collection_params_t;
 

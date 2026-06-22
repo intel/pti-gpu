@@ -1646,7 +1646,7 @@ inline pti_metrics_tracer_functions_t tf;
 
 class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
  private:
-  uint32_t time_aggr_window_;
+  uint64_t time_aggr_window_;
   external::L0::zet_metric_decoder_exp_handle_t metric_decoder_;
 
  public:
@@ -1658,7 +1658,7 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
 
   PtiTraceMetricsProfiler(pti_device_handle_t device_handle,
                           pti_metrics_group_handle_t metrics_group_handle,
-                          uint32_t time_aggr_window)
+                          uint64_t time_aggr_window)
       : PtiMetricsProfiler(device_handle, metrics_group_handle) {
     time_aggr_window_ = time_aggr_window;
     metric_decoder_ = nullptr;
@@ -1735,7 +1735,7 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
         std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
     PTI_ASSERT(inf.is_open());
 
-    uint32_t time_aggr_window = time_aggr_window_ / 1000;  // ns to us
+    uint64_t time_aggr_window = time_aggr_window_ / 1000;  // ns to us
     if (time_aggr_window_ == 0) {
       // TODO: Should there be a min and/or max?
       // TODO: Log message saying that default is used
@@ -2669,7 +2669,7 @@ class PtiMetricsCollectorHandler {
         }
         case external::L0::ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EXP_TRACER_BASED: {
           if (trace_api_enabled_) {
-            uint32_t time_aggr_window = metric_config_params->_time_aggr_window;
+            uint64_t time_aggr_window = metric_config_params->_time_aggr_window;
             std::unique_ptr<PtiTraceMetricsProfiler> trace_metrics_profiler =
                 std::make_unique<PtiTraceMetricsProfiler>(device_handle, group, time_aggr_window);
             trace_metrics_profilers_[device_handle] = std::move(trace_metrics_profiler);
