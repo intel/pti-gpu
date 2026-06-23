@@ -1587,13 +1587,13 @@ class ZeCollector {
               if (close_status == ZE_RESULT_SUCCESS) {
                 info.appended_commands = std::move(commands);
               } else {
-                SPDLOG_WARN("Failed to close instrumented command list {}, status: {:x}",
+                SPDLOG_INFO("Failed to close instrumented command list {}, status: {:x}",
                             static_cast<const void*>(info.instrumented_command_list),
                             static_cast<uint32_t>(close_status));
                 ZeCollector::ReleaseInstrumentedCommandList(info);
               }
             } else {
-              SPDLOG_WARN(
+              SPDLOG_INFO(
                   "Failed to visit command list {}, status: {:x}, skipping visit for this "
                   "command list.",
                   static_cast<const void*>(clist), static_cast<uint32_t>(result));
@@ -3473,10 +3473,8 @@ class ZeCollector {
         ref_count++;
         return ref_count;
       }
-      // Drop any command list info accumulated while tracing was off -
-      // entries from a prior region are stale and may reference resources
-      // the collector no longer owns once tracing resumes.
-      parent_collector_->ClearCommandListMap();
+      // NOTE: Re-enable ClearCommandListMap() if stale command list info becomes an issue. For now,
+      // keep the same behavior (pre-On-Demand SYCL Graph tracing).
       if (parent_collector_->options_.disabled_mode) {
         ze_result_t status = parent_collector_->l0_wrapper_.w_zelEnableTracingLayer();
         if (ZE_RESULT_SUCCESS == status) {

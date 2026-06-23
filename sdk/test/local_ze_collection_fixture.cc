@@ -510,6 +510,34 @@ TEST_F(LocalModeZeGemmTest, TestStartTracingExecuteCommandQueue) {
   ValidateGemmKernel();
 }
 
+TEST_F(LocalModeZeGemmTest, TestStartTracingExecuteCommandQueueWithoutVisitorExtensionEnabled) {
+  // Leaving out of Constructor / SetUp for now to allow extending to more test
+  // cases.
+  InitializeDrivers();
+  command_list_visit_supported_ = false;
+  InitializeEvents(1);
+  InitializeQueue();
+  CreateKernel();
+  SetKernelGroupSize();
+  SetKernelArguments();
+  PrepareCommandList();
+
+  EnableView(PTI_VIEW_DEVICE_GPU_KERNEL);
+  EnableView(PTI_VIEW_DRIVER_API);
+
+  auto status = zeCommandQueueExecuteCommandLists(cmd_q_, 1, &cmd_list_, nullptr);
+  ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+  status = zeCommandQueueSynchronize(cmd_q_, UINT64_MAX);
+  ASSERT_EQ(status, ZE_RESULT_SUCCESS);
+
+  DisableAndFlushAllViews();
+
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_ze_records, static_cast<size_t>(2));
+  EXPECT_EQ(LocalModeZeGemmTestData::Instance().num_kernels, static_cast<size_t>(0));
+
+  ValidateGemmKernel();
+}
+
 TEST_F(LocalModeZeGemmTest, TestStartTracingPrepareCommandList) {
   // Leaving out of Constructor / SetUp for now to allow extending to more test
   // cases.

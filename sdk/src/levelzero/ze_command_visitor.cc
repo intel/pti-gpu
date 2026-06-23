@@ -222,7 +222,8 @@ ZeCommandVisitor::Result ZeCommandVisitor::Visit(
   auto result = visitor_extension_.ze_command_list_visit(command_list, &visit_desc_);
   SPDLOG_TRACE("Visit result: {:x}", static_cast<std::uint32_t>(result));
   if (HasError() || result != ZE_RESULT_SUCCESS) {
-    SPDLOG_ERROR("Failed to visit command list: {:x}", static_cast<std::uint32_t>(result));
+    SPDLOG_INFO("Failed to visit command list: {:x}",
+                static_cast<std::uint32_t>(result == ZE_RESULT_SUCCESS ? internal_error_ : result));
     if (internal_error_ == ZE_RESULT_SUCCESS && result != ZE_RESULT_SUCCESS) {
       internal_error_ = result;
     }
@@ -241,7 +242,8 @@ ZeCommandVisitor::Result ZeCommandVisitor::GraphVisit(const ZeDeviceDescriptor& 
   auto result = visitor_extension_.ze_graph_visit(graph, &visit_desc_);
   SPDLOG_TRACE("GraphVisit result: {:x}", static_cast<std::uint32_t>(result));
   if (HasError() || result != ZE_RESULT_SUCCESS) {
-    SPDLOG_ERROR("Failed to visit graph: {:x}", static_cast<std::uint32_t>(result));
+    SPDLOG_INFO("Failed to visit graph: {:x}",
+                static_cast<std::uint32_t>(result == ZE_RESULT_SUCCESS ? internal_error_ : result));
     if (internal_error_ == ZE_RESULT_SUCCESS && result != ZE_RESULT_SUCCESS) {
       internal_error_ = result;
     }
@@ -270,8 +272,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -279,7 +281,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
     auto* event_ptr = event.Get();
     auto buf = utils::ze::MakeTimestampBuffer(visitor->current_command_list_info_.context, 1);
     if (!buf) {
-      SPDLOG_ERROR("Failed to create timestamp buffer");
+      SPDLOG_INFO("Failed to create timestamp buffer");
       visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       return;
     }
@@ -329,8 +331,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -339,7 +341,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
     auto buf = utils::ze::MakeTimestampBuffer(visitor->current_command_list_info_.context, 1);
 
     if (!buf) {
-      SPDLOG_ERROR("Failed to create timestamp buffer");
+      SPDLOG_INFO("Failed to create timestamp buffer");
       visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       return;
     }
@@ -376,8 +378,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -386,7 +388,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
     auto buf = utils::ze::MakeTimestampBuffer(visitor->current_command_list_info_.context, 1);
 
     if (!buf) {
-      SPDLOG_ERROR("Failed to create timestamp buffer");
+      SPDLOG_INFO("Failed to create timestamp buffer");
       visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       return;
     }
@@ -430,8 +432,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchCooperat
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -468,8 +470,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelIn
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -501,8 +503,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopy(
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -536,8 +538,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryFill(
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -575,8 +577,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyRegi
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -617,8 +619,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryCopyFrom
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -651,8 +653,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopy(
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -689,8 +691,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyRegio
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -724,8 +726,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMem
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -760,8 +762,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromM
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -804,8 +806,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMem
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -843,8 +845,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromM
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -897,8 +899,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendBarrier(
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
@@ -931,8 +933,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryRangesBa
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
-        SPDLOG_ERROR("Failed to append wait and signal for event: {}",
-                     static_cast<const void*>(hSignalEvent));
+        SPDLOG_INFO("Failed to append wait and signal for event: {}",
+                    static_cast<const void*>(hSignalEvent));
         visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       }
     }
