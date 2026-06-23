@@ -68,7 +68,8 @@ target_include_directories(
 target_link_libraries(
   ze_command_visitor_tests
   PUBLIC GTest::gmock GTest::gtest_main LevelZero::level-zero
-         LevelZero::level-zero-ext spdlog::spdlog fmt::fmt)
+         LevelZero::level-zero-ext spdlog::spdlog fmt::fmt
+         ${CMAKE_DL_LIBS})
 
 gtest_discover_tests(
   ze_command_visitor_tests DISCOVERY_TIMEOUT 60
