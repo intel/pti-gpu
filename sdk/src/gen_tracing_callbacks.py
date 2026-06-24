@@ -1302,6 +1302,24 @@ def main():
 
     # append runtime apis aa well
     existing_apiid_dict = get_apiids_per_category(pti_inc_path, category_dict)
+
+    # Instead of using ze_api.h directly to generate the internal maps and
+    # such, we will use the existing API files (unless regeneration is
+    # requested). This prevents the build from breaking on newer level zero
+    # versions than requested.
+    if not regen_api_files:
+        ze_existing_apiids = existing_apiid_dict.get(("driver", "levelzero"), {})
+        for function_name in list(func_param_dictionary.keys()):
+            if function_name + "_id" not in ze_existing_apiids:
+                print(
+                    f"Excluding {function_name} {func_param_dictionary.pop(function_name, None)}"
+                )
+
+        func_list = list(func_param_dictionary.keys())
+        # Overwrite category_dict to only include functions that are present in the
+        # PTI headers.
+        category_dict[("driver", "levelzero")] = func_list
+
     gen_callbacks(
         dst_file,
         func_param_dictionary,
