@@ -34,6 +34,7 @@
 #include "cl_intel_ext.h"
 
 #include "utils_ze.h"
+#include "utils_host.h"
 
 class ClCollector;
 
@@ -2038,11 +2039,11 @@ void *clHostMemAllocINTEL(cl_context context, const cl_mem_properties_intel *pro
         }
         str += "clHostMemAllocINTEL:";
 
-        str += " context = " + std::to_string(uint64_t(context));
-        str += " properties = " + std::to_string(uint64_t(properties));
+        str += " context = " + ToHexString(reinterpret_cast<uintptr_t>(context));
+        str += " properties = " + ToHexString(reinterpret_cast<uintptr_t>(properties));
         str += " size = " + std::to_string(size);
         str += " alignment = " + std::to_string(alignment);
-        str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
+        str += " errcode_ret = " + ToHexString(reinterpret_cast<uintptr_t>(errcode_ret));
         str += "\n";
 
         collector->Log(str);
@@ -2077,7 +2078,7 @@ void *clHostMemAllocINTEL(cl_context context, const cl_mem_properties_intel *pro
       str +=  "clHostMemAllocINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
 
-      str += " result = " + std::to_string(uint64_t(result));
+      str += " result = " + ToHexString(reinterpret_cast<uintptr_t>(result));
 
       str += " -> " + std::string(utils::cl::GetErrorString(*errcode_ret));
       str += " (" + std::to_string(*errcode_ret) + ")";
@@ -2112,12 +2113,12 @@ void *clDeviceMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
         }
         str += "clDeviceMemAllocINTEL:";
 
-        str += " context = " + std::to_string(uint64_t(context));
-        str += " device = " + std::to_string(uint64_t(device));
-        str += " properties = " + std::to_string(uint64_t(properties));
+        str += " context = " + ToHexString(reinterpret_cast<uintptr_t>(context));
+        str += " device = " + ToHexString(reinterpret_cast<uintptr_t>(device));
+        str += " properties = " + ToHexString(reinterpret_cast<uintptr_t>(properties));
         str += " size = " + std::to_string(size);
         str += " alignment = " + std::to_string(alignment);
-        str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
+        str += " errcode_ret = " + ToHexString(reinterpret_cast<uintptr_t>(errcode_ret));
         str += "\n";
 
         collector->Log(str);
@@ -2152,7 +2153,7 @@ void *clDeviceMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
       str +=  "clDeviceMemAllocINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
 
-      str += " result = " + std::to_string(uint64_t(result));
+      str += " result = " + ToHexString(reinterpret_cast<uintptr_t>(result));
 
       str += " -> " + std::string(utils::cl::GetErrorString(*errcode_ret));
       str += " (" + std::to_string(*errcode_ret) + ")";
@@ -2187,12 +2188,12 @@ void *clSharedMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
         }
         str += "clSharedMemAllocINTEL:";
 
-        str += " context = " + std::to_string(uint64_t(context));
-        str += " device = " + std::to_string(uint64_t(device));
-        str += " properties = " + std::to_string(uint64_t(properties));
+        str += " context = " + ToHexString(reinterpret_cast<uintptr_t>(context));
+        str += " device = " + ToHexString(reinterpret_cast<uintptr_t>(device));
+        str += " properties = " + ToHexString(reinterpret_cast<uintptr_t>(properties));
         str += " size = " + std::to_string(size);
         str += " alignment = " + std::to_string(alignment);
-        str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
+        str += " errcode_ret = " + ToHexString(reinterpret_cast<uintptr_t>(errcode_ret));
         str += "\n";
 
         collector->Log(str);
@@ -2227,7 +2228,7 @@ void *clSharedMemAllocINTEL(cl_context context, cl_device_id device, const cl_me
       str += "clSharedMemAllocINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
 
-      str += " result = " + std::to_string(uint64_t(result));
+      str += " result = " + ToHexString(reinterpret_cast<uintptr_t>(result));
 
       if (errcode_ret) {
         str += " -> " + std::string(utils::cl::GetErrorString(*errcode_ret));
@@ -2264,8 +2265,8 @@ cl_int clMemFreeINTEL(cl_context context, void *ptr) {
         }
         str += "clMemFreeINTEL:";
 
-        str += " context = " + std::to_string(uint64_t(context));
-        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += " context = " + ToHexString(reinterpret_cast<uintptr_t>(context));
+        str += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(ptr));
         str += "\n";
 
         collector->Log(str);
@@ -2331,12 +2332,12 @@ cl_int clGetMemAllocInfoINTEL(cl_context context, const void *ptr, cl_mem_info_i
         }
         str += "clGetMemAllocInfoINTEL:";
 
-        str += " context = " + std::to_string(uint64_t(context));
-        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += " context = " + ToHexString(reinterpret_cast<uintptr_t>(context));
+        str += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(ptr));
         str += " param_name = " + std::to_string(param_name);
         str += " param_value_size = " + std::to_string(param_value_size);
-        str += " param_value = " + std::to_string(uint64_t(param_value));
-        str += " param_value_size_ret = " + std::to_string(uint64_t(param_value_size_ret));
+        str += " param_value = " + ToHexString(reinterpret_cast<uintptr_t>(param_value));
+        str += " param_value_size_ret = " + ToHexString(reinterpret_cast<uintptr_t>(param_value_size_ret));
         str += "\n";
 
         collector->Log(str);
@@ -2404,9 +2405,9 @@ cl_int clSetKernelArgMemPointerINTEL(cl_kernel kernel, cl_uint arg_index, const 
         }
         str += "clSetKernelArgMemPointerINTEL:";
 
-        str += " kernel = " + std::to_string(uint64_t(kernel));
+        str += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(kernel));
         str += " arg_index = " + std::to_string(arg_index);
-        str += " arg_value = " + std::to_string(uint64_t(arg_value));
+        str += " arg_value = " + ToHexString(reinterpret_cast<uintptr_t>(arg_value));
         str += "\n";
 
         collector->Log(str);
@@ -2473,14 +2474,14 @@ cl_int clEnqueueMemcpyINTEL(cl_command_queue command_queue, cl_bool blocking, vo
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clEnqueueMemcpyINTEL:";
-        str += " command_queue = " + std::to_string(uint64_t(command_queue));
+        str += " command_queue = " + ToHexString(reinterpret_cast<uintptr_t>(command_queue));
         str += " blocking = " + std::to_string(blocking);
-        str += " dst_ptr = " + std::to_string(uint64_t(dst_ptr));
-        str += " src_ptr = " + std::to_string(uint64_t(src_ptr));
+        str += " dst_ptr = " + ToHexString(reinterpret_cast<uintptr_t>(dst_ptr));
+        str += " src_ptr = " + ToHexString(reinterpret_cast<uintptr_t>(src_ptr));
         str += " size = " + std::to_string(size);
         str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
-        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
-        str += " event = " + std::to_string(uint64_t(event));
+        str += " event_wait_list = " + ToHexString(reinterpret_cast<uintptr_t>(event_wait_list));
+        str += " event = " + ToHexString(reinterpret_cast<uintptr_t>(event));
         str += "\n";
 
         collector->Log(str);
@@ -2548,11 +2549,11 @@ cl_int clGetDeviceGlobalVariablePointerINTEL(cl_device_id device, cl_program pro
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clGetDeviceGlobalVariablePointerINTEL:";
-        str += " device = " + std::to_string(uint64_t(device));
-        str += " program = " + std::to_string(uint64_t(program));
+        str += " device = " + ToHexString(reinterpret_cast<uintptr_t>(device));
+        str += " program = " + ToHexString(reinterpret_cast<uintptr_t>(program));
         str += " global_variable_name = " + std::string(global_variable_name);
-        str += " global_variable_size_ret = " + std::to_string(uint64_t(global_variable_size_ret));
-        str += " global_variable_pointer_ret = " + std::to_string(uint64_t(global_variable_pointer_ret));
+        str += " global_variable_size_ret = " + ToHexString(reinterpret_cast<uintptr_t>(global_variable_size_ret));
+        str += " global_variable_pointer_ret = " + ToHexString(reinterpret_cast<uintptr_t>(global_variable_pointer_ret));
         str += "\n";
 
         collector->Log(str);
@@ -2619,12 +2620,12 @@ cl_int clGetKernelSuggestedLocalWorkSizeINTEL(cl_command_queue command_queue, cl
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clGetKernelSuggestedLocalWorkSizeINTEL:";
-        str += " command_queue = " + std::to_string(uint64_t(command_queue));
-        str += " kernel = " + std::to_string(uint64_t(kernel));
+        str += " command_queue = " + ToHexString(reinterpret_cast<uintptr_t>(command_queue));
+        str += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(kernel));
         str += " workDim = " + std::to_string(workDim);
-        str += " global_work_offset = " + std::to_string(uint64_t(global_work_offset));
-        str += " global_work_size = " + std::to_string(uint64_t(global_work_size));
-        str += " suggested_local_work_size = " + std::to_string(uint64_t(suggested_local_work_size));
+        str += " global_work_offset = " + ToHexString(reinterpret_cast<uintptr_t>(global_work_offset));
+        str += " global_work_size = " + ToHexString(reinterpret_cast<uintptr_t>(global_work_size));
+        str += " suggested_local_work_size = " + ToHexString(reinterpret_cast<uintptr_t>(suggested_local_work_size));
         str += "\n";
 
         collector->Log(str);
@@ -2658,7 +2659,7 @@ cl_int clGetKernelSuggestedLocalWorkSizeINTEL(cl_command_queue command_queue, cl
       }
       str +=  "clGetKernelSuggestedLocalWorkSizeINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
-      str += " suggested_local_work_size = " + std::to_string(uint64_t(suggested_local_work_size));
+      str += " suggested_local_work_size = " + ToHexString(reinterpret_cast<uintptr_t>(suggested_local_work_size));
       if (suggested_local_work_size != nullptr) {
         str += " (" + std::to_string(*suggested_local_work_size) + ")";
       }
@@ -2693,12 +2694,12 @@ cl_mem clCreateBufferWithPropertiesINTEL(cl_context context, const cl_mem_proper
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clCreateBufferWithPropertiesINTEL:";
-        str += " context = " + std::to_string(uint64_t(context));
-        str += " properties = " + std::to_string(uint64_t(properties));
+        str += " context = " + ToHexString(reinterpret_cast<uintptr_t>(context));
+        str += " properties = " + ToHexString(reinterpret_cast<uintptr_t>(properties));
         str += " cl_mem_flags = " + std::to_string(flags);
         str += " size = " + std::to_string(size);
-        str += " host_ptr = " + std::to_string(uint64_t(host_ptr));
-        str += " errcode_ret = " + std::to_string(uint64_t(errcode_ret));
+        str += " host_ptr = " + ToHexString(reinterpret_cast<uintptr_t>(host_ptr));
+        str += " errcode_ret = " + ToHexString(reinterpret_cast<uintptr_t>(errcode_ret));
         str += "\n";
 
         collector->Log(str);
@@ -2733,7 +2734,7 @@ cl_mem clCreateBufferWithPropertiesINTEL(cl_context context, const cl_mem_proper
       str +=  "clCreateBufferWithPropertiesINTEL";
       str += " [" + std::to_string(end_time - start_time) + " ns]";
 
-      str += " result = " + std::to_string(uint64_t(result));
+      str += " result = " + ToHexString(reinterpret_cast<uintptr_t>(result));
 
       if (errcode_ret) {
         str += " -> " + std::string(utils::cl::GetErrorString(*errcode_ret));
@@ -2769,13 +2770,13 @@ cl_int clEnqueueMemsetINTEL(cl_command_queue command_queue, void *dst_ptr, cl_in
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clEnqueueMemsetINTEL:";
-        str += " command_queue = " + std::to_string(uint64_t(command_queue));
-        str += " dst_ptr = " + std::to_string(uint64_t(dst_ptr));
+        str += " command_queue = " + ToHexString(reinterpret_cast<uintptr_t>(command_queue));
+        str += " dst_ptr = " + ToHexString(reinterpret_cast<uintptr_t>(dst_ptr));
         str += " value = " + std::to_string(value);
         str += " size = " + std::to_string(size);
         str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
-        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
-        str += " event = " + std::to_string(uint64_t(event));
+        str += " event_wait_list = " + ToHexString(reinterpret_cast<uintptr_t>(event_wait_list));
+        str += " event = " + ToHexString(reinterpret_cast<uintptr_t>(event));
         str += "\n";
 
         collector->Log(str);
@@ -2842,13 +2843,13 @@ cl_int clEnqueueMigrateMemINTEL(cl_command_queue command_queue, const void *ptr,
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clEnqueueMigrateMemINTEL:";
-        str += " command_queue = " + std::to_string(uint64_t(command_queue));
-        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += " command_queue = " + ToHexString(reinterpret_cast<uintptr_t>(command_queue));
+        str += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(ptr));
         str += " size = " + std::to_string(size);
-        str += " flags = " + std::to_string(uint64_t(flags));
+        str += " flags = " + ToHexString(static_cast<uintptr_t>(flags));
         str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
-        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
-        str += " event = " + std::to_string(uint64_t(event));
+        str += " event_wait_list = " + ToHexString(reinterpret_cast<uintptr_t>(event_wait_list));
+        str += " event = " + ToHexString(reinterpret_cast<uintptr_t>(event));
         str += "\n";
 
         collector->Log(str);
@@ -2915,13 +2916,13 @@ cl_int clEnqueueMemAdviseINTEL(cl_command_queue command_queue, const void *ptr, 
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clEnqueueMemAdviseINTEL:";
-        str += " command_queue = " + std::to_string(uint64_t(command_queue));
-        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += " command_queue = " + ToHexString(reinterpret_cast<uintptr_t>(command_queue));
+        str += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(ptr));
         str += " size = " + std::to_string(size);
-        str += " advice = " + std::to_string(uint64_t(advice));
+        str += " advice = " + ToHexString(static_cast<uintptr_t>(advice));
         str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
-        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
-        str += " event = " + std::to_string(uint64_t(event));
+        str += " event_wait_list = " + ToHexString(reinterpret_cast<uintptr_t>(event_wait_list));
+        str += " event = " + ToHexString(reinterpret_cast<uintptr_t>(event));
         str += "\n";
 
         collector->Log(str);
@@ -2988,14 +2989,14 @@ cl_int clEnqueueMemFillINTEL(cl_command_queue command_queue, void *dst_ptr, cons
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clEnqueueMemFillINTEL:";
-        str += " command_queue = " + std::to_string(uint64_t(command_queue));
-        str += " dst_ptr = " + std::to_string(uint64_t(dst_ptr));
-        str += " pattern = " + std::to_string(uint64_t(pattern));
+        str += " command_queue = " + ToHexString(reinterpret_cast<uintptr_t>(command_queue));
+        str += " dst_ptr = " + ToHexString(reinterpret_cast<uintptr_t>(dst_ptr));
+        str += " pattern = " + ToHexString(reinterpret_cast<uintptr_t>(pattern));
         str += " pattern_size = " + std::to_string(pattern_size);
         str += " size = " + std::to_string(size);
         str += " num_events_in_wait_list = " + std::to_string(num_events_in_wait_list);
-        str += " event_wait_list = " + std::to_string(uint64_t(event_wait_list));
-        str += " event = " + std::to_string(uint64_t(event));
+        str += " event_wait_list = " + ToHexString(reinterpret_cast<uintptr_t>(event_wait_list));
+        str += " event = " + ToHexString(reinterpret_cast<uintptr_t>(event));
         str += "\n";
 
         collector->Log(str);
@@ -3061,8 +3062,8 @@ cl_int clMemBlockingFreeINTEL(cl_context context, void *ptr) {
           str += "<TID:" + std::to_string((unsigned int)(utils::GetTid())) + "> ";
         }
         str += "clMemBlockingFreeINTEL:";
-        str += " context = " + std::to_string(uint64_t(context));
-        str += " ptr = " + std::to_string(uint64_t(ptr));
+        str += " context = " + ToHexString(reinterpret_cast<uintptr_t>(context));
+        str += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(ptr));
         str += "\n";
 
         collector->Log(str);

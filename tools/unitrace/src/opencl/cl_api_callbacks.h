@@ -7,6 +7,8 @@
 #ifndef PTI_TOOLS_UNITRACE_CL_API_CALLBACKS_H_
 #define PTI_TOOLS_UNITRACE_CL_API_CALLBACKS_H_
 
+#include "utils_host.h"
+
 static thread_local cl_int current_error = CL_SUCCESS;
 
 static void clGetSupportedImageFormatsOnEnter(
@@ -26,12 +28,12 @@ static void clGetSupportedImageFormatsOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " imageType = " + std::to_string(*(params->imageType));
   log_msg += " numEntries = " + std::to_string(*(params->numEntries));
-  log_msg += " imageFormats = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageFormats)));
-  log_msg += " numImageFormats = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numImageFormats)));
+  log_msg += " imageFormats = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->imageFormats)));
+  log_msg += " numImageFormats = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->numImageFormats)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -79,11 +81,11 @@ static void clGetKernelInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -131,9 +133,9 @@ static void clCompileProgramOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " program = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->program)));
   log_msg += " numDevices = " + std::to_string(*(params->numDevices));
-  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
+  log_msg += " deviceList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->deviceList)));
   if (*(params->options) == nullptr) {
     log_msg += " options = 0";
   } else if (strlen(*(params->options)) == 0) {
@@ -142,10 +144,10 @@ static void clCompileProgramOnEnter(
     log_msg += " options = \"" + std::string(*(params->options)) + "\"";
   }
   log_msg += " numInputHeaders = " + std::to_string(*(params->numInputHeaders));
-  log_msg += " inputHeaders = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->inputHeaders)));
-  log_msg += " headerIncludeNames = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->headerIncludeNames)));
-  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
-  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " inputHeaders = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->inputHeaders)));
+  log_msg += " headerIncludeNames = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->headerIncludeNames)));
+  log_msg += " funcNotify = " + ToHexString(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->userData)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -193,11 +195,11 @@ static void clSetEventCallbackOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += " commandExecCallbackType = " +
     std::to_string(*(params->commandExecCallbackType));
-  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
-  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " funcNotify = " + ToHexString(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->userData)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -245,7 +247,7 @@ static void clUnloadPlatformCompilerOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " platform = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platform)));
+  log_msg += " platform = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->platform)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -294,8 +296,8 @@ static void clGetPlatformIDsOnEnter(
   log_msg += std::string(data->functionName) + ":";
 
   log_msg += " numEntries = " + std::to_string(*(params->numEntries));
-  log_msg += " platforms = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platforms)));
-  log_msg += " numPlatforms = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numPlatforms)));
+  log_msg += " platforms = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->platforms)));
+  log_msg += " numPlatforms = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->numPlatforms)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -390,10 +392,10 @@ static void clEnqueueBarrierWithWaitListOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -441,16 +443,16 @@ static void clEnqueueMapBufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->buffer)));
   log_msg += " blockingMap = " + std::to_string(*(params->blockingMap));
   log_msg += " mapFlags = " + std::to_string(*(params->mapFlags));
   log_msg += " offset = " + std::to_string(*(params->offset));
   log_msg += " cb = " + std::to_string(*(params->cb));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -482,7 +484,7 @@ static void clEnqueueMapBufferOnExit(
   void ** result =
     reinterpret_cast<void **>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -510,16 +512,16 @@ static void clCreateImage3DOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
-  log_msg += " imageFormat = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageFormat)));
-  log_msg += " imageWidth = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageWidth)));
-  log_msg += " imageHeight = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageHeight)));
-  log_msg += " imageDepth = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageDepth)));
-  log_msg += " imageRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageRowPitch)));
-  log_msg += " imageSlicePitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageSlicePitch)));
-  log_msg += " hostPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " imageFormat = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->imageFormat)));
+  log_msg += " imageWidth = " + ToHexString(static_cast<uintptr_t>(*(params->imageWidth)));
+  log_msg += " imageHeight = " + ToHexString(static_cast<uintptr_t>(*(params->imageHeight)));
+  log_msg += " imageDepth = " + ToHexString(static_cast<uintptr_t>(*(params->imageDepth)));
+  log_msg += " imageRowPitch = " + ToHexString(static_cast<uintptr_t>(*(params->imageRowPitch)));
+  log_msg += " imageSlicePitch = " + ToHexString(static_cast<uintptr_t>(*(params->imageSlicePitch)));
+  log_msg += " hostPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -551,7 +553,7 @@ static void clCreateImage3DOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -579,12 +581,12 @@ static void clGetKernelArgInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
   log_msg += " argIndx = " + std::to_string(*(params->argIndx));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -632,14 +634,14 @@ static void clEnqueueSVMFreeOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " numSvmPointers = " + std::to_string(*(params->numSvmPointers));
-  log_msg += " svmPointers = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPointers)));
-  log_msg += " pfnFreeFunc = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->pfnFreeFunc)*>(params->pfnFreeFunc)));
-  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " svmPointers = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->svmPointers)));
+  log_msg += " pfnFreeFunc = " + ToHexString(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->pfnFreeFunc)*>(params->pfnFreeFunc)));
+  log_msg += " userData = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->userData)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -687,15 +689,15 @@ static void clEnqueueCopyImageToBufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " srcImage = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcImage)));
-  log_msg += " dstBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstBuffer)));
-  log_msg += " srcOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcOrigin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcImage = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->srcImage)));
+  log_msg += " dstBuffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->dstBuffer)));
+  log_msg += " srcOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->srcOrigin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
   log_msg += " dstOffset = " + std::to_string(*(params->dstOffset));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -743,11 +745,11 @@ static void clGetContextInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -795,7 +797,7 @@ static void clRetainCommandQueueOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -843,17 +845,17 @@ static void clEnqueueWriteImageOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " image = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->image)));
   log_msg += " blockingWrite = " + std::to_string(*(params->blockingWrite));
-  log_msg += " origin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->origin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " origin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->origin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
   log_msg += " inputRowPitch = " + std::to_string(*(params->inputRowPitch));
   log_msg += " inputSlicePitch = " + std::to_string(*(params->inputSlicePitch));
-  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->ptr)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -901,9 +903,9 @@ static void clEnqueueWaitForEventsOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " numEvents = " + std::to_string(*(params->numEvents));
-  log_msg += " eventList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventList)));
+  log_msg += " eventList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventList)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -951,11 +953,11 @@ static void clEnqueueSVMUnmapOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " svmPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPtr)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " svmPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->svmPtr)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1003,13 +1005,13 @@ static void clCreateProgramWithBinaryOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " numDevices = " + std::to_string(*(params->numDevices));
-  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
-  log_msg += " lengths = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->lengths)));
-  log_msg += " binaries = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->binaries)));
-  log_msg += " binaryStatus = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->binaryStatus)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " deviceList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->deviceList)));
+  log_msg += " lengths = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->lengths)));
+  log_msg += " binaries = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->binaries)));
+  log_msg += " binaryStatus = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->binaryStatus)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1041,7 +1043,7 @@ static void clCreateProgramWithBinaryOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -1069,14 +1071,14 @@ static void clEnqueueFillImageOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
-  log_msg += " fillColor = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->fillColor)));
-  log_msg += " origin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->origin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " image = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " fillColor = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->fillColor)));
+  log_msg += " origin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->origin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1124,12 +1126,12 @@ static void clCreateFromGLTexture2DOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " target = " + std::to_string(*(params->target));
   log_msg += " miplevel = " + std::to_string(*(params->miplevel));
   log_msg += " texture = " + std::to_string(*(params->texture));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1161,7 +1163,7 @@ static void clCreateFromGLTexture2DOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -1189,10 +1191,10 @@ static void clSetKernelExecInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1240,12 +1242,12 @@ static void clEnqueueReleaseGLObjectsOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " numObjects = " + std::to_string(*(params->numObjects));
-  log_msg += " memObjects = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memObjects)));
+  log_msg += " memObjects = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memObjects)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1293,11 +1295,11 @@ static void clGetDeviceIDsOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " platform = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platform)));
-  log_msg += " deviceType = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceType)));
+  log_msg += " platform = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->platform)));
+  log_msg += " deviceType = " + ToHexString(static_cast<uintptr_t>(*(params->deviceType)));
   log_msg += " numEntries = " + std::to_string(*(params->numEntries));
-  log_msg += " devices = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->devices)));
-  log_msg += " numDevices = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numDevices)));
+  log_msg += " devices = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->devices)));
+  log_msg += " numDevices = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->numDevices)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1345,7 +1347,7 @@ static void clReleaseMemObjectOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " memobj = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memobj)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1393,9 +1395,9 @@ static void clGetGLObjectInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
-  log_msg += " glObjectType = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->glObjectType)));
-  log_msg += " glObjectName = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->glObjectName)));
+  log_msg += " memobj = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " glObjectType = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->glObjectType)));
+  log_msg += " glObjectName = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->glObjectName)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1443,10 +1445,10 @@ static void clCreateFromGLRenderbufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " renderbuffer = " + std::to_string(*(params->renderbuffer));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1478,7 +1480,7 @@ static void clCreateFromGLRenderbufferOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -1506,7 +1508,7 @@ static void clReleaseContextOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1554,12 +1556,12 @@ static void clEnqueueUnmapMemObjectOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
-  log_msg += " mappedPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->mappedPtr)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " memobj = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " mappedPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->mappedPtr)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1607,12 +1609,12 @@ static void clCreateContextOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " properties = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->properties)));
   log_msg += " numDevices = " + std::to_string(*(params->numDevices));
-  log_msg += " devices = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->devices)));
-  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
-  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " devices = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->devices)));
+  log_msg += " funcNotify = " + ToHexString(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1644,7 +1646,7 @@ static void clCreateContextOnExit(
   cl_context* result =
     reinterpret_cast<cl_context*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -1672,8 +1674,8 @@ static void clGetHostTimerOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
-  log_msg += " hostTimestamp = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostTimestamp)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " hostTimestamp = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->hostTimestamp)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1721,11 +1723,11 @@ static void clGetPipeInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " pipe = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->pipe)));
+  log_msg += " pipe = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->pipe)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1773,12 +1775,12 @@ static void clEnqueueAcquireGLObjectsOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " numObjects = " + std::to_string(*(params->numObjects));
-  log_msg += " memObjects = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memObjects)));
+  log_msg += " memObjects = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memObjects)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1826,12 +1828,12 @@ static void clGetKernelWorkGroupInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1879,14 +1881,14 @@ static void clCreateImage2DOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
-  log_msg += " imageFormat = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageFormat)));
-  log_msg += " imageWidth = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageWidth)));
-  log_msg += " imageHeight = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageHeight)));
-  log_msg += " imageRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageRowPitch)));
-  log_msg += " hostPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " imageFormat = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->imageFormat)));
+  log_msg += " imageWidth = " + ToHexString(static_cast<uintptr_t>(*(params->imageWidth)));
+  log_msg += " imageHeight = " + ToHexString(static_cast<uintptr_t>(*(params->imageHeight)));
+  log_msg += " imageRowPitch = " + ToHexString(static_cast<uintptr_t>(*(params->imageRowPitch)));
+  log_msg += " hostPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1918,7 +1920,7 @@ static void clCreateImage2DOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -1946,11 +1948,11 @@ static void clCreateContextFromTypeOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
-  log_msg += " deviceType = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceType)));
-  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
-  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " properties = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " deviceType = " + ToHexString(static_cast<uintptr_t>(*(params->deviceType)));
+  log_msg += " funcNotify = " + ToHexString(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -1982,7 +1984,7 @@ static void clCreateContextFromTypeOnExit(
   cl_context* result =
     reinterpret_cast<cl_context*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -2010,7 +2012,7 @@ static void clRetainProgramOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " program = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->program)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2058,11 +2060,11 @@ static void clCreateProgramWithSourceOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " count = " + std::to_string(*(params->count));
-  log_msg += " strings = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->strings)));
-  log_msg += " lengths = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->lengths)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " strings = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->strings)));
+  log_msg += " lengths = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->lengths)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2094,7 +2096,7 @@ static void clCreateProgramWithSourceOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -2122,11 +2124,11 @@ static void clGetMemObjectInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " memobj = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memobj)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2174,9 +2176,9 @@ static void clLinkProgramOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " numDevices = " + std::to_string(*(params->numDevices));
-  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
+  log_msg += " deviceList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->deviceList)));
   if (*(params->options) == nullptr) {
     log_msg += " options = 0";
   } else if (strlen(*(params->options)) == 0) {
@@ -2185,10 +2187,10 @@ static void clLinkProgramOnEnter(
     log_msg += " options = \"" + std::string(*(params->options)) + "\"";
   }
   log_msg += " numInputPrograms = " + std::to_string(*(params->numInputPrograms));
-  log_msg += " inputPrograms = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->inputPrograms)));
-  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
-  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " inputPrograms = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->inputPrograms)));
+  log_msg += " funcNotify = " + ToHexString(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2220,7 +2222,7 @@ static void clLinkProgramOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -2248,9 +2250,9 @@ static void clCreateSamplerWithPropertiesOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
-  log_msg += " samplerProperties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->samplerProperties)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " samplerProperties = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->samplerProperties)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2282,7 +2284,7 @@ static void clCreateSamplerWithPropertiesOnExit(
   cl_sampler* result =
     reinterpret_cast<cl_sampler*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -2310,7 +2312,7 @@ static void clRetainSamplerOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " sampler = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sampler)));
+  log_msg += " sampler = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->sampler)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2358,12 +2360,12 @@ static void clCreateFromGLTexture3DOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " target = " + std::to_string(*(params->target));
   log_msg += " miplevel = " + std::to_string(*(params->miplevel));
   log_msg += " texture = " + std::to_string(*(params->texture));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2395,7 +2397,7 @@ static void clCreateFromGLTexture3DOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -2423,18 +2425,18 @@ static void clEnqueueMapImageOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " image = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->image)));
   log_msg += " blockingMap = " + std::to_string(*(params->blockingMap));
   log_msg += " mapFlags = " + std::to_string(*(params->mapFlags));
-  log_msg += " origin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->origin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
-  log_msg += " imageRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageRowPitch)));
-  log_msg += " imageSlicePitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageSlicePitch)));
+  log_msg += " origin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->origin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " imageRowPitch = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->imageRowPitch)));
+  log_msg += " imageSlicePitch = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->imageSlicePitch)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2466,7 +2468,7 @@ static void clEnqueueMapImageOnExit(
   void ** result =
     reinterpret_cast<void **>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -2494,15 +2496,15 @@ static void clEnqueueWriteBufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->buffer)));
   log_msg += " blockingWrite = " + std::to_string(*(params->blockingWrite));
   log_msg += " offset = " + std::to_string(*(params->offset));
   log_msg += " cb = " + std::to_string(*(params->cb));
-  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->ptr)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2551,15 +2553,15 @@ static void clEnqueueCopyImageOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " srcImage = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcImage)));
-  log_msg += " dstImage = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstImage)));
-  log_msg += " srcOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcOrigin)));
-  log_msg += " dstOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstOrigin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcImage = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->srcImage)));
+  log_msg += " dstImage = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->dstImage)));
+  log_msg += " srcOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->srcOrigin)));
+  log_msg += " dstOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->dstOrigin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2636,7 +2638,7 @@ static void clGetExtensionFunctionAddressOnExit(
   void** result =
     reinterpret_cast<void**>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2659,20 +2661,20 @@ static void clEnqueueReadBufferRectOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->buffer)));
   log_msg += " blockingRead = " + std::to_string(*(params->blockingRead));
-  log_msg += " bufferOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferOrigin)));
-  log_msg += " hostOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostOrigin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
-  log_msg += " bufferRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferRowPitch)));
-  log_msg += " bufferSlicePitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferSlicePitch)));
+  log_msg += " bufferOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->bufferOrigin)));
+  log_msg += " hostOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->hostOrigin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " bufferRowPitch = " + ToHexString(static_cast<uintptr_t>(*(params->bufferRowPitch)));
+  log_msg += " bufferSlicePitch = " + ToHexString(static_cast<uintptr_t>(*(params->bufferSlicePitch)));
   log_msg += " hostRowPitch = " + std::to_string(*(params->hostRowPitch));
   log_msg += " hostSlicePitch = " + std::to_string(*(params->hostSlicePitch));
-  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->ptr)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2720,11 +2722,11 @@ static void clCreateSubDevicesOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " inDevice = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->inDevice)));
-  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " inDevice = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->inDevice)));
+  log_msg += " properties = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->properties)));
   log_msg += " numDevices = " + std::to_string(*(params->numDevices));
-  log_msg += " outDevices = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->outDevices)));
-  log_msg += " numDevicesRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numDevicesRet)));
+  log_msg += " outDevices = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->outDevices)));
+  log_msg += " numDevicesRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->numDevicesRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2772,9 +2774,9 @@ static void clGetDeviceAndHostTimerOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
-  log_msg += " deviceTimestamp = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceTimestamp)));
-  log_msg += " hostTimestamp = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostTimestamp)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " deviceTimestamp = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->deviceTimestamp)));
+  log_msg += " hostTimestamp = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->hostTimestamp)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2822,7 +2824,7 @@ static void clReleaseSamplerOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " sampler = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sampler)));
+  log_msg += " sampler = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->sampler)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2870,8 +2872,8 @@ static void clEnqueueTaskOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
   if (*(params->kernel) != nullptr) {
     std::string kernel_name = utils::cl::GetKernelName(
         *(params->kernel), collector->Demangle());
@@ -2880,8 +2882,8 @@ static void clEnqueueTaskOnEnter(
     }
   }
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2929,7 +2931,7 @@ static void clFinishOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -2977,11 +2979,11 @@ static void clGetEventInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3029,11 +3031,11 @@ static void clGetEventProfilingInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3081,9 +3083,9 @@ static void clSetKernelArgSVMPointerOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
   log_msg += " argIndex = " + std::to_string(*(params->argIndex));
-  log_msg += " argValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->argValue)));
+  log_msg += " argValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->argValue)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3131,12 +3133,12 @@ static void clCreateImageOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
-  log_msg += " imageFormat = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageFormat)));
-  log_msg += " imageDesc = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->imageDesc)));
-  log_msg += " hostPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " imageFormat = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->imageFormat)));
+  log_msg += " imageDesc = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->imageDesc)));
+  log_msg += " hostPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3168,7 +3170,7 @@ static void clCreateImageOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -3196,14 +3198,14 @@ static void clEnqueueSVMMemcpyOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " blockingCopy = " + std::to_string(*(params->blockingCopy));
-  log_msg += " dstPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstPtr)));
-  log_msg += " srcPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcPtr)));
+  log_msg += " dstPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->dstPtr)));
+  log_msg += " srcPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->srcPtr)));
   log_msg += " size = " + std::to_string(*(params->size));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3251,7 +3253,7 @@ static void clReleaseKernelOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3299,16 +3301,16 @@ static void clEnqueueNativeKernelOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " userFunc = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->userFunc)*>(params->userFunc)));
-  log_msg += " args = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->args)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " userFunc = " + ToHexString(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->userFunc)*>(params->userFunc)));
+  log_msg += " args = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->args)));
   log_msg += " cbArgs = " + std::to_string(*(params->cbArgs));
   log_msg += " numMemObjects = " + std::to_string(*(params->numMemObjects));
-  log_msg += " memList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memList)));
-  log_msg += " argsMemLoc = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->argsMemLoc)));
+  log_msg += " memList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memList)));
+  log_msg += " argsMemLoc = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->argsMemLoc)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3356,10 +3358,10 @@ static void clCreateKernelsInProgramOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " program = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->program)));
   log_msg += " numKernels = " + std::to_string(*(params->numKernels));
-  log_msg += " kernels = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernels)));
-  log_msg += " numKernelsRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->numKernelsRet)));
+  log_msg += " kernels = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernels)));
+  log_msg += " numKernelsRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->numKernelsRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3407,10 +3409,10 @@ static void clSetCommandQueuePropertyOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " properties = " + ToHexString(static_cast<uintptr_t>(*(params->properties)));
   log_msg += " enable = " + std::to_string(*(params->enable));
-  log_msg += " oldProperties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->oldProperties)));
+  log_msg += " oldProperties = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->oldProperties)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3458,11 +3460,11 @@ static void clGetDeviceInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3510,8 +3512,8 @@ static void clEnqueueNDRangeKernelOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
   if (*(params->kernel) != nullptr) {
     std::string kernel_name = utils::cl::GetKernelName(
         *(params->kernel), collector->Demangle());
@@ -3520,7 +3522,7 @@ static void clEnqueueNDRangeKernelOnEnter(
     }
   }
   log_msg += " workDim = " + std::to_string(*(params->workDim));
-  log_msg += " globalWorkOffset = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->globalWorkOffset)));
+  log_msg += " globalWorkOffset = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->globalWorkOffset)));
   if (*(params->globalWorkOffset) != nullptr && *(params->workDim) > 0) {
     log_msg += " {" + std::to_string((*(params->globalWorkOffset))[0]);
     for (cl_uint i = 1; i < *(params->workDim); ++i) {
@@ -3528,7 +3530,7 @@ static void clEnqueueNDRangeKernelOnEnter(
     }
     log_msg += "}";
   }
-  log_msg += " globalWorkSize = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->globalWorkSize)));
+  log_msg += " globalWorkSize = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->globalWorkSize)));
   if (*(params->globalWorkSize) != nullptr && *(params->workDim) > 0) {
     log_msg += " {" + std::to_string((*(params->globalWorkSize))[0]);
     for (cl_uint i = 1; i < *(params->workDim); ++i) {
@@ -3536,7 +3538,7 @@ static void clEnqueueNDRangeKernelOnEnter(
     }
     log_msg += "}";
   }
-  log_msg += " localWorkSize = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->localWorkSize)));
+  log_msg += " localWorkSize = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->localWorkSize)));
   if (*(params->localWorkSize) != nullptr && *(params->workDim) > 0) {
     log_msg += " {" + std::to_string((*(params->localWorkSize))[0]);
     for (cl_uint i = 1; i < *(params->workDim); ++i) {
@@ -3545,8 +3547,8 @@ static void clEnqueueNDRangeKernelOnEnter(
     log_msg += "}";
   }
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3595,7 +3597,7 @@ static void clReleaseProgramOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " program = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->program)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3643,10 +3645,10 @@ static void clCreateFromGLBufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " bufobj = " + std::to_string(*(params->bufobj));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3678,7 +3680,7 @@ static void clCreateFromGLBufferOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -3706,11 +3708,11 @@ static void clGetGLTextureInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " memobj = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memobj)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3758,9 +3760,9 @@ static void clSetDefaultDeviceCommandQueueOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3808,12 +3810,12 @@ static void clCreatePipeOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " pipePacketSize = " + std::to_string(*(params->pipePacketSize));
   log_msg += " pipeMaxPackets = " + std::to_string(*(params->pipeMaxPackets));
-  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " properties = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3845,7 +3847,7 @@ static void clCreatePipeOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -3873,11 +3875,11 @@ static void clGetPlatformInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " platform = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platform)));
+  log_msg += " platform = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->platform)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3925,15 +3927,15 @@ static void clEnqueueReadBufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->buffer)));
   log_msg += " blockingRead = " + std::to_string(*(params->blockingRead));
   log_msg += " offset = " + std::to_string(*(params->offset));
   log_msg += " cb = " + std::to_string(*(params->cb));
-  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->ptr)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -3982,9 +3984,9 @@ static void clSetMemObjectDestructorCallbackOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
-  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
-  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " memobj = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " funcNotify = " + ToHexString(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->userData)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4032,14 +4034,14 @@ static void clGetKernelSubGroupInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " inputValueSize = " + std::to_string(*(params->inputValueSize));
-  log_msg += " inputValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->inputValue)));
+  log_msg += " inputValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->inputValue)));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4087,19 +4089,19 @@ static void clEnqueueCopyBufferRectOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " srcBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcBuffer)));
-  log_msg += " dstBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstBuffer)));
-  log_msg += " srcOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcOrigin)));
-  log_msg += " dstOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstOrigin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcBuffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->srcBuffer)));
+  log_msg += " dstBuffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->dstBuffer)));
+  log_msg += " srcOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->srcOrigin)));
+  log_msg += " dstOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->dstOrigin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
   log_msg += " srcRowPitch = " + std::to_string(*(params->srcRowPitch));
   log_msg += " srcSlicePitch = " + std::to_string(*(params->srcSlicePitch));
   log_msg += " dstRowPitch = " + std::to_string(*(params->dstRowPitch));
   log_msg += " dstSlicePitch = " + std::to_string(*(params->dstSlicePitch));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4148,7 +4150,7 @@ static void clWaitForEventsOnEnter(
   log_msg += std::string(data->functionName) + ":";
 
   log_msg += " numEvents = " + std::to_string(*(params->numEvents));
-  log_msg += " eventList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventList)));
+  log_msg += " eventList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventList)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4196,14 +4198,14 @@ static void clEnqueueSVMMigrateMemOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " numSvmPointers = " + std::to_string(*(params->numSvmPointers));
-  log_msg += " svmPointers = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPointers)));
-  log_msg += " sizes = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sizes)));
+  log_msg += " svmPointers = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->svmPointers)));
+  log_msg += " sizes = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->sizes)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4251,7 +4253,7 @@ static void clRetainKernelOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4299,10 +4301,10 @@ static void clCreateCommandQueueWithPropertiesOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
-  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " properties = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->properties)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4334,7 +4336,7 @@ static void clCreateCommandQueueWithPropertiesOnExit(
   cl_command_queue* result =
     reinterpret_cast<cl_command_queue*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -4362,9 +4364,9 @@ static void clCreateProgramWithBuiltInKernelsOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " numDevices = " + std::to_string(*(params->numDevices));
-  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
+  log_msg += " deviceList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->deviceList)));
   if (*(params->kernelNames) == nullptr) {
     log_msg += " kernelNames = 0";
   } else if (strlen(*(params->kernelNames)) == 0) {
@@ -4372,7 +4374,7 @@ static void clCreateProgramWithBuiltInKernelsOnEnter(
   } else {
     log_msg += " kernelNames = \"" + std::string(*(params->kernelNames)) + "\"";
   }
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4404,7 +4406,7 @@ static void clCreateProgramWithBuiltInKernelsOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -4432,11 +4434,11 @@ static void clCreateBufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " size = " + std::to_string(*(params->size));
-  log_msg += " hostPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " hostPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->hostPtr)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4468,7 +4470,7 @@ static void clCreateBufferOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -4496,12 +4498,12 @@ static void clGetProgramBuildInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " program = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4549,15 +4551,15 @@ static void clEnqueueFillBufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
-  log_msg += " pattern = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->pattern)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " pattern = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->pattern)));
   log_msg += " patternSize = " + std::to_string(*(params->patternSize));
   log_msg += " offset = " + std::to_string(*(params->offset));
   log_msg += " size = " + std::to_string(*(params->size));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4605,17 +4607,17 @@ static void clEnqueueReadImageOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " image = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->image)));
   log_msg += " blockingRead = " + std::to_string(*(params->blockingRead));
-  log_msg += " origin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->origin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " origin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->origin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
   log_msg += " rowPitch = " + std::to_string(*(params->rowPitch));
   log_msg += " slicePitch = " + std::to_string(*(params->slicePitch));
-  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->ptr)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4663,20 +4665,20 @@ static void clEnqueueWriteBufferRectOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " buffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->buffer)));
   log_msg += " blockingWrite = " + std::to_string(*(params->blockingWrite));
-  log_msg += " bufferOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferOrigin)));
-  log_msg += " hostOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->hostOrigin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
-  log_msg += " bufferRowPitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferRowPitch)));
-  log_msg += " bufferSlicePitch = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferSlicePitch)));
+  log_msg += " bufferOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->bufferOrigin)));
+  log_msg += " hostOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->hostOrigin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " bufferRowPitch = " + ToHexString(static_cast<uintptr_t>(*(params->bufferRowPitch)));
+  log_msg += " bufferSlicePitch = " + ToHexString(static_cast<uintptr_t>(*(params->bufferSlicePitch)));
   log_msg += " hostRowPitch = " + std::to_string(*(params->hostRowPitch));
   log_msg += " hostSlicePitch = " + std::to_string(*(params->hostSlicePitch));
-  log_msg += " ptr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->ptr)));
+  log_msg += " ptr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->ptr)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4724,15 +4726,15 @@ static void clEnqueueCopyBufferToImageOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " srcBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcBuffer)));
-  log_msg += " dstImage = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstImage)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcBuffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->srcBuffer)));
+  log_msg += " dstImage = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->dstImage)));
   log_msg += " srcOffset = " + std::to_string(*(params->srcOffset));
-  log_msg += " dstOrigin = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstOrigin)));
-  log_msg += " region = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->region)));
+  log_msg += " dstOrigin = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->dstOrigin)));
+  log_msg += " region = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->region)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4781,7 +4783,7 @@ static void clGetExtensionFunctionAddressForPlatformOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " platform = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->platform)));
+  log_msg += " platform = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->platform)));
   if (*(params->funcName) == nullptr) {
     log_msg += " funcName = 0";
   } else if (strlen(*(params->funcName)) == 0) {
@@ -4811,7 +4813,7 @@ static void clGetExtensionFunctionAddressForPlatformOnExit(
   void** result =
     reinterpret_cast<void**>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4834,10 +4836,10 @@ static void clSetKernelArgOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " kernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->kernel)));
+  log_msg += " kernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->kernel)));
   log_msg += " argIndex = " + std::to_string(*(params->argIndex));
   log_msg += " argSize = " + std::to_string(*(params->argSize));
-  log_msg += " argValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->argValue)));
+  log_msg += " argValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->argValue)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4885,7 +4887,7 @@ static void clReleaseDeviceOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4933,11 +4935,11 @@ static void clCreateSubBufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " buffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->buffer)));
+  log_msg += " buffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->buffer)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " bufferCreateType = " + std::to_string(*(params->bufferCreateType));
-  log_msg += " bufferCreateInfo = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->bufferCreateInfo)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " bufferCreateInfo = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->bufferCreateInfo)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -4969,7 +4971,7 @@ static void clCreateSubBufferOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -4997,13 +4999,13 @@ static void clEnqueueMigrateMemObjectsOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " numMemObjects = " + std::to_string(*(params->numMemObjects));
-  log_msg += " memObjects = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memObjects)));
+  log_msg += " memObjects = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memObjects)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5051,10 +5053,10 @@ static void clCreateCommandQueueOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
-  log_msg += " properties = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->properties)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " properties = " + ToHexString(static_cast<uintptr_t>(*(params->properties)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5086,7 +5088,7 @@ static void clCreateCommandQueueOnExit(
   cl_command_queue* result =
     reinterpret_cast<cl_command_queue*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -5114,14 +5116,14 @@ static void clEnqueueSVMMemFillOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " svmPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPtr)));
-  log_msg += " pattern = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->pattern)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " svmPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->svmPtr)));
+  log_msg += " pattern = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->pattern)));
   log_msg += " patternSize = " + std::to_string(*(params->patternSize));
   log_msg += " size = " + std::to_string(*(params->size));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5169,7 +5171,7 @@ static void clReleaseCommandQueueOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5217,15 +5219,15 @@ static void clEnqueueCopyBufferOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " srcBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->srcBuffer)));
-  log_msg += " dstBuffer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->dstBuffer)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " srcBuffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->srcBuffer)));
+  log_msg += " dstBuffer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->dstBuffer)));
   log_msg += " srcOffset = " + std::to_string(*(params->srcOffset));
   log_msg += " dstOffset = " + std::to_string(*(params->dstOffset));
   log_msg += " cb = " + std::to_string(*(params->cb));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5273,11 +5275,11 @@ static void clGetCommandQueueInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5325,9 +5327,9 @@ static void clBuildProgramOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " program = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->program)));
   log_msg += " numDevices = " + std::to_string(*(params->numDevices));
-  log_msg += " deviceList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->deviceList)));
+  log_msg += " deviceList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->deviceList)));
   if (*(params->options) == nullptr) {
     log_msg += " options = 0";
   } else if (strlen(*(params->options)) == 0) {
@@ -5335,8 +5337,8 @@ static void clBuildProgramOnEnter(
   } else {
     log_msg += " options = \"" + std::string(*(params->options)) + "\"";
   }
-  log_msg += " funcNotify = " + std::to_string(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
-  log_msg += " userData = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->userData)));
+  log_msg += " funcNotify = " + ToHexString(reinterpret_cast<uintptr_t>(*reinterpret_cast<decltype(params->funcNotify)*>(params->funcNotify)));
+  log_msg += " userData = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->userData)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5384,7 +5386,7 @@ static void clRetainContextOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5432,7 +5434,7 @@ static void clEnqueueBarrierOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5480,7 +5482,7 @@ static void clRetainDeviceOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " device = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->device)));
+  log_msg += " device = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->device)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5528,14 +5530,14 @@ static void clEnqueueSVMMapOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " blockingMap = " + std::to_string(*(params->blockingMap));
   log_msg += " mapFlags = " + std::to_string(*(params->mapFlags));
-  log_msg += " svmPtr = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPtr)));
+  log_msg += " svmPtr = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->svmPtr)));
   log_msg += " size = " + std::to_string(*(params->size));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5583,7 +5585,7 @@ static void clRetainMemObjectOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " memobj = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->memobj)));
+  log_msg += " memobj = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->memobj)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5631,7 +5633,7 @@ static void clSetUserEventStatusOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += " executionStatus = " + std::to_string(*(params->executionStatus));
   log_msg += "\n";
 
@@ -5680,8 +5682,8 @@ static void clCreateUserEventOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5713,7 +5715,7 @@ static void clCreateUserEventOnExit(
   cl_event* result =
     reinterpret_cast<cl_event*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -5741,11 +5743,11 @@ static void clGetSamplerInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " sampler = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sampler)));
+  log_msg += " sampler = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->sampler)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5793,8 +5795,8 @@ static void clEnqueueMarkerOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5842,7 +5844,7 @@ static void clCreateKernelOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " program = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->program)));
   if (*(params->kernelName) == nullptr) {
     log_msg += " kernelName = 0";
   } else if (strlen(*(params->kernelName)) == 0) {
@@ -5853,7 +5855,7 @@ static void clCreateKernelOnEnter(
       log_msg += " (" + utils::Demangle(*(params->kernelName)) + ")";
     }
   }
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5885,7 +5887,7 @@ static void clCreateKernelOnExit(
   cl_kernel* result =
     reinterpret_cast<cl_kernel*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -5913,11 +5915,11 @@ static void clGetProgramInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " program = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->program)));
+  log_msg += " program = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->program)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -5965,7 +5967,7 @@ static void clSVMAllocOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " size = " + std::to_string(*(params->size));
   log_msg += " alignment = " + std::to_string(*(params->alignment));
@@ -5992,7 +5994,7 @@ static void clSVMAllocOnExit(
     reinterpret_cast<void **>(
         data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6015,7 +6017,7 @@ static void clRetainEventOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6063,8 +6065,8 @@ static void clCloneKernelOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " sourceKernel = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->sourceKernel)));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " sourceKernel = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->sourceKernel)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6096,7 +6098,7 @@ static void clCloneKernelOnExit(
   cl_kernel* result =
     reinterpret_cast<cl_kernel*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -6124,11 +6126,11 @@ static void clGetImageInfoOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " image = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->image)));
+  log_msg += " image = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->image)));
   log_msg += " paramName = " + std::to_string(*(params->paramName));
   log_msg += " paramValueSize = " + std::to_string(*(params->paramValueSize));
-  log_msg += " paramValue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValue)));
-  log_msg += " paramValueSizeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
+  log_msg += " paramValue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValue)));
+  log_msg += " paramValueSizeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->paramValueSizeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6176,7 +6178,7 @@ static void clFlushOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6224,10 +6226,10 @@ static void clEnqueueMarkerWithWaitListOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " commandQueue = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
+  log_msg += " commandQueue = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->commandQueue)));
   log_msg += " numEventsInWaitList = " + std::to_string(*(params->numEventsInWaitList));
-  log_msg += " eventWaitList = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " eventWaitList = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->eventWaitList)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6275,10 +6277,10 @@ static void clCreateProgramWithILOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
-  log_msg += " il = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->il)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " il = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->il)));
   log_msg += " length = " + std::to_string(*(params->length));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6310,7 +6312,7 @@ static void clCreateProgramWithILOnExit(
   cl_program* result =
     reinterpret_cast<cl_program*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -6338,11 +6340,11 @@ static void clCreateSamplerOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " normalizedCoords = " + std::to_string(*(params->normalizedCoords));
   log_msg += " addressingMode = " + std::to_string(*(params->addressingMode));
   log_msg += " filterMode = " + std::to_string(*(params->filterMode));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6374,7 +6376,7 @@ static void clCreateSamplerOnExit(
   cl_sampler* result =
     reinterpret_cast<cl_sampler*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -6402,12 +6404,12 @@ static void clCreateFromGLTextureOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
   log_msg += " flags = " + std::to_string(*(params->flags));
   log_msg += " target = " + std::to_string(*(params->target));
   log_msg += " miplevel = " + std::to_string(*(params->miplevel));
   log_msg += " texture = " + std::to_string(*(params->texture));
-  log_msg += " errcodeRet = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
+  log_msg += " errcodeRet = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->errcodeRet)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6439,7 +6441,7 @@ static void clCreateFromGLTextureOnExit(
   cl_mem* result =
     reinterpret_cast<cl_mem*>(data->functionReturnValue);
   PTI_ASSERT(result != nullptr);
-  log_msg += " result = " + std::to_string(reinterpret_cast<uintptr_t>(*result));
+  log_msg += " result = " + ToHexString(reinterpret_cast<uintptr_t>(*result));
 
   PTI_ASSERT(*(params->errcodeRet) != nullptr);
   log_msg += " -> ";
@@ -6467,8 +6469,8 @@ static void clSVMFreeOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " context = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->context)));
-  log_msg += " svmPointer = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->svmPointer)));
+  log_msg += " context = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->context)));
+  log_msg += " svmPointer = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->svmPointer)));
   log_msg += "\n";
 
   collector->Log(log_msg);
@@ -6510,7 +6512,7 @@ static void clReleaseEventOnEnter(
   }
   log_msg += std::string(data->functionName) + ":";
 
-  log_msg += " event = " + std::to_string(reinterpret_cast<uintptr_t>(*(params->event)));
+  log_msg += " event = " + ToHexString(reinterpret_cast<uintptr_t>(*(params->event)));
   log_msg += "\n";
 
   collector->Log(log_msg);

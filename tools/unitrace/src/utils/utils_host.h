@@ -7,6 +7,8 @@
 #ifndef PTI_UTILS_HOST_UTILS_H_
 #define PTI_UTILS_HOST_UTILS_H_
 
+#include <inttypes.h>
+#include <cstdio>
 #include <string>
 #ifdef _WIN32
 #include <windows.h>
@@ -25,6 +27,14 @@ static inline std::string GetHostName(void) {
 #endif /* _WIN32 */
   hname[255] = 0;
   return hname;
+}
+
+// Convert pointer/handle values to hex string
+template <typename T>
+inline std::string ToHexString(T val) {
+  char buffer[32];
+  snprintf(buffer, sizeof(buffer), "0x%" PRIx64, (uintptr_t)val);
+  return std::string(buffer);
 }
 
 #endif // PTI_UTILS_HOST_UTILS_H_
