@@ -97,7 +97,7 @@ jobs:
            python -m venv venv
            source venv/bin/activate
            python -m pip install --upgrade setuptools wheel
-           python -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/xpu
+           python -m pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/test/xpu
            python ./test_unitrace.py --test-group python-test
 
       - name: Build-and-test-sysmon
