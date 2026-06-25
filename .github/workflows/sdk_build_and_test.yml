@@ -80,6 +80,7 @@ jobs:
         with:
           wdir: sdk
           preset: ${{ matrix.preset }}
+          skip_hw_metrics: ${{ contains(fromJSON(matrix.tags), 'BMG') && vars.SKIP_HW_METRICS == 'true' }}
 
       - name: Build AddressSanitizer
         if: contains(fromJSON(matrix.tags), 'server')

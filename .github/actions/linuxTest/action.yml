@@ -9,6 +9,10 @@ inputs:
   preset:
     description: Preset used in the build to be tested.
     required: true
+  skip_hw_metrics:
+    description: Skip hw-metrics tests
+    required: false
+    default: 'false'
 
 runs:
   using: "composite"
@@ -20,7 +24,12 @@ runs:
       run: |
         source /opt/intel/oneapi/setvars.sh
 
-        ctest --output-on-failure --preset ${{ inputs.preset }} -LE 'performance|quarantine'
+        EXCLUDE_PATTERN='performance|quarantine'
+        if [[ "${{ inputs.skip_hw_metrics }}" == "true" ]]; then
+          EXCLUDE_PATTERN="${EXCLUDE_PATTERN}|hw-metrics"
+        fi
+
+        ctest --output-on-failure --preset ${{ inputs.preset }} -LE "$EXCLUDE_PATTERN"
 
     - name: Quarantined tests # performance and flaky tests
       continue-on-error: true
