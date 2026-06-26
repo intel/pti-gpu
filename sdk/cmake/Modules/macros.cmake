@@ -11,6 +11,8 @@ endmacro()
 
 macro(SetPtiVersion)
   file(STRINGS "${PTI_CMAKE_MACRO_DIR}/VERSION" PTI_VERSION)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+               "${PTI_CMAKE_MACRO_DIR}/VERSION")
 endmacro()
 
 macro(SetBuildType)
