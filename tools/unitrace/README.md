@@ -76,7 +76,9 @@ The **BUILD_WITH_MPI=<1/0>** setting enables/disables MPI profiling support (ena
 In addition to BUILD_WITH_MPI, one or more of the following settings can also be passed to cmake:\
 **BUILD_WITH_ITT=<1/0>** to enable/disable oneCCL/oneDNN profiling support (enabled by default),\
 **BUILD_WITH_XPTI=<1/0>** to enable/disable SYCL/Unified Runtime profiling support (enabled by default),\
-**BUILD_WITH_OPENCL=<1/0>** to enable/disable OpenCL profiling support (enabled by default). 
+**BUILD_WITH_OMP=<1/0>** to enable/disable OpenMP profiling support (enabled by default),\
+**BUILD_WITH_OPENCL=<1/0>** to enable/disable OpenCL profiling support (enabled by default),\
+**BUILD_WITH_L0=<1/0>** to enable/disable Level Zero profiling support (enabled by default).
 
 Example:
 
@@ -152,6 +154,7 @@ The options can be one or more of the following:
 --kernel-submission [-s]                      Report append (queued), submit and execute intervals for kernels
 --device-timeline [-t]                        Report device timeline
 --opencl                                      Trace OpenCL
+--chrome-omp-logging                          Trace OpenMP
 --chrome-mpi-logging                          Trace MPI
 --chrome-sycl-logging                         Trace SYCL runtime and plugin
 --chrome-ccl-logging                          Trace oneCCL
@@ -970,6 +973,30 @@ PTI_ENABLE_COLLECTION=1 unitrace --chrome-call-logging --chrome-kernel-logging -
 
 If **--start-paused** option is not specified, PTI_ENABLE_COLLECTION settings or __itt_pause()/__itt_resume() calls have **no** effect and the application is traced/profiled from the start to the end.
 
+## Profile OpenMP Workloads
+
+### Run Profiling
+
+To profile an OpenMP workload, just enable OpenMP logging as follows:
+
+```sh
+unitrace --chrome-omp-logging <application>
+```
+
+The trace result is written to a JSON file `<application>.<process_id>.json`.
+
+### View Traces
+
+The trace result shows timelines of OpenMP activities or events that each OpenMP
+thread participates. Such activities include `parallel`/`teams` regions, task
+regions, synchronizations, work-sharing loops, etc.
+For example, the following trace collected from an OpenMP matrix multiplication
+application shows the timelines of parallel regions on the primary thread,
+implicit tasks invoked by each thread in the team, and barrier synchronizations
+implied at the end of each parallel region. It also shows each implicit task
+executing loop iterations statically assigned to it.
+
+![OpenMP Logging](/tools/unitrace/doc/images/omp-logging.png)
 
 ## Profile MPI Workloads
 

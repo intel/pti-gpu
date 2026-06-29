@@ -8,6 +8,10 @@
 #ifndef PTI_TOOLS_UNITRACE_UNIEVENT_H
 #define PTI_TOOLS_UNITRACE_UNIEVENT_H
 
+#if BUILD_WITH_OMP
+#include <omp-tools.h>
+#endif /* BUILD_WITH_OMP */
+
 enum EVENT_TYPE {
   EVENT_NULL = 0,
   EVENT_DURATION_START,
@@ -22,7 +26,8 @@ enum API_TYPE {
   API_TYPE_NONE,
   API_TYPE_MPI,
   API_TYPE_ITT,
-  API_TYPE_CCL
+  API_TYPE_CCL,
+  API_TYPE_OMP
 };
 
 typedef struct MpiArgs_ {
@@ -45,6 +50,15 @@ typedef struct IttArgs_ {
   void* data[1];
 } IttArgs;
 
+typedef struct OmpArgs_ {
+#if BUILD_WITH_OMP
+  /// Use ompt record data
+  ompt_record_ompt_t ompt;
+#endif /* BUILD_WITH_OMP */
+  /// Space for extra data
+  uint64_t data[2];
+} OmpArgs;
+
 typedef struct HostEventRecord_ {
   uint64_t id_;
   uint64_t start_time_;
@@ -57,6 +71,7 @@ typedef struct HostEventRecord_ {
   union {
     MpiArgs mpi_args_;
     IttArgs itt_args_;
+    OmpArgs omp_args_;
   };
 } HostEventRecord;
 

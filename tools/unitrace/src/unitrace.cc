@@ -58,12 +58,14 @@ void Usage(char * progname) {
   std::cout << "BUILD_WITH_OPENCL=" << BUILD_WITH_OPENCL << ", ";
   std::cout << "BUILD_WITH_ITT=" << BUILD_WITH_ITT << ", ";
   std::cout << "BUILD_WITH_XPTI=" << BUILD_WITH_XPTI << ", ";
-  std::cout << "BUILD_WITH_MPI=" << BUILD_WITH_MPI;
+  std::cout << "BUILD_WITH_MPI=" << BUILD_WITH_MPI << ", ";
+  std::cout << "BUILD_WITH_OMP=" << BUILD_WITH_OMP;
   std::cout << ")" << std::endl;
   std::cout <<
     "Usage: " << progname << " [options] <application> <args>" <<
     std::endl;
   std::cout << "Options:" << std::endl;
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
   std::cout <<
     "--call-logging [-c]              " <<
     "Trace host API calls" <<
@@ -76,12 +78,14 @@ void Usage(char * progname) {
     "--device-timing [-d]             " <<
     "Report kernels execution time" <<
     std::endl;
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
 #if BUILD_WITH_ITT
   std::cout <<
     "--ccl-summary-report [-r]        " <<
     "Report CCL execution time summary" <<
     std::endl;
 #endif /* BUILD_WITH_ITT */
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
   std::cout <<
     "--kernel-submission [-s]         " <<
     "Report append (queued), submit and execute intervals for kernels" <<
@@ -90,12 +94,19 @@ void Usage(char * progname) {
     "--device-timeline [-t]           " <<
     "Report device timeline" <<
     std::endl;
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
 #if BUILD_WITH_OPENCL
   std::cout <<
     "--opencl                         " <<
     "Trace OpenCL" <<
     std::endl;
 #endif /* BUILD_WITH_OPENCL */
+#if BUILD_WITH_OMP
+  std::cout <<
+    "--chrome-omp-logging             " <<
+    "Trace OpenMP" <<
+    std::endl;
+#endif /* BUILD_WITH_OMP */
 #if BUILD_WITH_MPI
   std::cout <<
     "--chrome-mpi-logging             " <<
@@ -118,6 +129,7 @@ void Usage(char * progname) {
     "Trace oneDNN" <<
     std::endl;
 #endif /* BUILD_WITH_ITT */
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
   std::cout <<
     "--chrome-call-logging            " <<
     "Trace Level Zero and/or OpenCL host calls" <<
@@ -130,20 +142,25 @@ void Usage(char * progname) {
     "--chrome-device-logging          " <<
     "Trace device activities" <<
     std::endl;
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
   std::cout <<
     "--chrome-itt-logging             " <<
     "Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs" <<
     std::endl;
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
   std::cout <<
     "--chrome-no-thread-on-device     " <<
     "Trace device activities without per-thread info" << std::endl <<
     "                                 Device activities are traced per thread if this option is not present" <<
     std::endl;
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
+#if BUILD_WITH_L0
   std::cout <<
     "--chrome-no-engine-on-device     " <<
     "Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info." << std::endl <<
     "                                 Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present" <<
     std::endl;
+#endif /* BUILD_WITH_L0 */
   std::cout <<
     "--chrome-event-buffer-size <number-of-events>      " <<
     "Size of event buffer on host per host thread(default is -1 or unlimited)" <<
@@ -157,10 +174,12 @@ void Usage(char * progname) {
     "--demangle                       " <<
     "Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend" <<
     std::endl;
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
   std::cout <<
     "--separate-tiles                 " <<
     "Trace each tile separately in case of implicit scaling" <<
     std::endl;
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
   std::cout <<
     "--tid                            " <<
     "Output TID in host API trace" <<
@@ -190,6 +209,7 @@ void Usage(char * progname) {
     "--result-dir <path>              " <<
     "Output result to a hierarchical directory" <<
     std::endl;
+#if BUILD_WITH_L0
   std::cout <<
     "--metric-query [-q]              " <<
     "Query hardware metrics for each kernel instance (Level Zero)" <<
@@ -227,6 +247,7 @@ void Usage(char * progname) {
     "Devices ID to sample. The argument <devices> is a list of comma separated devices as reported" << std::endl <<
     "                                 by --device-list" <<
     std::endl;
+#endif /* BUILD_WITH_L0 */
   std::cout <<
     "--follow-child-process <0/1>     " <<
     "0: Do not follow or profile child processes on Linux" << std::endl <<
@@ -259,6 +280,7 @@ void Usage(char * progname) {
     "Trace OS/KMD activities. The argument <script> file defines the OS kernel or device driver activities to trace" <<
     std::endl;
 #endif /* _WIN32 */
+#if BUILD_WITH_L0
   std::cout <<
     "--include-kernels <kernel-names> " <<
     "Trace kernels, the names of which contain substrings in the comma-separated <kernel-names>(Level Zero only)" <<
@@ -275,6 +297,7 @@ void Usage(char * progname) {
     "--exclude-kernels-file <file>    " <<
     "Same as --exclude-kernels, except that the kernel name substrings are in <file>" <<
     std::endl;
+#endif /* BUILD_WITH_L0 */
   std::cout <<
     "--version                        " <<
     "Print version                    " <<
@@ -315,7 +338,11 @@ int ParseArgs(int argc, char* argv[]) {
   int app_index = 1;
 
   for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--call-logging") == 0 || strcmp(argv[i], "-c") == 0) {
+    if (strcmp(argv[i], "--help") == 0) {
+      Usage(argv[0]);
+      return 0;
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
+    } else if (strcmp(argv[i], "--call-logging") == 0 || strcmp(argv[i], "-c") == 0) {
       utils::SetEnv("UNITRACE_CallLogging", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--host-timing") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -324,6 +351,7 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--device-timing") == 0 || strcmp(argv[i], "-d") == 0) {
       utils::SetEnv("UNITRACE_DeviceTiming", "1");
       ++app_index;
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
 #if BUILD_WITH_ITT
     } else if (strcmp(argv[i], "--ccl-summary-report") == 0 || strcmp(argv[i], "-r") == 0) {
       utils::SetEnv("UNITRACE_CclSummaryReport", "1");
@@ -331,21 +359,30 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("CCL_ITT_LEVEL", "1");
       ++app_index;
 #endif /* BUILD_WITH_ITT */
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
     } else if (strcmp(argv[i], "--kernel-submission") == 0 || strcmp(argv[i], "-s") == 0) {
       utils::SetEnv("UNITRACE_KernelSubmission", "1");
       ++app_index;
     } else if (strcmp(argv[i], "--device-timeline") == 0 || strcmp(argv[i], "-t") == 0) {
       utils::SetEnv("UNITRACE_DeviceTimeline", "1");
       ++app_index;
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
 #if BUILD_WITH_OPENCL
     } else if (strcmp(argv[i], "--opencl") == 0) {
       utils::SetEnv("UNITRACE_OpenCLTracing", "1");
       ++app_index;
 #endif /* BUILD_WITH_OPENCL */
+#if BUILD_WITH_MPI
     } else if (strcmp(argv[i], "--chrome-mpi-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeMpiLogging", "1");
       utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
       ++app_index;
+#endif /* BUILD_WITH_MPI */
+#if BUILD_WITH_OMP
+    } else if (strcmp(argv[i], "--chrome-omp-logging") == 0) {
+      utils::SetEnv("UNITRACE_ChromeOmpLogging", "1");
+      ++app_index;
+#endif /* BUILD_WITH_OMP */
 #if BUILD_WITH_XPTI
     } else if (strcmp(argv[i], "--chrome-sycl-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeSyclLogging", "1");
@@ -371,6 +408,7 @@ int ParseArgs(int argc, char* argv[]) {
       // what should be set here?
       ++app_index;
 #endif /* BUILD_WITH_ITT */
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
     } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
       utils::SetEnv("UNITRACE_ChromeCallLogging", "1");
       ++app_index;
@@ -383,9 +421,12 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--chrome-no-thread-on-device") == 0) {
       utils::SetEnv("UNITRACE_ChromeNoThreadOnDevice", "1");
       ++app_index;
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
+#if BUILD_WITH_L0
     } else if (strcmp(argv[i], "--chrome-no-engine-on-device") == 0) {
       utils::SetEnv("UNITRACE_ChromeNoEngineOnDevice", "1");
       ++app_index;
+#endif /* BUILD_WITH_L0 */
     } else if (strcmp(argv[i], "--chrome-event-buffer-size") == 0) {
       ++i;
       if (i >= argc) {
@@ -400,9 +441,11 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--demangle") == 0) {
       utils::SetEnv("UNITRACE_Demangle", "1");
       ++app_index;
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
     } else if (strcmp(argv[i], "--separate-tiles") == 0) {
       utils::SetEnv("UNITRACE_KernelOnSeparateTiles", "1");
       ++app_index;
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
     } else if (strcmp(argv[i], "--tid") == 0) {
       utils::SetEnv("UNITRACE_Tid", "1");
       ++app_index;
@@ -434,6 +477,7 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_UseResultDirectory", "1");
       utils::SetEnv("UNITRACE_ResultDirectory", argv[i]);
       app_index += 2;
+#if BUILD_WITH_L0
     } else if (strcmp(argv[i], "--metric-query") == 0 || strcmp(argv[i], "-q") == 0) {
       utils::SetEnv("UNITRACE_MetricQuery", "1");
       ++app_index;
@@ -526,6 +570,7 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--idle-sampling") == 0) {
       idle_sampling = true;
       ++app_index;
+#endif /* BUILD_WITH_L0 */
     } else if (strcmp(argv[i], "--system-time") == 0) { // internal option
       utils::SetEnv("UNITRACE_SystemTime", "1");
       ++app_index;
@@ -534,6 +579,7 @@ int ParseArgs(int argc, char* argv[]) {
       utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
       ++app_index;
 #endif /* BUILD_WITH_ITT */
+#if BUILD_WITH_L0
     } else if (strcmp(argv[i], "--sampling-interval") == 0 || strcmp(argv[i], "-i") == 0) {
       ++i;
       if (i >= argc) {
@@ -549,6 +595,7 @@ int ParseArgs(int argc, char* argv[]) {
     } else if (strcmp(argv[i], "--metric-list") == 0) {
       show_metric_list = true;
       ++app_index;
+#endif /* BUILD_WITH_L0 */
     } else if (strcmp(argv[i], "--follow-child-process") == 0) {
       ++i;
       if ((i >= argc) || (strcmp(argv[i], "1") && strcmp(argv[i], "0"))) {
@@ -623,9 +670,6 @@ int ParseArgs(int argc, char* argv[]) {
   #endif /* _WIN32 */
     } else if (strcmp(argv[i], "--version") == 0) {
       std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
-      return 0;
-    } else if (strcmp(argv[i], "--help") == 0) {
-      Usage(argv[0]);
       return 0;
     } else {
       break;
@@ -799,11 +843,15 @@ int ParseArgs(int argc, char* argv[]) {
 }
 
 ZeMetricProfiler *EnableProfiling(uint32_t app_pid, char *dir, std::string& logfile, bool idle_sampling) {
+#if BUILD_WITH_L0
   if (!InitializeL0()) {
     return nullptr;
   } else {
     return ZeMetricProfiler::Create(app_pid, dir, logfile, idle_sampling, utils::GetEnv("UNITRACE_DevicesToSample"));
   }
+#else /* BUILD_WITH_L0 */
+  return nullptr;
+#endif /* BUILD_WITH_L0 */
 }
 
 void DisableProfiling() {

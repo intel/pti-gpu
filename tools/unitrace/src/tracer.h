@@ -14,7 +14,7 @@
 #include <iostream>
 #include <string>
 
-#include "trace_options.h"
+#include "collector_options.h"
 #include "logger.h"
 #include "utils.h"
 #include "ze_collector.h"
@@ -29,47 +29,23 @@
 #if BUILD_WITH_XPTI
   #include "xpti_collector.h"
 #endif /* BUILD_WITH_XPTI */
+
 #if BUILD_WITH_ITT
   #include "itt_collector.h"
 #endif /* BUILD_WITH_ITT */
+
+#if BUILD_WITH_OMP
+  #include "ompt_collector.h"
+#endif /* BUILD_WITH_OMP */
 
 #include "chromelogger.h"
 #include "unimemory.h"
 #include "ze_loader.h"
 #include "logger_factory.h"
 
-static std::string GetChromeTraceFileName(void) {
-#ifdef _WIN32
-  char str[256];
-  if (GetModuleFileNameA(nullptr, str, sizeof(str))) {
-    std::string name(str);
-    auto pos = name.find_last_of('\\');
-    if (pos == std::string::npos) {
-      return name;  // std::move(name) here prevents copy elision on Windows
-    }
-    else {
-      return name.substr(pos + 1);
-    }
-  }
-#else /* _WIN32 */
-  std::ifstream comm("/proc/self/comm");
-  if (comm) {
-    std::string name;
-    std::getline(comm, name);
-    comm.close();
-    if (!name.empty()) {
-      return std::move(name);
-    }
-  }
-#endif /* _WIN32 */
-
-  // should never get here
-  return "unitrace";
-}
-
 class UniTracer {
  public:
-  static UniTracer* Create(const TraceOptions& options) {
+  static UniTracer* Create(const CollectorOptions& options) {
     if (!InitializeL0()) {
       exit(-1);
     }
@@ -77,16 +53,6 @@ class UniTracer {
     UniTracer* tracer = new UniTracer(options);
     UniMemory::ExitIfOutOfMemory((void *)tracer);
 
-    //TODO: cleanup option setting
-    CollectorOptions collector_options;
-    collector_options.device_timing = false;
-    collector_options.kernel_submission = false;
-    collector_options.host_timing = false;
-    collector_options.kernel_tracing = false;
-    collector_options.api_tracing = false;
-    collector_options.metric_query = false;
-    collector_options.metric_stream = false;
-    collector_options.stall_sampling = false;
     OnZeKernelFinishCallback ze_kcallback = nullptr;
     OnZeFunctionFinishCallback ze_fcallback = nullptr;
     ZeCollector* ze_collector = nullptr;
@@ -99,22 +65,28 @@ class UniTracer {
 #endif /* BUILD_WITH_OPENCL */
 
 #if BUILD_WITH_XPTI
-    if (tracer->CheckOption(TRACE_CHROME_SYCL_LOGGING)) {
+    if (options.chrome_sycl_logging) {
         xpti_collector = XptiCollector::Create(ChromeLogger::XptiLoggingCallback);
     }
 #endif /* BUILD_WITH_XPTI */
 
+#if BUILD_WITH_OMP
+    if (options.chrome_omp_logging) {
+        ompt_collector = OmptCollector::Create(ChromeLogger::OmptLoggingCallback);
+    }
+#endif /* BUILD_WITH_OMP */
+
 #if BUILD_WITH_ITT
-    if (tracer->CheckOption(TRACE_CHROME_ITT_LOGGING) || tracer->CheckOption(TRACE_CCL_SUMMARY_REPORT)) {
+    if (options.chrome_itt_logging || options.ccl_summary_report) {
         itt_collector = IttCollector::Create(ChromeLogger::IttLoggingCallback);
         if (itt_collector) {
-            if (tracer->CheckOption(TRACE_CCL_SUMMARY_REPORT)) {
+            if (options.ccl_summary_report) {
                 itt_collector->EnableCclSummary();
             }
-            if (tracer->CheckOption(TRACE_CHROME_ITT_LOGGING)) {
+            if (options.chrome_itt_logging) {
                 itt_collector->EnableChromeLogging();
             }
-            if (tracer->CheckOption(TRACE_CHROME_MPI_LOGGING)) {
+            if (options.chrome_mpi_logging) {
               itt_collector->SetMpiCallback(ChromeLogger::MpiLoggingCallback);
               itt_collector->SetMpiInternalCallback(ChromeLogger::MpiInternalLoggingCallback);
             }
@@ -124,15 +96,15 @@ class UniTracer {
         //TODO: clean it up later
         itt_collector = IttCollector::Create(nullptr);
     }
-#endif /* BUILD_WITH_XPTI */
+#endif /* BUILD_WITH_ITT */
 
-    if (tracer->CheckOption(TRACE_DEVICE_TIMING) ||
-        tracer->CheckOption(TRACE_DEVICE_TIMELINE) ||
-        tracer->CheckOption(TRACE_KERNEL_SUBMITTING) ||
-        tracer->CheckOption(TRACE_CHROME_DEVICE_LOGGING) ||
-        tracer->CheckOption(TRACE_CHROME_KERNEL_LOGGING)) {
+    if (options.device_timing ||
+        options.device_timeline ||
+        options.kernel_submission ||
+        options.chrome_device_logging ||
+        options.chrome_kernel_logging) {
 
-      if (tracer->CheckOption(TRACE_CHROME_KERNEL_LOGGING)) {
+      if (options.chrome_kernel_logging) {
         ze_kcallback = ChromeLogger::ZeChromeKernelLoggingCallback;
         // also set fcallback functions
         ze_fcallback = ChromeLogger::ChromeCallLoggingCallback;
@@ -141,60 +113,34 @@ class UniTracer {
         cl_fcallback = ChromeLogger::ClChromeCallLoggingCallback;
 #endif /* BUILD_WITH_OPENCL */
       }
-      else if (tracer->CheckOption(TRACE_CHROME_DEVICE_LOGGING)) {
+      else if (options.chrome_device_logging) {
         ze_kcallback = ChromeLogger::ZeChromeKernelLoggingCallback;
 #if BUILD_WITH_OPENCL
         cl_kcallback = ChromeLogger::ClChromeKernelLoggingCallback;
 #endif /* BUILD_WITH_OPENCL */
       }
-
-      collector_options.kernel_tracing = true;
-      collector_options.device_timing = tracer->CheckOption(TRACE_DEVICE_TIMING);
-      collector_options.device_timeline = tracer->CheckOption(TRACE_DEVICE_TIMELINE);
-      collector_options.kernel_submission = tracer->CheckOption(TRACE_KERNEL_SUBMITTING);
-      collector_options.verbose = tracer->CheckOption(TRACE_VERBOSE);
-      collector_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
-      collector_options.kernels_per_tile = tracer->CheckOption(TRACE_KERNELS_PER_TILE);
     }
 
-    if (tracer->CheckOption(TRACE_CALL_LOGGING) ||
-        tracer->CheckOption(TRACE_CHROME_CALL_LOGGING) ||
-        tracer->CheckOption(TRACE_HOST_TIMING)) {
+    if (options.call_logging ||
+        options.chrome_call_logging ||
+        options.host_timing) {
 
-      if (tracer->CheckOption(TRACE_CHROME_CALL_LOGGING)) {
+      if (options.chrome_call_logging) {
         ze_fcallback = ChromeLogger::ChromeCallLoggingCallback;
 #if BUILD_WITH_OPENCL
         cl_fcallback = ChromeLogger::ClChromeCallLoggingCallback;
 #endif /* BUILD_WITH_OPENCL */
       }
-
-      collector_options.api_tracing = true;
-      collector_options.host_timing = tracer->CheckOption(TRACE_HOST_TIMING);
-      collector_options.call_logging = tracer->CheckOption(TRACE_CALL_LOGGING);
-      collector_options.need_tid = tracer->CheckOption(TRACE_TID);
-      collector_options.need_pid = tracer->CheckOption(TRACE_PID);
-      collector_options.demangle = tracer->CheckOption(TRACE_DEMANGLE);
     }
 
-    if (tracer->CheckOption(TRACE_METRIC_QUERY)) {
-      collector_options.metric_query = true;
-    }
-
-    if (tracer->CheckOption(TRACE_METRIC_STREAM)) {
-      collector_options.metric_stream = true;
-      if (utils::GetEnv("UNITRACE_MetricGroup") == "EuStallSampling") {
-        collector_options.stall_sampling = true;
-      }
-    }
-
-    if (collector_options.kernel_tracing || collector_options.api_tracing) {
+    if (options.kernel_tracing || options.api_tracing) {
 #if BUILD_WITH_OPENCL
-      if (tracer->CheckOption(TRACE_OPENCL)) {
+      if (options.opencl) {
         cl_device_id cl_cpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_CPU);
         cl_device_id cl_gpu_device = utils::cl::GetIntelDevice(CL_DEVICE_TYPE_GPU);
 
         if (cl_cpu_device != nullptr) {
-          cl_cpu_collector = ClCollector::Create(cl_cpu_device, collector_options, cl_kcallback, cl_fcallback, tracer);
+          cl_cpu_collector = ClCollector::Create(cl_cpu_device, options, cl_kcallback, cl_fcallback, tracer);
           if (cl_cpu_collector == nullptr) {
             std::cerr <<
               "[WARNING] Unable to create kernel collector for CL CPU backend" <<
@@ -204,7 +150,7 @@ class UniTracer {
         }
 
         if (cl_gpu_device != nullptr) {
-          cl_gpu_collector = ClCollector::Create(cl_gpu_device, collector_options, cl_kcallback, cl_fcallback, tracer);
+          cl_gpu_collector = ClCollector::Create(cl_gpu_device, options, cl_kcallback, cl_fcallback, tracer);
           if (cl_gpu_collector == nullptr) {
             std::cerr << "[WARNING] Unable to create kernel collector for CL GPU backend" << std::endl;
           }
@@ -218,8 +164,11 @@ class UniTracer {
         }
       }
 #endif /* BUILD_WITH_OPENCL */
-      ze_collector = ZeCollector::Create(collector_options, ze_kcallback, ze_fcallback, tracer);
+
+#if BUILD_WITH_L0
+      ze_collector = ZeCollector::Create(options, ze_kcallback, ze_fcallback, tracer);
       tracer->ze_collector_ = ze_collector;
+#endif /* BUILD_WITH_L0 */
     }
 
     return tracer;
@@ -284,7 +233,15 @@ class UniTracer {
       delete itt_collector;
     }
 #endif /* BUILD_WITH_ITT */
-    if (CheckOption(TRACE_LOG_TO_FILE)) {
+
+#if BUILD_WITH_OMP
+    if (ompt_collector) {
+      delete ompt_collector;
+      ompt_collector = nullptr;
+    }
+#endif /* BUILD_WITH_OMP */
+
+    if (options_.log_to_file) {
       std::shared_ptr<Logger> logger = logger_factory_->GetLogger(LOGGER_TYPE_LEGACY_SHARED_TRACE);
       if (logger && !logger->IsEmpty()) {
         std::cerr << "[INFO] Log is stored in " <<
@@ -308,20 +265,19 @@ class UniTracer {
     }
   }
 
-  bool CheckOption(uint32_t option) {
-    return options_.CheckFlag(option);
-  }
 
   UniTracer(const UniTracer& that) = delete;
   UniTracer& operator=(const UniTracer& that) = delete;
 
  private:
-  UniTracer(const TraceOptions& options)
+  UniTracer(const CollectorOptions& options)
       : options_(options),
         logger_factory_(LoggerFactory::Create()) {
     start_time_ = utils::GetSystemTime();
-    if (CheckOption(TRACE_CHROME_CALL_LOGGING) || CheckOption(TRACE_CHROME_KERNEL_LOGGING) || CheckOption(TRACE_CHROME_DEVICE_LOGGING) || CheckOption(TRACE_CHROME_SYCL_LOGGING) || CheckOption(TRACE_CHROME_ITT_LOGGING)) {
-      chrome_logger_ = ChromeLogger::Create(GetChromeTraceFileName().c_str());
+    if (options_.chrome_call_logging || options_.chrome_kernel_logging ||
+        options_.chrome_device_logging || options_.chrome_sycl_logging ||
+        options_.chrome_itt_logging || options_.chrome_omp_logging) {
+      chrome_logger_ = ChromeLogger::Create(logger_factory_->GetAppName().c_str());
     }
 
   }
@@ -636,21 +592,21 @@ class UniTracer {
 
   void Report() {
 #if BUILD_WITH_OPENCL
-    if (CheckOption(TRACE_HOST_TIMING)) {
+    if (options_.host_timing) {
       ReportTiming(
           ze_collector_,
           cl_cpu_collector_,
           cl_gpu_collector_,
           "API");
     }
-    if (CheckOption(TRACE_DEVICE_TIMING)) {
+    if (options_.device_timing) {
       ReportTiming(
           ze_collector_,
           cl_cpu_collector_,
           cl_gpu_collector_,
           "Device");
     }
-    if (CheckOption(TRACE_KERNEL_SUBMITTING)) {
+    if (options_.kernel_submission) {
       ReportKernelSubmission(
           ze_collector_,
           cl_cpu_collector_,
@@ -658,21 +614,21 @@ class UniTracer {
           "Device");
     }
 #else /* BUILD_WITH_OPENCL */
-    if (CheckOption(TRACE_HOST_TIMING)) {
+    if (options_.host_timing) {
       ReportTiming(
           ze_collector_,
           nullptr,
           nullptr,
           "API");
     }
-    if (CheckOption(TRACE_DEVICE_TIMING)) {
+    if (options_.device_timing) {
       ReportTiming(
         ze_collector_,
         nullptr,
         nullptr,
           "Device");
     }
-    if (CheckOption(TRACE_KERNEL_SUBMITTING)) {
+    if (options_.kernel_submission) {
       ReportKernelSubmission(
         ze_collector_,
         nullptr,
@@ -683,7 +639,7 @@ class UniTracer {
   }
 
  private:
-  TraceOptions options_;
+  CollectorOptions options_;
 
   LoggerFactory* logger_factory_;
   uint64_t start_time_;

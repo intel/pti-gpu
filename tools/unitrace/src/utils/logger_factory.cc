@@ -20,7 +20,7 @@
 LoggerFactory::LoggerFactory(uint32_t app_id)
     : app_id_(app_id),
       dir_path_(""),
-      app_name_(GetAppName()),
+      app_name_(ComputeAppName()),
       rank_((utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK")),
       data_dir_path_(utils::GetEnv("UNITRACE_DataDir"))
 {}
@@ -102,7 +102,7 @@ std::shared_ptr<Logger> LegacyLoggerFactory::GetDeviceLogger(LoggerType type, in
     return GetLoggerImpl(type, device_id, lazy_flush, lock_free);
 }
 
-std::string LoggerFactory::GetAppName(void) {
+std::string LoggerFactory::ComputeAppName(void) {
 #ifdef _WIN32
     char str[256];
     if (GetModuleFileNameA(nullptr, str, sizeof(str))) {
@@ -179,22 +179,35 @@ std::string LegacyLoggerFactory::GetLogFileName(const std::string& logfile, uint
 }
 
 std::string LegacyLoggerFactory::GetMetricsFileName(const std::string& log_file, uint32_t app_id) const{
-    std::string log_file_name = GetLogFileName(log_file, app_id);
-    if (log_file_name.empty()) {
-        return log_file_name;
+    if (log_file.empty()) {
+        return log_file;
     }
-    std::string filename;
-    size_t pos = log_file_name.find_first_of('.');
+
+    size_t pos = log_file.find_last_of('.');
+
+    std::string result;
     if (pos == std::string::npos) {
-        filename = log_file_name;
+        result = log_file;
     } else {
-        filename = log_file_name.substr(0, pos);
+        result = log_file.substr(0, pos);
     }
-    filename = filename + ".metrics";
+
+    result += ".metrics";
+
+    if (app_id == (std::numeric_limits<uint32_t>::max)()) {
+        app_id = utils::GetPid();
+    }
+    result += "." + std::to_string(app_id);
+
+    if (!rank_.empty()) {
+        result += "." + rank_;
+    }
+
     if (pos != std::string::npos) {
-        filename = filename + log_file_name.substr(pos);
+        result += log_file.substr(pos);
     }
-    return filename;
+
+    return result;
 }
 
 std::string LegacyLoggerFactory::GetChromeTraceFileName() const {

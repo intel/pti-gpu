@@ -25,139 +25,148 @@
 
 static UniTracer* tracer = nullptr;
 
-static TraceOptions ReadArgs() {
+static CollectorOptions ReadArgs() {
   std::string value;
-  uint32_t flags = 0;
-  std::string log_file;
+
+  CollectorOptions options;
 
   value = utils::GetEnv("UNITRACE_CallLogging");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CALL_LOGGING);
+    options.call_logging = 1;
   }
 
   value = utils::GetEnv("UNITRACE_HostTiming");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_HOST_TIMING);
+    options.host_timing = 1;
   }
 
   value = utils::GetEnv("UNITRACE_DeviceTiming");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_DEVICE_TIMING);
+    options.device_timing = 1;
   }
 
   value = utils::GetEnv("UNITRACE_DeviceTimeline");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_DEVICE_TIMELINE);
+    options.device_timeline = 1;
   }
 
   value = utils::GetEnv("UNITRACE_KernelSubmission");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_KERNEL_SUBMITTING);
+    options.kernel_submission = 1;
   }
 
   value = utils::GetEnv("UNITRACE_OpenCLTracing");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_OPENCL);
+    options.opencl = 1;
   }
 
   value = utils::GetEnv("UNITRACE_ChromeSyclLogging");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CHROME_SYCL_LOGGING);
+    options.chrome_sycl_logging = 1;
   }
 
   value = utils::GetEnv("UNITRACE_CclSummaryReport");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CCL_SUMMARY_REPORT);
+    options.ccl_summary_report = 1;
   }
 
   value = utils::GetEnv("UNITRACE_ChromeIttLogging");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CHROME_ITT_LOGGING);
+    options.chrome_itt_logging = 1;
   }
 
   value = utils::GetEnv("UNITRACE_ChromeCallLogging");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CHROME_CALL_LOGGING);
+    options.chrome_call_logging = 1;
   }
 
   value = utils::GetEnv("UNITRACE_ChromeKernelLogging");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CHROME_KERNEL_LOGGING);
+    options.chrome_kernel_logging = 1;
   }
 
   value = utils::GetEnv("UNITRACE_ChromeDeviceLogging");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CHROME_DEVICE_LOGGING);
+    options.chrome_device_logging = 1;
   }
 
   value = utils::GetEnv("UNITRACE_ChromeNoThreadOnDevice");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CHROME_NO_THREAD_ON_DEVICE);
+    options.chrome_no_thread_on_device = 1;
   }
 
   value = utils::GetEnv("UNITRACE_ChromeNoEngineOnDevice");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CHROME_NO_ENGINE_ON_DEVICE);
+    options.chrome_no_engine_on_device = 1;
   }
 
   value = utils::GetEnv("UNITRACE_Verbose");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_VERBOSE);
+    options.verbose = 1;
   }
 
   value = utils::GetEnv("UNITRACE_Demangle");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_DEMANGLE);
+    options.demangle = 1;
   }
 
   value = utils::GetEnv("UNITRACE_KernelOnSeparateTiles");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_KERNELS_PER_TILE);
+    options.kernels_per_tile = 1;
   }
 
   value = utils::GetEnv("UNITRACE_Tid");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_TID);
+    options.need_tid = 1;
   }
 
   value = utils::GetEnv("UNITRACE_Pid");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_PID);
+    options.need_pid = 1;
   }
 
   value = utils::GetEnv("UNITRACE_LogToFile");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_LOG_TO_FILE);
-    log_file = utils::GetEnv("UNITRACE_LogFilename");
-    PTI_ASSERT(!log_file.empty());
+    options.log_to_file = 1;
   }
 
   value = utils::GetEnv("UNITRACE_StartPaused");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_CONDITIONAL_COLLECTION);
+    options.conditional_collection = 1;
   }
 
   value = utils::GetEnv("UNITRACE_TraceOutputDirPath");
   if (!value.empty() && value == "1") {
-    flags |= (1 << TRACE_OUTPUT_DIR_PATH);
+    options.output_dir_path = 1;
   }
 
   value = utils::GetEnv("UNITRACE_MetricQuery");
   if (!value.empty()) {
-    flags |= (1 << TRACE_METRIC_QUERY);
+    options.metric_query = 1;
   }
 
   value = utils::GetEnv("UNITRACE_KernelMetrics");
   if (!value.empty()) {
-    flags |= (1 << TRACE_METRIC_STREAM);
+    options.metric_stream = 1;
+
+    value = utils::GetEnv("UNITRACE_MetricGroup");
+    if (!value.empty() && value == "EuStallSampling") {
+      options.stall_sampling = 1;
+    }
   }
 
   value = utils::GetEnv("UNITRACE_ChromeMpiLogging");
   if (!value.empty()) {
-    flags |= (1 << TRACE_CHROME_MPI_LOGGING);
+    options.chrome_mpi_logging = 1;
   }
 
-  return TraceOptions(flags, log_file);
+  value = utils::GetEnv("UNITRACE_ChromeOmpLogging");
+  if (!value.empty() && value == "1") {
+    options.chrome_omp_logging = 1;
+  }
+
+  options.DeriveFlags();
+  return options;
 }
 
 std::string get_version() {

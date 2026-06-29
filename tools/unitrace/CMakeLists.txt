@@ -23,6 +23,10 @@ else()
   )
 endif()
 
+if (NOT DEFINED BUILD_WITH_L0)
+  set(BUILD_WITH_L0 1) # Defaul value is 1
+endif()
+
 if (NOT DEFINED BUILD_WITH_ITT)
   set(BUILD_WITH_ITT 1) # Defaul value is 1
 endif()
@@ -35,8 +39,8 @@ if (NOT DEFINED BUILD_WITH_OPENCL)
   set(BUILD_WITH_OPENCL 1) # Defaul value is 1
 endif()
 
-if (DEFINED BUILD_WITH_L0 AND BUILD_WITH_L0 STREQUAL "0")
-  message(FATAL_ERROR "BUILD_WITH_L0=0 is not supported. The unitrace tool can't be built without Level Zero")
+if (NOT DEFINED BUILD_WITH_OMP)
+  set(BUILD_WITH_OMP 1) # Default value is 1 - Enable OpenMP tracing
 endif()
 
 if (BUILD_WITH_MPI AND BUILD_WITH_ITT STREQUAL "0")
@@ -48,7 +52,8 @@ include(GNUInstallDirs)
 add_compile_definitions(BUILD_WITH_ITT=${BUILD_WITH_ITT})
 add_compile_definitions(BUILD_WITH_XPTI=${BUILD_WITH_XPTI})
 add_compile_definitions(BUILD_WITH_OPENCL=${BUILD_WITH_OPENCL})
-add_compile_definitions(BUILD_WITH_L0=1)
+add_compile_definitions(BUILD_WITH_L0=${BUILD_WITH_L0})
+add_compile_definitions(BUILD_WITH_OMP=${BUILD_WITH_OMP})
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /bigobj ")
@@ -172,6 +177,13 @@ if (BUILD_WITH_ITT)
   target_include_directories(unitrace_tool
     PRIVATE "${PROJECT_SOURCE_DIR}/src/itt"
     PRIVATE "${CMAKE_BINARY_DIR}/ittheaders")
+endif()
+
+if(BUILD_WITH_OMP)
+  find_package(OpenMP REQUIRED)
+  target_include_directories(unitrace_tool
+    PRIVATE "$ENV{CMPLR_ROOT}/opt/compiler/include"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/omp")
 endif()
 
 target_compile_definitions(unitrace_tool PUBLIC PTI_LEVEL_ZERO=1)

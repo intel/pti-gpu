@@ -110,6 +110,11 @@
             "name": "ze_gemm_metric",
             "platform": ["Windows", "Linux"],
             "scenarios": ["-k", "-q"]
+        },
+        {
+            "name": "omp_cpu_gemm",
+            "platform": ["Windows", "Linux"],
+            "scenarios": ["--chrome-omp-logging"]
         }
     ]
 }

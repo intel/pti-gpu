@@ -20,6 +20,7 @@
 #include <vector>
 #include <cmath>
 #include <fstream>
+#include <sstream>
 
 #if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
 #include <dlfcn.h>

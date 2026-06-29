@@ -43,6 +43,7 @@ public:
 
     bool IsLegacy() const;
     bool IsResultDir() const;
+    const std::string& GetAppName() const { return app_name_; }
     const std::string& GetRank() const { return rank_; }
 
     std::shared_ptr<Logger> GetLogger(LoggerType type, bool lazy_flush = false, bool lock_free = false) const {
@@ -62,7 +63,7 @@ public:
     virtual std::vector<std::string> SearchFilesByType(LoggerType type, int32_t device_id) const = 0;
 
 protected:
-    static std::string GetAppName(void);
+    static std::string ComputeAppName(void);
     explicit LoggerFactory(uint32_t app_id);
     void CreateDirectory(const std::string& dir) const;
     std::shared_ptr<Logger> GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free) const;

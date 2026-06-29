@@ -24,6 +24,7 @@
 #include "utils.h"
 
 inline bool InitializeL0() {
+#if BUILD_WITH_L0
   auto status = ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY);
   if (status != ZE_RESULT_SUCCESS) {
     std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
@@ -34,6 +35,9 @@ inline bool InitializeL0() {
   } else {
     return true;
   }
+#else /* BUILD_WITH_L0 */
+  return true;
+#endif /* BUILD_WITH_L0 */
 }
 
 inline std::vector<ze_driver_handle_t> GetDriverList() {

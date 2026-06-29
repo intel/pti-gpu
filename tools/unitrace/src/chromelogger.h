@@ -19,7 +19,6 @@
 #include <tuple>
 #include <set>
 #include <vector>
-#include "trace_options.h"
 #include "unitimer.h"
 #include "unikernel.h"
 #include "unievent.h"
@@ -72,6 +71,9 @@ ze_pci_ext_properties_t *GetZeDevicePciPropertiesAndId(ze_device_handle_t device
 std::string GetClKernelCommandName(uint64_t id);
 std::string GetZeDeviceName(ze_device_handle_t device);
 std::string GetZeEngineName(ze_device_handle_t device, uint32_t ordinal);
+#if BUILD_WITH_OMP
+extern const char *GetOmptEventName(uint32_t);
+#endif /* BUILD_WITH_OMP */
 
 static std::shared_ptr<Logger> logger_ = nullptr;
 
@@ -503,6 +505,43 @@ static std::string ConvertDataToString(IttArgs* args) {
 }
 #endif /* BUILD_WITH_ITT */
 
+#if BUILD_WITH_OMP
+static void OmpArgsToString(const OmpArgs &args, std::string &o) {
+  switch (args.ompt.type) {
+  case ompt_callback_implicit_task:
+    o += "\"actual_parallelism\": ";
+    o += std::to_string(args.ompt.record.implicit_task.actual_parallelism);
+    o += ", \"index\": ";
+    o += std::to_string(args.ompt.record.implicit_task.index);
+    break;
+  case ompt_callback_dispatch:
+    if (args.ompt.record.dispatch.kind == ompt_dispatch_iteration) {
+      o += "\"iteration\": ";
+      o += std::to_string(args.ompt.record.dispatch.instance.value);
+    } else if (args.ompt.record.dispatch.kind == ompt_dispatch_section) {
+      o += "\"section\": ";
+      o += std::to_string(args.ompt.record.dispatch.instance.value);
+    } else {
+      o += "\"chunk_start\": " + std::to_string(args.data[0]);
+      o += ", \"chunk_iterations\": " + std::to_string(args.data[1]);
+    }
+    break;
+  case ompt_callback_task_create:
+    o += "\"new_task_id\": ";
+    o += std::to_string(args.ompt.record.task_create.new_task_id);
+    break;
+  case ompt_callback_task_dependence:
+    o += "\"src_task_id\": ";
+    o += std::to_string(args.ompt.record.task_dependence.src_task_id);
+    o += ", \"sink_task_id\": ";
+    o += std::to_string(args.ompt.record.task_dependence.sink_task_id);
+    break;
+  default:
+    ;
+  }
+}
+#endif /* BUILD_WITH_OMP */
+
 // comparator for std::pair<start_time, end_time> of device timestamps
 struct DeviceTimestampComparator {
   bool operator()(const std::pair<uint64_t, uint64_t>& a, const std::pair<uint64_t, uint64_t>& b) const {
@@ -846,6 +885,10 @@ class TraceBuffer {
           } else {
             str += ", \"name\": \"" + std::string(rec.name_) + "\"";
           }
+#if BUILD_WITH_OMP
+        } else if (rec.api_id_ == OmpTracingId) {
+          str += ", \"name\": \"" + std::string(GetOmptEventName(rec.id_)) + "\"";
+#endif /* BUILD_WITH_OMP */
         } else {
           if ((rec.api_id_ != XptiTracingId) && (rec.api_id_ != IttTracingId)) {
             str += ", \"name\": \"" + get_symbol(rec.api_id_) + "\"";
@@ -913,6 +956,10 @@ class TraceBuffer {
         // reset count to 0 and type to API_TYPE_NONE
         rec.itt_args_.count = 0;
         rec.api_type_ = API_TYPE_NONE;
+#if BUILD_WITH_OMP
+      } else if (rec.api_type_ == API_TYPE_OMP) {
+        OmpArgsToString(rec.omp_args_, str_args);
+#endif /* BUILD_WITH_OMP */
       }
 
       if (!str_args.empty()) {
@@ -1625,6 +1672,31 @@ class ChromeLogger {
         thread_local_buffer_.BufferHostEvent();
       }
     }
+
+#if BUILD_WITH_OMP
+    static void OmptLoggingCallback(uint64_t event_id, uint64_t start_ts,
+                                    uint64_t end_ts, EVENT_TYPE etype,
+                                    OmpArgs *omp_args) {
+      if (thread_local_buffer_.IsFinalized())
+        return;
+
+      HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
+      rec->name_ = nullptr;
+      rec->type_ = etype;
+      rec->api_id_ = OmpTracingId;
+      rec->start_time_ = start_ts;
+      rec->end_time_ = end_ts;
+      rec->id_ = event_id;
+      if (omp_args) {
+        rec->api_type_ = API_TYPE_OMP;
+        rec->omp_args_ = *omp_args;
+      } else {
+        rec->api_type_ = API_TYPE_NONE;
+      }
+
+      thread_local_buffer_.BufferHostEvent();
+    }
+#endif /* BUILD_WITH_OMP */
 
     static void IttLoggingCallback(const char *name, uint64_t start_ts, uint64_t end_ts, IttArgs* metadata_args) {
       if (!thread_local_buffer_.IsFinalized()) {

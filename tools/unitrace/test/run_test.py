@@ -136,7 +136,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
             is_chrome_logging_present = True
 
         need_output_directory = False
-        if scenario in ["--chrome-call-logging", "--chrome-device-logging","--chrome-kernel-logging", "--chrome-sycl-logging", "--chrome-itt-logging"]:
+        if scenario in ["--chrome-call-logging", "--chrome-device-logging","--chrome-kernel-logging", "--chrome-sycl-logging", "--chrome-itt-logging", "--chrome-omp-logging"]:
             need_output_directory = True
 
         if need_output_directory:

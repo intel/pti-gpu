@@ -126,6 +126,9 @@ def gen_enums(out_file, l0_func_list, ext_func_list, ocl_func_list):
   #itt api id
   out_file.write("  IttTracingId,\n")
 
+  #omp api id
+  out_file.write("  OmpTracingId,\n")
+
   #footer
   out_file.write("} API_TRACING_ID;\n")
 
