@@ -17,3 +17,5 @@ out/
 
 # Raw install/packaging intermediary data
 drop_raw/
+
+dist/

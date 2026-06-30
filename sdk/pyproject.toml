@@ -1,0 +1,92 @@
+[project]
+name = "intel-pti"
+dynamic = ["version"]
+description = "Intel Profiling Tools Interface"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Intel Corporation" }]
+requires-python = ">=3.7"
+
+dependencies = []
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+
+  "Intended Audience :: Developers",
+  "Intended Audience :: Education",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: System Administrators",
+  "Intended Audience :: Other Audience",
+
+  "Topic :: Software Development :: Libraries",
+  "Topic :: System :: Hardware",
+
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+
+  "Programming Language :: C++",
+]
+
+[tool.scikit-build]
+build.verbose = true
+logging.level = "INFO"
+cmake.version = ">=3.14"
+cmake.build-type = "RelWithDebInfo"
+ninja.version = ">=1.10.1"
+minimum-version = "build-system.requires"
+wheel.py-api = "py3"
+wheel.platlib = true
+cmake.define.CMAKE_TOOLCHAIN_FILE = "cmake/toolchains/scikit-build.cmake"
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "VERSION"
+regex = '''
+^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$
+'''
+result = "{major}.{minor}.{patch}dev1"
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "CMakeLists.txt" }, { file = "VERSION" }]
+
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project.urls]
+Homepage = "https://github.com/intel/pti-gpu/tree/master/sdk"
+Documentation = "https://intel.github.io/pti-gpu/"
+Repository = "https://github.com/intel/pti-gpu"
+Issues = "https://github.com/intel/pti-gpu/issues"
+
+[[tool.scikit-build.overrides]]
+if.env.PTI_RELEASE_WHL = "1"
+if.platform_system = "linux"
+metadata.version.provider = "scikit_build_core.metadata.regex"
+metadata.version.input = "VERSION"
+metadata.version.regex = '''
+^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$
+'''
+metadata.version.result = "{major}.{minor}.{patch}"
+cmake.build-type = "Release"
+cmake.define.CMAKE_CXX_FLAGS = "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -D_FORTIFY_SOURCE=2"
+cmake.define.CMAKE_C_FLAGS = "-Wall -Wextra -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -D_FORTIFY_SOURCE=2"
+cmake.define.CMAKE_SHARED_LINKER_FLAGS = "-Wl,-z,relro,-z,now,-z,noexecstack"
+cmake.define.CMAKE_MODULE_LINKER_FLAGS = "-Wl,-z,relro,-z,now,-z,noexecstack"
+cmake.define.CMAKE_EXE_LINKER_FLAGS = "-Wl,-z,relro,-z,now,-z,noexecstack"
+
+[[tool.scikit-build.overrides]]
+if.env.PTI_RELEASE_WHL = "1"
+if.platform_system = "win32"
+metadata.version.provider = "scikit_build_core.metadata.regex"
+metadata.version.input = "VERSION"
+metadata.version.regex = '''
+^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$
+'''
+metadata.version.result = "{major}.{minor}.{patch}"
+cmake.build-type = "Release"
+cmake.define.CMAKE_CXX_FLAGS = "/W4 /WX /MD /EHcs /fp:precise /sdl /GS /Gy /DYNAMICBASE /guard:cf"
+cmake.define.CMAKE_C_FLAGS = "/W4 /WX /MD /fp:precise /sdl /GS /Gy /guard:cf"
+cmake.define.CMAKE_SHARED_LINKER_FLAGS = "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf"
+cmake.define.CMAKE_MODULE_LINKER_FLAGS = "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf"
+cmake.define.CMAKE_EXE_LINKER_FLAGS = "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf"
+

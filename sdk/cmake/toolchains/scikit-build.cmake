@@ -1,0 +1,15 @@
+if (UNIX)
+  set(CMAKE_C_COMPILER icx)
+  set(CMAKE_CXX_COMPILER icpx)
+endif()
+
+if (WIN32)
+  set(CMAKE_C_COMPILER icx)
+  set(CMAKE_CXX_COMPILER icx)
+endif()
+
+set(CMAKE_INSTALL_LIBDIR     "${SKBUILD_DATA_DIR}/lib"     CACHE PATH "")
+set(CMAKE_INSTALL_INCLUDEDIR "${SKBUILD_DATA_DIR}/include" CACHE PATH "")
+set(CMAKE_INSTALL_BINDIR     "${SKBUILD_DATA_DIR}/bin"     CACHE PATH "")
+set(CMAKE_INSTALL_DOCDIR     "${SKBUILD_DATA_DIR}/share"   CACHE PATH "")
+set(CMAKE_INSTALL_RPATH      "$ORIGIN"                     CACHE STRING "")
