@@ -73,9 +73,9 @@ auto& GetVisitorTable() {
 // void*).
 auto* MakeVisitors() {
   using VisitorTableType = std::decay_t<decltype(GetVisitorTable())>;
-  constexpr auto kSize = std::tuple_size_v<VisitorTableType>;
   static auto visitors = []() {
-    std::array<ze_concrete_visitor_ext_desc_t, kSize> visitors_temp = {};
+    std::array<ze_concrete_visitor_ext_desc_t, std::tuple_size_v<VisitorTableType>> visitors_temp =
+        {};
     std::transform(GetVisitorTable().begin(), GetVisitorTable().end(), visitors_temp.begin(),
                    [](const auto& str_func) {
                      return ze_concrete_visitor_ext_desc_t{
@@ -87,7 +87,7 @@ auto* MakeVisitors() {
 
   // repair pNext pointers.
   [[maybe_unused]] static const bool linked = []() {
-    for (size_t i = 0; i < kSize - 1; ++i) {
+    for (size_t i = 0; i < visitors.size() - 1; ++i) {
       visitors[i].pNext = visitors.data() + (i + 1);  // NOLINT
     }
     return true;

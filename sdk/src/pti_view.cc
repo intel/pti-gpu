@@ -17,14 +17,14 @@
 #include "view_handler.h"
 
 namespace {
-// TODO: maybe_unused because SPDLOG_ERROR not guaranteed to be there on release builds
+// TODO(PTI): maybe_unused because SPDLOG_ERROR not guaranteed to be there on release builds
 void LogException([[maybe_unused]] const std::exception& excep) {
   SPDLOG_ERROR("Caught exception before return: {}", excep.what());
 }
 }  // namespace
 
 //
-// TODO: parse different exception types, analyse caught exception and return
+// TODO(PTI): parse different exception types, analyse caught exception and return
 // different error code.
 //
 pti_result ptiViewEnable(pti_view_kind view_kind) {
@@ -53,7 +53,7 @@ pti_result ptiViewEnable(pti_view_kind view_kind) {
 }
 
 //
-// TODO: parse different exception types, analyse caught exception and return
+// TODO(PTI): parse different exception types, analyse caught exception and return
 // different error code.
 //
 pti_result ptiViewDisable(pti_view_kind view_kind) {
@@ -98,7 +98,7 @@ pti_result ptiViewGPULocalAvailable() {
   }
 }
 //
-// TODO: parse different exception types, analyse caught exception and return
+// TODO(PTI): parse different exception types, analyse caught exception and return
 // different error code.
 //
 pti_result ptiViewSetCallbacks(pti_fptr_buffer_requested fptr_bufferRequested,
@@ -120,7 +120,7 @@ pti_result ptiViewSetCallbacks(pti_fptr_buffer_requested fptr_bufferRequested,
 }
 
 //
-// TODO: parse different exception types, analyse caught exception and return
+// TODO(PTI): parse different exception types, analyse caught exception and return
 // different error code.
 //
 pti_result ptiViewGetNextRecord(uint8_t* buffer, size_t valid_bytes,
@@ -142,7 +142,7 @@ pti_result ptiViewGetNextRecord(uint8_t* buffer, size_t valid_bytes,
 }
 
 //
-// TODO: parse different exception types, analyse caught exception and return
+// TODO(PTI): parse different exception types, analyse caught exception and return
 // different error code.
 //
 pti_result ptiFlushAllViews() {
@@ -163,7 +163,7 @@ pti_result ptiFlushAllViews() {
 }
 
 //
-// TODO: parse different exception types, analyse caught exception and return
+// TODO(PTI): parse different exception types, analyse caught exception and return
 // different error code.
 //
 pti_result ptiViewPushExternalCorrelationId(pti_view_external_kind external_kind,
@@ -185,7 +185,7 @@ pti_result ptiViewPushExternalCorrelationId(pti_view_external_kind external_kind
 }
 
 //
-// TODO: parse different exception types, analyse caught exception and return
+// TODO(PTI): parse different exception types, analyse caught exception and return
 // different error code.
 //
 pti_result ptiViewPopExternalCorrelationId(pti_view_external_kind external_kind,
@@ -354,7 +354,8 @@ pti_result ptiViewGetApiIdName(pti_api_group_id type, uint32_t unique_id, const 
 }
 
 // Enable/Disable driver specific API specified by api_id within the api_group_id.
-// TODO--when groups have more than 1 driver Apis (say OCL) update this to call Reset appropriately
+// TODO(PTI) --when groups have more than 1 driver Apis (say OCL) update this to call Reset
+// appropriately
 pti_result ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id api_group_id, uint32_t api_id) {
   SPDLOG_DEBUG("In {}, api_group_id:  {}, api_id: {}, enable?: {}", __func__,
                static_cast<uint32_t>(api_group_id), static_cast<uint32_t>(api_id), enable);
@@ -373,12 +374,13 @@ pti_result ptiViewEnableDriverApi(uint32_t enable, pti_api_group_id api_group_id
     return Instance().CheckGranularityAndSetState(pti_group, api_id, enable);
   } catch (const std::out_of_range&) {
     return pti_result::PTI_ERROR_BAD_ARGUMENT;
-  };
+  }
   return PTI_SUCCESS;
 }
 
 // Enable/Disable runtime specific API specified by api_id within the api_group_id.
-// TODO--when groups have more than 1 runtime Apis (say OV) update this to call Reset appropriately
+// TODO(PTI)--when groups have more than 1 runtime Apis (say OV) update this to call Reset
+// appropriately
 pti_result ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id api_group_id,
                                    uint32_t api_id) {
   SPDLOG_DEBUG("In {}, api_group_id:  {}, api_id: {}, enable?: {}", __func__,
@@ -391,12 +393,12 @@ pti_result ptiViewEnableRuntimeApi(uint32_t enable, pti_api_group_id api_group_i
     }
 
     // Set the group to be specific here.  All calls require it.
-    // TODO -- Relook at this when api_group_id can be a valid group other than SYCL.
+    // TODO(PTI)-- Relook at this when api_group_id can be a valid group other than SYCL.
     pti_api_group_id pti_group = pti_api_group_id::PTI_API_GROUP_SYCL;
     return Instance().CheckGranularityAndSetState(pti_group, api_id, enable);
   } catch (const std::out_of_range&) {
     return pti_result::PTI_ERROR_BAD_ARGUMENT;
-  };
+  }
   return PTI_SUCCESS;
 }
 
@@ -436,10 +438,10 @@ pti_result ptiViewEnableRuntimeApiClass(uint32_t enable, pti_api_class pti_class
           status =
               Instance().ProcessGroupForRuntimePerClass(api_group_id, new_value, api_pti_class);
         }
-        if (pti_class != pti_api_class::PTI_API_CLASS_ALL)
+        if (pti_class != pti_api_class::PTI_API_CLASS_ALL) {
           break;
-        else
-          [[fallthrough]];
+        }
+        [[fallthrough]];
       }
       default:
         break;  // last valid case -- unconditional break;
@@ -486,10 +488,10 @@ pti_result ptiViewEnableDriverApiClass(uint32_t enable, pti_api_class pti_class,
           pti_api_group_id api_group_id = pti_api_group_id::PTI_API_GROUP_LEVELZERO;
           status = Instance().ProcessGroupForDriverPerClass(api_group_id, new_value, pti_class);
         }
-        if (pti_class != pti_api_class::PTI_API_CLASS_ALL)
+        if (pti_class != pti_api_class::PTI_API_CLASS_ALL) {
           break;
-        else
-          [[fallthrough]];
+        }
+        [[fallthrough]];
       }
       default:
         break;  // last valid case -- unconditional break;

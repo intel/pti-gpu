@@ -134,15 +134,30 @@ macro(GetSpdlog)
         CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(fmt spdlog)
 
+    set(PTI_FMT_COMPILE_OPTIONS
+      $<$<CXX_COMPILER_ID:MSVC>:/wd6285 /wd6294 /wd6240 /wd6031
+      $<$<CONFIG:Release>:/wd4702 /wd6385
+      >>
+    )
+
     # Prevent fmt from using exceptions because it could throw while logging.
     # Disable warning in fmt due to our usage of EHsc.
-    target_compile_definitions(fmt PUBLIC FMT_USE_EXCEPTIONS=0)
-    target_compile_options(fmt PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/wd6285 $<$<CONFIG:Release>:/wd4702 /wd6385>>)
-    target_compile_definitions(fmt-header-only INTERFACE FMT_USE_EXCEPTIONS=0)
-    target_compile_options(fmt-header-only INTERFACE $<$<CXX_COMPILER_ID:MSVC>:/wd6285 $<$<CONFIG:Release>:/wd4702 /wd6385>>)
+    set(PTI_FMT_COMPILE_DEFINITIONS
+      FMT_USE_EXCEPTIONS=0
+    )
 
     # spdlog sets the /MP flag on MSVC which causes a warning on icx.
-    target_compile_options(spdlog PRIVATE $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-command-line-argument>)
+    set(PTI_SPDLOG_COMPILE_OPTIONS
+      $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-command-line-argument>
+    )
+
+    target_compile_definitions(fmt PUBLIC ${PTI_FMT_COMPILE_DEFINITIONS})
+    target_compile_options(fmt PUBLIC ${PTI_FMT_COMPILE_OPTIONS})
+    target_compile_definitions(fmt-header-only INTERFACE
+      ${PTI_FMT_COMPILE_DEFINITIONS})
+    target_compile_options(fmt-header-only INTERFACE  ${PTI_FMT_COMPILE_OPTIONS})
+
+    target_compile_options(spdlog PRIVATE ${PTI_SPDLOG_COMPILE_OPTIONS})
   endif()
 endmacro()
 
@@ -265,7 +280,7 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
             -Wno-extra-semi
         >
         $<$<CXX_COMPILER_ID:MSVC>:
-            /wd6285
+            /wd6285 /wd6246 /wd6031 /wd6386
             $<$<CONFIG:Release>:/wd4702 /wd6385 /wd6386>
         >
         $<$<CXX_COMPILER_ID:GNU>:
@@ -282,7 +297,7 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
 
     # Silence Warnings from Level Zero Loader. Allows us to better detect PTI
     # warnings and errors.
-    set_target_properties(ze_loader ze_tracing_layer ze_null ze_validation_layer
+    set_target_properties(ze_loader ze_tracing_layer ze_null ze_validation_layer level_zero_utils
       PROPERTIES
         COMPILE_OPTIONS "${PTI_LZ_COMPILE_OPTIONS}"
         RUNTIME_OUTPUT_DIRECTORY "${PTI_ZE_LOADER_RUNTIME_DIR}/loader")

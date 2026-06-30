@@ -238,7 +238,7 @@ struct PtiViewRecordHandler {
     // Read Logging level required
     // set environment variable PTILOG_LEVEL=<level>, where level=TRACE/DEBUG/INFO..
     // Logs appear only when PTI_ENABLE_LOGGING=ON => SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
-    std::string env_string = utils::GetEnv("PTILOG_LEVEL");
+    auto env_string = utils::GetEnv("PTILOG_LEVEL");
     if (!env_string.empty()) {
       spdlog::cfg::helpers::load_levels(env_string);
     }
@@ -246,7 +246,7 @@ struct PtiViewRecordHandler {
 
     if (!collector_) {
       CollectorOptions collector_options{};
-      // TODO: Implement this better:
+      // TODO(PTI): Implement this better:
       // this line here is from the beginning,
       // and it is wrong as for simple API tracing - no need to trace GPU ops
       // (too much overhead)
@@ -263,13 +263,13 @@ struct PtiViewRecordHandler {
       // (clock_monotonic_raw and by default clock_realtime)
       //   Default is 1millisecond --- we allow any value closely bounded by 1second to
       //   1microsecond.
-      std::string env_string = utils::GetEnv("PTI_CONV_CLOCK_SYNC_TIME_NS");
-      if (!env_string.empty()) {
+      const auto sync_env_string = utils::GetEnv("PTI_CONV_CLOCK_SYNC_TIME_NS");
+      if (!sync_env_string.empty()) {
         try {
-          int64_t env_value = std::stoi(env_string);
-          if (env_value >= NSEC_IN_USEC &&
-              env_value <= NSEC_IN_SEC) {    // are we within 1micro to 1sec bounds?
-            sync_clocks_every_ = env_value;  // reset it.
+          const int64_t sync_env_value = std::stoi(sync_env_string);
+          if (sync_env_value >= NSEC_IN_USEC &&
+              sync_env_value <= NSEC_IN_SEC) {    // are we within 1micro to 1sec bounds?
+            sync_clocks_every_ = sync_env_value;  // reset it.
           }
 
         } catch (std::invalid_argument const& /*ex*/) {

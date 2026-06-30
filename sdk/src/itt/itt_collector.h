@@ -14,6 +14,7 @@
 #include <stack>
 #include <string>
 
+#include "pti_assert.h"
 #include "unikernel.h"
 
 using OnIttLoggingCallback = void (*)(void* data, CommunicationRecord& rec);
@@ -38,8 +39,8 @@ struct ThreadTaskDescriptor {
   uint64_t recv_size_;
   uint64_t communicator_id_;
 
-  ThreadTaskDescriptor(const __itt_domain* d = nullptr, const __itt_string_handle* n = nullptr,
-                       uint64_t start = 0)
+  explicit ThreadTaskDescriptor(const __itt_domain* d = nullptr,
+                                const __itt_string_handle* n = nullptr, uint64_t start = 0)
       : domain_(const_cast<__itt_domain*>(d)),
         name_(const_cast<__itt_string_handle*>(n)),
         start_time_(start),
@@ -61,7 +62,7 @@ class IttCollector {
   IttCollector& operator=(IttCollector&&) = delete;
 
   void EnableTrace() {
-    SPDLOG_DEBUG("{}(): TID: {}", __PRETTY_FUNCTION__, utils::GetTid());
+    SPDLOG_DEBUG("{}(): TID: {}", PTI_FUNCTION_NAME, utils::GetTid());
 
     // Clear any stale stack state for clean start
     if (!task_desc_.empty()) {
@@ -73,7 +74,7 @@ class IttCollector {
     EnableCollection();
   }
   void DisableTrace() {
-    SPDLOG_DEBUG("{}(): TID: {}", __PRETTY_FUNCTION__, utils::GetTid());
+    SPDLOG_DEBUG("{}(): TID: {}", PTI_FUNCTION_NAME, utils::GetTid());
 
     DisableCollection();
 
@@ -106,8 +107,8 @@ class IttCollector {
                  rec.send_size_, rec.recv_size_);
 
     // Single atomic load with relaxed ordering
-    auto cb = record_dispatcher_.load(std::memory_order_relaxed);
-    if (cb) {
+    auto itt_cb = record_dispatcher_.load(std::memory_order_relaxed);
+    if (itt_cb) {
       itt_runtime_rec_.pid_ = PidTidInfo::Get().pid;
       itt_runtime_rec_.tid_ = PidTidInfo::Get().tid;
       itt_runtime_rec_.start_time_ = rec.start_time_;
@@ -117,7 +118,7 @@ class IttCollector {
       itt_runtime_rec_.communicator_id_ = rec.communicator_id_;
       itt_runtime_rec_.name_ = rec.name_ ? rec.name_->strA : nullptr;
 
-      cb(nullptr, itt_runtime_rec_);
+      itt_cb(nullptr, itt_runtime_rec_);
     }
   }
 
@@ -130,9 +131,9 @@ class IttCollector {
   void DisableCollection();
 
   inline static thread_local CommunicationRecord itt_runtime_rec_;
-  IttCollector(OnIttLoggingCallback callback) : record_dispatcher_(callback) {}
+  explicit IttCollector(OnIttLoggingCallback callback) : record_dispatcher_(callback) {}
 
- private:  // Data
+  // Data
   std::atomic<OnIttLoggingCallback> record_dispatcher_ = nullptr;
   std::atomic<CollectionState> collection_state_{CollectionState::kDisabled};
 };
