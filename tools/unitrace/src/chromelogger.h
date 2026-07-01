@@ -1623,8 +1623,11 @@ class ChromeLogger {
     }
 
     void Flush() {
-      if (logger_ != nullptr && !flushed_) {
-        logger_lock_.lock();
+      if (logger_ == nullptr) {
+        return;
+      }
+      logger_lock_.lock();
+      if (!flushed_) {
         if (trace_buffers_) {
           for (auto it = trace_buffers_->begin(); it != trace_buffers_->end(); ++it) {
             (*it)->FlushDeviceBuffer();
@@ -1647,8 +1650,8 @@ class ChromeLogger {
           logger_->Flush();
         }
         flushed_ = true;
-        logger_lock_.unlock();
       }
+      logger_lock_.unlock();
     }
 
     static void XptiLoggingCallback(EVENT_TYPE etype, const char *name, uint64_t start_ts, uint64_t end_ts) {
