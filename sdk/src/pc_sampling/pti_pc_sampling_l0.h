@@ -46,6 +46,12 @@ constexpr const char* kInstructionPointerMetricName = "IP";
 inline void DestroyMetricStreamerContext(ze_context_handle_t* context);
 
 struct MetricStreamerHandles {
+  MetricStreamerHandles() = default;
+  MetricStreamerHandles(const MetricStreamerHandles&) = delete;
+  MetricStreamerHandles& operator=(const MetricStreamerHandles&) = delete;
+  MetricStreamerHandles(MetricStreamerHandles&& other) = delete;
+  MetricStreamerHandles& operator=(MetricStreamerHandles&& other) = delete;
+
   ze_context_handle_t context = nullptr;
   ze_device_handle_t device = nullptr;
   ze_event_pool_handle_t event_pool = nullptr;
@@ -53,20 +59,33 @@ struct MetricStreamerHandles {
   zet_metric_streamer_handle_t streamer = nullptr;
 
   void Reset() {
+    auto status = ZE_RESULT_SUCCESS;
     if (streamer != nullptr) {
-      zetMetricStreamerClose(streamer);
+      status = zetMetricStreamerClose(streamer);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_INFO("{}: zetMetricStreamerClose failed with status=0x{:x}", __FUNCTION__,
+                    static_cast<uint32_t>(status));
+      }
       streamer = nullptr;
     }
     if (event != nullptr) {
-      zeEventDestroy(event);
+      status = zeEventDestroy(event);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_INFO("{}: zeEventDestroy failed with status=0x{:x}", __FUNCTION__,
+                    static_cast<uint32_t>(status));
+      }
       event = nullptr;
     }
     if (event_pool != nullptr) {
-      zeEventPoolDestroy(event_pool);
+      status = zeEventPoolDestroy(event_pool);
+      if (status != ZE_RESULT_SUCCESS) {
+        SPDLOG_INFO("{}: zeEventPoolDestroy failed with status=0x{:x}", __FUNCTION__,
+                    static_cast<uint32_t>(status));
+      }
       event_pool = nullptr;
     }
     if (context != nullptr && device != nullptr) {
-      ze_result_t status = zetContextActivateMetricGroups(context, device, 0, nullptr);
+      status = zetContextActivateMetricGroups(context, device, 0, nullptr);
       if (status != ZE_RESULT_SUCCESS) {
         SPDLOG_WARN("{}: metric group deactivation failed with status=0x{:x}", __FUNCTION__,
                     static_cast<uint32_t>(status));

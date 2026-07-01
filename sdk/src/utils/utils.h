@@ -359,7 +359,7 @@ inline uint32_t GetTid() {
   return GetCurrentThreadId();
 #else
 #ifdef SYS_gettid
-  return syscall(SYS_gettid);
+  return static_cast<uint32_t>(syscall(SYS_gettid));
 #else
 #error "SYS_gettid is unavailable on this system"
 #endif

@@ -153,8 +153,15 @@ static std::vector<sycl::device> EnumerateLevelZeroGpuDevices() {
 // Map a sycl::device on the level_zero backend to its native L0 handle, which
 // equals the pti_device_handle_t the metrics scope API expects.
 static pti_device_handle_t GetPtiHandleFromSyclDevice(const sycl::device &dev) {
-  auto native = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(dev);
-  return static_cast<pti_device_handle_t>(native);
+  try {
+    auto *native = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(dev);
+    return static_cast<pti_device_handle_t>(native);
+  } catch (const sycl::exception &e) {
+    std::cerr << "Error: Failed to get native handle for device: " << e.what() << '\n';
+  } catch (...) {
+    std::cerr << "Error: Failed to get native handle for device" << '\n';
+  }
+  return nullptr;
 }
 
 namespace {
@@ -180,15 +187,19 @@ static ParsedDeviceIndices ParseDeviceIndices(const std::string &csv, size_t num
     }
     try {
       size_t consumed = 0;
-      unsigned long parsed = std::stoul(token, &consumed);
+      auto parsed = std::stoul(token, &consumed);
       if (consumed != token.size()) {
         result.error = "non-numeric device index '" + token + "' in --devices=" + csv;
         return result;
       }
       if (parsed >= num_available) {
-        result.error = "device index " + token + " out of range (have " +
-                       std::to_string(num_available) + " device(s), valid: 0.." +
-                       std::to_string(num_available - 1) + ")";
+        if (num_available == 0) {
+          result.error = "no devices available, but --devices=" + csv;
+        } else {
+          result.error = "device index " + token + " out of range (have " +
+                         std::to_string(num_available) + " device(s), valid: 0.." +
+                         std::to_string(num_available - 1) + ")";
+        }
         return result;
       }
       unique_indices.insert(static_cast<unsigned>(parsed));
@@ -274,7 +285,14 @@ int main(int argc, char *argv[]) {
     }
     pti_handles.reserve(parsed.indices.size());
     for (unsigned idx : parsed.indices) {
-      pti_handles.push_back(GetPtiHandleFromSyclDevice(all_sycl_devices[idx]));
+      auto *pti_handle = GetPtiHandleFromSyclDevice(all_sycl_devices[idx]);
+      if (pti_handle) {
+        pti_handles.push_back(pti_handle);
+      }
+    }
+    if (pti_handles.empty()) {
+      std::cerr << "Error: No valid device handles found for --devices=" << devices_arg << '\n';
+      return EXIT_FAILURE;
     }
   }
 
