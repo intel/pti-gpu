@@ -81,16 +81,44 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
     if is_python_test:
         test_case = test_case_name
     
-    # Check if Unitrace executable exists
-    if not os.path.exists(unitrace_exe):
-        print(f"[ERROR] Unitrace executable not found at {unitrace_exe}", file=sys.stderr)
-        return 1
-
     # Check if test case executable exists
     if not os.path.exists(test_case):
         print(f"[ERROR] Test case executable not found at {test_case}", file=sys.stderr)
         return 1
-    
+
+    # "native" scenario: run the application by itself, without unitrace. This is
+    # a sanity check for the driver/environment. If the app cannot even run on
+    # its own, the problem is not unitrace, so the caller can skip the remaining
+    # unitrace scenarios for this test. This runs before the unitrace executable
+    # check on purpose, so a missing/bad unitrace build cannot mask a driver issue.
+    if scenarios.strip() == "native":
+        native_command = []
+        if use_mpiexec:
+            native_command.extend(["mpiexec", "-n", str(num_ranks)])
+        native_command += [test_case] + args
+        print(f"[INFO] Native run (app only, no unitrace): {' '.join(native_command)}")
+        try:
+            native_result = subprocess.run(native_command, text=True, capture_output=True)
+        except Exception as e:
+            print(f"[ERROR] DRIVER/ENVIRONMENT ISSUE (NOT a unitrace problem): could not "
+                  f"launch the application '{' '.join(native_command)}': {e}", file = sys.stderr)
+            return 1
+        if native_result.returncode != 0:
+            print(f"[ERROR] DRIVER/ENVIRONMENT ISSUE (NOT a unitrace problem): the "
+                  f"application failed to run on its own with return code "
+                  f"{native_result.returncode}, before unitrace was involved.", file = sys.stderr)
+            print(f"[ERROR] Native command '{' '.join(native_command)}' failed.", file = sys.stderr)
+            print(f"[ERROR] Native stderr output: {native_result.stderr}", file = sys.stderr)
+            print(f"[ERROR] Native stdout output: {native_result.stdout}", file = sys.stderr)
+            return 1
+        print(f"[INFO] Native run succeeded.", file = sys.stderr)
+        return 0
+
+    # Check if Unitrace executable exists (unitrace scenarios only)
+    if not os.path.exists(unitrace_exe):
+        print(f"[ERROR] Unitrace executable not found at {unitrace_exe}", file=sys.stderr)
+        return 1
+
     scenario_set = set(scenarios.split(" "))
     is_result_dir = "--result-dir" in scenario_set
     # Prepare command here

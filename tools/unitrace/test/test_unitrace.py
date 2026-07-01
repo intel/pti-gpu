@@ -177,7 +177,10 @@ def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
     failed_options = []
     sub_tests = 0
 
-    for cmd in scenarios:
+    # "native" runs the app without unitrace first, as a driver/environment
+    # sanity check; if it fails, skip the unitrace scenarios (not our problem).
+    native_failed = False
+    for cmd in ["native"] + scenarios:
         os.environ['UNITRACE_OPTION'] = cmd
         sub_tests += 1
         try:
@@ -190,6 +193,7 @@ def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
             )
             print(str(total_tests+sub_tests)+" : "+test+cmd+" : Passed")
         except subprocess.CalledProcessError as e:
+            native_failed = cmd == "native"
             new_dir_name = test+cmd.replace('--', '_').replace('-', '_').replace(" ", "")
             failed_path = os.path.join(test_dir, 'build', 'Testing', f"Temporary_{new_dir_name}")
             failed_options.append((cmd, failed_path))
@@ -204,6 +208,11 @@ def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
             shutil.move(str(ctest_output_dir), str(new_dir_path))
         else:
             print(f"[ERROR] CTest output directory not found for option {cmd}. Skipping move operation.")
+
+        if native_failed:
+            print(f"[ERROR] '{test}' failed to run natively (driver/environment issue, "
+                  f"not a unitrace problem); skipping its unitrace scenarios.")
+            break
     return sub_tests, failed_options
 
 def run_ctest(test_dir, scenarios, test_name=None):
