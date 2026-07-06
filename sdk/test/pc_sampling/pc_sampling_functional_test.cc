@@ -83,22 +83,22 @@ void RunAlternateKernelWorkload(sycl::queue& queue) {
 
 TEST_F(PcSamplingTest, EnableRejectsSecondLiveHandle) {
   pti_pc_sampling_handle_t first_handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&first_handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&first_handle, PTI_SUCCESS);
 
   pti_pc_sampling_handle_t second_handle = nullptr;
-  EXPECT_EQ(ptiPcSamplingEnable(&second_handle), PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&second_handle, PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED);
   EXPECT_EQ(second_handle, nullptr);
 
   EXPECT_EQ(ptiPcSamplingDisable(first_handle), PTI_SUCCESS);
 
-  EXPECT_EQ(ptiPcSamplingEnable(&second_handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&second_handle, PTI_SUCCESS);
   EXPECT_NE(second_handle, nullptr);
   EXPECT_EQ(ptiPcSamplingDisable(second_handle), PTI_SUCCESS);
 }
 
 TEST_F(PcSamplingTest, RejectsDisabledHandleAfterRegistryRemoval) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
 
@@ -108,7 +108,7 @@ TEST_F(PcSamplingTest, RejectsDisabledHandleAfterRegistryRemoval) {
 
 TEST_F(PcSamplingTest, IsConfiguredDeviceMatchesOnlyConfiguredDevice) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
 
@@ -118,7 +118,7 @@ TEST_F(PcSamplingTest, IsConfiguredDeviceMatchesOnlyConfiguredDevice) {
 
 TEST_F(PcSamplingTest, QueryApisReturnSpecificLifecycleErrors) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
   ASSERT_NE(handle, nullptr);
 
   ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0), PTI_SUCCESS);
@@ -152,7 +152,7 @@ TEST_F(PcSamplingTest, QueryApisReturnSpecificLifecycleErrors) {
 
 TEST_F(PcSamplingTest, LifecycleSupportsEmptyQueries) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   size_t buffer_size = 0;
   EXPECT_EQ(ptiPcSamplingQueryCollectionBufferSize(handle, &buffer_size),
@@ -200,7 +200,7 @@ TEST_F(PcSamplingTest, LifecycleSupportsEmptyQueries) {
 
 TEST_F(PcSamplingTest, RejectsInvalidOrdering) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED);
   EXPECT_EQ(ptiPcSamplingStopCollection(handle), PTI_ERROR_PC_SAMPLING_NOT_STARTED);
@@ -235,7 +235,7 @@ TEST_F(PcSamplingTest, RejectsInvalidOrdering) {
 
 TEST_F(PcSamplingTest, ReturnsEmptyAllDeviceQueryAfterStoppedCollection) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
   ASSERT_NE(handle, nullptr);
   size_t device_count = devices_.size() > 0 ? 1 : 0;
   pti_device_handle_t device_handle[1] = {
@@ -254,7 +254,7 @@ TEST_F(PcSamplingTest, ReturnsEmptyAllDeviceQueryAfterStoppedCollection) {
 
 TEST_F(PcSamplingTest, ReturnsConfiguredDeviceAfterStoppedCollection) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   pti_device_handle_t device_handle[1] = {reinterpret_cast<pti_device_handle_t>(devices_.front())};
   ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, 1, 0), PTI_SUCCESS);
@@ -272,7 +272,7 @@ TEST_F(PcSamplingTest, AggregatesPerKernelAndPerInstructionData) {
   sycl::queue queue = sycl::queue(sycl::gpu_selector_v, sycl::property::queue::in_order{});
 
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
   ASSERT_NE(handle, nullptr);
   ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0), PTI_SUCCESS);
 
@@ -388,7 +388,7 @@ TEST_F(PcSamplingTest, DistinctKernelsEachExposeStallReasonData) {
   sycl::queue queue = sycl::queue(sycl::gpu_selector_v, sycl::property::queue::in_order{});
 
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
   ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0), PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
@@ -438,7 +438,7 @@ TEST_F(PcSamplingTest, AggregationIsIdempotentAcrossRepeatedQueries) {
   sycl::queue queue = sycl::queue(sycl::gpu_selector_v, sycl::property::queue::in_order{});
 
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
   ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0), PTI_SUCCESS);
 
   ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);

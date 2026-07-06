@@ -132,6 +132,7 @@ typedef struct _pti_pc_sampling_device_status_t {
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
  * @return PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED if another PC sampling handle is still enabled
  * @return PTI_ERROR_INTERNAL if PTI cannot allocate the collection handle
+ * @return PTI_ERROR_PC_SAMPLING_UNSUPPORTED if the PC Sampling is not supported on the current system
  */
 pti_result PTI_EXPORT
 ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle);

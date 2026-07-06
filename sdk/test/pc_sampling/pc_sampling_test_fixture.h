@@ -27,6 +27,19 @@ inline void BufferCompleted(unsigned char* buf, size_t /*size*/, size_t /*used*/
   std::free(buf);
 }
 
+// Macro for conditionally skipping tests if PC sampling is unsupported on the current system.
+// Note that using a helper function does not skip the test, so we use a macro instead.
+#define ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(HANDLE, EXPECTED_RESULT)                           \
+  do {                                                                                          \
+    ASSERT_NE((HANDLE), nullptr) << "Invalid handle pointer passed to AssertEnableResult";      \
+    pti_result status = ptiPcSamplingEnable((HANDLE));                                          \
+    if (status == PTI_ERROR_PC_SAMPLING_UNSUPPORTED) {                                          \
+      GTEST_SKIP() << "PC sampling unsupported by the installed driver - skipping";             \
+    }                                                                                           \
+    ASSERT_EQ(status, (EXPECTED_RESULT)) << "Failed to enable PC sampling, status = " << status \
+                                         << " (expected = " << (EXPECTED_RESULT) << ")";        \
+  } while (0)
+
 class PcSamplingTest : public ::testing::Test {
  protected:
   void SetUp() override {

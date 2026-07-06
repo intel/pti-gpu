@@ -82,7 +82,7 @@ std::vector<std::pair<std::string, std::string>> GetExpectedStallReasonsFromL0(
 
 TEST_F(PcSamplingTest, RejectsDeviceFilteredConfigurationForUnsupportedDevices) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   pti_device_handle_t configured_device[1] = {reinterpret_cast<pti_device_handle_t>(0x1)};
   EXPECT_EQ(ptiPcSamplingConfigure(handle, configured_device, 1, 0),
@@ -100,7 +100,7 @@ TEST_F(PcSamplingTest, RejectsDeviceFilteredConfigurationForUnsupportedDevices) 
 
 TEST_F(PcSamplingTest, ConfigureUsesDefaultSamplingPeriodWhenZero) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   size_t device_count = devices_.size() > 0 ? 1 : 0;
   pti_device_handle_t device_handle[1] = {
@@ -113,7 +113,7 @@ TEST_F(PcSamplingTest, ConfigureUsesDefaultSamplingPeriodWhenZero) {
 
 TEST_F(PcSamplingTest, ConfigurePreservesExplicitSamplingPeriod) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   constexpr uint32_t kExplicitSamplingPeriodNs = 42'000;
   size_t device_count = devices_.size() > 0 ? 1 : 0;
@@ -128,7 +128,7 @@ TEST_F(PcSamplingTest, ConfigurePreservesExplicitSamplingPeriod) {
 
 TEST_F(PcSamplingTest, GetStallReasons) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   const auto expected_reasons = GetExpectedStallReasonsFromL0(handle);
   size_t reason_count = 0;
@@ -154,7 +154,7 @@ TEST_F(PcSamplingTest, GetStallReasons) {
 
 TEST_F(PcSamplingTest, GetStallReasonsSupportsPartialCallerBuffer) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   const auto expected_reasons = GetExpectedStallReasonsFromL0(handle);
   ASSERT_FALSE(expected_reasons.empty());
@@ -172,7 +172,7 @@ TEST_F(PcSamplingTest, GetStallReasonsSupportsPartialCallerBuffer) {
 
 TEST_F(PcSamplingTest, GetStallReasonsNotReturnTooMuchData) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   const auto expected_reasons = GetExpectedStallReasonsFromL0(handle);
   const size_t expected_reason_count = expected_reasons.size();
@@ -194,7 +194,7 @@ TEST_F(PcSamplingTest, GetStallReasonsNotReturnTooMuchData) {
 
 TEST_F(PcSamplingTest, GetStallReasonsMultipleCallsReturnSamePointers) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   const auto expected_reasons = GetExpectedStallReasonsFromL0(handle);
   ASSERT_FALSE(expected_reasons.empty());
@@ -225,7 +225,7 @@ TEST_F(PcSamplingTest, GetStallReasonsMultipleCallsReturnSamePointers) {
 
 TEST_F(PcSamplingTest, GetStallReasonsPointersRemainValidAfterDisable) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   const auto expected_reasons = GetExpectedStallReasonsFromL0(handle);
   ASSERT_FALSE(expected_reasons.empty());
@@ -252,7 +252,7 @@ TEST_F(PcSamplingTest, GetStallReasonsPointersRemainValidAfterDisable) {
 
 TEST_F(PcSamplingTest, GetProfiledDevicesReturnsConfiguredSingleDevice) {
   pti_pc_sampling_handle_t handle = nullptr;
-  ASSERT_EQ(ptiPcSamplingEnable(&handle), PTI_SUCCESS);
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
   pti_device_handle_t configured_device = reinterpret_cast<pti_device_handle_t>(0x1);
   handle->configured_devices_.push_back(configured_device);
