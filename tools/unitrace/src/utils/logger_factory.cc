@@ -21,8 +21,7 @@ LoggerFactory::LoggerFactory(uint32_t app_id)
     : app_id_(app_id),
       dir_path_(""),
       app_name_(ComputeAppName()),
-      rank_((utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK")),
-      data_dir_path_(utils::GetEnv("UNITRACE_DataDir"))
+      rank_((utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK"))
 {}
 
 // LoggerFactory directory creation helper
@@ -239,15 +238,15 @@ std::string LegacyLoggerFactory::GenerateLogFileName(LoggerType type, int32_t de
         case LOGGER_TYPE_METRICS_SAMPLING:
             return GetMetricsFileName(log_file_, app_id_);
         case LOGGER_TYPE_KPROPS:
-            return data_dir_path_ + "/.kprops."  + std::to_string(device_id) + "." + std::to_string(app_id_) + ".txt";
+            return GetDataDirPath() + "/.kprops."  + std::to_string(device_id) + "." + std::to_string(app_id_) + ".txt";
         case LOGGER_TYPE_KTIME:
-            return data_dir_path_ + "/.ktime."  + std::to_string(device_id) + "." + std::to_string(app_id_) + ".txt";
+            return GetDataDirPath() + "/.ktime."  + std::to_string(device_id) + "." + std::to_string(app_id_) + ".txt";
         case LOGGER_TYPE_METRICS_QUERY_TEMP:
-            return data_dir_path_ + "/.metrics." + std::to_string(app_id_) + ".q";
+            return GetDataDirPath() + "/.metrics." + std::to_string(app_id_) + ".q";
         case LOGGER_TYPE_METRICS_SAMPLING_TEMP:
             {
                 std::string metric_group = utils::GetEnv("UNITRACE_MetricGroup");
-                return data_dir_path_ + "/." + std::to_string(device_id) + "." + metric_group + "." + std::to_string(app_id_) + ".t";
+                return GetDataDirPath() + "/." + std::to_string(device_id) + "." + metric_group + "." + std::to_string(app_id_) + ".t";
             }
         case LOGGER_TYPE_KMD_TRACE:
             return GetLogFileName("oskmd.json", app_id_);
@@ -263,7 +262,7 @@ std::string LegacyLoggerFactory::GenerateLogFileName(LoggerType type, int32_t de
 std::pair<std::string, std::string> LegacyLoggerFactory::SearchRawMetricFiles(uint32_t pid) const {
     std::pair<std::string, std::string> result;
 
-    std::string temp_file = data_dir_path_ + "/.metrics." + std::to_string(pid) + ".q";
+    std::string temp_file = GetDataDirPath() + "/.metrics." + std::to_string(pid) + ".q";
     std::string final_file = GetMetricsFileName(log_file_, pid);
     result = std::make_pair(temp_file, final_file);
     return result;
@@ -287,8 +286,9 @@ std::vector<std::string> LegacyLoggerFactory::SearchFilesByType(LoggerType type,
             return result;
     }
     
-    if (!data_dir_path_.empty() && CXX_STD_FILESYSTEM_NAMESPACE::exists(data_dir_path_) && CXX_STD_FILESYSTEM_NAMESPACE::is_directory(data_dir_path_)) {
-        for (const auto& e : CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir_path_))) {
+    std::string data_dir_path = GetDataDirPath(false);
+    if (!data_dir_path.empty() && CXX_STD_FILESYSTEM_NAMESPACE::exists(data_dir_path) && CXX_STD_FILESYSTEM_NAMESPACE::is_directory(data_dir_path)) {
+        for (const auto& e : CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir_path))) {
             if (e.path().filename().string().find(prefix + std::to_string(device_id)) == 0) {
                 result.push_back(e.path().string());
             }
@@ -378,15 +378,15 @@ std::string ResultDirLoggerFactory::GenerateLogFileName(LoggerType type, int32_t
             CreateDirectory(metrics_dir_path_);
             return metrics_dir_path_ + "/metrics_" + std::to_string(device_id) + ".csv";
         case LOGGER_TYPE_KPROPS:
-            return data_dir_path_ + "/kprops_" + std::to_string(device_id) + "." + std::to_string(app_id_) +  ".txt";
+            return GetDataDirPath() + "/kprops_" + std::to_string(device_id) + "." + std::to_string(app_id_) +  ".txt";
         case LOGGER_TYPE_KTIME:
-            return data_dir_path_ + "/ktime_" + std::to_string(device_id) + "." + std::to_string(app_id_) + ".txt";
+            return GetDataDirPath() + "/ktime_" + std::to_string(device_id) + "." + std::to_string(app_id_) + ".txt";
         case LOGGER_TYPE_METRICS_QUERY_TEMP:
-            return data_dir_path_ + "/metrics." + std::to_string(app_id_) + ".q";
+            return GetDataDirPath() + "/metrics." + std::to_string(app_id_) + ".q";
         case LOGGER_TYPE_METRICS_SAMPLING_TEMP:
             {
                 std::string metric_group = utils::GetEnv("UNITRACE_MetricGroup");
-                return data_dir_path_ + "/" + std::to_string(device_id) + "." + metric_group + "." + std::to_string(app_id_) + ".t";
+                return GetDataDirPath() + "/" + std::to_string(device_id) + "." + metric_group + "." + std::to_string(app_id_) + ".t";
             }
         default:
             PTI_ASSERT(false);
@@ -398,7 +398,7 @@ std::string ResultDirLoggerFactory::GenerateLogFileName(LoggerType type, int32_t
 // for windows - father process need to find .q file that was created by child process and prepare final metrics files
 std::pair<std::string, std::string> ResultDirLoggerFactory::SearchRawMetricFiles(uint32_t pid) const {
     std::pair<std::string, std::string> result;
-    std::string temp_file = data_dir_path_ + "/metrics." + std::to_string(pid) + ".q";
+    std::string temp_file = GetDataDirPath() + "/metrics." + std::to_string(pid) + ".q";
     if (result_dir_.empty() || !CXX_STD_FILESYSTEM_NAMESPACE::exists(result_dir_) || !CXX_STD_FILESYSTEM_NAMESPACE::is_directory(result_dir_)) {
         return result;
     }
@@ -436,8 +436,9 @@ std::vector<std::string> ResultDirLoggerFactory::SearchFilesByType(LoggerType ty
             return result;
     }
 
-    if (!data_dir_path_.empty() && CXX_STD_FILESYSTEM_NAMESPACE::exists(data_dir_path_) && CXX_STD_FILESYSTEM_NAMESPACE::is_directory(data_dir_path_)) {
-        for (const auto& e : CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir_path_))) {
+    std::string data_dir_path = GetDataDirPath(false);
+    if (!data_dir_path.empty() && CXX_STD_FILESYSTEM_NAMESPACE::exists(data_dir_path) && CXX_STD_FILESYSTEM_NAMESPACE::is_directory(data_dir_path)) {
+        for (const auto& e : CXX_STD_FILESYSTEM_NAMESPACE::directory_iterator(CXX_STD_FILESYSTEM_NAMESPACE::path(data_dir_path))) {
             if (e.path().filename().string().find(prefix + std::to_string(device_id)) == 0) {
                 result.push_back(e.path().string());
             }

@@ -68,12 +68,19 @@ protected:
     void CreateDirectory(const std::string& dir) const;
     std::shared_ptr<Logger> GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free) const;
     void SetAppId(uint32_t app_id) {app_id_ = app_id;}
+    std::string GetDataDirPath(bool warn = true) const {
+        std::string data_dir = utils::GetEnv("UNITRACE_DataDir");
+        if (data_dir.empty() && warn) {
+          std::cerr << "[ERROR] Data directory is missing or not specified." << std::endl;
+          exit(-1); // Bail out if data directory is not specified at this point.
+        }
+        return data_dir;
+    }
 
     uint32_t app_id_;
     const std::string app_name_;
     const std::string rank_;
     std::string dir_path_; // Directory path for output, empty by default
-    std::string data_dir_path_; // path for temporary files
     mutable std::mutex mutex_;
     mutable std::map<std::pair<LoggerType, int32_t>, std::shared_ptr<Logger>> loggers_;
 };
