@@ -169,13 +169,10 @@ class ZeCollector {
 
   ~ZeCollector() {
     if (tracer_ != nullptr) {
-      // Prevents crash when potentially receiving late Level Zero calls,
-      // particularly on Windows.
-      [[maybe_unused]] auto status = zelTracerSetEnabled(tracer_, false);
-#if !defined(_WIN32)
-      // TODO(PTI): Looks on Windows due to not specified DLLs unload order we hit assert here
+      // TODO(PTI): Right now, if called from a singleton, this will crash on Windows due to DLL
+      // unload order. Leak the collector on Windows.
+      [[maybe_unused]] auto status = zelTracerSetEnabled(tracer_, static_cast<ze_bool_t>(false));
       status = zelTracerDestroy(tracer_);
-#endif
       tracer_ = nullptr;
     }
   }

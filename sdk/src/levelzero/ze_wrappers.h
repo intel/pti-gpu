@@ -12,6 +12,7 @@
 #include <dlfcn.h>
 #endif
 
+#include <level_zero/loader/ze_loader.h>
 #include <level_zero/ze_api.h>
 #include <spdlog/spdlog.h>
 
@@ -21,14 +22,6 @@ inline static constexpr const char* const kLevelZeroLoaderName = "ze_loader.dll"
 inline static constexpr const char* const kLevelZeroLoaderName = "libze_loader.so.1";
 #endif
 
-inline static constexpr const char* const kLevelZeroDriverName =
-    kLevelZeroLoaderName;  // Use the loader instead of the driver due to crashes we've seen on
-                           // client platforms.
-                           //
-                           // Driver names:
-                           // * ze_intel_gpu64.dll on Windows
-                           // * libze_intel_gpu.so.1 on Linux
-
 /*
  * Wrappers for L0 Introspection APIs and for Loader Enable/Disable Tracing.
  * They enable graceful handling (starting from library loading)
@@ -36,46 +29,11 @@ inline static constexpr const char* const kLevelZeroDriverName =
  * the Introspection API implementation or Dynamic Tracing Enable/Disable
  */
 
-typedef ze_result_t (*fptr_zeEventPoolGetFlags_t)(ze_event_pool_handle_t hEventPool,
-                                                  ze_event_pool_flags_t* pFlags);
-
-typedef ze_result_t (*fptr_zeEventGetEventPool_t)(ze_event_handle_t hEvent,
-                                                  ze_event_pool_handle_t* phEventPool);
-
-typedef ze_result_t (*fptr_zeEventPoolGetContextHandle_t)(ze_event_pool_handle_t hEventPool,
-                                                          ze_context_handle_t* phContext);
-
-typedef ze_result_t (*fptr_zeCommandListGetDeviceHandle_t)(ze_command_list_handle_t command_list,
-                                                           ze_device_handle_t* device);
-
-typedef ze_result_t (*fptr_zeCommandListGetContextHandle_t)(ze_command_list_handle_t command_list,
-                                                            ze_context_handle_t* context);
-
-typedef ze_result_t (*fptr_zeCommandListIsImmediate_t)(ze_command_list_handle_t command_list,
-                                                       ze_bool_t* isImmediate);
-
-typedef ze_result_t (*fptr_zeCommandListImmediateGetIndex_t)(ze_command_list_handle_t command_list,
-                                                             uint32_t* index);
-
-typedef ze_result_t (*fptr_zeCommandListGetOrdinal_t)(ze_command_list_handle_t command_list,
-                                                      uint32_t* ordinal);
-typedef ze_result_t (*fptr_zeCommandQueueGetIndex_t)(ze_command_queue_handle_t command_queue,
-                                                     uint32_t* index);
-
-typedef ze_result_t (*fptr_zeCommandQueueGetOrdinal_t)(ze_command_queue_handle_t command_list,
-                                                       uint32_t* ordinal);
-
-typedef ze_result_t (*fptr_zelEnableTracingLayer_t)();
-
-typedef ze_result_t (*fptr_zelDisableTracingLayer_t)();
-
-#define LOADER_LOAD_AND_DEBUG_PRINT(name)                        \
-  fptr_##name##_ = l0_loader_.GetSymbol<fptr_##name##_t>(#name); \
-  SPDLOG_DEBUG("Found fptr_{}_: {}", #name, (void*)*fptr_##name##_);
-
-#define DRIVER_LOAD_AND_DEBUG_PRINT(name)                        \
-  fptr_##name##_ = l0_driver_.GetSymbol<fptr_##name##_t>(#name); \
-  SPDLOG_DEBUG("Found fptr_{}_: {}", #name, (void*)*fptr_##name##_);
+#define LOADER_LOAD_AND_DEBUG_PRINT(name)                          \
+  do {                                                             \
+    fptr_##name##_ = l0_loader_.GetSymbol<decltype(&name)>(#name); \
+    SPDLOG_DEBUG("Found fptr_{}_", #name);                         \
+  } while (0)
 
 class Level0Wrapper {
  public:
@@ -84,18 +42,16 @@ class Level0Wrapper {
       l0_loader_ = LibraryLoader{kLevelZeroLoaderName};
       LOADER_LOAD_AND_DEBUG_PRINT(zelEnableTracingLayer);
       LOADER_LOAD_AND_DEBUG_PRINT(zelDisableTracingLayer);
-
-      l0_driver_ = LibraryLoader{kLevelZeroDriverName};
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeEventPoolGetFlags);
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeEventGetEventPool);
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeEventPoolGetContextHandle);
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandListGetDeviceHandle);
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandListGetContextHandle);
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandListGetOrdinal);
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandListImmediateGetIndex);
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandListIsImmediate);
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandQueueGetIndex);
-      DRIVER_LOAD_AND_DEBUG_PRINT(zeCommandQueueGetOrdinal);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeEventPoolGetFlags);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeEventGetEventPool);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeEventPoolGetContextHandle);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListGetDeviceHandle);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListGetContextHandle);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListGetOrdinal);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListImmediateGetIndex);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListIsImmediate);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandQueueGetIndex);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandQueueGetOrdinal);
     } catch ([[maybe_unused]] const std::runtime_error& e) {
       SPDLOG_ERROR("Error Loading Level Zero symbols: {}", e.what());
     }
@@ -219,21 +175,19 @@ class Level0Wrapper {
   }
 
  private:
-  LibraryLoader l0_driver_;
   LibraryLoader l0_loader_;
-  fptr_zeEventPoolGetFlags_t fptr_zeEventPoolGetFlags_ = nullptr;
-  fptr_zeEventGetEventPool_t fptr_zeEventGetEventPool_ = nullptr;
-  fptr_zeEventPoolGetContextHandle_t fptr_zeEventPoolGetContextHandle_ = nullptr;
-  fptr_zeCommandListGetDeviceHandle_t fptr_zeCommandListGetDeviceHandle_ = nullptr;
-  fptr_zeCommandListGetContextHandle_t fptr_zeCommandListGetContextHandle_ = nullptr;
-  fptr_zeCommandListIsImmediate_t fptr_zeCommandListIsImmediate_ = nullptr;
-  fptr_zeCommandListImmediateGetIndex_t fptr_zeCommandListImmediateGetIndex_ = nullptr;
-  fptr_zeCommandListGetOrdinal_t fptr_zeCommandListGetOrdinal_ = nullptr;
-  fptr_zeCommandQueueGetIndex_t fptr_zeCommandQueueGetIndex_ = nullptr;
-  fptr_zeCommandQueueGetOrdinal_t fptr_zeCommandQueueGetOrdinal_ = nullptr;
-  fptr_zelEnableTracingLayer_t fptr_zelEnableTracingLayer_ = nullptr;
-  fptr_zelDisableTracingLayer_t fptr_zelDisableTracingLayer_ = nullptr;
+  decltype(&zeEventPoolGetFlags) fptr_zeEventPoolGetFlags_ = nullptr;
+  decltype(&zeEventGetEventPool) fptr_zeEventGetEventPool_ = nullptr;
+  decltype(&zeEventPoolGetContextHandle) fptr_zeEventPoolGetContextHandle_ = nullptr;
+  decltype(&zeCommandListGetDeviceHandle) fptr_zeCommandListGetDeviceHandle_ = nullptr;
+  decltype(&zeCommandListGetContextHandle) fptr_zeCommandListGetContextHandle_ = nullptr;
+  decltype(&zeCommandListIsImmediate) fptr_zeCommandListIsImmediate_ = nullptr;
+  decltype(&zeCommandListImmediateGetIndex) fptr_zeCommandListImmediateGetIndex_ = nullptr;
+  decltype(&zeCommandListGetOrdinal) fptr_zeCommandListGetOrdinal_ = nullptr;
+  decltype(&zeCommandQueueGetIndex) fptr_zeCommandQueueGetIndex_ = nullptr;
+  decltype(&zeCommandQueueGetOrdinal) fptr_zeCommandQueueGetOrdinal_ = nullptr;
+  decltype(&zelEnableTracingLayer) fptr_zelEnableTracingLayer_ = nullptr;
+  decltype(&zelDisableTracingLayer) fptr_zelDisableTracingLayer_ = nullptr;
 };
 #undef LOADER_LOAD_AND_DEBUG_PRINT
-#undef DRIVER_LOAD_AND_DEBUG_PRINT
 #endif

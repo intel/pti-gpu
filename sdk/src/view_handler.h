@@ -293,16 +293,19 @@ struct PtiViewRecordHandler {
     if (!deinit_) {
       try {
         overhead::overhead_collection_enabled = false;
-        if (collector_) {
-          collector_->DisableTracer();
-        }
         DisableTracing();
       } catch ([[maybe_unused]] const std::exception& e) {
         SPDLOG_ERROR("Exception caught in {}: {}", __FUNCTION__, e.what());
       } catch (...) {
         SPDLOG_ERROR("Unknown Exception in {}", __FUNCTION__);
       }
-      collector_.reset(nullptr);
+#if defined(_WIN32)
+      // TODO(PTI-446): Add a public function to manually release the collector and reset any PTI
+      // resources. E.g., ptiViewShutdown, ptiShutdown, or something like that.
+      collector_.release();
+#else
+      collector_.reset();
+#endif
       deinit_ = true;
     }
   }
