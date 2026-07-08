@@ -40,6 +40,16 @@
             "scenarios":["--opencl -d --start-paused"]
         },
         {
+            "name": "internal_conditional_trace",
+            "platform": ["Linux", "Windows"],
+            "scenarios":["-c --start-paused", "-h --start-paused", "-d --start-paused", "-t --start-paused", "-s --start-paused", "--start-paused --chrome-call-logging --chrome-kernel-logging", "--start-paused --chrome-device-logging", "-q --start-paused", "-k --start-paused"]
+        },
+        {
+            "name": "internal_conditional_trace_env",
+            "platform": ["Linux", "Windows"],
+            "scenarios":["-c --start-paused", "-h --start-paused", "-d --start-paused", "-t --start-paused", "-s --start-paused", "--start-paused --chrome-call-logging --chrome-kernel-logging", "--start-paused --chrome-device-logging", "-q --start-paused", "-k --start-paused"]
+        },
+        {
             "name": "mat_mul",
             "platform": ["Linux"],
             "skip_scenarios":["-q"]

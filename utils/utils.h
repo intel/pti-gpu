@@ -159,6 +159,11 @@ inline void SetEnv(const char* name, const char* value) {
 #if defined(_WIN32)
   std::string str = std::string(name) + "=" + value;
   status = _putenv(str.c_str());
+  // _putenv only updates the CRT environment. Some consumers (and the static
+  // ittnotify that reads INTEL_LIBITTNOTIFY64 via GetEnvironmentVariableA) read
+  // the Win32 environment block, and CreateProcess inherits that block. Update
+  // it too so the value reaches them and is inherited by child processes.
+  SetEnvironmentVariableA(name, value);
 #else
   status = setenv(name, value, 1);
 #endif

@@ -1,0 +1,11 @@
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):            268117100
+    Total Device Time for L0 backend (ns):             39227224
+
+== L0 Backend ==
+
+                                                                                                Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+"_ZTSZZL11RunAndCheckN4sycl3_V15queueERKSt6vectorIfSaIfEES6_RS4_jfENKUlRNS0_7handlerEE_clES9_E6__GEMM",            8,             29395725,    74.937050,              3674465,              3670625,              3679062
+                                                                  "zeCommandListAppendMemoryCopy(M2D)",           24,              7396397,    18.855265,               308183,               306093,               311041
+                                                                  "zeCommandListAppendMemoryCopy(D2M)",            8,              2435102,     6.207684,               304387,               304270,               304479

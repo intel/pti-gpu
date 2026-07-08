@@ -836,8 +836,14 @@ int ParseArgs(int argc, char* argv[]) {
   }
 
 
-  // __itt_pause()/__itt_resume() support always enabled
+  // __itt_pause()/__itt_resume()/__itt_detach() support always enabled.
+  // On Linux the LD_PRELOAD'd collector resolves the bare SONAME. On Windows
+  // the collector DLL is not on the default DLL search path, so this must be
+  // the FULL path to unitrace_tool.dll -- set from main() once lib_path is
+  // resolved (see below).
+#ifndef _WIN32
   utils::SetEnv("INTEL_LIBITTNOTIFY64", "libunitrace_tool.so");
+#endif /* _WIN32 */
 
   return app_index;
 }
@@ -926,6 +932,11 @@ void TearDown() {
 #endif /* _WIN32 */
       UniController::ReleaseMetricFlushControl();
     }
+  } else if (utils::GetEnv("UNITRACE_StartPaused") == "1" &&
+             utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+    // Nameless conditional-collection session created the flush control above;
+    // release it here (no-op if it was never created).
+    UniController::ReleaseMetricFlushControl();
   }
 
   if ((utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
@@ -1121,6 +1132,15 @@ int main(int argc, char *argv[]) {
   }
 #endif /* _WIN32 */
 
+#ifdef _WIN32
+  // The static ittnotify in the target app loads the collector named by
+  // INTEL_LIBITTNOTIFY64 via LoadLibrary. On Windows unitrace_tool.dll is not
+  // on the default DLL search path, so pass the full resolved path; otherwise
+  // the load fails and __itt_pause/resume/detach silently no-op. (Linux sets
+  // the bare SONAME in ParseArgs.)
+  utils::SetEnv("INTEL_LIBITTNOTIFY64", lib_path.c_str());
+#endif /* _WIN32 */
+
 #if BUILD_WITH_MPI
   std::string mpi_interceptor_path = executable_path + LIB_UNITRACE_MPI_NAME;
   if (use_ld_lib_path) {
@@ -1174,7 +1194,19 @@ int main(int argc, char *argv[]) {
 
   CreateConfigLog(unitrace_version, unitrace_args, app_args);
 
-  if (!utils::GetEnv("UNITRACE_Session").empty()) {
+  const bool named_session = !utils::GetEnv("UNITRACE_Session").empty();
+  // A nameless session can still be stopped from within the application via
+  // __itt_detach() or by setting PTI_ENABLE_COLLECTION=-1 when conditional
+  // collection (--start-paused) is enabled. That stop is reflected in the
+  // metric-sampling shared memory, which IsSessionStopped() also inspects.
+  const bool app_can_stop_collection =
+      (utils::GetEnv("UNITRACE_StartPaused") == "1") &&
+      (utils::GetEnv("UNITRACE_KernelMetrics") == "1");
+  // Collection may stop before the application exits: either externally via
+  // --stop (named session) or from within the application (nameless session).
+  const bool stoppable_session = named_session || app_can_stop_collection;
+
+  if (named_session) {
     UniController::CreateTemporalControl(utils::GetEnv("UNITRACE_Session").c_str());
     if (!utils::GetEnv("UNITRACE_StartPaused").empty()) {
       UniController::TemporalPause(utils::GetEnv("UNITRACE_Session").c_str());
@@ -1186,6 +1218,11 @@ int main(int argc, char *argv[]) {
 #endif /* _WIN32 */
       UniController::CreateMetricFlushControl();
     }
+  } else if (app_can_stop_collection) {
+    // Nameless conditional-collection session: enable the flush handshake so the
+    // parent can wait for the child to flush metric data on an in-application
+    // __itt_detach()/PTI_ENABLE_COLLECTION=-1 stop, just like a named session.
+    UniController::CreateMetricFlushControl();
   }
 
   std::string preload = utils::GetEnv("LD_PRELOAD");
@@ -1345,8 +1382,9 @@ int main(int argc, char *argv[]) {
       // This allows --stop to trigger metric finalization without waiting
       // for the application to exit naturally.
       bool session_stopped = false;
-      if (!utils::GetEnv("UNITRACE_Session").empty()) {
-        // Named session: poll for stop signal
+      if (stoppable_session) {
+        // Poll for stop signal: external --stop (named session) or an
+        // in-application __itt_detach()/PTI_ENABLE_COLLECTION=-1 (nameless session)
         while (true) {
           // Check if child(ren) have exited
           if (waitpid(-1, nullptr, WNOHANG) < 0) {
@@ -1413,7 +1451,8 @@ int main(int argc, char *argv[]) {
           }
         }
       } else {
-        // Not a named session: just wait for all children to exit
+        // Collection cannot be stopped before the app exits: just wait for
+        // all children to exit
         while (wait(nullptr) > 0);
       }
 
@@ -1546,7 +1585,7 @@ int main(int argc, char *argv[]) {
 
       if (metrics_query_enabled || metrics_sampling_enabled) {
         bool session_stopped = false;
-        if (!utils::GetEnv("UNITRACE_Session").empty()) {
+        if (stoppable_session) {
           constexpr DWORD kPollIntervalMs = 100;
           while (true) {
             if (WaitForSingleObject(pi.hProcess, kPollIntervalMs) == WAIT_OBJECT_0) {

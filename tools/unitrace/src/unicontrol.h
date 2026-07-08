@@ -273,6 +273,11 @@ class UniController{
     // IsMetricSamplingEnabled()/IsCollectionEnabled() this does NOT fire the
     // session-stopped callback, so it is safe to poll from the parent process.
     static bool IsSessionStopped(void) {
+      if (metric_sample_shm_.GetPtr() != nullptr) {
+        if (((TemporalControl*)metric_sample_shm_.GetPtr())->state_ == TEMPORAL_STOPPED) {
+          return true;
+        }
+      }
       if (session_shm_.GetPtr() == nullptr) {
         return false;
       }
@@ -280,6 +285,7 @@ class UniController{
     }
 
     static bool IsMetricSamplingEnabled(void) {
+
       if (session_shm_.GetPtr() != nullptr) {
         TemporalControlState state = ((TemporalControl*)session_shm_.GetPtr())->state_;
         if (state == TEMPORAL_STOPPED) {
@@ -287,8 +293,8 @@ class UniController{
           // so the owner of the metric sampling thread (the parent process)
           // can react to the stop. The callback is invoked at most once across
           // all sampling threads via the atomic exchange guard.
-          if (!session_stopped_notified_.exchange(true)) {
-            if (session_stopped_callback_) {
+          if (session_stopped_callback_) {
+            if (!session_stopped_notified_.exchange(true)) {
               session_stopped_callback_();
             }
           }
@@ -298,6 +304,13 @@ class UniController{
       }
 
       if (conditional_collection_) {
+        // The parent process owns the sampling thread and always creates the
+        // metric-sampling shared memory, so its state is authoritative here.
+        // The child pushes its PTI_ENABLE_COLLECTION-derived state into this
+        // shm (see PropagateCollectionStateToMetricSampling), which is how the
+        // parent tracks in-application collection changes. There is no env-var
+        // fallback: the parent's own PTI_ENABLE_COLLECTION does not gate the
+        // target application's sampling.
         if (metric_sample_shm_.GetPtr() != nullptr) {
           return (((TemporalControl*)metric_sample_shm_.GetPtr())->state_ == TEMPORAL_RESUMED);
         }
@@ -315,6 +328,15 @@ class UniController{
     // notification deferred, it fires later from a safe top-level call site
     // (e.g. the next OnEnter*Append* callback) where no collector lock is held.
     static bool IsCollectionEnabled(bool defer_callback = false) {
+      // __itt_detach() is a permanent, one-way stop (see IttStop()). Once it
+      // has been called, collection stays off for the rest of the process, so
+      // short-circuit here before any of the pause/session/env-var checks
+      // below. The flush is fired by IttStop() itself, not from here, so this
+      // path does not need to touch session_stopped_notified_.
+      if (itt_stopped_) {
+        return false;
+      }
+
       if (temporal_control_stopped_) {
         // Session is stopped. The very first detection may have happened in a
         // deferred context (under a collector lock, where firing the callback
@@ -323,8 +345,8 @@ class UniController{
         // notification is still pending and this is a safe (non-deferred)
         // top-level call site, fire it now -- otherwise the deferred callback
         // would be lost forever because every later call short-circuits here.
-        if (!defer_callback && !session_stopped_notified_.exchange(true)) {
-          if (session_stopped_callback_) {
+        if (session_stopped_callback_) {
+          if (!defer_callback && !session_stopped_notified_.exchange(true)) {
             session_stopped_callback_();
           }
         }
@@ -335,8 +357,8 @@ class UniController{
         TemporalControlState state = ((TemporalControl*)session_shm_.GetPtr())->state_;
         if (state == TEMPORAL_STOPPED) {
           temporal_control_stopped_ = true;
-          if (!defer_callback && !session_stopped_notified_.exchange(true)) {
-            if (session_stopped_callback_) {
+          if (session_stopped_callback_) {
+            if (!defer_callback && !session_stopped_notified_.exchange(true)) {
               session_stopped_callback_();
             }
           }
@@ -346,35 +368,17 @@ class UniController{
       }
 
       if (conditional_collection_) {
-        if (metric_sample_shm_.GetPtr() != nullptr) {
-          return (((TemporalControl*)metric_sample_shm_.GetPtr())->state_ == TEMPORAL_RESUMED);
-        }
-
         if (itt_paused_) {
           return false;
         }
 
-        if (environ != nullptr) {
-          char *env;
-          char *value = nullptr;
-          constexpr int len = sizeof("PTI_ENABLE_COLLECTION") - 1;  // do not count trailing '\0'
-          char **cursor = environ;
-          // PTI_ENABLE_COLLECTION is likely at the end if it is set
-          while (*cursor) {
-            cursor++;
-          }
-          cursor--;
-          for (; (cursor != environ - 1) && ((env = *cursor) != nullptr); cursor--) {
-            if ((env[0] == 'P') && (env[1] == 'T') && (env[2] == 'I') && (strncmp(env + 3, "_ENABLE_COLLECTION", len - 3) == 0) && (env[len] == '=')) {
-              value = (env + len + 1);
-              break;
-            }
-          }
-
-          if ((value == nullptr) || (*value == '0')) {
-             return false;
-          }
-        }
+        // Consult PTI_ENABLE_COLLECTION on every check rather than returning a
+        // cached metric-sampling shm state: the application may toggle the env
+        // var at any point to gate collection. IsCollectionEnabledByEnv() also
+        // pushes the resulting state into the metric-sampling shared memory so
+        // the parent's sampling thread -- which cannot see this child's
+        // environment -- tracks the change.
+        return IsCollectionEnabledByEnv(defer_callback);
       }
       return true;
     }
@@ -403,9 +407,125 @@ class UniController{
       }
     }
 
+    // Handles __itt_detach(): a permanent, one-way stop of collection, as
+    // opposed to the reversible IttPause()/IttResume() pair. Unlike pause,
+    // this takes effect regardless of --start-paused and cannot be undone --
+    // there is no "itt resume" that clears itt_stopped_. It models an
+    // application that profiles a phase and then detaches the tool for good.
+    static void IttStop(void) {
+      itt_stopped_ = true;
+      utils::SetEnv("PTI_ENABLE_COLLECTION", "-1");
+      // shared memory for metric sampling created by parent process
+      // we always need to check in child process if it still exist
+      if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+        if (metric_sample_shm_.AttachWrite(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl)) == SHM_SUCCESS) {
+          ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = TEMPORAL_STOPPED;
+        }
+      }
+      // Flush the data collected so far, now. This is the purpose of detach:
+      // get the profile out at stop time rather than waiting for process
+      // teardown. Firing synchronously here is safe (no deadlock): __itt_detach()
+      // runs on the application thread and the ITT path holds no collector lock,
+      // so OnSessionStopped() -> Flush() -> ProcessAllCommandsSubmitted() can
+      // take global_device_submissions_mutex_ without re-entering it. (This is
+      // why the deferred-callback hazard documented on IsCollectionEnabled()
+      // does not apply here.) The session_stopped_notified_ one-shot guard is
+      // shared with those deferred sites, so the flush runs at most once.
+      if (session_stopped_callback_ && !session_stopped_notified_.exchange(true)) {
+        session_stopped_callback_();
+      }
+    }
+
   private:
+    // Propagate the env-derived conditional-collection state into the
+    // metric-sampling shared memory so the parent process (which owns the
+    // sampling thread and cannot see this child's PTI_ENABLE_COLLECTION) can
+    // pause/resume/stop sampling in step with the application. Only relevant
+    // when kernel-metric sampling is active. Mirrors the shm writes done by
+    // IttPause()/IttResume()/IttStop(); the child attaches lazily on first use
+    // and only stores on subsequent calls, so this stays cheap on the hot path.
+    static void PropagateCollectionStateToMetricSampling(TemporalControlState state) {
+      if (utils::GetEnv("UNITRACE_KernelMetrics") != "1") {
+        return;
+      }
+      if (metric_sample_shm_.GetPtr() == nullptr) {
+        if (metric_sample_shm_.AttachWrite(UNITRACE_METRIC_SAMPLING_CONTROL, sizeof(TemporalControl)) != SHM_SUCCESS) {
+          return;
+        }
+      }
+      ((TemporalControl*)metric_sample_shm_.GetPtr())->state_ = state;
+    }
+
+    // Shared by IsCollectionEnabled() and IsMetricSamplingEnabled() under
+    // conditional collection (--start-paused): consult the
+    // PTI_ENABLE_COLLECTION environment variable, which the application (or
+    // an outside controller that exported it) uses to gate collection, and
+    // mirror the resulting state into the metric-sampling shared memory.
+    //   "-1" -> permanent stop: latch temporal_control_stopped_ and fire the
+    //           one-shot session-stopped flush (the env-var form of __itt_detach;
+    //           IttStop() writes it and child processes inherit it).
+    //   "0" / unset -> collection currently disabled.
+    //   anything else -> enabled.
+    // defer_callback follows the same contract as IsCollectionEnabled(): when
+    // true, report the stopped state without firing the callback or consuming
+    // the notify guard (used by callers holding a collector lock).
+    static bool IsCollectionEnabledByEnv(bool defer_callback = false) {
+      if (environ == nullptr) {
+        return true;
+      }
+
+      char *env;
+      char *value = nullptr;
+      constexpr int len = sizeof("PTI_ENABLE_COLLECTION") - 1;  // do not count trailing '\0'
+      char **cursor = environ;
+      // PTI_ENABLE_COLLECTION is likely at the end if it is set
+      while (*cursor) {
+        cursor++;
+      }
+      cursor--;
+      for (; (cursor != environ - 1) && ((env = *cursor) != nullptr); cursor--) {
+        if ((env[0] == 'P') && (env[1] == 'T') && (env[2] == 'I') && (strncmp(env + 3, "_ENABLE_COLLECTION", len - 3) == 0) && (env[len] == '=')) {
+          value = (env + len + 1);
+          break;
+        }
+      }
+
+      // Map the env-var value to a collection state and propagate it into the
+      // metric-sampling shared memory. PTI_ENABLE_COLLECTION is process-local,
+      // so a value set inside this (child) process is invisible to the parent
+      // process that owns the metric sampling thread; pushing the state here
+      // lets the parent's IsMetricSamplingEnabled() react to in-application
+      // PTI_ENABLE_COLLECTION changes.
+      //   "-1"        -> permanent stop
+      //   "0" / unset -> paused (collection currently disabled)
+      //   otherwise   -> resumed (collection enabled)
+      const bool stopped = (value != nullptr) && (value[0] == '-') && (value[1] == '1');
+      const bool disabled = (value == nullptr) || (*value == '0');
+      PropagateCollectionStateToMetricSampling(
+          stopped ? TEMPORAL_STOPPED : (disabled ? TEMPORAL_PAUSED : TEMPORAL_RESUMED));
+
+      // "-1": env-var form of a permanent stop. Treat like a stopped session --
+      // latch the stopped state and fire the one-shot flush callback so the data
+      // is flushed once and every later check short-circuits at the top.
+      if (stopped) {
+        temporal_control_stopped_ = true;
+        if (session_stopped_callback_) {
+          if (!defer_callback && !session_stopped_notified_.exchange(true)) {
+            session_stopped_callback_();
+          }
+        }
+        return false;
+      }
+
+      if (disabled) {
+        return false;
+      }
+      return true;
+    }
+
     inline static bool conditional_collection_ = (utils::GetEnv("UNITRACE_StartPaused") == "1") ? true : false;
     inline static bool itt_paused_ = false;
+    inline static bool itt_stopped_ = false;
     // when the session is stopped, the shared memory will be removed so processes started afterwards
     // gets null value for session_shm_.GetPtr()
     // but session_shm_.GetPtr() can also be null if the session is unnamed

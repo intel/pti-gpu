@@ -275,6 +275,13 @@ void CONSTRUCTOR Init(void) {
   if (!utils::GetEnv("UNITRACE_Session").empty()) {
     UniController::AttachTemporalControlRead(utils::GetEnv("UNITRACE_Session").c_str());
     UniController::SetSessionStoppedCallback(OnSessionStopped);
+  } else if (utils::GetEnv("UNITRACE_StartPaused") == "1") {
+    // No named session, but conditional collection is on (--start-paused), so
+    // the application can still stop the tool from within via __itt_detach()
+    // (UniController::IttStop). Register the flush callback so that stop has
+    // somewhere to flush; without this the callback stays null and the data
+    // would only be written at process teardown.
+    UniController::SetSessionStoppedCallback(OnSessionStopped);
   }
 
   if (!utils::GetEnv("UNITRACE_TeardownOnSignal").empty()) {

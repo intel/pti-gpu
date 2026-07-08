@@ -1,0 +1,11 @@
+=== Device Timing Summary ===
+
+                Total Execution Time (ns):            191099798
+    Total Device Time for L0 backend (ns):             43633469
+
+== L0 Backend ==
+
+                                                                                                                                                                                                                                                                                 Kernel,        Calls,            Time (ns),     Time (%),         Average (ns),             Min (ns),             Max (ns)
+"RunAndCheck(sycl::_V1::queue, std::vector<float, std::allocator<float> > const&, std::vector<float, std::allocator<float> > const&, std::vector<float, std::allocator<float> >&, unsigned int, float)::{lambda(sycl::_V1::handler&)#1}::operator()(sycl::_V1::handler&) const::__GEMM",            8,             33509788,    76.798363,              4188723,              4182083,              4192187
+                                                                                                                                                                                                                                                   "zeCommandListAppendMemoryCopy(M2D)",           24,              7754934,    17.772903,               323122,               307708,               339062
+                                                                                                                                                                                                                                                   "zeCommandListAppendMemoryCopy(D2M)",            8,              2368747,     5.428739,               296093,               295625,               297239

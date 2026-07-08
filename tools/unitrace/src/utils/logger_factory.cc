@@ -152,7 +152,16 @@ std::string LegacyLoggerFactory::GetLogFileName(const std::string& logfile, uint
         return logfile;
     }
 
+    // Locate the file-extension dot to insert the pid before it. Only treat a
+    // '.' as the extension separator when it is part of the file name (i.e.
+    // after the last path separator); otherwise a dotted parent directory name
+    // (e.g. ".../applications.analyzers.profilingtoolsinterfaces.sdk/...") would
+    // be mistaken for the extension and corrupt the path.
     size_t pos = logfile.find_last_of('.');
+    if (pos != std::string::npos &&
+        logfile.find_first_of("/\\", pos) != std::string::npos) {
+        pos = std::string::npos;
+    }
 
     std::string result;
     if (pos == std::string::npos) {
@@ -181,8 +190,17 @@ std::string LegacyLoggerFactory::GetMetricsFileName(const std::string& log_file,
     if (log_file.empty()) {
         return log_file;
     }
-
+    // Insert ".metrics" before the file extension. Use the LAST '.' so that
+    // dots in parent directory names (e.g. a path like
+    // ".../applications.analyzers.profilingtoolsinterfaces.sdk/...") are not
+    // mistaken for the extension separator, which would produce a bogus path.
     size_t pos = log_file.find_last_of('.');
+    // Guard against a '.' that belongs to a directory rather than the file name
+    // (i.e. there is a path separator after it).
+    if (pos != std::string::npos &&
+        log_file.find_first_of("/\\", pos) != std::string::npos) {
+        pos = std::string::npos;
+    }
 
     std::string result;
     if (pos == std::string::npos) {

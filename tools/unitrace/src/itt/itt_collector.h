@@ -305,6 +305,11 @@ ITT_EXTERN_C void ITTAPI __itt_resume(void)
   UniController::IttResume();
 }
 
+ITT_EXTERN_C void ITTAPI __itt_detach(void)
+{
+  UniController::IttStop();
+}
+
 ITT_EXTERN_C void ITTAPI __itt_resume_scoped(__itt_collection_scope /* scope */)
 {
 }
@@ -559,10 +564,6 @@ ITT_EXTERN_C void ITTAPI __itt_marker(const __itt_domain *domain, __itt_id id, _
 }
 
 // Need these empty stubs to make sure symbols are resolved in case any of these symbols are present in target application
-ITT_EXTERN_C void ITTAPI __itt_detach(void)
-{
-}
-
 ITT_EXTERN_C __itt_pt_region ITTAPI __itt_pt_region_create(const char * /* name */)
 {
   return 0;

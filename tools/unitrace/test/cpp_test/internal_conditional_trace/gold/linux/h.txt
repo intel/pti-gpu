@@ -1,0 +1,20 @@
+
+=== API Timing Summary ===
+
+             Total Execution Time (ns):            187638212
+    Total API Time for L0 backend (ns):             51318209
+
+== L0 Backend ==
+
+                                    Function,        Calls,            Time (ns),      Time (%),         Average (ns),             Min (ns),             Max (ns)
+                zeCommandListHostSynchronize,           32,             33523572,     65.324905,              1047611,                  178,              4192905
+               zeCommandListAppendMemoryCopy,           32,             11401225,     22.216724,               356288,               326331,               406947
+                      zeEventHostSynchronize,           96,              6120355,     11.926284,                63753,                   59,               657146
+                 zeDeviceGetGlobalTimestamps,            8,               155557,      0.303122,                19444,                17054,                24260
+zeCommandListAppendLaunchKernelWithArguments,            8,                71899,      0.140104,                 8987,                 5865,                10457
+                 zeEventQueryKernelTimestamp,           16,                35494,      0.069165,                 2218,                 1996,                 2626
+                    zeKernelSuggestGroupSize,            8,                 4457,      0.008685,                  557,                  404,                  605
+       zeCommandListIsGraphCaptureEnabledExp,           40,                 3928,      0.007654,                   98,                   26,                  292
+                        zeKernelSetGroupSize,            8,                 1722,      0.003356,                  215,                  139,                  241
+
+

@@ -144,6 +144,17 @@ add_library(unitrace_tool SHARED
 )
 link_directories(${ONEAPI_COMPILER_HOME}/lib)
 
+# On Windows the static ittnotify in the profiled application resolves this
+# collector's __itt_* overrides by name via GetProcAddress (ittnotify_static.c:
+# __itt_api_init -> fill_func_ptr_per_lib). DLL symbols are not exported by
+# default on Windows, so without this the lookups return NULL and in-application
+# ITT control (__itt_pause/__itt_resume/__itt_detach) silently no-ops. Export
+# all symbols so the collector entry points are visible. Linux/ELF exports
+# extern symbols by default and is unaffected.
+if (WIN32)
+  set_target_properties(unitrace_tool PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+
 if (BUILD_WITH_XPTI)
   find_package(Xptifw REQUIRED)
   if (Xptifw_FOUND)
