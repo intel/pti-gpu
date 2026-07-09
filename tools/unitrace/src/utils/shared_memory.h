@@ -127,7 +127,7 @@ public:
     SharedMemoryReturnStatus AttachWrite(const char* session, size_t size) {
         if (p_data_ != nullptr) {
             if (open_mode == SHM_OPEN_WRITE) {
-                std::cout << "[INFO] session " << session << " data already mapped" << std::endl;
+                // Already attached for writing in this process: idempotent no-op.
                 return SHM_SUCCESS;
             }
 
@@ -158,7 +158,7 @@ public:
     SharedMemoryReturnStatus AttachRead(const char* session, size_t size) {
         if (p_data_ != nullptr) {
             if (open_mode == SHM_OPEN_READ) {
-                std::cout << "[INFO] session " << session << " data already mapped" << std::endl;
+                // Already attached for reading in this process: idempotent no-op.
                 return SHM_SUCCESS;
             }
 
@@ -266,7 +266,7 @@ public:
     SharedMemoryReturnStatus AttachWrite(const char* session, size_t size) {
         if (p_data_ != nullptr) {
             if (open_mode == SHM_OPEN_WRITE) {
-                std::cout << "[INFO] session " << session << " data already mapped" << std::endl;
+                // Already attached for writing in this process: idempotent no-op.
                 return SHM_SUCCESS;
             }
 
@@ -306,7 +306,7 @@ public:
     SharedMemoryReturnStatus AttachRead(const char* session, size_t size) {
         if (p_data_ != nullptr) {
             if (open_mode == SHM_OPEN_READ) {
-                std::cout << "[INFO] session " << session << " data already mapped" << std::endl;
+                // Already attached for reading in this process: idempotent no-op.
                 return SHM_SUCCESS;
             }
 
