@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <level_zero/driver_experimental/zex_visit.h>
 #include <level_zero/ze_api.h>
 
 #include <memory>
@@ -52,6 +53,7 @@ class ZeCommandVisitorTestSuite : public testing::Test {
   CommandListUniquePtr CreateCommandList() {
     ze_command_list_desc_t desc = {};
     desc.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC;
+    desc.flags |= ZE_COMMAND_LIST_FLAG_ENABLE_CMD_VISITING;
     desc.pNext = nullptr;
     desc.commandQueueGroupOrdinal = 0;
     ze_command_list_handle_t command_list = nullptr;

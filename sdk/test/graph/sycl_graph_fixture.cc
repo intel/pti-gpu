@@ -399,7 +399,13 @@ TEST_P(SyclUsmGraphExecutionTestSuite, TestArbitraryReplays) {
   ValidateGraphReplayTimestamps();
 }
 
+// There is not a reliable way to enable this feature on Windows without a special driver build or
+// proper command list descriptor.
+#if defined(_WIN32)
+TEST_P(SyclUsmGraphVisitorTestSuite, DISABLED_TestArbitraryReplaysWithGraphRecreation) {
+#else
 TEST_P(SyclUsmGraphVisitorTestSuite, TestArbitraryReplaysWithGraphRecreation) {
+#endif
   auto graph = CreateUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product_.get(),
                                         x_vector_.get(), y_vector_.get(), z_vector_.get());
   graph_.emplace(graph.finalize());
