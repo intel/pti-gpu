@@ -49,9 +49,9 @@ class LibraryLoader {
   }
 
   LibraryLoader(const LibraryLoader&) = delete;
-  LibraryLoader(LibraryLoader&& other) { std::swap(other.handle_, handle_); }
+  LibraryLoader(LibraryLoader&& other) noexcept { std::swap(other.handle_, handle_); }
   LibraryLoader& operator=(const LibraryLoader&) = delete;
-  LibraryLoader& operator=(LibraryLoader&& other) {
+  LibraryLoader& operator=(LibraryLoader&& other) noexcept {
     if (this != &other) {
       std::swap(other.handle_, handle_);
     }
@@ -66,7 +66,7 @@ class LibraryLoader {
 #else
     auto sym_addr = dlsym(handle_, sym_name);
 #endif
-    return reinterpret_cast<T>(reinterpret_cast<SymHandle>(sym_addr));
+    return reinterpret_cast<T>(reinterpret_cast<SymHandle>(sym_addr));  // NOLINT
   }
 
   virtual ~LibraryLoader() {

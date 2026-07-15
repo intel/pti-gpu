@@ -138,10 +138,10 @@ class ZeCommandVisitor {
  private:
   Result CollectResultAndReset();
 
-  template <auto T, pti_api_id_driver_levelzero OverheadId, typename... Args>
-  void ZeCommand(Args&&... args) {
+  template <pti_api_id_driver_levelzero OverheadId, typename Fn, typename... Args>
+  void ZeCommand(Fn func, Args&&... args) {
     overhead::ScopedOverheadCollector scoped(OverheadId);
-    auto result = T(std::forward<Args>(args)...);
+    auto result = func(std::forward<Args>(args)...);
     if (result != ZE_RESULT_SUCCESS) {
       SPDLOG_ERROR("Command {} failed with result: {:x}", PTI_FUNCTION_NAME,
                    static_cast<std::uint32_t>(result));
@@ -164,8 +164,6 @@ class ZeCommandVisitor {
     return ZE_RESULT_SUCCESS;  // This return value is the return value of the callback, passed to
                                // the driver. Afaik, its unused.
   }
-
-  constexpr static Self* FromUserData(void* user_data) { return static_cast<Self*>(user_data); }
 
   ZeExts::Visit visitor_extension_;
   ZeEventPoolManager* event_pool_manager_;

@@ -61,8 +61,11 @@ add_executable(
 target_include_directories(
   ze_command_visitor_tests
   PUBLIC "${PROJECT_SOURCE_DIR}/src/levelzero"
-  PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/utils"
-          "${PROJECT_SOURCE_DIR}/include" "${PROJECT_BINARY_DIR}"
+  PRIVATE "${PROJECT_SOURCE_DIR}/test"
+          "${PROJECT_SOURCE_DIR}/src"
+          "${PROJECT_SOURCE_DIR}/src/utils"
+          "${PROJECT_SOURCE_DIR}/include"
+          "${PROJECT_BINARY_DIR}"
           "${PROJECT_BINARY_DIR}/include")
 
 target_link_libraries(

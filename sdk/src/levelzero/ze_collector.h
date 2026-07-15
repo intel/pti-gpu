@@ -1530,8 +1530,9 @@ class ZeCollector {
       auto& info = GetCommandListInfo(clist);
       std::lock_guard<std::shared_mutex> cl_list_lock(command_list_map_mutex_);
       auto dev_it = device_descriptors_.find(info.device);
-      if (dev_it != device_descriptors_.end() && dev_it->second.visit.has_value() &&
-          info.appended_commands.empty()) {
+      const auto visitor_extension_available =
+          (dev_it != device_descriptors_.end() && dev_it->second.visit.has_value());
+      if (visitor_extension_available && info.appended_commands.empty()) {
         if (!info.instrumented_command_list) {
           ze_command_list_handle_t clist_for_visit = nullptr;
           ze_command_list_desc_t desc{};
@@ -1606,6 +1607,13 @@ class ZeCollector {
                        static_cast<const void*>(clist));
           ZeCollector::ReleaseInstrumentedCommandList(info);
         }
+      }
+
+      if (info.appended_commands.empty() && !visitor_extension_available) {
+        SPDLOG_INFO(
+            "Command list {} submitted with no PTI tracking: visitor extension "
+            "unavailable and no commands captured via tracer.",
+            static_cast<const void*>(clist));
       }
 
       // as all command lists submitted to the execution into queue - they are not immediate

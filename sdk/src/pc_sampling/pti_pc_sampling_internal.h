@@ -32,6 +32,7 @@
 #include <utility>
 #include <vector>
 
+#include "lz_api_tracing_api_loader.h"
 #include "pti/pti_callback.h"
 #include "pti/pti_pc_sampling.h"
 #include "pti_pc_sampling_aggregator.h"
@@ -361,7 +362,13 @@ inline void KernelCreatedCallback(pti_callback_domain domain, pti_api_group_id /
     }
 
     size_t kernel_size = 0;
-    auto status = zeKernelGetBinaryExp(kernel_handle, &kernel_size, nullptr);
+    ze_result_t status = ZE_RESULT_SUCCESS;
+    auto* ze_kernel_get_binary_exp = pti::PtiLzTracerLoader::Instance().zeKernelGetBinaryExp_;
+    if (ze_kernel_get_binary_exp) {
+      status = ze_kernel_get_binary_exp(kernel_handle, &kernel_size, nullptr);
+    } else {
+      status = ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+    }
     if (status != ZE_RESULT_SUCCESS) {
       SPDLOG_DEBUG("{}: zeKernelGetBinaryExp failed with status {:#x}", __FUNCTION__,
                    static_cast<uint32_t>(status));

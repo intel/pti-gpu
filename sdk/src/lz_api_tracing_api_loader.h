@@ -3,8 +3,8 @@
 //
 // SPDX-License-Identifier: MIT
 // =============================================================
-#ifndef SRC_LZ_API_TRACING_API_LOADER_H_
-#define SRC_LZ_API_TRACING_API_LOADER_H_
+#ifndef LZ_API_TRACING_API_LOADER_H_
+#define LZ_API_TRACING_API_LOADER_H_
 
 #include <level_zero/layers/zel_tracing_api.h>
 #include <level_zero/layers/zel_tracing_register_cb.h>
@@ -41,9 +41,15 @@ class PtiLzTracerLoader {
 
   decltype(&zeInitDrivers) zeInitDrivers_ = nullptr;                              // NOLINT
   decltype(&zesDriverGetDeviceByUuidExp) zesDriverGetDeviceByUuidExp_ = nullptr;  // NOLINT
+  decltype(&zeKernelGetBinaryExp) zeKernelGetBinaryExp_ = nullptr;                // NOLINT
 
   // Forward to implementation in core library
-#include <tracing_api_dlsym_public.gen>  // Auto-generated callbacks
+#include "tracing_api_dlsym_public.gen"  // Auto-generated callbacks
+
+#define APPEND_COMMAND(X) \
+  decltype(&zeCommandListAppend##X) zeCommandListAppend##X##_ = nullptr;  // NOLINT
+#include "levelzero/ze_visitor_commands.inc"
+#undef APPEND_COMMAND
 
  private:
   PtiLzTracerLoader() {
@@ -56,13 +62,19 @@ class PtiLzTracerLoader {
     }
 #define LEVEL_ZERO_LOADER_GET_SYMBOL(X) \
   X##_ = api_dlsyms_lib_->GetSymbol<decltype(&X)>(#X)  // NOLINT
-#include <tracing_api_dlsym_private.gen>               // Auto-generated callbacks
+#include "tracing_api_dlsym_private.gen"               // Auto-generated callbacks
     LEVEL_ZERO_LOADER_GET_SYMBOL(zeInitDrivers);
     LEVEL_ZERO_LOADER_GET_SYMBOL(zesDriverGetDeviceByUuidExp);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeKernelGetBinaryExp);
 #undef LEVEL_ZERO_LOADER_GET_SYMBOL
+#define APPEND_COMMAND(X)                                                                    \
+  zeCommandListAppend##X##_ = api_dlsyms_lib_->GetSymbol<decltype(&zeCommandListAppend##X)>( \
+      "zeCommandListAppend" #X);  // NOLINT
+#include "levelzero/ze_visitor_commands.inc"
+#undef APPEND_COMMAND
   }
   std::unique_ptr<LibraryLoader> api_dlsyms_lib_ = nullptr;
 };
 }  // namespace pti
 
-#endif  // SRC_LZ_API_TRACING_API_LOADER_H_
+#endif  // LZ_API_TRACING_API_LOADER_H_

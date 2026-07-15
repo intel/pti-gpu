@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "lz_api_tracing_api_loader.h"
 #include "unikernel.h"
 #include "utils.h"
 #include "ze_driver_init.h"
@@ -33,39 +34,36 @@
 namespace {
 #define ZE_COMMAND(visitor, fn, ...)                 \
   do {                                               \
-    (visitor)->ZeCommand<&fn, fn##_id>(__VA_ARGS__); \
+    (visitor)->ZeCommand<fn##_id>(&fn, __VA_ARGS__); \
   } while (0)
 
-#define APPEND_PAIR(append_name)                              \
-  std::make_pair(                                             \
-      std::string_view{TOSTRING(zeCommandList##append_name)}, \
-      reinterpret_cast<void*>(&ZeCommandVisitor::VisitCommandList##append_name))  // NOLINT
+// If the symbol is not found, record internal_error_ and skip re-appending this command; we
+// cannot re-append it to the target command list without the symbol. This makes the visit no longer
+// valid.
+#define ZE_VISITOR_COMMAND(visitor, fn, ...)                 \
+  do {                                                       \
+    auto* symbol = pti::PtiLzTracerLoader::Instance().fn##_; \
+    if (!symbol) {                                           \
+      visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;    \
+      return;                                                \
+    }                                                        \
+    (visitor)->ZeCommand<fn##_id>(symbol, __VA_ARGS__);      \
+  } while (0)
+
+#define APPEND_COMMAND(append_name)                                 \
+  std::make_pair(                                                   \
+      std::string_view{TOSTRING(zeCommandListAppend##append_name)}, \
+      reinterpret_cast<void*>(&ZeCommandVisitor::VisitCommandListAppend##append_name)),  // NOLINT
 
 /* clang-format off */
 auto& GetVisitorTable() {
   static std::array visitor_table = {
-    APPEND_PAIR(AppendLaunchKernel),
-    APPEND_PAIR(AppendLaunchKernelWithArguments),
-    APPEND_PAIR(AppendLaunchKernelWithParameters),
-    APPEND_PAIR(AppendLaunchCooperativeKernel),
-    APPEND_PAIR(AppendLaunchKernelIndirect),
-    APPEND_PAIR(AppendMemoryCopy),
-    APPEND_PAIR(AppendMemoryFill),
-    APPEND_PAIR(AppendMemoryCopyRegion),
-    APPEND_PAIR(AppendMemoryCopyFromContext),
-    APPEND_PAIR(AppendImageCopy),
-    APPEND_PAIR(AppendImageCopyRegion),
-    APPEND_PAIR(AppendImageCopyToMemory),
-    APPEND_PAIR(AppendImageCopyFromMemory),
-    APPEND_PAIR(AppendImageCopyToMemoryExt),
-    APPEND_PAIR(AppendImageCopyFromMemoryExt),
-    APPEND_PAIR(AppendEventReset),
-    APPEND_PAIR(AppendBarrier),
-    APPEND_PAIR(AppendMemoryRangesBarrier),
+#include "ze_visitor_commands.inc"
   };  // NOLINT
   return visitor_table;
 }
 /* clang-format on */
+#undef APPEND_COMMAND
 
 // Static table of visitors. My thinking is that this should be generated at compile time and treat
 // it like a configuration. Eventually, we can support new configurations with different static
@@ -258,7 +256,7 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
     ze_command_list_handle_t hCommandList, ze_kernel_handle_t hKernel,
     const ze_group_count_t* pLaunchFuncArgs, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
     ze_event_handle_t* phWaitEvents, void* userData) {
-  auto* visitor = FromUserData(userData);
+  auto* visitor = static_cast<ZeCommandVisitor*>(userData);
   return ExceptionHandler(visitor, __func__, [&] {
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
@@ -325,9 +323,9 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
                                     ? visitor->visit_desc_.hReappendTargetCmdList
                                     : hCommandList;
 
-    ZE_COMMAND(visitor, zeCommandListAppendLaunchKernelWithArguments, target_command_list, hKernel,
-               groupCounts, groupSizes, pArguments, pNext, event.Get(), numWaitEvents,
-               phWaitEvents);
+    ZE_VISITOR_COMMAND(visitor, zeCommandListAppendLaunchKernelWithArguments, target_command_list,
+                       hKernel, groupCounts, groupSizes, pArguments, pNext, event.Get(),
+                       numWaitEvents, phWaitEvents);
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
@@ -373,8 +371,8 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
                                     ? visitor->visit_desc_.hReappendTargetCmdList
                                     : hCommandList;
 
-    ZE_COMMAND(visitor, zeCommandListAppendLaunchKernelWithParameters, target_command_list, hKernel,
-               pGroupCounts, pNext, event.Get(), numWaitEvents, phWaitEvents);
+    ZE_VISITOR_COMMAND(visitor, zeCommandListAppendLaunchKernelWithParameters, target_command_list,
+                       hKernel, pGroupCounts, pNext, event.Get(), numWaitEvents, phWaitEvents);
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
@@ -800,9 +798,9 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyToMem
                                     ? visitor->visit_desc_.hReappendTargetCmdList
                                     : hCommandList;
 
-    ZE_COMMAND(visitor, zeCommandListAppendImageCopyToMemoryExt, target_command_list, dstptr,
-               hSrcImage, pSrcRegion, destRowPitch, destSlicePitch, event.Get(), numWaitEvents,
-               phWaitEvents);
+    ZE_VISITOR_COMMAND(visitor, zeCommandListAppendImageCopyToMemoryExt, target_command_list,
+                       dstptr, hSrcImage, pSrcRegion, destRowPitch, destSlicePitch, event.Get(),
+                       numWaitEvents, phWaitEvents);
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
@@ -839,9 +837,9 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendImageCopyFromM
                                     ? visitor->visit_desc_.hReappendTargetCmdList
                                     : hCommandList;
 
-    ZE_COMMAND(visitor, zeCommandListAppendImageCopyFromMemoryExt, target_command_list, hDstImage,
-               srcptr, pDstRegion, srcRowPitch, srcSlicePitch, event.Get(), numWaitEvents,
-               phWaitEvents);
+    ZE_VISITOR_COMMAND(visitor, zeCommandListAppendImageCopyFromMemoryExt, target_command_list,
+                       hDstImage, srcptr, pDstRegion, srcRowPitch, srcSlicePitch, event.Get(),
+                       numWaitEvents, phWaitEvents);
     if (hSignalEvent) {
       auto res = A2AppendWaitAndSignalEvent(target_command_list, hSignalEvent, event.Get());
       if (!res) {
@@ -949,5 +947,5 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendMemoryRangesBa
   });
 }
 
+#undef ZE_VISITOR_COMMAND
 #undef ZE_COMMAND
-#undef APPEND_PAIR
