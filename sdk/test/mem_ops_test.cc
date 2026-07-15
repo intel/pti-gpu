@@ -9,6 +9,7 @@
 
 #include "pti/pti_view.h"
 #include "utils/pti_record_collection_fixture.h"
+#include "utils/sycl_config_info.h"
 #include "utils/sycl_usm_helper.h"
 
 namespace {
@@ -509,6 +510,11 @@ TEST_F(MemoryOperationTest, SuccessfulMemFillDriverAllocated) {
 }
 
 TEST_F(MemoryOperationTest, SuccessfulMemCopyUserAllocated) {
+  const auto dev_ = queue_.get_device();
+  if (pti::test::utils::IsIntegratedGraphics(dev_)) {
+    GTEST_SKIP() << "Integrated graphics device detected. Test valid only on discrete GPUs";
+  }
+
   InitCollection();
   EnableViews(PTI_VIEW_DEVICE_GPU_MEM_COPY);
 
@@ -539,6 +545,8 @@ TEST_F(MemoryOperationTest, SuccessfulMemCopyUserAllocated) {
               return first->_start_timestamp < second->_start_timestamp;
             });
   EXPECT_EQ(std::size(record_storage_.memcpy_records), 2);
+  ASSERT_GE(std::size(record_storage_.memcpy_records), 1);
+
   EXPECT_EQ(record_storage_.memcpy_records[0]->_mem_dst, PTI_VIEW_MEMORY_TYPE_DEVICE);
   EXPECT_EQ(record_storage_.memcpy_records[0]->_memcpy_type,
             pti_view_memcpy_type::PTI_VIEW_MEMCPY_TYPE_M2D);

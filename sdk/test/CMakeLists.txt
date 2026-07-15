@@ -311,7 +311,8 @@ if(HAVE_SYCL)
     mem_ops_test
     PUBLIC "${PROJECT_BINARY_DIR}/include"
            "${PROJECT_SOURCE_DIR}/include"
-           "${PROJECT_SOURCE_DIR}/src")
+           "${PROJECT_SOURCE_DIR}/src"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
   target_compile_options(mem_ops_test PRIVATE -fsycl)
 
