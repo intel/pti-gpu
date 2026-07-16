@@ -2,8 +2,8 @@
 
 # hadolint ignore=DL3007
 
-# This is ubuntu:25.10
-FROM ubuntu:questing
+# This is ubuntu:24.04
+FROM ubuntu:noble
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -24,9 +24,9 @@ RUN apt-get update -y && \
     make \
     sudo \
     g++ \
-    python3.14 \
+    python3.12 \
     python3-pip \
-    python3.13-venv \
+    python3.12-venv \
     ca-certificates && \
     apt-get clean -y
 

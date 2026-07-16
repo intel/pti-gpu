@@ -23,11 +23,7 @@ jobs:
 
     timeout-minutes: 30
 
-    #
-    # pti is a selector to machines with Intel Ponte Vecchio officially
-    # Intel(R) Data Center GPU Max 1100
-    #
-    runs-on: [self-hosted, Linux, pti-2gpu]
+    runs-on: ${{ fromJSON(matrix.tags) }}
 
     continue-on-error: true
 
@@ -35,42 +31,41 @@ jobs:
       max-parallel: 3
       matrix:
         include:
-          - container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_NMINUS1 }}
-            uploadname: ${{ vars.PTI_PKG_SLES_15_ONEAPI_NMINUS1 }}
-            preset: linux-icpx-release
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_NMINUS1 }}
             uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_RHEL_10_ONEAPI_NMINUS1 }}
-            uploadname: ${{ vars.PTI_PKG_RHEL_10_ONEAPI_NMINUS1 }}
-            preset: linux-icpx-release
+            tags: '["self-hosted", "Linux", "pti", "server", "PVC"]'
           - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_NMINUS1 }}
             uploadname: ${{ vars.PTI_PKG_ROCKY_8_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_25_10_ONEAPI_NMINUS1 }}
-            uploadname: ${{ vars.PTI_PKG_UBUNTU_25_10_ONEAPI_NMINUS1 }}
-            preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_NMINUS1 }}
-            uploadname: ${{ vars.PTI_PKG_ROCKY_8_GXX_NMINUS1 }}
-            preset: linux-gxx-release
-          - container: ${{ vars.PTI_DOCKER_SLES_15_ONEAPI_N }}
-            uploadname: ${{ vars.PTI_PKG_SLES_15_ONEAPI_N }}
-            preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
-            uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_ONEAPI_N }}
-            preset: linux-icpx-release
+            tags: '["self-hosted", "Linux", "pti", "server", "PVC"]'
+          #
+          # This is the n-1 container for BMG
+          #
           - container: ${{ vars.PTI_DOCKER_UBUNTU_25_10_ONEAPI_N }}
             uploadname: ${{ vars.PTI_PKG_UBUNTU_25_10_ONEAPI_N }}
             preset: linux-icpx-release
-          - container: ${{ vars.PTI_DOCKER_RHEL_10_ONEAPI_N }}
-            uploadname: ${{ vars.PTI_PKG_RHEL_10_ONEAPI_N }}
+            tags: '["self-hosted", "Linux", "pti", "client", "BMG"]'
+          - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_NMINUS1 }}
+            uploadname: ${{ vars.PTI_PKG_ROCKY_8_GXX_NMINUS1 }}
+            preset: linux-gxx-release
+            tags: '["self-hosted", "Linux", "pti", "server", "PVC"]'
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_ONEAPI_N }}
             preset: linux-icpx-release
+            tags: '["self-hosted", "Linux", "pti", "server", "PVC"]'
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_CLIENT_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_UBUNTU_24_4_CLIENT_ONEAPI_N }}
+            preset: linux-icpx-release
+            tags: '["self-hosted", "Linux", "pti", "client", "BMG"]'
           - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_N }}
             uploadname: ${{ vars.PTI_PKG_ROCKY_8_ONEAPI_N }}
             preset: linux-icpx-release
+            tags: '["self-hosted", "Linux", "pti", "server", "PVC"]'
           - container: ${{ vars.PTI_DOCKER_ROCKY_8_ONEAPI_N }}
             uploadname: ${{ vars.PTI_PKG_ROCKY_8_GXX_N }}
             preset: linux-gxx-release
+            tags: '["self-hosted", "Linux", "pti", "server", "PVC"]'
 
     container:
       image: ${{ matrix.container }}
