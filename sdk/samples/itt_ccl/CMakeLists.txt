@@ -15,6 +15,15 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
   return()
 endif()
 
+if(EXISTS "/etc/os-release")
+  file(STRINGS "/etc/os-release" os_release)
+  foreach(_line ${os_release})
+    if(_line MATCHES "^ID=")
+      string(REGEX REPLACE "^ID=\"?([^\"]*)\"?" "\\1" os_id "${_line}")
+    endif()
+  endforeach()
+endif()
+
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fsycl" has_sycl)
 
@@ -43,7 +52,7 @@ endif()
 option(PTI_BUILD_SYCL_ALLREDUCE_TEST "Build sycl_allreduce_test sample" ON)
 option(PTI_BUILD_SYCL_ALLREDUCE_USM_TEST "Build sycl_allreduce_usm_test sample" ON)
 
-if (PTI_BUILD_SYCL_ALLREDUCE_TEST)
+if (PTI_BUILD_SYCL_ALLREDUCE_TEST AND NOT os_id STREQUAL "rocky")
   add_executable(sycl_allreduce_test sycl_allreduce_test.cpp)
 
   target_link_options(sycl_allreduce_test PUBLIC -fsycl)
@@ -65,7 +74,7 @@ if (PTI_BUILD_SYCL_ALLREDUCE_TEST)
   target_link_libraries(sycl_allreduce_test PUBLIC oneCCL MPI::MPI_CXX $<TARGET_NAME_IF_EXISTS:Pti::pti_view> ${FS_LIB})
 endif()
 
-if (PTI_BUILD_SYCL_ALLREDUCE_USM_TEST)
+if (PTI_BUILD_SYCL_ALLREDUCE_USM_TEST AND NOT os_id STREQUAL "rocky")
   add_executable(sycl_allreduce_usm_test sycl_allreduce_usm_test.cpp)
 
   target_link_options(sycl_allreduce_usm_test PUBLIC -fsycl)

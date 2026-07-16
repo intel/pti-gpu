@@ -28,10 +28,10 @@ RUN apt update -y && \
 # These are the minimum
 #
 RUN apt update -y && \
-    apt install -y intel-dpcpp-cpp-compiler-2026.0 \
-      intel-oneapi-mkl-devel-2026.0 \
+    apt install -y intel-dpcpp-cpp-compiler-2026.1 \
+      intel-oneapi-mkl-devel-2026.1 \
       intel-oneapi-dnnl-devel-2026.0 \
-      intel-oneapi-ccl-devel-2022.0
+      intel-oneapi-ccl-devel-2022.1
 
 RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3.12 10
 
