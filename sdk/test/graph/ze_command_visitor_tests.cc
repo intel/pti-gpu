@@ -15,6 +15,10 @@
 #include "ze_gpu_command.h"
 #include "ze_utils.h"
 
+namespace {
+constexpr uint32_t kDriverVersionWithBrokenVisitorExtension = 17012470;
+}  // namespace
+
 class ZeCommandVisitorTestSuite : public testing::Test {
  protected:
   static constexpr size_t kPtiDeviceId = 0;
@@ -36,6 +40,7 @@ class ZeCommandVisitorTestSuite : public testing::Test {
       auto extension = driver_init_.GetExtension<ZeExts::Visit>(driver);
       if (extension) {
         driver_ = driver;
+        driver_props_ = utils::ze::GetDriverProperties(driver_);
         visit_extension_ = *extension;
         break;
       }
@@ -168,6 +173,7 @@ class ZeCommandVisitorTestSuite : public testing::Test {
   ZeDriverInit driver_init_{};
   ZeEventPoolManager event_pool_manager_{};
   ze_driver_handle_t driver_ = nullptr;
+  std::optional<ze_driver_properties_t> driver_props_ = std::nullopt;
   ZeExts::Visit visit_extension_{};
   ze_device_handle_t device_ = nullptr;
   ze_context_handle_t context_ = nullptr;
@@ -241,6 +247,15 @@ TEST_F(ZeCommandVisitorTestSuite, VisitClosedCommandListWithASingleCommand) {
 }
 
 TEST_F(ZeCommandVisitorTestSuite, VisitSkipsCommandWhenLoaderSymbolMissing) {
+  if (driver_props_) {
+    // zeCommandListAppendLaunchKernelWithArguments callback inside the driver has the wrong
+    // signature. This is fixed in later driver versions.
+    if (driver_props_->driverVersion <= kDriverVersionWithBrokenVisitorExtension) {
+      GTEST_SKIP() << "Driver version " << kDriverVersionWithBrokenVisitorExtension
+                   << " or lower has a broken (or non existent) command list visitor extension, "
+                      "skipping test.";
+    }
+  }
   auto& loader = pti::PtiLzTracerLoader::Instance();
   auto saved = loader.zeCommandListAppendLaunchKernelWithArguments_;
   ASSERT_NE(saved, nullptr) << "Loader barrier symbol should be resolved before corruption";
@@ -292,7 +307,17 @@ TEST_F(ZeCommandVisitorTestSuite, VisitSkipsCommandWhenLoaderSymbolMissing) {
   ASSERT_NE(result, ZE_RESULT_SUCCESS);
 }
 
+// This test is actually a regression test for a known issue in the driver where the command list
+// visitor extension does not handle CommandListReset.
 TEST_F(ZeCommandVisitorTestSuite, VisitClosedCommandListWithASingleCommandThenResetAndTryAgain) {
+  if (driver_props_) {
+    // This is fixed in later driver versions.
+    if (driver_props_->driverVersion <= kDriverVersionWithBrokenVisitorExtension) {
+      GTEST_SKIP() << "Driver version " << kDriverVersionWithBrokenVisitorExtension
+                   << " or lower has a broken (or non existent) command list visitor extension, "
+                      "skipping test.";
+    }
+  }
   auto command_list = CreateCommandList();
   auto command_list_instrumented = CreateCommandList();
   ZeCommandVisitor visitor(visit_extension_, &event_pool_manager_);

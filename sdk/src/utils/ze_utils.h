@@ -67,9 +67,11 @@ inline std::vector<ze_driver_extension_properties_t> GetDriverExtensions(
   ze_result_t status = ZE_RESULT_SUCCESS;
 
   uint32_t extension_count = 0;
-  overhead::Init();
-  status = zeDriverGetExtensionProperties(driver, &extension_count, nullptr);
-  overhead_fini(zeDriverGetExtensionProperties_id);
+
+  {
+    overhead::ScopedOverheadCollector overhead_collector(zeDriverGetExtensionProperties_id);
+    status = zeDriverGetExtensionProperties(driver, &extension_count, nullptr);
+  }
   PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   if (extension_count == 0) {
@@ -78,9 +80,9 @@ inline std::vector<ze_driver_extension_properties_t> GetDriverExtensions(
 
   std::vector<ze_driver_extension_properties_t> extension_list(extension_count);
 
-  overhead::Init();
+  overhead::ScopedOverheadCollector overhead_collector(zeDriverGetExtensionProperties_id);
   status = zeDriverGetExtensionProperties(driver, &extension_count, extension_list.data());
-  overhead_fini(zeDriverGetExtensionProperties_id);
+  PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
   return extension_list;
 }
@@ -624,6 +626,17 @@ inline std::optional<uint32_t> GetGpuDeviceIpVersion(ze_device_handle_t device) 
   }
 
   return static_cast<ze_device_ip_version_ext_t*>(props.pNext)->ipVersion;
+}
+
+inline std::optional<ze_driver_properties_t> GetDriverProperties(ze_driver_handle_t driver) {
+  ze_driver_properties_t properties{};
+  properties.stype = ZE_STRUCTURE_TYPE_DRIVER_PROPERTIES;
+  properties.pNext = nullptr;
+  auto status = zeDriverGetProperties(driver, &properties);
+  if (status != ZE_RESULT_SUCCESS) {
+    return std::nullopt;
+  }
+  return properties;
 }
 
 inline bool ContainsDeviceWithAtLeastIpVersion(const std::vector<ze_driver_handle_t>& driver_list,

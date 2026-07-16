@@ -21,6 +21,7 @@ constexpr auto kAValue = 0.128f;
 constexpr auto kBValue = 0.256f;
 constexpr auto kMaxEps = 1.0e-4f;
 constexpr uint32_t kDefaultEventWaitTimeMs = 5000;
+constexpr uint32_t kDriverVersionWithBrokenVisitorExtension = 17012470;
 
 // Prevent Test from hanging indefinitely
 ze_result_t SpinBlockEvent(ze_event_handle_t event, uint32_t milliseconds) {
@@ -80,10 +81,16 @@ class LocalModeZeGemmTest : public testing::Test {
     auto status = zeInit(ZE_INIT_FLAG_GPU_ONLY);
     ASSERT_EQ(status, ZE_RESULT_SUCCESS);
     drv_ = utils::ze::GetGpuDriver(kPtiDeviceId);
+    ASSERT_NE(drv_, nullptr);
+    auto props = utils::ze::GetDriverProperties(drv_);
     command_list_visit_supported_ =
         ::utils::ze::IsDriverExtensionSupported(drv_, ZE_COMMAND_VISIT_EXT_NAME);
+    if (props) {
+      if (props->driverVersion <= kDriverVersionWithBrokenVisitorExtension) {
+        command_list_visit_supported_ = false;
+      }
+    }
     dev_ = utils::ze::GetGpuDevice(kPtiDeviceId);
-    ASSERT_NE(drv_, nullptr);
     ctx_ = utils::ze::GetContext(drv_);
   }
 
