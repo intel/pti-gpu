@@ -7,6 +7,7 @@
 #ifndef PTI_STRING_POOL_H_
 #define PTI_STRING_POOL_H_
 
+#include <mutex>
 #include <shared_mutex>
 #include <string>
 #include <unordered_set>
@@ -49,12 +50,6 @@ class StringPool {
   size_t Size() const {
     std::shared_lock<std::shared_mutex> read_lock(mutex_);
     return strings_.size();
-  }
-
-  // Clear all stored strings.
-  void Clear() {
-    std::unique_lock<std::shared_mutex> write_lock(mutex_);
-    strings_.clear();
   }
 
   // Check if a string is registered.

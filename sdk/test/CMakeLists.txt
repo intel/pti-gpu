@@ -94,6 +94,18 @@ if (TARGET LevelZero::level-zero)
     DISCOVERY_TIMEOUT 60
     PROPERTIES LABELS "unit")
 
+  add_executable(pti_string_pool_test pti_string_pool_test.cc)
+  target_include_directories(
+    pti_string_pool_test
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_link_libraries(pti_string_pool_test PUBLIC GTest::gtest_main)
+
+  gtest_discover_tests(
+    pti_string_pool_test
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS "unit")
+
   add_executable(local_ze_collection_suite local_ze_collection_fixture.cc)
 
   target_include_directories(

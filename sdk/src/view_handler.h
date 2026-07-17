@@ -31,6 +31,7 @@
 
 #include "itt_collector.h"
 #include "overhead_kinds.h"
+#include "pti_string_pool.h"
 #include "unikernel.h"
 #include "utils.h"
 #include "view_buffer.h"
@@ -224,8 +225,6 @@ struct PtiViewRecordHandler {
   using ViewBuffer = pti::view::utilities::ViewBuffer;
   using ViewBufferQueue = pti::view::utilities::ViewBufferQueue;
   using ViewBufferTable = pti::view::utilities::ViewBufferTable<uint32_t>;
-  using KernelNameStorageQueue =
-      pti::view::utilities::ViewRecordBufferQueue<std::unique_ptr<std::string>>;
 
   PtiViewRecordHandler()
       : get_new_buffer_(pti::view::defaults::DefaultBufferAllocation),
@@ -663,10 +662,8 @@ struct PtiViewRecordHandler {
   }
 
   inline const char* InsertKernel(const std::string& name) {
-    auto kernel_name = std::make_unique<std::string>(name);
-    const auto* kernel_name_str = kernel_name->c_str();
-    kernel_name_storage_.Push(std::move(kernel_name));
-    return kernel_name_str;
+    // Store each distinct name once, return a stable pointer.
+    return kernel_name_storage_.Get(name);
   }
 
   // Given enable or disable new value; the array of apis in class - class_ops; and the state_map.
@@ -905,7 +902,7 @@ struct PtiViewRecordHandler {
                                           // might be writing to the same buffer
   mutable std::mutex map_granularity_set_mtx_;
 
-  KernelNameStorageQueue kernel_name_storage_;
+  StringPool kernel_name_storage_;
   ViewBufferTable view_buffers_;
   pti::view::BufferConsumer consumer_ = {};  // Starts thread
   std::atomic<pti_fptr_get_timestamp> user_provided_ts_func_ptr_ = nullptr;
