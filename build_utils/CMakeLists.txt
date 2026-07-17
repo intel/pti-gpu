@@ -545,7 +545,7 @@ macro(FindL0Library TARGET)
           break()
         endif()
       endforeach()
-      file(GLOB_RECURSE L0_DLL_PATH "${WIN_SYS_PATH}/ze_loader.dll")
+      file(GLOB L0_DLL_PATH "${WIN_SYS_PATH}/ze_loader.dll")
       if(NOT L0_DLL_PATH)
         message(FATAL_ERROR
           "Level Zero loader is not found. "
