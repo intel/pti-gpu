@@ -10,7 +10,6 @@
 #include <level_zero/zet_api.h>
 
 #include <cstdint>
-#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -24,7 +23,7 @@ namespace pti::pc_sampling {
  */
 struct KernelAggregate {
   uint64_t kernel_handle = 0;               /**< Unique kernel identifier (== base_address) */
-  std::string kernel_name_;                 /**< Stable kernel name kept alive for API returns */
+  const char* kernel_name_ = nullptr;       /**< PTI-owned kernel name valid until teardown */
   size_t reason_count = 0;                  /**< Number of persisted stall reasons */
   size_t instruction_count = 0;             /**< Number of persisted instructions */
   std::vector<uint64_t> aggregated_samples; /**< In-memory aggregated samples per stall reason */

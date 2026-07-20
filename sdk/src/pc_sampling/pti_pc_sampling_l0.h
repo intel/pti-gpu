@@ -28,7 +28,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -38,12 +40,9 @@
 
 namespace pti::pc_sampling {
 
-constexpr size_t kMinMetricStreamerReadSize = 4 * 1024;
-/** Name of the EU Stall Sampling metric group used for PC sampling */
-constexpr const char* kPcSamplingMetricGroupName = "EuStallSampling";
-constexpr const char* kInstructionPointerMetricName = "IP";
-
 inline void DestroyMetricStreamerContext(ze_context_handle_t* context);
+
+using StallMetricNameList = std::vector<std::pair<std::string, std::string>>;
 
 struct MetricStreamerHandles {
   MetricStreamerHandles() = default;
@@ -145,6 +144,8 @@ inline bool CreateNotificationEvent(ze_context_handle_t context, ze_event_pool_h
  * @return Metric group handle if found, nullptr otherwise
  */
 inline zet_metric_group_handle_t FindEUStallMetricGroupHandle(ze_device_handle_t device) {
+  constexpr std::string_view kEuStallSamplingMetricGroupName = "EuStallSampling";
+
   std::vector<zet_metric_group_handle_t> group_list;
   ::utils::ze::FindMetricGroups(device, group_list);
 
@@ -153,7 +154,7 @@ inline zet_metric_group_handle_t FindEUStallMetricGroupHandle(ze_device_handle_t
     return nullptr;
   }
 
-  // Search for the EuStallSampling metric group with time-based sampling
+  // Search for the metric group with time-based sampling
   for (zet_metric_group_handle_t group : group_list) {
     zet_metric_group_properties_t group_props{};
     group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
@@ -165,12 +166,18 @@ inline zet_metric_group_handle_t FindEUStallMetricGroupHandle(ze_device_handle_t
       return nullptr;
     }
 
-    // Check for EuStallSampling with time-based sampling support
-    if (std::string(group_props.name) == kPcSamplingMetricGroupName &&
+    // Check for metric group with time-based sampling support
+    if (std::string_view(group_props.name) == kEuStallSamplingMetricGroupName &&
         (group_props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_TIME_BASED)) {
+      SPDLOG_INFO("{}: Found {} metric group for device: {}", __FUNCTION__,
+                  kEuStallSamplingMetricGroupName, static_cast<const void*>(device));
       return group;
     }
   }
+
+  SPDLOG_WARN(
+      "{}: {} metric group not found for device, cannot support PC sampling for the device: {}",
+      __FUNCTION__, kEuStallSamplingMetricGroupName, static_cast<const void*>(device));
 
   return nullptr;
 }
@@ -206,7 +213,9 @@ inline void DestroyMetricStreamerContext(ze_context_handle_t* context) {
 
 inline bool OpenMetricStreamer(ze_context_handle_t context, ze_device_handle_t device,
                                zet_metric_group_handle_t metric_group, uint32_t sampling_period_ns,
-                               uint32_t notify_every_n_reports, MetricStreamerHandles* handles) {
+                               MetricStreamerHandles* handles) {
+  constexpr uint32_t kDefaultNotifyEveryNReports = 32'768;
+
   if (handles == nullptr) {
     return false;
   }
@@ -225,7 +234,7 @@ inline bool OpenMetricStreamer(ze_context_handle_t context, ze_device_handle_t d
   }
 
   zet_metric_streamer_desc_t streamerDesc{ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr,
-                                          notify_every_n_reports, sampling_period_ns};
+                                          kDefaultNotifyEveryNReports, sampling_period_ns};
   status = zetMetricStreamerOpen(context, device, metric_group, &streamerDesc, handles->event,
                                  &handles->streamer);
   if (status != ZE_RESULT_SUCCESS) {
@@ -317,6 +326,8 @@ inline void WaitForMetricStreamerReport(ze_event_handle_t event, uint64_t timeou
 inline void ReadMetricStreamerData(zet_metric_streamer_handle_t streamer,
                                    std::vector<uint8_t>* local_buffer,
                                    TempRawDataFile* raw_data_file, bool* samples_dropped) {
+  constexpr size_t kMinMetricStreamerReadSize = 4 * 1024;
+
   if (streamer == nullptr || local_buffer == nullptr || raw_data_file == nullptr ||
       samples_dropped == nullptr || !raw_data_file->IsOpen()) {
     return;
@@ -360,31 +371,25 @@ inline void ReadMetricStreamerData(zet_metric_streamer_handle_t streamer,
 }
 
 /**
- * @brief Get the stall-reason metrics from a metric group and report the IP metric index.
+ * @brief Enumerate EU stall metric to collect stall names and IP metric index.
  *
- * Enumerates all metrics within the given metric group, finds the IP metric,
- * and returns the remaining metrics as stall reasons in metric-group order.
+ * @param[in] group Metric group handle to query.
  *
- * @param[in] group             Metric group handle to query metrics from
- * @param[out] ip_metric_index  Index of the IP metric within the full metric order
- *
- * @return Vector of pairs where each pair contains (metric_name, metric_description),
- *         empty if the group is invalid or on error
+ * @return Returns the ordered `(metric_name, metric_description)`
+ *         stall-metric list together with the metric-group index of the IP metric.
+ *         Returns an empty pair if enumeration fails or the metric layout is invalid.
  */
-inline std::vector<std::pair<std::string, std::string>> GetAllSupportedStallMetricNames(
-    zet_metric_group_handle_t group, size_t* ip_metric_index) {
-  std::vector<std::pair<std::string, std::string>> metric_names;
-  if (ip_metric_index == nullptr) {
-    return metric_names;
-  }
+inline std::pair<StallMetricNameList, size_t> GetAllSupportedStallMetricNames(
+    zet_metric_group_handle_t group) {
+  size_t ip_metric_index = 0;
+  bool has_ip_metric = false;
 
-  *ip_metric_index = 0;
   uint32_t metric_count = 0;
   ze_result_t status = zetMetricGet(group, &metric_count, nullptr);
   if (status != ZE_RESULT_SUCCESS || metric_count == 0) {
     SPDLOG_ERROR("{}: zetMetricGet failed to get metric count, status: {:#x}, metric_count: {}",
                  __FUNCTION__, static_cast<uint32_t>(status), metric_count);
-    return metric_names;
+    return {};
   }
 
   std::vector<zet_metric_handle_t> metric_list(metric_count, nullptr);
@@ -392,11 +397,11 @@ inline std::vector<std::pair<std::string, std::string>> GetAllSupportedStallMetr
   if (status != ZE_RESULT_SUCCESS) {
     SPDLOG_ERROR("{}: zetMetricGet failed to get metrics, status: {:#x}", __FUNCTION__,
                  static_cast<uint32_t>(status));
-    return metric_names;
+    return {};
   }
 
+  StallMetricNameList metric_names;
   SPDLOG_DEBUG("{}: enumerating {} metrics from EuStallSampling group", __FUNCTION__, metric_count);
-  *ip_metric_index = metric_count;
   for (uint32_t metric_index = 0; metric_index < metric_count; ++metric_index) {
     auto metric = metric_list[metric_index];
     zet_metric_properties_t metric_props{};
@@ -406,21 +411,31 @@ inline std::vector<std::pair<std::string, std::string>> GetAllSupportedStallMetr
     if (status != ZE_RESULT_SUCCESS) {
       SPDLOG_ERROR("{}: zetMetricGetProperties failed, status: {:#x}", __FUNCTION__,
                    static_cast<uint32_t>(status));
-      continue;
+      return {};
     }
     SPDLOG_DEBUG("{}: metric name='{}', description='{}', units='{}', metric_type={}", __FUNCTION__,
                  metric_props.name, metric_props.description, metric_props.resultUnits,
                  static_cast<uint32_t>(metric_props.metricType));
 
-    if (std::string(metric_props.name) == kInstructionPointerMetricName) {
-      *ip_metric_index = metric_index;
+    if (metric_props.metricType == ZET_METRIC_TYPE_IP) {
+      if (has_ip_metric) {
+        SPDLOG_ERROR(
+            "{}: expected exactly one IP metric in EU stall sampling group, found another one "
+            "at index {} (previously found at index {})",
+            __FUNCTION__, metric_index, ip_metric_index);
+        return {};
+      }
+      ip_metric_index = metric_index;
+      has_ip_metric = true;
       continue;
     }
 
     if (metric_props.metricType != ZET_METRIC_TYPE_EVENT) {
-      SPDLOG_DEBUG("{}: skipping metric '{}' because metric_type={} is not EVENT", __FUNCTION__,
-                   metric_props.name, static_cast<uint32_t>(metric_props.metricType));
-      continue;
+      SPDLOG_ERROR(
+          "{}: metric '{}' has unsupported metric_type={} in EuStallSampling; expected one IP "
+          "metric and EVENT stall metrics only",
+          __FUNCTION__, metric_props.name, static_cast<uint32_t>(metric_props.metricType));
+      return {};
     }
 
     metric_names.emplace_back(metric_props.name, metric_props.description);
@@ -428,12 +443,12 @@ inline std::vector<std::pair<std::string, std::string>> GetAllSupportedStallMetr
 
   SPDLOG_DEBUG("{}: returning {} stall metrics after filtering", __FUNCTION__, metric_names.size());
 
-  if (*ip_metric_index >= metric_count) {
+  if (!has_ip_metric) {
     SPDLOG_ERROR("{}: failed to locate IP metric in EU stall sampling group", __FUNCTION__);
-    metric_names.clear();
+    return {};
   }
 
-  return metric_names;
+  return {metric_names, ip_metric_index};
 }
 
 }  // namespace pti::pc_sampling

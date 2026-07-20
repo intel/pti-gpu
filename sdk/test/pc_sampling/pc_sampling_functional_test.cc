@@ -327,6 +327,8 @@ TEST_F(PcSamplingTest, AggregatesPerKernelAndPerInstructionData) {
 
   uint64_t device_total_pc_count = 0;
   uint64_t summed_kernel_samples = 0;
+  std::vector<const char*> returned_kernel_names;
+  std::vector<std::string> expected_kernel_names;
   for (uint64_t kernel_handle : kernel_handles) {
     pti_pc_sampling_kernel_info_t kernel_info{};
     kernel_info._struct_size = sizeof(kernel_info);
@@ -336,7 +338,31 @@ TEST_F(PcSamplingTest, AggregatesPerKernelAndPerInstructionData) {
               PTI_SUCCESS);
     EXPECT_EQ(kernel_info._device, device);
     EXPECT_EQ(kernel_info._kernel_handle, kernel_handle);
-    EXPECT_NE(kernel_info._kernel_name, nullptr);
+    EXPECT_NE(kernel_info._kernel_name, nullptr)
+        << "Kernel name is null for kernel handle: " << kernel_handle;
+
+    // Kernel name must end with the expected suffix and must be demangled.
+    const std::string kernel_name = kernel_info._kernel_name;
+    EXPECT_FALSE(kernel_name.empty())
+        << "Kernel name is empty for kernel handle: " << kernel_handle;
+
+    // TODO(PTI-358): Figure out if demangling can be supported on Windows.
+#if !defined(_WIN32)
+    constexpr char kExpectedKernelName[] = "PcSamplingCollectionKernel";
+    constexpr size_t expected_kernel_name_length = sizeof(kExpectedKernelName) - 1;
+    ASSERT_GE(kernel_name.size(), expected_kernel_name_length)
+        << "Kernel name is shorter than expected suffix: " << kernel_name;
+    const size_t expected_kernel_name_offset = kernel_name.size() - expected_kernel_name_length;
+    const int suffix_compare_result = kernel_name.compare(
+        expected_kernel_name_offset, expected_kernel_name_length, kExpectedKernelName);
+    EXPECT_EQ(suffix_compare_result, 0)
+        << "Kernel name does not end with expected suffix: " << kernel_name;
+    EXPECT_NE(kernel_name.rfind("_Z", 0), 0u) << "Kernel name is not demangled: " << kernel_name;
+#endif
+
+    returned_kernel_names.push_back(kernel_info._kernel_name);
+    expected_kernel_names.push_back(kernel_name);
+
     EXPECT_EQ(kernel_info._reason_count, reason_count);
     EXPECT_GT(kernel_info._instructions_with_samples_count, 0u);
 
@@ -382,6 +408,15 @@ TEST_F(PcSamplingTest, AggregatesPerKernelAndPerInstructionData) {
   EXPECT_EQ(device_total_pc_count, device_status._total_pc_count);
 
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+
+  ASSERT_EQ(returned_kernel_names.size(), expected_kernel_names.size());
+  for (size_t index = 0; index < returned_kernel_names.size(); ++index) {
+    ASSERT_NE(returned_kernel_names[index], nullptr)
+        << "Kernel name at index " << index << " is null after ptiPcSamplingDisable";
+    EXPECT_STREQ(returned_kernel_names[index], expected_kernel_names[index].c_str())
+        << "Kernel name at index " << index
+        << " does not match expected after ptiPcSamplingDisable";
+  }
 }
 
 TEST_F(PcSamplingTest, DistinctKernelsEachExposeStallReasonData) {

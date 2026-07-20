@@ -112,3 +112,7 @@ TEST(PcSamplingBasicTest, TempRawDataFileReadRangeReadsRequestedSlice) {
   EXPECT_FALSE(raw_data.ReadRange(full.size() - 1, 2, slice.data()));
   EXPECT_FALSE(raw_data.ReadRange(0, 1, nullptr));
 }
+
+TEST(PcSamplingBasicTest, ResolveKernelNameReturnsUnknownForNullHandle) {
+  EXPECT_STREQ(pti::pc_sampling::ResolveKernelName(nullptr), "<unknown>");
+}

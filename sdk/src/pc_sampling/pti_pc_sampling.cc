@@ -11,22 +11,6 @@
 #include "pc_sampling/pti_pc_sampling_collector.h"
 #include "pc_sampling/pti_pc_sampling_internal.h"
 
-namespace pti::pc_sampling {
-
-void ResetCollectionSession(pti_pc_sampling_handle_t handle) {
-  if (handle == nullptr) {
-    return;
-  }
-
-  ClearProfiledDeviceData(handle);
-  handle->collector.reset();
-  handle->collected_metric_group_ = nullptr;
-  handle->collected_raw_data_.Reset();
-  handle->samples_dropped_ = false;
-}
-
-}  // namespace pti::pc_sampling
-
 pti_result ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle) {
   return pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().Create(handle);
 }
@@ -34,6 +18,8 @@ pti_result ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle) {
 pti_result ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
                                   const pti_device_handle_t* devices, size_t device_count,
                                   uint32_t sampling_period_ns) {
+  constexpr size_t kMaxProfiledDevicesPerSession = 1;
+
   const pti_result handle_status = pti::pc_sampling::ValidateHandle(handle);
   if (handle_status != PTI_SUCCESS) {
     return handle_status;
@@ -66,7 +52,7 @@ pti_result ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
       return PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED;
     }
     const size_t devices_to_copy =
-        (std::min)(supported_devices.size(), pti::pc_sampling::kMaxConfiguredDevices);
+        (std::min)(supported_devices.size(), kMaxProfiledDevicesPerSession);
     handle->configured_devices_.reserve(devices_to_copy);
     std::copy_n(supported_devices.begin(), devices_to_copy,
                 std::back_inserter(handle->configured_devices_));
@@ -74,7 +60,7 @@ pti_result ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
     for (size_t i = 0; i < device_count; ++i) {
       if (pti::pc_sampling::IsPCSamplingSupportedDevice(devices[i])) {
         handle->configured_devices_.push_back(devices[i]);
-        if (handle->configured_devices_.size() >= pti::pc_sampling::kMaxConfiguredDevices) {
+        if (handle->configured_devices_.size() >= kMaxProfiledDevicesPerSession) {
           break;
         }
       } else {
@@ -109,7 +95,7 @@ pti_result ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle) {
     return configured_status;
   }
 
-  pti::pc_sampling::ResetCollectionSession(handle);
+  pti::pc_sampling::ClearProfiledDeviceData(handle);
 
   pti_device_handle_t profiling_device = nullptr;
   const pti_result configured_device_status =
@@ -140,7 +126,7 @@ pti_result ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle) {
 
   const pti_result start_status = handle->collector->Start(handle->sampling_period_ns_);
   if (start_status != PTI_SUCCESS) {
-    pti::pc_sampling::ResetCollectionSession(handle);
+    pti::pc_sampling::ClearProfiledDeviceData(handle);
     return start_status;
   }
 
@@ -379,7 +365,7 @@ pti_result ptiPcSamplingDisable(pti_pc_sampling_handle_t handle) {
     }
   }
 
-  pti::pc_sampling::ResetCollectionSession(handle);
+  pti::pc_sampling::ClearProfiledDeviceData(handle);
 
   return pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().Destroy(handle);
 }

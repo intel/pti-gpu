@@ -62,16 +62,31 @@ std::vector<std::pair<std::string, std::string>> GetExpectedStallReasonsFromL0(
 
     std::vector<std::pair<std::string, std::string>> metric_names;
     metric_names.reserve(metric_count);
+    bool found_ip_metric = false;
     for (const auto metric : metrics) {
       zet_metric_properties_t metric_props{};
       metric_props.stype = ZET_STRUCTURE_TYPE_METRIC_PROPERTIES;
       if (zetMetricGetProperties(metric, &metric_props) != ZE_RESULT_SUCCESS) {
+        return {};
+      }
+
+      if (metric_props.metricType == ZET_METRIC_TYPE_IP) {
+        if (found_ip_metric) {
+          return {};
+        }
+        found_ip_metric = true;
         continue;
       }
 
-      if (metric_props.metricType == ZET_METRIC_TYPE_EVENT) {
-        metric_names.emplace_back(metric_props.name, metric_props.description);
+      if (metric_props.metricType != ZET_METRIC_TYPE_EVENT) {
+        return {};
       }
+
+      metric_names.emplace_back(metric_props.name, metric_props.description);
+    }
+
+    if (!found_ip_metric) {
+      return {};
     }
 
     return metric_names;

@@ -15,14 +15,6 @@
 
 #include "pc_sampling/pti_pc_sampling_internal.h"
 
-namespace {
-
-constexpr uint32_t kDefaultNotifyEveryNReports = 32'768;
-constexpr uint64_t kMetricStreamerEventWaitTimeoutNs = 50'000'000;
-constexpr auto kMetricStreamerStartTimeout = std::chrono::seconds(5);
-
-}  // namespace
-
 namespace pti::pc_sampling {
 
 PtiPcSamplingDataCollector::PtiPcSamplingDataCollector(pti_device_handle_t device,
@@ -37,6 +29,8 @@ PtiPcSamplingDataCollector::PtiPcSamplingDataCollector(pti_device_handle_t devic
       samples_dropped_(samples_dropped) {}
 
 pti_result PtiPcSamplingDataCollector::Start(uint32_t sampling_period_ns) {
+  constexpr auto kStartTimeout = std::chrono::seconds(5);
+
   const auto cleanup_start_failure = [this] {
     raw_data_.Reset();
     handles_.Reset();
@@ -65,7 +59,7 @@ pti_result PtiPcSamplingDataCollector::Start(uint32_t sampling_period_ns) {
 
   {
     std::unique_lock<std::mutex> cv_lock(start_cv_mutex_);
-    const bool signaled = start_cv_.wait_for(cv_lock, kMetricStreamerStartTimeout, [this] {
+    const bool signaled = start_cv_.wait_for(cv_lock, kStartTimeout, [this] {
       return state_.load(std::memory_order_acquire) != State::kStarting;
     });
 
@@ -115,16 +109,17 @@ pti_result PtiPcSamplingDataCollector::Stop() {
 }
 
 void PtiPcSamplingDataCollector::StreamerThread(uint32_t sampling_period_ns) {
+  constexpr uint64_t kEventWaitTimeoutNs = 50'000'000;
+
   if (state_.load(std::memory_order_acquire) != State::kStarting || handles_.context == nullptr) {
     state_.store(State::kError, std::memory_order_release);
     start_cv_.notify_one();
     return;
   }
 
-  if (!OpenMetricStreamer(handles_.context, reinterpret_cast<ze_device_handle_t>(device_),
-                          metric_group_,
-                          sampling_period_ns == 0 ? kDefaultSamplingPeriodNs : sampling_period_ns,
-                          kDefaultNotifyEveryNReports, &handles_)) {
+  if (!OpenMetricStreamer(
+          handles_.context, reinterpret_cast<ze_device_handle_t>(device_), metric_group_,
+          sampling_period_ns == 0 ? kDefaultSamplingPeriodNs : sampling_period_ns, &handles_)) {
     state_.store(State::kError, std::memory_order_release);
     start_cv_.notify_one();
     return;
@@ -135,7 +130,7 @@ void PtiPcSamplingDataCollector::StreamerThread(uint32_t sampling_period_ns) {
 
   std::vector<uint8_t> local_buffer;
   while (state_.load(std::memory_order_acquire) != State::kStopRequested) {
-    WaitForMetricStreamerReport(handles_.event, kMetricStreamerEventWaitTimeoutNs);
+    WaitForMetricStreamerReport(handles_.event, kEventWaitTimeoutNs);
     ReadMetricStreamerData(handles_.streamer, &local_buffer, &raw_data_, &samples_dropped_);
   }
 }

@@ -26,6 +26,7 @@
 #include <limits>
 #include <memory>
 #include <new>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -43,18 +44,11 @@
 
 namespace pti::pc_sampling {
 
-constexpr uint64_t kInstructionPointerAddressMask = 0xFFFFFFFFull;
-constexpr size_t kInvalidMetricIndex = (std::numeric_limits<size_t>::max)();
-
 //-----------------------------------------------------------------------------
 // Constants
 //-----------------------------------------------------------------------------
 
-/** Default sampling period in nanoseconds (100 µs) */
 constexpr uint32_t kDefaultSamplingPeriodNs = 100'000;
-
-/** Maximum number of devices that can be configured for PC sampling */
-constexpr size_t kMaxConfiguredDevices = 1;
 
 //-----------------------------------------------------------------------------
 // Enumerations
@@ -90,7 +84,7 @@ class PtiPcSamplingDataCollector;
 struct KernelBinaryInfo {
   uint64_t kernel_base_address_ = 0;             /**< Base address of kernel in device memory */
   size_t kernel_binary_size_ = 0;                /**< Size of the kernel binary in bytes */
-  std::string kernel_name_;                      /**< Name of the kernel (owned copy) */
+  const char* kernel_name_ = nullptr;            /**< PTI-owned name valid until teardown */
   pti_backend_kernel_t kernel_handle_ = nullptr; /**< Device kernel handle */
   pti_backend_module_t module_handle_ = nullptr; /**< Module handle containing this kernel */
   pti_device_handle_t device_handle_ = nullptr; /**< Device handle this kernel is associated with */
@@ -121,6 +115,35 @@ inline const char* PcSamplingStateToString(PcSamplingState state) {
       return "FORCE_UINT32";
   }
   return "UNKNOWN";
+}
+
+/**
+ * @brief Convert an EuStallSampling IP value into a byte address.
+ *
+ * EuStallSampling reports instruction pointers as 29 or 61 bit values.
+ * They need to be shifted by 3 to align with kernel base address.
+ * See e.g.:
+ * https://github.com/intel/compute-runtime/blob/master/level_zero/core/source/gfx_core_helpers/l0_gfx_core_helper_xe2_hpg_xe3.inl
+ */
+inline uint64_t NormalizeInstructionPointer(uint64_t instruction_pointer) {
+  constexpr uint32_t kEuStallSamplingIpShift = 3;
+  return (instruction_pointer << kEuStallSamplingIpShift);
+}
+
+/**
+ * @brief Normalize a kernel base address into the EuStallSampling address domain.
+ *
+ * Kernel addresses returned by zexKernelGetBaseAddress may be 64-bit, while EuStallSampling reports
+ * IPs in 29 or 61 bits. This function uses the device IP version to determine whether to truncate
+ * the kernel base address to 32 bits for comparison with sampled IPs. See e.g.:
+ * https://github.com/intel/compute-runtime/blob/master/shared/source/xe2_hpg_core/hw_info_bmg.cpp
+ *
+ * TODO: Make a proper check for the device IP version to determine if truncation is needed. For
+ * now, we assume that if the device IP version is less than 7.0, we truncate to 32 bits.
+ */
+inline uint64_t NormalizeKernelAddress(uint64_t kernel_address) {
+  constexpr uint64_t kInstructionPointerAddressMask = 0xFFFFFFFFull;
+  return kernel_address & kInstructionPointerAddressMask;
 }
 
 }  // namespace pti::pc_sampling
@@ -156,7 +179,7 @@ struct _pti_pc_sampling_handle_t {
   // Stall reasons in metric-group order, pooled so the pointers stay alive for
   // the API caller. Size is the stall-reason count (IP metric excluded).
   std::vector<std::pair<const char*, const char*>> stall_reasons_;
-  size_t ip_metric_index_ = pti::pc_sampling::kInvalidMetricIndex;
+  std::optional<size_t> ip_metric_index_;
 };
 
 namespace pti::pc_sampling {
@@ -166,10 +189,14 @@ inline void ClearProfiledDeviceData(pti_pc_sampling_handle_t handle) {
     return;
   }
 
+  handle->collected_metric_group_ = nullptr;
+  handle->collected_raw_data_.Reset();
+  handle->samples_dropped_ = false;
+  handle->collector.reset();
+  handle->aggregated_ = false;
   handle->device_aggregate_.Clear();
   handle->stall_reasons_.clear();
-  handle->ip_metric_index_ = pti::pc_sampling::kInvalidMetricIndex;
-  handle->aggregated_ = false;
+  handle->ip_metric_index_.reset();
 }
 
 inline pti_result GetConfiguredDevice(const pti_pc_sampling_handle_t handle,
@@ -188,9 +215,29 @@ inline pti_result GetConfiguredDevice(const pti_pc_sampling_handle_t handle,
   return PTI_SUCCESS;
 }
 
-pti_result EnsureStallReasons(pti_pc_sampling_handle_t handle);
-pti_result EnsureAggregatedResults(pti_pc_sampling_handle_t handle);
-void ResetCollectionSession(pti_pc_sampling_handle_t handle);
+inline StringPool& GetPcSamplingStringPool() {
+  static StringPool string_pool;
+  return string_pool;
+}
+
+inline const char* ResolveKernelName(ze_kernel_handle_t kernel_handle) {
+  static constexpr char kUnknownKernelName[] = "<unknown>";
+
+  if (kernel_handle == nullptr) {
+    SPDLOG_ERROR("{}: kernel_handle is null, returning {}", __FUNCTION__, kUnknownKernelName);
+    return kUnknownKernelName;
+  }
+
+  std::string demangled_name = ::utils::ze::GetKernelName(kernel_handle, true);
+
+  if (demangled_name.empty()) {
+    SPDLOG_WARN("{}: failed to resolve kernel name, returning {}", __FUNCTION__,
+                kUnknownKernelName);
+    return kUnknownKernelName;
+  }
+
+  return GetPcSamplingStringPool().Get(demangled_name);
+}
 
 //-----------------------------------------------------------------------------
 // Kernel Info Storage (Thread-Safe)
@@ -314,14 +361,14 @@ inline void KernelCreatedCallback(pti_callback_domain domain, pti_api_group_id /
   kernel_info.kernel_handle_ = data->_device_kernel_handle;
   kernel_info.module_handle_ = data->_module_handle;
   kernel_info.device_handle_ = data->_device_handle;
-  kernel_info.kernel_name_ = data->_name ? data->_name : "<unknown>";
+  const auto kernel_handle = reinterpret_cast<ze_kernel_handle_t>(data->_device_kernel_handle);
+  kernel_info.kernel_name_ = ResolveKernelName(kernel_handle);
 
   SPDLOG_DEBUG("{}: kernel created - handle: {}, name: {}, module: {}, device: {}", __FUNCTION__,
                static_cast<void*>(data->_device_kernel_handle), kernel_info.kernel_name_,
                static_cast<void*>(data->_module_handle), static_cast<void*>(data->_device_handle));
 
   // Query kernel base address using extension function
-  auto kernel_handle = reinterpret_cast<ze_kernel_handle_t>(data->_device_kernel_handle);
   if (kernel_handle != nullptr) {
     using ZexKernelGetBaseAddressFn = ze_result_t (*)(ze_kernel_handle_t, uint64_t*);
 
@@ -352,7 +399,7 @@ inline void KernelCreatedCallback(pti_callback_domain domain, pti_api_group_id /
         SPDLOG_WARN("{}: zexKernelGetBaseAddress failed with status {:#x}", __FUNCTION__,
                     static_cast<uint32_t>(status));
       } else {
-        kernel_info.kernel_base_address_ = base_address & kInstructionPointerAddressMask;
+        kernel_info.kernel_base_address_ = NormalizeKernelAddress(base_address);
         SPDLOG_DEBUG("{}: kernel base address {:#x} for '{}'", __FUNCTION__, base_address,
                      kernel_info.kernel_name_);
       }
@@ -471,8 +518,6 @@ class PtiPcSamplingHandleStorage {
         supported_device_metric_group_map.emplace(reinterpret_cast<pti_device_handle_t>(device),
                                                   metric_group);
         supported_devices_ordered.push_back(reinterpret_cast<pti_device_handle_t>(device));
-        SPDLOG_INFO("{}: device {} supports {}", __FUNCTION__, props.name,
-                    kPcSamplingMetricGroupName);
       }
     }
 
@@ -659,30 +704,12 @@ inline std::vector<pti_device_handle_t> GetAllDevices() {
   return PtiPcSamplingHandleStorage::Instance().GetSupportedDevices();
 }
 
-class StringCache {
- public:
-  static StringCache& Instance() {
-    static StringCache cache;
-    return cache;
-  }
-
-  const char* Get(const std::string& value) { return string_pool_.Get(value); }
-
- private:
-  StringCache() = default;
-  ~StringCache() = default;
-  StringCache(const StringCache&) = delete;
-  StringCache& operator=(const StringCache&) = delete;
-
-  StringPool string_pool_;
-};
-
 inline pti_result EnsureStallReasons(pti_pc_sampling_handle_t handle) {
   if (handle == nullptr) {
     return PTI_ERROR_BAD_ARGUMENT;
   }
 
-  if (handle->ip_metric_index_ != pti::pc_sampling::kInvalidMetricIndex) {
+  if (handle->ip_metric_index_.has_value()) {
     return PTI_SUCCESS;
   }
 
@@ -700,11 +727,9 @@ inline pti_result EnsureStallReasons(pti_pc_sampling_handle_t handle) {
     return PTI_SUCCESS;
   }
 
-  size_t ip_metric_index = pti::pc_sampling::kInvalidMetricIndex;
-  std::vector<std::pair<std::string, std::string>> metric_names =
-      GetAllSupportedStallMetricNames(metric_group, &ip_metric_index);
+  auto [metric_names, ip_metric_index] = GetAllSupportedStallMetricNames(metric_group);
   if (metric_names.empty()) {
-    handle->ip_metric_index_ = pti::pc_sampling::kInvalidMetricIndex;
+    handle->ip_metric_index_.reset();
     handle->stall_reasons_.clear();
     SPDLOG_ERROR("{}: failed to collect metric names", __FUNCTION__);
     return PTI_ERROR_INTERNAL;
@@ -713,8 +738,8 @@ inline pti_result EnsureStallReasons(pti_pc_sampling_handle_t handle) {
   std::vector<std::pair<const char*, const char*>> stall_reasons;
   stall_reasons.reserve(metric_names.size());
   for (const auto& [name, description] : metric_names) {
-    stall_reasons.emplace_back(StringCache::Instance().Get(name),
-                               StringCache::Instance().Get(description));
+    stall_reasons.emplace_back(GetPcSamplingStringPool().Get(name),
+                               GetPcSamplingStringPool().Get(description));
   }
 
   handle->stall_reasons_ = std::move(stall_reasons);
@@ -744,7 +769,7 @@ inline pti_result EnsureAggregatedResults(pti_pc_sampling_handle_t handle) {
   const size_t reason_count = handle->stall_reasons_.size();
   const pti_result aggregate_status = AggregateCollectedData(
       configured_device, metric_group, handle->samples_dropped_, handle->collected_raw_data_,
-      handle->ip_metric_index_, reason_count, &handle->device_aggregate_);
+      *handle->ip_metric_index_, reason_count, &handle->device_aggregate_);
   if (aggregate_status != PTI_SUCCESS) {
     return aggregate_status;
   }
@@ -902,7 +927,7 @@ inline pti_result FillObservedKernelInfo(pti_device_handle_t device,
 
   kernel_info->_device = device;
   kernel_info->_kernel_handle = kernel_aggregate->kernel_handle;
-  kernel_info->_kernel_name = kernel_aggregate->kernel_name_.c_str();
+  kernel_info->_kernel_name = kernel_aggregate->kernel_name_;
   kernel_info->_reason_count = kernel_aggregate->reason_count;
   kernel_info->_instructions_with_samples_count = kernel_aggregate->instruction_count;
 

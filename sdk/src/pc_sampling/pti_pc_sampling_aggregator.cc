@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
-#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -23,16 +22,6 @@
 namespace {
 
 using namespace pti::pc_sampling;
-
-// EuStallSampling reports IP values in 8-byte units. On current Intel GPU
-// drivers the reported address lives in the low 32-bit GPU address space,
-// while zexKernelGetBaseAddress may expose a wider address. Normalize both to
-// the sampled address representation before correlating PCs with kernels.
-inline uint64_t NormalizeInstructionPointer(uint64_t instruction_pointer) {
-  constexpr uint32_t kInstructionPointerAlignmentShift = 3;
-  return (instruction_pointer << kInstructionPointerAlignmentShift) &
-         kInstructionPointerAddressMask;
-}
 
 uint64_t GetMetricValueAsUint64(const zet_typed_value_t& typed_value) {
   switch (typed_value.type) {
@@ -65,7 +54,7 @@ struct AggregationScratch {
 
 struct PendingKernelAggregate {
   uint64_t kernel_handle = 0;
-  std::string kernel_name;
+  const char* kernel_name = nullptr;
   std::vector<uint64_t> aggregated_samples;
   std::vector<uint64_t> instruction_offsets;
   std::vector<uint64_t> flattened_samples;
