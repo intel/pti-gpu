@@ -1,12 +1,27 @@
 include("../../build_utils/CMakeLists.txt")
 
 cmake_minimum_required(VERSION 3.22)
+
+# Need to check the build type first as project() can have default build type set,
+# which can be different for different platforms.
+if(NOT DEFINED CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release")
+endif()
+
 project(PTI_Tools_UniTrace C CXX)
 find_package(Python 3.9 COMPONENTS Interpreter REQUIRED)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 SetCompilerFlags()
-SetBuildType()
+
+# Print the configured build type and target bitness. unitrace only supports
+# 64-bit builds, so a 32-bit toolchain fails the configure step.
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  message(STATUS "Bitness: 64 bits")
+else()
+  message(FATAL_ERROR "32-bit mode is not supported")
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
