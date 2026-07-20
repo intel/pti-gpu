@@ -19,11 +19,13 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include "consumer_thread.h"
 #include "default_buffer_callbacks.h"
 #include "pti/pti_view.h"
 #include "pti_api_ids_state_maps.h"
+#include "sycl/sycl_core_apis.h"
 
 #if defined(PTI_TRACE_SYCL)
 #include "sycl_collector.h"
@@ -79,25 +81,6 @@ enum class InternalResult {
   kStatusSuccess = 0,
   kStatusViewNotEnabled = 1,  //!< status due to a pti_view_kind not enabled
 };
-
-inline static constexpr std::array kPtiClassSyclGpuOpsCoreApis{
-    pti_api_id_runtime_sycl::urEnqueueUSMFill_id,
-    pti_api_id_runtime_sycl::urEnqueueUSMFill2D_id,
-    pti_api_id_runtime_sycl::urEnqueueUSMMemcpy_id,
-    pti_api_id_runtime_sycl::urEnqueueUSMMemcpy2D_id,
-    pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id,
-    pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id,
-    pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id,
-    pti_api_id_runtime_sycl::urEnqueueKernelLaunchWithArgsExp_id,
-    pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id,
-    pti_api_id_runtime_sycl::urEnqueueMemBufferRead_id,
-    pti_api_id_runtime_sycl::urEnqueueMemBufferWrite_id,
-    pti_api_id_runtime_sycl::urEnqueueMemBufferCopy_id,
-    pti_api_id_runtime_sycl::urUSMHostAlloc_id,
-    pti_api_id_runtime_sycl::urUSMSharedAlloc_id,
-    pti_api_id_runtime_sycl::urUSMDeviceAlloc_id,
-    pti_api_id_runtime_sycl::urEnqueueCommandBufferExp_id,
-    pti_api_id_runtime_sycl::urEnqueueGraphExp_id};
 
 inline static constexpr std::array kPtiClassLzHostSynchOpApis{
     pti_api_id_driver_levelzero::zeFenceHostSynchronize_id,
@@ -669,16 +652,37 @@ struct PtiViewRecordHandler {
   // Given enable or disable new value; the array of apis in class - class_ops; and the state_map.
   //   -- set the state of the api to the new_value for all apis in the class_ops array.
   template <typename T, size_t N>
-  inline pti_result SetGranularApis(uint32_t new_value, const std::array<T, N>& class_ops,
-                                    std::unordered_map<uint32_t, uint32_t>& state_map) {
-    for (const auto& sycl_ops_id : class_ops) {
-      if (state_map.find(sycl_ops_id) != state_map.end()) {
-        state_map.at(sycl_ops_id) = new_value;
+  inline void SetGranularApis(uint32_t new_value, const std::array<T, N>& class_ops,
+                              std::unordered_map<uint32_t, uint32_t>& state_map,
+                              std::string_view class_name) {
+    for (const auto& id : class_ops) {
+      auto it = state_map.find(id);
+      if (it != state_map.end()) {
+        it->second = new_value;
       } else {
-        return pti_result::PTI_ERROR_BAD_API_ID;
+        SPDLOG_WARN(
+            "SetGranularApis: class '{}' contains api_id {} not defined in the overall API list",
+            class_name, static_cast<uint32_t>(id));
       }
     }
-    return PTI_SUCCESS;
+  }
+
+  // Overload for SyclCoreApi arrays — extracts the id field from each entry.
+  template <size_t N>
+  inline void SetGranularApis(uint32_t new_value, const std::array<SyclCoreApi, N>& class_ops,
+                              std::unordered_map<uint32_t, uint32_t>& state_map,
+                              std::string_view class_name) {
+    for (const auto& entry : class_ops) {
+      const auto id = static_cast<uint32_t>(entry.id);
+      auto it = state_map.find(id);
+      if (it != state_map.end()) {
+        it->second = new_value;
+      } else {
+        SPDLOG_WARN(
+            "SetGranularApis: class '{}' contains api_id {} not defined in the overall API list",
+            class_name, id);
+      }
+    }
   }
 
   // TODO - Assumes only Sycl runtime frontend -- extend this as we add more runtimes.
@@ -689,7 +693,8 @@ struct PtiViewRecordHandler {
     switch (pti_class) {
       case pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE: {
         const std::lock_guard<std::mutex> lock{sycl_set_granularity_map_mtx};
-        SetGranularApis(new_value, kPtiClassSyclGpuOpsCoreApis, pti_api_id_runtime_sycl_state);
+        SetGranularApis(new_value, kSyclCoreApis, pti_api_id_runtime_sycl_state,
+                        "PTI_API_CLASS_GPU_OPERATION_CORE");
         break;
       }
       case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION:  // Does not apply to
@@ -708,12 +713,14 @@ struct PtiViewRecordHandler {
     switch (pti_class) {
       case pti_api_class::PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION: {
         const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
-        SetGranularApis(new_value, kPtiClassLzHostSynchOpApis, pti_api_id_driver_levelzero_state);
+        SetGranularApis(new_value, kPtiClassLzHostSynchOpApis, pti_api_id_driver_levelzero_state,
+                        "PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION");
         break;
       }
       case pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE: {
         const std::lock_guard<std::mutex> lock(levelzero_set_granularity_map_mtx);
-        SetGranularApis(new_value, kPtiClassLzGpuOpsCoreApis, pti_api_id_driver_levelzero_state);
+        SetGranularApis(new_value, kPtiClassLzGpuOpsCoreApis, pti_api_id_driver_levelzero_state,
+                        "PTI_API_CLASS_GPU_OPERATION_CORE");
         break;
       }
       case pti_api_class::PTI_API_CLASS_ALL:

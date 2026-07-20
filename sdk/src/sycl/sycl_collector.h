@@ -25,6 +25,7 @@
 #include "platform_strings.h"
 #include "pti/pti_runtime_sycl_api_ids.h"
 #include "pti_api_ids_state_maps.h"
+#include "sycl_core_apis.h"
 #include "unikernel.h"
 #include "utils.h"
 
@@ -56,32 +57,6 @@ inline constexpr static std::array<const char* const, 13> kSTraceType = {
     "TaskBegin",           "TaskEnd",     "Signal",    "NodeCreate", "FunctionWithArgsBegin",
     "FunctionWithArgsEnd", "Metadata",    "WaitBegin", "WaitEnd",    "FunctionBegin",
     "FunctionEnd",         "QueueCreate", "Other"};
-
-enum class ApiType { kInvalid = 0, kKernel = 1, kMemory = 2, kGraph = 3 };
-
-inline static const std::unordered_map<pti_api_id_runtime_sycl, ApiType> kCoreApis = {
-    {pti_api_id_runtime_sycl::urEnqueueUSMFill_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urEnqueueUSMFill2D_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urEnqueueUSMMemcpy_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urEnqueueUSMMemcpy2D_id, ApiType::kMemory},
-
-    {pti_api_id_runtime_sycl::urEnqueueKernelLaunch_id, ApiType::kKernel},
-    // two APIs below removed in 2025.3+ compiler runtime,
-    // but we keep them around for the case when someone runs with earlier runtime
-    {pti_api_id_runtime_sycl::urEnqueueKernelLaunchCustomExp_id, ApiType::kKernel},
-    {pti_api_id_runtime_sycl::urEnqueueCooperativeKernelLaunchExp_id, ApiType::kKernel},
-
-    {pti_api_id_runtime_sycl::urEnqueueKernelLaunchWithArgsExp_id, ApiType::kKernel},
-
-    {pti_api_id_runtime_sycl::urEnqueueMemBufferFill_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urEnqueueMemBufferRead_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urEnqueueMemBufferWrite_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urEnqueueMemBufferCopy_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urUSMHostAlloc_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urUSMSharedAlloc_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urUSMDeviceAlloc_id, ApiType::kMemory},
-    {pti_api_id_runtime_sycl::urEnqueueCommandBufferExp_id, ApiType::kGraph},
-    {pti_api_id_runtime_sycl::urEnqueueGraphExp_id, ApiType::kGraph}};
 
 inline const char* GetTracePointTypeString(xpti::trace_point_type_t trace_type) {
   switch (trace_type) {
@@ -120,11 +95,6 @@ inline std::string Truncate(const std::string& name) {
     return name.substr(pos + 1);
   }
   return name;
-}
-
-inline ApiType GetApiType(const pti_api_id_runtime_sycl api_id) noexcept {
-  const auto it = kCoreApis.find(api_id);
-  return (it != kCoreApis.end()) ? it->second : ApiType::kInvalid;
 }
 
 // Metadata key classification enum and cache
