@@ -33,7 +33,8 @@ struct CollectorOptions {
       unsigned int chrome_call_logging : 1;
       unsigned int chrome_kernel_logging : 1;
       unsigned int chrome_device_logging : 1;
-      unsigned int chrome_sycl_logging : 1;
+      unsigned int chrome_syclrt_logging : 1;
+      unsigned int chrome_ur_logging : 1;
       unsigned int chrome_itt_logging : 1;
       unsigned int chrome_no_thread_on_device : 1;
       unsigned int chrome_no_engine_on_device : 1;

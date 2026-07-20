@@ -9,6 +9,7 @@
 
 #include "unicontrol.h"
 #include "unievent.h"
+#include "utils.h"
 #include "xpti/xpti_trace_framework.h"
 
 #include <chrono>
@@ -74,12 +75,26 @@ static XptiCollector *xpti_collector = nullptr;
 XPTI_CALLBACK_API void tpCallback(uint16_t trace_type, xpti::trace_event_data_t *parent, xpti::trace_event_data_t *event, uint64_t instance, const void *user_data);
 
 void xptiTraceInit(unsigned int /* major_version */, unsigned int /* minor_version */, const char * /* version_str */, const char *stream_name) {
-  if ((std::string(stream_name) == "sycl") ||
-      (std::string(stream_name) == "sycl.pi") ||
-      (std::string(stream_name) == "ur.call") ||
-      //(std::string(stream_name) == "sycl.pi.debug") ||
-      (std::string(stream_name) == "sycl.experimental.buffer") ||
-      (std::string(stream_name) == "sycl.experimental.mem_alloc")) {
+  // SYCL runtime and Unified Runtime (UR) tracing are decoupled and controlled
+  // by separate options. The SYCL runtime streams ("sycl", "sycl.pi",
+  // "sycl.experimental.*") are registered only when SYCL runtime logging is
+  // enabled; the Unified Runtime stream ("ur.call") only when UR logging is
+  // enabled. UR is the implementation layer beneath the SYCL runtime.
+  static const bool syclrt_logging =
+      (utils::GetEnv("UNITRACE_ChromeSyclRuntimeLogging") == "1");
+  static const bool ur_logging =
+      (utils::GetEnv("UNITRACE_ChromeUrLogging") == "1");
+
+  std::string stream(stream_name);
+  bool is_syclrt_stream =
+      (stream == "sycl") ||
+      (stream == "sycl.pi") ||
+      //(stream == "sycl.pi.debug") ||
+      (stream == "sycl.experimental.buffer") ||
+      (stream == "sycl.experimental.mem_alloc");
+  bool is_ur_stream = (stream == "ur.call");
+
+  if ((is_syclrt_stream && syclrt_logging) || (is_ur_stream && ur_logging)) {
     uint8_t stream = xptiRegisterStream(stream_name);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::function_begin, tpCallback);
     xptiRegisterCallback(stream, (uint16_t)xpti::trace_point_type_t::function_end, tpCallback);

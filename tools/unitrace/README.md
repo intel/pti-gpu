@@ -156,7 +156,9 @@ The options can be one or more of the following:
 --opencl                                      Trace OpenCL
 --chrome-omp-logging                          Trace OpenMP
 --chrome-mpi-logging                          Trace MPI
---chrome-sycl-logging                         Trace SYCL runtime and plugin
+--chrome-syclrt-logging                       Trace SYCL runtime
+--chrome-ur-logging                           Trace Unified Runtime (implementation layer beneath the SYCL runtime)
+--chrome-sycl-logging                         Trace SYCL runtime and Unified Runtime (same as --chrome-syclrt-logging --chrome-ur-logging)
 --chrome-ccl-logging                          Trace oneCCL
 --chrome-dnn-logging                          Trace oneDNN
 --chrome-call-logging                         Trace Level Zero and/or OpenCL host calls
@@ -431,7 +433,11 @@ The **--chrome-mpi-logging** traces MPI activities
 
 ![MPI Logging!](/tools/unitrace/doc/images/mpi-logging.png)
 
-The **--chrome-sycl-logging** traces SYCL runtime and SYCL Plugins activities
+The **--chrome-syclrt-logging** traces SYCL runtime activities.
+
+The **--chrome-ur-logging** traces Unified Runtime (UR) activities. Unified Runtime is the implementation layer beneath the SYCL runtime (the modern successor to the SYCL Plugin Interface), so this option is primarily useful for Intel GPU software stack developers.
+
+The **--chrome-sycl-logging** traces both SYCL runtime and Unified Runtime activities. It is kept for backward compatibility and is equivalent to passing both **--chrome-syclrt-logging** and **--chrome-ur-logging**.
 
 ![SYCL Logging!](/tools/unitrace/doc/images/sycl-logging.png)
 
@@ -1256,7 +1262,7 @@ The `<output-file>` is in HTML format. It can be loaded and viewd in a browser:
 
 How to make the best use of the tool and to get the most out of it really depends on what you want to do and what part of your code you want to focus on.
 
-If you care about just the host activities, you don't need options for device profiling. If you just want to focus on one specific layer of the software stack, for example, the SYCL runtime, you can use the corresponding layer specific options to enable profiling only the layer of interest, for example, **--chrome-sycl-logging**. Of course, if you need to see interactions between layers, you need to enable profiling multiple layers at the same time.
+If you care about just the host activities, you don't need options for device profiling. If you just want to focus on one specific layer of the software stack, for example, the SYCL runtime, you can use the corresponding layer specific options to enable profiling only the layer of interest, for example, **--chrome-syclrt-logging**. Of course, if you need to see interactions between layers, you need to enable profiling multiple layers at the same time.
 
 Similarly, if you care about just the device activities, you can use the options to turn on device profiling only. By default, device activities are profiled by thread (not GPU thread) and by Level Zero engines and/or OpenCL queues. This gives detailed information of how the device is utilized and if concurrencies between engines/queues match the expectations. In case you don't need the details and care only how the device is utilized in general, you may use **--chrome-no-thread-on-device** and/or **--chrome-no-engine-on-device** to turn one or both off.
 

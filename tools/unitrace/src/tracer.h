@@ -65,7 +65,7 @@ class UniTracer {
 #endif /* BUILD_WITH_OPENCL */
 
 #if BUILD_WITH_XPTI
-    if (options.chrome_sycl_logging) {
+    if (options.chrome_syclrt_logging || options.chrome_ur_logging) {
         xpti_collector = XptiCollector::Create(ChromeLogger::XptiLoggingCallback);
     }
 #endif /* BUILD_WITH_XPTI */
@@ -275,7 +275,8 @@ class UniTracer {
         logger_factory_(LoggerFactory::Create()) {
     start_time_ = utils::GetSystemTime();
     if (options_.chrome_call_logging || options_.chrome_kernel_logging ||
-        options_.chrome_device_logging || options_.chrome_sycl_logging ||
+        options_.chrome_device_logging || options_.chrome_syclrt_logging ||
+        options_.chrome_ur_logging ||
         options_.chrome_itt_logging || options_.chrome_omp_logging) {
       chrome_logger_ = ChromeLogger::Create(logger_factory_->GetAppName().c_str());
     }

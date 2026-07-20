@@ -115,8 +115,16 @@ void Usage(char * progname) {
 #endif /* BUILD_WITH_MPI */
 #if BUILD_WITH_XPTI
   std::cout <<
+    "--chrome-syclrt-logging          " <<
+    "Trace SYCL runtime" <<
+    std::endl;
+  std::cout <<
+    "--chrome-ur-logging              " <<
+    "Trace Unified Runtime (implementation layer beneath the SYCL runtime)" <<
+    std::endl;
+  std::cout <<
     "--chrome-sycl-logging            " <<
-    "Trace SYCL runtime and plugin" <<
+    "Trace SYCL runtime and Unified Runtime (same as --chrome-syclrt-logging --chrome-ur-logging)" <<
     std::endl;
 #endif /* BUILD_WITH_XPTI */
 #if BUILD_WITH_ITT
@@ -384,10 +392,25 @@ int ParseArgs(int argc, char* argv[]) {
       ++app_index;
 #endif /* BUILD_WITH_OMP */
 #if BUILD_WITH_XPTI
-    } else if (strcmp(argv[i], "--chrome-sycl-logging") == 0) {
-      utils::SetEnv("UNITRACE_ChromeSyclLogging", "1");
+    } else if ((strcmp(argv[i], "--chrome-syclrt-logging") == 0) ||
+               (strcmp(argv[i], "--chrome-ur-logging") == 0) ||
+               (strcmp(argv[i], "--chrome-sycl-logging") == 0)) {
+      // SYCL runtime and Unified Runtime (UR) tracing are decoupled:
+      //   --chrome-syclrt-logging  traces the SYCL runtime
+      //   --chrome-ur-logging      traces the Unified Runtime (implementation
+      //                            layer beneath the SYCL runtime)
+      //   --chrome-sycl-logging    kept for backward compatibility; equivalent
+      //                            to passing both of the above
+      if ((strcmp(argv[i], "--chrome-syclrt-logging") == 0) ||
+          (strcmp(argv[i], "--chrome-sycl-logging") == 0)) {
+        utils::SetEnv("UNITRACE_ChromeSyclRuntimeLogging", "1");
+      }
+      if ((strcmp(argv[i], "--chrome-ur-logging") == 0) ||
+          (strcmp(argv[i], "--chrome-sycl-logging") == 0)) {
+        utils::SetEnv("UNITRACE_ChromeUrLogging", "1");
+        utils::SetEnv("UR_ENABLE_LAYERS", "UR_LAYER_TRACING");
+      }
       utils::SetEnv("XPTI_TRACE_ENABLE", "1");
-      utils::SetEnv("UR_ENABLE_LAYERS", "UR_LAYER_TRACING");
 #ifdef _WIN32
       utils::SetEnv("XPTI_SUBSCRIBERS", "unitrace_tool.dll");
       utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "xptifw.dll");

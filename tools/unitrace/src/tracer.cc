@@ -60,9 +60,14 @@ static CollectorOptions ReadArgs() {
     options.opencl = 1;
   }
 
-  value = utils::GetEnv("UNITRACE_ChromeSyclLogging");
+  value = utils::GetEnv("UNITRACE_ChromeSyclRuntimeLogging");
   if (!value.empty() && value == "1") {
-    options.chrome_sycl_logging = 1;
+    options.chrome_syclrt_logging = 1;
+  }
+
+  value = utils::GetEnv("UNITRACE_ChromeUrLogging");
+  if (!value.empty() && value == "1") {
+    options.chrome_ur_logging = 1;
   }
 
   value = utils::GetEnv("UNITRACE_CclSummaryReport");
