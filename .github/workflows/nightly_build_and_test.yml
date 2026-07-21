@@ -119,21 +119,42 @@ jobs:
           cmake --preset linux-fuzz
           cmake --build --preset linux-fuzz --parallel $(($(nproc)/2))
 
-      #
-      # Rocky8 and Red Hat has a problem with this test.
-      #
       - name: Test AddressSanitizer
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
 
+          #
+          # MKLD-20051: debug symbols needed for suppression, only on BMG containers.
+          # N-1=ubuntu-25-10 predates 2026.1, so add main/debug component manually.
+          # Remove these branches when MKLD-20051 is fixed or ubuntu-25-10
+          # is no longer N-1.
+          #
+          if [[ "${{ matrix.tags }}" == *BMG* ]]; then
+            if [[ "${{ matrix.container }}" == *ubuntu-25-10* ]]; then
+              sed -i 's/^Components: main$/Components: main main\/debug/' \
+                /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*.sources
+              apt-get update -qq
+            fi
+            apt-get install -qq -y libze-intel-gpu1-dbgsym libze1-dbgsym libigc2-dbgsym
+          fi
           ctest --preset linux-asan --output-on-failure -L samples
 
       - name: Test ThreadSanitizer
         working-directory: sdk
         run: |
+          #
+          # This is to avoid PTI-450. Remove when resolved.
+          # We could have used TSan suppression, but I fear that
+          # this may be too heavy handed because it will affect all
+          # samples.
+          #
+          TSAN_EXCLUDE=()
+          [[ "${{ matrix.tags }}" == *BMG* ]] && [[ "${{ matrix.container }}" == *ubuntu-24-04-client_2026.1.0* ]] && \
+          TSAN_EXCLUDE=(-E run-dlworkload)
+
           source /opt/intel/oneapi/setvars.sh
-          ctest --preset linux-tsan --output-on-failure -L samples
+          ctest --preset linux-tsan --output-on-failure -L samples "${TSAN_EXCLUDE[@]}"
 
       - name: Package SDK
         working-directory: sdk

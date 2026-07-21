@@ -43,7 +43,9 @@ RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRO
 # Setup the appropriate repos for GPU
 #
 RUN apt-get update && apt-get install -y software-properties-common && \
-    add-apt-repository -y ppa:kobuk-team/intel-graphics
+    add-apt-repository -y ppa:kobuk-team/intel-graphics && \
+    sed -i 's/^Components: main$/Components: main main\/debug/' \
+        /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*.sources
 
 RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3 10
 
