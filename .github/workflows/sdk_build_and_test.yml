@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/sdk_build_and_test.yml
       - .github/actions/linuxTest/action.yml
+      - .github/actions/detectChanges/action.yml
       - sdk/**
     branches:
       - master
@@ -63,7 +64,12 @@ jobs:
         with:
           clean: true
 
+      - name: Detect code changes
+        id: check
+        uses: ./.github/actions/detectChanges
+
       - name: Build
+        if: steps.check.outputs.code == 'true'
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -71,13 +77,14 @@ jobs:
           cmake --build --preset ${{ matrix.preset }} -j $(($(nproc)/2))
 
       - name: Test action
+        if: steps.check.outputs.code == 'true'
         uses: ./.github/actions/linuxTest
         with:
           wdir: sdk
           preset: ${{ matrix.preset }}
 
       - name: Build AddressSanitizer
-        if: contains(fromJSON(matrix.tags), 'server')
+        if: steps.check.outputs.code == 'true' && contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -85,7 +92,7 @@ jobs:
           cmake --build --preset linux-asan --parallel $(($(nproc)/2))
 
       - name: Build ThreadSanitizer
-        if: contains(fromJSON(matrix.tags), 'server')
+        if: steps.check.outputs.code == 'true' && contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -93,7 +100,7 @@ jobs:
           cmake --build --preset linux-tsan --parallel $(($(nproc)/2))
 
       - name: Build libFuzzer
-        if: contains(fromJSON(matrix.tags), 'server')
+        if: steps.check.outputs.code == 'true' && contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           # To ensure it still builds, run build for fuzz targets until we have
@@ -106,7 +113,7 @@ jobs:
       # Rocky8 has a problem with this test.
       #
       - name: Test AddressSanitizer
-        if: contains(fromJSON(matrix.tags), 'server')
+        if: steps.check.outputs.code == 'true' && contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -122,7 +129,7 @@ jobs:
           ctest --preset linux-asan --output-on-failure -L samples
 
       - name: Test ThreadSanitizer
-        if: contains(fromJSON(matrix.tags), 'server')
+        if: steps.check.outputs.code == 'true' && contains(fromJSON(matrix.tags), 'server')
         working-directory: sdk
         run: |
           source /opt/intel/oneapi/setvars.sh
@@ -155,7 +162,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect code changes
+        id: check
+        uses: ./.github/actions/detectChanges
+
       - name: Get Level Zero Loader Version
+        if: steps.check.outputs.code == 'true'
         id: loader-ver
         run: |
           @echo off
@@ -163,13 +175,14 @@ jobs:
           echo ze_loader_ver=%LEVEL_ZERO_LOADER_VERSION%>>%GITHUB_OUTPUT%
 
       - uses: actions/cache@v4
+        if: steps.check.outputs.code == 'true'
         id: cache
         with:
           path: sdk/level-zero-sdk
           key: ${{ runner.os }}-Ze-Loader-${{ steps.loader-ver.outputs.ze_loader_ver }}
 
       - name: Download Dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.check.outputs.code == 'true' && steps.cache.outputs.cache-hit != 'true'
         run: |
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
@@ -182,6 +195,7 @@ jobs:
           echo "Successfully Downloaded Level Zero Loader Version %LEVEL_ZERO_LOADER_VERSION%"
 
       - name: Build
+        if: steps.check.outputs.code == 'true'
         run: |
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
@@ -192,6 +206,7 @@ jobs:
           cmake --build --preset ${{ matrix.preset }} --parallel %JOBS%
 
       - name: Test
+        if: steps.check.outputs.code == 'true'
         run: |
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
@@ -201,6 +216,7 @@ jobs:
             -E "MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords"
 
       - name: Quarantined tests # performance and flaky tests
+        if: steps.check.outputs.code == 'true'
         continue-on-error: true
         run: |
           @echo off

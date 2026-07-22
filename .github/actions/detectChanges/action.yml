@@ -1,0 +1,53 @@
+name: Detect code changes
+description: |
+  Determines whether a push/PR contains code changes that require building
+  and testing, or only documentation changes (sdk/docs/) that can be skipped.
+
+  Sets output 'code' to 'true' if build/test should run, 'false' if not.
+
+  Safe defaults — always sets code=true when:
+  - Triggered by schedule or workflow_dispatch (no base SHA available).
+  - git diff fails for any reason (e.g. fetch error, missing commit).
+
+outputs:
+  code:
+    description: "'true' if code changes detected, 'false' if docs-only"
+    value: ${{ steps.check.outputs.code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect code vs docs-only changes
+      id: check
+      shell: bash
+      run: |
+        # In Docker containers the workspace may be owned by a different user.
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+        BASE=${{ github.event.pull_request.base.sha || github.event.before }}
+
+        # schedule/workflow_dispatch have no base SHA — always run tests.
+        if [ -z "$BASE" ]; then
+          echo "code=true" >> $GITHUB_OUTPUT
+          echo "Scheduled/manual run — build and test will run."
+          exit 0
+        fi
+
+        # Ensure the base commit is available locally regardless of PR depth.
+        git fetch --depth=1 origin "$BASE"
+
+        CHANGED=$(git diff --name-only "$BASE" ${{ github.sha }})
+        if [ $? -ne 0 ]; then
+          # git diff failed — safer to run tests than silently skip.
+          echo "code=true" >> $GITHUB_OUTPUT
+          echo "git diff failed — assuming code changes, build and test will run."
+          exit 0
+        fi
+
+        if echo "$CHANGED" | grep -qvE '^sdk/docs/'; then
+          echo "code=true" >> $GITHUB_OUTPUT
+          echo "Code changes detected — build and test will run."
+        else
+          echo "code=false" >> $GITHUB_OUTPUT
+          echo "Documentation-only changes detected — skipping build and test."
+        fi

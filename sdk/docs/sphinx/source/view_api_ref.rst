@@ -54,9 +54,13 @@ Record structures contain profiling data passed to callbacks:
 * :ref:`pti_view_record_base <pti_view_record_base>` - Base record structure
 * :ref:`pti_view_record_api <pti_view_record_api>` - Runtime API call record
 * :ref:`pti_view_record_kernel <pti_view_record_kernel>` - GPU kernel record
+* :ref:`pti_view_record_kernel_v2 <pti_view_record_kernel_v2>` - GPU kernel record v2 (extended)
 * :ref:`pti_view_record_memory_copy <pti_view_record_memory_copy>` - Memory copy record
+* :ref:`pti_view_record_memory_copy_v2 <pti_view_record_memory_copy_v2>` - Memory copy record v2 (extended)
 * :ref:`pti_view_record_memory_copy_p2p <pti_view_record_memory_copy_p2p>` - Peer-to-peer copy record
+* :ref:`pti_view_record_memory_copy_p2p_v2 <pti_view_record_memory_copy_p2p_v2>` - Peer-to-peer copy record v2 (extended)
 * :ref:`pti_view_record_memory_fill <pti_view_record_memory_fill>` - Memory fill record
+* :ref:`pti_view_record_memory_fill_v2 <pti_view_record_memory_fill_v2>` - Memory fill record v2 (extended)
 * :ref:`pti_view_record_synchronization <pti_view_record_synchronization>` - Synchronization record
 * :ref:`pti_view_record_external_correlation <pti_view_record_external_correlation>` - External correlation record
 * :ref:`pti_view_record_overhead <pti_view_record_overhead>` - Overhead record
@@ -163,16 +167,32 @@ Structures
 .. doxygenstruct::   pti_view_record_kernel
    :members:
 
+.. _pti_view_record_kernel_v2:
+.. doxygenstruct::   pti_view_record_kernel_v2
+   :members:
+
 .. _pti_view_record_memory_copy:
 .. doxygenstruct::   pti_view_record_memory_copy
+   :members:
+
+.. _pti_view_record_memory_copy_v2:
+.. doxygenstruct::   pti_view_record_memory_copy_v2
    :members:
 
 .. _pti_view_record_memory_copy_p2p:
 .. doxygenstruct::   pti_view_record_memory_copy_p2p
    :members:
 
+.. _pti_view_record_memory_copy_p2p_v2:
+.. doxygenstruct::   pti_view_record_memory_copy_p2p_v2
+   :members:
+
 .. _pti_view_record_memory_fill:
 .. doxygenstruct::   pti_view_record_memory_fill
+   :members:
+
+.. _pti_view_record_memory_fill_v2:
+.. doxygenstruct::   pti_view_record_memory_fill_v2
    :members:
 
 .. _pti_view_record_synchronization:

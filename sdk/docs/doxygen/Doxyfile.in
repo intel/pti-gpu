@@ -898,7 +898,8 @@ EXCLUDE_PATTERNS       =
 # Note that the wildcards are matched against the file with absolute path, so to
 # exclude all test directories use the pattern */test/*
 
-EXCLUDE_SYMBOLS        =
+# Internal compile-time assertion macro, not part of the public API.
+EXCLUDE_SYMBOLS        = PTI_STATIC_ASSERT
 
 # The EXAMPLE_PATH tag can be used to specify one or more files or directories
 # that contain example code fragments that are included (see the \include

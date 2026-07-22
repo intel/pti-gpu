@@ -16,6 +16,7 @@ PTI SDK provides the following groups of APIs:
 * ``ptiView`` - to trace GPU device kernels and memory transfers, host runtime and driver function calls, and deliver the data about traced instances, while the application runs, via registered callbacks in batches;
 * ``ptiMetricsScope`` - to collect and annotate GPU kernel instances with GPU hardware performance metrics, such as EU utilization, memory bandwidth, cache statistics, and others;
 * ``ptiMetrics`` - to discover available GPU hardware performance metrics and metrics sets, and collect them over time;
+* ``ptiPcSampling`` - to collect statistical per-instruction stall sampling data for GPU kernels, enabling fine-grained performance analysis by identifying instruction-level bottlenecks and stall reasons (Experimental);
 * ``ptiCallback`` - to subscribe to the notifications about GPU resources and operation lifecycle events (append, dispatch, complete) with a low-level synchronous callback API.
 
 PTI SDK supports **on-demand** profiling for most use cases - the application can start and stop profiling with ``ptiViewEnable()`` and ``ptiViewDisable()`` calls correspondingly.
@@ -52,5 +53,6 @@ After installation (either from binaries or by building from source):
    * :doc:`view_api_ref` - PTI View API for tracing GPU operations
    * :doc:`metrics_scope` - Metrics Scope API for per-kernel hardware metrics
    * :doc:`metrics` - Device-level metrics API for continuous sampling
+   * :doc:`pc_sampling_api_ref` - PC Sampling API for instruction-level stall sampling (Experimental)
    * :doc:`callback_api` - Callback API for synchronous GPU operation notifications (Experimental)
 

@@ -38,7 +38,7 @@ Demonstrates how to use the :doc:`ptiView API <view_api_ref>` for tracing GPU op
      - Intel(R) oneCCL library operations tracing (Linux only)
      - ``COMMUNICATION``
    * - **dpc_gemm_threaded**
-     - Multi-threaded DPC++ matrix multiplication
+     - DPC++ matrix multiplication submitted to GPU from multiple host threads concurrently
      - ``DEVICE_GPU_KERNEL``, ``DEVICE_GPU_MEM_COPY``, ``DEVICE_GPU_MEM_FILL``, ``RUNTIME_API``, ``DRIVER_API``, ``COLLECTION_OVERHEAD``
    * - **omp_vec_add**
      - C-language OpenMP sample with GPU offload

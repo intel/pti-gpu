@@ -8,4 +8,5 @@ API Reference
    view_api_ref
    metrics_scope
    metrics
+   pc_sampling_api_ref
    callback_api
