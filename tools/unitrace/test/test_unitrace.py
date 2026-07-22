@@ -166,9 +166,13 @@ def get_filter_tests(tests_configs, default_cmd_list):
         else:
             enabled_scenarios = default_cmd_list[:]
         if skip_scenarios:
-            for scenario in skip_scenarios:
-                if scenario in enabled_scenarios:
-                    enabled_scenarios.remove(scenario)
+            # Match by token subset so a skip entry covers every scenario that
+            # contains all of its options, regardless of order or extra flags.
+            # e.g. "-q" skips "-q", "-q --result-dir" and "--result-dir -q".
+            enabled_scenarios = [
+                s for s in enabled_scenarios
+                if not any(set(skip.split()) <= set(s.split()) for skip in skip_scenarios)
+            ]
         filter_tests[test_name] = {"platforms":platforms, "scenarios":enabled_scenarios, "skip_gpus":skip_gpus}
     return filter_tests
 

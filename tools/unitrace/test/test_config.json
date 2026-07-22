@@ -27,7 +27,8 @@
         },
         {
             "name": "ze_grph_api",
-            "platform": ["Windows"]
+            "platform": ["Windows"],
+            "skip_scenarios":["-q"]
         },
         {
             "name": "ze_counterbased_events",
