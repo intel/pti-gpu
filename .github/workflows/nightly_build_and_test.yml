@@ -25,9 +25,8 @@ jobs:
 
     runs-on: ${{ fromJSON(matrix.tags) }}
 
-    continue-on-error: true
-
     strategy:
+      fail-fast: false
       max-parallel: 3
       matrix:
         include:
