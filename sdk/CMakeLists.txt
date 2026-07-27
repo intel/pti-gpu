@@ -168,6 +168,12 @@ endif()
 
 GetLevelZeroExtensions()
 
+# Probes the system-installed Level Zero loader for zetDeviceEnableMetricsExp /
+# zetDeviceDisableMetricsExp. Sets HAVE_ZET_DEVICE_METRIC_API=TRUE if both are
+# present, FALSE otherwise. Used to decide whether ZET_ENABLE_METRICS=1 must be
+# set at runtime for metrics tests and samples.
+DetectSystemLevelZeroMetricApi()
+
 get_itt()
 
 find_package(Threads REQUIRED)

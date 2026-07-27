@@ -666,3 +666,59 @@ macro(GetLevelZeroExtensions)
     target_link_libraries(level-zero-ext INTERFACE LevelZero::headers)
   endif()
 endmacro()
+
+# DetectSystemLevelZeroMetricApi
+#
+# Detects whether the system-installed Level Zero loader exports both on-demand
+# metric enable/disable symbols (zetDeviceEnableMetricsExp and
+# zetDeviceDisableMetricsExp). Sets HAVE_ZET_DEVICE_METRIC_API to TRUE only if
+# both are present, FALSE otherwise. A single variable is used because both
+# symbols must be present for the feature to work — checking one is not enough.
+#
+# Always probes the SYSTEM loader, not the one potentially built from FetchContent
+# into _deps. The fetched loader is always a recent version that exports the
+# symbols, but the runtime driver may not — probing the fetched binary would give
+# a false positive.
+#
+# NO_CMAKE_PATH and NO_CMAKE_ENVIRONMENT_PATH prevent accidentally finding the
+# FetchContent copy if CMAKE_PREFIX_PATH points into _deps.
+# Standard system paths are still searched (NO_CMAKE_SYSTEM_PATH is absent).
+#
+# Platform notes:
+#   Linux:   finds libze_loader.so via LIBRARY_PATH / LD_LIBRARY_PATH / system paths
+#   Windows: finds ze_loader.lib (import library) via LEVEL_ZERO_V1_SDK_PATH
+#            (standard Intel L0 SDK env var) or system lib dirs
+macro(DetectSystemLevelZeroMetricApi)
+  find_library(_system_ze_loader
+    NAMES ze_loader
+    HINTS
+      ENV LIBRARY_PATH
+      ENV LD_LIBRARY_PATH
+      ENV LEVEL_ZERO_V1_SDK_PATH
+    PATH_SUFFIXES lib lib64
+    NO_CMAKE_PATH
+    NO_CMAKE_ENVIRONMENT_PATH
+  )
+
+  if(_system_ze_loader)
+    include(CheckLibraryExists)
+    check_library_exists("${_system_ze_loader}" zetDeviceEnableMetricsExp ""
+                         _have_ze_enable)
+    check_library_exists("${_system_ze_loader}" zetDeviceDisableMetricsExp ""
+                         _have_ze_disable)
+    if(_have_ze_enable AND _have_ze_disable)
+      set(HAVE_ZET_DEVICE_METRIC_API TRUE CACHE BOOL "" FORCE)
+      message(STATUS "Level Zero: zetDeviceEnableMetricsExp/zetDeviceDisableMetricsExp found in system loader -- on-demand metric enable supported")
+    else()
+      set(HAVE_ZET_DEVICE_METRIC_API FALSE CACHE BOOL "" FORCE)
+      message(STATUS "Level Zero: zetDeviceEnableMetricsExp/zetDeviceDisableMetricsExp NOT found in system loader -- ZET_ENABLE_METRICS=1 required at runtime")
+    endif()
+    unset(_have_ze_enable CACHE)
+    unset(_have_ze_disable CACHE)
+  else()
+    set(HAVE_ZET_DEVICE_METRIC_API FALSE CACHE BOOL "" FORCE)
+    message(STATUS "Level Zero: system loader not found -- assuming ZET_ENABLE_METRICS=1 required at runtime")
+  endif()
+  unset(_system_ze_loader CACHE)
+  unset(_system_ze_loader)
+endmacro()
