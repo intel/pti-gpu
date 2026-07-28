@@ -131,7 +131,6 @@ public:
                 return SHM_SUCCESS;
             }
 
-            std::cout << "[INFO] session " << session << " is already mapped in read-only mode" << std::endl;
             SoftRelease();
         }
 
@@ -270,7 +269,6 @@ public:
                 return SHM_SUCCESS;
             }
 
-            std::cout << "[INFO] session " << session << " is already mapped in read-only mode" << std::endl;
             UnmapViewOfFile(p_data_);
             p_data_ = MapViewOfFile(hMapFile_, FILE_MAP_WRITE, 0, 0, shm_size_);
             if (!p_data_) {
