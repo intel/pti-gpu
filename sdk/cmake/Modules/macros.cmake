@@ -251,9 +251,6 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
         GIT_REPOSITORY
         https://github.com/oneapi-src/level-zero.git
         GIT_TAG ${PTI_L0_LOADER_COMMIT_HASH}
-        # Patch: Fix VERSION file location to avoid Windows <version> header conflict (CMAKE_BINARY_DIR -> CMAKE_CURRENT_BINARY_DIR)
-        PATCH_COMMAND "${GIT_EXECUTABLE}" checkout .
-        COMMAND "${GIT_EXECUTABLE}" apply --ignore-whitespace --whitespace=fix "${PROJECT_SOURCE_DIR}/cmake/levelzero_version_fix.patch"
     )
     # Prevent content from automatically being installed with PTI
     FetchContent_GetProperties(LevelZero)
@@ -278,6 +275,7 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
             -Wno-unused-parameter
             -Wno-cast-function-type-mismatch
             -Wno-extra-semi
+            $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,19.0.0>:-Wno-variadic-macro-arguments-omitted>
         >
         $<$<CXX_COMPILER_ID:MSVC>:
             /wd6285 /wd6246 /wd6031 /wd6386
@@ -292,6 +290,7 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
             -Wno-error
             -Wno-unused-parameter
             $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,3.0.0>:-Wno-extra-semi>
+            $<$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,19.0.0>:-Wno-variadic-macro-arguments-omitted>
         >
     )
 
@@ -304,8 +303,6 @@ macro(GetLevelZero PTI_L0_LOADER PTI_L0_LOADER_COMMIT_HASH)
 
     # Pull Headers out of source tree and add them to level_zero/
     # This allows us to keep the normal way to include level zero
-    # TODO(matthew.schilling@intel.com): Should we move PTI headers to
-    # <proj_dir>/include/pti/?
     file(GLOB_RECURSE L0_DL_HEADERS
         LIST_DIRECTORIES TRUE
         "${LZ_BASE_DIR}/levelzero-src/include/*")
@@ -431,7 +428,7 @@ macro(AddApiGenTarget L0_GEN_SCRIPT GEN_FILE_NAME L0_TARGET)
   endif()
 
   # Temporary until we remove UR build dependency.
-  set(UR_HEADER_PATH "<empty>")
+  set(UR_HEADER_PATH "${PROJECT_SOURCE_DIR}/third-party/unified-runtime/include/unified-runtime/ur_api.h")
   if (TARGET unified-runtime::loader)
     get_target_property(UR_HEADER_PATH unified-runtime::loader INTERFACE_INCLUDE_DIRECTORIES)
   endif()

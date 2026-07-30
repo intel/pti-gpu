@@ -282,6 +282,18 @@ typedef enum _pti_api_id_runtime_sycl {
     urKernelGetSuggestedLocalWorkSizeWithArgs_id=311,
     urUSMHostAllocRegisterExp_id=312,
     urUSMHostAllocUnregisterExp_id=313,
+    urQueueGetGraphExp_id=314,
+    urGraphSetDestructionCallbackExp_id=315,
+    urIPCGetPhysMemHandleExp_id=316,
+    urIPCPutPhysMemHandleExp_id=317,
+    urIPCOpenPhysMemHandleExp_id=318,
+    urIPCClosePhysMemHandleExp_id=319,
+    urGraphGetNativeHandleExp_id=320,
+    urGraphExecutableGraphGetNativeHandleExp_id=321,
+    urEventCreateExp_id=322,
+    urIPCGetEventHandleExp_id=323,
+    urIPCPutEventHandleExp_id=324,
+    urIPCOpenEventHandleExp_id=325,
  } pti_api_id_runtime_sycl;
 
 #endif
