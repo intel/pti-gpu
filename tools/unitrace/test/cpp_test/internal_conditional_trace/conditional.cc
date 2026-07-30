@@ -52,13 +52,21 @@ static float Check(const std::vector<float>& a, float value) {
   return eps / a.size();
 }
 
+// iterations is a runtime value (threaded down from main via a kernel argument)
+// so the JIT compiler cannot elide the outer loop. Each pass recomputes the
+// exact same dot product and only the last one is written out, so the numeric
+// result is identical to a single pass -- this lengthens the kernel's device
+// execution time without changing its result, launch dimensions or call count.
 void GEMM(const float* a, const float* b, float* c,
-          unsigned size, sycl::id<2> id) {
+          unsigned size, unsigned iterations, sycl::id<2> id) {
   int i = id.get(0);
   int j = id.get(1);
   float sum = 0.0f;
-  for (unsigned k = 0; k < size; ++k) {
-    sum += a[i * size + k] * b[k * size + j];
+  for (unsigned it = 0; it < iterations; ++it) {
+    sum = 0.0f;
+    for (unsigned k = 0; k < size; ++k) {
+      sum += a[i * size + k] * b[k * size + j];
+    }
   }
   c[i * size + j] = sum;
 }
@@ -68,6 +76,7 @@ static float RunAndCheck(sycl::queue queue,
                          const std::vector<float>& b,
                          std::vector<float>& c,
                          unsigned size,
+                         unsigned iterations,
                          float expected_result) {
   double time = 0.0;
 
@@ -89,7 +98,7 @@ static float RunAndCheck(sycl::queue queue,
                         GEMM(a_acc_ptr.get(),
                              b_acc_ptr.get(),
                              c_acc_ptr.get(),
-                             size, id);
+                             size, iterations, id);
                       });
     });
     queue.wait_and_throw();
@@ -115,33 +124,34 @@ static void Compute(sycl::queue queue,
                     std::vector<float>& c,
                     unsigned size,
                     unsigned repeat_count,
+                    unsigned iterations,
                     float expected_result) {
   for (unsigned i = 0; i < repeat_count; ++i) {
-    float eps = RunAndCheck(queue, a, b, c, size, expected_result);
+    float eps = RunAndCheck(queue, a, b, c, size, iterations, expected_result);
     std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN") <<
       "CORRECT with accuracy: " << eps << std::endl;
   }
   CollectionResume();
   for (unsigned i = 0; i < repeat_count; ++i) {
-    float eps = RunAndCheck(queue, a, b, c, size, expected_result);
+    float eps = RunAndCheck(queue, a, b, c, size, iterations, expected_result);
     std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN") <<
       "CORRECT with accuracy: " << eps << std::endl;
   }
   CollectionPause();
   for (unsigned i = 0; i < repeat_count; ++i) {
-    float eps = RunAndCheck(queue, a, b, c, size, expected_result);
+    float eps = RunAndCheck(queue, a, b, c, size, iterations, expected_result);
     std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN") <<
       "CORRECT with accuracy: " << eps << std::endl;
   }
   CollectionResume();
   for (unsigned i = 0; i < repeat_count; ++i) {
-    float eps = RunAndCheck(queue, a, b, c, size, expected_result);
+    float eps = RunAndCheck(queue, a, b, c, size, iterations, expected_result);
     std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN") <<
       "CORRECT with accuracy: " << eps << std::endl;
   }
   CollectionStop();
   for (unsigned i = 0; i < repeat_count; ++i) {
-    float eps = RunAndCheck(queue, a, b, c, size, expected_result);
+    float eps = RunAndCheck(queue, a, b, c, size, iterations, expected_result);
     std::cout << "Results are " << ((eps < MAX_EPS) ? "" : "IN") <<
       "CORRECT with accuracy: " << eps << std::endl;
   }
@@ -180,6 +190,18 @@ int main(int argc, char* argv[]) {
     repeat_count = std::stoul(argv[3]);
   }
 
+  // Number of times each GEMM work-item recomputes its dot product. This
+  // lengthens the on-device execution time of every __GEMM kernel without
+  // altering the kernel launch dimensions, the number of kernels, or the
+  // numeric result, so the existing device timing/timeline gold files stay
+  // valid. Overridable as the 4th positional argument. Note the "env"
+  // control option is scanned for separately above, so it does not shift
+  // these positional slots.
+  unsigned iterations = 16;
+  if (argc > 4 && strcmp(argv[4], "env") != 0) {
+    iterations = std::stoul(argv[4]);
+  }
+
   sycl::property_list prop_list{sycl::property::queue::enable_profiling()};
   sycl::queue queue(dev, sycl::async_handler{}, prop_list);
 
@@ -195,7 +217,7 @@ int main(int argc, char* argv[]) {
 
   auto start = std::chrono::steady_clock::now();
   float expected_result = A_VALUE * B_VALUE * size;
-  Compute(queue, a, b, c, size, repeat_count, expected_result);
+  Compute(queue, a, b, c, size, repeat_count, iterations, expected_result);
   auto end = std::chrono::steady_clock::now();
   std::chrono::duration<float> time = end - start;
 
