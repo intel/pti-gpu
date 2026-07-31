@@ -609,7 +609,6 @@ class ZeCollector {
     CreateDeviceMap(driver_init);
     DetermineIfCounterEventsPossible(driver_init);
     DetermineIfVisitorExtensionIsAvailable(driver_init);
-    UserRequestsOverrideWithBridgeCommands();
     UpdateDeviceSyncDelta();
     ze_result_t res = l0_wrapper_.InitDynamicTracingWrappers();
     if (ZE_RESULT_SUCCESS == res) {
@@ -756,25 +755,6 @@ class ZeCollector {
       swap_cmd_lists_func_ = &ZeCollector::SwapCommandListsWithInstrumentedCommandLists;
     }
   }
-
-  void UserRequestsOverrideWithBridgeCommands() {
-    constexpr static std::string_view kEnvName = "PTI_FORCE_BRIDGE_COMMANDS";
-    constexpr static std::array<std::string_view, 6> kPositiveValues = {"1", "true", "yes",
-                                                                        "y", "on",   "ON"};
-
-    std::string env_value = utils::GetEnv(kEnvName.data());
-    if (env_value.empty()) {
-      user_requested_bridge_commands_ = false;
-    }
-
-    user_requested_bridge_commands_ =
-        std::any_of(kPositiveValues.cbegin(), kPositiveValues.cend(),
-                    [&](std::string_view positive_value) { return env_value == positive_value; });
-
-    SPDLOG_TRACE("{}: {}", kEnvName, user_requested_bridge_commands_ ? "true" : "false");
-  }
-
-  constexpr bool ShouldInjectSignalEvent() const { return !user_requested_bridge_commands_; }
 
   static ZeDeviceDescriptor GetZeDeviceDescriptor(const ze_device_handle_t device) {
     ZeDeviceDescriptor desc = {};
@@ -2267,34 +2247,9 @@ class ZeCollector {
     // but with UR V2 in presence of counter-based events
     // - for Full and Hybrid modes the same event_swap mechanism is used
     if (command->event_swap.Get() != nullptr) {
-      bool append_res = true;
-      if (ShouldInjectSignalEvent()) {
-        SPDLOG_DEBUG("\t\t Will be appending WaitAndSignal command!");
-        append_res = A2AppendWaitAndSignalEvent(command->command_list, command->event_self,
-                                                command->event_swap.Get());
-      } else {
-        SPDLOG_DEBUG("\t\t Will be appending Bridge command!");
-        if (command->props.type == KernelCommandType::kKernel) {
-          ze_kernel_handle_t kernel =
-              bridge_kernel_pool_.GetMarkKernel(command->context, command->device);
-          PTI_ASSERT(kernel != nullptr);
-          append_res = A2AppendBridgeKernel(kernel, command->command_list, command->event_self,
-                                            command->event_swap.Get());
-        } else if (command->props.type == KernelCommandType::kMemory) {
-          SPDLOG_TRACE("\t\tDevices in Memory command: src: {}, dst {}",
-                       static_cast<const void*>(command->props.src_device),
-                       static_cast<const void*>(command->props.dst_device));
-
-          auto* buffer = device_buffer_pool_.GetBuffers(command->context, command->device);
-          PTI_ASSERT(buffer != nullptr);
-          append_res = A2AppendBridgeMemoryCopyOrFillEx(command->command_list, command->event_self,
-                                                        command->event_swap.Get(), buffer,
-                                                        A2DeviceBufferPool::kBufferSize);
-        } else if (command->props.type == KernelCommandType::kCommand) {
-          append_res = A2AppendBridgeBarrier(command->command_list, command->event_self,
-                                             command->event_swap.Get());
-        }
-      }
+      SPDLOG_DEBUG("\t\t Will be appending WaitAndSignal command!");
+      bool append_res = A2AppendWaitAndSignalEvent(command->command_list, command->event_self,
+                                                   command->event_swap.Get());
       PTI_ASSERT(append_res);
     }
 
@@ -3401,7 +3356,6 @@ class ZeCollector {
   // activity.
   SwapCmdListsFn swap_cmd_lists_func_ =
       &ZeCollector::DisabledSwapCommandListsWithInstrumentedCommandLists;
-  bool user_requested_bridge_commands_ = false;
   bool loader_dynamic_tracing_capable_ = false;
   CallbacksEnabled cb_enabled_ = {};
   OnZeKernelFinishCallback acallback_ = nullptr;
@@ -3441,9 +3395,6 @@ class ZeCollector {
 
   std::map<ze_command_queue_handle_t, ZeCommandQueue> command_queues_;
   std::map<ze_fence_handle_t, ze_command_queue_handle_t> fence_queue_map_;
-
-  A2BridgeKernelPool bridge_kernel_pool_;
-  A2DeviceBufferPool device_buffer_pool_;
 
   Level0Wrapper l0_wrapper_;
 

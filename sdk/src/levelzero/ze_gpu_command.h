@@ -68,7 +68,7 @@ struct ZeKernelCommand {
   ZeKernelCommandProps props;
   uint64_t device_timer_frequency_;
   uint64_t device_timer_mask_;
-  ze_event_handle_t event_self = nullptr;  // in Local mode this event goes to the Bridge kernel
+  ze_event_handle_t event_self = nullptr;  // in Local mode this event goes after traced GPU op
   ZeEventView<ZeEventPool> event_swap;     // event created in Local collection mode
   ze_device_handle_t device =
       nullptr;  // Device where the operation is submitted, associated with command list
