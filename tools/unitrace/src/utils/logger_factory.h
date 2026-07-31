@@ -66,6 +66,7 @@ protected:
     static std::string ComputeAppName(void);
     explicit LoggerFactory(uint32_t app_id);
     void CreateDirectory(const std::string& dir) const;
+    void RemoveDirectoryIfEmpty(const std::string& dir) const;
     std::shared_ptr<Logger> GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free) const;
     void SetAppId(uint32_t app_id) {app_id_ = app_id;}
     std::string GetDataDirPath(bool warn = true) const {
@@ -108,6 +109,7 @@ private:
 class ResultDirLoggerFactory : public LoggerFactory {
 public:
     ResultDirLoggerFactory(uint32_t app_id);
+    ~ResultDirLoggerFactory() override;
 
     std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false) const override;
     std::string GenerateLogFileName(LoggerType type, int32_t device_id = -1) const override;

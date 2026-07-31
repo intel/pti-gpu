@@ -37,6 +37,21 @@ void LoggerFactory::CreateDirectory(const std::string& dir) const {
     }
 }
 
+// LoggerFactory directory removal helper: remove the directory only if it exists and is empty
+void LoggerFactory::RemoveDirectoryIfEmpty(const std::string& dir) const {
+    if (dir.empty()) return;
+
+    try {
+        if (CXX_STD_FILESYSTEM_NAMESPACE::exists(dir) &&
+            CXX_STD_FILESYSTEM_NAMESPACE::is_directory(dir) &&
+            CXX_STD_FILESYSTEM_NAMESPACE::is_empty(dir)) {
+            CXX_STD_FILESYSTEM_NAMESPACE::remove(dir);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[WARNING] Failed to remove directory '" << dir << "': " << e.what() << std::endl;
+    }
+}
+
 // LoggerFactory singleton implementation
 LoggerFactory* LoggerFactory::Create(uint32_t app_id) {
     static std::unique_ptr<LoggerFactory> instance;
@@ -339,6 +354,19 @@ ResultDirLoggerFactory::ResultDirLoggerFactory(uint32_t app_id)
     dir_path_ = dir;
     metrics_dir_path_ = dir + "/metrics";
     CreateDirectory(dir_path_);
+}
+
+// ResultDirLoggerFactory destructor: on application exit, remove the directories
+// created for this run if they are empty (i.e. nothing was actually logged).
+ResultDirLoggerFactory::~ResultDirLoggerFactory() {
+    // Release any loggers so their files are closed before we inspect the
+    // directories for emptiness.
+    loggers_.clear();
+
+    // Remove the metrics subdirectory first so that its removal may in turn
+    // leave the parent result directory empty and eligible for removal.
+    RemoveDirectoryIfEmpty(metrics_dir_path_);
+    RemoveDirectoryIfEmpty(dir_path_);
 }
 
 std::string ResultDirLoggerFactory::GetTraceLogFileName(LoggerType type) const{
