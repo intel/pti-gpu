@@ -142,18 +142,8 @@ jobs:
       - name: Test ThreadSanitizer
         working-directory: sdk
         run: |
-          #
-          # This is to avoid PTI-450. Remove when resolved.
-          # We could have used TSan suppression, but I fear that
-          # this may be too heavy handed because it will affect all
-          # samples.
-          #
-          TSAN_EXCLUDE=()
-          [[ "${{ matrix.tags }}" == *BMG* ]] && [[ "${{ matrix.container }}" == *ubuntu-24-04-client_2026.1.0* ]] && \
-          TSAN_EXCLUDE=(-E run-dlworkload)
-
           source /opt/intel/oneapi/setvars.sh
-          ctest --preset linux-tsan --output-on-failure -L samples "${TSAN_EXCLUDE[@]}"
+          ctest --preset linux-tsan --output-on-failure -L samples
 
       - name: Package SDK
         working-directory: sdk

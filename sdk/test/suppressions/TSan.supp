@@ -7,7 +7,6 @@
 # dependencies.
 
 # TODO: Fixed in compiler >= 2024.0.0? Definitely an issue on == 2023.2.1
-race:libxpti*
 race:libsycl.so.6*
 
 # compute-runtime bug

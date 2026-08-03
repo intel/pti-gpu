@@ -337,11 +337,20 @@ struct PtiViewRecordHandler {
       // There's space to insert more records. No need for swap.
       return;
     }
-    consumer_.PushAndForget([this, buffer = std::move(buffer)]() mutable {
-      if (!buffer.IsNull()) {
-        DeliverBuffer(std::move(buffer));
-      }
-    });
+    // Per-flush atomic provides the release/acquire happens-before edge between the
+    // producer's buffer writes and the consumer's reads. Each flush gets its own instance
+    // so concurrent flushes from different threads are independent. The queue mutex alone
+    // does not cover the buffer memory, which is accessed via a pointer copied independently
+    // into the lambda.
+    auto handoff = std::make_unique<std::atomic<unsigned char*>>(nullptr);
+    handoff->store(buffer.GetBuffer(), std::memory_order_release);
+    consumer_.PushAndForget(
+        [this, buffer = std::move(buffer), handoff = std::move(handoff)]() mutable {
+          (void)handoff->load(std::memory_order_acquire);
+          if (!buffer.IsNull()) {
+            DeliverBuffer(std::move(buffer));
+          }
+        });
   }
 
   inline pti_result RegisterTimestampCallback(pti_fptr_get_timestamp get_timestamp) {
