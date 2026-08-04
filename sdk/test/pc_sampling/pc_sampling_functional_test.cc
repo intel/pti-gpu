@@ -338,7 +338,7 @@ TEST_F(PcSamplingTest, AggregatesPerKernelAndPerInstructionData) {
               PTI_SUCCESS);
     EXPECT_EQ(kernel_info._device, device);
     EXPECT_EQ(kernel_info._kernel_handle, kernel_handle);
-    EXPECT_NE(kernel_info._kernel_name, nullptr)
+    ASSERT_NE(kernel_info._kernel_name, nullptr)
         << "Kernel name is null for kernel handle: " << kernel_handle;
 
     // Kernel name must end with the expected suffix and must be demangled.
