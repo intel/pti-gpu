@@ -679,39 +679,90 @@ endmacro()
 #
 # NO_CMAKE_PATH and NO_CMAKE_ENVIRONMENT_PATH prevent accidentally finding the
 # FetchContent copy if CMAKE_PREFIX_PATH points into _deps.
-# Standard system paths are still searched (NO_CMAKE_SYSTEM_PATH is absent).
 #
 # Platform notes:
-#   Linux:   finds libze_loader.so via LIBRARY_PATH / LD_LIBRARY_PATH / system paths
-#   Windows: finds ze_loader.lib (import library) via LEVEL_ZERO_V1_SDK_PATH
-#            (standard Intel L0 SDK env var) or system lib dirs
+#   Linux:   finds libze_loader.so in system lib dirs (/usr/lib, /usr/lib64, etc.)
+#   Windows: finds ze_loader.dll in %SystemRoot%\System32 (installed by GPU driver).
+#            CMAKE_FIND_LIBRARY_SUFFIXES is overridden to .dll since find_library
+#            defaults to .lib on Windows.
 macro(DetectSystemLevelZeroMetricApi)
-  find_library(_system_ze_loader
-    NAMES ze_loader
-    HINTS
-      ENV LIBRARY_PATH
-      ENV LD_LIBRARY_PATH
-      ENV LEVEL_ZERO_V1_SDK_PATH
-    PATH_SUFFIXES lib lib64
-    NO_CMAKE_PATH
-    NO_CMAKE_ENVIRONMENT_PATH
-  )
+  if(WIN32)
+    # find_library on Windows appends CMAKE_FIND_LIBRARY_SUFFIXES (.lib by default).
+    # Override to .dll so we find ze_loader.dll in System32 as installed by the GPU driver.
+    set(_saved_suffixes ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".dll")
+    find_library(_system_ze_loader
+      NAMES ze_loader
+      PATHS $ENV{SystemRoot}/System32
+      NO_DEFAULT_PATH
+    )
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ${_saved_suffixes})
+    unset(_saved_suffixes)
+  else()
+    find_library(_system_ze_loader
+      NAMES ze_loader
+      NO_CMAKE_PATH
+      NO_CMAKE_ENVIRONMENT_PATH
+    )
+  endif()
 
   if(_system_ze_loader)
-    include(CheckLibraryExists)
-    check_library_exists("${_system_ze_loader}" zetDeviceEnableMetricsExp ""
-                         _have_ze_enable)
-    check_library_exists("${_system_ze_loader}" zetDeviceDisableMetricsExp ""
-                         _have_ze_disable)
-    if(_have_ze_enable AND _have_ze_disable)
+    if(WIN32)
+      # check_library_exists cannot link against a DLL; use dumpbin /EXPORTS instead
+      find_program(_dumpbin dumpbin)
+      if(_dumpbin)
+        execute_process(
+          COMMAND ${_dumpbin} /EXPORTS ${_system_ze_loader}
+          OUTPUT_VARIABLE _dumpbin_output
+          ERROR_VARIABLE  _dumpbin_error
+          RESULT_VARIABLE _dumpbin_result
+          OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        if(NOT _dumpbin_result EQUAL 0)
+          message(WARNING "Level Zero: dumpbin failed (exit ${_dumpbin_result}): ${_dumpbin_error} -- assuming APIs not supported")
+          set(_symbols_found FALSE)
+        else()
+          string(FIND "${_dumpbin_output}" "zetDeviceEnableMetricsExp"  _have_ze_enable)
+          string(FIND "${_dumpbin_output}" "zetDeviceDisableMetricsExp" _have_ze_disable)
+          if(NOT _have_ze_enable EQUAL -1 AND NOT _have_ze_disable EQUAL -1)
+            set(_symbols_found TRUE)
+          else()
+            set(_symbols_found FALSE)
+          endif()
+        endif()
+        unset(_dumpbin_output)
+        unset(_dumpbin_error)
+        unset(_dumpbin_result)
+      else()
+        message(WARNING "Level Zero: dumpbin not found -- cannot check DLL exports, assuming APIs not supported")
+        set(_symbols_found FALSE)
+      endif()
+      unset(_dumpbin CACHE)
+    else()
+      include(CheckLibraryExists)
+      check_library_exists("${_system_ze_loader}" zetDeviceEnableMetricsExp ""
+                           _have_ze_enable)
+      check_library_exists("${_system_ze_loader}" zetDeviceDisableMetricsExp ""
+                           _have_ze_disable)
+      if(_have_ze_enable AND _have_ze_disable)
+        set(_symbols_found TRUE)
+      else()
+        set(_symbols_found FALSE)
+      endif()
+      unset(_have_ze_enable CACHE)
+      unset(_have_ze_enable)
+      unset(_have_ze_disable CACHE)
+      unset(_have_ze_disable)
+    endif()
+
+    if(_symbols_found)
       set(HAVE_ZET_DEVICE_METRIC_API TRUE CACHE BOOL "" FORCE)
       message(STATUS "Level Zero: zetDeviceEnableMetricsExp/zetDeviceDisableMetricsExp found in system loader -- on-demand metric enable supported")
     else()
       set(HAVE_ZET_DEVICE_METRIC_API FALSE CACHE BOOL "" FORCE)
       message(STATUS "Level Zero: zetDeviceEnableMetricsExp/zetDeviceDisableMetricsExp NOT found in system loader -- ZET_ENABLE_METRICS=1 required at runtime")
     endif()
-    unset(_have_ze_enable CACHE)
-    unset(_have_ze_disable CACHE)
+    unset(_symbols_found)
   else()
     set(HAVE_ZET_DEVICE_METRIC_API FALSE CACHE BOOL "" FORCE)
     message(STATUS "Level Zero: system loader not found -- assuming ZET_ENABLE_METRICS=1 required at runtime")

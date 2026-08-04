@@ -15,6 +15,8 @@ GetGTest()
 
 enable_testing()
 
+message(STATUS "Configuring tests")
+
 include(GoogleTest)
 
 if (NOT TARGET fmt::fmt)
@@ -28,6 +30,13 @@ endif()
 if (NOT TARGET LevelZero::level-zero)
   find_package(LevelZero REQUIRED)
 endif()
+
+# Detects whether the system Level Zero loader exports zetDeviceEnableMetricsExp
+# and zetDeviceDisableMetricsExp. On Linux uses check_library_exists against
+# libze_loader.so; on Windows uses dumpbin /EXPORTS against ze_loader.dll in
+# System32. Sets HAVE_ZET_DEVICE_METRIC_API=TRUE if both symbols are present.
+# Must be called after LevelZero::level-zero target is available.
+DetectSystemLevelZeroMetricApi()
 
 if (NOT TARGET unified-runtime::loader)
   find_package(unified-runtime)
