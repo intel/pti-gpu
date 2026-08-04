@@ -10,9 +10,26 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <tuple>
 #include <fstream>
 #include "utils.h"
 #include "logger.h"
+
+// JSON is the default; protobuf only when --output-format=protobuf and built in.
+// Resolved once (queried per record on the flush path); the format is fixed for
+// the process lifetime.
+inline bool UseProtobufOutput() {
+#if BUILD_WITH_PERFETTO
+  static const bool use_protobuf = (utils::GetEnv("UNITRACE_OutputFormat") == "protobuf");
+  return use_protobuf;
+#else  /* BUILD_WITH_PERFETTO */
+  return false;
+#endif /* BUILD_WITH_PERFETTO */
+}
+
+inline const char* TimelineTraceExt() {
+  return UseProtobufOutput() ? "pftrace" : "json";
+}
 
 enum LoggerType {
   LOGGER_TYPE_LEGACY_SHARED_TRACE = 0,
@@ -46,16 +63,16 @@ public:
     const std::string& GetAppName() const { return app_name_; }
     const std::string& GetRank() const { return rank_; }
 
-    std::shared_ptr<Logger> GetLogger(LoggerType type, bool lazy_flush = false, bool lock_free = false) const {
+    std::shared_ptr<Logger> GetLogger(LoggerType type, bool lazy_flush = false, bool lock_free = false, bool binary = false) const {
         int32_t device_id = -1;
-        return GetDeviceLogger(type, device_id, lazy_flush, lock_free);
+        return GetDeviceLogger(type, device_id, lazy_flush, lock_free, binary);
     }
 
     LoggerFactory(const LoggerFactory&) = delete;
     LoggerFactory& operator=(const LoggerFactory&) = delete;
     virtual ~LoggerFactory() = default;
 
-    virtual std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false) const  = 0;
+    virtual std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false, bool binary = false) const  = 0;
     virtual std::string GenerateLogFileName(LoggerType type, int32_t device_id = -1) const = 0;
 #ifdef _WIN32
     virtual std::pair<std::string, std::string> SearchRawMetricFiles(uint32_t pid) const = 0;
@@ -66,8 +83,8 @@ protected:
     static std::string ComputeAppName(void);
     explicit LoggerFactory(uint32_t app_id);
     void CreateDirectory(const std::string& dir) const;
+    std::shared_ptr<Logger> GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary = false) const;
     void RemoveDirectoryIfEmpty(const std::string& dir) const;
-    std::shared_ptr<Logger> GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free) const;
     void SetAppId(uint32_t app_id) {app_id_ = app_id;}
     std::string GetDataDirPath(bool warn = true) const {
         std::string data_dir = utils::GetEnv("UNITRACE_DataDir");
@@ -83,7 +100,7 @@ protected:
     const std::string rank_;
     std::string dir_path_; // Directory path for output, empty by default
     mutable std::mutex mutex_;
-    mutable std::map<std::pair<LoggerType, int32_t>, std::shared_ptr<Logger>> loggers_;
+    mutable std::map<std::tuple<LoggerType, int32_t, bool>, std::shared_ptr<Logger>> loggers_;
 };
 
 class LegacyLoggerFactory : public LoggerFactory {
@@ -94,7 +111,7 @@ public:
     std::string GetMetricsFileName(const std::string& log_file, uint32_t app_id) const;
 
     std::string GetChromeTraceFileName() const;
-    std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false) const override;
+    std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false, bool binary = false) const override;
     std::string GenerateLogFileName(LoggerType type, int32_t device_id = -1) const override;
 #ifdef _WIN32
     std::pair<std::string, std::string> SearchRawMetricFiles(uint32_t pid) const override;
@@ -111,7 +128,7 @@ public:
     ResultDirLoggerFactory(uint32_t app_id);
     ~ResultDirLoggerFactory() override;
 
-    std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false) const override;
+    std::shared_ptr<Logger> GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush = false, bool lock_free = false, bool binary = false) const override;
     std::string GenerateLogFileName(LoggerType type, int32_t device_id = -1) const override;
 #ifdef _WIN32
     std::pair<std::string, std::string> SearchRawMetricFiles(uint32_t pid) const override;

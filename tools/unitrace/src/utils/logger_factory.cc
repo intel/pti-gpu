@@ -81,16 +81,16 @@ LoggerFactory* LoggerFactory::Create(uint32_t app_id) {
     return instance.get();
 }
 
-std::shared_ptr<Logger> LoggerFactory::GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free) const {
+std::shared_ptr<Logger> LoggerFactory::GetLoggerImpl(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary) const {
     std::lock_guard<std::mutex> guard(mutex_);
 
-    auto key = std::make_pair(type, device_id);
+    auto key = std::make_tuple(type, device_id, binary);
     auto it = loggers_.find(key);
     if (it != loggers_.end()) {
         return it->second;
     }
     std::string filename = GenerateLogFileName(type, device_id);
-    auto logger = std::make_shared<Logger>(filename, lazy_flush, lock_free);
+    auto logger = std::make_shared<Logger>(filename, lazy_flush, lock_free, binary);
     loggers_[key] = logger;
     return logger;
 }
@@ -111,9 +111,9 @@ void LegacyLoggerFactory::AdjustLoggerTypeAndDeviceId(LoggerType& type, int32_t&
     }
 }
 
-std::shared_ptr<Logger> LegacyLoggerFactory::GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free) const{
+std::shared_ptr<Logger> LegacyLoggerFactory::GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary) const{
     AdjustLoggerTypeAndDeviceId(type, device_id);
-    return GetLoggerImpl(type, device_id, lazy_flush, lock_free);
+    return GetLoggerImpl(type, device_id, lazy_flush, lock_free, binary);
 }
 
 std::string LoggerFactory::ComputeAppName(void) {
@@ -249,9 +249,9 @@ std::string LegacyLoggerFactory::GetChromeTraceFileName() const {
     }
 
     if (!rank_.empty()) {
-        return filename + "." + std::to_string(utils::GetPid()) + "." + rank_ + ".json";
+        return filename + "." + std::to_string(utils::GetPid()) + "." + rank_ + "." + TimelineTraceExt();
     }
-    return filename + "." + std::to_string(utils::GetPid()) + ".json";
+    return filename + "." + std::to_string(utils::GetPid()) + "." + TimelineTraceExt();
 }
 
 // LegacyLoggerFactory::GenerateLogFileName implementation
@@ -330,8 +330,8 @@ std::vector<std::string> LegacyLoggerFactory::SearchFilesByType(LoggerType type,
     return result;
 }
 
-std::shared_ptr<Logger> ResultDirLoggerFactory::GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free) const{
-    return GetLoggerImpl(type, device_id, lazy_flush, lock_free);
+std::shared_ptr<Logger> ResultDirLoggerFactory::GetDeviceLogger(LoggerType type, int32_t device_id, bool lazy_flush, bool lock_free, bool binary) const{
+    return GetLoggerImpl(type, device_id, lazy_flush, lock_free, binary);
 }
 
 // ResultDirLoggerFactory constructor
@@ -416,7 +416,7 @@ std::string ResultDirLoggerFactory::GenerateLogFileName(LoggerType type, int32_t
         case LOGGER_TYPE_KMD_TRACE:
             return GetTraceLogFileName(type);
         case LOGGER_TYPE_CHROME_TRACE_UNITRACE:
-            return dir_path_ + "/chrome_trace.json";
+            return dir_path_ + "/chrome_trace." + TimelineTraceExt();
         case LOGGER_TYPE_METRICS_QUERY:
             CreateDirectory(metrics_dir_path_);
             return metrics_dir_path_ + "/metrics_" + std::to_string(device_id) + ".csv";

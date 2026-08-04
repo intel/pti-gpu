@@ -170,6 +170,7 @@ The options can be one or more of the following:
 --chrome-no-engine-on-device                  Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info.
                                               Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present
 --chrome-event-buffer-size <number-of-events> Size of event buffer on host per host thread (default is -1 or unlimited)
+--output-format <format>                      Timeline trace format: "json" (Chrome trace, default) or "protobuf" (Perfetto)
 --verbose [-v]                                Enable verbose mode to show kernel shapes
                                               Kernel shapes are always enabled in timelines for Level Zero backend
 --demangle                                    Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend
@@ -213,7 +214,7 @@ By default, only Level Zero tracing/profiling is enabled. To enable OpenCL traci
 
 ## View
 
-If one or more of the **--chrome-** options are used, a .json file, for example, **myapp.json** is generated. You can run the **uniview.py** utility to view the data, assuming all required Python packages are installed:
+If one or more of the **--chrome-** options are used, a .json file, for example, **myapp.json** is generated (or a **.pftrace** file with **--output-format protobuf**; see [Output Format](#output-format)). You can run the **uniview.py** utility to view the data, assuming all required Python packages are installed:
 
 ```sh
 python uniview.py -t <myapp.json>
@@ -366,6 +367,24 @@ Device Logging:
 ![Device Logging!](/tools/unitrace/doc/images/device-logging.png)
 
 In case both **--chrome-kernel-logging** and **--chrome-device-logging** are present, **--chrome-kernel-logging** takes precedence.
+
+### Output Format
+
+By default the timeline trace is written as a Chrome JSON file (**chrome_trace.json** / **\<app\>.\<pid\>.json**). Use **--output-format protobuf** to emit a Perfetto protobuf trace (**.pftrace**) instead:
+
+```
+unitrace --output-format protobuf --chrome-kernel-logging <application>
+```
+
+Both formats load in **https://ui.perfetto.dev/**, and **uniview.py -t \<file\>** works with either extension. To convert a protobuf trace to JSON for tooling that still expects JSON, use Perfetto's **traceconv** (https://perfetto.dev/docs/quickstart/traceconv):
+
+```
+traceconv json <trace>.pftrace <trace>.json
+```
+
+> [!NOTE]
+> **--output-format protobuf** requires unitrace built with Perfetto support (**BUILD_WITH_PERFETTO=ON**, the default). If protobuf support is unavailable, the output falls back to JSON.
+
 ### Include and Exclude Kernels
 
 If you care about the performance of just a subset of kernels in an application, for example, kernels you are currently developing or optimizing, you can use the kernel inclusion and/or exclusion options **--include-kernels**, **--exclude-kernels**, **--include-kernels-file** and **--exclude-kernels-file** to instruct unitrace to profile and trace only the kernels of interest, reducing performance overhead and improving analysis efficiency.
@@ -525,7 +544,7 @@ Different profiling data is stored in different files. The table below shows the
 
 | Options | File Name |
 |---------------------|-----------|
-| --chrome-*-logging (except --chrome-kmd-logging) | chrome_trace.json |
+| --chrome-*-logging (except --chrome-kmd-logging) | chrome_trace.json (or chrome_trace.pftrace with --output-format protobuf) |
 | -h | host_timing.txt |
 | -d | device_timing.txt |
 | -s | device_submission.txt |

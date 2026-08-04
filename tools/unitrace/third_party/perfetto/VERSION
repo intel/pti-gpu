@@ -1,0 +1,31 @@
+Perfetto fused trace proto - fetched at build time from public upstream.
+
+Component:   perfetto (fused trace protos)
+Upstream:    https://github.com/google/perfetto
+Tag:         v56.1
+File:        protos/perfetto/trace/perfetto_trace.proto
+License:     Apache-2.0 (see ./LICENSE)
+
+perfetto_trace.proto
+  size:    707859 bytes
+  sha256:  69515f6fa6c0073de20f08c7ddee1b54befa788847af956ad5f74d113340f4c3
+  syntax:  proto2
+  package: perfetto.protos  (generated C++ namespace: perfetto::protos)
+
+The proto is NOT vendored in the tree. The build fetches it from upstream,
+verifies it against the sha256 above, and compiles it with protoc built from
+source (see CMakeLists.txt, BUILD_WITH_PERFETTO; protobuf is always built from
+source, never taken from a system install). Only this LICENSE and VERSION file
+are kept in-tree as the license/SBOM record. Requires network access when
+BUILD_WITH_PERFETTO is enabled; the build degrades to JSON-only if the fetch
+fails.
+
+To bump to a new tag <tag>:
+  1. Download and hash:
+       BASE=https://raw.githubusercontent.com/google/perfetto/<tag>
+       curl -fsSL $BASE/protos/perfetto/trace/perfetto_trace.proto -o /tmp/perfetto_trace.proto
+       curl -fsSL $BASE/LICENSE -o LICENSE
+       sha256sum /tmp/perfetto_trace.proto ; wc -c /tmp/perfetto_trace.proto
+  2. Update PERFETTO_TAG and PERFETTO_PROTO_SHA256 in tools/unitrace/CMakeLists.txt.
+  3. Update Tag / size / sha256 above.
+  4. Update the SDK-root third-party-programs.txt if the version changed.

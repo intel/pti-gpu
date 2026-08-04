@@ -16,9 +16,10 @@
 
 class Logger {
  public:
-  Logger(const std::string& filename, bool lazy_flush = false, bool lock_free = false) {
+  Logger(const std::string& filename, bool lazy_flush = false, bool lock_free = false, bool binary = false) {
     if (!filename.empty()) {
-      file_.open(filename);
+      // Binary mode for the Perfetto protobuf stream; text otherwise.
+      file_.open(filename, binary ? (std::ios::out | std::ios::binary) : std::ios::out);
       if (!(file_.is_open())) {
         std::cerr << "[ERROR] Failed to open file " << filename << " for writing. Do you have the right permission?" << std::endl;
         exit(-1);
@@ -64,6 +65,31 @@ class Logger {
       }
     } else {
       std::cerr << text;
+      if (!lazy_flush_) {
+        std::cerr << std::flush;
+      }
+    }
+  }
+
+  // Binary write overload (raw bytes), used by the Perfetto protobuf emitter.
+  void Log(const void* data, size_t len) {
+    const std::streamsize count = static_cast<std::streamsize>(len);
+    if (file_.is_open()) {
+      if (lock_free_) {
+        file_.write(static_cast<const char*>(data), count);
+        if (!lazy_flush_) {
+          file_ << std::flush;
+        }
+      }
+      else {
+        const std::lock_guard<std::mutex> lock(lock_);
+        file_.write(static_cast<const char*>(data), count);
+        if (!lazy_flush_) {
+          file_ << std::flush;
+        }
+      }
+    } else {
+      std::cerr.write(static_cast<const char*>(data), count);
       if (!lazy_flush_) {
         std::cerr << std::flush;
       }

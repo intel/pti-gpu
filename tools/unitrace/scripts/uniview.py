@@ -24,7 +24,7 @@ import analyzeperfmetrics as apm
 
 def ParseArguments():
     argparser = argparse.ArgumentParser(description = "View trace and hardware metrics in https://ui.perfetto.dev")
-    argparser.add_argument('-t', '--trace', required = True, help = "trace file in JSON format")
+    argparser.add_argument('-t', '--trace', required = True, help = "trace file (.pftrace or legacy .json)")
     argparser.add_argument('-f', '--config', help = "metric view config file ")
     argparser.add_argument('-s', '--shaderdump', help = "shader dump folder for stall analysis")
     argparser.add_argument('-m', '--metrics', help = "hardware performance metrics file in CSV format")
@@ -108,46 +108,51 @@ def main():
             return 1
 
     # validate trace file
+    is_perfetto = args.trace.endswith(".pftrace")
     fsize = os.stat(args.trace).st_size
     if (fsize != 0):
-        valid = True
-        with open(args.trace, 'r') as fp:
-            try:
-                data = json.load(fp)
-                del data
-                gc.collect()
-            except Exception as ex:
-                valid = False
-        if (valid == False):
-            # trace file may not be closely closed
-            # Try to add closing tags
-            with open(args.trace, 'a') as fp:
-                try:
-                    fp.write("\n]\n}\n")
-                except Exception as ex:
-                    # give up
-                    print("Failed to add closing tags to trace file " + args.trace)
-                    return 1
-            # read the file again
-            rollback = False
+        # Perfetto protobuf is binary and self-terminating; skip the JSON
+        # validity check and closing-tag repair (those are JSON-only).
+        # ui.perfetto.dev auto-detects the protobuf format.
+        if (is_perfetto == False):
+            valid = True
             with open(args.trace, 'r') as fp:
                 try:
                     data = json.load(fp)
                     del data
                     gc.collect()
                 except Exception as ex:
-                    # give up, but need to roll back the changes made to the file
-                    rollback = True
-            if (rollback == True):
+                    valid = False
+            if (valid == False):
+                # trace file may not be closely closed
+                # Try to add closing tags
                 with open(args.trace, 'a') as fp:
                     try:
-                        fp.truncate(fsize)
+                        fp.write("\n]\n}\n")
                     except Exception as ex:
-                        print("Failed to rollback the changes to trace file " + args.trace)
-                print("Trace file " + args.trace + " is invalid")
-                return 1 
-            else:
-                print("Trace file " + args.trace + " is modified with proper closing tags added")
+                        # give up
+                        print("Failed to add closing tags to trace file " + args.trace)
+                        return 1
+                # read the file again
+                rollback = False
+                with open(args.trace, 'r') as fp:
+                    try:
+                        data = json.load(fp)
+                        del data
+                        gc.collect()
+                    except Exception as ex:
+                        # give up, but need to roll back the changes made to the file
+                        rollback = True
+                if (rollback == True):
+                    with open(args.trace, 'a') as fp:
+                        try:
+                            fp.truncate(fsize)
+                        except Exception as ex:
+                            print("Failed to rollback the changes to trace file " + args.trace)
+                    print("Trace file " + args.trace + " is invalid")
+                    return 1
+                else:
+                    print("Trace file " + args.trace + " is modified with proper closing tags added")
     else:
         print("Trace file " + args.trace + " is empty")
         return 1
@@ -156,11 +161,17 @@ def main():
 
     if args.metrics is not None:
         https = False
-        with open(args.trace, 'r') as fp:
-            for num, line in enumerate(fp):
-                if ("https://" in line):
-                    https = True
-                    break
+        # The https-vs-local decision is driven by a metrics URL embedded in the
+        # trace. For JSON it can be found by a text scan; the binary
+        # Perfetto trace carries it in a debug annotation, so skip the scan and
+        # use the local (-q) path, matching the http://localhost URL the emitter
+        # writes for protobuf output.
+        if (is_perfetto == False):
+            with open(args.trace, 'r') as fp:
+                for num, line in enumerate(fp):
+                    if ("https://" in line):
+                        https = True
+                        break
 
         options = []
         if (eustall is True):

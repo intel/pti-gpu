@@ -28,6 +28,10 @@
 
 #include "common_header.gen"
 
+#if BUILD_WITH_PERFETTO
+#include "perfettologger.h"
+#endif /* BUILD_WITH_PERFETTO */
+
 static constexpr uint32_t num_device_timestamps_cahced_ = 1024;
 
 #ifdef _WIN32
@@ -121,6 +125,46 @@ static std::map<ZeDeviceTidKey, std::tuple<uint32_t, uint32_t, uint64_t>, ZeDevi
 static uint32_t next_device_pid_ = (uint32_t)(~0) - (mpi_rank << 5);  // each rank uses no more than 32 devices
 static uint32_t next_device_tid_ = (uint32_t)(~0) - (mpi_rank << 5);  // the first device thread is the "main" thread which has the same id as the device process id
 
+// Emit a device process/thread metadata record in the active format (Perfetto
+// track vs JSON "M").
+static void EmitDeviceProcessMetadata(uint32_t device_pid, const std::string& name,
+                                      double start_time) {
+#if BUILD_WITH_PERFETTO
+  if (UseProtobufOutput()) {
+    // Called once per device pid (the device_pid_map_ miss branch), so emit the
+    // descriptor directly -- no MarkTrackEmitted dedup needed.
+    perfetto_emit::EmitProcessTrack(perfetto_emit::MakeUuid(device_pid),
+                                    device_pid, name,
+                                    UniTimer::GetEpochTime(UniTimer::GetHostTimestamp()),
+                                    perfetto_emit::DescriptorSeqId());
+    return;
+  }
+#endif /* BUILD_WITH_PERFETTO */
+  logger_->Log(",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
+               ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"" + name + "\"}}");
+  logger_->Flush();
+}
+
+static void EmitDeviceThreadMetadata(uint32_t device_pid, uint32_t device_tid,
+                                     const std::string& name, double start_time) {
+#if BUILD_WITH_PERFETTO
+  if (UseProtobufOutput()) {
+    // Called once per device tid (the device_tid_map_ miss branch), so emit the
+    // descriptor directly -- no MarkTrackEmitted dedup needed.
+    perfetto_emit::EmitThreadTrack(perfetto_emit::MakeUuid(device_pid, device_tid),
+                                   perfetto_emit::MakeUuid(device_pid),
+                                   device_pid, device_tid, name,
+                                   UniTimer::GetEpochTime(UniTimer::GetHostTimestamp()),
+                                   perfetto_emit::DescriptorSeqId());
+    return;
+  }
+#endif /* BUILD_WITH_PERFETTO */
+  logger_->Log(",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) + ", \"tid\": " +
+               std::to_string(device_tid) + ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"" +
+               name + "\"}}");
+  logger_->Flush();
+}
+
 static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device, uint32_t engine_ordinal, uint32_t engine_index, int host_pid, int host_tid, uint32_t track_id) {
   if (device_logging_no_thread_) {
     // map all threads to the process
@@ -183,41 +227,38 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
 
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
-      std::string str = ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
-                        ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+      // Build the device process display name (shared by both output formats).
+      std::string device_proc_name;
       if (rank.empty()) {
-        str += "DEVICE<" + pmi_hostname + ">";
+        device_proc_name = "DEVICE<" + pmi_hostname + ">";
       }
       else {
-        str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
+        device_proc_name = "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
       }
 
       std::string device_name = GetZeDeviceName(device);
       if (device_name.size() > 0) {
-        str += "[" + device_name + "] ";
+        device_proc_name += "[" + device_name + "] ";
       }
 
       char str2[128];
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.domain);
-      str += std::string(str2) + ":";
+      device_proc_name += std::string(str2) + ":";
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.bus);
-      str += std::string(str2) + ":";
+      device_proc_name += std::string(str2) + ":";
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.device);
-      str += std::string(str2) + ":";
+      device_proc_name += std::string(str2) + ":";
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.function);
-      str += std::string(str2);
+      device_proc_name += std::string(str2);
 
       if (pid_key.parent_device_id_ >= 0) {
-        str += " #" + std::to_string(pid_key.parent_device_id_) + "." + std::to_string(pid_key.subdevice_id_);
+        device_proc_name += " #" + std::to_string(pid_key.parent_device_id_) + "." + std::to_string(pid_key.subdevice_id_);
       }
       else {
-        str += " #" + std::to_string(pid_key.device_id_);
+        device_proc_name += " #" + std::to_string(pid_key.device_id_);
       }
 
-      str += "\"}}";
-
-      logger_->Log(str);
-      logger_->Flush();
+      EmitDeviceProcessMetadata(device_pid, device_proc_name, start_time);
     }
 
     device_tid = next_device_tid_--;
@@ -226,27 +267,26 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
 
     std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
-    std::string str = ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) + ", \"tid\": " +
-                      std::to_string(device_tid) + ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+    // Build the device thread display name (shared by both output formats).
+    std::string device_thread_name;
     if (device_logging_no_thread_) {
       if (device_logging_no_engine_) {
-        str += "L0\"}}";
+        device_thread_name = "L0";
       } else {
-        str += GetZeEngineName(device, tid_key.engine_ordinal_);
-        str += "<" + std::to_string(tid_key.engine_ordinal_) + "," + std::to_string(tid_key.engine_index_) + ">\"}}";
+        device_thread_name = GetZeEngineName(device, tid_key.engine_ordinal_);
+        device_thread_name += "<" + std::to_string(tid_key.engine_ordinal_) + "," + std::to_string(tid_key.engine_index_) + ">";
       }
     } else {
       if (device_logging_no_engine_) {
-        str += "Thread " + std::to_string(tid_key.host_tid_) + " L0\"}}";
+        device_thread_name = "Thread " + std::to_string(tid_key.host_tid_) + " L0";
       } else {
-        str += "Thread " + std::to_string(tid_key.host_tid_);
-        str += " " + GetZeEngineName(device, tid_key.engine_ordinal_);
-        str += "<" + std::to_string(tid_key.engine_ordinal_) + "," + std::to_string(tid_key.engine_index_) + ">\"}}";
+        device_thread_name = "Thread " + std::to_string(tid_key.host_tid_);
+        device_thread_name += " " + GetZeEngineName(device, tid_key.engine_ordinal_);
+        device_thread_name += "<" + std::to_string(tid_key.engine_ordinal_) + "," + std::to_string(tid_key.engine_index_) + ">";
       }
     }
 
-    logger_->Log(str);
-    logger_->Flush();
+    EmitDeviceThreadMetadata(device_pid, device_tid, device_thread_name, start_time);
   }
 
   return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
@@ -333,34 +373,31 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
 
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
-      std::string str = ",\n{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": " + std::to_string(device_pid) +
-                        ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+      // Build the device process display name (shared by both output formats).
+      std::string device_proc_name;
       if (rank.empty()) {
-        str += "DEVICE<" + pmi_hostname + ">";
+        device_proc_name = "DEVICE<" + pmi_hostname + ">";
       }
       else {
-        str += "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
+        device_proc_name = "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
       }
 
       std::string device_name = GetClDeviceName(device);
       if (device_name.size() > 0) {
-        str += "[" + device_name + "] ";
+        device_proc_name += "[" + device_name + "] ";
       }
 
       char str2[128];
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_domain);
-      str += std::string(str2) + ":";
+      device_proc_name += std::string(str2) + ":";
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_bus);
-      str += std::string(str2) + ":";
+      device_proc_name += std::string(str2) + ":";
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_device);
-      str += std::string(str2) + ":";
+      device_proc_name += std::string(str2) + ":";
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_function);
-      str += std::string(str2);
+      device_proc_name += std::string(str2);
 
-      str += "\"}}";
-
-      logger_->Log(str);
-      logger_->Flush();
+      EmitDeviceProcessMetadata(device_pid, device_proc_name, start_time);
     }
     device_tid = next_device_tid_--;
     auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
@@ -368,34 +405,30 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
 
     std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
-    std::string str = ",\n{\"ph\": \"M\", \"name\": \"thread_name\", \"pid\": " + std::to_string(device_pid) +
-                      ", \"tid\": " + std::to_string(device_tid) +
-                      ", \"ts\": " + std::to_string(start_time) + ", \"args\": {\"name\": \"";
+    // Build the device thread display name (shared by both output formats).
+    std::string device_thread_name;
     if (device_logging_no_thread_) {
       if (device_logging_no_engine_) {
-        str += "CL\"}}";
+        device_thread_name = "CL";
       }
       else {
         char str2[128];
-
         snprintf(str2, sizeof(str2), "%p", tid_key.queue_);
-        str += "CL Queue<" + std::string(str2) + ">\"}}";
+        device_thread_name = "CL Queue<" + std::string(str2) + ">";
       }
     }
     else {
       if (device_logging_no_engine_) {
-        str += "Thread " + std::to_string(tid_key.host_tid_) + " CL\"}}";
+        device_thread_name = "Thread " + std::to_string(tid_key.host_tid_) + " CL";
       }
       else {
         char str2[128];
-
         snprintf(str2, sizeof(str2), "%p", tid_key.queue_);
-        str += "Thread " + std::to_string(tid_key.host_tid_) + " CL Queue<" + std::string(str2) + ">\"}}";
+        device_thread_name = "Thread " + std::to_string(tid_key.host_tid_) + " CL Queue<" + std::string(str2) + ">";
       }
     }
 
-    logger_->Log(str);
-    logger_->Flush();
+    EmitDeviceThreadMetadata(device_pid, device_tid, device_thread_name, start_time);
   }
 
   return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
@@ -545,7 +578,7 @@ static void OmpArgsToString(const OmpArgs &args, std::string &o) {
 // comparator for std::pair<start_time, end_time> of device timestamps
 struct DeviceTimestampComparator {
   bool operator()(const std::pair<uint64_t, uint64_t>& a, const std::pair<uint64_t, uint64_t>& b) const {
-    // sort by end_time ascending, then start_time ascending 
+    // sort by end_time ascending, then start_time ascending
     if (a.second != b.second) {
       return a.second < b.second; // primary sort
     }
@@ -606,6 +639,169 @@ std::set<TraceBuffer *> *trace_buffers_ = nullptr;
 
 #define BUFFER_SLICE_SIZE_DEFAULT  (0x1 << 20)
 
+#if BUILD_WITH_PERFETTO
+// H2D flow ids (from EVENT_FLOW_SOURCE records) awaiting the next host slice.
+// Per host-thread buffer: the callback pushes a call's flow records right before
+// its EVENT_COMPLETE on one thread, so they stay contiguous.
+struct PendingFlows {
+  std::vector<uint64_t> source;  // -> flow_ids on the submit slice
+};
+
+// Host process track uuid, scoped by mpi_rank so concatenated per-rank traces
+// with repeating pids don't merge (thread tracks use this as parent_uuid).
+inline uint64_t HostProcessTrackUuid(uint32_t pid) {
+  constexpr uint64_t kHostProcMarker = 0x50524f43;  // "PROC"
+  return perfetto_emit::MakeUuid(pid, mpi_rank, kHostProcMarker);
+}
+
+// Emit a HostEventRecord as Perfetto TrackEvent(s) on its host thread track.
+// Shared by TraceBuffer and ClTraceBuffer; reproduces the JSON host output
+// (cpu_op category, "id" arg, MPI/ITT args) and frees name_/ITT data like
+// StringifyHostEvent. Flow ids accumulate in |pending| and ride on the next slice.
+// |host_track_emitted| is the buffer's once-per-thread flag: the host thread track
+// uuid is constant for a buffer (pid/tid fixed), so the descriptor is emitted on
+// the first host event only, avoiding a global-locked MarkTrackEmitted probe per
+// event.
+inline void PerfettoEmitHostEvent(HostEventRecord& rec, uint32_t pid, uint32_t tid,
+                                  uint32_t seq_id, PendingFlows& pending,
+                                  bool& host_track_emitted) {
+  // "HOST" marker keeps host uuids off device uuids; +mpi_rank scopes per rank.
+  constexpr uint64_t kHostTrackMarker = 0x484f5354;
+  uint64_t track_uuid = perfetto_emit::MakeUuid(pid, tid, kHostTrackMarker + mpi_rank);
+  if (!host_track_emitted) {
+    perfetto_emit::EmitThreadTrack(track_uuid, HostProcessTrackUuid(pid),
+                                   pid, tid, "Thread " + std::to_string(tid),
+                                   UniTimer::GetEpochTime(rec.start_time_),
+                                   perfetto_emit::DescriptorSeqId());
+    host_track_emitted = true;
+  }
+  uint64_t ts_ns = UniTimer::GetEpochTime(rec.start_time_);
+
+  // Flow records emit no slice of their own. Only H2D (submit) ids are kept; they
+  // ride as flow_ids on the EVENT_COMPLETE that follows, and the kernel carries
+  // the same id -> Perfetto draws submit -> kernel. D2H (sink) ids are dropped:
+  // the host wait begins before the device work it waits on, so a shared flow_id
+  // would render backwards (wait -> kernel). The fix is GpuCorrelation (see
+  // UNITRACEI-107); until then the submit -> kernel arrow shows the association.
+  if (rec.type_ == EVENT_FLOW_SOURCE || rec.type_ == EVENT_FLOW_SINK) {
+    if (rec.type_ == EVENT_FLOW_SOURCE) {
+      pending.source.push_back(rec.id_);
+    }
+    if (rec.name_ != nullptr) { free(rec.name_); rec.name_ = nullptr; }
+    return;
+  }
+
+  perfetto_emit::SliceOptions opts;
+  opts.category = "cpu_op";
+  if (rec.name_ != nullptr) {
+    opts.name = rec.name_;
+    if (opts.name.size() >= 2 && opts.name.front() == '"' && opts.name.back() == '"') {
+      opts.name = opts.name.substr(1, opts.name.size() - 2);
+    }
+  } else if ((rec.api_id_ != XptiTracingId) && (rec.api_id_ != IttTracingId)) {
+    opts.name = get_symbol(rec.api_id_);
+  }
+  if (rec.name_ != nullptr) { free(rec.name_); rec.name_ = nullptr; }
+
+  // Build args (mirror the JSON args), replicating ITT free side effects.
+  bool has_args = false;
+  if (rec.api_type_ == API_TYPE_MPI) {
+    const MpiArgs& args = rec.mpi_args_;
+    if (args.src_size != 0) {
+      opts.annotations.push_back(perfetto_emit::Annotation::Uint("ssize", args.src_size));
+      if (args.is_tagged) {
+        opts.annotations.push_back(perfetto_emit::Annotation::Int("src", args.src_location));
+        opts.annotations.push_back(perfetto_emit::Annotation::Int("stag", args.src_tag));
+      }
+      has_args = true;
+    }
+    if (args.dst_size != 0) {
+      opts.annotations.push_back(perfetto_emit::Annotation::Uint("dsize", args.dst_size));
+      if (args.is_tagged) {
+        opts.annotations.push_back(perfetto_emit::Annotation::Int("dst", args.dst_location));
+        opts.annotations.push_back(perfetto_emit::Annotation::Int("dtag", args.dst_tag));
+      }
+      has_args = true;
+    }
+    if (args.mpi_counter >= 0) {
+      opts.annotations.push_back(perfetto_emit::Annotation::Int("mpi_counter", args.mpi_counter));
+      has_args = true;
+    }
+  } else if (rec.api_type_ == API_TYPE_ITT) {
+    opts.annotations.push_back(perfetto_emit::Annotation::Str(rec.itt_args_.key, ConvertDataToString(&rec.itt_args_)));
+    if (rec.itt_args_.isIndirectData) {
+      free(rec.itt_args_.data[0]);
+    }
+    IttArgs* args = rec.itt_args_.next;
+    while (args != nullptr) {
+      opts.annotations.push_back(perfetto_emit::Annotation::Str(args->key, ConvertDataToString(args)));
+      IttArgs* toFree = args;
+      args = args->next;
+      free(toFree);
+    }
+    rec.itt_args_.count = 0;
+    rec.api_type_ = API_TYPE_NONE;
+    has_args = true;
+  }
+  // The JSON path emits a top-level "id" only when there are no args.
+  if (!has_args) {
+    opts.annotations.push_back(perfetto_emit::Annotation::Uint("id", rec.id_));
+  }
+
+  if (rec.type_ == EVENT_COMPLETE) {
+    // Attach the H2D flow ids accumulated from this call's FLOW_SOURCE records.
+    if (!pending.source.empty()) {
+      opts.flow_ids = std::move(pending.source);
+      pending.source.clear();
+    }
+    perfetto_emit::EmitSliceBegin(seq_id, track_uuid, ts_ns, opts);
+    perfetto_emit::EmitSliceEnd(seq_id, track_uuid, UniTimer::GetEpochTime(rec.end_time_));
+  } else if (rec.type_ == EVENT_DURATION_START) {
+    perfetto_emit::EmitSliceBegin(seq_id, track_uuid, ts_ns, opts);
+  } else if (rec.type_ == EVENT_DURATION_END) {
+    perfetto_emit::EmitSliceEnd(seq_id, track_uuid, ts_ns);
+  } else if (rec.type_ == EVENT_MARK) {
+    perfetto_emit::EmitInstant(seq_id, track_uuid, ts_ns, opts);
+  }
+}
+
+// Emit one device kernel command as a Perfetto slice (begin+end) on its device
+// thread track. The Level Zero and OpenCL device emitters differ only in how
+// pid/tid/kname are resolved, so they resolve those and call this with the
+// common fields. Carries the gpu_op category, the kernel id arg, optional
+// metrics arg, and (non-implicit-scaling) the kid as a flow_id -- the device end
+// of the H2D submit -> kernel arrow (the host submit slice carries the same id).
+// Shared device-slice emit for both ZE and CL (the wrappers resolve the backend).
+inline void PerfettoEmitDeviceSlice(uint32_t seq_id, uint32_t pid, uint32_t tid,
+                                    const std::string& kname, uint64_t kid,
+                                    bool implicit_scaling, uint32_t tile,
+                                    bool metrics_enabled, uint64_t start_time,
+                                    uint64_t end_time) {
+  perfetto_emit::SliceOptions opts;
+  opts.category = "gpu_op";
+  if (implicit_scaling) {
+    opts.name = "Tile #" + std::to_string(tile) + ": " + kname;
+  } else {
+    opts.name = kname;
+    // The JSON path emits a dep flow tied to kid for non-scaled commands.
+    opts.flow_ids.push_back(kid);
+  }
+  opts.annotations.push_back(perfetto_emit::Annotation::Str("id", std::to_string(kid)));
+  if (metrics_enabled) {
+    opts.annotations.push_back(perfetto_emit::Annotation::Str(
+        "metrics", "http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(kid)));
+  }
+
+  uint64_t track_uuid = perfetto_emit::MakeUuid(pid, tid);
+  perfetto_emit::EmitSliceBegin(seq_id, track_uuid, UniTimer::GetEpochTime(start_time), opts);
+  perfetto_emit::EmitSliceEnd(seq_id, track_uuid, UniTimer::GetEpochTime(end_time));
+}
+#endif /* BUILD_WITH_PERFETTO */
+
+// TODO(refactor): TraceBuffer (Level Zero) and ClTraceBuffer (OpenCL) differ only
+// in the record type and device-id resolution; a TraceBuffer templated on the
+// record + a device-id trait would fold both into one. Deferred to keep this
+// change scoped to the Perfetto output.
 class TraceBuffer {
   public:
     TraceBuffer() : flush_immediately_(false) {
@@ -633,6 +829,11 @@ class TraceBuffer {
       host_event_buffer_.push_back(her);
       tid_= utils::GetTid();
       pid_= utils::GetPid();
+#if BUILD_WITH_PERFETTO
+      // One packet sequence per writer thread; slices on the same track from the
+      // same sequence stack correctly. Per-rank files are already separate.
+      seq_id_ = perfetto_emit::NextSequenceId();
+#endif /* BUILD_WITH_PERFETTO */
 
       current_device_event_buffer_slice_ = 0;
       current_host_event_buffer_slice_ = 0;
@@ -756,7 +957,7 @@ class TraceBuffer {
       if (flush_immediately_) {
         std::lock_guard<std::recursive_mutex> lock(logger_lock_);
         FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][next_host_event_index_]);
-        // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
+        // in case that flush_immediately_ is true, only one slice and one event slot, so set the flushed flag to true
         host_event_buffer_flushed_ = true;
       }
       else {
@@ -769,8 +970,8 @@ class TraceBuffer {
       if (flush_immediately_) {
         std::lock_guard<std::recursive_mutex> lock(logger_lock_);
         FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][next_device_event_index_]);
-        // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
-        host_event_buffer_flushed_ = true;
+        // in case that flush_immediately_ is true, only one slice and one event slot, so set the flushed flag to true
+        device_event_buffer_flushed_ = true;
       }
       else {
         next_device_event_index_++;
@@ -974,7 +1175,28 @@ class TraceBuffer {
       return str;
     }
 
+#if BUILD_WITH_PERFETTO
+    // Emit a Level Zero device kernel command as a Perfetto slice. Resolves the
+    // ZE-specific pid/tid/kname (reusing the same track allocation as the JSON
+    // path) and defers the shared slice emit to PerfettoEmitDeviceSlice.
+    void PerfettoEmitDeviceEvent(ZeKernelCommandExecutionRecord& rec) {
+      auto& rdt = GetRecentDeviceTimestamps(rec.device_, rec.engine_ordinal_, rec.engine_index_);
+      uint32_t track = GetDeviceEventTrack(rdt, rec.start_time_, rec.end_time_);
+      auto [pid, tid] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, pid_, rec.tid_, track);
+      std::string kname = GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
+      // GetZeKernelCommandName may return a quoted string; unquote for the proto.
+      if (!kname.empty() && kname.front() == '"' && kname.back() == '"') {
+        kname = kname.substr(1, kname.size() - 2);
+      }
+      PerfettoEmitDeviceSlice(seq_id_, pid, tid, kname, rec.kid_, rec.implicit_scaling_,
+                              rec.tile_, metrics_enabled_, rec.start_time_, rec.end_time_);
+    }
+#endif /* BUILD_WITH_PERFETTO */
+
     void FlushDeviceEvent(ZeKernelCommandExecutionRecord& rec) {
+#if BUILD_WITH_PERFETTO
+      if (UseProtobufOutput()) { PerfettoEmitDeviceEvent(rec); return; }
+#endif /* BUILD_WITH_PERFETTO */
       logger_->Log(StringifyDeviceEvent(rec));
     }
 
@@ -999,6 +1221,9 @@ class TraceBuffer {
     }
 
     void FlushHostEvent(HostEventRecord& rec) {
+#if BUILD_WITH_PERFETTO
+      if (UseProtobufOutput()) { PerfettoEmitHostEvent(rec, pid_, tid_, seq_id_, pending_flows_, host_track_emitted_); return; }
+#endif /* BUILD_WITH_PERFETTO */
       logger_->Log(StringifyHostEvent(rec));
     }
 
@@ -1062,6 +1287,14 @@ class TraceBuffer {
     int32_t next_host_event_index_;  // next free host event in in-use slice
     uint32_t tid_;
     uint32_t pid_;
+#if BUILD_WITH_PERFETTO
+    uint32_t seq_id_;  // Perfetto packet sequence id for this writer thread
+    // Flow ids from FLOW_SOURCE/SINK records awaiting the next real host slice.
+    PendingFlows pending_flows_;
+    // Whether this buffer's host thread TrackDescriptor has been emitted (it is
+    // emitted once on the first host event; the uuid is constant per buffer).
+    bool host_track_emitted_ = false;
+#endif /* BUILD_WITH_PERFETTO */
     std::vector<ZeKernelCommandExecutionRecord *> device_event_buffer_;
     std::vector<HostEventRecord *> host_event_buffer_;
     // device event timestampes cached are <device, engine_ordinal, engine_index> specific
@@ -1104,6 +1337,11 @@ class ClTraceBuffer {
       host_event_buffer_.push_back(her);
       tid_= utils::GetTid();
       pid_= utils::GetPid();
+#if BUILD_WITH_PERFETTO
+      // One packet sequence per writer thread; slices on the same track from the
+      // same sequence stack correctly. Per-rank files are already separate.
+      seq_id_ = perfetto_emit::NextSequenceId();
+#endif /* BUILD_WITH_PERFETTO */
 
       current_device_event_buffer_slice_ = 0;
       current_host_event_buffer_slice_ = 0;
@@ -1227,7 +1465,7 @@ class ClTraceBuffer {
       if (flush_immediately_) {
         std::lock_guard<std::recursive_mutex> lock(logger_lock_);
         FlushHostEvent(host_event_buffer_[current_host_event_buffer_slice_][next_host_event_index_]);
-        // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
+        // in case that flush_immediately_ is true, only one slice and one event slot, so set the flushed flag to true
         host_event_buffer_flushed_ = true;
       }
       else {
@@ -1240,8 +1478,8 @@ class ClTraceBuffer {
       if (flush_immediately_) {
         std::lock_guard<std::recursive_mutex> lock(logger_lock_);
         FlushDeviceEvent(device_event_buffer_[current_device_event_buffer_slice_][next_device_event_index_]);
-        // in case that flush_immediately_ is true, only one slice and one even slot, so set the flushed flag to true
-        host_event_buffer_flushed_ = true;
+        // in case that flush_immediately_ is true, only one slice and one event slot, so set the flushed flag to true
+        device_event_buffer_flushed_ = true;
       }
       else {
         next_device_event_index_++;
@@ -1320,7 +1558,27 @@ class ClTraceBuffer {
       return str;
     }
 
+#if BUILD_WITH_PERFETTO
+    // Emit an OpenCL device kernel command as a Perfetto slice. Mirrors the L0
+    // emitter: resolves the CL-specific pid/tid/kname and defers to the shared
+    // PerfettoEmitDeviceSlice.
+    void PerfettoEmitDeviceEvent(ClKernelCommandExecutionRecord& rec) {
+      auto& rdt = GetRecentDeviceTimestamps(rec.device_, rec.queue_);
+      uint32_t track = GetDeviceEventTrack(rdt, rec.start_time_, rec.end_time_);
+      auto [pid, tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_, track);
+      std::string kname = GetClKernelCommandName(rec.kernel_command_id_);
+      if (!kname.empty() && kname.front() == '"' && kname.back() == '"') {
+        kname = kname.substr(1, kname.size() - 2);
+      }
+      PerfettoEmitDeviceSlice(seq_id_, pid, tid, kname, rec.kid_, rec.implicit_scaling_,
+                              rec.tile_, metrics_enabled_, rec.start_time_, rec.end_time_);
+    }
+#endif /* BUILD_WITH_PERFETTO */
+
     void FlushDeviceEvent(ClKernelCommandExecutionRecord& rec) {
+#if BUILD_WITH_PERFETTO
+      if (UseProtobufOutput()) { PerfettoEmitDeviceEvent(rec); return; }
+#endif /* BUILD_WITH_PERFETTO */
       logger_->Log(StringifyDeviceEvent(rec));
     }
 
@@ -1446,8 +1704,9 @@ class ClTraceBuffer {
           args = args->next;
           free(toFree);
         }
-        // reset count to 0
+        // reset count to 0 and type to API_TYPE_NONE
         rec.itt_args_.count = 0;
+        rec.api_type_ = API_TYPE_NONE;
       }
 
       if (!str_args.empty()) {
@@ -1463,6 +1722,9 @@ class ClTraceBuffer {
     }
 
     void FlushHostEvent(HostEventRecord& rec) {
+#if BUILD_WITH_PERFETTO
+      if (UseProtobufOutput()) { PerfettoEmitHostEvent(rec, pid_, tid_, seq_id_, pending_flows_, host_track_emitted_); return; }
+#endif /* BUILD_WITH_PERFETTO */
       logger_->Log(StringifyHostEvent(rec));
     }
 
@@ -1526,6 +1788,14 @@ class ClTraceBuffer {
     int32_t next_host_event_index_;  // next free host event in in-use slice
     uint32_t tid_;
     uint32_t pid_;
+#if BUILD_WITH_PERFETTO
+    uint32_t seq_id_;  // Perfetto packet sequence id for this writer thread
+    // Flow ids from FLOW_SOURCE/SINK records awaiting the next real host slice.
+    PendingFlows pending_flows_;
+    // Whether this buffer's host thread TrackDescriptor has been emitted (it is
+    // emitted once on the first host event; the uuid is constant per buffer).
+    bool host_track_emitted_ = false;
+#endif /* BUILD_WITH_PERFETTO */
     std::vector<ClKernelCommandExecutionRecord *> device_event_buffer_;
     std::vector<HostEventRecord *> host_event_buffer_;
     // device event timestampes cached are <device, queue> specific
@@ -1550,28 +1820,63 @@ class ChromeLogger {
     ChromeLogger(const char* process_name)
       : logger_factory_(LoggerFactory::Create())
     {
-      process_start_time_ = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
       process_name_ = process_name;
+
+      std::string host = GetHostName();
+      std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
+      std::string host_proc_name = rank.empty() ? ("HOST<" + host + ">")
+                                                : ("RANK " + rank + " HOST<" + host + ">");
+
+#if !BUILD_WITH_PERFETTO
+      if (utils::GetEnv("UNITRACE_OutputFormat") == "protobuf") {
+        std::cerr << "[WARNING] --output-format=protobuf requested, but unitrace was built "
+                     "without Perfetto support (BUILD_WITH_PERFETTO=OFF). Falling back to JSON." << std::endl;
+      }
+#endif /* !BUILD_WITH_PERFETTO */
+
+#if BUILD_WITH_PERFETTO
+      if (UseProtobufOutput()) {
+        // Protobuf is opened in binary mode (4th GetLogger arg = binary).
+        logger_ = logger_factory_->GetLogger(LOGGER_TYPE_CHROME_TRACE_UNITRACE, true, true, /*binary=*/true);
+        if (!logger_) {
+          UniMemory::ExitIfOutOfMemory((void *)(logger_.get()));
+        }
+        perfetto_emit::EmitLogger() = logger_;
+
+        // Clock domain: REALTIME (epoch ns) by default -- globally meaningful
+        // across hosts, enabling cross-rank Timeline Sync. Under
+        // UNITRACE_SystemTime=1, GetEpochTime returns raw monotonic ns instead, so
+        // resolve to MONOTONIC_RAW in that mode.
+        perfetto_emit::ClockId() = (utils::GetEnv("UNITRACE_SystemTime") == "1")
+                                       ? perfetto_emit::kClockMonotonicRaw
+                                       : perfetto_emit::kClockRealtime;
+
+        // Sample BOOTTIME and the event clock back-to-back so the ClockSnapshot
+        // relates them accurately (needed for the trace processor's clock sync).
+        uint64_t boot_ns = UniTimer::GetHostBootTimestamp();
+        uint64_t now_ns = UniTimer::GetEpochTime(UniTimer::GetHostTimestamp());
+        perfetto_emit::EmitClockSnapshot(now_ns, boot_ns, perfetto_emit::DescriptorSeqId());
+        // Emitted once at construction, so direct emit -- no dedup needed.
+        perfetto_emit::EmitProcessTrack(HostProcessTrackUuid(utils::GetPid()),
+                                        utils::GetPid(), host_proc_name, now_ns,
+                                        perfetto_emit::DescriptorSeqId());
+        // After the clock snapshot so "no events -> delete file" still holds.
+        logger_->SetEmptyPosition();
+        return;
+      }
+#endif /* BUILD_WITH_PERFETTO */
       logger_ = logger_factory_->GetLogger(LOGGER_TYPE_CHROME_TRACE_UNITRACE, true, true);
       if (!logger_) {
         UniMemory::ExitIfOutOfMemory((void *)(logger_.get()));
       }
 
+      process_start_time_ = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
+
       logger_->Log("{ \"traceEvents\":[\n");
 
       std::string str("{\"ph\": \"M\", \"name\": \"process_name\", \"pid\": ");
-
       str += std::to_string(utils::GetPid()) + ", \"ts\": " + std::to_string(process_start_time_) + ", \"args\": {\"name\": \"";
-
-      std::string host = GetHostName();
-      std::string rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
-
-      if (rank.empty()) {
-        str += "HOST<" + host + ">\"}}";
-      }
-      else {
-        str += "RANK " + rank + " HOST<" + host + ">\"}}";
-      }
+      str += host_proc_name + "\"}}";
 
       logger_->Log(str);
       logger_->SetEmptyPosition();
@@ -1608,9 +1913,11 @@ class ChromeLogger {
         logger_lock_.unlock();
 
         if (logger_->IsEmpty()) {
-          // no data has been logged 
+          // no data has been logged
           std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
         } else {
+          // The JSON closing tags (if any) are written by Flush(), called above.
+          // The protobuf stream is self-terminating.
           std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
         }
       }
@@ -1644,8 +1951,10 @@ class ChromeLogger {
         }
 #endif /* BUILD_WITH_OPENCL */
 
-        // Write closing brackets so the JSON is valid if the process terminates abnormally
-        if (!logger_->IsEmpty()) {
+        // Write closing brackets so the JSON is valid if the process terminates
+        // abnormally. The protobuf stream is binary and self-terminating, so the
+        // tags would corrupt it -- JSON-only.
+        if (!UseProtobufOutput() && !logger_->IsEmpty()) {
           logger_->Log("\n]\n}\n");
           logger_->Flush();
         }
@@ -1812,20 +2121,36 @@ class ChromeLogger {
         return;
       }
 
-      HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
+      // The protobuf emitter attaches the flow ids to the next slice, so protobuf
+      // must buffer the flow records before the EVENT_COMPLETE; JSON keeps the
+      // COMPLETE first (its ph:s/ph:t follow).
+      // NOTE: this body is identical to ClChromeCallLoggingCallback except for the
+      // thread-local buffer it writes to; both would collapse if the ZE/CL trace
+      // buffers were unified (templatized) -- see the TraceBuffer note above.
+      bool flows_first = false;
+#if BUILD_WITH_PERFETTO
+      flows_first = UseProtobufOutput();
+#endif /* BUILD_WITH_PERFETTO */
 
-      rec->type_ = EVENT_COMPLETE;
-      rec->api_type_ = API_TYPE_NONE;
-      rec->api_id_ = api_id;
-      rec->start_time_ = started;
-      rec->end_time_ = ended;
-      rec->id_ = 0;
-      rec->name_ = nullptr;
-      thread_local_buffer_.BufferHostEvent();
+      auto buffer_complete = [&]() {
+        HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
+        rec->type_ = EVENT_COMPLETE;
+        rec->api_type_ = API_TYPE_NONE;
+        rec->api_id_ = api_id;
+        rec->start_time_ = started;
+        rec->end_time_ = ended;
+        rec->id_ = 0;
+        rec->name_ = nullptr;
+        thread_local_buffer_.BufferHostEvent();
+      };
+
+      if (!flows_first) {
+        buffer_complete();
+      }
 
       if ((kids != nullptr) && (flow_dir == FLOW_H2D)) {
         for (auto id : *kids) {
-          rec = thread_local_buffer_.GetHostEvent();
+          HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SOURCE;
           rec->api_type_ = API_TYPE_NONE;
@@ -1838,7 +2163,7 @@ class ChromeLogger {
       }
       if ((kids != nullptr) && (flow_dir == FLOW_D2H)) {
         for (auto id : *kids) {
-          rec = thread_local_buffer_.GetHostEvent();
+          HostEventRecord *rec = thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SINK;
           rec->api_type_ = API_TYPE_NONE;
@@ -1848,6 +2173,10 @@ class ChromeLogger {
           rec->name_ = nullptr;
           thread_local_buffer_.BufferHostEvent();
         }
+      }
+
+      if (flows_first) {
+        buffer_complete();
       }
     }
 
@@ -1890,19 +2219,35 @@ class ChromeLogger {
         return;
       }
 
-      HostEventRecord *rec = cl_thread_local_buffer_.GetHostEvent();
-      rec->type_ = EVENT_COMPLETE;
-      rec->api_type_ = API_TYPE_NONE;
-      rec->api_id_ = api_id;
-      rec->start_time_ = started;
-      rec->end_time_ = ended;
-      rec->id_ = 0;
-      rec->name_ = nullptr;
-      cl_thread_local_buffer_.BufferHostEvent();
+      // See ChromeCallLoggingCallback: protobuf buffers the flow records before
+      // the EVENT_COMPLETE so the emitter can attach them to that slice; JSON
+      // keeps COMPLETE first. This body mirrors ChromeCallLoggingCallback exactly
+      // but for the cl_ buffer -- another pair that a templatized TraceBuffer
+      // would unify (see the TraceBuffer note above).
+      bool flows_first = false;
+#if BUILD_WITH_PERFETTO
+      flows_first = UseProtobufOutput();
+#endif /* BUILD_WITH_PERFETTO */
+
+      auto buffer_complete = [&]() {
+        HostEventRecord *rec = cl_thread_local_buffer_.GetHostEvent();
+        rec->type_ = EVENT_COMPLETE;
+        rec->api_type_ = API_TYPE_NONE;
+        rec->api_id_ = api_id;
+        rec->start_time_ = started;
+        rec->end_time_ = ended;
+        rec->id_ = 0;
+        rec->name_ = nullptr;
+        cl_thread_local_buffer_.BufferHostEvent();
+      };
+
+      if (!flows_first) {
+        buffer_complete();
+      }
 
       if ((kids != nullptr) && (flow_dir == FLOW_H2D)) {
         for (auto id : *kids) {
-          rec = cl_thread_local_buffer_.GetHostEvent();
+          HostEventRecord *rec = cl_thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SOURCE;
           rec->api_type_ = API_TYPE_NONE;
@@ -1916,7 +2261,7 @@ class ChromeLogger {
 
       if ((kids != nullptr) && (flow_dir == FLOW_D2H)) {
         for (auto id : *kids) {
-          rec = cl_thread_local_buffer_.GetHostEvent();
+          HostEventRecord *rec = cl_thread_local_buffer_.GetHostEvent();
 
           rec->type_ = EVENT_FLOW_SINK;
           rec->api_type_ = API_TYPE_NONE;
@@ -1926,6 +2271,10 @@ class ChromeLogger {
           rec->name_ = nullptr;
           cl_thread_local_buffer_.BufferHostEvent();
         }
+      }
+
+      if (flows_first) {
+        buffer_complete();
       }
     }
 #endif /* BUILD_WITH_OPENCL */

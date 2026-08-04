@@ -59,7 +59,8 @@ void Usage(char * progname) {
   std::cout << "BUILD_WITH_ITT=" << BUILD_WITH_ITT << ", ";
   std::cout << "BUILD_WITH_XPTI=" << BUILD_WITH_XPTI << ", ";
   std::cout << "BUILD_WITH_MPI=" << BUILD_WITH_MPI << ", ";
-  std::cout << "BUILD_WITH_OMP=" << BUILD_WITH_OMP;
+  std::cout << "BUILD_WITH_OMP=" << BUILD_WITH_OMP << ", ";
+  std::cout << "BUILD_WITH_PERFETTO=" << BUILD_WITH_PERFETTO;
   std::cout << ")" << std::endl;
   std::cout <<
     "Usage: " << progname << " [options] <application> <args>" <<
@@ -200,6 +201,12 @@ void Usage(char * progname) {
     "--output [-o] <filename>         " <<
     "Output profiling result to file" <<
     std::endl;
+#if BUILD_WITH_PERFETTO
+  std::cout <<
+    "--output-format <format>         " <<
+    "Timeline trace format: \"json\" (Chrome trace, default) or \"protobuf\" (Perfetto)" <<
+    std::endl;
+#endif /* BUILD_WITH_PERFETTO */
   std::cout <<
     "--conditional-collection         " <<
     "Enable conditional collection. " <<
@@ -484,6 +491,20 @@ int ParseArgs(int argc, char* argv[]) {
       }
       utils::SetEnv("UNITRACE_LogFilename", argv[i]);
       app_index += 2;
+#if BUILD_WITH_PERFETTO
+    } else if (strcmp(argv[i], "--output-format") == 0) {
+      ++i;
+      if (i >= argc) {
+        std::cerr << "[ERROR] Output format is not specified. Use \"protobuf\" or \"json\"" << std::endl;
+        return -1;
+      }
+      if (strcmp(argv[i], "protobuf") != 0 && strcmp(argv[i], "json") != 0) {
+        std::cerr << "[ERROR] Invalid output format \"" << argv[i] << "\". Use \"protobuf\" or \"json\"" << std::endl;
+        return -1;
+      }
+      utils::SetEnv("UNITRACE_OutputFormat", argv[i]);
+      app_index += 2;
+#endif /* BUILD_WITH_PERFETTO */
     } else if (strcmp(argv[i], "--conditional-collection") == 0) { // deprecate this option
       utils::SetEnv("UNITRACE_StartPaused", "1");
       ++app_index;

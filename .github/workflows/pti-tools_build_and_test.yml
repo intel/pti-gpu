@@ -82,6 +82,17 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           python ./test_unitrace.py --test-group cpp-test
 
+      - name: Unitrace-trace-format
+        working-directory: tools/unitrace/test
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          # Perfetto's traceconv launcher downloads its binary via curl.
+          command -v curl >/dev/null || (apt-get update && apt-get install -y curl)
+          python -m venv venv
+          source venv/bin/activate
+          python -m pip install -r requirements.txt
+          python ./trace_format_test.py
+
       - name: Python Environment Setup
         uses: actions/setup-python@v5
         with:
@@ -175,6 +186,18 @@ jobs:
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
           python ./test_unitrace.py
+
+      - name: Unitrace-trace-format
+        working-directory: tools/unitrace/test
+        env:
+          SYCL_UR_USE_LEVEL_ZERO_V2: 0
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          python -m venv venv
+          call venv\Scripts\activate.bat
+          python -m pip install -r requirements.txt
+          python ./trace_format_test.py
 
       - name: Print output files on failure
         if: failure()

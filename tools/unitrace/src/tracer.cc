@@ -170,6 +170,13 @@ static CollectorOptions ReadArgs() {
     options.chrome_omp_logging = 1;
   }
 
+#if BUILD_WITH_PERFETTO
+  value = utils::GetEnv("UNITRACE_OutputFormat");
+  if (value == "protobuf") {
+    options.protobuf_output = 1;
+  }
+#endif /* BUILD_WITH_PERFETTO */
+
   options.DeriveFlags();
   return options;
 }

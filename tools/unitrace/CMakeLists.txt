@@ -126,6 +126,17 @@ if (${BUILD_WITH_ITT})
   endif()
 endif()
 
+# Perfetto protobuf trace output (built from source into the build tree.
+# All of the fetch/build/generate logic lives in
+# cmake/Perfetto.cmake; SetupPerfetto() degrades to JSON-only on any failure.
+option(BUILD_WITH_PERFETTO "Build with support for Perfetto protobuf trace output" ON)
+if (BUILD_WITH_PERFETTO)
+  include(${PROJECT_SOURCE_DIR}/cmake/Perfetto.cmake)
+  SetupPerfetto()  # clears BUILD_WITH_PERFETTO (degrade to JSON-only) on any failure
+endif()
+
+add_compile_definitions(BUILD_WITH_PERFETTO=$<BOOL:${BUILD_WITH_PERFETTO}>)
+
 if (BUILD_WITH_MPI)
   find_package(MPI REQUIRED)
   add_library(unitrace_mpi SHARED
@@ -216,6 +227,32 @@ target_compile_definitions(unitrace_tool PUBLIC PTI_LEVEL_ZERO=1)
 if(CMAKE_INCLUDE_PATH)
   target_include_directories(unitrace_tool
     PUBLIC "${CMAKE_INCLUDE_PATH}")
+endif()
+
+# Link libprotobuf + its headers (vars from SetupPerfetto()); SYSTEM mutes
+# protobuf's own warnings.
+if (BUILD_WITH_PERFETTO)
+  # Generated protobuf TU goes in its own STATIC lib, not unitrace_tool directly:
+  # WINDOWS_EXPORT_ALL_SYMBOLS auto-exports the target's own objects, and the huge
+  # perfetto_trace.pb.cc would blow the MSVC 65535-export cap (LNK1189). Symbols
+  # from a linked static lib are not auto-exported, so this keeps exports.def small.
+  add_library(unitrace_perfetto_proto STATIC ${PERFETTO_PROTO_SRCS})
+  target_include_directories(unitrace_perfetto_proto SYSTEM PRIVATE
+    "${PROTOBUF_INCLUDE}" "${PERFETTO_GEN_DIR}")
+  set_target_properties(unitrace_perfetto_proto PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+  # unitrace_tool sources include perfetto_trace.pb.h (via perfettologger.h).
+  target_include_directories(unitrace_tool SYSTEM PRIVATE
+    "${PROTOBUF_INCLUDE}" "${PERFETTO_GEN_DIR}")
+  target_link_libraries(unitrace_tool unitrace_perfetto_proto ${PROTOBUF_LIB})
+  # Keep the static protobuf's symbols internal: LD_PRELOADed unitrace_tool.so
+  # would otherwise interpose on a target's own protobuf (e.g. PyTorch) and crash
+  # it. --exclude-libs takes the archive basename, not a path.
+  if (UNIX AND NOT APPLE)
+    get_filename_component(_protobuf_lib_name "${PROTOBUF_LIB}" NAME)
+    target_link_options(unitrace_tool PRIVATE
+      "LINKER:--exclude-libs,${_protobuf_lib_name}")
+  endif()
 endif()
 
 if (BUILD_WITH_OPENCL)

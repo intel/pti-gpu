@@ -45,6 +45,7 @@ struct CollectorOptions {
       unsigned int log_to_file : 1;
       unsigned int output_dir_path : 1;
       unsigned int ccl_summary_report : 1;
+      unsigned int protobuf_output : 1;
     };
     uint64_t flags_ = 0;  // Default member initializer zeros all bitfields
   };

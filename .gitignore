@@ -1,6 +1,7 @@
 **/build
 **/build_debug
 **/__pycache__
+**/_perfetto_pb2
 venv/
 .vscode/
 .vs/
