@@ -125,17 +125,27 @@ jobs:
 
           #
           # MKLD-20051: debug symbols needed for suppression, only on BMG containers.
-          # N-1=ubuntu-25-10 predates 2026.1, so add main/debug component manually.
-          # Remove these branches when MKLD-20051 is fixed or ubuntu-25-10
-          # is no longer N-1.
+          #
+          # Starting with 2026.1, the containers include the main/debug component
+          # in the kobuk-team-ubuntu-intel-graphics-*.sources file.
+          # N-1 (ubuntu-25-10) predates 2026.1 containers, so add main/debug manually
+          # into the kobuk sources file to enable installing the required debug symbols.
+          #
+
+          #
+          # Remove the branch when MKLD-20051 is fixed.
           #
           if [[ "${{ matrix.tags }}" == *BMG* ]]; then
+
+            #
+            # Remove the branch when ubuntu-25-10 is no longer N-1
+            #
             if [[ "${{ matrix.container }}" == *ubuntu-25-10* ]]; then
               sed -i 's/^Components: main$/Components: main main\/debug/' \
                 /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*.sources
-              apt-get update -qq
             fi
-            apt-get install -qq -y libze-intel-gpu1-dbgsym libze1-dbgsym libigc2-dbgsym
+            apt-get update -qq
+            apt-get install -qq -y libze-intel-gpu1-dbgsym libze1-dbgsym
           fi
           ctest --preset linux-asan --output-on-failure -L samples
 
