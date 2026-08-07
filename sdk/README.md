@@ -33,6 +33,16 @@ On systems with Level-Zero version lower than 1.9.0 **PTI SDK** still operates a
 - Windows support added.
 - Various bug fixes and improvements.
 
+## Recent (version 1.1.0) update
+
+- Preliminary Level Zero native graph support added.
+  Requires Intel(R) oneAPI icpx 2026.1.1 compiler and Level Zero (compute-runtime) 1.15.39122+12.
+- With Level Zero (compute-runtime) 1.15.39122+12 SYCL graph support is also
+  enabled. To enable SYCL graph support, set environment variables
+  `NEOReadDebugKeys=1 ExperimentalFlatCommandListApiRecording=1`. (Note: this
+  limitation is *NOT* a part of Level Zero native graph support. Just legacy
+  SYCL graph.)
+
 **Known issues on Windows:**
 
 - Kernel Name Demangling not present.

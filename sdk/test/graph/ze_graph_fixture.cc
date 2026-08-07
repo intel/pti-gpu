@@ -5,32 +5,33 @@
 // =============================================================
 
 #include <gtest/gtest.h>
-#include <level_zero/driver_experimental/zex_graph.h>
 #include <level_zero/ze_api.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <string_view>
+#include <memory>
+#include <string>
+#include <type_traits>
 #include <vector>
 
 #include "graph_dotproduct_workload_info.h"
 #include "graph_record_validation.h"
 #include "pti/pti_view.h"
+#include "utils/gtest_helpers.h"
 #include "utils/pti_record_collection_fixture.h"
 #include "utils/utils.h"
+#include "utils/ze_symbol_loader.h"
 #include "utils/ze_utils.h"
 #include "ze_graph_workloads.h"
 
 class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
  protected:
-  // TODO(PTI): Move these into a common test utility header either when more tests are added that
-  // need them or when graph extensions are supported by the Level Zero loader.
   struct ZeGraphDestroy {
     ZeGraphTestSuite* test_suite = nullptr;
     void operator()(ze_graph_handle_t graph) const {
       if (graph) {
-        test_suite->ze_graph_destroy_exp_(graph);
+        test_suite->ze_graph_destroy_ext_(graph);
       }
     }
   };
@@ -39,7 +40,7 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
     ZeGraphTestSuite* test_suite = nullptr;
     void operator()(ze_executable_graph_handle_t exec_graph) const {
       if (exec_graph) {
-        test_suite->ze_executable_graph_destroy_exp_(exec_graph);
+        test_suite->ze_executable_graph_destroy_ext_(exec_graph);
       }
     }
   };
@@ -57,12 +58,9 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
             utils::LoadBinaryFile(utils::GetExecutablePath() + Workload::kSpvKernelFile)) {}
 
   void SetUp() override {
-    constexpr static const char* const kUnsupportedGraphMessage =
-        "Required Level Zero graph extensions not supported. Skipping ZeGraph test suite.";
-
-#if !defined(ZE_RECORD_REPLAY_GRAPH_EXP_NAME)
-    GTEST_SKIP() << kUnsupportedGraphMessage;
-#endif
+    if (!loader_.Loaded()) {
+      GTEST_SKIP() << "Level Zero loader not found. Skipping test.";
+    }
 
     InitializeDriver();
     if (drv_ == nullptr || dev_ == nullptr) {
@@ -72,10 +70,9 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
     ctx_ = utils::ze::GetContext(drv_);
     ASSERT_NE(ctx_, nullptr);
 
-    LoadExtensions();
-
-    if (!graph_supported_) {
-      GTEST_SKIP() << kUnsupportedGraphMessage;
+    auto [success, message] = LoadExtensions();
+    if (!success) {
+      GTEST_SKIP() << message;
     }
 
     ASSERT_NO_FATAL_FAILURE(CreateEventPool());
@@ -162,7 +159,7 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
 
   ZeGraph CreateGraph() {
     ze_graph_handle_t graph = nullptr;
-    if (ze_graph_create_exp_(ctx_, &graph, nullptr) != ZE_RESULT_SUCCESS || !graph) {
+    if (ze_graph_create_ext_(ctx_, nullptr, &graph) != ZE_RESULT_SUCCESS || !graph) {
       throw std::runtime_error("Failed to create graph");
     }
     return ZeGraph{graph, ZeGraphDestroy{this}};
@@ -172,7 +169,7 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
   std::pair<ZeGraph, ZeExecutableGraph> CaptureGraph(ze_command_list_handle_t primary_list,
                                                      Func record_func, Args&&... args) {
     auto graph = CreateGraph();
-    if (ze_command_list_begin_capture_into_graph_exp_(primary_list, graph.get(), nullptr) !=
+    if (ze_command_list_begin_capture_into_graph_ext_(primary_list, graph.get(), nullptr) !=
         ZE_RESULT_SUCCESS) {
       throw std::runtime_error("Failed to begin graph capture");
     }
@@ -180,14 +177,13 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
     record_func(std::forward<Args>(args)...);
 
     auto* graph_ptr = graph.get();
-    if (ze_command_list_end_graph_capture_exp_(primary_list, &graph_ptr, nullptr) !=
+    if (ze_command_list_end_graph_capture_ext_(primary_list, nullptr, &graph_ptr) !=
         ZE_RESULT_SUCCESS) {
       throw std::runtime_error("Failed to end graph capture");
     }
 
     ze_executable_graph_handle_t exec_graph = nullptr;
-    if (ze_command_list_instantiate_graph_exp_(graph.get(), &exec_graph, nullptr) !=
-        ZE_RESULT_SUCCESS) {
+    if (ze_graph_instantiate_ext_(graph.get(), nullptr, &exec_graph) != ZE_RESULT_SUCCESS) {
       throw std::runtime_error("Failed to instantiate graph");
     }
     return {std::move(graph), ZeExecutableGraph{exec_graph, ZeExecutableGraphDestroy{this}}};
@@ -196,7 +192,7 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
   void ExecuteGraph(ze_command_list_handle_t command_list, ze_executable_graph_handle_t exec_graph,
                     ze_event_handle_t signal_event = nullptr, uint32_t num_wait_events = 0,
                     ze_event_handle_t* wait_events = nullptr) {
-    ASSERT_EQ(ze_command_list_append_graph_exp_(command_list, exec_graph, nullptr, signal_event,
+    ASSERT_EQ(ze_command_list_append_graph_ext_(command_list, exec_graph, nullptr, signal_event,
                                                 num_wait_events, wait_events),
               ZE_RESULT_SUCCESS);
   }
@@ -208,43 +204,51 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
 
   auto& GetDotProductLists() { return lists_; }
 
-  template <typename FnPtr>
-  bool LoadExtensionFunction(std::string_view fn_name, FnPtr& fn_ptr) {
-    auto* ptr = utils::ze::GetExtensionFunctionAddr(drv_, fn_name.data());
-    if (!ptr) {
-      return false;
+  std::pair<bool, std::string> LoadExtensions() {
+    if (!drv_) {
+      return {false, "Driver handle is null"};
     }
-    fn_ptr = reinterpret_cast<FnPtr>(ptr);
-    return true;
+
+    if (!utils::ze::IsDriverExtensionSupported(drv_, ZE_RECORD_REPLAY_GRAPH_EXT_NAME)) {
+      return {false, "Level Zero " + std::string(ZE_RECORD_REPLAY_GRAPH_EXT_NAME) +
+                         " extension not supported by the driver"};
+    }
+
+#define PTI_TEST_ZE_GET_SYMBOL(name) loader_.Get<decltype(&name)>(#name)
+    ze_graph_create_ext_ = PTI_TEST_ZE_GET_SYMBOL(zeGraphCreateExt);
+    ze_graph_destroy_ext_ = PTI_TEST_ZE_GET_SYMBOL(zeGraphDestroyExt);
+    ze_graph_instantiate_ext_ = PTI_TEST_ZE_GET_SYMBOL(zeGraphInstantiateExt);
+    ze_graph_is_empty_ext_ = PTI_TEST_ZE_GET_SYMBOL(zeGraphIsEmptyExt);
+    ze_graph_dump_contents_ext_ = PTI_TEST_ZE_GET_SYMBOL(zeGraphDumpContentsExt);
+    ze_graph_set_destruction_callback_ext_ =
+        PTI_TEST_ZE_GET_SYMBOL(zeGraphSetDestructionCallbackExt);
+    ze_command_list_begin_graph_capture_ext_ =
+        PTI_TEST_ZE_GET_SYMBOL(zeCommandListBeginGraphCaptureExt);
+    ze_command_list_begin_capture_into_graph_ext_ =
+        PTI_TEST_ZE_GET_SYMBOL(zeCommandListBeginCaptureIntoGraphExt);
+    ze_command_list_end_graph_capture_ext_ =
+        PTI_TEST_ZE_GET_SYMBOL(zeCommandListEndGraphCaptureExt);
+    ze_command_list_is_graph_capture_enabled_ext_ =
+        PTI_TEST_ZE_GET_SYMBOL(zeCommandListIsGraphCaptureEnabledExt);
+    ze_command_list_append_graph_ext_ = PTI_TEST_ZE_GET_SYMBOL(zeCommandListAppendGraphExt);
+    ze_command_list_get_graph_ext_ = PTI_TEST_ZE_GET_SYMBOL(zeCommandListGetGraphExt);
+    ze_executable_graph_destroy_ext_ = PTI_TEST_ZE_GET_SYMBOL(zeExecutableGraphDestroyExt);
+#undef PTI_TEST_ZE_GET_SYMBOL
+
+    if (!ze_graph_create_ext_ || !ze_graph_destroy_ext_ || !ze_graph_instantiate_ext_ ||
+        !ze_graph_is_empty_ext_ || !ze_graph_dump_contents_ext_ ||
+        !ze_graph_set_destruction_callback_ext_ || !ze_command_list_begin_graph_capture_ext_ ||
+        !ze_command_list_begin_capture_into_graph_ext_ || !ze_command_list_end_graph_capture_ext_ ||
+        !ze_command_list_is_graph_capture_enabled_ext_ || !ze_command_list_append_graph_ext_ ||
+        !ze_command_list_get_graph_ext_ || !ze_executable_graph_destroy_ext_) {
+      return {false,
+              "Level Zero loader does not export the record and replay graph entry points. "
+              "Skipping ZeGraph test suite."};
+    }
+    return {true, ""};
   }
 
-  void LoadExtensions() {
-    ASSERT_NE(drv_, nullptr);
-
-    if (!utils::ze::IsDriverExtensionSupported(drv_, ZE_RECORD_REPLAY_GRAPH_EXP_NAME)) {
-      return;
-    }
-    graph_supported_ =
-        LoadExtensionFunction("zeGraphCreateExp", ze_graph_create_exp_) &&
-        LoadExtensionFunction("zeCommandListBeginGraphCaptureExp",
-                              ze_command_list_begin_graph_capture_exp_) &&
-        LoadExtensionFunction("zeCommandListBeginCaptureIntoGraphExp",
-                              ze_command_list_begin_capture_into_graph_exp_) &&
-        LoadExtensionFunction("zeCommandListEndGraphCaptureExp",
-                              ze_command_list_end_graph_capture_exp_) &&
-        LoadExtensionFunction("zeCommandListInstantiateGraphExp",
-                              ze_command_list_instantiate_graph_exp_) &&
-        LoadExtensionFunction("zeCommandListAppendGraphExp", ze_command_list_append_graph_exp_) &&
-        LoadExtensionFunction("zeGraphDestroyExp", ze_graph_destroy_exp_) &&
-        LoadExtensionFunction("zeExecutableGraphDestroyExp", ze_executable_graph_destroy_exp_) &&
-        LoadExtensionFunction("zeCommandListIsGraphCaptureEnabledExp",
-                              ze_command_list_is_graph_capture_enabled_exp_) &&
-        LoadExtensionFunction("zeGraphIsEmptyExp", ze_graph_is_empty_exp_) &&
-        LoadExtensionFunction("zeGraphDumpContentsExp", ze_graph_dump_contents_exp_) &&
-        LoadExtensionFunction("zeCommandListGetGraphExp", ze_command_list_get_graph_exp_) &&
-        LoadExtensionFunction("zeGraphSetDestructionCallbackExp",
-                              ze_graph_set_destruction_callback_exp_);
-  }
+  pti::test::utils::level_zero::ZeSymbolLoader loader_{};
 
   std::vector<std::uint8_t> spirv_binary_;
 
@@ -259,25 +263,27 @@ class ZeGraphTestSuite : public pti::test::utils::RecordCollectionFixture {
   DotProductLists lists_;
   DotProductKernels kernels_;
 
-  bool graph_supported_ = false;
-  decltype(&zeGraphCreateExp) ze_graph_create_exp_ = nullptr;
-  decltype(&zeCommandListBeginGraphCaptureExp) ze_command_list_begin_graph_capture_exp_ = nullptr;
-  decltype(&zeCommandListBeginCaptureIntoGraphExp) ze_command_list_begin_capture_into_graph_exp_ =
+  decltype(&zeGraphCreateExt) ze_graph_create_ext_ = nullptr;
+  decltype(&zeGraphDestroyExt) ze_graph_destroy_ext_ = nullptr;
+  decltype(&zeGraphInstantiateExt) ze_graph_instantiate_ext_ = nullptr;
+  decltype(&zeGraphIsEmptyExt) ze_graph_is_empty_ext_ = nullptr;
+  decltype(&zeGraphDumpContentsExt) ze_graph_dump_contents_ext_ = nullptr;
+  decltype(&zeGraphSetDestructionCallbackExt) ze_graph_set_destruction_callback_ext_ = nullptr;
+  decltype(&zeCommandListBeginGraphCaptureExt) ze_command_list_begin_graph_capture_ext_ = nullptr;
+  decltype(&zeCommandListBeginCaptureIntoGraphExt) ze_command_list_begin_capture_into_graph_ext_ =
       nullptr;
-  decltype(&zeCommandListEndGraphCaptureExp) ze_command_list_end_graph_capture_exp_ = nullptr;
-  decltype(&zeCommandListInstantiateGraphExp) ze_command_list_instantiate_graph_exp_ = nullptr;
-  decltype(&zeCommandListAppendGraphExp) ze_command_list_append_graph_exp_ = nullptr;
-  decltype(&zeGraphDestroyExp) ze_graph_destroy_exp_ = nullptr;
-  decltype(&zeExecutableGraphDestroyExp) ze_executable_graph_destroy_exp_ = nullptr;
-  decltype(&zeCommandListIsGraphCaptureEnabledExp) ze_command_list_is_graph_capture_enabled_exp_ =
+  decltype(&zeCommandListEndGraphCaptureExt) ze_command_list_end_graph_capture_ext_ = nullptr;
+  decltype(&zeCommandListIsGraphCaptureEnabledExt) ze_command_list_is_graph_capture_enabled_ext_ =
       nullptr;
-  decltype(&zeGraphIsEmptyExp) ze_graph_is_empty_exp_ = nullptr;
-  decltype(&zeGraphDumpContentsExp) ze_graph_dump_contents_exp_ = nullptr;
-  decltype(&zeCommandListGetGraphExp) ze_command_list_get_graph_exp_ = nullptr;
-  decltype(&zeGraphSetDestructionCallbackExp) ze_graph_set_destruction_callback_exp_ = nullptr;
+  decltype(&zeCommandListAppendGraphExt) ze_command_list_append_graph_ext_ = nullptr;
+  decltype(&zeCommandListGetGraphExt) ze_command_list_get_graph_ext_ = nullptr;
+  decltype(&zeExecutableGraphDestroyExt) ze_executable_graph_destroy_ext_ = nullptr;
 };
 
 TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionTracingGraphCreation) {
+  constexpr std::size_t kExpectedNumberOfDriverCalls =
+      10;  // 1 graph creation + 2 graph recording + 1 graph instantiation + 1 graph execution + 4
+           // kernel launches + 1 synch
   auto vectors =
       CreateDotProductVectors<Workload::DefaultVectorDataType>(Workload::kDefaultVectorSize);
   auto& [primary, fork_one, fork_two] = GetDotProductLists();
@@ -296,6 +302,7 @@ TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionTracingGraphCreation) {
   // Start tracing before graph is created and captured.
   ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
 
   auto [graph, exec_graph] = CaptureGraph(
       primary.get(), RecordDotProductGraph, primary.get(), fork_one.get(), fork_two.get(),
@@ -306,10 +313,12 @@ TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionTracingGraphCreation) {
 
   EXPECT_FLOAT_EQ(*std::get<0>(vectors), Workload::Result());
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   ParseAllBuffers();
   // Graph creation captured, so records expected for all kernels in the graph.
   EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{Workload::kDefaultKernelNumber});
+  EXPECT_GE(std::size(record_storage_.api_records), kExpectedNumberOfDriverCalls);
   ValidateViewTimestamps(record_storage_.kernel_records);
 }
 
@@ -345,6 +354,6 @@ TEST_F(ZeGraphTestSuite, TestZeUsmGraphExecutionWithoutTracingGraphCreation) {
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
   ParseAllBuffers();
   // Graph creation not captured, so no records expected.
-  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{0});
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{4});
   ValidateViewTimestamps(record_storage_.kernel_records);
 }

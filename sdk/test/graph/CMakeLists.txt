@@ -25,12 +25,13 @@ add_executable(ze_graph_suite ze_graph_fixture.cc)
 target_link_libraries(
   ze_graph_suite
   PUBLIC Pti::pti_view
-         GTest::gtest_main
          spdlog::spdlog
          fmt::fmt
+         GTest::gtest_main
          Threads::Threads
          LevelZero::level-zero
-         LevelZero::level-zero-ext)
+         LevelZero::level-zero-ext
+         ${CMAKE_DL_LIBS})
 
 target_include_directories(
   ze_graph_suite
@@ -53,13 +54,13 @@ gtest_discover_tests(
              "PTI_CONV_CLOCK_SYNC_TIME_NS=1000000000")
 
 add_executable(
-  ze_command_visitor_tests
+  ze_graph_integration_tests
   ${PROJECT_SOURCE_DIR}/src/levelzero/ze_driver_init.cc
   ${PROJECT_SOURCE_DIR}/src/levelzero/ze_command_visitor.cc
   ze_command_visitor_tests.cc)
 
 target_include_directories(
-  ze_command_visitor_tests
+  ze_graph_integration_tests
   PUBLIC "${PROJECT_SOURCE_DIR}/src/levelzero"
   PRIVATE "${PROJECT_SOURCE_DIR}/test"
           "${PROJECT_SOURCE_DIR}/src"
@@ -69,13 +70,13 @@ target_include_directories(
           "${PROJECT_BINARY_DIR}/include")
 
 target_link_libraries(
-  ze_command_visitor_tests
+  ze_graph_integration_tests
   PUBLIC GTest::gmock GTest::gtest_main LevelZero::level-zero
          LevelZero::level-zero-ext spdlog::spdlog fmt::fmt
          ${CMAKE_DL_LIBS})
 
 gtest_discover_tests(
-  ze_command_visitor_tests DISCOVERY_TIMEOUT 60
+  ze_graph_integration_tests DISCOVERY_TIMEOUT 60
   PROPERTIES LABELS
              "functional"
              LABELS

@@ -19,7 +19,7 @@
 
 namespace pti::test::utils {
 
-class RecordCollectionFixture : public ::testing::Test {
+class RecordCollectionFixture : public virtual ::testing::Test {
  protected:
   RecordCollectionFixture() { record_storage_.Reset(); }
 

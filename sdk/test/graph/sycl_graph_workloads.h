@@ -59,4 +59,49 @@ template <typename T>
   return graph;
 }
 
+template <typename T>
+inline void RecordUsmDotProductGraph(sycl::queue& queue, std::size_t vector_size, T* dot_product,
+                                     T* x_vector, T* y_vector, T* z_vector) {
+  const sycl::range<1> exec_range{vector_size};
+  queue.parallel_for(exec_range, InitDotProductVectors(x_vector, y_vector, z_vector));
+
+  queue.parallel_for(exec_range,
+                     CombineTwoVectors{x_vector, y_vector, DotProductWorkload<T>::kDefaultAlpha,
+                                       DotProductWorkload<T>::kDefaultBeta});
+
+  queue.parallel_for(exec_range,
+                     CombineTwoVectors{z_vector, y_vector, DotProductWorkload<T>::kDefaultGamma,
+                                       DotProductWorkload<T>::kDefaultBeta});
+
+  queue.single_task(CalculateDotProduct{x_vector, z_vector, dot_product, vector_size});
+}
+
+template <typename T>
+[[nodiscard]] inline auto CreateNativeUsmDotProductGraph(sycl::queue& queue,
+                                                         std::size_t vector_size, T* dot_product,
+                                                         T* x_vector, T* y_vector, T* z_vector) {
+  sycl::ext::oneapi::experimental::command_graph graph{
+      queue, {sycl::ext::oneapi::experimental::property::graph::enable_native_recording{}}};
+
+  graph.begin_recording(queue);
+  RecordUsmDotProductGraph(queue, vector_size, dot_product, x_vector, y_vector, z_vector);
+  graph.end_recording();
+
+  return graph;
+}
+
+template <typename T>
+[[nodiscard]] inline auto CreateUsmDotProductGraphWithRecording(sycl::queue& queue,
+                                                                std::size_t vector_size,
+                                                                T* dot_product, T* x_vector,
+                                                                T* y_vector, T* z_vector) {
+  sycl::ext::oneapi::experimental::command_graph graph{queue};
+
+  graph.begin_recording(queue);
+  RecordUsmDotProductGraph(queue, vector_size, dot_product, x_vector, y_vector, z_vector);
+  graph.end_recording();
+
+  return graph;
+}
+
 #endif  // TEST_GRAPH_SYCL_GRAPH_WORKLOADS_H_

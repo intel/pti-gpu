@@ -7,6 +7,7 @@
 #ifndef PTI_LEVELZERO_ZE_GPU_COMMAND_H_
 #define PTI_LEVELZERO_ZE_GPU_COMMAND_H_
 
+#include <level_zero/driver_experimental/zex_graph.h>
 #include <level_zero/layers/zel_tracing_api.h>
 #include <level_zero/layers/zel_tracing_register_cb.h>
 #include <level_zero/loader/ze_loader.h>
@@ -17,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -119,6 +121,48 @@ struct ZeCommandListInfo {
   ze_command_list_handle_t instrumented_command_list = nullptr;
 };
 
+struct ZeGraphExecutionInfo {
+  ze_graph_handle_t instrumented_graph = nullptr;  // The graph handle PTI creates and
+                                                   // swaps the user's graph handle with.
+  ze_executable_graph_handle_t instrumented_executable_graph =
+      nullptr;  // The executable graph handle PTI creates and swaps the user's executable graph
+                // handle with.
+  std::vector<std::shared_ptr<ZeKernelCommand>> graph_commands;  // List of commands associated with
+                                                                 // the graph execution. Gets
+                                                                 // drained into same list as
+                                                                 // command list commands.
+  ZeEventView<ZeEventPool> graph_execution_event;                // PTI's event used to track the
+                                                                 // graph execution completion.
+};
+
+struct ZeGraphInfo {
+  ze_graph_handle_t graph = nullptr;  // User's Level Zero native graph handle
+  ze_executable_graph_handle_t executable_graph =
+      nullptr;  // User's Level Zero native executable graph handle
+  ze_command_list_handle_t primary_command_list = nullptr;  // The command list used to start the
+                                                            // graph capture
+  ze_device_handle_t device = nullptr;                      // Device handle associated with primary
+                                                            // command list
+  ze_context_handle_t context = nullptr;  // Context handle associated with primary command list
+  ZeGraphExecutionInfo execution;         // Represents an execution of the graph
+                                          // (not static properties of the graph).
+  std::mutex execution_mutex;
+};
+
+struct ZeGraphAppendInstanceData {
+  ZeGraphInfo* graph_info = nullptr;
+  ze_event_handle_t user_graph_signal_event = nullptr;  // User's signal event they passed to the
+                                                        // graph append call.
+  ze_event_handle_t graph_completion_event =
+      nullptr;  // PTI's event we use to track the graph
+                // execution completion. We swap the user's
+                // event with this event if the user already
+                // passed an signal event to the graph append call.
+  uint64_t submit_time_host = 0;
+  uint64_t submit_time_device = 0;
+  uint64_t graph_correlation_id = 0;
+};
+
 struct ZeDeviceDescriptor {
   uint64_t host_time_origin = 0;
   uint64_t device_time_origin = 0;
@@ -132,6 +176,7 @@ struct ZeDeviceDescriptor {
   uint32_t ip_version = 0;
   std::optional<ZeExts::Visit> visit = std::nullopt;
   std::optional<ZeExts::CmdListIntrospection> cmdlist_introspection = std::nullopt;
+  std::optional<ZeExts::GraphExt> graph_exp = std::nullopt;
 };
 
 [[nodiscard]] inline ZeMemoryInfo GetMemoryInfo(ze_context_handle_t ctx, const void* ptr) {

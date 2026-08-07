@@ -55,6 +55,7 @@
 #include "ze_event_managers.h"
 #include "ze_events_and_pools_observer.h"
 #include "ze_gpu_command.h"
+#include "ze_graph_storage.h"
 #include "ze_kernel_name_cache.h"
 #include "ze_local_collection_helpers.h"
 #include "ze_timer_helper.h"
@@ -605,6 +606,7 @@ class ZeCollector {
         event_cache_(ZE_EVENT_POOL_FLAG_KERNEL_TIMESTAMP),
         l0_wrapper_(),
         event_pools_observer_(l0_wrapper_),
+        graph_storage_(&l0_wrapper_),
         startstop_mode_changer(this) {
     CreateDeviceMap(driver_init);
     DetermineIfCounterEventsPossible(driver_init);
@@ -672,11 +674,13 @@ class ZeCollector {
       const auto visit = driver_init.GetExtension<ZeExts::Visit>(driver);
       const auto cmdlist_introspection =
           driver_init.GetExtension<ZeExts::CmdListIntrospection>(driver);
+      const auto graph_ext = driver_init.GetExtension<ZeExts::GraphExt>(driver);
       const auto devices = utils::ze::GetDeviceList(driver);
       for (auto* const device : devices) {
         device_descriptors_[device] = GetZeDeviceDescriptor(device);
         device_descriptors_[device].visit = visit;
         device_descriptors_[device].cmdlist_introspection = cmdlist_introspection;
+        device_descriptors_[device].graph_exp = graph_ext;
         SPDLOG_DEBUG("\tdevice: {}", static_cast<const void*>(device));
         const auto sub_devices = utils::ze::GetSubDeviceList(device);
         device_map_[device] = sub_devices;
@@ -685,6 +689,7 @@ class ZeCollector {
           device_descriptors_[sub_device] = GetZeDeviceDescriptor(sub_device);
           device_descriptors_[sub_device].visit = visit;
           device_descriptors_[sub_device].cmdlist_introspection = cmdlist_introspection;
+          device_descriptors_[sub_device].graph_exp = graph_ext;
         }
       }
     }
@@ -710,7 +715,6 @@ class ZeCollector {
       descriptor.device_sync_delta = delta;
     }
   }
-
   void MarkIntrospection(const ZeDriverInit& drivers) {
     for (auto* const driver : drivers.Drivers()) {
       const auto devices = utils::ze::GetDeviceList(driver);
@@ -950,6 +954,17 @@ class ZeCollector {
     DoCallbackOnGPUOperationCompletion(cmd_records);
   }
 
+  void ProcessCommandsAndReturnCommandExecutionsRecordsToUser(std::vector<uint64_t>* kids) {
+    std::vector<ZeKernelCommandExecutionRecord> kcexec;
+    {
+      const std::lock_guard<std::mutex> lock(lock_);
+      ProcessCalls(kids, &kcexec);
+    }
+    if (cb_enabled_.acallback && acallback_ != nullptr) {
+      acallback_(callback_data_, kcexec);
+    }
+  }
+
   // Heavy handed operation - only call if the user's event is signaled and we have to wait for
   // kernel timestamps to be available.
   static bool SynchronizeTimestampQueryEvent(const ZeKernelCommand* command) {
@@ -1018,9 +1033,6 @@ class ZeCollector {
       if (ready_to_process_command) {
         ProcessCallCommand(command, kids, kcexecrec);
         it = submitted_commands_.erase(it);
-        if (is_target_event) {
-          return;
-        }
       } else {
         it++;
       }
@@ -1189,9 +1201,14 @@ class ZeCollector {
       rec.submit_time_ = command->submit_time;
       rec.start_time_ = host_start;
       rec.end_time_ = host_end;
-      PTI_ASSERT(queue_ordinal_index_map_.count(command->queue) != 0);
-      std::pair<uint32_t, uint32_t> oi;
-      oi = queue_ordinal_index_map_[command->queue];
+      auto oi = std::make_pair(static_cast<uint32_t>(-1), static_cast<uint32_t>(-1));
+      const auto oi_it = queue_ordinal_index_map_.find(command->queue);
+      if (oi_it != queue_ordinal_index_map_.end()) {
+        oi = oi_it->second;
+      } else {
+        SPDLOG_DEBUG("In {} no engine ordinal/index known for queue: {}, command: {}", __FUNCTION__,
+                     static_cast<const void*>(command->queue), name);
+      }
       rec.engine_ordinal_ = oi.first;
       rec.engine_index_ = oi.second;
       rec.tile_ = tile;
@@ -2270,6 +2287,21 @@ class ZeCollector {
         command->submit_time = command->append_time;
         command->submit_time_device_ =
             ze_instance_data.timestamp_device;  // append time and submit time are the same
+                                                //
+        auto dev_desc = device_descriptors_.find(command_list_info.device);
+        if (dev_desc != device_descriptors_.end()) {
+          if (dev_desc->second.graph_exp.has_value()) {
+            if (ZE_RESULT_QUERY_TRUE == l0_wrapper_.w_zeCommandListIsGraphCaptureEnabledExt(
+                                            command_list_info.command_list)) {
+              SPDLOG_DEBUG(
+                  "In {} Graph capture is enabled for command list {}, skipping kernel command "
+                  "creation",
+                  __func__, static_cast<const void*>(command_list_info.command_list));
+              return;
+            }
+          }
+        }
+
         command->queue = reinterpret_cast<ze_command_queue_handle_t>(command->command_list);
         submitted_commands_.push_back(std::move(p_command));
         SPDLOG_TRACE("\tImmediate CmdList, command: {} pushed to submitted_commands_, queue: {}",
@@ -2491,8 +2523,8 @@ class ZeCollector {
       ze_command_list_append_launch_cooperative_kernel_params_t* params, ze_result_t result,
       void* global_data, void** instance_data, std::vector<uint64_t>* kids) {
     SPDLOG_TRACE("In {}, result: {}", __FUNCTION__, (uint32_t)result);
-    ZeCollector* collector = static_cast<ZeCollector*>(global_data);
-    ZeKernelCommand* command = static_cast<ZeKernelCommand*>(*instance_data);
+    auto* collector = static_cast<ZeCollector*>(global_data);
+    auto* command = static_cast<ZeKernelCommand*>(*instance_data);
     command->callback_id_ = zeCommandListAppendLaunchCooperativeKernel_id;
     collector->PostAppendKernel(collector, *(params->phKernel), *(params->ppLaunchFuncArgs),
                                 *(params->phSignalEvent), *(params->phCommandList), result,
@@ -3339,9 +3371,234 @@ class ZeCollector {
         return;
       }
 
-      collector->PostSubmitKernelCommands(command_lists, command_list_count, nullptr);
+      if (command_lists != nullptr) {
+        collector->PostSubmitKernelCommands(command_lists, command_list_count, nullptr);
+      }
     }
     delete[] swapped_lists;
+  }
+
+  void SynchronizePreviousExecution(ZeGraphInfo* graph_info) {
+    static constexpr auto kExecutionTimeout =
+        std::chrono::nanoseconds(std::chrono::milliseconds(250)).count();
+    auto& execution = graph_info->execution;
+    if (execution.graph_execution_event.Empty()) {
+      SPDLOG_TRACE("No previous execution of graph {} to synchronize",
+                   static_cast<const void*>(graph_info->graph));
+      return;
+    }
+    if (!execution.graph_execution_event.Ready()) {
+      SPDLOG_INFO("Waiting for completion of previous execution of graph {}",
+                  static_cast<const void*>(graph_info->graph));
+      overhead::ScopedOverheadCollector overhead_collector{zeEventHostSynchronize_id};
+      const auto result =
+          zeEventHostSynchronize(execution.graph_execution_event.Get(), kExecutionTimeout);
+      if (result != ZE_RESULT_SUCCESS) {
+        SPDLOG_ERROR(
+            "Failed to synchronize completion event {} for graph {}, result: {:x}. Timeout {} ns",
+            static_cast<const void*>(execution.graph_execution_event.Get()),
+            static_cast<const void*>(graph_info->graph), static_cast<uint32_t>(result),
+            kExecutionTimeout);
+      }
+    }
+  }
+
+  bool InstrumentGraph(ZeGraphInfo& graph_info) {
+    if (graph_info.execution.instrumented_executable_graph != nullptr) {
+      return true;
+    }
+
+    auto dev_it = device_descriptors_.find(graph_info.device);
+    if (dev_it == device_descriptors_.end() || !dev_it->second.visit.has_value()) {
+      return false;
+    }
+
+    if (graph_info.execution.instrumented_graph == nullptr) {
+      overhead::ScopedOverheadCollector overhead_collector{zeGraphCreateExt_id};
+      auto result = l0_wrapper_.w_zeGraphCreateExt(graph_info.context, nullptr,
+                                                   &graph_info.execution.instrumented_graph);
+      if (result != ZE_RESULT_SUCCESS) {
+        SPDLOG_ERROR("Failed to create instrumented graph for graph {}, result: {:x}",
+                     static_cast<const void*>(graph_info.graph), static_cast<uint32_t>(result));
+        return false;
+      }
+    }
+
+    // Record a new "instrumented" graph into the primary command list with the visitor feature.
+    // This enables us to clone a graph and insert our own instrumentation.
+    {
+      overhead::ScopedOverheadCollector overhead_collector{
+          zeCommandListBeginCaptureIntoGraphExt_id};
+      auto result = l0_wrapper_.w_zeCommandListBeginCaptureIntoGraphExt(
+          graph_info.primary_command_list, graph_info.execution.instrumented_graph, nullptr);
+      if (result != ZE_RESULT_SUCCESS) {
+        SPDLOG_ERROR("Failed to begin capture into instrumented graph for graph {}, result: {:x}",
+                     static_cast<const void*>(graph_info.graph), static_cast<uint32_t>(result));
+        return false;
+      }
+    }
+
+    std::vector<std::shared_ptr<ZeKernelCommand>> commands;
+    auto visit_result = ZE_RESULT_SUCCESS;
+    try {
+      auto visitor = ZeCommandVisitor{*dev_it->second.visit, &event_pool_manager_};
+      std::tie(commands, visit_result) =
+          visitor.GraphVisit(dev_it->second, graph_info, graph_info.graph);
+    } catch (const std::exception& e) {
+      SPDLOG_ERROR("Exception occurred during graph visit for graph {}: {}",
+                   static_cast<const void*>(graph_info.graph), e.what());
+      visit_result = ZE_RESULT_ERROR_UNKNOWN;
+    } catch (...) {
+      SPDLOG_ERROR("Unknown exception occurred during graph visit for graph {}",
+                   static_cast<const void*>(graph_info.graph));
+      visit_result = ZE_RESULT_ERROR_UNKNOWN;
+    }
+
+    ze_graph_handle_t captured_graph = nullptr;
+    {
+      overhead::ScopedOverheadCollector overhead_collector{zeCommandListEndGraphCaptureExt_id};
+      auto end_result = l0_wrapper_.w_zeCommandListEndGraphCaptureExt(
+          graph_info.primary_command_list, nullptr, &captured_graph);
+      if (end_result != ZE_RESULT_SUCCESS) {
+        SPDLOG_ERROR("Failed to end capture into instrumented graph for graph {}, result: {:x}",
+                     static_cast<const void*>(graph_info.graph), static_cast<uint32_t>(end_result));
+        return false;
+      }
+    }
+
+    if (visit_result != ZE_RESULT_SUCCESS) {
+      SPDLOG_ERROR("Failed to visit graph {}, result: {:x}",
+                   static_cast<const void*>(graph_info.graph), static_cast<uint32_t>(visit_result));
+      return false;
+    }
+
+    PTI_ASSERT(captured_graph == graph_info.execution.instrumented_graph);
+    SPDLOG_INFO(
+        "Capturing graph {} into instrumented graph {} is done. This graph contains {} commands.",
+        static_cast<const void*>(graph_info.graph),
+        static_cast<const void*>(graph_info.execution.instrumented_graph), commands.size());
+
+    {
+      overhead::ScopedOverheadCollector overhead_collector{zeGraphInstantiateExt_id};
+      auto inst_result =
+          l0_wrapper_.w_zeGraphInstantiateExt(graph_info.execution.instrumented_graph, nullptr,
+                                              &graph_info.execution.instrumented_executable_graph);
+      if (inst_result != ZE_RESULT_SUCCESS) {
+        SPDLOG_ERROR("Failed to instantiate instrumented graph for graph {}, result: {:x}",
+                     static_cast<const void*>(graph_info.graph),
+                     static_cast<uint32_t>(inst_result));
+        return false;
+      }
+    }
+    SPDLOG_INFO("Finished generating instrumented executable graph {} from instrumented graph {}",
+                static_cast<const void*>(graph_info.execution.instrumented_executable_graph),
+                static_cast<const void*>(graph_info.execution.instrumented_graph));
+
+    graph_info.execution.graph_commands = std::move(commands);
+    return true;
+  }
+
+  static void OnEnterCommandListAppendGraphExt(ze_command_list_append_graph_ext_params_t* params,
+                                               void* global_data, void** instance_data) {
+    SPDLOG_TRACE("In {}", __FUNCTION__);
+    auto* const collector = static_cast<ZeCollector*>(global_data);
+
+    auto* const graph_info = collector->graph_storage_.GetInfo(*params->phGraph);
+    if (!graph_info) {
+      SPDLOG_ERROR("Failed to get graph info");
+      return;
+    }
+
+    auto* const app_signal_event = *params->phSignalEvent;
+    ze_event_handle_t completion_event = nullptr;
+
+    const std::lock_guard<std::mutex> replay_lock(graph_info->execution_mutex);
+    // TODO(PTI): We are serializing graph execution to simplify the
+    // implementation. We should consider parallelizing this in the future e.g., create another
+    // instrumented graph for overlapping executions. Executions records should be processed again
+    // to make sure all timestamps are collected.
+    // Check graph
+    collector->SynchronizePreviousExecution(graph_info);
+    collector->ProcessCommandsAndReturnCommandExecutionsRecordsToUser(nullptr);
+    if (!collector->InstrumentGraph(*graph_info)) {
+      return;
+    }
+    if (graph_info->execution.graph_execution_event.Empty()) {
+      graph_info->execution.graph_execution_event =
+          collector->event_pool_manager_.AcquireEvent(graph_info->context);
+    }
+    graph_info->execution.graph_execution_event.ResetSignal();
+    completion_event = graph_info->execution.graph_execution_event.Get();
+
+    uint64_t host_timestamp = 0;
+    uint64_t device_timestamp = 0;  // in ticks
+    auto status =
+        collector->GetDeviceTimestamps(graph_info->device, &host_timestamp, &device_timestamp);
+    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
+    ze_instance_data.timestamp_host = host_timestamp;
+    ze_instance_data.timestamp_device = device_timestamp;
+
+    // Correlation between urEnqueueGraphExp and graph commands.
+#if defined(PTI_TRACE_SYCL)
+    const uint64_t graph_cid = sycl_data_kview.cid_ ? sycl_data_kview.cid_ : sycl_data_mview.cid_;
+#else
+    const uint64_t graph_cid = 0;
+#endif
+    *params->phGraph = graph_info->execution.instrumented_executable_graph;
+    *params->phSignalEvent = completion_event;
+    SPDLOG_TRACE(
+        "Replacing user graph {} with instrumented graph {} and user event {} with swap event {}",
+        static_cast<const void*>(graph_info->graph),
+        static_cast<const void*>(graph_info->execution.instrumented_executable_graph),
+        static_cast<const void*>(app_signal_event), static_cast<const void*>(completion_event));
+    try {
+      auto graph_data = std::make_unique<ZeGraphAppendInstanceData>(
+          ZeGraphAppendInstanceData{graph_info, app_signal_event, completion_event, host_timestamp,
+                                    device_timestamp, graph_cid});
+      *instance_data = graph_data.release();
+    } catch (const std::bad_alloc&) {
+      SPDLOG_ERROR("Failed to allocate ZeGraphAppendInstanceData");
+      *instance_data = nullptr;
+    }
+  }
+  static void OnExitCommandListAppendGraphExt(ze_command_list_append_graph_ext_params_t* params,
+                                              ze_result_t result, void* global_data,
+                                              void** instance_data) {
+    SPDLOG_TRACE("In {}, result: {:x}", __FUNCTION__, static_cast<uint32_t>(result));
+    auto* const graph_append_data = static_cast<ZeGraphAppendInstanceData*>(*instance_data);
+    if (!graph_append_data) {
+      return;
+    }
+    std::unique_ptr<ZeGraphAppendInstanceData> graph_data(graph_append_data);
+    if (result != ZE_RESULT_SUCCESS) {
+      SPDLOG_WARN("User graph append failed: {:x}", static_cast<uint32_t>(result));
+      return;
+    }
+    if (graph_append_data->user_graph_signal_event) {
+      SPDLOG_TRACE("Chaining user graph completion signal {} with swap event {}",
+                   static_cast<const void*>(graph_append_data->user_graph_signal_event),
+                   static_cast<const void*>(graph_append_data->graph_completion_event));
+      const bool success = A2AppendWaitAndSignalEvent(*params->phCommandList,
+                                                      graph_append_data->user_graph_signal_event,
+                                                      graph_append_data->graph_completion_event);
+      if (!success) {
+        SPDLOG_ERROR("Failed to chain user graph completion signal with user's events");
+      }
+    }
+
+    auto* const collector = static_cast<ZeCollector*>(global_data);
+    {
+      const std::lock_guard<std::mutex> graph_lock(graph_data->graph_info->execution_mutex);
+      const std::lock_guard<std::mutex> collector_lock(collector->lock_);
+      for (const auto& command : graph_data->graph_info->execution.graph_commands) {
+        if (graph_append_data->graph_correlation_id) {
+          command->corr_id_ = graph_append_data->graph_correlation_id;
+        }
+        command->submit_time = graph_append_data->submit_time_host;
+        command->submit_time_device_ = graph_append_data->submit_time_device;
+        collector->submitted_commands_.emplace_back(command);
+      }
+    }
   }
 
   zel_tracer_handle_t tracer_ = nullptr;
@@ -3403,6 +3660,8 @@ class ZeCollector {
   // all is to find out if GPU operation event is regular or counter-based, and
   // if regular - may be already has timestamp property
   ZeEventPoolsObserver event_pools_observer_;
+
+  ZeGraphStorage graph_storage_;
 
   // Multiple subscribers support with subscriber handle-based access
   // important that container is ordered, callbacks should be called in an order

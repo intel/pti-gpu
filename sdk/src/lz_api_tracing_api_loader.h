@@ -42,6 +42,14 @@ class PtiLzTracerLoader {
   decltype(&zeInitDrivers) zeInitDrivers_ = nullptr;                              // NOLINT
   decltype(&zesDriverGetDeviceByUuidExp) zesDriverGetDeviceByUuidExp_ = nullptr;  // NOLINT
   decltype(&zeKernelGetBinaryExp) zeKernelGetBinaryExp_ = nullptr;                // NOLINT
+  decltype(&zeExecutableGraphGetSourceGraphExt) zeExecutableGraphGetSourceGraphExt_ =
+      nullptr;                                                                            // NOLINT
+  decltype(&zeGraphGetPrimaryCommandListExt) zeGraphGetPrimaryCommandListExt_ = nullptr;  // NOLINT
+  decltype(&zeGraphCreateExt) zeGraphCreateExt_ = nullptr;                                // NOLINT
+  decltype(&zeCommandListBeginCaptureIntoGraphExt) zeCommandListBeginCaptureIntoGraphExt_ =
+      nullptr;                                                                            // NOLINT
+  decltype(&zeCommandListEndGraphCaptureExt) zeCommandListEndGraphCaptureExt_ = nullptr;  // NOLINT
+  decltype(&zeGraphInstantiateExt) zeGraphInstantiateExt_ = nullptr;                      // NOLINT
 
   // Forward to implementation in core library
 #include "tracing_api_dlsym_public.gen"  // Auto-generated callbacks
@@ -66,6 +74,12 @@ class PtiLzTracerLoader {
     LEVEL_ZERO_LOADER_GET_SYMBOL(zeInitDrivers);
     LEVEL_ZERO_LOADER_GET_SYMBOL(zesDriverGetDeviceByUuidExp);
     LEVEL_ZERO_LOADER_GET_SYMBOL(zeKernelGetBinaryExp);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeExecutableGraphGetSourceGraphExt);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeGraphGetPrimaryCommandListExt);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeGraphCreateExt);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeCommandListBeginCaptureIntoGraphExt);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeCommandListEndGraphCaptureExt);
+    LEVEL_ZERO_LOADER_GET_SYMBOL(zeGraphInstantiateExt);
 #undef LEVEL_ZERO_LOADER_GET_SYMBOL
 #define APPEND_COMMAND(X)                                                                    \
   zeCommandListAppend##X##_ = api_dlsyms_lib_->GetSymbol<decltype(&zeCommandListAppend##X)>( \

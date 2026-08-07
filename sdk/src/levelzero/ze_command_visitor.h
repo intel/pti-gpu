@@ -37,8 +37,7 @@ class ZeCommandVisitor {
                              ze_command_list_handle_t instrumented_command_list);
 
   [[nodiscard]] Result GraphVisit(const ZeDeviceDescriptor& device_desc,
-                                  const ZeCommandListInfo& command_list_info,
-                                  ze_graph_handle_t graph);
+                                  const ZeGraphInfo& graph_info, ze_graph_handle_t graph);
 
   static ze_result_t VISITOR_CCONV VisitCommandListAppendLaunchKernel(
       ze_command_list_handle_t hCommandList, ze_kernel_handle_t hKernel,
@@ -164,6 +163,8 @@ class ZeCommandVisitor {
     return ZE_RESULT_SUCCESS;  // This return value is the return value of the callback, passed to
                                // the driver. Afaik, its unused.
   }
+  std::pair<ZeEventView<ZeEventPool>, utils::ze::TimestampBuffer> AppendQueryTimestamp(
+      ze_command_list_handle_t command_list, ze_event_handle_t event_to_query);
 
   ZeExts::Visit visitor_extension_;
   ZeEventPoolManager* event_pool_manager_;

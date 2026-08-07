@@ -31,6 +31,10 @@ namespace pti::test::utils {
   return level_zero::CommandListVisitAvailable();
 }
 
+[[nodiscard]] inline bool NativeGraphApisAvailable() {
+  return level_zero::NativeGraphApisAvailable();
+}
+
 }  // namespace pti::test::utils
 
 #endif  // TEST_UTILS_SYCL_CONFIG_INFO_H_

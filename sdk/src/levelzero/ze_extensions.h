@@ -77,69 +77,19 @@ struct ZeExts {
     }
   };
 
-  struct GraphExp {
-    static constexpr std::string_view kExtName = ZE_RECORD_REPLAY_GRAPH_EXP_NAME;
+  struct GraphExt {
+    static constexpr std::string_view kExtName = ZE_RECORD_REPLAY_GRAPH_EXT_NAME;
 
-    decltype(&zeGraphCreateExp) ze_graph_create_exp = nullptr;
-    decltype(&zeCommandListBeginGraphCaptureExp) ze_command_list_begin_graph_capture_exp = nullptr;
-    decltype(&zeCommandListBeginCaptureIntoGraphExp) ze_command_list_begin_capture_into_graph_exp =
-        nullptr;
-    decltype(&zeCommandListEndGraphCaptureExp) ze_command_list_end_graph_capture_exp = nullptr;
-    decltype(&zeCommandListInstantiateGraphExp) ze_command_list_instantiate_graph_exp = nullptr;
-    decltype(&zeCommandListAppendGraphExp) ze_command_list_append_graph_exp = nullptr;
-    decltype(&zeGraphDestroyExp) ze_graph_destroy_exp = nullptr;
-    decltype(&zeExecutableGraphDestroyExp) ze_executable_graph_destroy_exp = nullptr;
-    decltype(&zeCommandListIsGraphCaptureEnabledExp) ze_command_list_is_graph_capture_enabled_exp =
-        nullptr;
-    decltype(&zeGraphIsEmptyExp) ze_graph_is_empty_exp = nullptr;
-    decltype(&zeGraphDumpContentsExp) ze_graph_dump_contents_exp = nullptr;
-    decltype(&zeCommandListGetGraphExp) ze_command_list_get_graph_exp = nullptr;
-    decltype(&zeGraphSetDestructionCallbackExp) ze_graph_set_destruction_callback_exp = nullptr;
-    decltype(&zeExecutableGraphGetSourceGraphExt) ze_executable_graph_get_source_graph_ext =
-        nullptr;
-    decltype(&zeGraphGetPrimaryCommandListExt) ze_graph_get_primary_command_list_ext = nullptr;
-
-    static std::optional<GraphExp> Load(ze_driver_handle_t driver) {
-      if (!IsSupported<GraphExp>(driver)) {
+    static std::optional<GraphExt> Load(ze_driver_handle_t driver) {
+      if (!IsSupported<GraphExt>(driver)) {
         return std::nullopt;
       }
-
-      GraphExp graph{};
-
-      if (LoadFunction(driver, "zeGraphCreateExp", graph.ze_graph_create_exp) &&
-          LoadFunction(driver, "zeCommandListBeginGraphCaptureExp",
-                       graph.ze_command_list_begin_graph_capture_exp) &&
-          LoadFunction(driver, "zeCommandListBeginCaptureIntoGraphExp",
-                       graph.ze_command_list_begin_capture_into_graph_exp) &&
-          LoadFunction(driver, "zeCommandListEndGraphCaptureExp",
-                       graph.ze_command_list_end_graph_capture_exp) &&
-          LoadFunction(driver, "zeCommandListInstantiateGraphExp",
-                       graph.ze_command_list_instantiate_graph_exp) &&
-          LoadFunction(driver, "zeCommandListAppendGraphExp",
-                       graph.ze_command_list_append_graph_exp) &&
-          LoadFunction(driver, "zeGraphDestroyExp", graph.ze_graph_destroy_exp) &&
-          LoadFunction(driver, "zeExecutableGraphDestroyExp",
-                       graph.ze_executable_graph_destroy_exp) &&
-          LoadFunction(driver, "zeCommandListIsGraphCaptureEnabledExp",
-                       graph.ze_command_list_is_graph_capture_enabled_exp) &&
-          LoadFunction(driver, "zeGraphIsEmptyExp", graph.ze_graph_is_empty_exp) &&
-          LoadFunction(driver, "zeGraphDumpContentsExp", graph.ze_graph_dump_contents_exp) &&
-          LoadFunction(driver, "zeCommandListGetGraphExp", graph.ze_command_list_get_graph_exp) &&
-          LoadFunction(driver, "zeGraphSetDestructionCallbackExp",
-                       graph.ze_graph_set_destruction_callback_exp) &&
-          LoadFunction(driver, "zeExecutableGraphGetSourceGraphExt",
-                       graph.ze_executable_graph_get_source_graph_ext) &&
-          LoadFunction(driver, "zeGraphGetPrimaryCommandListExt",
-                       graph.ze_graph_get_primary_command_list_ext)) {
-        return graph;
-      }
-
-      return std::nullopt;
+      return GraphExt{};
     }
   };
 
   using Extensions = std::tuple<std::optional<Visit>, std::optional<CounterBasedEvents>,
-                                std::optional<CmdListIntrospection>, std::optional<GraphExp>>;
+                                std::optional<CmdListIntrospection>, std::optional<GraphExt>>;
   Extensions extensions;
 };
 

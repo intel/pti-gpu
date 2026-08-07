@@ -52,6 +52,21 @@ class Level0Wrapper {
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListIsImmediate);
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandQueueGetIndex);
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandQueueGetOrdinal);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeGraphCreateExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeGraphDestroyExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeGraphInstantiateExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeGraphIsEmptyExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeGraphDumpContentsExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeGraphSetDestructionCallbackExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListBeginGraphCaptureExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListBeginCaptureIntoGraphExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListEndGraphCaptureExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListIsGraphCaptureEnabledExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListAppendGraphExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListGetGraphExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeGraphGetPrimaryCommandListExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeExecutableGraphGetSourceGraphExt);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeExecutableGraphDestroyExt);
     } catch ([[maybe_unused]] const std::runtime_error& e) {
       SPDLOG_ERROR("Error Loading Level Zero symbols: {}", e.what());
     }
@@ -136,6 +151,128 @@ class Level0Wrapper {
     return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
   }
 
+  ze_result_t w_zeGraphCreateExt(ze_context_handle_t hContext, const void* pNext,
+                                 ze_graph_handle_t* phGraph) const {
+    if (nullptr != fptr_zeGraphCreateExt_) {
+      return fptr_zeGraphCreateExt_(hContext, pNext, phGraph);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeGraphDestroyExt(ze_graph_handle_t hGraph) const {
+    if (nullptr != fptr_zeGraphDestroyExt_) {
+      return fptr_zeGraphDestroyExt_(hGraph);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeGraphInstantiateExt(ze_graph_handle_t hGraph, const void* pNext,
+                                      ze_executable_graph_handle_t* phExecutableGraph) const {
+    if (nullptr != fptr_zeGraphInstantiateExt_) {
+      return fptr_zeGraphInstantiateExt_(hGraph, pNext, phExecutableGraph);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeGraphIsEmptyExt(ze_graph_handle_t hGraph) const {
+    if (nullptr != fptr_zeGraphIsEmptyExt_) {
+      return fptr_zeGraphIsEmptyExt_(hGraph);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeGraphDumpContentsExt(ze_graph_handle_t hGraph, const char* filePath,
+                                       const void* pNext) const {
+    if (nullptr != fptr_zeGraphDumpContentsExt_) {
+      return fptr_zeGraphDumpContentsExt_(hGraph, filePath, pNext);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeGraphSetDestructionCallbackExt(ze_graph_handle_t hGraph,
+                                                 zex_mem_graph_free_callback_fn_t pfnCallback,
+                                                 void* pUserData, const void* pNext) const {
+    if (nullptr != fptr_zeGraphSetDestructionCallbackExt_) {
+      return fptr_zeGraphSetDestructionCallbackExt_(hGraph, pfnCallback, pUserData, pNext);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeCommandListBeginGraphCaptureExt(ze_command_list_handle_t hCommandList,
+                                                  const void* pNext) const {
+    if (nullptr != fptr_zeCommandListBeginGraphCaptureExt_) {
+      return fptr_zeCommandListBeginGraphCaptureExt_(hCommandList, pNext);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeCommandListBeginCaptureIntoGraphExt(ze_command_list_handle_t hCommandList,
+                                                      ze_graph_handle_t hGraph,
+                                                      const void* pNext) const {
+    if (nullptr != fptr_zeCommandListBeginCaptureIntoGraphExt_) {
+      return fptr_zeCommandListBeginCaptureIntoGraphExt_(hCommandList, hGraph, pNext);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeCommandListEndGraphCaptureExt(ze_command_list_handle_t hCommandList,
+                                                const void* pNext,
+                                                ze_graph_handle_t* phGraph) const {
+    if (nullptr != fptr_zeCommandListEndGraphCaptureExt_) {
+      return fptr_zeCommandListEndGraphCaptureExt_(hCommandList, pNext, phGraph);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeCommandListIsGraphCaptureEnabledExt(ze_command_list_handle_t hCommandList) const {
+    if (nullptr != fptr_zeCommandListIsGraphCaptureEnabledExt_) {
+      return fptr_zeCommandListIsGraphCaptureEnabledExt_(hCommandList);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeCommandListAppendGraphExt(ze_command_list_handle_t hCommandList,
+                                            ze_executable_graph_handle_t hGraph, const void* pNext,
+                                            ze_event_handle_t hSignalEvent, uint32_t numWaitEvents,
+                                            ze_event_handle_t* phWaitEvents) const {
+    if (nullptr != fptr_zeCommandListAppendGraphExt_) {
+      return fptr_zeCommandListAppendGraphExt_(hCommandList, hGraph, pNext, hSignalEvent,
+                                               numWaitEvents, phWaitEvents);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeCommandListGetGraphExt(ze_command_list_handle_t hCommandList,
+                                         ze_graph_handle_t* phGraph) const {
+    if (nullptr != fptr_zeCommandListGetGraphExt_) {
+      return fptr_zeCommandListGetGraphExt_(hCommandList, phGraph);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeGraphGetPrimaryCommandListExt(ze_graph_handle_t hGraph,
+                                                ze_command_list_handle_t* phCommandList) const {
+    if (nullptr != fptr_zeGraphGetPrimaryCommandListExt_) {
+      return fptr_zeGraphGetPrimaryCommandListExt_(hGraph, phCommandList);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeExecutableGraphGetSourceGraphExt(ze_executable_graph_handle_t hGraph,
+                                                   ze_graph_handle_t* phSourceGraph) const {
+    if (nullptr != fptr_zeExecutableGraphGetSourceGraphExt_) {
+      return fptr_zeExecutableGraphGetSourceGraphExt_(hGraph, phSourceGraph);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeExecutableGraphDestroyExt(ze_executable_graph_handle_t hGraph) const {
+    if (nullptr != fptr_zeExecutableGraphDestroyExt_) {
+      return fptr_zeExecutableGraphDestroyExt_(hGraph);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
   ze_result_t w_zelEnableTracingLayer() const {
     if (nullptr != fptr_zelEnableTracingLayer_) {
       return fptr_zelEnableTracingLayer_();
@@ -165,6 +302,26 @@ class Level0Wrapper {
     return ZE_RESULT_SUCCESS;
   }
 
+  ze_result_t InitGraphWrappers() const {
+    SPDLOG_DEBUG("In {}", __FUNCTION__);
+
+    if (nullptr == fptr_zeGraphCreateExt_ || nullptr == fptr_zeGraphDestroyExt_ ||
+        nullptr == fptr_zeGraphInstantiateExt_ || nullptr == fptr_zeGraphIsEmptyExt_ ||
+        nullptr == fptr_zeGraphDumpContentsExt_ ||
+        nullptr == fptr_zeGraphSetDestructionCallbackExt_ ||
+        nullptr == fptr_zeCommandListBeginGraphCaptureExt_ ||
+        nullptr == fptr_zeCommandListBeginCaptureIntoGraphExt_ ||
+        nullptr == fptr_zeCommandListEndGraphCaptureExt_ ||
+        nullptr == fptr_zeCommandListIsGraphCaptureEnabledExt_ ||
+        nullptr == fptr_zeCommandListAppendGraphExt_ || nullptr == fptr_zeCommandListGetGraphExt_ ||
+        nullptr == fptr_zeGraphGetPrimaryCommandListExt_ ||
+        nullptr == fptr_zeExecutableGraphGetSourceGraphExt_ ||
+        nullptr == fptr_zeExecutableGraphDestroyExt_) {
+      return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+    }
+    return ZE_RESULT_SUCCESS;
+  }
+
   ze_result_t InitDynamicTracingWrappers() const {
     SPDLOG_DEBUG("In {}", __FUNCTION__);
 
@@ -188,6 +345,23 @@ class Level0Wrapper {
   decltype(&zeCommandQueueGetOrdinal) fptr_zeCommandQueueGetOrdinal_ = nullptr;
   decltype(&zelEnableTracingLayer) fptr_zelEnableTracingLayer_ = nullptr;
   decltype(&zelDisableTracingLayer) fptr_zelDisableTracingLayer_ = nullptr;
+  decltype(&zeGraphCreateExt) fptr_zeGraphCreateExt_ = nullptr;
+  decltype(&zeGraphDestroyExt) fptr_zeGraphDestroyExt_ = nullptr;
+  decltype(&zeGraphInstantiateExt) fptr_zeGraphInstantiateExt_ = nullptr;
+  decltype(&zeGraphIsEmptyExt) fptr_zeGraphIsEmptyExt_ = nullptr;
+  decltype(&zeGraphDumpContentsExt) fptr_zeGraphDumpContentsExt_ = nullptr;
+  decltype(&zeGraphSetDestructionCallbackExt) fptr_zeGraphSetDestructionCallbackExt_ = nullptr;
+  decltype(&zeCommandListBeginGraphCaptureExt) fptr_zeCommandListBeginGraphCaptureExt_ = nullptr;
+  decltype(&zeCommandListBeginCaptureIntoGraphExt) fptr_zeCommandListBeginCaptureIntoGraphExt_ =
+      nullptr;
+  decltype(&zeCommandListEndGraphCaptureExt) fptr_zeCommandListEndGraphCaptureExt_ = nullptr;
+  decltype(&zeCommandListIsGraphCaptureEnabledExt) fptr_zeCommandListIsGraphCaptureEnabledExt_ =
+      nullptr;
+  decltype(&zeCommandListAppendGraphExt) fptr_zeCommandListAppendGraphExt_ = nullptr;
+  decltype(&zeCommandListGetGraphExt) fptr_zeCommandListGetGraphExt_ = nullptr;
+  decltype(&zeGraphGetPrimaryCommandListExt) fptr_zeGraphGetPrimaryCommandListExt_ = nullptr;
+  decltype(&zeExecutableGraphGetSourceGraphExt) fptr_zeExecutableGraphGetSourceGraphExt_ = nullptr;
+  decltype(&zeExecutableGraphDestroyExt) fptr_zeExecutableGraphDestroyExt_ = nullptr;
 };
 #undef LOADER_LOAD_AND_DEBUG_PRINT
 #endif

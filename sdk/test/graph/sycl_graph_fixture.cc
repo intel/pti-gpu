@@ -241,6 +241,18 @@ class SyclUsmGraphVisitorTestSuite : public SyclUsmGraphExecutionTestSuite {
   }
 };
 
+class SyclUsmNativeGraphVisitorTestSuite : public SyclUsmGraphExecutionTestSuite {
+ protected:
+  void SetUp() override {
+    if (!pti::test::utils::NativeGraphApisAvailable()) {
+      GTEST_SKIP() << "Command list visit extension unavailable. It requires a supporting driver "
+                      "and NEOReadDebugKeys=1 ExperimentalFlatCommandListApiRecording=1 to be set "
+                      "in the environment.";
+    }
+    SyclUsmGraphExecutionTestSuite::SetUp();
+  }
+};
+
 TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecution) {
   using UnderlyingType = Workload::DefaultVectorDataType;
   auto [dot_product, x_vector, y_vector, z_vector] =
@@ -254,6 +266,61 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecution) {
 
   const auto exec = graph.finalize();
   queue_.ext_oneapi_graph(exec).wait_and_throw();
+  EXPECT_FLOAT_EQ(*dot_product, Workload::Result());
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{Workload::kDefaultKernelNumber});
+  ValidateViewTimestamps(record_storage_.kernel_records);
+}
+
+TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecutionWithRecordingApi) {
+  using UnderlyingType = Workload::DefaultVectorDataType;
+  auto [dot_product, x_vector, y_vector, z_vector] =
+      CreateUsmDotProductVectors<UnderlyingType>(queue_, Workload::kDefaultVectorSize);
+
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+
+  auto graph =
+      CreateUsmDotProductGraphWithRecording(queue_, Workload::kDefaultVectorSize, dot_product.get(),
+                                            x_vector.get(), y_vector.get(), z_vector.get());
+
+  const auto exec = graph.finalize();
+  queue_.ext_oneapi_graph(exec).wait_and_throw();
+  EXPECT_FLOAT_EQ(*dot_product, Workload::Result());
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+  ParseAllBuffers();
+  EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{Workload::kDefaultKernelNumber});
+  ValidateViewTimestamps(record_storage_.kernel_records);
+}
+
+TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecutionWithNativeRecordingApi) {
+  if (!pti::test::utils::NativeGraphApisAvailable()) {
+    GTEST_SKIP()
+        << "Native graph recording extension unavailable. It requires a supporting driver.";
+  }
+  using UnderlyingType = Workload::DefaultVectorDataType;
+  auto [dot_product, x_vector, y_vector, z_vector] =
+      CreateUsmDotProductVectors<UnderlyingType>(queue_, Workload::kDefaultVectorSize);
+
+  ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+  try {
+    auto graph =
+        CreateNativeUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product.get(),
+                                       x_vector.get(), y_vector.get(), z_vector.get());
+
+    const auto exec = graph.finalize();
+    queue_.ext_oneapi_graph(exec).wait_and_throw();
+  } catch (const sycl::exception& e) {
+    GTEST_SKIP()
+        << "SYCL exception during graph execution, likely due to unsupported native recording API: "
+        << e.what();
+  } catch (...) {
+    FAIL() << "Unknown exception during SYCL graph execution.";
+  }
   EXPECT_FLOAT_EQ(*dot_product, Workload::Result());
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
@@ -425,12 +492,38 @@ TEST_P(SyclUsmGraphVisitorTestSuite, TestArbitraryReplaysWithGraphRecreation) {
   ValidateGraphReplayTimestamps();
 }
 
+TEST_P(SyclUsmNativeGraphVisitorTestSuite, TestArbitraryReplaysWithGraphRecreation) {
+  auto graph =
+      CreateNativeUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product_.get(),
+                                     x_vector_.get(), y_vector_.get(), z_vector_.get());
+  graph_.emplace(graph.finalize());
+
+  InitializeTracing();
+  EnableTracing();
+  queue_.ext_oneapi_graph(*graph_).wait_and_throw();
+  for (std::size_t i = 0; i < replays_; ++i) {
+    queue_.ext_oneapi_graph(*graph_).wait_and_throw();
+  }
+  FinalizeTracing();
+  const auto expected_result =
+      (Workload::Result() * static_cast<UnderlyingType>(replays_)) + Workload::Result();
+  EXPECT_FLOAT_EQ(*dot_product_, expected_result);
+  EXPECT_EQ(std::size(record_storage_.kernel_records),
+            (replays_ + 1) * kExpectedKernelsPerExecution);
+  ValidateGraphReplayTimestamps();
+}
+
 INSTANTIATE_TEST_SUITE_P(SyclUsmGraphExecutionReplayTests, SyclUsmGraphExecutionTestSuite,
                          ::testing::Values(0, 1, 5, 10), [](const auto& info) {
                            return fmt::format("{}_Replays", std::get<0>(info.param));
                          });
 
 INSTANTIATE_TEST_SUITE_P(SyclUsmGraphVisitorReplayTests, SyclUsmGraphVisitorTestSuite,
+                         ::testing::Values(0, 1, 5, 10), [](const auto& info) {
+                           return fmt::format("{}_Replays", std::get<0>(info.param));
+                         });
+
+INSTANTIATE_TEST_SUITE_P(SyclUsmNativeGraphVisitorReplayTests, SyclUsmNativeGraphVisitorTestSuite,
                          ::testing::Values(0, 1, 5, 10), [](const auto& info) {
                            return fmt::format("{}_Replays", std::get<0>(info.param));
                          });

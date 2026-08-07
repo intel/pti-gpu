@@ -211,6 +211,22 @@ ZeCommandVisitor::Result ZeCommandVisitor::CollectResultAndReset() {
   return result;
 }
 
+std::pair<ZeEventView<ZeEventPool>, utils::ze::TimestampBuffer>
+ZeCommandVisitor::AppendQueryTimestamp(ze_command_list_handle_t command_list,
+                                       ze_event_handle_t event_to_query) {
+  auto buf = utils::ze::MakeTimestampBuffer(current_command_list_info_.context, 1);
+  if (!buf) {
+    SPDLOG_INFO("Failed to create timestamp buffer");
+    internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
+    return {};
+  }
+
+  auto timestamp_event = event_pool_manager_->AcquireEvent(current_command_list_info_.context);
+  ZE_COMMAND(this, zeCommandListAppendQueryKernelTimestamps, command_list, 1, &event_to_query,
+             buf.get(), nullptr, timestamp_event.Get(), 1, &event_to_query);
+  return std::make_pair(std::move(timestamp_event), std::move(buf));
+}
+
 ZeCommandVisitor::Result ZeCommandVisitor::Visit(
     const ZeDeviceDescriptor& device_desc, const ZeCommandListInfo& info,
     ze_command_list_handle_t command_list, ze_command_list_handle_t instrumented_command_list) {
@@ -233,10 +249,13 @@ ZeCommandVisitor::Result ZeCommandVisitor::Visit(
 }
 
 ZeCommandVisitor::Result ZeCommandVisitor::GraphVisit(const ZeDeviceDescriptor& device_desc,
-                                                      const ZeCommandListInfo& info,
+                                                      const ZeGraphInfo& graph_info,
                                                       ze_graph_handle_t graph) {
   current_device_desc_ = device_desc;
-  current_command_list_info_ = info;
+  // Convert graph_info to command list info. For now, its easier to use the graph information for
+  // graphs. This is the relevant information between the two.
+  current_command_list_info_.context = graph_info.context;
+  current_command_list_info_.device = graph_info.device;
   auto result = visitor_extension_.ze_graph_visit(graph, &visit_desc_);
   SPDLOG_TRACE("GraphVisit result: {:x}", static_cast<std::uint32_t>(result));
   if (HasError() || result != ZE_RESULT_SUCCESS) {
@@ -276,19 +295,10 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernel(
       }
     }
 
-    auto* event_ptr = event.Get();
-    auto buf = utils::ze::MakeTimestampBuffer(visitor->current_command_list_info_.context, 1);
+    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
     if (!buf) {
-      SPDLOG_INFO("Failed to create timestamp buffer");
-      visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       return;
     }
-
-    auto timestamp_event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-
-    ZE_COMMAND(visitor, zeCommandListAppendQueryKernelTimestamps, target_command_list, 1,
-               &event_ptr, buf.get(), nullptr, timestamp_event.Get(), 1, &event_ptr);
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -316,8 +326,6 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
   return ExceptionHandler(visitor, __func__, [&] {
     auto event =
         visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-    auto timestamp_event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
 
     auto* target_command_list = visitor->visit_desc_.hReappendTargetCmdList
                                     ? visitor->visit_desc_.hReappendTargetCmdList
@@ -335,17 +343,10 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
       }
     }
 
-    auto* event_ptr = event.Get();
-    auto buf = utils::ze::MakeTimestampBuffer(visitor->current_command_list_info_.context, 1);
-
+    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
     if (!buf) {
-      SPDLOG_INFO("Failed to create timestamp buffer");
-      visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       return;
     }
-
-    ZE_COMMAND(visitor, zeCommandListAppendQueryKernelTimestamps, target_command_list, 1,
-               &event_ptr, buf.get(), nullptr, timestamp_event.Get(), 1, &event_ptr);
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -382,19 +383,10 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelWi
       }
     }
 
-    auto* event_ptr = event.Get();
-    auto buf = utils::ze::MakeTimestampBuffer(visitor->current_command_list_info_.context, 1);
-
+    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
     if (!buf) {
-      SPDLOG_INFO("Failed to create timestamp buffer");
-      visitor->internal_error_ = ZE_RESULT_ERROR_UNKNOWN;
       return;
     }
-
-    auto timestamp_event =
-        visitor->event_pool_manager_->AcquireEvent(visitor->current_command_list_info_.context);
-    ZE_COMMAND(visitor, zeCommandListAppendQueryKernelTimestamps, target_command_list, 1,
-               &event_ptr, buf.get(), nullptr, timestamp_event.Get(), 1, &event_ptr);
 
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
@@ -436,10 +428,17 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchCooperat
       }
     }
 
+    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
+    if (!buf) {
+      return;
+    }
+
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
     visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
     visitor->commands_.back()->event_swap = std::move(event);
+    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_event);
+    visitor->commands_.back()->timestamp = std::move(buf);
     visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
     visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
     if (pLaunchFuncArgs != nullptr) {
@@ -474,10 +473,17 @@ ze_result_t VISITOR_CCONV ZeCommandVisitor::VisitCommandListAppendLaunchKernelIn
       }
     }
 
+    auto [timestamp_event, buf] = visitor->AppendQueryTimestamp(target_command_list, event.Get());
+    if (!buf) {
+      return;
+    }
+
     visitor->commands_.emplace_back(MakeCommand<KernelCommandType::kKernel>(
         hCommandList, visitor->current_command_list_info_, visitor->current_device_desc_));
     visitor->commands_.back()->event_self = hSignalEvent ? hSignalEvent : event.Get();
     visitor->commands_.back()->event_swap = std::move(event);
+    visitor->commands_.back()->timestamp_query_event = std::move(timestamp_event);
+    visitor->commands_.back()->timestamp = std::move(buf);
     visitor->commands_.back()->props.name = utils::ze::GetKernelName(hKernel, true);
     visitor->commands_.back()->props.simd_width = utils::ze::GetKernelMaxSubgroupSize(hKernel);
   });

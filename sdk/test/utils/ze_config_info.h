@@ -29,6 +29,7 @@ inline constexpr zel_version_t kProperLoaderVersionForZeInitDrivers = {1, 19, 2}
 inline constexpr zel_version_t kProperLoaderVersionForZesInit = {1, 16, 0};
 inline constexpr uint32_t kBmgIpVersion = 0x05004000;
 inline constexpr std::string_view kCommandVisitExtName = "ZE_extension_command_visit";
+inline constexpr std::string_view kNativeGraphExt = "ZE_extension_record_replay_graph";
 
 [[nodiscard]] inline bool FlatCommandListRecordingEnabled() {
   static constexpr std::string_view kPositiveValue = "1";
@@ -46,6 +47,15 @@ inline constexpr std::string_view kCommandVisitExtName = "ZE_extension_command_v
 [[nodiscard]] inline bool CommandListVisitAvailable() {
   return FlatCommandListRecordingEnabled() && CommandListVisitSupported();
 }
+
+[[nodiscard]] inline bool NativeGraphApisSupported() {
+  const auto drivers = ::utils::ze::GetDriverList();
+  return std::any_of(std::cbegin(drivers), std::cend(drivers), [](auto* const driver) {
+    return ::utils::ze::IsDriverExtensionSupported(driver, kNativeGraphExt);
+  });
+}
+
+[[nodiscard]] inline bool NativeGraphApisAvailable() { return NativeGraphApisSupported(); }
 
 [[nodiscard]] inline bool CheckIntegratedGraphics(ze_device_handle_t device) {
   ze_device_properties_t device_props{};
