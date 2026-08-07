@@ -38,6 +38,7 @@
 #include <stdlib.h>
 #include "ze_metrics.h"
 #include "utils.h"
+#include "cli_options.h"
 #include "version.h"
 #include "unitrace_commit_hash.h"
 #include "unicontrol.h"
@@ -52,276 +53,53 @@
 static ZeMetricProfiler* metric_profiler = nullptr;
 static bool idle_sampling = false;
 
-void Usage(char * progname) {
-  std::cout << "(Built with ";
-  std::cout << "BUILD_WITH_L0=" << BUILD_WITH_L0 << ", ";
-  std::cout << "BUILD_WITH_OPENCL=" << BUILD_WITH_OPENCL << ", ";
-  std::cout << "BUILD_WITH_ITT=" << BUILD_WITH_ITT << ", ";
-  std::cout << "BUILD_WITH_XPTI=" << BUILD_WITH_XPTI << ", ";
-  std::cout << "BUILD_WITH_MPI=" << BUILD_WITH_MPI << ", ";
-  std::cout << "BUILD_WITH_OMP=" << BUILD_WITH_OMP << ", ";
-  std::cout << "BUILD_WITH_PERFETTO=" << BUILD_WITH_PERFETTO;
-  std::cout << ")" << std::endl;
-  std::cout <<
-    "Usage: " << progname << " [options] <application> <args>" <<
-    std::endl;
-  std::cout << "Options:" << std::endl;
-#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
-  std::cout <<
-    "--call-logging [-c]              " <<
-    "Trace host API calls" <<
-    std::endl;
-  std::cout <<
-    "--host-timing  [-h]              " <<
-    "Report host API execution time" <<
-    std::endl;
-  std::cout <<
-    "--device-timing [-d]             " <<
-    "Report kernels execution time" <<
-    std::endl;
-#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
-#if BUILD_WITH_ITT
-  std::cout <<
-    "--ccl-summary-report [-r]        " <<
-    "Report CCL execution time summary" <<
-    std::endl;
-#endif /* BUILD_WITH_ITT */
-#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
-  std::cout <<
-    "--kernel-submission [-s]         " <<
-    "Report append (queued), submit and execute intervals for kernels" <<
-    std::endl;
-  std::cout <<
-    "--device-timeline [-t]           " <<
-    "Report device timeline" <<
-    std::endl;
-#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
-#if BUILD_WITH_OPENCL
-  std::cout <<
-    "--opencl                         " <<
-    "Trace OpenCL" <<
-    std::endl;
-#endif /* BUILD_WITH_OPENCL */
-#if BUILD_WITH_OMP
-  std::cout <<
-    "--chrome-omp-logging             " <<
-    "Trace OpenMP" <<
-    std::endl;
-#endif /* BUILD_WITH_OMP */
-#if BUILD_WITH_MPI
-  std::cout <<
-    "--chrome-mpi-logging             " <<
-    "Trace MPI" <<
-    std::endl;
-#endif /* BUILD_WITH_MPI */
-#if BUILD_WITH_XPTI
-  std::cout <<
-    "--chrome-syclrt-logging          " <<
-    "Trace SYCL runtime" <<
-    std::endl;
-  std::cout <<
-    "--chrome-ur-logging              " <<
-    "Trace Unified Runtime (implementation layer beneath the SYCL runtime)" <<
-    std::endl;
-  std::cout <<
-    "--chrome-sycl-logging            " <<
-    "Trace SYCL runtime and Unified Runtime (same as --chrome-syclrt-logging --chrome-ur-logging)" <<
-    std::endl;
-#endif /* BUILD_WITH_XPTI */
-#if BUILD_WITH_ITT
-  std::cout <<
-    "--chrome-ccl-logging             " <<
-    "Trace oneCCL" <<
-    std::endl;
-  std::cout <<
-    "--chrome-dnn-logging             " <<
-    "Trace oneDNN" <<
-    std::endl;
-#endif /* BUILD_WITH_ITT */
-#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
-  std::cout <<
-    "--chrome-call-logging            " <<
-    "Trace Level Zero and/or OpenCL host calls" <<
-    std::endl;
-  std::cout <<
-    "--chrome-kernel-logging          " <<
-    "Trace device and host kernel activities" <<
-    std::endl;
-  std::cout <<
-    "--chrome-device-logging          " <<
-    "Trace device activities" <<
-    std::endl;
-#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
-  std::cout <<
-    "--chrome-itt-logging             " <<
-    "Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs" <<
-    std::endl;
-#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
-  std::cout <<
-    "--chrome-no-thread-on-device     " <<
-    "Trace device activities without per-thread info" << std::endl <<
-    "                                 Device activities are traced per thread if this option is not present" <<
-    std::endl;
-#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
-#if BUILD_WITH_L0
-  std::cout <<
-    "--chrome-no-engine-on-device     " <<
-    "Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info." << std::endl <<
-    "                                 Device activities are traced per Level-Zero engine or OpenCL queue if this option is not present" <<
-    std::endl;
-#endif /* BUILD_WITH_L0 */
-  std::cout <<
-    "--chrome-event-buffer-size <number-of-events>      " <<
-    "Size of event buffer on host per host thread(default is -1 or unlimited)" <<
-    std::endl;
-  std::cout <<
-    "--verbose [-v]                   " <<
-    "Enable verbose mode to show kernel shapes" << std::endl <<
-    "                                 Kernel shapes are always enabled in timelines for Level Zero backend" <<
-    std::endl;
-  std::cout <<
-    "--demangle                       " <<
-    "Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend" <<
-    std::endl;
-#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
-  std::cout <<
-    "--separate-tiles                 " <<
-    "Trace each tile separately in case of implicit scaling" <<
-    std::endl;
-#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
-  std::cout <<
-    "--tid                            " <<
-    "Output TID in host API trace" <<
-    std::endl;
-  std::cout <<
-    "--pid                            " <<
-    "Output PID in host API and device activity trace" <<
-    std::endl;
-  std::cout <<
-    "--output [-o] <filename>         " <<
-    "Output profiling result to file" <<
-    std::endl;
-#if BUILD_WITH_PERFETTO
-  std::cout <<
-    "--output-format <format>         " <<
-    "Timeline trace format: \"json\" (Chrome trace, default) or \"protobuf\" (Perfetto)" <<
-    std::endl;
-#endif /* BUILD_WITH_PERFETTO */
-  std::cout <<
-    "--conditional-collection         " <<
-    "Enable conditional collection. " <<
-    "This options is deprecated. Use --start-paused instead" <<
-    std::endl;
-  std::cout <<
-    "--start-paused                   " <<
-    "Start the tool with tracing and profiling paused" <<
-    std::endl;
-  std::cout <<
-    "--output-dir-path <path>         " <<
-    "Output result to a flat directory" <<
-    std::endl;
-  std::cout <<
-    "--result-dir <path>              " <<
-    "Output result to a hierarchical directory" <<
-    std::endl;
-#if BUILD_WITH_L0
-  std::cout <<
-    "--metric-query [-q]              " <<
-    "Query hardware metrics for each kernel instance (Level Zero)" <<
-    std::endl;
-  std::cout <<
-    "--metric-sampling [-k]           " <<
-    "Sample hardware performance metrics for each kernel instance in time-based mode" <<
-    std::endl;
-  std::cout <<
-    "--group [-g] <metric-group>      " <<
-    "Hardware metric group (ComputeBasic by default)" <<
-    std::endl;
-  std::cout <<
-    "--sampling-interval [-i] <interval> " <<
-    "Hardware performance metric sampling interval in us (default is 50 us) in time-based mode" <<
-    std::endl;
-  std::cout <<
-    "--device-list                    " <<
-    "Print available devices" <<
-    std::endl;
-  std::cout <<
-    "--metric-list                    " <<
-    "Print available metric groups and metrics" <<
-    std::endl;
-  std::cout <<
-    "--stall-sampling                 " <<
-    "Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs" <<
-    std::endl;
-  std::cout <<
-    "--ranks-to-sample <ranks>        " <<
-    "MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks" <<
-    std::endl;
-  std::cout <<
-    "--devices-to-sample <devices>    " <<
-    "Devices ID to sample. The argument <devices> is a list of comma separated devices as reported" << std::endl <<
-    "                                 by --device-list" <<
-    std::endl;
-#endif /* BUILD_WITH_L0 */
-  std::cout <<
-    "--follow-child-process <0/1>     " <<
-    "0: Do not follow or profile child processes on Linux" << std::endl <<
-    "                                 1: Follow and profile child processes on Linux (default)" <<
-    std::endl;
-  std::cout <<
-    "--teardown-on-signal <signum>    " <<
-    "Try to gracefully shut down in case the application crashes or is terminated or <signum> is raised" << std::endl <<
-    "                                 This option may change the application behavior so please use it carefully" <<
-    std::endl;
-  std::cout <<
-    "--session <session>              " <<
-    "Name this session <session> for dynamic control. The argument <session> is an alphanumeric string" <<
-    std::endl;
-  std::cout <<
-    "--pause <session>                " <<
-    "Pause session <session>. The argument <session> must be the same session named with --session option" <<
-    std::endl;
-  std::cout <<
-    "--resume <session>               " <<
-    "Resume session <session>. The argument <session> must be the same session named with --session option" <<
-    std::endl;
-  std::cout <<
-    "--stop <session>                 " <<
-    "Stop session <session>. The argument <session> must be the same session named with --session option" <<
-    std::endl;
-#ifndef _WIN32
-  std::cout <<
-    "--chrome-kmd-logging <script>    " <<
-    "Trace OS/KMD activities. The argument <script> file defines the OS kernel or device driver activities to trace" <<
-    std::endl;
-#endif /* _WIN32 */
-#if BUILD_WITH_L0
-  std::cout <<
-    "--include-kernels <kernel-names> " <<
-    "Trace kernels, the names of which contain substrings in the comma-separated <kernel-names>(Level Zero only)" <<
-    std::endl;
-  std::cout <<
-    "--exclude-kernels <kernel-names> " <<
-    "Trace kernels, the names of which do not contain any substrings in the comma-separated <kernel-names>(Level Zero only)" <<
-    std::endl;
-  std::cout <<
-    "--include-kernels-file <file>    " <<
-    "Same as --include-kernels, except that the kernel name substrings are in <file>" <<
-    std::endl;
-  std::cout <<
-    "--exclude-kernels-file <file>    " <<
-    "Same as --exclude-kernels, except that the kernel name substrings are in <file>" <<
-    std::endl;
-#endif /* BUILD_WITH_L0 */
-  std::cout <<
-    "--version                        " <<
-    "Print version                    " <<
-    std::endl;
-  std::cout <<
-    "--help                           " <<
-    "Show this help message and exit. Please refer to the README.md file for further details" <<
-    std::endl;
+// ============================================================================
+// CLI option table: the single source of truth for argument parsing, the
+// --help text (Usage), and --print-options-schema. Add or rename a flag by editing
+// one row of kCliOptions[] below; ParseArgs, Usage and the JSON schema all derive
+// from it. The generic engine lives in cli_options.h for reuse by other tools;
+// ArgParseState (this file's Ctx) and FinalizeParse are unitrace-specific.
+// ============================================================================
+
+// Shared state written by handlers, consumed after the parse loop by FinalizeParse.
+struct ArgParseState {
+  char* progname_ = nullptr;
+  int   app_index_ = 1;
+  bool  show_metric_list_ = false;
+  bool  stall_sampling_ = false;
+  bool  metric_sampling_ = false;
+  bool  devices_to_sample_present_ = false;
+  std::set<int> ranks_to_sample_;
+  std::set<int> devices_to_sample_;
+};
+
+using CliOption = cli::CliOption<ArgParseState>;
+using Status    = cli::Status;
+
+// Row factories for the kCliOptions[] table below: Opt::Bool, Opt::Value, Opt::BoolH, ...
+using Opt = cli::Factory<ArgParseState>;
+
+void Usage(char* progname);
+void PrintOptionsSchema(std::ostream& os);
+static int FinalizeParse(ArgParseState& st);
+
+bool IsAlphanumericString(const std::string& str) {
+  return std::all_of(str.begin(), str.end(), [](unsigned char c) {return std::isalnum(c);});
 }
+
+bool IsNumericString(const std::string& str) {
+  return std::all_of(str.begin(), str.end(), [](unsigned char c) {return std::isdigit(c);});
+}
+
+static bool IsZeroOrOne(const std::string& str) {
+  return str == "0" || str == "1";
+}
+
+#if BUILD_WITH_PERFETTO
+static bool IsTraceFormat(const std::string& str) {
+  return str == "json" || str == "protobuf";
+}
+#endif /* BUILD_WITH_PERFETTO */
 
 void SetTracingEnvironment() {
   utils::SetEnv("ZE_ENABLE_TRACING_LAYER", "1");
@@ -335,391 +113,407 @@ void SetSysmanEnvironment() {
   utils::SetEnv("ZES_ENABLE_SYSMAN", "1");
 }
 
-bool IsAlphanumericString(const std::string& str) {
-  return std::all_of(str.begin(), str.end(), [](unsigned char c) {return std::isalnum(c);});
+// ============================================================================
+// Handlers for flags that are not a plain 1:1 "set one env var" mapping.
+// ============================================================================
+
+static Status OnOutput(ArgParseState&, const CliOption&, const char* value) {
+  utils::SetEnv("UNITRACE_LogToFile", "1");
+  utils::SetEnv("UNITRACE_LogFilename", value);
+  return Status::Ok;
 }
 
-bool IsNumericString(const std::string& str) {
-  return std::all_of(str.begin(), str.end(), [](unsigned char c) {return std::isdigit(c);});
+static Status OnOutputDirPath(ArgParseState&, const CliOption&, const char* value) {
+  utils::SetEnv("UNITRACE_TraceOutputDirPath", "1");
+  utils::SetEnv("UNITRACE_TraceOutputDir", value);
+  return Status::Ok;
+}
+
+static Status OnResultDir(ArgParseState&, const CliOption&, const char* value) {
+  utils::SetEnv("UNITRACE_UseResultDirectory", "1");
+  utils::SetEnv("UNITRACE_ResultDirectory", value);
+  return Status::Ok;
+}
+
+#if BUILD_WITH_ITT
+static Status OnCclSummaryReport(ArgParseState&, const CliOption&, const char*) {
+  utils::SetEnv("UNITRACE_CclSummaryReport", "1");
+  utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
+  utils::SetEnv("CCL_ITT_LEVEL", "1");
+  return Status::Ok;
+}
+
+static Status OnChromeCclLogging(ArgParseState&, const CliOption&, const char*) {
+  utils::SetEnv("UNITRACE_ChromeCclLogging", "1");
+  utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
+  utils::SetEnv("CCL_ITT_LEVEL", "1");
+  return Status::Ok;
+}
+
+static Status OnChromeDnnLogging(ArgParseState&, const CliOption&, const char*) {
+  utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
+  // what should be set here?
+  return Status::Ok;
+}
+#endif /* BUILD_WITH_ITT */
+
+#if BUILD_WITH_MPI
+static Status OnChromeMpiLogging(ArgParseState&, const CliOption&, const char*) {
+  utils::SetEnv("UNITRACE_ChromeMpiLogging", "1");
+  utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
+  return Status::Ok;
+}
+#endif /* BUILD_WITH_MPI */
+
+#if BUILD_WITH_XPTI
+// (C) SYCL runtime and Unified Runtime tracing are decoupled:
+//   --chrome-syclrt-logging  traces the SYCL runtime
+//   --chrome-ur-logging      traces the Unified Runtime (layer beneath SYCL rt)
+//   --chrome-sycl-logging    kept for backward compatibility; both of the above
+static Status OnXptiLogging(ArgParseState&, const CliOption& o, const char*) {
+  const bool sycl = (strcmp(o.name_, "--chrome-sycl-logging") == 0);
+  if (sycl || strcmp(o.name_, "--chrome-syclrt-logging") == 0) {
+    utils::SetEnv("UNITRACE_ChromeSyclRuntimeLogging", "1");
+  }
+  if (sycl || strcmp(o.name_, "--chrome-ur-logging") == 0) {
+    utils::SetEnv("UNITRACE_ChromeUrLogging", "1");
+    utils::SetEnv("UR_ENABLE_LAYERS", "UR_LAYER_TRACING");
+  }
+  utils::SetEnv("XPTI_TRACE_ENABLE", "1");
+#ifdef _WIN32
+  utils::SetEnv("XPTI_SUBSCRIBERS", "unitrace_tool.dll");
+  utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "xptifw.dll");
+#else /* _WIN32 */
+  utils::SetEnv("XPTI_SUBSCRIBERS", "libunitrace_tool.so");
+  utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "libxptifw.so");
+#endif /* _WIN32 */
+  return Status::Ok;
+}
+#endif /* BUILD_WITH_XPTI */
+
+#if BUILD_WITH_L0
+// These flags only record intent; the actual logic runs in FinalizeParse
+// once every flag has been seen (mutual exclusion, defaulting, MPI-rank gating).
+static Status OnStallSampling(ArgParseState& st, const CliOption&, const char*) {
+  st.stall_sampling_ = true;
+  return Status::Ok;
+}
+
+static Status OnMetricSampling(ArgParseState& st, const CliOption&, const char*) {
+  utils::SetEnv("UNITRACE_KernelMetrics", "1");
+  st.metric_sampling_ = true;
+  return Status::Ok;
+}
+
+static Status OnMetricList(ArgParseState& st, const CliOption&, const char*) {
+  st.show_metric_list_ = true;  // PrintMetricList runs in FinalizeParse
+  return Status::Ok;
+}
+
+static Status OnIdleSampling(ArgParseState&, const CliOption&, const char*) {
+  idle_sampling = true;  // file-scope global, consumed by main()
+  return Status::Ok;
+}
+
+// Repeated --ranks-to-sample flags accumulate into UNITRACE_RanksToSample.
+static Status OnRanksToSample(ArgParseState& st, const CliOption&, const char* value) {
+  std::string ranks = utils::GetEnv("UNITRACE_RanksToSample");
+  if (ranks.empty()) {
+    utils::SetEnv("UNITRACE_RanksToSample", value);
+  } else {
+    ranks += ",";
+    ranks += value;
+    utils::SetEnv("UNITRACE_RanksToSample", ranks.c_str());
+  }
+  st.ranks_to_sample_.clear();
+  if (GetZeRanksToSample(st.ranks_to_sample_) != 0) {
+    std::cerr << "[ERROR] Invalid MPI ranks to sample" << std::endl;
+    return Status::Error;
+  }
+  return Status::Ok;
+}
+
+// Repeated --devices-to-sample flags accumulate into UNITRACE_DevicesToSampleArg.
+static Status OnDevicesToSample(ArgParseState& st, const CliOption&, const char* value) {
+  st.devices_to_sample_present_ = true;
+  std::string devices = utils::GetEnv("UNITRACE_DevicesToSampleArg");
+  if (devices.empty()) {
+    utils::SetEnv("UNITRACE_DevicesToSampleArg", value);
+  } else {
+    devices += ",";
+    devices += value;
+    utils::SetEnv("UNITRACE_DevicesToSampleArg", devices.c_str());
+  }
+  st.devices_to_sample_.clear();
+  if (GetZeDevicesToSample(st.devices_to_sample_) != 0) {
+    std::cout << "[ERROR] Invalid devices to sample" << std::endl;
+    return Status::Error;
+  }
+  return Status::Ok;
+}
+
+// Print-and-exit.
+static Status OnDeviceList(ArgParseState&, const CliOption&, const char*) {
+  SetSysmanEnvironment();  // enable ZES_ENABLE_SYSMAN
+  PrintDeviceList();
+  return Status::ExitOk;
+}
+#endif /* BUILD_WITH_L0 */
+
+static Status OnHelp(ArgParseState& st, const CliOption&, const char*) {
+  Usage(st.progname_);
+  return Status::ExitOk;
+}
+
+static Status OnVersion(ArgParseState&, const CliOption&, const char*) {
+  std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
+  return Status::ExitOk;
+}
+
+static Status OnPrintOptionsSchema(ArgParseState&, const CliOption&, const char*) {
+  PrintOptionsSchema(std::cout);  // runs before any Level Zero init => HW-independent
+  return Status::ExitOk;
+}
+
+// ============================================================================
+// The option table.
+// ============================================================================
+inline constexpr CliOption kCliOptions[] = {
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
+  Opt::Bool("--call-logging", "-c", "core", "Trace host API calls", "UNITRACE_CallLogging"),
+  Opt::Bool("--host-timing", "-h", "core", "Report host API execution time", "UNITRACE_HostTiming"),
+  Opt::Bool("--device-timing", "-d", "core", "Report kernels execution time", "UNITRACE_DeviceTiming"),
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
+#if BUILD_WITH_ITT
+  Opt::BoolH("--ccl-summary-report", "-r", "core", "Report CCL execution time summary", OnCclSummaryReport),
+#endif /* BUILD_WITH_ITT */
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
+  Opt::Bool("--kernel-submission", "-s", "core",
+       "Report append (queued), submit and execute intervals for kernels", "UNITRACE_KernelSubmission"),
+  Opt::Bool("--device-timeline", "-t", "core", "Report device timeline", "UNITRACE_DeviceTimeline"),
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
+#if BUILD_WITH_OPENCL
+  Opt::Bool("--opencl", nullptr, "core", "Trace OpenCL", "UNITRACE_OpenCLTracing"),
+#endif /* BUILD_WITH_OPENCL */
+#if BUILD_WITH_OMP
+  Opt::Bool("--chrome-omp-logging", nullptr, "chrome", "Trace OpenMP", "UNITRACE_ChromeOmpLogging"),
+#endif /* BUILD_WITH_OMP */
+#if BUILD_WITH_MPI
+  Opt::BoolH("--chrome-mpi-logging", nullptr, "chrome", "Trace MPI", OnChromeMpiLogging),
+#endif /* BUILD_WITH_MPI */
+#if BUILD_WITH_XPTI
+  Opt::BoolH("--chrome-syclrt-logging", nullptr, "chrome", "Trace SYCL runtime", OnXptiLogging),
+  Opt::BoolH("--chrome-ur-logging", nullptr, "chrome",
+        "Trace Unified Runtime (implementation layer beneath the SYCL runtime)", OnXptiLogging),
+  Opt::BoolH("--chrome-sycl-logging", nullptr, "chrome",
+        "Trace SYCL runtime and Unified Runtime (same as --chrome-syclrt-logging --chrome-ur-logging)",
+        OnXptiLogging),
+#endif /* BUILD_WITH_XPTI */
+#if BUILD_WITH_ITT
+  Opt::BoolH("--chrome-ccl-logging", nullptr, "chrome", "Trace oneCCL", OnChromeCclLogging),
+  Opt::BoolH("--chrome-dnn-logging", nullptr, "chrome", "Trace oneDNN", OnChromeDnnLogging),
+#endif /* BUILD_WITH_ITT */
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
+  Opt::Bool("--chrome-call-logging", nullptr, "chrome",
+       "Trace Level Zero and/or OpenCL host calls", "UNITRACE_ChromeCallLogging"),
+  Opt::Bool("--chrome-kernel-logging", nullptr, "chrome",
+       "Trace device and host kernel activities", "UNITRACE_ChromeKernelLogging"),
+  Opt::Bool("--chrome-device-logging", nullptr, "chrome", "Trace device activities", "UNITRACE_ChromeDeviceLogging"),
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
+#if BUILD_WITH_ITT
+  Opt::Bool("--chrome-itt-logging", nullptr, "chrome",
+       "Trace activities in applications instrumented using Intel(R) Instrumentation and Tracing Technology APIs",
+       "UNITRACE_ChromeIttLogging"),
+#endif /* BUILD_WITH_ITT */
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
+  Opt::Bool("--chrome-no-thread-on-device", nullptr, "chrome",
+       "Trace device activities without per-thread info", "UNITRACE_ChromeNoThreadOnDevice"),
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
+#if BUILD_WITH_L0
+  Opt::Bool("--chrome-no-engine-on-device", nullptr, "chrome",
+       "Trace device activities without per-Level-Zero-engine-or-OpenCL-queue info",
+       "UNITRACE_ChromeNoEngineOnDevice"),
+#endif /* BUILD_WITH_L0 */
+  Opt::Value("--chrome-event-buffer-size", nullptr, "int", "chrome", "number-of-events",
+        "Size of event buffer on host per host thread (default is -1 or unlimited)",
+        "UNITRACE_ChromeEventBufferSize", nullptr, "-1"),
+#ifndef _WIN32
+  Opt::Value("--chrome-kmd-logging", nullptr, "path", "chrome", "script",
+        "Trace OS/KMD activities. The argument <script> file defines the OS kernel or device driver activities to trace",
+        "UNITRACE_ChromeKmdLogging").PathFile(),
+#endif /* _WIN32 */
+
+#if BUILD_WITH_L0
+  Opt::Bool("--metric-query", "-q", "metrics",
+       "Query hardware metrics for each kernel instance (Level Zero)", "UNITRACE_MetricQuery")
+      .Conflicts("--metric-sampling,--stall-sampling"),
+  Opt::BoolH("--metric-sampling", "-k", "metrics",
+        "Sample hardware performance metrics for each kernel instance in time-based mode", OnMetricSampling)
+      .Conflicts("--metric-query,--stall-sampling"),
+  Opt::BoolH("--stall-sampling", nullptr, "metrics",
+        "Sample hardware execution unit stalls. Valid for Intel(R) Data Center GPU Max Series and later GPUs",
+        OnStallSampling)
+      .Conflicts("--metric-query,--metric-sampling"),
+  Opt::Value("--group", "-g", "enum", "metrics", "metric-group",
+        "Hardware metric group (ComputeBasic by default)", "UNITRACE_MetricGroup", nullptr, "ComputeBasic")
+      .ChoicesFrom("metric-groups").Requires("--metric-query,--metric-sampling,--stall-sampling"),
+  Opt::Value("--sampling-interval", "-i", "int", "metrics", "interval",
+        "Hardware performance metric sampling interval in us (default is 50 us) in time-based mode",
+        "UNITRACE_SamplingInterval", nullptr, "50")
+      .Requires("--metric-query,--metric-sampling,--stall-sampling"),
+  Opt::ValueH("--ranks-to-sample", nullptr, "string", "metrics", "ranks",
+         "MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks", OnRanksToSample),
+  Opt::ValueH("--devices-to-sample", nullptr, "string", "metrics", "devices",
+         "Devices ID to sample. The argument <devices> is a list of comma separated devices as reported by --device-list",
+         OnDevicesToSample),
+  Opt::BoolH("--idle-sampling", nullptr, "metrics", "Continue metric sampling while the device is idle", OnIdleSampling),
+  Opt::Action("--device-list", "metrics", "Print available devices", OnDeviceList),
+  Opt::Action("--metric-list", "metrics", "Print available metric groups and metrics", OnMetricList),
+  Opt::Value("--include-kernels", nullptr, "string", "filter", "kernel-names",
+        "Trace kernels, the names of which contain substrings in the comma-separated <kernel-names> (Level Zero only)",
+        "UNITRACE_IncludeKernels"),
+  Opt::Value("--exclude-kernels", nullptr, "string", "filter", "kernel-names",
+        "Trace kernels, the names of which do not contain any substrings in the comma-separated <kernel-names> (Level Zero only)",
+        "UNITRACE_ExcludeKernels"),
+  Opt::Value("--include-kernels-file", nullptr, "path", "filter", "file",
+        "Same as --include-kernels, except that the kernel name substrings are in <file>",
+        "UNITRACE_IncludeKernelsFile").PathFile(),
+  Opt::Value("--exclude-kernels-file", nullptr, "path", "filter", "file",
+        "Same as --exclude-kernels, except that the kernel name substrings are in <file>",
+        "UNITRACE_ExcludeKernelsFile").PathFile(),
+#endif /* BUILD_WITH_L0 */
+
+  Opt::ValueH("--result-dir", nullptr, "path", "output", "path",
+         "Output result to a hierarchical directory", OnResultDir)
+      .PathDir().Conflicts("--output,--output-dir-path"),
+  Opt::ValueH("--output", "-o", "path", "output", "filename",
+         "Output profiling result to file", OnOutput)
+      .PathFile().Conflicts("--result-dir,--output-dir-path"),
+  Opt::ValueH("--output-dir-path", nullptr, "path", "output", "path",
+         "Output result to a flat directory", OnOutputDirPath)
+      .PathDir().Conflicts("--result-dir,--output"),
+#if BUILD_WITH_PERFETTO
+  Opt::Value("--output-format", nullptr, "enum", "output", "format",
+        "Timeline trace format: \"json\" (Chrome trace, default) or \"protobuf\" (Perfetto)",
+        "UNITRACE_OutputFormat", IsTraceFormat, "json", "json,protobuf"),
+#endif /* BUILD_WITH_PERFETTO */
+
+  Opt::Bool("--start-paused", nullptr, "session",
+       "Start the tool with tracing and profiling paused", "UNITRACE_StartPaused"),
+  Opt::Value("--follow-child-process", nullptr, "enum", "session", "0/1",
+        "0: Do not follow or profile child processes on Linux; 1: Follow and profile child processes on Linux (default)",
+        "UNITRACE_FollowChildProcess", IsZeroOrOne, "1", "0,1"),
+  Opt::Value("--session", nullptr, "string", "session", "session",
+        "Name this session for dynamic control. The argument <session> is an alphanumeric string",
+        "UNITRACE_Session", IsAlphanumericString),
+  Opt::Value("--teardown-on-signal", nullptr, "int", "session", "signum",
+        "Try to gracefully shut down in case the application crashes or is terminated or <signum> is raised",
+        "UNITRACE_TeardownOnSignal", IsNumericString),
+  // pause/resume/stop stay in --help and dispatch, but are SchemaOmit()ted:
+  // the launcher UI drives session control with dedicated buttons, not the form.
+  Opt::Value("--pause", nullptr, "string", "session", "session",
+        "Pause session <session>. The argument <session> must be the same session named with --session option",
+        "UNITRACE_PauseSession", IsAlphanumericString).SchemaOmit(),
+  Opt::Value("--resume", nullptr, "string", "session", "session",
+        "Resume session <session>. The argument <session> must be the same session named with --session option",
+        "UNITRACE_ResumeSession", IsAlphanumericString).SchemaOmit(),
+  Opt::Value("--stop", nullptr, "string", "session", "session",
+        "Stop session <session>. The argument <session> must be the same session named with --session option",
+        "UNITRACE_StopSession", IsAlphanumericString).SchemaOmit(),
+
+  Opt::Bool("--verbose", "-v", "misc", "Enable verbose mode to show kernel shapes", "UNITRACE_Verbose"),
+  Opt::Bool("--demangle", nullptr, "misc",
+       "Demangle kernel names. For OpenCL backend only. Kernel names are always demangled for Level Zero backend",
+       "UNITRACE_Demangle"),
+#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
+  Opt::Bool("--separate-tiles", nullptr, "misc",
+       "Trace each tile separately in case of implicit scaling", "UNITRACE_KernelOnSeparateTiles"),
+#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
+  Opt::Bool("--tid", nullptr, "misc", "Output TID in host API trace", "UNITRACE_Tid"),
+  Opt::Bool("--pid", nullptr, "misc", "Output PID in host API and device activity trace", "UNITRACE_Pid"),
+
+  Opt::Action("--version", "misc", "Print version", OnVersion),
+  Opt::Action("--help", "misc",
+         "Show this help message and exit. Please refer to the README.md file for further details", OnHelp),
+
+  // ---- hidden: internal/deprecated flags (excluded from --help, still in JSON) ----
+  Opt::Bool("--conditional-collection", nullptr, "session",
+       "Enable conditional collection. This option is deprecated. Use --start-paused instead",
+       "UNITRACE_StartPaused", /*hidden=*/true),
+  Opt::Value("--reset-event-on-device", nullptr, "enum", "session", "0/1",
+        "Internal: reset events on device", "UNITRACE_ResetEventOnDevice", IsZeroOrOne,
+        /*def=*/nullptr, /*choices=*/"0,1", /*hidden=*/true),
+  Opt::Bool("--system-time", nullptr, "misc", "Internal: use system time", "UNITRACE_SystemTime", /*hidden=*/true),
+  Opt::Action("--print-options-schema", "misc", "Print the option schema as JSON and exit", OnPrintOptionsSchema, /*hidden=*/true),
+};
+
+// Group id -> human label, for the launcher form's section headers.
+using CliGroup = cli::CliGroup;
+inline constexpr CliGroup kCliGroups[] = {
+  {"core",    "Core Collection"},
+  {"chrome",  "Chrome Timeline"},
+  {"metrics", "Hardware Metrics"},
+  {"filter",  "Kernel Filtering"},
+  {"output",  "Output"},
+  {"session", "Session & Control"},
+  {"misc",    "Formatting & Misc"},
+};
+
+// Emit the build's flag schema for the launcher UI. Covers the mechanical
+// attributes, the group labels, and the schema-only relations set via
+// CliOption's chained modifiers (pathKind, conflictsWith, requires,
+// choicesFrom). Flags marked SchemaOmit() (pause/resume/stop) are excluded --
+// the extension drives those with dedicated UI, not the generic form.
+void PrintOptionsSchema(std::ostream& os) {
+  std::string header("  \"schemaVersion\": 1,\n");
+  header += "  \"unitraceVersion\": \"";
+  header += UNITRACE_VERSION;
+  header += " (";
+  header += COMMIT_HASH;
+  header += ")\",\n";
+  header += "  \"build\": { \"L0\": " + std::to_string(BUILD_WITH_L0);
+  header += ", \"OPENCL\": " + std::to_string(BUILD_WITH_OPENCL);
+  header += ", \"ITT\": " + std::to_string(BUILD_WITH_ITT);
+  header += ", \"XPTI\": " + std::to_string(BUILD_WITH_XPTI);
+  header += ", \"MPI\": " + std::to_string(BUILD_WITH_MPI);
+  header += ", \"OMP\": " + std::to_string(BUILD_WITH_OMP);
+  header += ", \"PERFETTO\": " + std::to_string(BUILD_WITH_PERFETTO);
+  header += " },\n";
+  cli::PrintOptionsSchema<ArgParseState>(os, kCliGroups, std::size(kCliGroups),
+                                     kCliOptions, std::size(kCliOptions), header);
+}
+
+static void PrintBuildBanner() {
+  std::cout << "(Built with ";
+  std::cout << "BUILD_WITH_L0=" << BUILD_WITH_L0 << ", ";
+  std::cout << "BUILD_WITH_OPENCL=" << BUILD_WITH_OPENCL << ", ";
+  std::cout << "BUILD_WITH_ITT=" << BUILD_WITH_ITT << ", ";
+  std::cout << "BUILD_WITH_XPTI=" << BUILD_WITH_XPTI << ", ";
+  std::cout << "BUILD_WITH_MPI=" << BUILD_WITH_MPI << ", ";
+  std::cout << "BUILD_WITH_OMP=" << BUILD_WITH_OMP << ", ";
+  std::cout << "BUILD_WITH_PERFETTO=" << BUILD_WITH_PERFETTO;
+  std::cout << ")" << std::endl;
+}
+
+void Usage(char* progname) {
+  PrintBuildBanner();
+  cli::Usage<ArgParseState>(std::cout, progname, kCliOptions, std::size(kCliOptions));
 }
 
 int ParseArgs(int argc, char* argv[]) {
-  bool show_metric_list = false;
-  bool stall_sampling = false;
-  bool metric_sampling = false;
-  std::set<int> ranks_to_sample;
-  std::set<int> devices_to_sample;
-  bool devices_to_sample_present = false;
-  int app_index = 1;
+  ArgParseState st;
+  st.progname_ = argv[0];
 
-  for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--help") == 0) {
-      Usage(argv[0]);
-      return 0;
-#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
-    } else if (strcmp(argv[i], "--call-logging") == 0 || strcmp(argv[i], "-c") == 0) {
-      utils::SetEnv("UNITRACE_CallLogging", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--host-timing") == 0 || strcmp(argv[i], "-h") == 0) {
-      utils::SetEnv("UNITRACE_HostTiming", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--device-timing") == 0 || strcmp(argv[i], "-d") == 0) {
-      utils::SetEnv("UNITRACE_DeviceTiming", "1");
-      ++app_index;
-#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
-#if BUILD_WITH_ITT
-    } else if (strcmp(argv[i], "--ccl-summary-report") == 0 || strcmp(argv[i], "-r") == 0) {
-      utils::SetEnv("UNITRACE_CclSummaryReport", "1");
-      utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
-      utils::SetEnv("CCL_ITT_LEVEL", "1");
-      ++app_index;
-#endif /* BUILD_WITH_ITT */
-#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
-    } else if (strcmp(argv[i], "--kernel-submission") == 0 || strcmp(argv[i], "-s") == 0) {
-      utils::SetEnv("UNITRACE_KernelSubmission", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--device-timeline") == 0 || strcmp(argv[i], "-t") == 0) {
-      utils::SetEnv("UNITRACE_DeviceTimeline", "1");
-      ++app_index;
-#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
-#if BUILD_WITH_OPENCL
-    } else if (strcmp(argv[i], "--opencl") == 0) {
-      utils::SetEnv("UNITRACE_OpenCLTracing", "1");
-      ++app_index;
-#endif /* BUILD_WITH_OPENCL */
-#if BUILD_WITH_MPI
-    } else if (strcmp(argv[i], "--chrome-mpi-logging") == 0) {
-      utils::SetEnv("UNITRACE_ChromeMpiLogging", "1");
-      utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
-      ++app_index;
-#endif /* BUILD_WITH_MPI */
-#if BUILD_WITH_OMP
-    } else if (strcmp(argv[i], "--chrome-omp-logging") == 0) {
-      utils::SetEnv("UNITRACE_ChromeOmpLogging", "1");
-      ++app_index;
-#endif /* BUILD_WITH_OMP */
-#if BUILD_WITH_XPTI
-    } else if ((strcmp(argv[i], "--chrome-syclrt-logging") == 0) ||
-               (strcmp(argv[i], "--chrome-ur-logging") == 0) ||
-               (strcmp(argv[i], "--chrome-sycl-logging") == 0)) {
-      // SYCL runtime and Unified Runtime (UR) tracing are decoupled:
-      //   --chrome-syclrt-logging  traces the SYCL runtime
-      //   --chrome-ur-logging      traces the Unified Runtime (implementation
-      //                            layer beneath the SYCL runtime)
-      //   --chrome-sycl-logging    kept for backward compatibility; equivalent
-      //                            to passing both of the above
-      if ((strcmp(argv[i], "--chrome-syclrt-logging") == 0) ||
-          (strcmp(argv[i], "--chrome-sycl-logging") == 0)) {
-        utils::SetEnv("UNITRACE_ChromeSyclRuntimeLogging", "1");
-      }
-      if ((strcmp(argv[i], "--chrome-ur-logging") == 0) ||
-          (strcmp(argv[i], "--chrome-sycl-logging") == 0)) {
-        utils::SetEnv("UNITRACE_ChromeUrLogging", "1");
-        utils::SetEnv("UR_ENABLE_LAYERS", "UR_LAYER_TRACING");
-      }
-      utils::SetEnv("XPTI_TRACE_ENABLE", "1");
-#ifdef _WIN32
-      utils::SetEnv("XPTI_SUBSCRIBERS", "unitrace_tool.dll");
-      utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "xptifw.dll");
-#else /*_WIN32*/
-      utils::SetEnv("XPTI_SUBSCRIBERS", "libunitrace_tool.so");
-      utils::SetEnv("XPTI_FRAMEWORK_DISPATCHER", "libxptifw.so");
-#endif /*_WIN32*/
-      ++app_index;
-#endif /* BUILD_WITH_XPTI */
-#if BUILD_WITH_ITT
-    } else if (strcmp(argv[i], "--chrome-ccl-logging") == 0) {
-      utils::SetEnv("UNITRACE_ChromeCclLogging", "1");
-      utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
-      utils::SetEnv("CCL_ITT_LEVEL", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--chrome-dnn-logging") == 0) {
-      utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
-      // what should be set here?
-      ++app_index;
-#endif /* BUILD_WITH_ITT */
-#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
-    } else if (strcmp(argv[i], "--chrome-call-logging") == 0) {
-      utils::SetEnv("UNITRACE_ChromeCallLogging", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--chrome-kernel-logging") == 0) {
-      utils::SetEnv("UNITRACE_ChromeKernelLogging", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--chrome-device-logging") == 0) {
-      utils::SetEnv("UNITRACE_ChromeDeviceLogging", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--chrome-no-thread-on-device") == 0) {
-      utils::SetEnv("UNITRACE_ChromeNoThreadOnDevice", "1");
-      ++app_index;
-#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
-#if BUILD_WITH_L0
-    } else if (strcmp(argv[i], "--chrome-no-engine-on-device") == 0) {
-      utils::SetEnv("UNITRACE_ChromeNoEngineOnDevice", "1");
-      ++app_index;
-#endif /* BUILD_WITH_L0 */
-    } else if (strcmp(argv[i], "--chrome-event-buffer-size") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Event buffer size is not specified" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_ChromeEventBufferSize", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--verbose") == 0 || strcmp(argv[i], "-v") == 0) {
-      utils::SetEnv("UNITRACE_Verbose", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--demangle") == 0) {
-      utils::SetEnv("UNITRACE_Demangle", "1");
-      ++app_index;
-#if BUILD_WITH_L0 || BUILD_WITH_OPENCL
-    } else if (strcmp(argv[i], "--separate-tiles") == 0) {
-      utils::SetEnv("UNITRACE_KernelOnSeparateTiles", "1");
-      ++app_index;
-#endif /* BUILD_WITH_L0 || BUILD_WITH_OPENCL */
-    } else if (strcmp(argv[i], "--tid") == 0) {
-      utils::SetEnv("UNITRACE_Tid", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--pid") == 0) {
-      utils::SetEnv("UNITRACE_Pid", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--output") == 0 || strcmp(argv[i], "-o") == 0) {
-      utils::SetEnv("UNITRACE_LogToFile", "1");
-      ++i;
-      if (i >= argc) {
-        std::cerr << "[ERROR] Log file name is not specified" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_LogFilename", argv[i]);
-      app_index += 2;
-#if BUILD_WITH_PERFETTO
-    } else if (strcmp(argv[i], "--output-format") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cerr << "[ERROR] Output format is not specified. Use \"protobuf\" or \"json\"" << std::endl;
-        return -1;
-      }
-      if (strcmp(argv[i], "protobuf") != 0 && strcmp(argv[i], "json") != 0) {
-        std::cerr << "[ERROR] Invalid output format \"" << argv[i] << "\". Use \"protobuf\" or \"json\"" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_OutputFormat", argv[i]);
-      app_index += 2;
-#endif /* BUILD_WITH_PERFETTO */
-    } else if (strcmp(argv[i], "--conditional-collection") == 0) { // deprecate this option
-      utils::SetEnv("UNITRACE_StartPaused", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--start-paused") == 0) {
-      utils::SetEnv("UNITRACE_StartPaused", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--output-dir-path") == 0) {
-      ++i;
-      utils::SetEnv("UNITRACE_TraceOutputDirPath", "1");
-      utils::SetEnv("UNITRACE_TraceOutputDir", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--result-dir") == 0) {
-      ++i;
-      utils::SetEnv("UNITRACE_UseResultDirectory", "1");
-      utils::SetEnv("UNITRACE_ResultDirectory", argv[i]);
-      app_index += 2;
-#if BUILD_WITH_L0
-    } else if (strcmp(argv[i], "--metric-query") == 0 || strcmp(argv[i], "-q") == 0) {
-      utils::SetEnv("UNITRACE_MetricQuery", "1");
-      ++app_index;
-    } else if (strcmp(argv[i], "--group") == 0 || strcmp(argv[i], "-g") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Metric group is not specified" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_MetricGroup", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--stall-sampling") == 0) {
-      stall_sampling = true;
-      ++app_index;
-    } else if (strcmp(argv[i], "--ranks-to-sample") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Missing MPI ranks to sample" << std::endl;
-        return -1;
-      }
-      std::string ranks_to_sample_str = utils::GetEnv("UNITRACE_RanksToSample");
-      if (ranks_to_sample_str.empty()) {
-        utils::SetEnv("UNITRACE_RanksToSample", argv[i]);
-      } else {
-        ranks_to_sample_str += "," + std::string(argv[i]);
-        utils::SetEnv("UNITRACE_RanksToSample", ranks_to_sample_str.c_str());
-      }
-      ranks_to_sample.clear();
-      if (GetZeRanksToSample(ranks_to_sample) != 0) {
-        std::cerr << "[ERROR] Invalid MPI ranks to sample" << std::endl;
-        return -1;
-      }
-      app_index += 2;
-    } else if (strcmp(argv[i], "--devices-to-sample") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Missing devices to sample" << std::endl;
-        return -1;
-      }
-      devices_to_sample_present = true;
-      std::string devices_to_sample_str = utils::GetEnv("UNITRACE_DevicesToSampleArg");
-      if (devices_to_sample_str.empty()) {
-        utils::SetEnv("UNITRACE_DevicesToSampleArg", argv[i]);
-      } else {
-        devices_to_sample_str += "," + std::string(argv[i]);
-        utils::SetEnv("UNITRACE_DevicesToSampleArg", devices_to_sample_str.c_str());
-      }
-      devices_to_sample.clear();
-      if (GetZeDevicesToSample(devices_to_sample) != 0) {
-        std::cout << "[ERROR] Invalid devices to sample" << std::endl;
-        return -1;
-      }
-      app_index += 2;
-    } else if (strcmp(argv[i], "--metric-sampling") == 0 || strcmp(argv[i], "-k") == 0) {
-      utils::SetEnv("UNITRACE_KernelMetrics", "1");
-      metric_sampling = true;
-      ++app_index;
-    } else if (strcmp(argv[i], "--include-kernels") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Missing kernel names to include" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_IncludeKernels", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--exclude-kernels") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Missing kernel names to exclude " << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_ExcludeKernels", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--include-kernels-file") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Missing file of kernel name to include" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_IncludeKernelsFile", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--exclude-kernels-file") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Missing file of kernel name to exclude" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_ExcludeKernelsFile", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--idle-sampling") == 0) {
-      idle_sampling = true;
-      ++app_index;
-#endif /* BUILD_WITH_L0 */
-    } else if (strcmp(argv[i], "--system-time") == 0) { // internal option
-      utils::SetEnv("UNITRACE_SystemTime", "1");
-      ++app_index;
-#if BUILD_WITH_ITT
-    } else if (strcmp(argv[i], "--chrome-itt-logging") == 0 ) {
-      utils::SetEnv("UNITRACE_ChromeIttLogging", "1");
-      ++app_index;
-#endif /* BUILD_WITH_ITT */
-#if BUILD_WITH_L0
-    } else if (strcmp(argv[i], "--sampling-interval") == 0 || strcmp(argv[i], "-i") == 0) {
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] Sampling interval is not specified" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_SamplingInterval", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--device-list") == 0) {
-      SetSysmanEnvironment();    // enable ZES_ENABLE_SYSMAN
-      PrintDeviceList();
-      return 0;
-    } else if (strcmp(argv[i], "--metric-list") == 0) {
-      show_metric_list = true;
-      ++app_index;
-#endif /* BUILD_WITH_L0 */
-    } else if (strcmp(argv[i], "--follow-child-process") == 0) {
-      ++i;
-      if ((i >= argc) || (strcmp(argv[i], "1") && strcmp(argv[i], "0"))) {
-        std::cout << "[ERROR] Option --follow-child-process takes argument 0 or 1" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_FollowChildProcess", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--teardown-on-signal") == 0) {
-      ++i;
-      if ((i >= argc) || !IsNumericString(argv[i])) {
-        std::cout << "[ERROR] --teardown-on-signal takes a signal number argument" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_TeardownOnSignal", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--reset-event-on-device") == 0) { // internal option
-      ++i;
-      if ((i >= argc) || (strcmp(argv[i], "1") && strcmp(argv[i], "0"))) {
-        std::cout << "[ERROR] Option --reset-event-on-device takes argument 0 or 1" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_ResetEventOnDevice", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--session") == 0) {
-      ++i;
-      if ((i >= argc) || !IsAlphanumericString(argv[i])) {
-        std::cout << "[ERROR] Option --session takes an argument of an alphanumeric string" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_Session", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--pause") == 0) {
-      ++i;
-      if ((i >= argc) || !IsAlphanumericString(argv[i])) {
-        std::cout << "[ERROR] Option --pause takes an argument of an alphanumeric string" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_PauseSession", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--resume") == 0) {
-      ++i;
-      if ((i >= argc) || !IsAlphanumericString(argv[i])) {
-        std::cout << "[ERROR] Option --resume takes an argument of an alphanumeric string" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_ResumeSession", argv[i]);
-      app_index += 2;
-    } else if (strcmp(argv[i], "--stop") == 0) {
-      ++i;
-      if ((i >= argc) || !IsAlphanumericString(argv[i])) {
-        std::cout << "[ERROR] Option --stop takes an argument of an alphanumeric string" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_StopSession", argv[i]);
-      app_index += 2;
-  #ifndef _WIN32
-    } else if (strcmp(argv[i], "--chrome-kmd-logging") == 0) {
-      // NOTE: --chrome-kmd-logging runs the application as a -c grandchild of
-      // bpftrace. This is why session-stop handling treats it as a special
-      // case: stopping the session terminates the bpftrace process, which in
-      // turn exits the application process. See the session-stop wait logic in
-      // main() (the TerminateProcess(bpftrace_pid) call and the post-stop
-      // "wait for the application to complete" loop) for details.
-      ++i;
-      if (i >= argc) {
-        std::cout << "[ERROR] OS kernel probes are missing" << std::endl;
-        return -1;
-      }
-      utils::SetEnv("UNITRACE_ChromeKmdLogging", argv[i]);
-      app_index += 2;
-  #endif /* _WIN32 */
-    } else if (strcmp(argv[i], "--version") == 0) {
-      std::cout << UNITRACE_VERSION << " (" << COMMIT_HASH << ")" << std::endl;
-      return 0;
-    } else {
-      break;
-    }
+  int app_index = cli::ParseArgs<ArgParseState>(argc, argv, kCliOptions, std::size(kCliOptions), st);
+  if (app_index <= 0) {
+    return app_index;
   }
+  st.app_index_ = app_index;
 
+  return FinalizeParse(st);
+}
+
+static int FinalizeParse(ArgParseState& st) {
 #ifndef _WIN32
   if (!utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
     if (geteuid() != 0) {
@@ -747,8 +541,8 @@ int ParseArgs(int argc, char* argv[]) {
     utils::SetEnv("UNITRACE_FollowChildProcess", "1");  // default is to follow child processes
   }
 
-  if (stall_sampling) {
-    if (metric_sampling && (utils::GetEnv("UNITRACE_MetricGroup") != "EuStallSampling")) {
+  if (st.stall_sampling_) {
+    if (st.metric_sampling_ && (utils::GetEnv("UNITRACE_MetricGroup") != "EuStallSampling")) {
       std::cerr << "[ERROR] Stall sampling cannot be enabled together with other metric group sampling" << std::endl;
       return -1;
     }
@@ -758,27 +552,27 @@ int ParseArgs(int argc, char* argv[]) {
     utils::SetEnv("UNITRACE_KernelMetrics", "1");
   }
 
-  if (stall_sampling || metric_sampling) {
+  if (st.stall_sampling_ || st.metric_sampling_) {
     auto my_MPI_rank = (utils::GetEnv("PMI_RANK").empty()) ? utils::GetEnv("PMIX_RANK") : utils::GetEnv("PMI_RANK");
     if (!my_MPI_rank.empty()) {
-      if (ranks_to_sample.empty()) {
+      if (st.ranks_to_sample_.empty()) {
         std::cout << "[WARNING] MPI ranks to sample are not specified" << std::endl;
       }
       else {
         auto my_MPI_rank_ = std::stoi(my_MPI_rank);
-        if (ranks_to_sample.find(my_MPI_rank_) == ranks_to_sample.end()) {
+        if (st.ranks_to_sample_.find(my_MPI_rank_) == st.ranks_to_sample_.end()) {
           // turn off sampling on this rank
-          stall_sampling = false;
-          metric_sampling = false;
+          st.stall_sampling_ = false;
+          st.metric_sampling_ = false;
           // reset UNITRACE_KernelMetrics
           utils::SetEnv("UNITRACE_KernelMetrics", "");
           // ignore devices to samples
-          devices_to_sample_present = false;
+          st.devices_to_sample_present_ = false;
         }
       }
     }
 
-    if (devices_to_sample_present) {
+    if (st.devices_to_sample_present_) {
       // Need to initialize L0 now to get the device list
       SetTracingEnvironment();
       SetSysmanEnvironment();
@@ -795,7 +589,7 @@ int ParseArgs(int argc, char* argv[]) {
         return -1;
       }
       std::string s;
-      for (const auto &device_no : devices_to_sample) {
+      for (const auto &device_no : st.devices_to_sample_) {
         if ((0 <= device_no) && (device_no < device_count)) {
           if (s.length() == 0) {
             s = std::to_string(device_no);
@@ -853,7 +647,7 @@ int ParseArgs(int argc, char* argv[]) {
   if (!utils::GetEnv("UNITRACE_UseResultDirectory").empty() && utils::GetEnv("UNITRACE_UseResultDirectory") == "1") {
     if ((!utils::GetEnv("UNITRACE_TraceOutputDirPath").empty()) || !utils::GetEnv("UNITRACE_LogToFile").empty()) {
         std::cerr << "[ERROR] Option --result-dir cannot be used together with --output-dir-path or --output." << std::endl;
-      return 1;
+      return -1;
     }
   }
 
@@ -871,7 +665,7 @@ int ParseArgs(int argc, char* argv[]) {
           return -1;
       }
   }
-  if (show_metric_list) {
+  if (st.show_metric_list_) {
     SetProfilingEnvironment(); // enable ZET_ENABLE_METRICS
     std::string value = utils::GetEnv("UNITRACE_DeviceId");
     uint32_t device_id = value.empty() ? 0 : std::stoul(value);
@@ -889,7 +683,7 @@ int ParseArgs(int argc, char* argv[]) {
   utils::SetEnv("INTEL_LIBITTNOTIFY64", "libunitrace_tool.so");
 #endif /* _WIN32 */
 
-  return app_index;
+  return st.app_index_;
 }
 
 ZeMetricProfiler *EnableProfiling(uint32_t app_pid, char *dir, std::string& logfile, bool idle_sampling) {
@@ -1409,7 +1203,7 @@ int main(int argc, char *argv[]) {
         bpftrace_pid = child;
       }
       if (utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
-        
+
         metric_profiler = EnableProfiling(child, data_dir, logfile, idle_sampling);
 
         // create a latch file to notify the application process to proceed

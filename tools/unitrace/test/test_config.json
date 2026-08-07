@@ -126,6 +126,12 @@
             "name": "omp_cpu_gemm",
             "platform": ["Windows", "Linux"],
             "scenarios": ["--chrome-omp-logging"]
+        },
+        {
+            "_comment": "scenario-independent; runs a single scenario (plus the harness's native run) instead of the full matrix",
+            "name": "print_options_schema",
+            "platform": ["Windows", "Linux"],
+            "scenarios": ["-c"]
         }
     ]
 }
