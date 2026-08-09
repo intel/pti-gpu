@@ -8,6 +8,10 @@
 
 #include "ze_config_info.h"
 
+#if __SYCL_COMPILER_VERSION >= 20260724 || __LIBSYCL_MAJOR_VERSION >= 9
+#define PTI_TEST_NATIVE_GRAPH_RECORDING_API_AVAILABLE
+#endif
+
 namespace pti::test::utils {
 [[nodiscard]] inline bool IsIntegratedGraphics(const sycl::device& device) {
   if (!device.is_gpu()) {
