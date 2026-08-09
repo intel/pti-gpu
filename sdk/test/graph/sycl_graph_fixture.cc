@@ -274,6 +274,7 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecution) {
   ValidateViewTimestamps(record_storage_.kernel_records);
 }
 
+#if defined(PTI_TEST_NATIVE_GRAPH_RECORDING_API_AVAILABLE)
 TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecutionWithRecordingApi) {
   using UnderlyingType = Workload::DefaultVectorDataType;
   auto [dot_product, x_vector, y_vector, z_vector] =
@@ -328,6 +329,7 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecutionWithNativeRecordingApi) {
   EXPECT_EQ(std::size(record_storage_.kernel_records), std::size_t{Workload::kDefaultKernelNumber});
   ValidateViewTimestamps(record_storage_.kernel_records);
 }
+#endif  // PTI_TEST_NATIVE_GRAPH_RECORDING_API_AVAILABLE
 
 TEST_F(SyclGraphTestSuite, TestSyclBuffersGraphExecution) {
   // https://github.com/intel/llvm/blob/sycl/sycl/doc/syclgraph/SYCLGraphUsageGuide.md#code-examples
@@ -492,6 +494,7 @@ TEST_P(SyclUsmGraphVisitorTestSuite, TestArbitraryReplaysWithGraphRecreation) {
   ValidateGraphReplayTimestamps();
 }
 
+#if defined(PTI_TEST_NATIVE_GRAPH_RECORDING_API_AVAILABLE)
 TEST_P(SyclUsmNativeGraphVisitorTestSuite, TestArbitraryReplaysWithGraphRecreation) {
   auto graph =
       CreateNativeUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product_.get(),
@@ -513,17 +516,18 @@ TEST_P(SyclUsmNativeGraphVisitorTestSuite, TestArbitraryReplaysWithGraphRecreati
   ValidateGraphReplayTimestamps();
 }
 
+INSTANTIATE_TEST_SUITE_P(SyclUsmNativeGraphVisitorReplayTests, SyclUsmNativeGraphVisitorTestSuite,
+                         ::testing::Values(0, 1, 5, 10), [](const auto& info) {
+                           return fmt::format("{}_Replays", std::get<0>(info.param));
+                         });
+#endif  // PTI_TEST_NATIVE_GRAPH_RECORDING_API_AVAILABLE
+
 INSTANTIATE_TEST_SUITE_P(SyclUsmGraphExecutionReplayTests, SyclUsmGraphExecutionTestSuite,
                          ::testing::Values(0, 1, 5, 10), [](const auto& info) {
                            return fmt::format("{}_Replays", std::get<0>(info.param));
                          });
 
 INSTANTIATE_TEST_SUITE_P(SyclUsmGraphVisitorReplayTests, SyclUsmGraphVisitorTestSuite,
-                         ::testing::Values(0, 1, 5, 10), [](const auto& info) {
-                           return fmt::format("{}_Replays", std::get<0>(info.param));
-                         });
-
-INSTANTIATE_TEST_SUITE_P(SyclUsmNativeGraphVisitorReplayTests, SyclUsmNativeGraphVisitorTestSuite,
                          ::testing::Values(0, 1, 5, 10), [](const auto& info) {
                            return fmt::format("{}_Replays", std::get<0>(info.param));
                          });

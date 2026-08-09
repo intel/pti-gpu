@@ -12,6 +12,7 @@
 
 #include "graph_dotproduct_workload_info.h"
 #include "sycl_graph_test_kernels.h"
+#include "utils/sycl_config_info.h"
 #include "utils/sycl_usm_helper.h"
 
 // The first USM vector is the result (shared memory with host), the rest are the input vectors
@@ -76,6 +77,7 @@ inline void RecordUsmDotProductGraph(sycl::queue& queue, std::size_t vector_size
   queue.single_task(CalculateDotProduct{x_vector, z_vector, dot_product, vector_size});
 }
 
+#if defined(PTI_TEST_NATIVE_GRAPH_RECORDING_API_AVAILABLE)
 template <typename T>
 [[nodiscard]] inline auto CreateNativeUsmDotProductGraph(sycl::queue& queue,
                                                          std::size_t vector_size, T* dot_product,
@@ -103,5 +105,6 @@ template <typename T>
 
   return graph;
 }
+#endif  // PTI_TEST_NATIVE_GRAPH_RECORDING_API_AVAILABLE
 
 #endif  // TEST_GRAPH_SYCL_GRAPH_WORKLOADS_H_
