@@ -8,8 +8,10 @@
 
 #include "ze_config_info.h"
 
-#if __SYCL_COMPILER_VERSION >= 20260724 || __LIBSYCL_MAJOR_VERSION >= 9
+#if defined(__SYCL_COMPILER_VERSION) && defined(__LIBSYCL_MAJOR_VERSION)
+#if __SYCL_COMPILER_VERSION >= 20260724 && __LIBSYCL_MAJOR_VERSION >= 9
 #define PTI_TEST_NATIVE_GRAPH_RECORDING_API_AVAILABLE
+#endif
 #endif
 
 namespace pti::test::utils {
@@ -26,7 +28,7 @@ namespace pti::test::utils {
     result = level_zero::CheckIntegratedGraphics(device_handle);
   }
 
-  // TODO: add supported backends as they come and move implementation to .cc
+  // TODO(PTI): add supported backends as they come and move implementation to .cc
 
   return result;
 }
