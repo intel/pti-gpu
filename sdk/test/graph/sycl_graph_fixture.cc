@@ -249,6 +249,7 @@ class SyclUsmNativeGraphVisitorTestSuite : public SyclUsmGraphExecutionTestSuite
                       "and NEOReadDebugKeys=1 ExperimentalFlatCommandListApiRecording=1 to be set "
                       "in the environment.";
     }
+
     SyclUsmGraphExecutionTestSuite::SetUp();
   }
 };
@@ -283,12 +284,28 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecutionWithRecordingApi) {
   ASSERT_EQ(ptiViewSetCallbacks(ProvideBuffer, MarkBuffer), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
 
-  auto graph =
-      CreateUsmDotProductGraphWithRecording(queue_, Workload::kDefaultVectorSize, dot_product.get(),
-                                            x_vector.get(), y_vector.get(), z_vector.get());
+  try {
+    auto graph = CreateUsmDotProductGraphWithRecording(queue_, Workload::kDefaultVectorSize,
+                                                       dot_product.get(), x_vector.get(),
+                                                       y_vector.get(), z_vector.get());
 
-  const auto exec = graph.finalize();
-  queue_.ext_oneapi_graph(exec).wait_and_throw();
+    const auto exec = graph.finalize();
+    queue_.ext_oneapi_graph(exec).wait_and_throw();
+  } catch (const sycl::exception& e) {
+    EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+    if (e.code() == sycl::errc::feature_not_supported) {
+      GTEST_SKIP()
+          << "SYCL exception during graph execution, likely due to unsupported recording API: "
+          << e.what();
+    }
+    FAIL() << "SYCL exception during graph execution: " << e.what();
+  } catch (...) {
+    EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+    FAIL() << "Unknown exception during SYCL graph execution.";
+  }
+
   EXPECT_FLOAT_EQ(*dot_product, Workload::Result());
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
@@ -316,10 +333,17 @@ TEST_F(SyclGraphTestSuite, TestSyclUsmGraphExecutionWithNativeRecordingApi) {
     const auto exec = graph.finalize();
     queue_.ext_oneapi_graph(exec).wait_and_throw();
   } catch (const sycl::exception& e) {
-    GTEST_SKIP()
-        << "SYCL exception during graph execution, likely due to unsupported native recording API: "
-        << e.what();
+    EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+    if (e.code() == sycl::errc::feature_not_supported) {
+      GTEST_SKIP() << "SYCL exception during graph execution, likely due to unsupported native "
+                      "recording API: "
+                   << e.what();
+    }
+    FAIL() << "SYCL exception during graph execution: " << e.what();
   } catch (...) {
+    EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
+    EXPECT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
     FAIL() << "Unknown exception during SYCL graph execution.";
   }
   EXPECT_FLOAT_EQ(*dot_product, Workload::Result());
@@ -496,10 +520,21 @@ TEST_P(SyclUsmGraphVisitorTestSuite, TestArbitraryReplaysWithGraphRecreation) {
 
 #if defined(PTI_TEST_NATIVE_GRAPH_RECORDING_API_AVAILABLE)
 TEST_P(SyclUsmNativeGraphVisitorTestSuite, TestArbitraryReplaysWithGraphRecreation) {
-  auto graph =
-      CreateNativeUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product_.get(),
-                                     x_vector_.get(), y_vector_.get(), z_vector_.get());
-  graph_.emplace(graph.finalize());
+  try {
+    auto graph =
+        CreateNativeUsmDotProductGraph(queue_, Workload::kDefaultVectorSize, dot_product_.get(),
+                                       x_vector_.get(), y_vector_.get(), z_vector_.get());
+    graph_.emplace(graph.finalize());
+  } catch (const sycl::exception& e) {
+    if (e.code() == sycl::errc::feature_not_supported) {
+      GTEST_SKIP() << "SYCL exception during graph execution, likely due to unsupported native "
+                      "recording API: "
+                   << e.what();
+    }
+    FAIL() << "SYCL exception during graph execution: " << e.what();
+  } catch (...) {
+    FAIL() << "Unknown exception during SYCL graph execution.";
+  }
 
   InitializeTracing();
   EnableTracing();
