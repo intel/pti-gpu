@@ -36,7 +36,8 @@ template <typename Ctx>
 struct CliOption {
   const char* name_;        // "--call-logging"
   const char* alias_;       // "-c" or nullptr
-  const char* type_;        // "bool"|"int"|"string"|"enum"|"path"|"action"
+  const char* type_;        // schema only: "bool"|"int"|"string"|"enum"|"path"|"action"
+  bool        takes_value_; // consumes the next argv token (set by the factory below)
   const char* group_;       // caller-defined group id, e.g. "core"|"output"
   const char* value_hint_;  // "number-of-events" -> "<number-of-events>"; nullptr for bool/action
   const char* def_;         // default as a string ("false","-1","50","ComputeBasic"); nullptr
@@ -76,13 +77,13 @@ struct Factory {
   // Boolean switch (no value) that sets `env` to "1".
   static constexpr Opt Bool(const char* name, const char* alias, const char* group,
                             const char* help, const char* env, bool hidden = false) {
-    return {name, alias, "bool", group, nullptr, "false", nullptr, hidden, help, env, nullptr, nullptr};
+    return {name, alias, "bool", false, group, nullptr, "false", nullptr, hidden, help, env, nullptr, nullptr};
   }
 
   // Boolean switch whose behavior is a handler (multi-env / stateful), not an env var.
   static constexpr Opt BoolH(const char* name, const char* alias, const char* group,
                              const char* help, HandlerFn handler, bool hidden = false) {
-    return {name, alias, "bool", group, nullptr, "false", nullptr, hidden, help, nullptr, nullptr, handler};
+    return {name, alias, "bool", false, group, nullptr, "false", nullptr, hidden, help, nullptr, nullptr, handler};
   }
 
   // Value flag (takes the next argv token) that sets `env` to that value.
@@ -91,30 +92,25 @@ struct Factory {
                              const char* env, Validator validate = nullptr,
                              const char* def = nullptr, const char* choices = nullptr,
                              bool hidden = false) {
-    return {name, alias, type, group, value_hint, def, choices, hidden, help, env, validate, nullptr};
+    return {name, alias, type, true, group, value_hint, def, choices, hidden, help, env, validate, nullptr};
   }
 
   // Value flag whose behavior is a handler (multi-env / stateful), not an env var.
   static constexpr Opt ValueH(const char* name, const char* alias, const char* type,
                               const char* group, const char* value_hint, const char* help,
                               HandlerFn handler) {
-    return {name, alias, type, group, value_hint, nullptr, nullptr, false, help, nullptr, nullptr, handler};
+    return {name, alias, type, true, group, value_hint, nullptr, nullptr, false, help, nullptr, nullptr, handler};
   }
 
   // Print-and-exit flag (no value): the handler prints and returns Status::ExitOk.
   static constexpr Opt Action(const char* name, const char* group, const char* help,
                               HandlerFn handler, bool hidden = false) {
-    return {name, nullptr, "action", group, nullptr, nullptr, nullptr, hidden, help, nullptr, nullptr, handler};
+    return {name, nullptr, "action", false, group, nullptr, nullptr, nullptr, hidden, help, nullptr, nullptr, handler};
   }
 };
 
 // Group id -> human label, for a launcher form's section headers.
 struct CliGroup { const char* id_; const char* label_; };
-
-template <typename Ctx>
-inline bool IsValueType(const CliOption<Ctx>& o) {
-  return strcmp(o.type_, "bool") != 0 && strcmp(o.type_, "action") != 0;
-}
 
 // Match an argv token against a flag name or its short alias.
 template <typename Ctx>
@@ -141,8 +137,9 @@ int ParseArgs(int argc, char* argv[], const CliOption<Ctx>* table, size_t n, Ctx
       break;  // first token that is not a known flag => the application begins here
     }
 
-    const char* value = nullptr;
-    if (IsValueType(*o)) {
+    // Resolved before dispatch so handlers and SetEnv never see a null value.
+    const char* value = "1";  // valueless rows (bool/action) keep this
+    if (o->takes_value_) {
       if (++i >= argc) {
         std::cerr << "[ERROR] Option " << o->name_ << " requires a value" << std::endl;
         return -1;
@@ -161,10 +158,10 @@ int ParseArgs(int argc, char* argv[], const CliOption<Ctx>* table, size_t n, Ctx
         case Status::Ok:     break;
       }
     } else if (o->env_) {
-      utils::SetEnv(o->env_, value ? value : "1");
+      utils::SetEnv(o->env_, value);
     }
 
-    app_index += IsValueType(*o) ? 2 : 1;
+    app_index += o->takes_value_ ? 2 : 1;
   }
 
   return app_index;
