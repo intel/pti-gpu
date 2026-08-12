@@ -1419,19 +1419,21 @@ class ZeCollector {
   }
 
   void Finalize() {
-
     FlushData();
 
+#ifndef _WIN32
+    // Not done on Windows: the process randomly dies inside zelTracerDestroy().
+    // Teardown runs from DllMain(DLL_PROCESS_DETACH) at process exit, and the call
+    // intermittently never returns -- it takes the process down before the trace is
+    // closed, silently truncating the output. Only a fraction of runs are affected,
+    // which is what made it look like malformed JSON rather than a crash.
     if (tracer_ != nullptr) {
       ze_result_t status = ZE_FUNC(zelTracerDestroy)(tracer_);
       if (status != ZE_RESULT_SUCCESS) {
-#ifndef _WIN32
-        // on Windows, it is very possible that L0 has been unloaded or is being unloaded at this point and L0 calls may fail safely
-        // so ignore the error
         std::cerr << "[WARNING] Failed to destroy tracer (status = 0x" << std::hex << status << std::dec << ")" << std::endl;
-#endif /* _WIN32 */
       }
     }
+#endif /* _WIN32 */
 
     // Reset the global collector pointer for extension API tracing
     SetGlobalZeCollector(nullptr);

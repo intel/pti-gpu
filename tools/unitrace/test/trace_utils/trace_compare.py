@@ -194,6 +194,20 @@ def parse_timeline_stats_perfetto(filename):
 # name). Track identity / lane packing / timestamps are NOT compared -- they
 # differ across the two separate runs and across the formats by design.
 
+# Slice names excluded from every equivalence compare. These are non-deterministic
+# APIs the runtime calls in a busy-wait loop until the work completes, so their call
+# count tracks how long each run happened to take rather than the work performed.
+# The traces being compared always come from two separate runs, which differ in
+# timing by design, so these counts are not comparable; every other slice name still
+# has to match exactly. Lives here so both compare engines (the direct
+# protobuf-bindings fingerprints below and the traceconv round-trip in
+# perfetto_vs_json_e2e.py) filter the same set.
+EXCLUDED_SLICE_NAMES = frozenset([
+    "zeEventHostSynchronize",
+    "zeEventQueryStatus",
+])
+
+
 def _summarize(tracks):
   slice_names = Counter()
   for slices in tracks.values():
@@ -202,12 +216,42 @@ def _summarize(tracks):
   return {"num_tracks": len(tracks), "slice_names": slice_names}
 
 
+def _check_json_complete(path, text):
+  # A complete unitrace JSON timeline ends with the "\n]\n}\n" tags that
+  # ChromeLogger writes when it closes the trace. Their absence means the traced
+  # process died without finalizing the logger, so the tail of the trace is still
+  # in the ofstream buffer and the file ends mid-record. Diagnose that here: the
+  # raw JSONDecodeError ("Expecting ',' delimiter") points at the end of the file
+  # and reads like malformed output rather than a truncated write. Report it and
+  # return False rather than exiting, so the caller can fail just this scenario and
+  # the matrix driver still runs the remaining ones; the tail is never repaired,
+  # since that would hide real data loss.
+  # Compare with whitespace stripped out of the tail so the check is independent of
+  # newline style (the writer emits CRLF on Windows) and of the trailing newline.
+  if "".join(text[-16:].split()).endswith("]}"):
+    return True
+  tail = text[-120:].replace("\n", "\\n")
+  print("[ERROR] truncated timeline {}: the JSON closing tags are missing, so the "
+        "traced process exited without finalizing the trace (unitrace's buffered "
+        "writes never reached disk). {} bytes, ends with:\n    ...{}".format(
+            path, len(text), tail))
+  return False
+
+
 def fingerprint_json(path):
   # strict=False: the OpenCL path can embed raw control characters in kernel
   # names/args, which the default (strict) decoder rejects; harmless here since we
   # only look at slice names.
   with open(path) as f:
-    data = json.loads(f.read(), strict=False)
+    text = f.read()
+
+  # A truncated trace cannot be parsed at all (json.loads would raise on the
+  # cut-off record and abort the whole run), so return an empty fingerprint: the
+  # error is already reported and the caller sees a mismatch for this scenario.
+  if not _check_json_complete(path, text):
+    return _summarize({})
+
+  data = json.loads(text, strict=False)
   tracks = {}
   for e in data.get("traceEvents", []):
     if e.get("ph") == "X" and e.get("cat") in ("gpu_op", "cpu_op"):

@@ -135,9 +135,17 @@ def compare_scenario(unitrace, name, chrome_flags, app, app_args):
     j = trace_compare.fingerprint_json(json_path)
     p = trace_compare.fingerprint_protobuf(pb_path)
     n_flows, flow_errors = (trace_compare.validate_protobuf_flows(pb_path) if check_flows else (0, []))
+    # An empty json fingerprint means the timeline is truncated (trace_compare
+    # reports the details) or empty. There is nothing to compare against, and
+    # traceconv would parse the same unparsable file, so record the failure and
+    # skip the cross-check instead of letting it raise: this scenario fails and the
+    # matrix driver still runs the rest.
+    json_ok = j["num_tracks"] != 0 and sum(j["slice_names"].values()) != 0
+    if not json_ok:
+      errors.append("[{}] json trace has no tracks/slices (truncated or empty).".format(name))
     # Second engine: the protobuf trace also round-trips through Perfetto's own
     # traceconv and must match the json structure (must run before tempdir cleanup).
-    if not perfetto_vs_json_e2e.compare_traces(pb_path, json_path):
+    elif not perfetto_vs_json_e2e.compare_traces(pb_path, json_path):
       errors.append("[{}] traceconv structural compare failed".format(name))
 
   # The protobuf trace must independently be well-formed.
@@ -147,11 +155,13 @@ def compare_scenario(unitrace, name, chrome_flags, app, app_args):
   # The compact binary format must be meaningfully smaller than the text JSON.
   errors += check_size(name, json_bytes, pb_bytes)
 
-  # Equivalence = identical slice-name multiset (same operations, same counts).
-  if j["slice_names"] != p["slice_names"]:
-    diff = [(n, j["slice_names"].get(n, 0), p["slice_names"].get(n, 0))
-            for n in (set(j["slice_names"]) | set(p["slice_names"]))
-            if j["slice_names"].get(n, 0) != p["slice_names"].get(n, 0)]
+  # Equivalence = identical slice-name multiset (same operations, same counts),
+  # ignoring the event APIs (see trace_compare.EXCLUDED_SLICE_NAMES).
+  diff = [(n, j["slice_names"].get(n, 0), p["slice_names"].get(n, 0))
+          for n in (set(j["slice_names"]) | set(p["slice_names"]))
+          if n not in trace_compare.EXCLUDED_SLICE_NAMES
+          and j["slice_names"].get(n, 0) != p["slice_names"].get(n, 0)]
+  if diff:
     msg = ["[{}] slice-name multiset differs between json and protobuf (name, json, proto):".format(name)]
     for d in sorted(diff)[:30]:
       msg.append("    {!r} {} {}".format(*d))

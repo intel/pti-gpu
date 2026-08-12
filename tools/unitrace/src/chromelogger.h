@@ -1888,27 +1888,37 @@ class ChromeLogger {
 
     ~ChromeLogger() {
       if (logger_ != nullptr) {
-        // Make sure any data that was buffered after the last Flush() (or if Flush() was never
-        // called at all) reaches disk and the JSON is properly closed.
-        Flush();
-
         std::string chrome_trace_file_name_ = logger_->GetLogFileName();
+
         logger_lock_.lock();
-        if (trace_buffers_) {
-          for (auto it = trace_buffers_->begin(); it != trace_buffers_->end();) {
-            (*it)->Finalize();
-            it = trace_buffers_->erase(it);
+
+        if (!flushed_) {
+          // Drain every registered trace buffer BEFORE the JSON is closed:
+          if (trace_buffers_) {
+            for (auto it = trace_buffers_->begin(); it != trace_buffers_->end();) {
+              (*it)->Finalize();
+              it = trace_buffers_->erase(it);
+            }
           }
-        }
 
 #if BUILD_WITH_OPENCL
-        if (cl_trace_buffers_) {
-          for (auto it = cl_trace_buffers_->begin(); it != cl_trace_buffers_->end();) {
-            (*it)->Finalize();
-            it = cl_trace_buffers_->erase(it);
+          if (cl_trace_buffers_) {
+            for (auto it = cl_trace_buffers_->begin(); it != cl_trace_buffers_->end();) {
+              (*it)->Finalize();
+              it = cl_trace_buffers_->erase(it);
+            }
           }
-        }
 #endif /* BUILD_WITH_OPENCL */
+
+          // Write closing brackets so the JSON is valid
+          // The protobuf stream is binary and self-terminating, so the
+          // tags would corrupt it -- JSON-only.
+          if (!UseProtobufOutput() && !logger_->IsEmpty()) {
+            logger_->Log("\n]\n}\n");
+            logger_->Flush();
+          }
+          flushed_ = true;
+        }
 
         logger_lock_.unlock();
 
@@ -1916,8 +1926,8 @@ class ChromeLogger {
           // no data has been logged
           std::cerr << "[INFO] No event of interest is logged for process " << utils::GetPid() << " (" << process_name_ << ")" << std::endl;
         } else {
-          // The JSON closing tags (if any) are written by Flush(), called above.
-          // The protobuf stream is self-terminating.
+          // The JSON closing tags (if any) are written above (or by an earlier
+          // Flush()). The protobuf stream is self-terminating.
           std::cerr << "[INFO] Timeline is stored in " << chrome_trace_file_name_ << std::endl;
         }
       }

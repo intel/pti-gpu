@@ -21,6 +21,10 @@ import subprocess
 import sys
 import urllib.request
 
+# Same directory; on sys.path both when imported by trace_format_test.py (which adds
+# trace_utils/) and when this file is run as a script.
+import trace_compare
+
 # Fetch the launcher from the immutable ${PERFETTO_TAG} git path, not the rolling
 # get.perfetto.dev pointer (whose hash changes on every upstream roll). The launcher
 # self-verifies the native binary it downloads, so pinning its one hash suffices.
@@ -111,7 +115,9 @@ from collections import Counter
 # Structural fingerprint of a Chrome-JSON trace: the multiset of slice ("X")
 # event names. Event names are format-invariant; absolute timestamps and the
 # pid/tid track *labels* are not (traceconv re-derives them), and the number of
-# device tracks varies run to run with engine/lane packing.
+# device tracks varies run to run with engine/lane packing. The busy-wait APIs in
+# trace_compare.EXCLUDED_SLICE_NAMES are dropped, so this engine compares exactly
+# the same set of names as the direct-bindings compare in trace_compare.py.
 def slice_names_from_chrome_json(path):
   # strict=False: the OpenCL path can embed raw control characters (e.g. NUL in a
   # device name) that the default decoder rejects; harmless for the structural
@@ -122,7 +128,9 @@ def slice_names_from_chrome_json(path):
   name_counts = Counter()
   for e in events:
     if e.get("ph") == "X":
-      name_counts[e.get("name", "")] += 1
+      name = e.get("name", "")
+      if name not in trace_compare.EXCLUDED_SLICE_NAMES:
+        name_counts[name] += 1
   return name_counts
 
 
