@@ -134,6 +134,13 @@ macro(GetSpdlog)
         CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(fmt spdlog)
 
+    # To keep macro self contained.
+    if (NOT DEFINED PTI_INTEL_LLVM_EXCLUDE_LIBS)
+      set(PTI_INTEL_LLVM_EXCLUDE_LIBS
+        $<$<AND:$<CXX_COMPILER_ID:IntelLLVM>,$<PLATFORM_ID:Linux>>:-no-intel-lib>
+        $<$<AND:$<CXX_COMPILER_ID:IntelLLVM>,$<PLATFORM_ID:Windows>>:/Qno-intel-lib>)
+    endif()
+
     set(PTI_FMT_COMPILE_OPTIONS
       $<$<CXX_COMPILER_ID:MSVC>:/wd6285 /wd6294 /wd6240 /wd6031
       $<$<CONFIG:Release>:/wd4702 /wd6385
@@ -151,13 +158,16 @@ macro(GetSpdlog)
       $<$<CXX_COMPILER_ID:IntelLLVM>:-Wno-unused-command-line-argument>
     )
 
-    target_compile_definitions(fmt PUBLIC ${PTI_FMT_COMPILE_DEFINITIONS})
-    target_compile_options(fmt PUBLIC ${PTI_FMT_COMPILE_OPTIONS})
+    target_compile_definitions(fmt PRIVATE ${PTI_FMT_COMPILE_DEFINITIONS})
+    target_compile_options(fmt PRIVATE ${PTI_FMT_COMPILE_OPTIONS} ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+    target_link_options(fmt PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+
     target_compile_definitions(fmt-header-only INTERFACE
       ${PTI_FMT_COMPILE_DEFINITIONS})
-    target_compile_options(fmt-header-only INTERFACE  ${PTI_FMT_COMPILE_OPTIONS})
+    target_compile_options(fmt-header-only INTERFACE ${PTI_FMT_COMPILE_OPTIONS})
 
-    target_compile_options(spdlog PRIVATE ${PTI_SPDLOG_COMPILE_OPTIONS})
+    target_compile_options(spdlog PRIVATE ${PTI_SPDLOG_COMPILE_OPTIONS} ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+    target_link_options(spdlog PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
   endif()
 endmacro()
 
