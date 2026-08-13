@@ -189,6 +189,9 @@ add_library(Pti::pti_all ALIAS pti_all)
 set(PTI_ITT_COLLECTOR_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_collector.cc>)
 set(PTI_ITT_STUBS_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_stubs.cc>)
 set(PTI_ITT_ADAPTER_FILE $<$<PLATFORM_ID:Linux>:${PROJECT_SOURCE_DIR}/src/itt/itt_adapter.cc>)
+set(PTI_INTEL_LLVM_EXCLUDE_LIBS
+  $<$<AND:$<CXX_COMPILER_ID:IntelLLVM>,$<PLATFORM_ID:Linux>>:-no-intel-lib>
+  $<$<AND:$<CXX_COMPILER_ID:IntelLLVM>,$<PLATFORM_ID:Windows>>:/Qno-intel-lib>)
 
 # Apply -Wno-attributes flag to ITT files only for GCC on Linux
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -291,6 +294,10 @@ target_link_libraries(
           ${FS_LIB}
           $<TARGET_NAME_IF_EXISTS:ittapi::headers>)
 
+target_compile_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+
+target_link_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+
 FindHeadersPath(
   pti "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py"
   "tracing.gen" gen_tracing_header LevelZero::level-zero)
@@ -351,6 +358,10 @@ target_link_libraries(
           ${CMAKE_DL_LIBS}
           ${FS_LIB}
           $<TARGET_NAME_IF_EXISTS:ittapi::headers>)
+
+target_compile_options(pti_view PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+
+target_link_options(pti_view PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
 
 target_link_libraries(
   pti_all INTERFACE Pti::pti_view)
