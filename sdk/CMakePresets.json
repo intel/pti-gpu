@@ -142,12 +142,31 @@
       }
     },
     {
+      "name": "linux-dpclang-release",
+      "inherits": "linux-icpx-release",
+      "displayName": "Linux Release x64 DPC++ Clang Config",
+      "description": "Linux Release x64 Config using Ninja generator and dpclang compiler",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/dpclang_toolchain.cmake"
+      }
+    },
+    {
       "name": "linux-clang-debug",
       "inherits": "linux-icpx-debug",
       "displayName": "Linux Debug x64 Clang Config",
       "description": "Linux Debug x64 Config using Ninja generator and clang compiler",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang_toolchain.cmake",
+        "PTI_ENABLE_LOGGING": "ON"
+      }
+    },
+    {
+      "name": "linux-dpclang-debug",
+      "inherits": "linux-icpx-debug",
+      "displayName": "Linux Debug x64 DPC++ Clang Config",
+      "description": "Linux Debug x64 Config using Ninja generator and dpclang compiler",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/dpclang_toolchain.cmake",
         "PTI_ENABLE_LOGGING": "ON"
       }
     },
@@ -302,6 +321,11 @@
     "displayName": "Linux Release x64 Clang Ninja Build"
   },
   {
+    "name": "linux-dpclang-release",
+    "configurePreset": "linux-dpclang-release",
+    "displayName": "Linux Release x64 DPC++ Clang Ninja Build"
+  },
+  {
     "name": "linux-icpx-reldebuginfo",
     "configurePreset": "linux-icpx-reldebuginfo",
     "displayName": "Linux Release x64 IntelLLVM Ninja Build"
@@ -315,6 +339,11 @@
     "name": "linux-clang-debug",
     "configurePreset": "linux-clang-debug",
     "displayName": "Linux Debug x64 Clang Ninja Build"
+  },
+  {
+    "name": "linux-dpclang-debug",
+    "configurePreset": "linux-dpclang-debug",
+    "displayName": "Linux Debug x64 DPC++ Clang Ninja Build"
   },
   {
     "name": "linux-cov",
@@ -420,6 +449,14 @@
     }
   },
   {
+    "name": "linux-dpclang-release",
+    "configurePreset": "linux-dpclang-release",
+    "displayName": "Linux Release x64 DPC++ Clang Tests",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
+    }
+  },
+  {
     "name": "linux-icpx-reldebuginfo",
     "configurePreset": "linux-icpx-reldebuginfo",
     "displayName": "Linux Release x64 IntelLLVM Tests",
@@ -439,6 +476,14 @@
     "name": "linux-clang-debug",
     "configurePreset": "linux-clang-debug",
     "displayName": "Linux Debug x64 Clang Tests",
+    "environment": {
+      "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
+    }
+  },
+  {
+    "name": "linux-dpclang-debug",
+    "configurePreset": "linux-dpclang-debug",
+    "displayName": "Linux Debug x64 DPC++ Clang Tests",
     "environment": {
       "LD_LIBRARY_PATH": "${sourceDir}/build-${presetName}/lib:$penv{LD_LIBRARY_PATH}"
     }

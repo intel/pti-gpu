@@ -1,0 +1,184 @@
+name: sdk-opensource-dpcpp-build-and-test
+
+#
+# Build and test the SDK with the open-source DPC++ compiler (github.com/intel/llvm,
+# branch sycl-rel-7_0) instead of oneAPI.
+#
+
+on:
+  push:
+    paths:
+      - .github/workflows/sdk_opensource_dpcpp.yml
+  workflow_dispatch:
+  schedule:
+    # Daily 8:00 AM UTC / 12:00 AM PST.
+    - cron: '0 8 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  # Separate job because the container used in 'build-and-test' cannot reach ghcr.
+  get-toolchain:
+    name: Extract ${{ matrix.toolchain }}
+
+    timeout-minutes: 10
+
+    runs-on: [self-hosted, Linux, pti, server]
+
+    strategy:
+      matrix:
+        include:
+          - toolchain: dpcpp-7.0
+            # TODO: move to a repo variable, like the other container images.
+            # e.g. vars.PTI_DOCKER_DPCPP_REL_7_0
+            image: ghcr.io/intel/llvm/sycl_prebuilt_tests:sycl-rel-7_0
+
+    container:
+      image: ${{ matrix.image }}
+      options: --user root ${{ vars.PTI_DOCKER_PROXIES }}
+      credentials:
+        username: ${{ secrets.PTI_GHCR_USER }}
+        password: ${{ secrets.PTI_GHCR_PWD }}
+
+    if: vars.PTI_RUN_OPENSOURCE_TESTS == 1
+
+    steps:
+      - name: Decompress toolchain
+        run: |
+          # Decompressed here, the later container has tar but no zstd.
+          zstd -d -f /sycl-prebuilt/toolchain.tar.zst -o "$GITHUB_WORKSPACE/toolchain.tar"
+          ls -lh "$GITHUB_WORKSPACE/toolchain.tar"
+
+      - name: Upload toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-${{ matrix.toolchain }}
+          path: toolchain.tar
+          retention-days: 1
+          # Fast deflate: the tar is ~1 GB of binaries and compresses ~3x.
+          compression-level: 1
+
+  build-and-test:
+    name: Test PTI ${{ matrix.label }}
+
+    needs: get-toolchain
+
+    timeout-minutes: 30
+
+    continue-on-error: true
+
+    runs-on: ${{ fromJSON(matrix.tags) }}
+
+    strategy:
+      matrix:
+        include:
+          - label: ubuntu-24.04-client BMG dpcpp-7.0
+            toolchain: dpcpp-7.0
+            container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_CLIENT_ONEAPI_N }}
+            preset: linux-dpclang-release
+            tags: '["self-hosted", "Linux", "pti", "client", "BMG"]'
+
+    container:
+      image: ${{ matrix.container }}
+      options: --device=/dev/dri --cap-add CAP_PERFMON --shm-size=24G ${{ vars.PTI_DOCKER_PROXIES }} --volume=/dev/dri/by-path:/dev/dri/by-path
+      credentials:
+        username: ${{ vars.PTI_DOCKER_USER }}
+        password: ${{ secrets.PTI_DOCKER_PWD }}
+
+    if: vars.PTI_RUN_OPENSOURCE_TESTS == 1
+
+    env:
+      # The tarball has bin/, include/ and lib/ at its top level.
+      TC: ${{ github.workspace }}/dpcpp-toolchain
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Download toolchain
+        uses: actions/download-artifact@v4
+        with:
+          name: toolchain-${{ matrix.toolchain }}
+
+      - name: Unpack toolchain
+        run: |
+          mkdir -p "$TC"
+          tar -xf toolchain.tar -C "$TC"
+          rm -f toolchain.tar
+
+          # PATH order selects the compiler: dpclang_toolchain.cmake searches PATH
+          # for dpclang++. LD_LIBRARY_PATH is needed for libsycl at run time and for
+          # CMake to find libur_loader at configure time.
+          echo "$TC/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=${TC}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> "$GITHUB_ENV"
+
+      - name: Verify toolchain and GPU
+        run: |
+          echo "dpclang++ resolves to: $(which dpclang++)"
+          case "$(which dpclang++)" in
+            "$TC"/bin/dpclang++) ;;
+            *) echo "::error::dpclang++ is not the open-source toolchain"; exit 1 ;;
+          esac
+
+          dpclang++ --version
+
+          if ! sycl-ls | grep -q 'gpu'; then
+            echo "::error::no SYCL GPU device found"
+            SYCL_UR_TRACE=1 sycl-ls --verbose || true
+            exit 1
+          fi
+          sycl-ls
+
+      - name: Build
+        working-directory: sdk
+        run: |
+          # Note: "Could NOT find unified-runtime" is expected and fails soft:
+          # Findunified-runtime.cmake does not search include/unified-runtime/,
+          # so UR-specific tests are silently skipped.
+          cmake --preset ${{ matrix.preset }}
+          cmake --build --preset ${{ matrix.preset }} -j $(($(nproc)/2))
+
+      - name: Testing
+        working-directory: sdk
+        run: |
+          # LibLoadTest.CoreModuleLoadsWithLocalScope passes and then segfaults at
+          # process exit (139) under open-source DPC++ only; run separately below.
+          #
+          # onemkl_gemm_exe and omp_vec_add report Not Run: their samples skip
+          # themselves at configure time without oneMKL / icx, but the tests are
+          # still registered.
+          ctest --output-on-failure --preset ${{ matrix.preset }} \
+            -LE "performance|quarantine" \
+            -E "LibLoadTest.CoreModuleLoadsWithLocalScope|run-onemkl_gemm_exe|run-omp_vec_add"
+
+      - name: Quarantined tests # performance and flaky tests
+        continue-on-error: true
+        working-directory: sdk
+        run: |
+          if ctest --output-on-failure --preset ${{ matrix.preset }} -L 'performance|quarantine'; then
+            echo "Quarantined tests pass"
+          else
+            echo "::warning::Quarantined tests failed"
+          fi
+
+      - name: Known-failing test, tracked separately
+        continue-on-error: true
+        working-directory: sdk
+        run: |
+          if ctest --output-on-failure --preset ${{ matrix.preset }} \
+               -R "LibLoadTest.CoreModuleLoadsWithLocalScope"; then
+            echo "::warning::LibLoadTest.CoreModuleLoadsWithLocalScope now passes - remove the -E exclusion"
+          else
+            echo "::warning::LibLoadTest.CoreModuleLoadsWithLocalScope still fails (known, open-source DPC++ only)"
+          fi
