@@ -5,6 +5,7 @@
 // =============================================================
 #include "pti/pti_metrics.h"
 
+#include "metric_state_manager.h"
 #include "metrics_handler.h"
 
 namespace {
@@ -392,6 +393,28 @@ pti_result ptiMetricsGetCalculatedData(pti_device_handle_t device_handle,
     }
 
     return result;
+  } catch (const std::exception& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsEnable(pti_device_handle_t device) {
+  try {
+    return pti::metrics::MetricStateManager::Instance().EnableMetric(device);
+  } catch (const std::exception& e) {
+    LogException(e);
+    return pti_result::PTI_ERROR_INTERNAL;
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsDisable(pti_device_handle_t device) {
+  try {
+    return pti::metrics::MetricStateManager::Instance().DisableMetric(device);
   } catch (const std::exception& e) {
     LogException(e);
     return pti_result::PTI_ERROR_INTERNAL;

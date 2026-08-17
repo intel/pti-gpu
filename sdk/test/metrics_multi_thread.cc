@@ -127,10 +127,21 @@ void SubmitMinimalGpuWork(const sycl::device& device) {
 class MetricsMultiThreadingTest : public ::testing::Test {
  protected:
   std::vector<sycl::device> sycl_devices;
+  bool metrics_enabled_by_setup_ = false;  // Track if we enabled metrics in SetUp
 
   void SetUp() override {
     bool metrics_enabled = (utils::GetEnv("ZET_ENABLE_METRICS") == "1");
-    ASSERT_TRUE(metrics_enabled) << "ZET_ENABLE_METRICS must be set to 1";
+    if (!metrics_enabled) {
+      // Enable metrics via on-demand API
+      pti_result metric_result = ptiMetricsEnable(nullptr);  // Enable for all devices
+      if (metric_result == PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED ||
+          metric_result == PTI_ERROR_NOT_IMPLEMENTED) {
+        GTEST_SKIP() << "zetDeviceEnableMetricsExp not supported by driver, skipping test";
+      }
+      ASSERT_EQ(metric_result, PTI_SUCCESS)
+          << "Enable metrics via l0 API failed, set ZET_ENABLE_METRICS=1 to enable metrics";
+      metrics_enabled_by_setup_ = true;
+    }
 
     std::lock_guard<std::mutex> lock(g_setup_mutex);
     if (!g_setup_complete.load()) {
@@ -155,7 +166,12 @@ class MetricsMultiThreadingTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    // Cleanup is handled by global destructors
+    // Release the metrics reference taken in SetUp; the rest of the cleanup is handled by
+    // global destructors.
+    if (metrics_enabled_by_setup_) {
+      ptiMetricsDisable(nullptr);
+      metrics_enabled_by_setup_ = false;
+    }
   }
 };
 

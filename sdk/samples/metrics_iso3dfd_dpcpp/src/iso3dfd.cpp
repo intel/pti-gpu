@@ -304,6 +304,16 @@ int main(int argc, char* argv[]) {
   // Check if running SYCL version
   if (sycl) {
     try {
+      bool metrics_enabled = (samples_utils::GetEnv("ZET_ENABLE_METRICS") == "1");
+      if (!metrics_enabled) {
+        // Enable metrics via on-demand API
+        pti_result metric_result = ptiMetricsEnable(nullptr);  // Enable for all devices
+        if (metric_result != PTI_SUCCESS) {
+          std::cerr << "Error: Failed to enable metrics on the system, set ZET_ENABLE_METRICS=1 to enable." << std::endl;
+          return 1; // Exit if metrics cannot be enabled
+        }
+      }
+
       {
         const std::lock_guard<std::mutex> cout_lock(global_cout_mtx);
         std::cout << " ***** Running SYCL variant *****\n";
@@ -395,6 +405,11 @@ int main(int argc, char* argv[]) {
   delete[] prev_base;
   delete[] next_base;
   delete[] vel_base;
+
+  // Disable metrics before cleanup
+  if (sycl) {
+    ptiMetricsDisable(nullptr);
+  }
 
   // Check if the metrics collection was run on the same device as the compute device
   if (sycl_device_has_uuid) {

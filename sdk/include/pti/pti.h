@@ -58,7 +58,14 @@ typedef enum {
                                            //!< to 1
   PTI_ERROR_L0_LOCAL_PROFILING_NOT_SUPPORTED = 52,  //!< no Local profiling support in the installed
                                                     //!< driver
-
+  PTI_ERROR_METRICS_ENABLE_FAILED = 98,  //!< metrics collection could not be enabled on all devices
+                                         //!< present in the system, see ptiMetricsEnable
+  PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED = 99,  //!< installed driver does not support
+                                                      //!< enabling metrics collection at runtime
+                                                      //!< via ptiMetricsEnable; metrics must
+                                                      //!< instead be enabled at process startup by
+                                                      //!< setting the environment variable
+                                                      //!< ZET_ENABLE_METRICS to 1
   PTI_ERROR_METRICS_COLLECTION_NOT_ENABLED = 100, //!< metrics collection not running
   PTI_ERROR_METRICS_COLLECTION_NOT_DISABLED = 101, //!< metrics collection not stopped
   PTI_ERROR_METRICS_COLLECTION_NOT_PAUSED = 102, //!< metrics collection not paused

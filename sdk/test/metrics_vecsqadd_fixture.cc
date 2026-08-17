@@ -141,6 +141,16 @@ void RunVecsqadd(TestType a_test_type) {
 class VecsqaddMetricsFixtureTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    // Called right after constructor before each test
+    if (utils::GetEnv("ZET_ENABLE_METRICS") != "1") {
+      // Enable metrics
+      pti_result status = ptiMetricsEnable(nullptr);
+      if (status == PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED ||
+          status == PTI_ERROR_NOT_IMPLEMENTED) {
+        GTEST_SKIP() << "zetDeviceEnableMetricsExp not supported by driver, skipping test";
+      }
+      ASSERT_EQ(status, PTI_SUCCESS) << "Failed to enable metrics, error: " << status;
+    }
     uint32_t device_count = 0;
     pti_result result = PTI_SUCCESS;
     result = ptiMetricsGetDevices(nullptr, &device_count);
@@ -190,16 +200,16 @@ class VecsqaddMetricsFixtureTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    // Stop any running collection for all devices before disabling metrics
+    for (const auto &device : devices) {
+      ptiMetricsStopCollection(device._handle);  // Ignore errors - may already be stopped
+    }
     // Called right before destructor after each test
+    ptiMetricsDisable(nullptr);
     devices.clear();
     metric_groups.clear();
   }
 };
-
-TEST_F(VecsqaddMetricsFixtureTest, MetricsEnabled) {
-  bool metrics_enabled = (utils::GetEnv("ZET_ENABLE_METRICS") == "1");
-  EXPECT_EQ(metrics_enabled, true);
-}
 
 TEST_F(VecsqaddMetricsFixtureTest, GetDevices) {
   uint32_t device_count = 0;

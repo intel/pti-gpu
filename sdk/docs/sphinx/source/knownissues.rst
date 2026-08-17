@@ -5,7 +5,7 @@ Known Issues
 .. warning::
    **DRAFT DOCUMENTATION** - This documentation is currently in draft status and subject to change.
 
-1. Metrics collection (``ptiMetrics`` and ``ptiMetricsScope`` APIs) requires the ``ZET_ENABLE_METRICS=1`` environment variable to be set.
+1. Metrics collection (``ptiMetrics`` and ``ptiMetricsScope`` APIs) requires metrics to be enabled on the device, either by calling ``ptiMetricsEnable`` or by setting the ``ZET_ENABLE_METRICS=1`` environment variable. Drivers that do not support enabling metrics at runtime make ``ptiMetricsEnable`` return ``PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED``; on those drivers the environment variable is still required.
 
 2. Communication tracing (``PTI_VIEW_COMMUNICATION``) requires the ``INTEL_LIBITTNOTIFY64`` environment variable to be set, pointing to the ``pti_view`` library path. Without this, communication tracing will not be enabled.
 

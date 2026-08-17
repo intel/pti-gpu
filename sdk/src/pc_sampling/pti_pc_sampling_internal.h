@@ -35,6 +35,7 @@
 
 #include "lz_api_tracing_api_loader.h"
 #include "pti/pti_callback.h"
+#include "pti/pti_metrics.h"
 #include "pti/pti_pc_sampling.h"
 #include "pti_pc_sampling_aggregator.h"
 #include "pti_pc_sampling_collector.h"
@@ -493,6 +494,14 @@ class PtiPcSamplingHandleStorage {
       return PTI_ERROR_PC_SAMPLING_UNSUPPORTED;
     }
 
+    // Enable metrics globally before creating the handle
+    pti_result metric_status = ptiMetricsEnable(nullptr);
+    if (metric_status != PTI_SUCCESS) {
+      SPDLOG_ERROR("{}: Failed to enable metrics: {}", __FUNCTION__,
+                   ptiResultTypeToString(metric_status));
+      return metric_status;
+    }
+
     for (ze_driver_handle_t driver : ::utils::ze::GetDriverList()) {
       for (ze_device_handle_t device : ::utils::ze::GetDeviceList(driver)) {
         ze_device_properties_t props{};
@@ -525,13 +534,11 @@ class PtiPcSamplingHandleStorage {
       std::string err_msg = "";
 #ifndef _WIN32
       err_msg +=
-          "/proc/sys/dev/i915/perf_stream_paranoid or /proc/sys/dev/xe/observation_paranoid is set "
-          "to 0 and";
+          "Ensure /proc/sys/dev/i915/perf_stream_paranoid or "
+          "/proc/sys/dev/xe/observation_paranoid is set to 0. ";
 #endif /* _WIN32 */
-      SPDLOG_ERROR(
-          "{}: no devices with EUStallSampling support found. "
-          "Ensure {} ZET_ENABLE_METRICS=1 is set in the environment for PC sampling to work.",
-          __FUNCTION__, err_msg);
+      SPDLOG_ERROR("{}: no devices with EUStallSampling support found. {}", __FUNCTION__, err_msg);
+      ptiMetricsDisable(nullptr);
       return PTI_ERROR_PC_SAMPLING_UNSUPPORTED;
     }
 
@@ -539,6 +546,7 @@ class PtiPcSamplingHandleStorage {
     auto collection_handle =
         std::unique_ptr<_pti_pc_sampling_handle_t>(new (std::nothrow) _pti_pc_sampling_handle_t());
     if (collection_handle == nullptr) {
+      ptiMetricsDisable(nullptr);
       return PTI_ERROR_INTERNAL;
     }
 
@@ -560,6 +568,7 @@ class PtiPcSamplingHandleStorage {
       SPDLOG_ERROR("{}: ptiCallbackSubscribe failed with result {}", __FUNCTION__,
                    static_cast<uint32_t>(callback_result));
       handle_.reset();
+      ptiMetricsDisable(nullptr);
       return callback_result;
     }
 
@@ -574,6 +583,7 @@ class PtiPcSamplingHandleStorage {
       ptiCallbackUnsubscribe(callback_subscriber_);
       callback_subscriber_ = nullptr;
       handle_.reset();
+      ptiMetricsDisable(nullptr);
       return callback_result;
     }
 

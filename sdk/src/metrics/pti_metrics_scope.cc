@@ -10,9 +10,11 @@
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "metrics_handler.h"
 #include "pti/pti_callback.h"
+#include "pti/pti_metrics.h"
 #include "pti_assert.h"
 #include "pti_metrics_scope_buffer.h"
 #include "pti_metrics_scope_buffer_handler.h"
@@ -187,6 +189,14 @@ pti_result ptiMetricsScopeEnable(pti_scope_collection_handle_t* scope_collection
     if (scope_collection_handle == nullptr) {
       return PTI_ERROR_BAD_ARGUMENT;
     }
+
+    // Call ptiMetricsEnable() first to make sure metrics collection is enabled in the driver
+    pti_result status = ptiMetricsEnable(nullptr);
+    if (status != PTI_SUCCESS) {
+      SPDLOG_ERROR("{}: Failed to enable metrics: {}", __FUNCTION__, ptiResultTypeToString(status));
+      return status;
+    }
+    SPDLOG_INFO("ptiMetricsScopeEnable: Successfully enabled metrics for all devices");
 
     auto handle = std::make_unique<_pti_scope_collection_handle_t>();
 
@@ -1051,6 +1061,8 @@ pti_result ptiMetricsScopeDisable(pti_scope_collection_handle_t scope_collection
   try {
     std::lock_guard<std::mutex> lock(g_scope_ops_mutex);
 
+    pti_result stop_result = PTI_SUCCESS;
+
     // Remove handle from global registry under exclusive lock
     {
       std::lock_guard<std::shared_mutex> lock(g_scope_handles_mutex);
@@ -1063,7 +1075,6 @@ pti_result ptiMetricsScopeDisable(pti_scope_collection_handle_t scope_collection
       PTI_ASSERT(it != g_scope_handles.end());
 
       // Stop collection if still active
-      pti_result stop_result = PTI_SUCCESS;
       if (scope_collection_handle->is_collection_active_) {
         stop_result = InternalMetricsScopeStopCollectionNoHandleCheck(scope_collection_handle);
         if (stop_result != PTI_SUCCESS) {
@@ -1073,9 +1084,19 @@ pti_result ptiMetricsScopeDisable(pti_scope_collection_handle_t scope_collection
       }
       // Remove handle from registry
       g_scope_handles.erase(it);
-      SPDLOG_TRACE("Scope metrics collection handle disabled");
-      return stop_result;
     }
+
+    // Release this handle's metrics reference. The reference count in MetricStateManager
+    // decides whether the driver actually disables metrics. Done outside
+    // g_scope_handles_mutex to keep the driver call off a global registry lock.
+    pti_result disable_status = ptiMetricsDisable(nullptr);
+    if (disable_status != PTI_SUCCESS) {
+      SPDLOG_WARN("{}: Failed to disable metrics: {}", __FUNCTION__,
+                  ptiResultTypeToString(disable_status));
+    }
+
+    SPDLOG_TRACE("Scope metrics collection handle disabled");
+    return stop_result;
   } catch (const std::exception& e) {
     LogException(e);
     return PTI_ERROR_INTERNAL;

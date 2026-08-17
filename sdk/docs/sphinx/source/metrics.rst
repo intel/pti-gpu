@@ -16,6 +16,7 @@ The **Metrics API** provides time-based and event-based sampling of hardware per
 
 The API includes:
 
+* **Enable/Disable Functions** - Turn metrics collection on and off on the devices at runtime
 * **Device Discovery Functions** - Enumerate devices that support metrics collection
 * **Metric Discovery Functions** - Discover available metric groups and individual metrics
 * **Collection Control Functions** - Configure, start, stop, pause, and resume collection
@@ -27,6 +28,21 @@ The API includes:
 
 Detailed API Documentation
 ===========================
+
+Enable/Disable Functions
+------------------------
+
+``ptiMetricsEnable`` must be called before any other Metrics API function. It replaces the need to set
+the ``ZET_ENABLE_METRICS=1`` environment variable before the process starts, provided the installed
+driver supports enabling metrics at runtime; otherwise it returns
+``PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED`` and the environment variable must be used instead.
+
+Calls are reference counted per device, so every ``ptiMetricsEnable`` call must be matched with a
+``ptiMetricsDisable`` call. Metrics are disabled on a device only once its last reference is released.
+
+.. doxygenfunction:: ptiMetricsEnable
+
+.. doxygenfunction:: ptiMetricsDisable
 
 Device Discovery Functions
 --------------------------

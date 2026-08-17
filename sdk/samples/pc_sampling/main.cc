@@ -150,25 +150,6 @@ static bool RunGEMMWorkload(sycl::queue& queue, unsigned size, unsigned repeat_c
 }
 
 //-----------------------------------------------------------------------------
-// Environment Setup
-//-----------------------------------------------------------------------------
-
-/**
- * @brief Set up environment variables required for PC sampling.
- *
- * This function sets ZET_ENABLE_METRICS=1 which is required for
- * Level Zero metrics to be available.
- */
-void setPcSamplingEnvironment() {
-#ifdef _WIN32
-  _putenv_s("ZET_ENABLE_METRICS", "1");
-#else
-  setenv("ZET_ENABLE_METRICS", "1", 0);  // 0 = don't overwrite if already set
-#endif
-  std::cout << "Set ZET_ENABLE_METRICS=1" << std::endl;
-}
-
-//-----------------------------------------------------------------------------
 // Command Line Parsing
 //-----------------------------------------------------------------------------
 
@@ -264,9 +245,6 @@ bool ParseCommandLine(int argc, char* argv[], SampleConfig& config) {
 //-----------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-  // Set environment variables required for PC sampling
-  setPcSamplingEnvironment();
-
   // Parse command line arguments
   SampleConfig config;
   if (!ParseCommandLine(argc, argv, config)) {

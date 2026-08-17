@@ -21,8 +21,8 @@
 #include <string>
 #include <string_view>
 #include <thread>
-#include <unordered_set>
 
+#include "metric_state_manager.h"
 #include "pti/pti_metrics.h"
 #include "utils/pti_filesystem.h"
 #include "utils/pti_string_pool.h"
@@ -1788,7 +1788,6 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
         status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
                                                               nullptr);
         PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-        std::cout << "Calculate Report size: " << report_size << "\n";
 
         // get report format
         std::vector<zet_metric_handle_t> metrics_in_report(report_size);
@@ -1826,7 +1825,6 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
           status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
                                                                 nullptr);
           PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-          std::cout << "Calculate Report size: " << report_size << "\n";
 
           // get report format
           std::vector<zet_metric_handle_t> metrics_in_report(report_size);
@@ -1846,9 +1844,6 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
           std::vector<uint32_t> report_count_per_set(set_count);
           std::vector<external::L0::zet_intel_metric_result_exp_t> metric_results(
               total_report_count * report_size);
-          std::cout << "Calculate number of sets: " << set_count
-                    << ". Total number of results: " << total_report_count
-                    << ". Rawdata used: " << raw_size << std::endl;
 
           status = tf.zetIntelMetricDecodeCalculateMultipleValuesExp(
               metric_decoder_, &raw_size, raw_metrics.data(), calculate_op_handle, &set_count,
@@ -1859,23 +1854,15 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
           std::string valid_value;
           // walk through the sets
           for (uint32_t set_index = 0; set_index < set_count; set_index++) {
-            std::cout << "Set : " << set_index
-                      << " Reports in set: " << report_count_per_set[set_index] << std::endl;
             // For each set, walk through the reports
             for (uint32_t report_index = 0; report_index < report_count_per_set[set_index];
                  report_index++) {
-              std::cout << " Report : " << report_index
-                        << " Metrics in result: " << metrics_in_report[report_index] << std::endl;
-
               // For each report, walk through the results
               for (uint32_t result_index = 0; result_index < report_size; result_index++) {
                 zet_metric_properties_t metric_properties = {};
                 status =
                     zetMetricGetProperties(metrics_in_report[result_index], &metric_properties);
                 PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-                std::cout << "   Index: " << output_index
-                          << " Component: " << metric_properties.component
-                          << "\t Metric name: " << metric_properties.name << " | ";
 
                 valid_value.assign((metric_results[output_index].resultStatus ==
                                     external::L0::ZET_INTEL_METRIC_CALCULATE_EXP_RESULT_VALID)
@@ -1887,33 +1874,25 @@ class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
                   case ZET_VALUE_TYPE_UINT16:
                     metrics_values_buffer[buffer_idx++].ui32 =
                         metric_results[output_index].value.ui32;
-                    std::cout << "\t value: " << metric_results[output_index].value.ui32 << " | ";
                     break;
                   case ZET_VALUE_TYPE_UINT64:
                     metrics_values_buffer[buffer_idx++].ui64 =
                         metric_results[output_index].value.ui64;
-                    std::cout << "\t value: " << metric_results[output_index].value.ui64 << " | ";
                     break;
                   case ZET_VALUE_TYPE_FLOAT32:
                     metrics_values_buffer[buffer_idx++].fp32 =
                         metric_results[output_index].value.fp32;
-                    std::cout << "\t value: " << metric_results[output_index].value.fp32 << " | ";
                     break;
                   case ZET_VALUE_TYPE_FLOAT64:
                     metrics_values_buffer[buffer_idx++].fp64 =
                         metric_results[output_index].value.fp64;
-                    std::cout << "\t value: " << metric_results[output_index].value.fp64 << " | ";
                     break;
                   case ZET_VALUE_TYPE_BOOL8:
                     metrics_values_buffer[buffer_idx++].b8 = metric_results[output_index].value.b8;
-                    std::cout << "\t value: " << metric_results[output_index].value.b8 << " | ";
                     break;
                   default:
-                    std::cout << "[ERROR] Encountered unsupported Type";
                     break;
                 }
-                std::cout << valid_value << " | " << std::endl;
-
                 output_index++;
               }
             }
@@ -2107,65 +2086,10 @@ class PtiMetricsCollectorHandler {
     }
     utils::SetGlobalSpdLogPattern();
 
-    ZeDriverInit init_drivers{};
-    auto l0_initialized = init_drivers.Success();
-    bool metrics_enabled = (utils::GetEnv("ZET_ENABLE_METRICS") == "1");
-
-    if (!l0_initialized) {
-      SPDLOG_DEBUG("Level Zero driver initialization failed");
-#ifndef _WIN32
-      if (metrics_enabled) {
-        SPDLOG_DEBUG(
-            "Please also make sure: "
-            "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
-            "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
-            "is set to 0.");
-      }
-#endif /* _WIN32 */
-    }
-
-    if (!metrics_enabled) {
-      SPDLOG_DEBUG(
-          "Metrics collection is not enabled on this system. Please make sure environment variable "
-          "ZET_ENABLE_METRICS is set to 1.");
-    }
-
-    // Initialize devices during construction
-    if (l0_initialized && metrics_enabled) {
-      devices_ = utils::ze::GetDeviceList(init_drivers.Drivers());
-      // Remove duplicates while preserving order (O(n) using unordered_set)
-      std::unordered_set<ze_device_handle_t> seen;
-      auto end = std::remove_if(
-          devices_.begin(), devices_.end(),
-          [&seen](ze_device_handle_t device) { return !seen.insert(device).second; });
-      devices_.erase(end, devices_.end());
-      SPDLOG_DEBUG("In {} found {} devices", __func__, devices_.size());
-
-      // Pre-populate device mutexes and metric groups for all devices
-      for (auto device : devices_) {
-        pti_device_handle_t device_handle = static_cast<pti_device_handle_t>(device);
-        device_mutexes_[device_handle];  // Creates mutex
-        device_collection_active_[device_handle] = CollectionState::DISABLED;
-
-        // Get device properties and register device name
-        ze_device_properties_t device_props;
-        std::memset(&device_props, 0, sizeof(device_props));
-        device_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
-        if (zeDeviceGetProperties(device, &device_props) == ZE_RESULT_SUCCESS) {
-          string_pool_.Get(device_props.name);
-        }
-
-        // Find metric groups for this device
-        utils::ze::FindMetricGroups(device, metric_groups_[device]);
-
-        // Register all metric group names and descriptions
-        for (auto group : metric_groups_[device]) {
-          RegisterMetricGroupStrings(group);
-        }
-      }
-    }
-
-    metrics_enabled_ = (l0_initialized && metrics_enabled);
+    // Initialize devices and check metric status. A failure here is not fatal: metrics may still be
+    // enabled later via ptiMetricsEnable(), which triggers RefreshMetricState(). The status is
+    // reported to the caller by the individual metrics APIs, which gate on metrics_enabled_.
+    static_cast<void>(InitializeDevicesWithMetrics());
 
     std::string loader_lib_name = kLoaderLibraryName;
 
@@ -2201,7 +2125,9 @@ class PtiMetricsCollectorHandler {
   }
 
   inline pti_result HookTraceMetricsAPI() {
-    if (metrics_enabled_ == false) {
+    // Deliberately not MetricsUsable(): this is reached from RefreshMetricState() while
+    // refresh_mutex_ is held, and MetricsUsable() can call RefreshMetricState() again.
+    if (!MetricsCachedStateUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2344,8 +2270,66 @@ class PtiMetricsCollectorHandler {
     return false;
   }
 
-  inline pti_result GetDeviceCount(uint32_t *device_count) const {
-    if (metrics_enabled_ == false) {
+  // Non-refreshing form of MetricsUsable(): true only if the cached device/metric-group state is
+  // valid and metrics are still enabled in the driver. A cached flag alone cannot see a
+  // ptiMetricsDisable() that dropped the last reference, so MetricStateManager is consulted too.
+  //
+  // Only HookTraceMetricsAPI() should call this: it runs under RefreshMetricState()'s
+  // refresh_mutex_, so it must not take a path that re-enters that non-recursive mutex.
+  inline bool MetricsCachedStateUsable() const {
+    if (!metrics_enabled_.load(std::memory_order_acquire)) {
+      return false;
+    }
+    if (!pti::metrics::MetricStateManager::Instance().IsMetricEnabled()) {
+      metrics_enabled_.store(false, std::memory_order_release);
+      SPDLOG_DEBUG(
+          "Metrics were disabled after initialization; metrics APIs are unavailable "
+          "until ptiMetricsEnable() is called again");
+      return false;
+    }
+    return true;
+  }
+
+  // Single gate for every metrics API. Rebuilds the cached state when metrics have been enabled
+  // since it was last built, so a disable -> enable sequence recovers from any entry point.
+  // Refreshing in only some APIs left the rest returning PTI_ERROR_DRIVER permanently unless the
+  // caller happened to re-enumerate devices first.
+  inline bool MetricsUsable() {
+    if (MetricsCachedStateUsable()) {
+      return true;
+    }
+    if (!pti::metrics::MetricStateManager::Instance().IsMetricEnabled()) {
+      return false;
+    }
+    return RefreshMetricState() == PTI_SUCCESS && metrics_enabled_.load(std::memory_order_acquire);
+  }
+
+  // Refresh metric state after ptiMetricsEnable() is called.
+  // This re-checks device metric status and updates metrics_enabled_ flag.
+  // Serialized on refresh_mutex_: unlike the constructor path, this can be reached
+  // concurrently from GetDeviceCount()/GetDevices() and mutates the shared device maps.
+  inline pti_result RefreshMetricState() {
+    std::lock_guard<std::mutex> refresh_lock(refresh_mutex_);
+
+    // Another thread may have completed the refresh while we waited for the lock.
+    if (metrics_enabled_.load(std::memory_order_acquire)) {
+      return PTI_SUCCESS;
+    }
+
+    auto status = InitializeDevicesWithMetrics();
+    if (status != PTI_SUCCESS) {
+      return status;
+    }
+
+    // Re-hook trace metrics API if not already enabled
+    if (!trace_api_enabled_) {
+      trace_api_enabled_ = (HookTraceMetricsAPI() == PTI_SUCCESS) ? true : false;
+    }
+    return PTI_SUCCESS;
+  }
+
+  inline pti_result GetDeviceCount(uint32_t *device_count) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2358,8 +2342,8 @@ class PtiMetricsCollectorHandler {
     return PTI_SUCCESS;
   }
 
-  inline pti_result GetDevices(pti_device_properties_t *pDevices, uint32_t *device_count) const {
-    if (metrics_enabled_ == false) {
+  inline pti_result GetDevices(pti_device_properties_t *pDevices, uint32_t *device_count) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2441,9 +2425,11 @@ class PtiMetricsCollectorHandler {
     return false;
   }
 
+  // Not const: MetricsUsable() rebuilds the cached device/metric-group state when metrics have
+  // been enabled since it was last built.
   inline pti_result GetMetricGroupCount(pti_device_handle_t device_handle,
-                                        uint32_t *metrics_group_count) const {
-    if (metrics_enabled_ == false) {
+                                        uint32_t *metrics_group_count) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2465,10 +2451,11 @@ class PtiMetricsCollectorHandler {
     return PTI_SUCCESS;
   }
 
+  // Not const: see GetMetricGroupCount().
   inline pti_result GetMetricGroups(pti_device_handle_t device_handle,
                                     pti_metrics_group_properties_t *metrics_groups,
-                                    uint32_t *metrics_group_count) const {
-    if (metrics_enabled_ == false) {
+                                    uint32_t *metrics_group_count) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2524,9 +2511,10 @@ class PtiMetricsCollectorHandler {
     return PTI_SUCCESS;
   }
 
+  // Not const: see GetMetricGroupCount().
   inline pti_result GetMetrics(pti_metrics_group_handle_t metrics_group_handle,
-                               pti_metric_properties_t *metrics) const {
-    if (metrics_enabled_ == false) {
+                               pti_metric_properties_t *metrics) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2579,7 +2567,7 @@ class PtiMetricsCollectorHandler {
   inline pti_result ConfigureMetricGroups(
       pti_device_handle_t device_handle,
       pti_metrics_group_collection_params_t *metric_config_params, uint32_t metrics_group_count) {
-    if (metrics_enabled_ == false) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2689,7 +2677,7 @@ class PtiMetricsCollectorHandler {
   }
 
   pti_result StartCollection(pti_device_handle_t device_handle, bool start_paused = false) {
-    if (metrics_enabled_ == false) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2784,7 +2772,7 @@ class PtiMetricsCollectorHandler {
   }
 
   pti_result PauseCollection(pti_device_handle_t device_handle) {
-    if (metrics_enabled_ == false) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2852,7 +2840,7 @@ class PtiMetricsCollectorHandler {
   }
 
   pti_result ResumeCollection(pti_device_handle_t device_handle) {
-    if (metrics_enabled_ == false) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2921,7 +2909,7 @@ class PtiMetricsCollectorHandler {
   }
 
   pti_result StopCollection(pti_device_handle_t device_handle) {
-    if (metrics_enabled_ == false) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -2998,7 +2986,7 @@ class PtiMetricsCollectorHandler {
   pti_result GetCalculatedData(pti_device_handle_t device_handle,
                                pti_metrics_group_handle_t metrics_group_handle,
                                pti_value_t *metrics_values_buffer, uint32_t *metrics_values_count) {
-    if (metrics_enabled_ == false) {
+    if (!MetricsUsable()) {
       return PTI_ERROR_DRIVER;
     }
 
@@ -3081,15 +3069,101 @@ class PtiMetricsCollectorHandler {
   mutable std::shared_mutex profilers_mutex_;  // Protects: all profiler maps
 
   std::unordered_map<pti_device_handle_t, std::mutex> device_mutexes_;
-  mutable std::mutex device_mutexes_mutex_;  // Protects: device_mutexes_ map
+  mutable std::mutex device_mutexes_mutex_;  // Protects: device_mutexes_ map, and insertion into
+                                             // device_collection_active_ by the refresh path
 
   // Collection state tracking
   enum class CollectionState { DISABLED, ENABLED, PAUSED };
   std::unordered_map<pti_device_handle_t, CollectionState> device_collection_active_;
 
-  bool metrics_enabled_;
-  bool trace_api_enabled_;
+  // mutable so that the const MetricsCachedStateUsable() can clear it when it observes that
+  // metrics have been disabled since the state was cached.
+  mutable std::atomic<bool> metrics_enabled_{false};
+  bool trace_api_enabled_ = false;
   HMODULE loader_lib_;
+
+  // Serializes RefreshMetricState()/InitializeDevicesWithMetrics(), which mutate devices_,
+  // metric_groups_, string_pool_ and trace_api_enabled_. The constructor runs before the
+  // instance is reachable, so only the post-construction refresh path needs this.
+  std::mutex refresh_mutex_;
+
+  // Private helper to initialize devices and check metric status.
+  // Can be called from constructor or later when metrics are enabled via ptiMetricsEnable().
+  pti_result InitializeDevicesWithMetrics() {
+    // Check if metrics are enabled via environment variable
+    const bool metrics_enabled_via_env = ::utils::GetEnv("ZET_ENABLE_METRICS") == "1";
+    size_t enabled_count = 0;
+
+    ZeDriverInit init_drivers{};
+    auto l0_initialized = init_drivers.Success();
+    // Initialize devices during construction
+    if (l0_initialized) {
+      // Only reinitialize if devices_ is empty (first call or needs refresh)
+      if (devices_.empty()) {
+        devices_ = utils::ze::GetUniqueDeviceList(init_drivers.Drivers());
+        SPDLOG_DEBUG("In {} found {} devices", __func__, devices_.size());
+      }
+
+      // Pre-populate device mutexes and metric groups for all devices
+      for (auto device : devices_) {
+        if (!metrics_enabled_via_env &&
+            !pti::metrics::MetricStateManager::Instance().IsMetricEnabled(device)) {
+          SPDLOG_WARN("Metrics are disabled for device: {}", static_cast<void *>(device));
+          continue;
+        }
+
+        pti_device_handle_t device_handle = static_cast<pti_device_handle_t>(device);
+        {
+          std::lock_guard<std::mutex> device_map_lock(device_mutexes_mutex_);
+          device_mutexes_[device_handle];  // Creates mutex
+          device_collection_active_[device_handle] = CollectionState::DISABLED;
+        }
+
+        // Get device properties and register device name
+        ze_device_properties_t device_props;
+        std::memset(&device_props, 0, sizeof(device_props));
+        device_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+        if (zeDeviceGetProperties(device, &device_props) == ZE_RESULT_SUCCESS) {
+          string_pool_.Get(device_props.name);
+        }
+
+        if (metric_groups_.find(device) == metric_groups_.end()) {
+          utils::ze::FindMetricGroups(device, metric_groups_[device]);
+
+          // Register all metric group names and descriptions
+          for (auto group : metric_groups_[device]) {
+            RegisterMetricGroupStrings(group);
+          }
+        }
+        ++enabled_count;
+      }
+    } else {
+      SPDLOG_ERROR("Level Zero driver initialization failed");
+    }
+
+    const bool enabled = (enabled_count == devices_.size()) && !devices_.empty();
+    metrics_enabled_.store(l0_initialized && enabled, std::memory_order_release);
+
+    if (!enabled) {
+#ifndef _WIN32
+      if (enabled_count == 0) {
+        SPDLOG_WARN(
+            "Please also make sure: "
+            "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
+            "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
+            "is set to 0.");
+      }
+#endif /* _WIN32 */
+
+      SPDLOG_WARN(
+          "Metrics collection is not enabled on all devices present in the system. "
+          "Please make sure environment variable ZET_ENABLE_METRICS is set to 1, "
+          "or call ptiMetricsEnable() before calling any metrics collection APIs.");
+
+      return PTI_ERROR_METRICS_ENABLE_FAILED;
+    }
+    return PTI_SUCCESS;
+  }
 
   void RegisterMetricGroupStrings(zet_metric_group_handle_t group) {
     zet_metric_group_properties_t group_props;

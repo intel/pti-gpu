@@ -10,6 +10,7 @@
 
 #include "pc_sampling/pti_pc_sampling_collector.h"
 #include "pc_sampling/pti_pc_sampling_internal.h"
+#include "pti/pti_metrics.h"
 
 pti_result ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle) {
   return pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().Create(handle);
@@ -367,5 +368,16 @@ pti_result ptiPcSamplingDisable(pti_pc_sampling_handle_t handle) {
 
   pti::pc_sampling::ClearProfiledDeviceData(handle);
 
-  return pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().Destroy(handle);
+  pti_result destroy_result =
+      pti::pc_sampling::PtiPcSamplingHandleStorage::Instance().Destroy(handle);
+
+  // Release this handle's metrics reference. The reference count in MetricStateManager
+  // decides whether the driver actually disables metrics.
+  pti_result disable_status = ptiMetricsDisable(nullptr);
+  if (disable_status != PTI_SUCCESS) {
+    SPDLOG_WARN("{}: Failed to disable metrics: {}", __FUNCTION__,
+                ptiResultTypeToString(disable_status));
+  }
+
+  return destroy_result;
 }

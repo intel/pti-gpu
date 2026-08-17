@@ -23,6 +23,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "demangle.h"
@@ -142,6 +143,31 @@ inline std::vector<ze_device_handle_t> GetDeviceList(
 }
 
 inline std::vector<ze_device_handle_t> GetDeviceList() { return GetDeviceList(GetDriverList()); }
+
+// Remove duplicate device handles while preserving discovery order (O(n) using unordered_set).
+// The same physical device can be reported by more than one driver handle, so any code that
+// enumerates devices across all drivers must deduplicate before using the result as a set.
+inline void DedupDeviceList(std::vector<ze_device_handle_t>& device_list) {
+  std::unordered_set<ze_device_handle_t> seen;
+  auto end =
+      std::remove_if(device_list.begin(), device_list.end(),
+                     [&seen](ze_device_handle_t device) { return !seen.insert(device).second; });
+  device_list.erase(end, device_list.end());
+}
+
+// Enumerate the devices of the given drivers with duplicates removed. Prefer this over calling
+// GetDeviceList() followed by DedupDeviceList() -- callers that need a device *set* almost always
+// want both steps, and returning by value keeps the deduplication from being forgotten.
+inline std::vector<ze_device_handle_t> GetUniqueDeviceList(
+    const std::vector<ze_driver_handle_t>& driver_list) {
+  std::vector<ze_device_handle_t> device_list = GetDeviceList(driver_list);
+  DedupDeviceList(device_list);
+  return device_list;
+}
+
+inline std::vector<ze_device_handle_t> GetUniqueDeviceList() {
+  return GetUniqueDeviceList(GetDriverList());
+}
 
 inline std::vector<ze_device_handle_t> GetSubDeviceList(ze_device_handle_t device) {
   PTI_ASSERT(device != nullptr);

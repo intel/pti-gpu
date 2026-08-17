@@ -199,7 +199,19 @@ class GemmMetricsScopeFixtureTest : public ::testing::Test {
   inline static OverheadTestStats overhead_stats;
 
  protected:
+  bool metrics_enabled_by_setup_ = false;  // Track if we enabled metrics in SetUp
+
   void SetUp() override {
+    // Enable metrics first - required before calling ptiMetricsGetDevices
+    bool metrics_already_enabled = (utils::GetEnv("ZET_ENABLE_METRICS") == "1");
+    if (!metrics_already_enabled) {
+      auto status = ptiMetricsEnable(nullptr);
+      if (status != PTI_SUCCESS) {
+        GTEST_SKIP() << "Metrics cannot be enabled. ptiMetricsEnable() returned: " << status;
+      }
+      metrics_enabled_by_setup_ = true;  // We enabled metrics, need to disable in TearDown
+    }
+
     uint32_t device_count = 0;
     pti_result result = PTI_SUCCESS;
     result = ptiMetricsGetDevices(nullptr, &device_count);
@@ -246,6 +258,12 @@ class GemmMetricsScopeFixtureTest : public ::testing::Test {
     EXPECT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), PTI_SUCCESS);
     EXPECT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), PTI_SUCCESS);
     EXPECT_EQ(ptiFlushAllViews(), PTI_SUCCESS);
+
+    // Disable metrics if we enabled them in SetUp
+    if (metrics_enabled_by_setup_) {
+      ptiMetricsDisable(nullptr);
+      metrics_enabled_by_setup_ = false;
+    }
   }
 
   void ConfigureOrSkipIfNonUniform(pti_scope_collection_handle_t scope_handle,
@@ -640,12 +658,10 @@ TEST_F(GemmMetricsScopeFixtureTest, InvalidHandleAcrossApi) {
 // REGULAR TESTS (Non-parameterized)
 // ============================================================================
 
-TEST_F(GemmMetricsScopeFixtureTest, MetricsEnabled) {
-  bool metrics_enabled = (utils::GetEnv("ZET_ENABLE_METRICS") == "1");
-  EXPECT_EQ(metrics_enabled, true);
-}
-
 TEST_F(GemmMetricsScopeFixtureTest, GetDevices) {
+  // SetUp has already enabled metrics (and TearDown releases that single reference).
+  // Enabling again here would take a reference that nothing releases, leaving metrics
+  // enabled on the device for every later test in this binary.
   uint32_t device_count = 0;
   EXPECT_EQ(ptiMetricsGetDevices(nullptr, &device_count), PTI_SUCCESS);
   EXPECT_NE(device_count, static_cast<uint32_t>(0));

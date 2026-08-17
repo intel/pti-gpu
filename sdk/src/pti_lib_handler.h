@@ -109,6 +109,8 @@ class PtiLibHandler {
   decltype(&ptiMetricsGetDevices) ptiMetricsGetDevices_ = nullptr;                        // NOLINT
   decltype(&ptiMetricsStartCollection) ptiMetricsStartCollection_ = nullptr;              // NOLINT
   decltype(&ptiMetricsGetCalculatedData) ptiMetricsGetCalculatedData_ = nullptr;          // NOLINT
+  decltype(&ptiMetricsEnable) ptiMetricsEnable_ = nullptr;                                // NOLINT
+  decltype(&ptiMetricsDisable) ptiMetricsDisable_ = nullptr;                              // NOLINT
   decltype(&ptiCallbackSubscribe) ptiCallbackSubscribe_ = nullptr;                        // NOLINT
   decltype(&ptiCallbackUnsubscribe) ptiCallbackUnsubscribe_ = nullptr;                    // NOLINT
   decltype(&ptiCallbackEnableDomain) ptiCallbackEnableDomain_ = nullptr;                  // NOLINT
@@ -234,6 +236,9 @@ class PtiLibHandler {
     PTI_VIEW_GET_SYMBOL(ptiMetricsGetDevices);
     PTI_VIEW_GET_SYMBOL(ptiMetricsStartCollection);
     PTI_VIEW_GET_SYMBOL(ptiMetricsGetCalculatedData);
+
+    PTI_VIEW_GET_SYMBOL(ptiMetricsEnable);
+    PTI_VIEW_GET_SYMBOL(ptiMetricsDisable);
 
     PTI_VIEW_GET_SYMBOL(ptiCallbackSubscribe);
     PTI_VIEW_GET_SYMBOL(ptiCallbackUnsubscribe);

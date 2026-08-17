@@ -38,6 +38,16 @@ endif()
 # Must be called after LevelZero::level-zero target is available.
 DetectSystemLevelZeroMetricApi()
 
+# Metric tests enable metrics at runtime through ptiMetricsEnable(). When the system
+# loader does not export the on-demand APIs, that call cannot work and the tests need
+# ZET_ENABLE_METRICS=1 in the environment instead -- the L0 loader latches this variable
+# at zeInit(), so it must come from ctest rather than from inside the test process.
+# Kept as a list so that no empty ENVIRONMENT entry is passed when the APIs are present.
+set(PTI_METRIC_TEST_PROPS "")
+if(NOT HAVE_ZET_DEVICE_METRIC_API)
+  list(APPEND PTI_METRIC_TEST_PROPS ENVIRONMENT "ZET_ENABLE_METRICS=1")
+endif()
+
 if (NOT TARGET unified-runtime::loader)
   find_package(unified-runtime)
 endif()
@@ -200,6 +210,26 @@ if(HAVE_SYCL)
 
   target_link_libraries(vecsqadd_metrics_suite PUBLIC spdlog::spdlog
     GTest::gtest_main Pti::pti_view ${FS_LIB})
+
+  # Metric enable/disable tests. These exercise the on-demand ptiMetricsEnable path and
+  # skip themselves when ZET_ENABLE_METRICS=1 is set, so they deliberately do not get
+  # ${PTI_METRIC_TEST_PROPS}.
+  add_executable(metric_enable_disable_test metric_enable_disable_test.cc)
+  target_include_directories(
+    metric_enable_disable_test
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
+
+  target_compile_definitions(metric_enable_disable_test PUBLIC PTI_LEVEL_ZERO=1)
+
+  target_link_libraries(metric_enable_disable_test PUBLIC spdlog::spdlog
+    GTest::gtest_main Pti::pti_view LevelZero::level-zero)
+
+  gtest_discover_tests(
+    metric_enable_disable_test
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES LABELS "unit")
 
 
 
@@ -525,7 +555,7 @@ if(HAVE_SYCL)
     vecsqadd_metrics_suite
     DISCOVERY_TIMEOUT 60
     PROPERTIES
-       ENVIRONMENT ZET_ENABLE_METRICS=1
+       ${PTI_METRIC_TEST_PROPS}
        LABELS "functional"
        LABELS "metrics"
        LABELS "hw-metrics")
@@ -535,7 +565,7 @@ if(HAVE_SYCL)
     multi_thread_metrics_suite
     DISCOVERY_TIMEOUT 60
     PROPERTIES
-        ENVIRONMENT ZET_ENABLE_METRICS=1
+        ${PTI_METRIC_TEST_PROPS}
         TIMEOUT 20
         LABELS "functional"
         LABELS "metrics"
@@ -545,7 +575,7 @@ if(HAVE_SYCL)
     metrics_scope_gemm_suite
     DISCOVERY_TIMEOUT 60
     PROPERTIES
-       ENVIRONMENT ZET_ENABLE_METRICS=1
+       ${PTI_METRIC_TEST_PROPS}
        LABELS "functional"
        LABELS "metrics"
        LABELS "hw-metrics-scope")
@@ -563,7 +593,7 @@ if(HAVE_SYCL)
     metrics_scope_parallel
     DISCOVERY_TIMEOUT 60
     PROPERTIES
-       ENVIRONMENT ZET_ENABLE_METRICS=1
+       ${PTI_METRIC_TEST_PROPS}
        LABELS "functional"
        LABELS "metrics"
        LABELS "hw-metrics-scope")
@@ -861,14 +891,14 @@ gtest_discover_tests(
   pc_sampling_basic_test
   DISCOVERY_TIMEOUT 60
   PROPERTIES
-    ENVIRONMENT ZET_ENABLE_METRICS=1
+    ${PTI_METRIC_TEST_PROPS}
     LABELS "unit")
 
 gtest_discover_tests(
   pc_sampling_internal_test
   DISCOVERY_TIMEOUT 60
   PROPERTIES
-    ENVIRONMENT ZET_ENABLE_METRICS=1
+    ${PTI_METRIC_TEST_PROPS}
     LABELS "unit"
     LABELS "metrics"
     LABELS "hw-metrics")
@@ -878,7 +908,7 @@ if(HAVE_SYCL)
     pc_sampling_functional_test
     DISCOVERY_TIMEOUT 60
     PROPERTIES
-      ENVIRONMENT ZET_ENABLE_METRICS=1
+      ${PTI_METRIC_TEST_PROPS}
       LABELS "functional"
       LABELS "metrics"
       LABELS "hw-metrics")

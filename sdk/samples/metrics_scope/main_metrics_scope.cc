@@ -221,12 +221,6 @@ static ParsedDeviceIndices ParseDeviceIndices(const std::string &csv, size_t num
 int main(int argc, char *argv[]) {
   std::cout << "PTI Metrics Scope Example\n";
 
-#ifndef _WIN32
-  setenv("ZET_ENABLE_METRICS", "1", 0);  // Don't overwrite if already set
-#else
-  _putenv_s("ZET_ENABLE_METRICS", "1");
-#endif
-
   unsigned size = 1024;
   unsigned repeat_count = 1;
   std::string devices_arg = "auto";

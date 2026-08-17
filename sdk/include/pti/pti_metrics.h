@@ -39,6 +39,46 @@ typedef struct _pti_device_properties_t {
 
 
 /*****************************************************************************
+                           METRIC ENABLE/DISABLE
+*****************************************************************************/
+
+/**
+ * @brief Enable metrics collection for a device or all devices
+ *
+ * This function enables metrics collection on the specified device. Before calling ptiMetricsGetDevices and
+ * other similar functions, ptiMetricsEnable must be called.
+ *
+ * @param[in] device                        Device handle. If NULL, enables metrics for all devices.
+ *
+ * @return pti_result
+ *         - PTI_SUCCESS: Metrics enabled successfully
+ *         - PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED: Feature not supported by driver; env ZET_ENABLE_METRICS=1 needs to be set
+ *         - PTI_ERROR_DRIVER: Driver error during enable operation, or no devices found
+ *         - PTI_ERROR_NOT_IMPLEMENTED: pti library not loaded or does not export this API
+ *         - PTI_ERROR_INTERNAL: Internal error
+ */
+pti_result PTI_EXPORT
+ptiMetricsEnable(pti_device_handle_t device);
+
+/**
+ * @brief Disable metrics collection for a device or all devices
+ *
+ * This function disables metrics collection on the specified device. Every ptiMetricsEnable call
+ * must be matched with a ptiMetricsDisable call.
+ *
+ * @param[in] device                        Device handle. If NULL, disables metrics for all devices.
+ *
+ * @return pti_result
+ *         - PTI_SUCCESS: Metrics disabled successfully (or reference count decremented)
+ *         - PTI_ERROR_DRIVER: Driver error during disable operation
+ *         - PTI_ERROR_NOT_IMPLEMENTED: pti library not loaded or does not export this API
+ *         - PTI_ERROR_INTERNAL: Internal error
+ */
+pti_result PTI_EXPORT
+ptiMetricsDisable(pti_device_handle_t device);
+
+
+/*****************************************************************************
                                  METRIC
 *****************************************************************************/
 
@@ -128,9 +168,10 @@ typedef struct _pti_metrics_group_properties_t {
 
 /**
  * @brief Get the properties of all devices on the system on which metric collection can be done
- * usage: 1- Call ptiMetricsGetDevices(NULL, device_count) to discover the required buffer size; the required buffer size will be written to device_count.
- *        2- Allocate devices buffer of size sizeof(pti_device_properties_t) * device_count
- *        3- Call ptiMetricsGetDevices(devices, device_count) to get the properties of the discovered devices written to devices
+ * usage: 1- Call ptiMetricsEnable(device) to enable metrics collection on the specified device, before calling ptiMetricsGetDevices.
+ *        2- Call ptiMetricsGetDevices(NULL, device_count) to discover the required buffer size; the required buffer size will be written to device_count.
+ *        3- Allocate devices buffer of size sizeof(pti_device_properties_t) * device_count
+ *        4- Call ptiMetricsGetDevices(devices, device_count) to get the properties of the discovered devices written to devices
  *
  * @param[in/out] devices                   Pointer to the array of devices. If NULL, the number of devices is returned in *device_count
  *                                          if not NULL, it should point to the buffer of size: sizeof(pti_device_description_t) * (*device_count)
@@ -148,10 +189,11 @@ ptiMetricsGetDevices(pti_device_properties_t* devices,
 
 /**
  * @brief Get the properties of the metric groups supported by the device
- * Usage: 1- Call ptiMetricsGetMetricGroups(device_handle, null, metrics_group_count) to discover the required buffer size; the required buffer size will be written
+ * Usage: 1- Call ptiMetricsEnable(device) to enable metrics collection on the specified device, before calling ptiMetricsGetMetricGroups.
+ *        2- Call ptiMetricsGetMetricGroups(device_handle, null, metrics_group_count) to discover the required buffer size; the required buffer size will be written
  *        to metrics_group_count.
- *        2- Allocate metrics_groups buffer of size sizeof(pti_metrics_group_properties_t) * metrics_group_count
- *        3- Call ptiMetricsGetMetricGroups(device_handle, metrics_groups, metrics_group_count) again to get the properties of the discovered metric groups written
+ *        3- Allocate metrics_groups buffer of size sizeof(pti_metrics_group_properties_t) * metrics_group_count
+ *        4- Call ptiMetricsGetMetricGroups(device_handle, metrics_groups, metrics_group_count) again to get the properties of the discovered metric groups written
  *           to the supplied buffer
  *
  * @param[in] device_handle                  Device handle
@@ -171,9 +213,10 @@ ptiMetricsGetMetricGroups(pti_device_handle_t device_handle,
 
 /**
  * @brief Get properties for all metrics in a metric group.
- * Usage: 1- Get available metric groups on a specified device using ptiMetricsGetMetricGroups
- *        2- In the metric group properties structure of the metric group of interest, allocate buffer _metric_properties of size sizeof(pti_metric_properties_t) * _metric_count
- *        3- call ptiMetricsGetMetricsProperties(metrics_group_handle, _metric_properties) to get the metric properties written to the supplied buffer
+ * Usage: 1- Call ptiMetricsEnable(device) to enable metrics collection on the specified device, before calling ptiMetricsGetMetricsProperties.
+ *        2- Get available metric groups on a specified device using ptiMetricsGetMetricGroups
+ *        3- In the metric group properties structure of the metric group of interest, allocate buffer _metric_properties of size sizeof(pti_metric_properties_t) * _metric_count
+ *        4- call ptiMetricsGetMetricsProperties(metrics_group_handle, _metric_properties) to get the metric properties written to the supplied buffer
  *
  * @param[in] metrics_group_handle           Metric group handle
  * @param[in/out] metrics                    Buffer where to save metric properties for the specified metric group
@@ -194,7 +237,7 @@ typedef struct _pti_metrics_group_collection_params_t {
 } pti_metrics_group_collection_params_t;
 
 /**
- * @brief Configure metric groups of interest.
+ * @brief Configure metric groups of interest. Call ptiMetricsEnable to enable metrics collection before calling ptiMetricsConfigureCollection.
  * Note: only 1 metric group of type PTI_METRIC_GROUP_TYPE_TIME_BASED can be specified at this time.
  * TODO: add support for multiple metric groups and different types
  *
@@ -211,7 +254,9 @@ ptiMetricsConfigureCollection(pti_device_handle_t device_handle,
 
 /**
  * @brief Start metrics collection on specified device
- * Note: ptiMetricsConfigureCollection must be called first to configure the metric group(s) of interest
+ * Note:
+ * 1. Call ptiMetricsEnable to enable metrics collection before starting the collection.
+ * 2. ptiMetricsConfigureCollection must be called first to configure the metric group(s) of interest
  *
  * @param[in] device_handle                  Device handle
  *
@@ -222,7 +267,9 @@ ptiMetricsStartCollection(pti_device_handle_t device_handle);
 
 /**
  * @brief Start metrics collection on specified device in paused mode
- * Note: ptiMetricsConfigureCollection must be called first to configure the metric group(s) of interest
+ * Note:
+ * 1. Call ptiMetricsEnable to enable metrics collection before starting the collection.
+ * 2. ptiMetricsConfigureCollection must be called first to configure the metric group(s) of interest
  *
  * @param[in] device_handle                  Device handle
  *

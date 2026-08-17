@@ -329,6 +329,38 @@ pti_result ptiMetricsGetDevices(pti_device_properties_t* devices, uint32_t* devi
   }
 }
 
+pti_result ptiMetricsEnable(pti_device_handle_t device) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsEnable_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsEnable_(device);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
+pti_result ptiMetricsDisable(pti_device_handle_t device) {
+  try {
+    if (!pti::PtiLibHandler::Instance().ViewAvailable()) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    if (!pti::PtiLibHandler::Instance().ptiMetricsDisable_) {
+      return pti_result::PTI_ERROR_NOT_IMPLEMENTED;
+    }
+
+    return pti::PtiLibHandler::Instance().ptiMetricsDisable_(device);
+  } catch (...) {
+    return pti_result::PTI_ERROR_INTERNAL;
+  }
+}
+
 pti_result ptiMetricsGetMetricGroups(pti_device_handle_t device_handle,
                                      pti_metrics_group_properties_t* metrics_groups,
                                      uint32_t* metrics_group_count) {

@@ -437,11 +437,37 @@ void PrintAllMetrics() {
   std::cout << "\n===========================================\n" << std::endl;
 }
 
+// Releases the ptiMetricsEnable() reference taken by InitializeTest(). main() has several exit
+// paths, so the matching ptiMetricsDisable() is done from a destructor rather than by hand.
+class MetricsEnableGuard {
+ public:
+  MetricsEnableGuard() = default;
+  ~MetricsEnableGuard() {
+    if (enabled_) {
+      ptiMetricsDisable(nullptr);
+    }
+  }
+  MetricsEnableGuard(const MetricsEnableGuard&) = delete;
+  MetricsEnableGuard& operator=(const MetricsEnableGuard&) = delete;
+
+  void MarkEnabled() { enabled_ = true; }
+
+ private:
+  bool enabled_ = false;
+};
+
+MetricsEnableGuard g_metrics_enable_guard;
+
 bool InitializeTest() {
   bool metrics_enabled = (samples_utils::GetEnv("ZET_ENABLE_METRICS") == "1");
   if (!metrics_enabled) {
-    std::cerr << "ERROR: ZET_ENABLE_METRICS must be set to 1" << std::endl;
-    return false;
+    pti_result status = ptiMetricsEnable(nullptr);
+    if (status != PTI_SUCCESS) {
+      std::cerr << "ERROR: Metrics are not enabled. ZET_ENABLE_METRICS must be set to 1"
+                << std::endl;
+      return false;
+    }
+    g_metrics_enable_guard.MarkEnabled();
   }
 
   if (!DiscoverDevicesThreadSafe(g_devices)) {
