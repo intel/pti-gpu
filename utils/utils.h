@@ -8,6 +8,7 @@
 #define PTI_UTILS_UTILS_H_
 
 #if defined(_WIN32)
+#define NOMINMAX
 #include <windows.h>
 #else
 #include <unistd.h>
