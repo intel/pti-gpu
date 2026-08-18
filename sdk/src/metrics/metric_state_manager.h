@@ -22,10 +22,8 @@ namespace metrics {
 // Global metric enable/disable state manager with per-device reference counting
 class MetricStateManager {
  public:
-  // Singleton instance
   static MetricStateManager& Instance();
 
-  // Public API methods
   // If device is nullptr, enables/disables metrics for all devices
   pti_result EnableMetric(pti_device_handle_t device);
   pti_result DisableMetric(pti_device_handle_t device);
@@ -41,11 +39,9 @@ class MetricStateManager {
   MetricStateManager(const MetricStateManager&) = delete;
   MetricStateManager& operator=(const MetricStateManager&) = delete;
 
-  // Helper methods
   pti_result EnableSingleDevice(ze_device_handle_t device);
   pti_result DisableSingleDevice(ze_device_handle_t device);
 
-  // Per-device reference count: device handle -> reference count
   std::unordered_map<ze_device_handle_t, int32_t> device_ref_counts_;
 
   // Protects device_ref_counts_. A shared_mutex rather than a plain mutex because

@@ -141,9 +141,7 @@ void RunVecsqadd(TestType a_test_type) {
 class VecsqaddMetricsFixtureTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Called right after constructor before each test
     if (utils::GetEnv("ZET_ENABLE_METRICS") != "1") {
-      // Enable metrics
       pti_result status = ptiMetricsEnable(nullptr);
       if (status == PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED ||
           status == PTI_ERROR_NOT_IMPLEMENTED) {
@@ -204,7 +202,6 @@ class VecsqaddMetricsFixtureTest : public ::testing::Test {
     for (const auto &device : devices) {
       ptiMetricsStopCollection(device._handle);  // Ignore errors - may already be stopped
     }
-    // Called right before destructor after each test
     ptiMetricsDisable(nullptr);
     devices.clear();
     metric_groups.clear();

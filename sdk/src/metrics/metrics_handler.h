@@ -3087,18 +3087,14 @@ class PtiMetricsCollectorHandler {
   // instance is reachable, so only the post-construction refresh path needs this.
   std::mutex refresh_mutex_;
 
-  // Private helper to initialize devices and check metric status.
   // Can be called from constructor or later when metrics are enabled via ptiMetricsEnable().
   pti_result InitializeDevicesWithMetrics() {
-    // Check if metrics are enabled via environment variable
     const bool metrics_enabled_via_env = ::utils::GetEnv("ZET_ENABLE_METRICS") == "1";
     size_t enabled_count = 0;
 
     ZeDriverInit init_drivers{};
     auto l0_initialized = init_drivers.Success();
-    // Initialize devices during construction
     if (l0_initialized) {
-      // Only reinitialize if devices_ is empty (first call or needs refresh)
       if (devices_.empty()) {
         devices_ = utils::ze::GetUniqueDeviceList(init_drivers.Drivers());
         SPDLOG_DEBUG("In {} found {} devices", __func__, devices_.size());
@@ -3119,7 +3115,6 @@ class PtiMetricsCollectorHandler {
           device_collection_active_[device_handle] = CollectionState::DISABLED;
         }
 
-        // Get device properties and register device name
         ze_device_properties_t device_props;
         std::memset(&device_props, 0, sizeof(device_props));
         device_props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
@@ -3130,7 +3125,6 @@ class PtiMetricsCollectorHandler {
         if (metric_groups_.find(device) == metric_groups_.end()) {
           utils::ze::FindMetricGroups(device, metric_groups_[device]);
 
-          // Register all metric group names and descriptions
           for (auto group : metric_groups_[device]) {
             RegisterMetricGroupStrings(group);
           }

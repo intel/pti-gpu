@@ -199,7 +199,7 @@ class GemmMetricsScopeFixtureTest : public ::testing::Test {
   inline static OverheadTestStats overhead_stats;
 
  protected:
-  bool metrics_enabled_by_setup_ = false;  // Track if we enabled metrics in SetUp
+  bool metrics_enabled_by_setup_ = false;
 
   void SetUp() override {
     // Enable metrics first - required before calling ptiMetricsGetDevices
@@ -209,7 +209,7 @@ class GemmMetricsScopeFixtureTest : public ::testing::Test {
       if (status != PTI_SUCCESS) {
         GTEST_SKIP() << "Metrics cannot be enabled. ptiMetricsEnable() returned: " << status;
       }
-      metrics_enabled_by_setup_ = true;  // We enabled metrics, need to disable in TearDown
+      metrics_enabled_by_setup_ = true;
     }
 
     uint32_t device_count = 0;
@@ -259,7 +259,6 @@ class GemmMetricsScopeFixtureTest : public ::testing::Test {
     EXPECT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), PTI_SUCCESS);
     EXPECT_EQ(ptiFlushAllViews(), PTI_SUCCESS);
 
-    // Disable metrics if we enabled them in SetUp
     if (metrics_enabled_by_setup_) {
       ptiMetricsDisable(nullptr);
       metrics_enabled_by_setup_ = false;

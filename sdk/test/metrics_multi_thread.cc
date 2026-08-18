@@ -127,13 +127,12 @@ void SubmitMinimalGpuWork(const sycl::device& device) {
 class MetricsMultiThreadingTest : public ::testing::Test {
  protected:
   std::vector<sycl::device> sycl_devices;
-  bool metrics_enabled_by_setup_ = false;  // Track if we enabled metrics in SetUp
+  bool metrics_enabled_by_setup_ = false;
 
   void SetUp() override {
     bool metrics_enabled = (utils::GetEnv("ZET_ENABLE_METRICS") == "1");
     if (!metrics_enabled) {
-      // Enable metrics via on-demand API
-      pti_result metric_result = ptiMetricsEnable(nullptr);  // Enable for all devices
+      pti_result metric_result = ptiMetricsEnable(nullptr);
       if (metric_result == PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED ||
           metric_result == PTI_ERROR_NOT_IMPLEMENTED) {
         GTEST_SKIP() << "zetDeviceEnableMetricsExp not supported by driver, skipping test";

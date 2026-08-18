@@ -306,11 +306,10 @@ int main(int argc, char* argv[]) {
     try {
       bool metrics_enabled = (samples_utils::GetEnv("ZET_ENABLE_METRICS") == "1");
       if (!metrics_enabled) {
-        // Enable metrics via on-demand API
-        pti_result metric_result = ptiMetricsEnable(nullptr);  // Enable for all devices
+        pti_result metric_result = ptiMetricsEnable(nullptr);
         if (metric_result != PTI_SUCCESS) {
           std::cerr << "Error: Failed to enable metrics on the system, set ZET_ENABLE_METRICS=1 to enable." << std::endl;
-          return 1; // Exit if metrics cannot be enabled
+          return 1;
         }
       }
 
@@ -406,7 +405,6 @@ int main(int argc, char* argv[]) {
   delete[] next_base;
   delete[] vel_base;
 
-  // Disable metrics before cleanup
   if (sycl) {
     ptiMetricsDisable(nullptr);
   }

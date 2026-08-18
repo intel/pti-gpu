@@ -190,7 +190,6 @@ pti_result ptiMetricsScopeEnable(pti_scope_collection_handle_t* scope_collection
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
-    // Call ptiMetricsEnable() first to make sure metrics collection is enabled in the driver
     pti_result status = ptiMetricsEnable(nullptr);
     if (status != PTI_SUCCESS) {
       SPDLOG_ERROR("{}: Failed to enable metrics: {}", __FUNCTION__, ptiResultTypeToString(status));

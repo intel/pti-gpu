@@ -494,7 +494,6 @@ class PtiPcSamplingHandleStorage {
       return PTI_ERROR_PC_SAMPLING_UNSUPPORTED;
     }
 
-    // Enable metrics globally before creating the handle
     pti_result metric_status = ptiMetricsEnable(nullptr);
     if (metric_status != PTI_SUCCESS) {
       SPDLOG_ERROR("{}: Failed to enable metrics: {}", __FUNCTION__,

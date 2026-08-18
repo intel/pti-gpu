@@ -26,15 +26,12 @@ MetricStateManager& MetricStateManager::Instance() {
 }
 
 pti_result MetricStateManager::EnableSingleDevice(ze_device_handle_t device) {
-  // Check if device is already enabled
   auto it = device_ref_counts_.find(device);
   if (it != device_ref_counts_.end()) {
-    // Device already enabled, increment reference count
     it->second++;
     return PTI_SUCCESS;
   }
 
-  // Device not yet enabled, call L0 API
   ze_result_t status = zetDeviceEnableMetricsExp(device);
   if (status != ZE_RESULT_SUCCESS) {
     if (status == ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
@@ -50,7 +47,6 @@ pti_result MetricStateManager::EnableSingleDevice(ze_device_handle_t device) {
     }
   }
 
-  // Add device with reference count = 1
   device_ref_counts_[device] = 1;
   return PTI_SUCCESS;
 }
@@ -82,10 +78,10 @@ pti_result MetricStateManager::DisableSingleDevice(ze_device_handle_t device) {
 }
 
 pti_result MetricStateManager::EnableMetric(pti_device_handle_t device) {
-  // Check if metrics are already enabled via environment variable
   bool metrics_enabled_env = (::utils::GetEnv("ZET_ENABLE_METRICS") == "1");
   if (metrics_enabled_env) {
-    // Metrics are already enabled via environment variable, no need to enable again
+    // The driver already has metrics enabled on every device, so there is nothing to reference
+    // count here.
     return PTI_SUCCESS;
   }
 
@@ -101,8 +97,6 @@ pti_result MetricStateManager::EnableMetric(pti_device_handle_t device) {
   std::lock_guard<std::shared_mutex> lock(state_mutex_);
 
   if (device == nullptr) {
-    // Enable for all devices.
-    //
     // Enumerate through init_drivers.Drivers() rather than the argument-less overload.
     // ZeDriverInit unions the drivers reported by zeDriverGet with those from zeInitDrivers, so
     // the argument-less overload can miss devices that PtiMetricsCollectorHandler still discovers
@@ -139,23 +133,21 @@ pti_result MetricStateManager::EnableMetric(pti_device_handle_t device) {
     }
     return PTI_SUCCESS;
   } else {
-    // Enable for specific device
     return EnableSingleDevice(reinterpret_cast<ze_device_handle_t>(device));
   }
 }
 
 pti_result MetricStateManager::DisableMetric(pti_device_handle_t device) {
-  // Check if metrics are already enabled via environment variable
   bool metrics_enabled_env = (::utils::GetEnv("ZET_ENABLE_METRICS") == "1");
   if (metrics_enabled_env) {
-    // Metrics are already enabled via environment variable, no needs to enable again
+    // EnableMetric() took no reference in this mode, so there is nothing to release. The driver
+    // keeps metrics enabled for the lifetime of the process.
     return PTI_SUCCESS;
   }
 
   std::lock_guard<std::shared_mutex> lock(state_mutex_);
 
   if (device == nullptr) {
-    // Disable for all currently enabled devices
     // Make a copy of keys since we may modify the map during iteration
     std::vector<ze_device_handle_t> devices_to_disable;
     devices_to_disable.reserve(device_ref_counts_.size());
@@ -173,13 +165,11 @@ pti_result MetricStateManager::DisableMetric(pti_device_handle_t device) {
     }
     return overall_status;
   } else {
-    // Disable for specific device
     return DisableSingleDevice(reinterpret_cast<ze_device_handle_t>(device));
   }
 }
 
 bool MetricStateManager::IsMetricEnabled(pti_device_handle_t device) {
-  // Check if metrics are enabled via environment variable
   bool metrics_enabled_env = (::utils::GetEnv("ZET_ENABLE_METRICS") == "1");
   if (metrics_enabled_env) {
     return true;
@@ -190,10 +180,8 @@ bool MetricStateManager::IsMetricEnabled(pti_device_handle_t device) {
   std::shared_lock<std::shared_mutex> lock(state_mutex_);
 
   if (device == nullptr) {
-    // Check if any device has metrics enabled
     return !device_ref_counts_.empty();
   } else {
-    // Check if specific device has metrics enabled
     ze_device_handle_t ze_device = reinterpret_cast<ze_device_handle_t>(device);
     auto it = device_ref_counts_.find(ze_device);
     return (it != device_ref_counts_.end() && it->second > 0);
