@@ -7,6 +7,7 @@
 #ifndef UTILS_LIBRARY_LOADER_H_
 #define UTILS_LIBRARY_LOADER_H_
 
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -48,6 +49,19 @@ class LibraryLoader {
     }
   }
 
+#if defined(__linux__)
+  // The caller owns this handle and releases it when the recovery chain completes.
+  static std::unique_ptr<LibraryLoader> Preload(const std::string& lib_name, std::string& error) {
+    auto* const handle = dlopen(lib_name.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (handle == nullptr) {
+      const auto* const dl_error = dlerror();
+      error = dl_error != nullptr ? dl_error : "unknown dlopen failure";
+      return nullptr;
+    }
+    return std::unique_ptr<LibraryLoader>(new LibraryLoader(handle));
+  }
+#endif  // __linux__
+
   LibraryLoader(const LibraryLoader&) = delete;
   LibraryLoader(LibraryLoader&& other) noexcept { std::swap(other.handle_, handle_); }
   LibraryLoader& operator=(const LibraryLoader&) = delete;
@@ -80,6 +94,10 @@ class LibraryLoader {
   }
 
  private:
+#if defined(__linux__)
+  explicit LibraryLoader(Handle handle) : handle_(handle) {}
+#endif  // __linux__
+
   Handle handle_ = nullptr;
 };
 

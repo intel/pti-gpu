@@ -75,6 +75,135 @@ if(PTI_IS_MULTI_CONFIG)
   set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}")
 endif()
 
+# Dependency pre-load tests. libld_dependency_preload_test.cc documents the layout
+# these libraries make up: the test executable stands in for the PTI interface
+# library and the "core" stubs in preload_stage/pti for the PTI Core library.
+#
+# Linux only: what this exercises is ELF specific - resolution by soname, $ORIGIN
+# based RUNPATH, and the loader error text MissingSonameFromLoaderError parses.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(PTI_PRELOAD_STAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/preload_stage")
+
+  # Builds synthetic library pti_preload_<id> from libld_preload_stub.c.
+  # OUTPUT_DIR controls its location; NEEDS <id> and ALSO_NEEDS <id> add DT_NEEDED dependencies.
+  # Only ORIGIN_RUNPATH gives it RUNPATH $ORIGIN; other stubs have no RPATH.
+  function(AddPreloadStub id)
+    cmake_parse_arguments(STUB "UNDEFINED_SYMBOL;ORIGIN_RUNPATH" "OUTPUT_DIR;NEEDS;ALSO_NEEDS" "" ${ARGN})
+
+    set(stub_target "pti_preload_${id}")
+    add_library(${stub_target} SHARED "${CMAKE_CURRENT_SOURCE_DIR}/libld_preload_stub.c")
+    target_compile_definitions(${stub_target} PRIVATE "PRELOAD_STUB_NAME=${id}")
+
+    set(stub_install_rpath "")
+    if(STUB_ORIGIN_RUNPATH)
+      set(stub_install_rpath "$ORIGIN")
+    endif()
+    set_target_properties(
+      ${stub_target}
+      PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${STUB_OUTPUT_DIR}"
+                 # Overrides CMAKE_BUILD_RPATH. Most stubs must leave their
+                 # dependencies unresolved so the pre-load path can recover them.
+                 BUILD_WITH_INSTALL_RPATH ON
+                 INSTALL_RPATH "${stub_install_rpath}")
+
+    # Same reason the product libraries do this: keep the Intel compiler's runtime
+    # libraries off DT_NEEDED, so a stub cannot fail over a dependency the test
+    # never set up.
+    target_compile_options(${stub_target} PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+    target_link_options(${stub_target} PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+
+    if(STUB_NEEDS)
+      target_compile_definitions(${stub_target} PRIVATE "PRELOAD_STUB_NEEDS=${STUB_NEEDS}")
+      target_link_libraries(${stub_target} PRIVATE "pti_preload_${STUB_NEEDS}")
+    endif()
+
+    if(STUB_ALSO_NEEDS)
+      target_compile_definitions(${stub_target} PRIVATE "PRELOAD_STUB_ALSO_NEEDS=${STUB_ALSO_NEEDS}")
+      target_link_libraries(${stub_target} PRIVATE "pti_preload_${STUB_ALSO_NEEDS}")
+    endif()
+
+    if(STUB_UNDEFINED_SYMBOL)
+      target_compile_definitions(${stub_target} PRIVATE PRELOAD_STUB_UNDEFINED_SYMBOL)
+    endif()
+
+    add_dependencies(libld_dependency_preload_test ${stub_target})
+  endfunction()
+
+  add_executable(libld_dependency_preload_test libld_dependency_preload_test.cc)
+
+  target_include_directories(
+    libld_dependency_preload_test
+    PRIVATE "${PROJECT_SOURCE_DIR}/src"
+            "${PROJECT_SOURCE_DIR}/src/utils"
+            "${PROJECT_SOURCE_DIR}/include"
+            ${PROJECT_BINARY_DIR}
+            "${PROJECT_BINARY_DIR}/include")
+
+  target_link_libraries(libld_dependency_preload_test PRIVATE GTest::gtest_main spdlog::spdlog
+    ${CMAKE_DL_LIBS} ${FS_LIB})
+
+  # The trace log is what makes a failure here readable. Compiling the macros in is
+  # only half of it; the test raises the runtime level, see LogLevelFromEnvironment.
+  target_compile_definitions(libld_dependency_preload_test PRIVATE
+    SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
+
+  set_target_properties(
+    libld_dependency_preload_test
+    PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PTI_PRELOAD_STAGE_DIR}"
+               # Stands in for the interface library's RUNPATH, which is what makes
+               # the loader's search reach the stage directory and nothing above it.
+               BUILD_WITH_INSTALL_RPATH ON
+               INSTALL_RPATH "$ORIGIN")
+
+  # Where the Core library is deployed, also the 1st fallback search directory.
+  set(PTI_PRELOAD_CORE_DIR "${PTI_PRELOAD_STAGE_DIR}/${PTI_MODULE_SUBDIR}")
+
+  # Next to the test executable, so the loader's own search reaches it through
+  # RUNPATH $ORIGIN. This is the wheel's case.
+  AddPreloadStub(dep_bysoname OUTPUT_DIR "${PTI_PRELOAD_STAGE_DIR}")
+  # Next to the core libraries instead: in a fallback search directory but outside
+  # RUNPATH, so only naming the file outright reaches it.
+  AddPreloadStub(dep_byfullpath OUTPUT_DIR "${PTI_PRELOAD_CORE_DIR}")
+  # A dependency of a dependency: reachable, but not before chain_tail is.
+  AddPreloadStub(dep_chain_tail OUTPUT_DIR "${PTI_PRELOAD_STAGE_DIR}")
+  AddPreloadStub(dep_chain_head OUTPUT_DIR "${PTI_PRELOAD_STAGE_DIR}" NEEDS dep_chain_tail)
+  # Reachable neither way.
+  AddPreloadStub(dep_unreachable OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/preload_unreachable")
+  # Recovery pre-loads tail, then head. Core's other direct dependency remains unreachable.
+  AddPreloadStub(dep_cleanup_tail OUTPUT_DIR "${PTI_PRELOAD_STAGE_DIR}")
+  AddPreloadStub(dep_cleanup_head OUTPUT_DIR "${PTI_PRELOAD_STAGE_DIR}" NEEDS dep_cleanup_tail)
+  AddPreloadStub(dep_cleanup_missing OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/preload_unreachable")
+
+  # Stand-ins for the PTI Core library, one per dependency shape above.
+  AddPreloadStub(core_bysoname OUTPUT_DIR "${PTI_PRELOAD_CORE_DIR}" NEEDS dep_bysoname)
+  AddPreloadStub(core_byfullpath OUTPUT_DIR "${PTI_PRELOAD_CORE_DIR}" NEEDS dep_byfullpath)
+  AddPreloadStub(core_chain OUTPUT_DIR "${PTI_PRELOAD_CORE_DIR}" NEEDS dep_chain_head)
+  AddPreloadStub(core_unreachable OUTPUT_DIR "${PTI_PRELOAD_CORE_DIR}" NEEDS dep_unreachable)
+  AddPreloadStub(core_cleanup_failure OUTPUT_DIR "${PTI_PRELOAD_CORE_DIR}"
+                 NEEDS dep_cleanup_head ALSO_NEEDS dep_cleanup_missing)
+  AddPreloadStub(core_undefined OUTPUT_DIR "${PTI_PRELOAD_CORE_DIR}" UNDEFINED_SYMBOL)
+
+  # Ordinary ELF resolution case: the synthetic Core and its dependency share a
+  # directory, and Core alone carries RUNPATH $ORIGIN.
+  set(PTI_ORIGIN_STAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/origin_stage")
+  AddPreloadStub(dep_origin OUTPUT_DIR "${PTI_ORIGIN_STAGE_DIR}")
+  AddPreloadStub(core_origin OUTPUT_DIR "${PTI_ORIGIN_STAGE_DIR}" NEEDS dep_origin ORIGIN_RUNPATH)
+
+  add_executable(libld_origin_test libld_origin_test.cc)
+  add_dependencies(libld_origin_test pti_preload_core_origin)
+  target_compile_definitions(
+    libld_origin_test
+    PRIVATE PTI_ORIGIN_CORE_LIBRARY_PATH="$<TARGET_FILE:pti_preload_core_origin>")
+  target_link_libraries(libld_origin_test PRIVATE GTest::gtest_main ${CMAKE_DL_LIBS})
+
+  gtest_discover_tests(
+    libld_dependency_preload_test
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES
+       LABELS "unit"
+       LABELS "libload")
+endif()
+
 if (TARGET LevelZero::level-zero)
   add_executable(ze_event_manager_tests ze_event_manager_tests.cc)
   target_include_directories(
@@ -1032,10 +1161,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
                ${FS_LIB})
 
   #
-  # 1) Bug warning in CMake: it does not accept LABELS separated by ';'.
-  # 2) We use DISCOVERY_MODE PRE_TEST to prevent invoking tests when
-  #    INTEL_LIBITTNOTIFY64 is not set, which would otherwise produce
-  #    spurious warnings during the build.
+  # Bug warning in CMake: it does not accept LABELS separated by ';'.
   #
   gtest_discover_tests(
      itt_test_suite
@@ -1049,26 +1175,50 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
   # CCL ITT shared libraries test
   add_subdirectory(ccl_itt_shared_libs)
 
-  # Library loading regression tests (standalone executable)
-  add_executable(lib_load_suite lib_load_suite.cc)
-  target_include_directories(
-    lib_load_suite
-    PUBLIC "${PROJECT_SOURCE_DIR}/include"
-     "${PROJECT_BINARY_DIR}/include"
-  )
-  # Intentionally NOT linking against Pti::pti_view to test library loading scenarios
-  target_link_libraries(lib_load_suite PRIVATE
-    GTest::gtest_main
-    ${CMAKE_DL_LIBS})
+  # Real-library preload integration test. The stage models a wheel layout: Core is in
+  # pti/, while the interface and the complete non-system XPTI runtime closure are one
+  # directory above it. No ambient loader path is permitted.
+  if(TARGET Xpti::xpti)
+    set(PTI_LIB_LOAD_PRELOAD_STAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/lib_load_preload")
+    set(PTI_LIB_LOAD_PRELOAD_CORE_DIR
+        "${PTI_LIB_LOAD_PRELOAD_STAGE_DIR}/${PTI_MODULE_SUBDIR}")
 
-  gtest_discover_tests(
-     lib_load_suite
-     DISCOVERY_TIMEOUT 60
-     PROPERTIES
-        ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Pti::pti_view>:$<TARGET_FILE_DIR:Pti::pti>:$ENV{LD_LIBRARY_PATH}"
+    add_custom_target(
+      lib_load_stage
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${PTI_LIB_LOAD_PRELOAD_CORE_DIR}"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:pti_view>"
+              "${PTI_LIB_LOAD_PRELOAD_STAGE_DIR}"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:pti>"
+              "${PTI_LIB_LOAD_PRELOAD_CORE_DIR}"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:Xpti::xpti>"
+              "${PTI_LIB_LOAD_PRELOAD_STAGE_DIR}"
+      COMMAND ${CMAKE_COMMAND}
+              "-DPTI_XPTI_LIBRARY=$<TARGET_FILE:Xpti::xpti>"
+              "-DPTI_XPTI_RUNTIME_DIRECTORY=$<TARGET_FILE_DIR:Xpti::xpti>"
+              "-DPTI_PRELOAD_STAGE_DIRECTORY=${PTI_LIB_LOAD_PRELOAD_STAGE_DIR}"
+              -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/stage_xpti_runtime_dependencies.cmake"
+      DEPENDS pti pti_view
+      VERBATIM)
+
+    add_executable(lib_load_suite lib_load_suite.cc)
+    add_dependencies(lib_load_suite lib_load_stage)
+    target_compile_definitions(
+      lib_load_suite
+      PRIVATE
+        PTI_PRELOAD_VIEW_LIBRARY_PATH="${PTI_LIB_LOAD_PRELOAD_STAGE_DIR}/$<TARGET_FILE_NAME:pti_view>"
+        PTI_PRELOAD_CORE_LIBRARY_PATH="${PTI_LIB_LOAD_PRELOAD_CORE_DIR}/$<TARGET_FILE_NAME:pti>")
+    # Intentionally does not link against either PTI library.
+    target_link_libraries(lib_load_suite PRIVATE GTest::gtest_main ${CMAKE_DL_LIBS})
+
+    gtest_discover_tests(
+      lib_load_suite
+      DISCOVERY_TIMEOUT 60
+      PROPERTIES
+        ENVIRONMENT "LD_LIBRARY_PATH="
         LABELS "unit"
         LABELS "libload"
         LABELS "itt")
+  endif()
 
   add_executable(itt_basic itt_basic.cc)
   target_link_options(itt_basic PUBLIC -fsycl)
@@ -1107,6 +1257,17 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
     endif()
   endif()
 
+endif()
+
+# Register this after all other libload tests so default serial CTest output shows it last.
+if(TARGET libld_origin_test)
+  gtest_discover_tests(
+    libld_origin_test
+    DISCOVERY_TIMEOUT 60
+    PROPERTIES
+      ENVIRONMENT "LD_LIBRARY_PATH="
+      LABELS "unit"
+      LABELS "libload")
 endif()
 
 if(PTI_FUZZ)
