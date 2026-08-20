@@ -19,8 +19,6 @@ pti_result ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle) {
 pti_result ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
                                   const pti_device_handle_t* devices, size_t device_count,
                                   uint32_t sampling_period_ns) {
-  constexpr size_t kMaxProfiledDevicesPerSession = 1;
-
   const pti_result handle_status = pti::pc_sampling::ValidateHandle(handle);
   if (handle_status != PTI_SUCCESS) {
     return handle_status;
@@ -35,51 +33,7 @@ pti_result ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
     return PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED;
   }
 
-  if (devices != nullptr && device_count == 0) {
-    SPDLOG_ERROR(
-        "{}: Invalid PC sampling configuration parameters passed, devices = {} device_count = {}",
-        __FUNCTION__, static_cast<const void*>(devices), device_count);
-    return PTI_ERROR_BAD_ARGUMENT;
-  }
-
-  // Find out list of supported devices
-  handle->configured_devices_.clear();
-
-  if (devices == nullptr) {
-    // all supported devices will be profiled if no device filter is provided
-    auto supported_devices = pti::pc_sampling::GetAllDevices();
-    if (supported_devices.empty()) {
-      SPDLOG_ERROR("{}: No supported devices found for PC sampling", __FUNCTION__);
-      return PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED;
-    }
-    const size_t devices_to_copy =
-        (std::min)(supported_devices.size(), kMaxProfiledDevicesPerSession);
-    handle->configured_devices_.reserve(devices_to_copy);
-    std::copy_n(supported_devices.begin(), devices_to_copy,
-                std::back_inserter(handle->configured_devices_));
-  } else {
-    for (size_t i = 0; i < device_count; ++i) {
-      if (pti::pc_sampling::IsPCSamplingSupportedDevice(devices[i])) {
-        handle->configured_devices_.push_back(devices[i]);
-        if (handle->configured_devices_.size() >= kMaxProfiledDevicesPerSession) {
-          break;
-        }
-      } else {
-        SPDLOG_WARN("{}: device {} does not support PC sampling and will be ignored", __FUNCTION__,
-                    static_cast<const void*>(devices[i]));
-      }
-    }
-  }
-
-  if (handle->configured_devices_.empty()) {
-    SPDLOG_ERROR("{}: None of the provided device(s) support PC sampling", __FUNCTION__);
-    return PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED;
-  }
-
-  handle->sampling_period_ns_ =
-      (sampling_period_ns == 0) ? pti::pc_sampling::kDefaultSamplingPeriodNs : sampling_period_ns;
-  handle->state_ = pti::pc_sampling::PcSamplingState::kConfigured;
-  return PTI_SUCCESS;
+  return pti::pc_sampling::ApplyConfiguration(handle, devices, device_count, sampling_period_ns);
 }
 
 pti_result ptiPcSamplingQueryCollectionBufferSize(pti_pc_sampling_handle_t, size_t*) {
@@ -90,12 +44,10 @@ pti_result ptiPcSamplingSetCollectionBufferSize(pti_pc_sampling_handle_t, size_t
   return PTI_ERROR_NOT_IMPLEMENTED;
 }
 
-pti_result ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle) {
-  const pti_result configured_status = pti::pc_sampling::ValidateConfiguredHandle(handle);
-  if (configured_status != PTI_SUCCESS) {
-    return configured_status;
-  }
+namespace {
 
+// Starts collection on a handle that already carries a resolved configuration.
+pti_result StartConfiguredCollection(pti_pc_sampling_handle_t handle) {
   pti::pc_sampling::ClearProfiledDeviceData(handle);
 
   pti_device_handle_t profiling_device = nullptr;
@@ -133,6 +85,46 @@ pti_result ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle) {
 
   handle->state_ = pti::pc_sampling::PcSamplingState::kStarted;
   return PTI_SUCCESS;
+}
+
+}  // namespace
+
+pti_result ptiPcSamplingStartCollection(pti_pc_sampling_handle_t handle) {
+  const pti_result startable_status = pti::pc_sampling::ValidateStartableHandle(handle);
+  if (startable_status != PTI_SUCCESS) {
+    return startable_status;
+  }
+
+  // Configuration is optional: apply the default one when the caller skipped
+  // ptiPcSamplingConfigure.
+  const bool applied_default_configuration =
+      handle->state_ == pti::pc_sampling::PcSamplingState::kEnabled;
+  if (applied_default_configuration) {
+    SPDLOG_INFO(
+        "{}: PC sampling was not configured explicitly, applying the default configuration "
+        "(PTI selected device, sampling period {} ns)",
+        __FUNCTION__, pti::pc_sampling::kDefaultSamplingPeriodNs);
+    const pti_result default_configure_status = pti::pc_sampling::ApplyConfiguration(
+        handle, /*devices=*/nullptr, /*device_count=*/0, /*sampling_period_ns=*/0);
+    if (default_configure_status != PTI_SUCCESS) {
+      return default_configure_status;
+    }
+  }
+
+  const pti_result start_status = StartConfiguredCollection(handle);
+  if (start_status != PTI_SUCCESS && applied_default_configuration) {
+    // Leave the handle as the caller found it, so an explicit ptiPcSamplingConfigure
+    // is still accepted after a failed implicitly configured start.
+    SPDLOG_WARN(
+        "{}: failed to start collection on the default configuration, reverting handle to "
+        "unconfigured state. Check suitable default configuration for the device.",
+        __FUNCTION__);
+    handle->configured_devices_.clear();
+    handle->sampling_period_ns_ = pti::pc_sampling::kDefaultSamplingPeriodNs;
+    handle->state_ = pti::pc_sampling::PcSamplingState::kEnabled;
+  }
+
+  return start_status;
 }
 
 pti_result ptiPcSamplingStopCollection(pti_pc_sampling_handle_t handle) {

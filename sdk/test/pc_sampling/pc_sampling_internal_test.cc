@@ -101,7 +101,7 @@ TEST_F(PcSamplingTest, RejectsDeviceFilteredConfigurationForUnsupportedDevices) 
 
   pti_device_handle_t configured_device[1] = {reinterpret_cast<pti_device_handle_t>(0x1)};
   EXPECT_EQ(ptiPcSamplingConfigure(handle, configured_device, 1, 0),
-            PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED);
+            PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL);
 
   handle->configured_devices_.push_back(configured_device[0]);
   EXPECT_TRUE(pti::pc_sampling::IsConfiguredDevice(handle, configured_device[0]));
@@ -137,6 +137,90 @@ TEST_F(PcSamplingTest, ConfigurePreservesExplicitSamplingPeriod) {
   ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, device_count, kExplicitSamplingPeriodNs),
             PTI_SUCCESS);
   EXPECT_EQ(handle->sampling_period_ns_, kExplicitSamplingPeriodNs);
+
+  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+TEST_F(PcSamplingTest, StartWithoutConfigureAppliesDefaultDeviceAndSamplingPeriod) {
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+
+  ASSERT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kEnabled);
+  ASSERT_TRUE(handle->configured_devices_.empty());
+  ASSERT_FALSE(handle->supported_devices_.empty());
+
+  ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
+
+  // Start must resolve the same configuration as ptiPcSamplingConfigure(handle, nullptr, 0, 0):
+  // the first supported device and the default sampling period.
+  EXPECT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kStarted);
+  EXPECT_EQ(handle->sampling_period_ns_, pti::pc_sampling::kDefaultSamplingPeriodNs);
+  ASSERT_EQ(handle->configured_devices_.size(), 1u);
+  EXPECT_EQ(handle->configured_devices_.front(), handle->supported_devices_.front());
+
+  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+TEST_F(PcSamplingTest, StartKeepsExplicitConfigurationInsteadOfDefaults) {
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+
+  constexpr uint32_t kExplicitSamplingPeriodNs = 42'000;
+  ASSERT_FALSE(handle->supported_devices_.empty());
+  pti_device_handle_t device_handle[1] = {handle->supported_devices_.front()};
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, device_handle, 1, kExplicitSamplingPeriodNs),
+            PTI_SUCCESS);
+  ASSERT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kConfigured);
+
+  ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
+
+  // An explicitly configured handle must not be overwritten by the default configuration.
+  EXPECT_EQ(handle->sampling_period_ns_, kExplicitSamplingPeriodNs);
+  ASSERT_EQ(handle->configured_devices_.size(), 1u);
+  EXPECT_EQ(handle->configured_devices_.front(), device_handle[0]);
+
+  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+TEST_F(PcSamplingTest, ConfigureRejectsDeviceFilterWithZeroCount) {
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+
+  pti_device_handle_t device_handle[1] = {reinterpret_cast<pti_device_handle_t>(0x1)};
+  EXPECT_EQ(ptiPcSamplingConfigure(handle, device_handle, 0, 0), PTI_ERROR_BAD_ARGUMENT);
+  EXPECT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kEnabled);
+
+  // A failed configuration must keep the handle configurable with the defaults.
+  ASSERT_FALSE(handle->supported_devices_.empty());
+  ASSERT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0), PTI_SUCCESS);
+  EXPECT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kConfigured);
+  EXPECT_EQ(handle->sampling_period_ns_, pti::pc_sampling::kDefaultSamplingPeriodNs);
+  ASSERT_EQ(handle->configured_devices_.size(), 1u);
+  EXPECT_EQ(handle->configured_devices_.front(), handle->supported_devices_.front());
+
+  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+TEST_F(PcSamplingTest, StartCollectionRejectsStartedAndStoppedStates) {
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+
+  // ENABLED is startable because configuration is optional; the CONFIGURED case is
+  // covered by StartKeepsExplicitConfigurationInsteadOfDefaults.
+  ASSERT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kEnabled);
+  ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
+  ASSERT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kStarted);
+
+  EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_ALREADY_STARTED);
+  EXPECT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kStarted);
+
+  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  ASSERT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kStopped);
+
+  EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED);
+  EXPECT_EQ(handle->state_, pti::pc_sampling::PcSamplingState::kStopped);
 
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
 }

@@ -25,7 +25,9 @@ extern "C" {
  *
  * Configuration:
  *   1. Call ptiPcSamplingEnable to create a collection handle
- *   2. Call ptiPcSamplingConfigure to select the devices to profile and the sampling period.
+ *   2. Call ptiPcSamplingConfigure to select the devices to profile and the sampling period (optional).
+ *      Skip it to collect with the default configuration: the device(s) PTI selects and the default
+ *      sampling period of 100000 ns. When used, it must be called before ptiPcSamplingStartCollection.
  *   3. Call ptiPcSamplingQueryCollectionBufferSize to query the recommended collection buffer size (optional)
  *   4. Call ptiPcSamplingSetCollectionBufferSize to set the collection buffer size (optional)
  *
@@ -139,16 +141,21 @@ ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle);
 
 /**
  * @brief Configure PC Sampling for a collection handle
- * 
+ *
+ * This call is optional; use it when you need to override the default configuration.
+ * It can be called only once and only right after ptiPcSamplingEnable, that is before
+ * ptiPcSamplingStartCollection.
+ *
  * @param[in] handle               Collection handle
  * @param[in] devices              Device filter; NULL profiles all available devices
  * @param[in] device_count         Number of entries in devices; ignored when devices is NULL
  * @param[in] sampling_period_ns   Sampling period in nanoseconds for all selected devices; 0 makes PTI use the default period of 100000 ns
  *
  * @return PTI_SUCCESS on successful configuration
- * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
- * @return PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED if handle is already configured or otherwise not in the initial state required for configuration
- * @return PTI_ERROR_NOT_IMPLEMENTED if a device-filtered configuration is requested
+ * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL or devices is not NULL while device_count is 0
+ * @return PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED if handle is already configured (explicitly or by ptiPcSamplingStartCollection) or otherwise not in the initial state required for configuration
+ * @return PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL if none of the requested devices supports PC Sampling
+ * @return PTI_ERROR_NOT_IMPLEMENTED if API is not present.
  */
 pti_result PTI_EXPORT
 ptiPcSamplingConfigure(pti_pc_sampling_handle_t handle,
@@ -183,11 +190,14 @@ ptiPcSamplingSetCollectionBufferSize(pti_pc_sampling_handle_t handle,
 /**
  * @brief Start PC Sampling collection
  *
+ * Applies the default configuration, by calling ptiPcSamplingConfigure with default params,
+ * if user does not configure before manually.
+ *
  * @param[in] handle             Collection handle
  *
  * @return PTI_SUCCESS when collection is started
  * @return PTI_ERROR_BAD_ARGUMENT if handle is NULL
- * @return PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED if collection is not in the configured state yet
+ * @return PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL if the default configuration cannot be applied because no device supporting PC Sampling is available
  * @return PTI_ERROR_PC_SAMPLING_ALREADY_STARTED if collection is already running
  * @return PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED if collection was already stopped
  */

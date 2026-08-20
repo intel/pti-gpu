@@ -19,7 +19,7 @@ bool InitializeProfilingEnvironment();
 
 // Enable PC sampling and create a collection handle.
 // This corresponds to ptiPcSamplingEnable().
-// Must be called before ConfigurePcSampling().
+// Must be called before ConfigurePcSampling() and StartPcSamplingCollection().
 bool EnablePcSampling();
 
 // Configure PC sampling with device selection and sampling period.
@@ -28,13 +28,15 @@ bool EnablePcSampling();
 //   device_count: Number of devices in the array, or 0 when devices is nullptr.
 //   sampling_period_ns: Sampling period in nanoseconds (e.g., 50000 for 50µs).
 // This corresponds to ptiPcSamplingConfigure().
-// Must be called after EnablePcSampling() and before StartPcSamplingCollection().
+// Optional: skip it to collect with the PTI defaults. When used, it must be called after
+// EnablePcSampling() and before StartPcSamplingCollection().
 bool ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count,
                          uint32_t sampling_period_ns);
 
 // Start PC sampling collection.
 // This corresponds to ptiPcSamplingStartCollection().
-// Must be called after ConfigurePcSampling().
+// Must be called after EnablePcSampling(). Applies the default configuration when
+// ConfigurePcSampling() was not called.
 bool StartPcSamplingCollection();
 
 // Stop PC sampling collection.

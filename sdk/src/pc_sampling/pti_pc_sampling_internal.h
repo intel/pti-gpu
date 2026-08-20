@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <new>
@@ -59,7 +60,9 @@ constexpr uint32_t kDefaultSamplingPeriodNs = 100'000;
  * @brief State machine for PC sampling collection lifecycle.
  *
  * Valid transitions:
- *   ENABLED     -> CONFIGURED (via Configure)
+ *   ENABLED     -> CONFIGURED (via Configure; optional)
+ *   ENABLED     -> CONFIGURED (via StartCollection, which applies the default configuration
+ *                              when Configure was not called)
  *   CONFIGURED  -> STARTED    (via StartCollection)
  *   STARTED     -> STOPPED    (via StopCollection)
  */
@@ -709,8 +712,75 @@ inline bool IsPCSamplingSupportedDevice(pti_device_handle_t device) {
   return PtiPcSamplingHandleStorage::Instance().IsSupported(device);
 }
 
-inline std::vector<pti_device_handle_t> GetAllDevices() {
+inline std::vector<pti_device_handle_t> GetAllSupportedDevices() {
   return PtiPcSamplingHandleStorage::Instance().GetSupportedDevices();
+}
+
+/**
+ * @brief Resolve the device filter and sampling period onto an enabled handle.
+ *
+ * Shared by the explicit ptiPcSamplingConfigure path and by the implicit default
+ * configuration ptiPcSamplingStartCollection applies when Configure was skipped.
+ * The caller is responsible for validating the handle and its state; on success
+ * the handle moves to the CONFIGURED state.
+ *
+ * @param[in] handle               Enabled collection handle
+ * @param[in] devices              Device filter; NULL selects the PTI-chosen device(s)
+ * @param[in] device_count         Number of entries in devices; ignored when devices is NULL
+ * @param[in] sampling_period_ns   Sampling period in nanoseconds; 0 selects the default period
+ *
+ * @return PTI_SUCCESS or appropriate error code
+ */
+inline pti_result ApplyConfiguration(pti_pc_sampling_handle_t handle,
+                                     const pti_device_handle_t* devices, size_t device_count,
+                                     uint32_t sampling_period_ns) {
+  if (devices != nullptr && device_count == 0) {
+    SPDLOG_ERROR(
+        "{}: Invalid PC sampling configuration parameters passed, devices = {} device_count = {}",
+        __FUNCTION__, static_cast<const void*>(devices), device_count);
+    return PTI_ERROR_BAD_ARGUMENT;
+  }
+
+  constexpr size_t kMaxProfiledDevicesPerSession = 1;
+
+  // Find out list of supported devices
+  handle->configured_devices_.clear();
+
+  if (devices == nullptr) {
+    // all supported devices will be profiled if no device filter is provided
+    auto supported_devices = GetAllSupportedDevices();
+    if (supported_devices.empty()) {
+      SPDLOG_ERROR("{}: No supported devices found for PC sampling", __FUNCTION__);
+      return PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL;
+    }
+    const size_t devices_to_copy =
+        (std::min)(supported_devices.size(), kMaxProfiledDevicesPerSession);
+    handle->configured_devices_.reserve(devices_to_copy);
+    std::copy_n(supported_devices.begin(), devices_to_copy,
+                std::back_inserter(handle->configured_devices_));
+  } else {
+    for (size_t i = 0; i < device_count; ++i) {
+      if (IsPCSamplingSupportedDevice(devices[i])) {
+        handle->configured_devices_.push_back(devices[i]);
+        if (handle->configured_devices_.size() >= kMaxProfiledDevicesPerSession) {
+          break;
+        }
+      } else {
+        SPDLOG_WARN("{}: device {} does not support PC sampling and will be ignored", __FUNCTION__,
+                    static_cast<const void*>(devices[i]));
+      }
+    }
+  }
+
+  if (handle->configured_devices_.empty()) {
+    SPDLOG_ERROR("{}: None of the provided device(s) support PC sampling", __FUNCTION__);
+    return PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL;
+  }
+
+  handle->sampling_period_ns_ =
+      (sampling_period_ns == 0) ? kDefaultSamplingPeriodNs : sampling_period_ns;
+  handle->state_ = PcSamplingState::kConfigured;
+  return PTI_SUCCESS;
 }
 
 inline pti_result EnsureStallReasons(pti_pc_sampling_handle_t handle) {
@@ -816,9 +886,12 @@ inline pti_result ValidateHandle(const pti_pc_sampling_handle_t handle) {
 }
 
 /**
- * @brief Validate handle is configured and ready to start collection.
+ * @brief Validate handle is in a state from which collection can be started.
+ *
+ * Both ENABLED and CONFIGURED are startable: configuration is optional and the
+ * default one is applied on start when it was skipped.
  */
-inline pti_result ValidateConfiguredHandle(const pti_pc_sampling_handle_t handle) {
+inline pti_result ValidateStartableHandle(const pti_pc_sampling_handle_t handle) {
   const pti_result handle_status = ValidateHandle(handle);
   if (handle_status != PTI_SUCCESS) {
     return handle_status;
@@ -836,8 +909,9 @@ inline pti_result ValidateConfiguredHandle(const pti_pc_sampling_handle_t handle
     return PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED;
   }
 
-  if (handle->state_ != PcSamplingState::kConfigured) {
-    SPDLOG_ERROR("{}: collection not configured, current state is {}", __FUNCTION__,
+  if (handle->state_ != PcSamplingState::kEnabled &&
+      handle->state_ != PcSamplingState::kConfigured) {
+    SPDLOG_ERROR("{}: collection cannot be started, current state is {}", __FUNCTION__,
                  PcSamplingStateToString(handle->state_));
     return PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED;
   }

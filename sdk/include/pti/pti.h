@@ -29,11 +29,15 @@ extern "C" {
 #elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
 #define PTI_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #else
-/* Fallback for pre-C11: generates a compile error if condition is false */
-#define PTI_STATIC_ASSERT_CONCAT_(a, b) a##b
-#define PTI_STATIC_ASSERT_CONCAT(a, b) PTI_STATIC_ASSERT_CONCAT_(a, b)
+/* Fallback for pre-C11: declares an array with a negative size, so a false
+   condition is a compile error. Repeatedly declaring one extern array with a
+   compatible type is valid C89/C99, so this needs no per-assertion unique name;
+   a typedef-based form would need one, and can only be safely redefined in C11
+   (-Wtypedef-redefinition). Deriving that name from __LINE__ collides whenever
+   two PTI headers assert on the same line, and __COUNTER__ is diagnosed under
+   -pedantic by compilers that expose it as a C2y extension. */
 #define PTI_STATIC_ASSERT(cond, msg) \
-    typedef char PTI_STATIC_ASSERT_CONCAT(pti_static_assertion_, __LINE__)[(cond) ? 1 : -1]
+    extern char pti_static_assertion_failed[(cond) ? 1 : -1]
 #endif
 
 /**
@@ -89,13 +93,17 @@ typedef enum {
   PTI_ERROR_INTERNAL = 200,  //!< internal error
 
   PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED = 250,  //!< another PC sampling handle is already enabled
-  PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED = 251,  //!< handle is not in the required configuration state
+  PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED = 251,  //!< handle is not in the required configuration state;
+                                               //!< kept for backward compatibility, configuration
+                                               //!< failures are reported with
+                                               //!< PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL
   PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED = 252,  //!< handle is already configured - not in the initial state for configuration
   PTI_ERROR_PC_SAMPLING_ALREADY_STARTED = 253,  //!< collection is already running
   PTI_ERROR_PC_SAMPLING_NOT_STARTED = 254,  //!< collection has not started yet
   PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED = 255,  //!< collection is already stopped
   PTI_ERROR_PC_SAMPLING_NOT_STOPPED = 256,  //!< collection is not stopped yet
   PTI_ERROR_PC_SAMPLING_UNSUPPORTED = 257,  //!< PC sampling is not supported on the current system configuration (e.g. no devices with EUStallSampling support found)
+  PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL = 258,  //!< PC sampling configuration failed, e.g. none of the requested devices supports PC sampling
 
   PTI_RESULT_FORCE_UINT32 = 0x7fffffff
 } pti_result;

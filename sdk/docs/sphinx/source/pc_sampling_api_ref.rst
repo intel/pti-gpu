@@ -24,9 +24,16 @@ Configuration Functions
 =======================
 
 * :ref:`ptiPcSamplingEnable <ptiPcSamplingEnable>` - Create a collection handle
-* :ref:`ptiPcSamplingConfigure <ptiPcSamplingConfigure>` - Configure devices and sampling period
+* :ref:`ptiPcSamplingConfigure <ptiPcSamplingConfigure>` - Configure devices and sampling period (optional)
 * :ref:`ptiPcSamplingQueryCollectionBufferSize <ptiPcSamplingQueryCollectionBufferSize>` - Query recommended buffer size
 * :ref:`ptiPcSamplingSetCollectionBufferSize <ptiPcSamplingSetCollectionBufferSize>` - Set collection buffer size
+
+.. note::
+   ``ptiPcSamplingConfigure`` is optional and is only needed to override the defaults. When it is
+   skipped, ``ptiPcSamplingStartCollection`` applies the default configuration: the device(s) PTI
+   selects and the default sampling period of 100000 ns. The collection lifecycle is therefore
+   ``ptiPcSamplingEnable`` → ``ptiPcSamplingConfigure`` (optional) → ``ptiPcSamplingStartCollection``
+   → ``ptiPcSamplingStopCollection``.
 
 Collection Control Functions
 ============================

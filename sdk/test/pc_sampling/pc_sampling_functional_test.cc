@@ -202,7 +202,7 @@ TEST_F(PcSamplingTest, RejectsInvalidOrdering) {
   pti_pc_sampling_handle_t handle = nullptr;
   ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
 
-  EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_NOT_CONFIGURED);
+  // Configuration is optional, so only stopping is invalid on a freshly enabled handle.
   EXPECT_EQ(ptiPcSamplingStopCollection(handle), PTI_ERROR_PC_SAMPLING_NOT_STARTED);
 
   pti_device_handle_t device_handle[1] = {reinterpret_cast<pti_device_handle_t>(devices_.front())};
@@ -229,6 +229,103 @@ TEST_F(PcSamplingTest, RejectsInvalidOrdering) {
   EXPECT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0),
             PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED);
   EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED);
+
+  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+//-----------------------------------------------------------------------------
+// Optional Configuration Tests
+//-----------------------------------------------------------------------------
+
+TEST_F(PcSamplingTest, StartAppliesDefaultConfigurationWhenConfigureSkipped) {
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+  ASSERT_NE(handle, nullptr);
+
+  // enable -> start, without any ptiPcSamplingConfigure call.
+  ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
+
+  // The implicit configuration owns the handle from now on, exactly like an explicit one.
+  EXPECT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0),
+            PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED);
+  EXPECT_EQ(ptiPcSamplingStartCollection(handle), PTI_ERROR_PC_SAMPLING_ALREADY_STARTED);
+
+  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+  EXPECT_EQ(ptiPcSamplingConfigure(handle, nullptr, 0, 0),
+            PTI_ERROR_PC_SAMPLING_ALREADY_CONFIGURED);
+
+  // Results queries must be valid on the default configuration, the same way they are
+  // after an explicitly configured collection.
+  size_t reason_count = 0;
+  EXPECT_EQ(ptiPcSamplingGetStallReasons(handle, nullptr, &reason_count), PTI_SUCCESS);
+  EXPECT_GT(reason_count, 0u);
+
+  size_t profiled_device_count = 0;
+  ASSERT_EQ(ptiPcSamplingGetProfiledDevices(handle, nullptr, &profiled_device_count), PTI_SUCCESS);
+  ASSERT_EQ(profiled_device_count, 1u);
+  pti_device_handle_t profiled_device = nullptr;
+  ASSERT_EQ(ptiPcSamplingGetProfiledDevices(handle, &profiled_device, &profiled_device_count),
+            PTI_SUCCESS);
+  ASSERT_NE(profiled_device, nullptr);
+
+  // No workload ran, so a valid and empty result set is expected.
+  size_t kernel_count = 0;
+  EXPECT_EQ(ptiPcSamplingGetObservedKernelHandles(handle, profiled_device, nullptr, &kernel_count),
+            PTI_SUCCESS);
+  EXPECT_EQ(kernel_count, 0u);
+
+  EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
+}
+
+TEST_F(PcSamplingTest, CollectsDataWhenConfigureSkipped) {
+  sycl::queue queue = sycl::queue(sycl::gpu_selector_v, sycl::property::queue::in_order{});
+
+  pti_pc_sampling_handle_t handle = nullptr;
+  ASSERT_PC_SAMPLING_ENABLE_EQ_OR_SKIP(&handle, PTI_SUCCESS);
+  ASSERT_NE(handle, nullptr);
+
+  ASSERT_EQ(ptiPcSamplingStartCollection(handle), PTI_SUCCESS);
+  RunLargeKernelWorkload(queue);
+  ASSERT_EQ(ptiPcSamplingStopCollection(handle), PTI_SUCCESS);
+
+  size_t device_count = 0;
+  ASSERT_EQ(ptiPcSamplingGetProfiledDevices(handle, nullptr, &device_count), PTI_SUCCESS);
+  ASSERT_EQ(device_count, 1u);
+  std::vector<pti_device_handle_t> profiled_devices(device_count);
+  ASSERT_EQ(ptiPcSamplingGetProfiledDevices(handle, profiled_devices.data(), &device_count),
+            PTI_SUCCESS);
+  pti_device_handle_t device = profiled_devices[0];
+
+  size_t reason_count = 0;
+  ASSERT_EQ(ptiPcSamplingGetStallReasons(handle, nullptr, &reason_count), PTI_SUCCESS);
+  ASSERT_GT(reason_count, 0u);
+
+  pti_pc_sampling_device_status_t device_status{};
+  device_status._struct_size = sizeof(device_status);
+  ASSERT_EQ(ptiPcSamplingGetDeviceStatus(handle, device, &device_status), PTI_SUCCESS);
+  EXPECT_GT(device_status._total_sample_count, 0u);
+  EXPECT_GT(device_status._total_pc_count, 0u);
+
+  size_t kernel_count = 0;
+  ASSERT_EQ(ptiPcSamplingGetObservedKernelHandles(handle, device, nullptr, &kernel_count),
+            PTI_SUCCESS);
+  ASSERT_EQ(kernel_count, 1u);
+  std::vector<uint64_t> kernel_handles(kernel_count);
+  ASSERT_EQ(
+      ptiPcSamplingGetObservedKernelHandles(handle, device, kernel_handles.data(), &kernel_count),
+      PTI_SUCCESS);
+
+  pti_pc_sampling_kernel_info_t kernel_info{};
+  kernel_info._struct_size = sizeof(kernel_info);
+  std::vector<uint64_t> kernel_aggregated_samples(reason_count, 0);
+  kernel_info._aggregated_samples = kernel_aggregated_samples.data();
+  ASSERT_EQ(ptiPcSamplingGetObservedKernelInfo(handle, device, kernel_handles[0], &kernel_info),
+            PTI_SUCCESS);
+  EXPECT_EQ(kernel_info._reason_count, reason_count);
+  EXPECT_NE(kernel_info._kernel_name, nullptr);
+  EXPECT_GT(kernel_info._instructions_with_samples_count, 0u);
+  EXPECT_TRUE(std::any_of(kernel_aggregated_samples.begin(), kernel_aggregated_samples.end(),
+                          [](uint64_t value) { return value != 0; }));
 
   EXPECT_EQ(ptiPcSamplingDisable(handle), PTI_SUCCESS);
 }

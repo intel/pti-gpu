@@ -11,7 +11,7 @@
  * This sample demonstrates the complete PC sampling workflow:
  *   1. Initialize environment and enable PTI kernel view
  *   2. Enable PC sampling
- *   3. Configure PC sampling with devices and sampling period
+ *   3. Configure PC sampling with devices and sampling period (optional)
  *   4. Start PC sampling collection
  *   5. Run compute workloads (two GEMM kernels)
  *   6. Stop PC sampling collection
@@ -286,6 +286,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Step 3: Configure PC sampling (ptiPcSamplingConfigure)
+  // This step is optional: skipping it makes Step 4 collect with the PTI defaults
   // Pass nullptr and 0 to profile all available devices.
   // Users can pass specific device handles to profile a subset:
   //   pti_device_handle_t devices[] = {device_handle_1, device_handle_2};

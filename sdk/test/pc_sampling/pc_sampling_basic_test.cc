@@ -38,6 +38,21 @@ TEST(PcSamplingBasicTest, RejectsForeignHandle) {
   EXPECT_EQ(ptiPcSamplingDisable(&foreign_handle), PTI_ERROR_BAD_ARGUMENT);
 }
 
+TEST(PcSamplingBasicTest, ValidateStartableHandleRejectsNullAndForeignHandles) {
+  using pti::pc_sampling::PcSamplingState;
+
+  EXPECT_EQ(pti::pc_sampling::ValidateStartableHandle(nullptr), PTI_ERROR_BAD_ARGUMENT);
+
+  _pti_pc_sampling_handle_t foreign_handle;
+  EXPECT_EQ(pti::pc_sampling::ValidateStartableHandle(&foreign_handle), PTI_ERROR_BAD_ARGUMENT);
+
+  // A rejected handle must not pick up the default configuration that
+  // ptiPcSamplingStartCollection applies when ptiPcSamplingConfigure was skipped.
+  EXPECT_EQ(ptiPcSamplingStartCollection(&foreign_handle), PTI_ERROR_BAD_ARGUMENT);
+  EXPECT_EQ(foreign_handle.state_, PcSamplingState::kEnabled);
+  EXPECT_TRUE(foreign_handle.configured_devices_.empty());
+}
+
 TEST(PcSamplingBasicTest, ResultTypeToStringSupportsPcSamplingSpecificErrors) {
   EXPECT_STREQ(ptiResultTypeToString(PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED),
                "PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED");
@@ -53,6 +68,8 @@ TEST(PcSamplingBasicTest, ResultTypeToStringSupportsPcSamplingSpecificErrors) {
                "PTI_ERROR_PC_SAMPLING_ALREADY_STOPPED");
   EXPECT_STREQ(ptiResultTypeToString(PTI_ERROR_PC_SAMPLING_NOT_STOPPED),
                "PTI_ERROR_PC_SAMPLING_NOT_STOPPED");
+  EXPECT_STREQ(ptiResultTypeToString(PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL),
+               "PTI_ERROR_PC_SAMPLING_CONFIGURATION_FAIL");
 }
 
 TEST(PcSamplingBasicTest, PcSamplingStateToStringReturnsCorrectStrings) {
