@@ -222,7 +222,9 @@ jobs:
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          ctest --output-on-failure --preset ${{ matrix.preset }} -L "performance|quarantine"
+          REM TODO(PTI-473): perf-prof-gpu-overhead hangs on Windows and bricks the runner.
+          ctest --output-on-failure --preset ${{ matrix.preset }} -L "performance|quarantine" ^
+            -E "^perf-prof-gpu-overhead$"
           if %ERRORLEVEL% NEQ 0 (
             echo ::warning::Quarantined tests step failed.
           )
