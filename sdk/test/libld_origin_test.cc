@@ -12,6 +12,14 @@
 
 namespace {
 
+struct DlCloser {
+  void operator()(void* handle) const noexcept {
+    if (handle != nullptr) {
+      (void)dlclose(handle);
+    }
+  }
+};
+
 const char* LibraryPathForSymbol(const void* symbol) {
   Dl_info info{};
   if (dladdr(symbol, &info) == 0 || info.dli_fname == nullptr) {
@@ -28,7 +36,7 @@ TEST(OriginResolution, CoreResolvesColocatedDependency) {
   dlerror();
   void* raw_handle = dlopen(PTI_ORIGIN_CORE_LIBRARY_PATH, RTLD_NOW | RTLD_LOCAL);
   ASSERT_NE(raw_handle, nullptr) << "Failed to dlopen synthetic Core library: " << dlerror();
-  auto handle = std::unique_ptr<void, decltype(&dlclose)>(raw_handle, dlclose);
+  auto handle = std::unique_ptr<void, DlCloser>(raw_handle);
 
   using CoreSymbol = int (*)();
   dlerror();
