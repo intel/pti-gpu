@@ -96,11 +96,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
                  BUILD_WITH_INSTALL_RPATH ON
                  INSTALL_RPATH "${stub_install_rpath}")
 
-    # Same reason the product libraries do this: keep the Intel compiler's runtime
-    # libraries off DT_NEEDED, so a stub cannot fail over a dependency the test
-    # never set up.
-    target_compile_options(${stub_target} PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
-    target_link_options(${stub_target} PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+    # Keep icx's implicit runtime libraries out of DT_NEEDED. These fixtures test
+    # ELF dependency resolution with an empty LD_LIBRARY_PATH.
+    if(CMAKE_C_COMPILER_ID STREQUAL "IntelLLVM")
+      target_link_options(${stub_target} PRIVATE -no-intel-lib)
+    endif()
 
     if(STUB_NEEDS)
       target_compile_definitions(${stub_target} PRIVATE "PRELOAD_STUB_NEEDS=${STUB_NEEDS}")
