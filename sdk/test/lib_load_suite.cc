@@ -52,7 +52,7 @@ TEST(LibLoadTest, InterfacePreloadsCoreDependenciesWithoutLdLibraryPath) {
   void *direct_core_handle = dlopen(PTI_PRELOAD_CORE_LIBRARY_PATH, RTLD_NOW | RTLD_LOCAL);
   ASSERT_EQ(direct_core_handle, nullptr)
       << "staged Core unexpectedly loaded without interface-side pre-loading: " << dlerror();
-  void *raw_handle = dlopen(PTI_PRELOAD_VIEW_LIBRARY_PATH, RTLD_NOW | RTLD_LOCAL);
+  void *raw_handle = dlopen(PTI_PRELOAD_VIEW_LIBRARY_PATH, RTLD_NOW | RTLD_LOCAL | RTLD_NODELETE);
   ASSERT_NE(raw_handle, nullptr) << "Failed to dlopen staged libpti_view.so: " << dlerror();
   auto handle = std::unique_ptr<void, decltype(&dlclose)>(raw_handle, dlclose);
 
@@ -80,8 +80,4 @@ TEST(LibLoadTest, InterfacePreloadsCoreDependenciesWithoutLdLibraryPath) {
   ASSERT_NE(core_handle, nullptr) << "ptiViewGetTimestamp did not load staged libpti.so: "
                                   << dlerror();
   EXPECT_EQ(dlclose(core_handle), 0);
-
-  // Keep the interface loaded until process exit. Its PtiLibHandler singleton owns Core
-  // forwarding pointers and pre-loaded dependencies for the same lifetime.
-  (void)handle.release();
 }
