@@ -533,13 +533,22 @@ class PtiPcSamplingHandleStorage {
     }
 
     if (supported_device_metric_group_map.empty()) {
-      std::string err_msg = "";
 #ifndef _WIN32
-      err_msg +=
-          "Ensure /proc/sys/dev/i915/perf_stream_paranoid or "
-          "/proc/sys/dev/xe/observation_paranoid is set to 0. ";
+      SPDLOG_ERROR(
+          "{}: no devices supporting PC Sampling found.\n"
+          "Set the applicable Intel GPU driver paranoid mode to 0:\n"
+          "  i915: /proc/sys/dev/i915/perf_stream_paranoid\n"
+          "  xe:   /proc/sys/dev/xe/observation_paranoid\n"
+          "Also ensure that the installed Linux kernel and Intel GPU drivers support\n"
+          "EuStallSampling. The latest available driver versions are recommended.",
+          __FUNCTION__);
+#else
+      SPDLOG_ERROR(
+          "{}: no devices supporting PC Sampling found.\n"
+          "Ensure that the installed Intel GPU drivers support\n"
+          "EuStallSampling. The latest available driver versions are recommended.",
+          __FUNCTION__);
 #endif /* _WIN32 */
-      SPDLOG_ERROR("{}: no devices with EUStallSampling support found. {}", __FUNCTION__, err_msg);
       ptiMetricsDisable(nullptr);
       return PTI_ERROR_PC_SAMPLING_UNSUPPORTED;
     }
