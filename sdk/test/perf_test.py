@@ -57,24 +57,41 @@ def get_value(name, text):
         return None
 
 
+process_timeout_sec = 60  # approximate; overridden in main() from argv[4]
+
+
 def run_process(command, path, environ=None):
-    shell = False
-    if sys.platform == "win32":
-        shell = True
-    else:
-        command[0] = os.path.join(path, command[0])
+    command[0] = os.path.join(path, command[0])
 
     p = subprocess.Popen(
         command,
         cwd=path,
-        shell=shell,
+        shell=False,
         env=environ,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         encoding="latin-1",
         text=True,
     )
-    stdout, stderr = p.communicate()
+    try:
+        stdout, stderr = p.communicate(timeout=process_timeout_sec)
+    except subprocess.TimeoutExpired:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(p.pid)],
+                capture_output=True,
+            )
+        else:
+            p.kill()
+        try:
+            p.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            if p.stdout:
+                p.stdout.close()
+            if p.stderr:
+                p.stderr.close()
+        print(f"ERROR: process timed out after {process_timeout_sec}s: {command[0]}")
+        return None, None
 
     return stdout, stderr
 
@@ -107,8 +124,11 @@ def run_test(path, test_type="profiled", repetitions=15, warm_up_runs=1):
         print("\nWarm-up phase:")
         for i in range(warm_up_runs):
             print("  Warm-up run " + str(i + 1) + "...", end=" ", flush=True)
-            run_process(command_baseline, path)
-            run_process(command_test, path)
+            wb, _ = run_process(command_baseline, path)
+            wt, _ = run_process(command_test, path)
+            if wb is None or wt is None:
+                print("FAILED (timeout during warm-up)")
+                return False, None, None, None, None, None
             print("✓")
 
     print("\nMeasurement phase - runs: ")
@@ -122,6 +142,13 @@ def run_test(path, test_type="profiled", repetitions=15, warm_up_runs=1):
         # Interleaved: baseline first, then test (keeps CPU state similar)
         stdout_b, stderr_b = run_process(command_baseline, path)
         stdout_t, stderr_t = run_process(command_test, path)
+        if stdout_b is None or stdout_t is None:
+            print("FAILED (timeout)")
+            throughput_test.append(None)
+            throughput_baseline.append(None)
+            elapsed_test.append(None)
+            elapsed_baseline.append(None)
+            continue
         if stderr_t or stderr_b:
             print("WARNING (Detected stderr output)")
             print(stderr_t)
@@ -229,11 +256,45 @@ def process_data(values):
     return min_v, avg_v, med_v, max_v, std_v
 
 
+def usage():
+    print(f"Usage: {sys.argv[0]} <executable_path> [threshold] [test_type] [timeout]")
+    print("  executable_path  directory containing test binaries (required)")
+    print("  threshold        overhead threshold % to pass, default: 60")
+    print(
+        "  test_type        profiled | prof-gpu | linkonly | overhead, default: profiled"
+    )
+    print(
+        "  timeout          approximate budget in seconds divided across all process invocations"
+        " (10s floor per process), default: 60"
+    )
+
+
 def main():
+    global process_timeout_sec
+
+    if len(sys.argv) < 2:
+        usage()
+        return 1
+
     executable_path = sys.argv[1]
     print(" executable path: " + executable_path)
     threshold_overhead = float(sys.argv[2]) if len(sys.argv) > 2 else 60
     test_type = sys.argv[3] if len(sys.argv) > 3 else "profiled"
+    test_timeout = int(sys.argv[4]) if len(sys.argv) > 4 else 60
+
+    # Each repetition runs two processes (baseline + test), plus warm-up (also two).
+    # Distribute the approximate budget evenly; a 10s floor ensures each process
+    # gets a reasonable minimum even if the budget divided by invocations is small.
+    # Actual worst-case runtime may exceed test_timeout due to the floor.
+    repetitions = 1 if test_type == "overhead" else 15
+    warm_up_runs = 0 if test_type == "overhead" else 1
+    total_invocations = (repetitions + warm_up_runs) * 2
+    process_timeout_sec = max(10, test_timeout // total_invocations)
+    print(
+        f"Process timeout: {process_timeout_sec}s per invocation "
+        f"(total budget: {test_timeout}s, invocations: {total_invocations})"
+    )
+
     (
         Result,
         throughput_baseline,

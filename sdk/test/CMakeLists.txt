@@ -783,37 +783,54 @@ if(HAVE_SYCL)
     set(LINK_OVERHEAD_THRESHOLD 5)
   endif()
 
+  # Approximate total runtime budget (seconds) for each performance test,
+  # passed to perf_test.py. The script divides it across all subprocess
+  # invocations to derive a per-process timeout, with a 10s minimum floor,
+  # so the actual worst-case runtime may exceed this value. It is intentionally
+  # approximate: the goal is to bound runaway hangs, not enforce a hard deadline.
+  # No ctest TIMEOUT is set here: perf_test.py spawns subprocesses and is the
+  # only level that can kill them cleanly on timeout. A ctest-level kill would
+  # terminate the Python script but leave the child process orphaned and still
+  # holding GPU resources, which is exactly the hang this mechanism prevents.
+  set(PTI_PERF_TEST_APROXIMATE_TIMEOUT 60)
+
+  set(PTI_PERF_TESTS
+    perf-profiling-overhead
+    perf-prof-gpu-overhead
+    perf-link-overhead
+    perf-overhead-view)
+
   add_test(
     NAME perf-profiling-overhead
     COMMAND
       ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 60 profiled
+      ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
 
   add_test(
     NAME perf-prof-gpu-overhead
     COMMAND
       ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 32.5 prof-gpu
+      ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
-
 
   add_test(
     NAME perf-link-overhead
     COMMAND
       ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" ${LINK_OVERHEAD_THRESHOLD} linkonly
+      ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
 
   add_test(
     NAME perf-overhead-view
     COMMAND
       ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" ${L0_OVERHEAD_THRESHOLD} overhead
+      ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
 
-
   set_tests_properties(
-    perf-profiling-overhead perf-link-overhead PROPERTIES LABELS "performance")
-
-  set_tests_properties(
-    perf-prof-gpu-overhead perf-link-overhead PROPERTIES LABELS "performance")
+    ${PTI_PERF_TESTS} PROPERTIES
+    LABELS "performance")
 
   set_tests_properties(
     perf-overhead-view PROPERTIES LABELS "performance;functional")
