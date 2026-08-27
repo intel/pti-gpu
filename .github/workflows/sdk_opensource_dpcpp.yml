@@ -74,11 +74,11 @@ jobs:
 
     timeout-minutes: 30
 
-    continue-on-error: true
-
     runs-on: ${{ fromJSON(matrix.tags) }}
 
     strategy:
+      # One failing configuration must not cancel the others; the run still fails.
+      fail-fast: false
       matrix:
         include:
           - label: ubuntu-24.04-client BMG dpcpp-7.0
@@ -141,6 +141,7 @@ jobs:
           sycl-ls
 
       - name: Build
+        id: build
         working-directory: sdk
         run: |
           # Note: "Could NOT find unified-runtime" is expected and fails soft:
@@ -163,6 +164,7 @@ jobs:
             -E "LibLoadTest.CoreModuleLoadsWithLocalScope|run-onemkl_gemm_exe|run-omp_vec_add"
 
       - name: Quarantined tests # performance and flaky tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         continue-on-error: true
         working-directory: sdk
         run: |
@@ -173,6 +175,7 @@ jobs:
           fi
 
       - name: Known-failing test, tracked separately
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         continue-on-error: true
         working-directory: sdk
         run: |
