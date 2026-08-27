@@ -130,10 +130,9 @@ void Usage(const char *name) {
   std::cout << "--workload [-w]  string         "
             << "Comma-separated indices or \"auto\". Selects which GPU(s) the GEMM runs on. "
                "Default: matches --devices\n";
-  std::cout << "--size     [-s]  integer        "
-            << "Matrix size. Default: 1024 (max " << max_size << ")\n";
-  std::cout << "--repeat   [-r]  integer        "
-            << "Repetition count per device. Default: 1\n";
+  std::cout << "--size     [-s]  integer        " << "Matrix size. Default: 1024 (max " << max_size
+            << ")\n";
+  std::cout << "--repeat   [-r]  integer        " << "Repetition count per device. Default: 1\n";
   std::cout << "--help     [-h]                 Print this help message.\n";
 }
 

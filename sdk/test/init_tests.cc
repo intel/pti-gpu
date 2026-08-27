@@ -141,11 +141,6 @@ void CopyToAndFromDevice(ze_driver_handle_t driver, T& memory) {
   EXPECT_EQ(zeMemFree(ctx, device_storage), ZE_RESULT_SUCCESS);
 }
 
-template <typename T>
-void CopyToAndFromDevice(T& memory) {
-  auto* drv = utils::ze::GetGpuDriver(kPtiDeviceId);
-  CopyToAndFromDevice(drv, memory);
-}
 }  // namespace
 
 // These tests are better run within the context of CTest (i.e., separate processes) since ze*Init*

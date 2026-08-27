@@ -163,7 +163,7 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev, float *
     // Force synchronization within a work-group
     // using barrier function to ensure
     // all the work-items have completed reading into the SLM buffer
-    it.barrier(access::fence_space::local_space);
+    sycl::group_barrier(it.get_group());
 
     // Only one new data-point read from global memory
     // in z-dimension (depth)
@@ -207,7 +207,7 @@ void Iso3dfdIterationSLM(sycl::nd_item<3> &it, float *next, float *prev, float *
     // using barrier function to ensure that SLM buffers
     // are not overwritten by next set of work-items
     // (highly unlikely but not impossible)
-    it.barrier(access::fence_space::local_space);
+    sycl::group_barrier(it.get_group());
   }
 }
 

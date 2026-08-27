@@ -1812,14 +1812,14 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeMultiThreadedDifferentKernels) {
 
                   // Load data into local memory
                   local_mem[local_id] = (global_id < reduce_size) ? input_acc[global_id] : 0.0f;
-                  item.barrier(sycl::access::fence_space::local_space);
+                  sycl::group_barrier(item.get_group());
 
                   // Reduction in local memory
                   for (size_t stride = 128; stride > 0; stride >>= 1) {
                     if (local_id < stride) {
                       local_mem[local_id] += local_mem[local_id + stride];
                     }
-                    item.barrier(sycl::access::fence_space::local_space);
+                    sycl::group_barrier(item.get_group());
                   }
 
                   // Write result

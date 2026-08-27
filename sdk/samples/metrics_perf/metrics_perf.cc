@@ -501,8 +501,8 @@ void Usage(const char* name) {
   std::cout << " Calculating floating point matrix multiply on gpu, compare the performance "
                "with and without PTI Metrics API (Single and multi-thread)\n"
             << "  Usage " << name << "  [ options ]" << std::endl;
-  std::cout << "--size [-s]       integer        "
-            << "Matrix size, default: " << kDefaultMatrixSize << std::endl;
+  std::cout << "--size [-s]       integer        " << "Matrix size, default: " << kDefaultMatrixSize
+            << std::endl;
   std::cout << "--repeat [-r]     integer        "
             << "Number of iterations, default: " << kNumIterations << std::endl;
   std::cout << "--list-metrics    (no argument) "

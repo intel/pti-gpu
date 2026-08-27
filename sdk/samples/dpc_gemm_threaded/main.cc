@@ -272,8 +272,8 @@ void Usage(const char* name) {
             << "  Usage " << name << "  [ options ]" << std::endl;
   std::cout << "--threads [-t]  integer         "
             << "Threads number, default: " << default_thread_count << std::endl;
-  std::cout << "--size [-s]     integer        "
-            << "Matrix size, default: " << default_size << std::endl;
+  std::cout << "--size [-s]     integer        " << "Matrix size, default: " << default_size
+            << std::endl;
   std::cout << "--repeat [-r]   integer         "
             << "Repetition number per thread, default: " << default_repetition_per_thread
             << std::endl;

@@ -47,7 +47,6 @@ size_t rejected_buffer_calls = 0;  // Buffer requests that are called and reject
 size_t completed_buffer_calls = 0;
 size_t completed_buffer_used_bytes = 0;
 bool memory_view_record_created = false;
-uint64_t kernel_launch_id = 0;
 bool kernel_view_record_created = false;
 uint64_t memory_view_record_count = 0;
 uint64_t kernel_view_record_count = 0;
@@ -574,7 +573,6 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
     completed_buffer_calls = 0;
     completed_buffer_used_bytes = 0;
     memory_view_record_created = false;
-    kernel_launch_id = 0;
     kernel_view_record_created = false;
     memory_view_record_count = 0;
     kernel_view_record_count = 0;
@@ -757,7 +755,6 @@ class MainZeFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool,
                       << function_name << '\n';
             if (strcmp(api_name, "zeCommandListAppendLaunchKernel") == 0) {
               special_record_seen = true;
-              kernel_launch_id = rec->_api_id;
               num_special_records++;
               corrid_in_special_record = rec->_correlation_id;
             }
