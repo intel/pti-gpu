@@ -7,6 +7,8 @@
 #include <array>
 #include <set>
 #include <iostream>
+#include <cstdio>
+#include <cstdlib>
 
 #if !defined(_WIN32) && (defined(__gnu_linux__) || defined(__unix__))
 
@@ -513,6 +515,22 @@ int ParseArgs(int argc, char* argv[]) {
   return FinalizeParse(st);
 }
 
+// True when a metric run should behave as if -d were given, either to turn on
+// the kernel tracing that metric attribution needs, or to get the device-timing
+// report a stall capture into a result directory wants.
+static bool NeedsImplicitDeviceTiming() {
+  if (!utils::GetEnv("UNITRACE_DeviceTiming").empty()) {
+    return false;  // the user asked for it already
+  }
+  if (utils::GetEnv("UNITRACE_ChromeKernelLogging").empty() &&
+      utils::GetEnv("UNITRACE_ChromeDeviceLogging").empty()) {
+    return true;  // nothing else derives kernel_tracing, so no .kprops map
+  }
+  // Kernel tracing is covered, but chrome logging writes no timing report.
+  return utils::GetEnv("UNITRACE_UseResultDirectory") == "1" &&
+         utils::GetEnv("UNITRACE_MetricGroup") == "EuStallSampling";
+}
+
 static int FinalizeParse(ArgParseState& st) {
 #ifndef _WIN32
   if (!utils::GetEnv("UNITRACE_ChromeKmdLogging").empty()) {
@@ -617,8 +635,7 @@ static int FinalizeParse(ArgParseState& st) {
   }
 
   if ((utils::GetEnv("UNITRACE_MetricQuery") == "1") || (utils::GetEnv("UNITRACE_KernelMetrics") == "1")) {
-    // kernel tracing must be on
-    if (utils::GetEnv("UNITRACE_DeviceTiming").empty() && utils::GetEnv("UNITRACE_ChromeKernelLogging").empty() && utils::GetEnv("UNITRACE_ChromeDeviceLogging").empty()) {
+    if (NeedsImplicitDeviceTiming()) {
       utils::SetEnv("UNITRACE_DeviceTiming", "1");
     }
 
@@ -799,6 +816,92 @@ std::string StringifyJsonArray(const char* label, char* const* arr, size_t start
   return json;
 }
 
+// Build the "device" line for the config log by querying the GPU device
+// directly, so downstream tooling (e.g. the VS Code extension picking a
+// metric-view config) knows the exact hardware even when analysis runs on a
+// different machine than capture. Returns "" when no GPU/Level Zero is
+// available -- this runs before the app is exec'd and must never abort a
+// capture, so every Level Zero status is checked and no path asserts. It carries
+// ground truth (device name + PCI id); mapping the PCI id to a HW family is
+// left to the consumer.
+static std::string StringifyDevice() {
+  // Level Zero latches these at the first zeInit(), which is now this one --
+  // ahead of where main() sets them. Without ZET_ENABLE_METRICS a metric run
+  // would come up with metrics disabled and later fail to enumerate metric
+  // groups. Setting them twice is harmless.
+  SetSysmanEnvironment();
+  if (utils::GetEnv("UNITRACE_MetricQuery") == "1" ||
+      utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
+    SetProfilingEnvironment();
+  }
+  // Silent, guarded init: unlike InitializeL0() this must not print anything,
+  // because a plain (non-metrics) --result-dir capture would otherwise emit a
+  // spurious "Failed to initialize Level Zero" line on hosts where the perf
+  // paranoid sysctl blocks L0. If L0 is unavailable we simply omit the field.
+  if (!ZE_HAVE_FUNC(zeInit) ||
+      ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY) != ZE_RESULT_SUCCESS) {
+    return "";
+  }
+  // Enumerate locally instead of calling GetGpuDevice(): that helper, and the
+  // GetDriverList/GetDeviceList it builds on, PTI_ASSERT on every Level Zero
+  // status. Any driver that errored here would then abort the capture -- the
+  // opposite of this function's contract. Everything below checks return codes.
+  uint32_t driver_count = 0;
+  if (!ZE_HAVE_FUNC(zeDriverGet) ||
+      ZE_FUNC(zeDriverGet)(&driver_count, nullptr) != ZE_RESULT_SUCCESS ||
+      driver_count == 0) {
+    return "";
+  }
+  std::vector<ze_driver_handle_t> drivers(driver_count, nullptr);
+  if (ZE_FUNC(zeDriverGet)(&driver_count, drivers.data()) != ZE_RESULT_SUCCESS) {
+    return "";
+  }
+
+  // Name the device being sampled: the first of --devices-to-sample, which
+  // FinalizeParse has already validated into UNITRACE_DevicesToSample. Indices
+  // match unitrace's own, since the GPU_ONLY zeInit above leaves this walking the
+  // same devices in the same order. Anything unusable falls back to the first
+  // device; strtoul, because stoul throws on a huge value and would abort the run.
+  size_t wanted = 0;
+  const std::string devices_env = utils::GetEnv("UNITRACE_DevicesToSample");
+  if (!devices_env.empty()) {
+    const std::string first = devices_env.substr(0, devices_env.find(','));
+    if (!first.empty() && IsNumericString(first)) {
+      wanted = std::strtoul(first.c_str(), nullptr, 10);
+    }
+  }
+
+  std::vector<ze_device_properties_t> gpus;
+  for (auto driver : drivers) {
+    uint32_t device_count = 0;
+    if (!ZE_HAVE_FUNC(zeDeviceGet) ||
+        ZE_FUNC(zeDeviceGet)(driver, &device_count, nullptr) != ZE_RESULT_SUCCESS ||
+        device_count == 0) {
+      continue;
+    }
+    std::vector<ze_device_handle_t> devices(device_count, nullptr);
+    if (ZE_FUNC(zeDeviceGet)(driver, &device_count, devices.data()) != ZE_RESULT_SUCCESS) {
+      continue;
+    }
+    for (auto device : devices) {
+      ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES, };
+      if (ZE_FUNC(zeDeviceGetProperties)(device, &props) == ZE_RESULT_SUCCESS &&
+          props.type == ZE_DEVICE_TYPE_GPU) {
+        gpus.push_back(props);
+      }
+    }
+  }
+  if (gpus.empty()) {
+    return "";
+  }
+  const ze_device_properties_t& chosen = gpus[wanted < gpus.size() ? wanted : 0];
+
+  char pci_id[8];
+  std::snprintf(pci_id, sizeof(pci_id), "0x%04X", chosen.deviceId & 0xFFFF);
+  return std::string("  \"device\": { \"name\": \"") + chosen.name +
+         "\", \"pci_id\": \"" + pci_id + "\" },\n";
+}
+
 void CreateConfigLog(const std::string& unitrace_version, const std::vector<char*>& unitrace_args, const std::vector<char*>& app_args) {
   std::string value = utils::GetEnv("UNITRACE_UseResultDirectory");
   if (!value.empty() && value == "1") {
@@ -810,6 +913,7 @@ void CreateConfigLog(const std::string& unitrace_version, const std::vector<char
     config_logger->Log(StringifyJsonArray("unitrace_args", unitrace_args.data()));
     config_logger->Log(StringifyJsonArray("app_args", app_args.data(), 1));
     config_logger->Log("  \"Host\": \"" + GetHostName() + "\",\n");
+    config_logger->Log(StringifyDevice());
     config_logger->Log("  \"pid\": \"" + std::to_string(utils::GetPid()) + "\"\n");
     config_logger->Log("}\n");
     config_logger->Flush();
