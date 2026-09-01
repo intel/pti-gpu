@@ -38,6 +38,10 @@ jobs:
             uploadname: ${{ vars.PTI_PKG_ROCKY_8_ONEAPI_NMINUS1 }}
             preset: linux-icpx-release
             tags: '["self-hosted", "Linux", "pti", "server", "PVC"]'
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_26_4_CLIENT_ONEAPI_N }}
+            uploadname: ${{ vars.PTI_PKG_UBUNTU_26_4_CLIENT_ONEAPI_N }}
+            preset: linux-icpx-release
+            tags: '["self-hosted", "Linux", "pti", "client", "BMG"]'
           #
           # This is the n-1 container for BMG
           #

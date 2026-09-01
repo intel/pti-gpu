@@ -2,7 +2,7 @@
 
 # hadolint ignore=DL3007
 
-# This is ubuntu:25.10
+# This is ubuntu:26.04
 FROM ubuntu:resolute
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -43,9 +43,9 @@ RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRO
 # Setup the appropriate repos for GPU
 #
 RUN apt-get update && apt-get install -y software-properties-common && \
-    add-apt-repository -y ppa:kobuk-team/intel-graphics && \
-    sed -i 's/^Components: main$/Components: main main\/debug/' \
-        /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*.sources
+    add-apt-repository -y ppa:kobuk-team/intel-graphics-testing \
+    --component main \
+    --component "main/debug"
 
 RUN update-alternatives --install /usr/local/bin/python python /usr/bin/python3 10
 

@@ -36,10 +36,10 @@ jobs:
         include:
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
             tags: '["self-hosted", "Linux", "pti", "PVC"]'
-            os_id: "ubuntu-24.04.2026.1.0"
+            os_id: "ubuntu-24.04.2026.1"
           - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_CLIENT_ONEAPI_N }}
             tags: '["self-hosted", "Linux", "pti", "BMG"]'
-            os_id: "ubuntu-24.04.2026.1.0"
+            os_id: "ubuntu-24.04.2026.1"
 
     container:
       image: ${{ matrix.container }}

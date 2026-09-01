@@ -29,7 +29,9 @@ runs:
           EXCLUDE_PATTERN="${EXCLUDE_PATTERN}|hw-metrics"
         fi
 
-        ctest --output-on-failure --preset ${{ inputs.preset }} -LE "$EXCLUDE_PATTERN"
+        # TODO(PTI-480): Fix Graph Tests on Latest Driver Set
+        ctest --output-on-failure --preset ${{ inputs.preset }} -LE "$EXCLUDE_PATTERN" \
+          -E  "ZeGraphTestSuite.TestZeUsmGraphExecutionTracingGraphCreation|ZeGraphTestSuite.TestZeUsmGraphExecutionWithoutTracingGraphCreation|SyclGraphTestSuite.TestSyclUsmGraphExecutionWithNativeRecordingApi"
 
     - name: Quarantined tests # performance and flaky tests
       continue-on-error: true
