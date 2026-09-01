@@ -162,7 +162,7 @@ jobs:
           # TODO(PTI-480): Fix Graph Tests on Latest Driver Set
           ctest --output-on-failure --preset ${{ matrix.preset }} \
             -LE "performance|quarantine" \
-            -E "LibLoadTest.CoreModuleLoadsWithLocalScope|run-onemkl_gemm_exe|run-omp_vec_add|ZeGraphTestSuite.TestZeUsmGraphExecutionTracingGraphCreation|ZeGraphTestSuite.TestZeUsmGraphExecutionWithoutTracingGraphCreation|SyclGraphTestSuite.TestSyclUsmGraphExecutionWithNativeRecordingApi"
+            -E "LibLoadTest.CoreModuleLoadsWithLocalScope|run-onemkl_gemm_exe|run-omp_vec_add|ZeGraphTestSuite.TestZeUsmGraphExecutionTracingGraphCreation|ZeGraphTestSuite.TestZeUsmGraphExecutionWithoutTracingGraphCreation"
 
       - name: Quarantined tests # performance and flaky tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

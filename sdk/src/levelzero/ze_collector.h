@@ -2291,8 +2291,16 @@ class ZeCollector {
         auto dev_desc = device_descriptors_.find(command_list_info.device);
         if (dev_desc != device_descriptors_.end()) {
           if (dev_desc->second.graph_exp.has_value()) {
-            if (ZE_RESULT_QUERY_TRUE == l0_wrapper_.w_zeCommandListIsGraphCaptureEnabledExt(
-                                            command_list_info.command_list)) {
+            const auto capture_enabled_result =
+                l0_wrapper_.w_zeCommandListIsGraphCaptureEnabledExt(command_list_info.command_list);
+            // Drop the command if graph capture is enabled - avoids clashes with visitor extension.
+            // The command will be picked up by the graph visitor extension and will be processed
+            // there. Level Zero started returning ZE_RESULT_QUERY_TRUE for this API, however, older
+            // versions (e.g., 26.27.39122.11) returned 0x7fff0000. This is vestigial from the
+            // experimental API.
+            constexpr static uint32_t kFormerZeResultQueryTrue = 0x7fff0000;
+            if (capture_enabled_result == ZE_RESULT_QUERY_TRUE ||
+                static_cast<uint32_t>(capture_enabled_result) == kFormerZeResultQueryTrue) {
               SPDLOG_DEBUG(
                   "In {} Graph capture is enabled for command list {}, skipping kernel command "
                   "creation",

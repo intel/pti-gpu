@@ -7,7 +7,6 @@
 #ifndef PTI_LEVELZERO_ZE_GPU_COMMAND_H_
 #define PTI_LEVELZERO_ZE_GPU_COMMAND_H_
 
-#include <level_zero/driver_experimental/zex_graph.h>
 #include <level_zero/layers/zel_tracing_api.h>
 #include <level_zero/layers/zel_tracing_register_cb.h>
 #include <level_zero/loader/ze_loader.h>

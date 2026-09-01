@@ -7,7 +7,6 @@
 #ifndef LEVEL_ZERO_ZE_EXTENSIONS_H_
 #define LEVEL_ZERO_ZE_EXTENSIONS_H_
 
-#include <level_zero/driver_experimental/zex_graph.h>
 #include <level_zero/driver_experimental/zex_visit.h>
 #include <level_zero/ze_intel_gpu.h>
 #include <spdlog/spdlog.h>
