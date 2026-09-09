@@ -1,0 +1,352 @@
+name: sdk-compat-check
+
+#
+# Checks that the PTI SDK has not broken compatibility with the last released
+# version on the same major line, in two ways:
+#
+#   API  baseline-era consumer source must still compile against today's headers
+#   ABI  libabigail's abidiff on libpti_view.so, built from both revisions
+#
+# Gating follows semver, comparing sdk/VERSION against the baseline tag:
+#
+#   PATCH  x.y.Z   nothing may change, not even additions
+#   MINOR  x.Y.0   new exported symbols allowed, nothing else may change
+#
+# There is no MAJOR case: the baseline is only ever searched for on the current
+# major line, so right after a major bump no baseline exists and the whole job
+# is skipped until that major's first release is tagged. That leaves the major
+# development cycle unchecked, which is deliberate (2.x may break 1.x) but also
+# means an unintended break during it will not be caught.
+#
+
+on:
+  pull_request:
+    branches:
+      - master
+      - release/**
+    paths:
+      - sdk/include/**
+      - sdk/src/**
+      - sdk/VERSION
+      - sdk/CMakePresets.json
+      - sdk/CMakeLists.txt
+      - .github/workflows/sdk_compat_check.yml
+  push:
+    branches:
+      - master
+      - release/**
+    paths:
+      - sdk/include/**
+      - sdk/src/**
+      - sdk/VERSION
+      - .github/workflows/sdk_compat_check.yml
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: 'Tag to compare against (default: newest release below sdk/VERSION)'
+        required: false
+  schedule:
+    - cron: '0 6 * * *' # Daily 6:00 AM UTC, after the nightly build
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  compat-check:
+    name: API/ABI compatibility
+
+    timeout-minutes: 40
+
+    #TODO: may use a different machine
+    runs-on: [self-hosted, Linux, pti, server]
+
+    # No GPU is used: this job only compiles the library and inspects the ELF.
+    container:
+      image: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
+      credentials:
+        username: ${{ vars.PTI_DOCKER_USER }}
+        password: ${{ secrets.PTI_DOCKER_PWD }}
+
+    if: vars.PTI_RUN_LINUX_TESTS == 1
+
+    env:
+      # ABI: library only, gcc, DWARF for abidiff. API: samples, so icpx.
+      PRESET: linux-abi
+      API_PRESET: linux-oneAPI-release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Tags are required to resolve and build the baseline release.
+          fetch-depth: 0
+          clean: true
+
+      - name: Resolve paths
+        run: |
+          {
+            echo "BASE_SRC=${RUNNER_TEMP}/pti-compat-baseline"
+            echo "CUR_INSTALL=${RUNNER_TEMP}/pti-install-current"
+            echo "BASE_INSTALL=${RUNNER_TEMP}/pti-install-baseline"
+          } >> "$GITHUB_ENV"
+
+      - name: Install libabigail
+        run: |
+          if command -v abidiff; then
+            abidiff --version
+            exit 0
+          fi
+          apt-get update -qq
+          if ! apt-get install -y --no-install-recommends abigail-tools; then
+            echo "::error::abigail-tools install failed"
+            exit 1
+          fi
+          abidiff --version
+
+      - name: Resolve baseline release and release type
+        id: baseline
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          VERSION=$(tr -d '[:space:]' < sdk/VERSION)
+          MAJOR=${VERSION%%.*}          # 1.2.0 -> 1
+          REST=${VERSION#*.}            # 1.2.0 -> 2.0
+          MINOR=${REST%%.*}             # 2.0   -> 2
+
+          # Release candidates and alphas are not the compatibility contract.
+          FINAL_RELEASE='^pti-[0-9]+\.[0-9]+\.[0-9]+$'
+
+          TAG='${{ inputs.baseline }}'
+          if [ -n "$TAG" ]; then
+            git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null \
+              || { echo "::error::no such tag: ${TAG}"; exit 1; }
+          else
+            # Newest release below VERSION, so release/1.1.x compares against
+            # 1.1.0 and not a later 1.2.0. Empty TAG falls through to the skip.
+            CANDIDATES=$(git tag -l "pti-${MAJOR}.*" | grep -E "$FINAL_RELEASE" | sed 's/^pti-//')
+            BASE=$(printf '%s\n' $CANDIDATES "$VERSION" | sort -V -u \
+                   | awk -v v="$VERSION" '$0==v{exit} {last=$0} END{print last}')
+            [ -z "$BASE" ] || TAG="pti-${BASE}"
+          fi
+
+          if [ -z "$TAG" ]; then
+            echo "No pti-${MAJOR}.y.z release tagged yet; nothing to compare against."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            # Without this the run is a bare green check, indistinguishable from
+            # a check that actually ran.
+            {
+              echo "### API/ABI compatibility"
+              echo ""
+              echo ":warning: **Skipped.** No \`pti-${MAJOR}.y.z\` release is tagged yet, so there is"
+              echo "no baseline for \`${VERSION}\`. API and ABI are unchecked until that release exists."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          BASE_VERSION=${TAG#pti-}      # pti-1.0.1 -> 1.0.1
+          BASE_MINOR=${BASE_VERSION#*.}
+          BASE_MINOR=${BASE_MINOR%%.*}  # 1.0.1     -> 0
+
+          if [ "$MINOR" != "$BASE_MINOR" ]; then
+            TYPE=MINOR
+          else
+            TYPE=PATCH
+          fi
+
+          echo "skip=false"                >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"                >> "$GITHUB_OUTPUT"
+          echo "base_version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}"        >> "$GITHUB_OUTPUT"
+          echo "type=${TYPE}"              >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### API/ABI compatibility"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| current version | \`${VERSION}\` |"
+            echo "| baseline | \`${TAG}\` |"
+            echo "| release type | **${TYPE}** |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build and install current tree
+        if: steps.baseline.outputs.skip == 'false'
+        working-directory: sdk
+        run: |
+          cmake --preset "$PRESET"
+          cmake --build --preset "$PRESET" -j "$(($(nproc)/2))"
+          cmake --install "build-${PRESET}" --prefix "$CUR_INSTALL"
+
+      - name: Build and install baseline ${{ steps.baseline.outputs.tag }}
+        if: steps.baseline.outputs.skip == 'false'
+        run: |
+          TAG='${{ steps.baseline.outputs.tag }}'
+
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$BASE_SRC"
+
+          rm -rf "$BASE_SRC"
+          git worktree prune
+          git worktree add --detach "$BASE_SRC" "$TAG"
+
+          # The preset postdates the tag. Copying it in keeps both sides on
+          # identical flags, so abidiff cannot report toolchain differences.
+          cp sdk/CMakePresets.json "${BASE_SRC}/sdk/CMakePresets.json"
+
+          cmake -S "${BASE_SRC}/sdk" --preset "$PRESET"
+          cmake --build "${BASE_SRC}/sdk/build-${PRESET}" -j "$(($(nproc)/2))"
+          cmake --install "${BASE_SRC}/sdk/build-${PRESET}" --prefix "$BASE_INSTALL"
+
+      # Source-level check: the baseline's samples are the consumer code we have,
+      # and they must still build against today's headers. abidiff cannot cover
+      # this: a deleted macro, for one, leaves the library byte-identical.
+      - name: Check API compatibility and report results
+        if: steps.baseline.outputs.skip == 'false'
+        run: |
+          # A failing build is this step's signal, not an error to abort on.
+          set +e
+
+          BASE="${BASE_SRC}/sdk"
+          BASE_VER='${{ steps.baseline.outputs.base_version }}'
+          BUILD="${GITHUB_WORKSPACE}/sdk/build-${API_PRESET}"
+          JOBS="$(($(nproc)/2))"
+
+          source /opt/intel/oneapi/setvars.sh >/dev/null
+          command -v icpx >/dev/null || { echo "::error::icpx not on PATH after setvars.sh"; exit 1; }
+
+          # Overlaid, not replaced: samples added since the baseline are named in
+          # today's CMakeLists.
+          cp -r "${BASE}/samples/." "${GITHUB_WORKSPACE}/sdk/samples/"
+
+          cmake -S "${GITHUB_WORKSPACE}/sdk" --preset "$API_PRESET" 2>&1 | tee configure.log
+          [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "::error::configuring with the ${BASE_VER} samples failed"; exit 1; }
+
+          # A sample returns early when a compiler or dependency check fails, which
+          # would leave the build green having compiled no consumer at all.
+          if grep -A2 "CMake Warning" configure.log | grep -E "requires|only supported"; then
+            echo "::error::a sample skipped itself; the samples above were not checked"
+            exit 1
+          fi
+
+          if cmake --build "$BUILD" -j "$JOBS"; then
+            echo "PASS: the ${BASE_VER} samples build against today's headers."
+            echo "consumers built:"
+            ls "${BUILD}/bin"
+            echo ":white_check_mark: API compatible with \`${BASE_VER}\`." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "::error::API break: the ${BASE_VER} samples no longer build against today's headers"
+          {
+            echo ""
+            echo ":x: **API break.** Source written against \`${BASE_VER}\` no longer builds"
+            echo "against the current headers. Renaming or removing anything in a public"
+            echo "header breaks every consumer's build. The compiler errors are in the"
+            echo "step log."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit 1
+
+      - name: Compare ABI and report results
+        if: steps.baseline.outputs.skip == 'false'
+        run: |
+          # abidiff's non-zero exit is this step's result, not an error to abort on.
+          set +e
+
+          TYPE='${{ steps.baseline.outputs.type }}'
+
+          # Excluded: their exported set varies by compiler, not by PTI's sources.
+          #   __itt_*  vendored ittnotify, versioned upstream by Intel
+          #   _Z*      C++ template instantiations escaping -fvisibility=hidden
+          cat > suppressions.ini <<'EOF'
+          [suppress_function]
+            symbol_name_regexp = ^(__itt_|_Z)
+          [suppress_variable]
+            symbol_name_regexp = ^(__itt_|_Z)
+          EOF
+
+          ARGS=(--suppressions suppressions.ini)
+          if [ "$TYPE" = MINOR ]; then
+            ARGS+=(--no-added-syms)
+          fi
+
+          # What PTI ships is whatever it installs, so both sides are listed rather
+          # than named here. The unversioned symlink is the stable name.
+          shipped() { # <install prefix>
+            find "$1/lib" -maxdepth 1 -name '*.so' -printf '%f\n' | sort
+          }
+
+          ADDED=$(comm -13 <(shipped "$BASE_INSTALL") <(shipped "$CUR_INSTALL"))
+          REMOVED=$(comm -23 <(shipped "$BASE_INSTALL") <(shipped "$CUR_INSTALL"))
+          KEPT=$(comm -12 <(shipped "$BASE_INSTALL") <(shipped "$CUR_INSTALL"))
+
+          [ -n "$KEPT$REMOVED" ] || { echo "::error::no installed libraries found to compare"; exit 1; }
+
+          rc=0
+
+          if [ -n "$REMOVED" ]; then
+            echo "::error::libraries no longer shipped: $(echo $REMOVED)"
+            rc=1
+          fi
+
+          if [ -n "$ADDED" ]; then
+            if [ "$TYPE" = PATCH ]; then
+              echo "::error::libraries added in a PATCH: $(echo $ADDED). Bump the minor in sdk/VERSION."
+              rc=1
+            else
+              echo "New library this ${TYPE}: $(echo $ADDED)"
+            fi
+          fi
+
+          for lib in $KEPT; do
+            echo "abidiff ${ARGS[*]} $lib"
+            abidiff "${ARGS[@]}" "${BASE_INSTALL}/lib/${lib}" "${CUR_INSTALL}/lib/${lib}" | tee "abidiff-${lib}.log"
+            RC=${PIPESTATUS[0]}
+            echo "${lib}: abidiff exit status $RC"
+
+            # Bit field: 1 ERROR, 2 USAGE, 4 ABI_CHANGE, 8 INCOMPATIBLE_CHANGE.
+            if [ $((RC & 3)) -ne 0 ]; then
+              echo "::error::abidiff could not complete on ${lib} (exit $RC)"
+              rc=1
+              continue
+            fi
+
+            if [ "$RC" -eq 0 ]; then
+              echo ":white_check_mark: \`${lib}\`: no incompatible ABI change." >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+
+            rc=1
+            {
+              echo ""
+              echo ":x: **\`${lib}\`: changes that are not allowed in a ${TYPE} release.**"
+              echo ""
+              echo '```'
+              head -50 "abidiff-${lib}.log"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          if [ "$rc" -eq 0 ]; then
+            echo "PASS: ABI is compatible as a ${TYPE} release."
+            exit 0
+          fi
+
+          if [ "$TYPE" = PATCH ]; then
+            echo "::error::A PATCH allows no ABI change. To add API, bump the minor in sdk/VERSION; to change existing API, bump the major."
+          else
+            echo "::error::A MINOR may add exported symbols but not change or remove them. Added symbols were already ignored, so the changes above alter the existing surface. Make it additive (see sdk/samples/view_record_versioned/main.cc) or plan a MAJOR."
+          fi
+
+          exit 1
+
+      - name: Remove baseline worktree
+        if: always()
+        run: |
+          git worktree remove --force "$BASE_SRC" 2>/dev/null || true
+          rm -rf "$BASE_SRC"
+          git worktree prune 2>/dev/null || true
