@@ -122,3 +122,29 @@ gtest_discover_tests(
              "NEOReadDebugKeys=1"
              ENVIRONMENT
              "ExperimentalFlatCommandListApiRecording=1")
+
+add_executable(sycl_graph_overhead_test sycl_graph_overhead_test.cc)
+
+target_compile_options(sycl_graph_overhead_test PUBLIC -fsycl)
+target_link_options(sycl_graph_overhead_test PUBLIC -fsycl)
+
+target_link_libraries(
+  sycl_graph_overhead_test PUBLIC Pti::pti_view fmt::fmt Threads::Threads
+  LevelZero::headers)
+
+target_include_directories(
+  sycl_graph_overhead_test
+  PUBLIC "${PROJECT_SOURCE_DIR}/include" "${PROJECT_BINARY_DIR}/include"
+  PRIVATE "${PROJECT_SOURCE_DIR}/test" "${PROJECT_SOURCE_DIR}/src"
+          "${PROJECT_SOURCE_DIR}/src/utils"
+          $<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>)
+
+add_test(NAME sycl_graph_overhead_test
+  COMMAND $<TARGET_FILE:sycl_graph_overhead_test> --iterations 5)
+
+set_tests_properties(
+  sycl_graph_overhead_test
+  PROPERTIES
+    SKIP_RETURN_CODE 77
+    LABELS "functional;graph;sycl"
+    TIMEOUT 360)

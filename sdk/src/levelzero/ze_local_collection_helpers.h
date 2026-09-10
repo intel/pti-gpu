@@ -58,4 +58,23 @@ inline bool A2AppendWaitAndSignalEvent(ze_command_list_handle_t command_list,
   return true;
 }
 
+inline bool A2AppendSignalEvent(ze_command_list_handle_t command_list,
+                                ze_event_handle_t signal_event) {
+  SPDLOG_DEBUG(" --- In: {}, CmdList: {}, Signal event: {}", __FUNCTION__,
+               static_cast<const void*>(command_list), static_cast<const void*>(signal_event));
+
+  ze_result_t signal_res = ZE_RESULT_SUCCESS;
+  {
+    overhead::ScopedOverheadCollector overhead_collector{zeCommandListAppendSignalEvent_id};
+    signal_res = zeCommandListAppendSignalEvent(command_list, signal_event);
+  }
+  if (signal_res != ZE_RESULT_SUCCESS) {
+    SPDLOG_ERROR("In {}, zeCommandListAppendSignalEvent failed: 0x{:x}", __FUNCTION__,
+                 static_cast<uint32_t>(signal_res));
+    return false;
+  }
+
+  return true;
+}
+
 #endif  // PTI_TOOLS_ZE_LOCAL_COLLECTION_HELPERS_H_

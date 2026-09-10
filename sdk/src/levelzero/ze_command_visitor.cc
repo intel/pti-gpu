@@ -221,9 +221,17 @@ ZeCommandVisitor::AppendQueryTimestamp(ze_command_list_handle_t command_list,
     return {};
   }
 
-  auto timestamp_event = event_pool_manager_->AcquireEvent(current_command_list_info_.context);
+  ZeEventView<ZeEventPool> timestamp_event{};
+
+  const auto is_native_graph = visit_desc_.hReappendTargetCmdList == nullptr;
+
+  if (!is_native_graph) {
+    timestamp_event = event_pool_manager_->AcquireEvent(current_command_list_info_.context);
+  }
+
   ZE_COMMAND(this, zeCommandListAppendQueryKernelTimestamps, command_list, 1, &event_to_query,
              buf.get(), nullptr, timestamp_event.Get(), 1, &event_to_query);
+
   return std::make_pair(std::move(timestamp_event), std::move(buf));
 }
 

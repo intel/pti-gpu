@@ -48,7 +48,9 @@ class Level0Wrapper {
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListGetDeviceHandle);
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListGetContextHandle);
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListGetOrdinal);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListGetFlags);
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListImmediateGetIndex);
+      LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListImmediateGetFlags);
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandListIsImmediate);
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandQueueGetIndex);
       LOADER_LOAD_AND_DEBUG_PRINT(zeCommandQueueGetOrdinal);
@@ -119,10 +121,27 @@ class Level0Wrapper {
     return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
   }
 
+  ze_result_t w_zeCommandListGetFlags(ze_command_list_handle_t command_list,
+                                      ze_command_list_flags_t* flags) const {
+    if (nullptr != fptr_zeCommandListGetFlags_) {
+      return fptr_zeCommandListGetFlags_(command_list, flags);
+    }
+
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
   ze_result_t w_zeCommandListImmediateGetIndex(ze_command_list_handle_t command_list,
                                                uint32_t* index) const {
     if (nullptr != fptr_zeCommandListImmediateGetIndex_) {
       return fptr_zeCommandListImmediateGetIndex_(command_list, index);
+    }
+    return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  }
+
+  ze_result_t w_zeCommandListImmediateGetFlags(ze_command_list_handle_t command_list,
+                                               ze_command_queue_flags_t* flags) const {
+    if (nullptr != fptr_zeCommandListImmediateGetFlags_) {
+      return fptr_zeCommandListImmediateGetFlags_(command_list, flags);
     }
     return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
   }
@@ -338,8 +357,10 @@ class Level0Wrapper {
   decltype(&zeEventPoolGetContextHandle) fptr_zeEventPoolGetContextHandle_ = nullptr;
   decltype(&zeCommandListGetDeviceHandle) fptr_zeCommandListGetDeviceHandle_ = nullptr;
   decltype(&zeCommandListGetContextHandle) fptr_zeCommandListGetContextHandle_ = nullptr;
+  decltype(&zeCommandListGetFlags) fptr_zeCommandListGetFlags_ = nullptr;
   decltype(&zeCommandListIsImmediate) fptr_zeCommandListIsImmediate_ = nullptr;
   decltype(&zeCommandListImmediateGetIndex) fptr_zeCommandListImmediateGetIndex_ = nullptr;
+  decltype(&zeCommandListImmediateGetFlags) fptr_zeCommandListImmediateGetFlags_ = nullptr;
   decltype(&zeCommandListGetOrdinal) fptr_zeCommandListGetOrdinal_ = nullptr;
   decltype(&zeCommandQueueGetIndex) fptr_zeCommandQueueGetIndex_ = nullptr;
   decltype(&zeCommandQueueGetOrdinal) fptr_zeCommandQueueGetOrdinal_ = nullptr;

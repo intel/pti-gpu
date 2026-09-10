@@ -115,9 +115,22 @@ struct ZeCommandListInfo {
   bool immediate = false;
   bool closed = false;
   std::pair<uint32_t, uint32_t> oi_pair;
-  ze_command_list_flags_t flags = 0;
+  ze_command_list_flags_t flags = ZE_COMMAND_LIST_FLAG_FORCE_UINT32;
+  ze_command_queue_flags_t immediate_flags = ZE_COMMAND_QUEUE_FLAG_FORCE_UINT32;
   ze_command_list_handle_t command_list = nullptr;
   ze_command_list_handle_t instrumented_command_list = nullptr;
+};
+
+// Structure represents a batch of commands submitted to the device for which checking each
+// command's completion event individually is not efficient.
+struct ZeBatchedExecution {
+  std::shared_ptr<ZeEventView<ZeEventPool>> completion_event = nullptr;
+  ze_event_handle_t user_completion_event =
+      nullptr;  // User's event they passed to the submit call.
+  uint64_t submit_time_host = 0;
+  uint64_t submit_time_device = 0;
+  uint64_t graph_correlation_id = 0;
+  std::vector<std::shared_ptr<ZeKernelCommand>> commands;
 };
 
 struct ZeGraphExecutionInfo {
@@ -130,8 +143,10 @@ struct ZeGraphExecutionInfo {
                                                                  // the graph execution. Gets
                                                                  // drained into same list as
                                                                  // command list commands.
-  ZeEventView<ZeEventPool> graph_execution_event;                // PTI's event used to track the
-                                                                 // graph execution completion.
+  std::shared_ptr<ZeEventView<ZeEventPool>> graph_execution_event;  // PTI's event used to track the
+                                                                    // graph execution completion.
+  bool sync_timeout = false;  // PTI checked the exec event and it timed out. It's likely not being
+                              // signaled so don't wait on it again.
 };
 
 struct ZeGraphInfo {
