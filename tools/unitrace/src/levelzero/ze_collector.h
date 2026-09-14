@@ -6105,33 +6105,100 @@ typedef struct _zex_kernel_register_file_size_exp_t {
     collector->OnInstantiateGraph(*(params->phGraph), **(params->pphExecutableGraph));
   }
 
-  static void OnEnterCommandListAppendGraphExp(
-      ze_command_list_append_graph_exp_params_t* params,
-      void* global_data, void** /* instance_data */) {
-    if (UniController::IsCollectionEnabled()) {
-      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-      collector->PrepareGraphExecution(
-          *(params->phCommandList),
-          *(params->phGraph));
-    }
+  // Bodies shared by the Exp and Ext variants of zeCommandListAppendGraph.
+  static void StageGraphExecution(void* global_data, ze_command_list_handle_t command_list,
+                                  ze_executable_graph_handle_t graph) {
+    if (!UniController::IsCollectionEnabled()) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->PrepareGraphExecution(command_list, graph);
   }
 
-  static void OnExitCommandListAppendGraphExp(
-      ze_command_list_append_graph_exp_params_t* params,
-      ze_result_t result, void* global_data, void** /* instance_data */,
-      std::vector<uint64_t> *kids) {
-    if (result != ZE_RESULT_SUCCESS) {
+  static void SubmitGraphExecution(ze_result_t result, void* global_data,
+                                   std::vector<uint64_t> *kids) {
+    if (result != ZE_RESULT_SUCCESS || !UniController::IsCollectionEnabled()) {
       local_device_submissions_.RevertStagedKernelCommandAndMetricQueries();
       return;
     }
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
-    if (UniController::IsCollectionEnabled()) {
-      // Pass kids so the host-side flow callback emits FLOW_H2D from this call
-      // to each replayed kernel record.
-      local_device_submissions_.SubmitStagedKernelCommandAndMetricQueries(collector->event_cache_, kids);
-    } else {
-      local_device_submissions_.RevertStagedKernelCommandAndMetricQueries();
-    }
+    // kids let the host-side flow callback emit FLOW_H2D to each replayed kernel.
+    local_device_submissions_.SubmitStagedKernelCommandAndMetricQueries(collector->event_cache_, kids);
+  }
+
+  static void OnEnterCommandListAppendGraphExp(
+      ze_command_list_append_graph_exp_params_t* params,
+      void* global_data, void** /* instance_data */) {
+    StageGraphExecution(global_data, *(params->phCommandList), *(params->phGraph));
+  }
+
+  static void OnExitCommandListAppendGraphExp(
+      ze_command_list_append_graph_exp_params_t* /* params */,
+      ze_result_t result, void* global_data, void** /* instance_data */,
+      std::vector<uint64_t> *kids) {
+    SubmitGraphExecution(result, global_data, kids);
+  }
+
+  // Stable (Ext) graph APIs, which SYCL uses when the driver reports them. They
+  // carry the same handles as the Exp ones, so they feed the same bookkeeping.
+
+  static void OnExitCommandListBeginGraphCaptureExt(
+      ze_command_list_begin_graph_capture_ext_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnBeginGraphCaptureNoGraph(*(params->phCommandList));
+  }
+
+  static void OnExitCommandListBeginCaptureIntoGraphExt(
+      ze_command_list_begin_capture_into_graph_ext_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnBeginGraphCapture(*(params->phCommandList), *(params->phGraph));
+  }
+
+  static void OnExitCommandListEndGraphCaptureExt(
+      ze_command_list_end_graph_capture_ext_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnEndGraphCapture(*(params->phCommandList), **(params->pphGraph));
+  }
+
+  static void OnExitGraphInstantiateExt(
+      ze_graph_instantiate_ext_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnInstantiateGraph(*(params->phGraph), **(params->pphExecutableGraph));
+  }
+
+  static void OnExitGraphDestroyExt(
+      ze_graph_destroy_ext_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnGraphDestroy(*(params->phGraph));
+  }
+
+  static void OnExitExecutableGraphDestroyExt(
+      ze_executable_graph_destroy_ext_params_t* params,
+      ze_result_t result, void* global_data, void** /* instance_data */) {
+    if (result != ZE_RESULT_SUCCESS) return;
+    ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+    collector->OnExecutableGraphDestroy(*(params->phGraph));
+  }
+
+  static void OnEnterCommandListAppendGraphExt(
+      ze_command_list_append_graph_ext_params_t* params,
+      void* global_data, void** /* instance_data */) {
+    StageGraphExecution(global_data, *(params->phCommandList), *(params->phGraph));
+  }
+
+  static void OnExitCommandListAppendGraphExt(
+      ze_command_list_append_graph_ext_params_t* /* params */,
+      ze_result_t result, void* global_data, void** /* instance_data */,
+      std::vector<uint64_t> *kids) {
+    SubmitGraphExecution(result, global_data, kids);
   }
 
   #include <tracing.gen> // Auto-generated callbacks

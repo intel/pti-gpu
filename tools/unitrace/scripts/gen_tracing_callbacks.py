@@ -26,6 +26,13 @@ SKIPPED_EXTENSION_APIS = {
   'zeIntelMediaCommunicationDestroy',    # uses struct by value (ze_intel_media_doorbell_handle_desc_t)
 }
 
+# IPC handles are structs wrapping an opaque byte array: log their 'data' member.
+IPC_HANDLE_TYPES = {
+  'ze_ipc_mem_handle_t',
+  'ze_ipc_event_pool_handle_t',
+  'ze_ipc_event_counter_based_handle_t',
+}
+
 # Parse Level Zero Headers ####################################################
 
 STATE_NORMAL = 0
@@ -190,8 +197,13 @@ def find_enums(f, enum_map):
       assert not (field_name in params)
       params[field_name] = field_value
     assert len(params) > 0
-    assert not (enum_name in enum_map)
-    enum_map[enum_name] = params
+    # The same enum can come from two headers (compute-runtime's ze_stypes.h
+    # backports core ones); keep the first, which is the core declaration.
+    if enum_name not in enum_map:
+      enum_map[enum_name] = params
+    elif enum_map[enum_name] != params:
+      print("[WARNING] " + enum_name + " is declared differently in another header; "
+            "keeping the first declaration", file = sys.stderr)
 
 def get_param_struct_name(func_name):
   assert func_name[0] == 'z'
@@ -244,7 +256,9 @@ def add_param_map(f, func_list, param_map):
 def get_enum_map(include_path):
   enum_map = {}
 
-  for file_name in os.listdir(include_path):
+  # ze_api.h first, so that a duplicated enum resolves to the core declaration.
+  file_names = sorted(os.listdir(include_path), key = lambda name: (name != "ze_api.h", name))
+  for file_name in file_names:
     if file_name.endswith(".h") or file_name.endswith(".hpp"):
       file_path = os.path.join(include_path, file_name)
       file = open(file_path, "rt")
@@ -383,7 +397,7 @@ def gen_enter_callback(f, func, synchronize_func_list, params):
   f.write("    }\n")
   f.write("    str += \"" + func + ":\";\n")
   for name, type in params:
-    if type == "ze_ipc_mem_handle_t" or type == "ze_ipc_event_pool_handle_t":
+    if type in IPC_HANDLE_TYPES:
       f.write("    str += \" " + name + " = \" ;\n")
       f.write("    TO_HEX_STRING(str, (params->p" + name + ")->data);\n")
     else:
@@ -439,7 +453,7 @@ def gen_enter_callback(f, func, synchronize_func_list, params):
           f.write("    }\n")
         if name.find("ph") == 0 or name.find("pptr") == 0 or name.find("pCount") == 0:
           f.write("    if (*(params->p" + name + ") != nullptr) {\n")
-          if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
+          if type.endswith("*") and type[:-1] in IPC_HANDLE_TYPES:
             f.write("      str += \" (" + name[1:] + " = \" ;\n")
             f.write("      TO_HEX_STRING(str, (*(params->p" + name + "))->data);\n")
           elif type == "ze_event_handle_t*" and func != "zeEventCreate":
@@ -769,7 +783,7 @@ def gen_exit_callback(f, func, return_type, submission_func_list, synchronize_fu
           f.write("      }\n")
         else:
           f.write("      if (*(params->p" + name + ") != nullptr) {\n")
-          if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
+          if type.endswith("*") and type[:-1] in IPC_HANDLE_TYPES:
             f.write("        str += \" " + name[1:] + " = \";\n")
             f.write("        str += (*(params->p" + name + "))->data;\n")
 
@@ -783,7 +797,7 @@ def gen_exit_callback(f, func, return_type, submission_func_list, synchronize_fu
           f.write("    if (result == ZE_RESULT_SUCCESS) {\n")
           result_block_present = True
         f.write("      if (*(params->p" + name + ") != nullptr) {\n")
-        if type == "ze_ipc_mem_handle_t*" or type == "ze_ipc_event_pool_handle_t*":
+        if type.endswith("*") and type[:-1] in IPC_HANDLE_TYPES:
           f.write("        str += \" " + name[1:] + " = \";\n")
           f.write("        TO_HEX_STRING(str, (*(params->p" + name + "))->data);\n")
 
@@ -1016,13 +1030,17 @@ def gen_extension_interception(f, ext_funcs: List[FunctionDecl]):
   f.write("  return false;\n")
   f.write("}\n\n")
 
-def gen_extension_api_tracing(f, types_f, ext_funcs: List[FunctionDecl], submission_func_list):
+def gen_extension_api_tracing(f, types_f, ext_funcs: List[FunctionDecl], submission_func_list,
+                              core_func_names):
   """Generate all extension API tracing code."""
   if not ext_funcs:
     return
 
   # Filter out functions with L0 header uncommon behavior (reference params, struct by value, etc.)
-  filtered_funcs = [func for func in ext_funcs if func.name not in SKIPPED_EXTENSION_APIS]
+  # and the ones that graduated into the core API, which the core generator covers.
+  filtered_funcs = [func for func in ext_funcs
+                    if func.name not in SKIPPED_EXTENSION_APIS
+                    and func.name not in core_func_names]
 
   if not filtered_funcs:
     return
@@ -1132,6 +1150,17 @@ def main():
       "zeCommandListImmediateAppendCommandListsExp",
       "zeDriverGetExtensionFunctionAddress"]
 
+  # Stable graph APIs. The Exp ones are traced by wrapping the pointers returned
+  # from zeDriverGetExtensionFunctionAddress; these are core, so they need callbacks.
+  kfunc_list += [
+      "zeCommandListBeginGraphCaptureExt",
+      "zeCommandListBeginCaptureIntoGraphExt",
+      "zeCommandListEndGraphCaptureExt",
+      "zeGraphInstantiateExt",
+      "zeCommandListAppendGraphExt",
+      "zeGraphDestroyExt",
+      "zeExecutableGraphDestroyExt"]
+
   command_list_func_list = [
       "zeCommandListAppendEventReset",
       "zeCommandListAppendLaunchKernel",
@@ -1156,9 +1185,10 @@ def main():
     
   submission_func_list = command_list_func_list.copy()
   submission_func_list.append("zeCommandQueueExecuteCommandLists")
-  # AppendGraphExp replays captured commands; treat as a submission API so
+  # AppendGraph replays captured commands; treat as a submission API so
   # FLOW_H2D links are drawn into the replayed kernel records.
   submission_func_list.append("zeCommandListAppendGraphExp")
+  submission_func_list.append("zeCommandListAppendGraphExt")
 
   synchronize_func_list_on_enter = [
       "zeEventDestroy",
@@ -1189,7 +1219,8 @@ def main():
 
   types_file = open(types_file_path, "wt")
   if ext_funcs:
-    gen_extension_api_tracing(dst_file, types_file, ext_funcs, submission_func_list)
+    gen_extension_api_tracing(dst_file, types_file, ext_funcs, submission_func_list,
+                              set(func_list))
 
   types_file.close()
   l0_exp_file.close()

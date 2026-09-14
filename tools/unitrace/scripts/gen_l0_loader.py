@@ -110,9 +110,12 @@ def main():
   get_api_func_list(os.path.join(l0_path, "zes_api.h"), api_func_list)
   get_api_func_list(os.path.join(l0_path, "layers", "zel_tracing_api.h"), api_func_list)
 
-  # Extension functions go into a separate list - they're not loaded from the library
+  # Extension functions go into a separate list - they're not loaded from the library.
+  # Skip the ones that graduated into the core API: they are declared above already.
+  core_func_names = set(register_func_list) | set(api_func_list)
   for header_path in find_extension_headers(l0_path):
-    ext_func_list.extend(get_extension_function_names(header_path))
+    ext_func_list.extend(func for func in get_extension_function_names(header_path)
+                         if func not in core_func_names)
 
   gen_loader(dst_loader_file, register_func_list, api_func_list, ext_func_list)
 

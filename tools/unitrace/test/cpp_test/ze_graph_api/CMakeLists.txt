@@ -4,6 +4,8 @@ project(ze_graph_api CXX)
 
 add_executable(ze_graph_api main.cc)
 
+target_compile_features(ze_graph_api PRIVATE cxx_std_17)
+
 target_include_directories(ze_graph_api PRIVATE "${PROJECT_SOURCE_DIR}/../../../../../utils")
 
 # Include Level Zero headers with Graph extension from unitrace build
@@ -17,7 +19,7 @@ if(WIN32)
   FindL0Library(ze_graph_api)
   FindL0Headers(ze_graph_api)
 else()
-  target_link_libraries(ze_graph_api PRIVATE ze_loader)
+  target_link_libraries(ze_graph_api PRIVATE ze_loader ${CMAKE_DL_LIBS})
 endif()
 
 # Copy the graph_kernels SPV (add_one, multiply_two)

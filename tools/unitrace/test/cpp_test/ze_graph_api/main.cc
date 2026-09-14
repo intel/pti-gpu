@@ -11,8 +11,10 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "shared_library.h"
 #include "ze_utils.h"
 
 // Test configuration constants
@@ -60,8 +62,102 @@ static pfn_zeCommandListAppendGraphExp p_zeCommandListAppendGraphExp = nullptr;
 #define LOAD_GRAPH_EXTENSION_FUNCTION(driver, func_name) \
   ZE_CHECK(zeDriverGetExtensionFunctionAddress(driver, #func_name, (void**)(&p_##func_name)))
 
-/// Loads graph extension function pointers from the Level Zero driver.
+// Stable graph API: core entry points exported by the loader, so unlike the Exp
+// ones they cannot be resolved with zeDriverGetExtensionFunctionAddress.
+typedef ze_result_t(ZE_APICALL* pfn_zeGraphCreateExt)(ze_context_handle_t, const void*,
+                                                      ze_graph_handle_t*);
+typedef ze_result_t(ZE_APICALL* pfn_zeGraphDestroyExt)(ze_graph_handle_t);
+typedef ze_result_t(ZE_APICALL* pfn_zeExecutableGraphDestroyExt)(ze_executable_graph_handle_t);
+typedef ze_result_t(ZE_APICALL* pfn_zeCommandListBeginCaptureIntoGraphExt)(ze_command_list_handle_t,
+                                                                           ze_graph_handle_t,
+                                                                           const void*);
+typedef ze_result_t(ZE_APICALL* pfn_zeCommandListEndGraphCaptureExt)(ze_command_list_handle_t,
+                                                                     const void*,
+                                                                     ze_graph_handle_t*);
+typedef ze_result_t(ZE_APICALL* pfn_zeGraphInstantiateExt)(ze_graph_handle_t, const void*,
+                                                           ze_executable_graph_handle_t*);
+typedef ze_result_t(ZE_APICALL* pfn_zeCommandListAppendGraphExt)(ze_command_list_handle_t,
+                                                                 ze_executable_graph_handle_t,
+                                                                 const void*, ze_event_handle_t,
+                                                                 uint32_t, ze_event_handle_t*);
+
+static pfn_zeGraphCreateExt p_zeGraphCreateExt = nullptr;
+static pfn_zeGraphDestroyExt p_zeGraphDestroyExt = nullptr;
+static pfn_zeExecutableGraphDestroyExt p_zeExecutableGraphDestroyExt = nullptr;
+static pfn_zeCommandListBeginCaptureIntoGraphExt p_zeCommandListBeginCaptureIntoGraphExt = nullptr;
+static pfn_zeCommandListEndGraphCaptureExt p_zeCommandListEndGraphCaptureExt = nullptr;
+static pfn_zeGraphInstantiateExt p_zeGraphInstantiateExt = nullptr;
+static pfn_zeCommandListAppendGraphExt p_zeCommandListAppendGraphExt = nullptr;
+
+#define STABLE_GRAPH_FUNCTION(func_name) \
+  { #func_name, reinterpret_cast<void**>(&p_##func_name) }
+
+/// True when the driver reports the stable graph extension, which is what makes
+/// SYCL use it in preference to the experimental one.
+static bool HasStableGraphExtension(ze_driver_handle_t driver) {
+  // Spelled out, not ZE_RECORD_REPLAY_GRAPH_EXT_NAME, to keep building with older headers.
+  const char* extension_name = "ZE_extension_record_replay_graph";
+
+  uint32_t count = 0;
+  if (zeDriverGetExtensionProperties(driver, &count, nullptr) != ZE_RESULT_SUCCESS) {
+    return false;
+  }
+  std::vector<ze_driver_extension_properties_t> extensions(count);
+  if (zeDriverGetExtensionProperties(driver, &count, extensions.data()) != ZE_RESULT_SUCCESS) {
+    return false;
+  }
+  for (const auto& extension : extensions) {
+    if (strcmp(extension.name, extension_name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Resolves the stable graph API from the Level Zero loader. Returns false when
+/// the loader predates it, in which case the caller falls back to Exp.
+static bool LoadStableGraphApi() {
+  // Kept open for the process: the resolved pointers have to stay valid.
+#if defined(_WIN32)
+  static SharedLibrary* lib = SharedLibrary::Create("ze_loader.dll");
+#else
+  static SharedLibrary* lib = SharedLibrary::Create("libze_loader.so.1");
+#endif
+  if (lib == nullptr) {
+    return false;
+  }
+
+  const std::pair<const char*, void**> functions[] = {
+      STABLE_GRAPH_FUNCTION(zeGraphCreateExt),
+      STABLE_GRAPH_FUNCTION(zeGraphDestroyExt),
+      STABLE_GRAPH_FUNCTION(zeExecutableGraphDestroyExt),
+      STABLE_GRAPH_FUNCTION(zeCommandListBeginCaptureIntoGraphExt),
+      STABLE_GRAPH_FUNCTION(zeCommandListEndGraphCaptureExt),
+      STABLE_GRAPH_FUNCTION(zeGraphInstantiateExt),
+      STABLE_GRAPH_FUNCTION(zeCommandListAppendGraphExt)};
+
+  bool complete = true;
+  for (const auto& [name, address] : functions) {
+    *address = lib->GetSym<void*>(name);
+    complete = complete && (*address != nullptr);
+  }
+
+  if (!complete) {
+    // Take the Exp path as a whole rather than mixing the two APIs.
+    for (const auto& [name, address] : functions) {
+      *address = nullptr;
+    }
+  }
+  return complete;
+}
+
+/// Loads graph function pointers, preferring the stable API over Exp.
 static bool LoadGraphExtension(ze_driver_handle_t driver) {
+  if (HasStableGraphExtension(driver) && LoadStableGraphApi()) {
+    std::cout << "Stable graph API loaded successfully" << std::endl;
+    return true;
+  }
+
   LOAD_GRAPH_EXTENSION_FUNCTION(driver, zeGraphCreateExp);
   LOAD_GRAPH_EXTENSION_FUNCTION(driver, zeGraphDestroyExp);
   LOAD_GRAPH_EXTENSION_FUNCTION(driver, zeExecutableGraphDestroyExp);
@@ -72,6 +168,50 @@ static bool LoadGraphExtension(ze_driver_handle_t driver) {
 
   std::cout << "Graph extension loaded successfully" << std::endl;
   return true;
+}
+
+// Dispatch helpers: call whichever variant was loaded.
+
+static ze_result_t GraphCreate(ze_context_handle_t context, ze_graph_handle_t* graph) {
+  return (p_zeGraphCreateExt != nullptr) ? p_zeGraphCreateExt(context, nullptr, graph)
+                                         : p_zeGraphCreateExp(context, graph, nullptr);
+}
+
+static ze_result_t BeginCaptureIntoGraph(ze_command_list_handle_t cmdlist,
+                                         ze_graph_handle_t graph) {
+  return (p_zeCommandListBeginCaptureIntoGraphExt != nullptr)
+             ? p_zeCommandListBeginCaptureIntoGraphExt(cmdlist, graph, nullptr)
+             : p_zeCommandListBeginCaptureIntoGraphExp(cmdlist, graph, nullptr);
+}
+
+static ze_result_t EndGraphCapture(ze_command_list_handle_t cmdlist, ze_graph_handle_t* graph) {
+  return (p_zeCommandListEndGraphCaptureExt != nullptr)
+             ? p_zeCommandListEndGraphCaptureExt(cmdlist, nullptr, graph)
+             : p_zeCommandListEndGraphCaptureExp(cmdlist, graph, nullptr);
+}
+
+static ze_result_t GraphInstantiate(ze_graph_handle_t graph,
+                                    ze_executable_graph_handle_t* exec_graph) {
+  return (p_zeGraphInstantiateExt != nullptr)
+             ? p_zeGraphInstantiateExt(graph, nullptr, exec_graph)
+             : p_zeCommandListInstantiateGraphExp(graph, exec_graph, nullptr);
+}
+
+static ze_result_t AppendGraph(ze_command_list_handle_t cmdlist,
+                               ze_executable_graph_handle_t exec_graph) {
+  return (p_zeCommandListAppendGraphExt != nullptr)
+             ? p_zeCommandListAppendGraphExt(cmdlist, exec_graph, nullptr, nullptr, 0, nullptr)
+             : p_zeCommandListAppendGraphExp(cmdlist, exec_graph, nullptr, nullptr, 0, nullptr);
+}
+
+static ze_result_t GraphDestroy(ze_graph_handle_t graph) {
+  return (p_zeGraphDestroyExt != nullptr) ? p_zeGraphDestroyExt(graph)
+                                          : p_zeGraphDestroyExp(graph);
+}
+
+static ze_result_t ExecutableGraphDestroy(ze_executable_graph_handle_t exec_graph) {
+  return (p_zeExecutableGraphDestroyExt != nullptr) ? p_zeExecutableGraphDestroyExt(exec_graph)
+                                                    : p_zeExecutableGraphDestroyExp(exec_graph);
 }
 
 /// Captures a graph with sequential fork/join pattern using 3 command lists.
@@ -97,10 +237,10 @@ static bool CaptureGraphWithForks(
     ze_executable_graph_handle_t& out_exec_graph) {
 
   ze_graph_handle_t graph = nullptr;
-  ZE_CHECK(p_zeGraphCreateExp(context, &graph, nullptr));
+  ZE_CHECK(GraphCreate(context, &graph));
 
   // Begin capture on primary cmdlist
-  ZE_CHECK(p_zeCommandListBeginCaptureIntoGraphExp(primary_cmdlist, graph, nullptr));
+  ZE_CHECK(BeginCaptureIntoGraph(primary_cmdlist, graph));
 
   // PRIMARY: H2D copy
   ZE_CHECK(zeCommandListAppendMemoryCopy(primary_cmdlist, dev_buf, host_input, buf_size,
@@ -132,11 +272,11 @@ static bool CaptureGraphWithForks(
                                          nullptr, 0, nullptr));
 
   // End capture on primary
-  ZE_CHECK(p_zeCommandListEndGraphCaptureExp(primary_cmdlist, &graph, nullptr));
+  ZE_CHECK(EndGraphCapture(primary_cmdlist, &graph));
 
   // Instantiate executable graph
   ze_executable_graph_handle_t exec_graph = nullptr;
-  ZE_CHECK(p_zeCommandListInstantiateGraphExp(graph, &exec_graph, nullptr));
+  ZE_CHECK(GraphInstantiate(graph, &exec_graph));
 
   out_graph = graph;
   out_exec_graph = exec_graph;
@@ -241,8 +381,7 @@ static bool RunGraphPipeline(ze_kernel_handle_t kernel_add_one,
 
   // Execute the graph multiple times
   for (int i = 0; i < graph_exec_count; ++i) {
-    ZE_CHECK(p_zeCommandListAppendGraphExp(primary_cmdlist, exec_graph, nullptr,
-                                          nullptr, 0, nullptr));
+    ZE_CHECK(AppendGraph(primary_cmdlist, exec_graph));
   }
 
   // Synchronize
@@ -277,8 +416,8 @@ static bool RunGraphPipeline(ze_kernel_handle_t kernel_add_one,
   }
 
   // Cleanup
-  p_zeExecutableGraphDestroyExp(exec_graph);
-  p_zeGraphDestroyExp(graph);
+  ExecutableGraphDestroy(exec_graph);
+  GraphDestroy(graph);
 
   for (uint32_t i = 0; i < EVENT_POOL_SIZE; ++i) {
     zeEventDestroy(events[i]);

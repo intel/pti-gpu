@@ -15,7 +15,7 @@ find_package(PythonInterp 3.9 REQUIRED)
 find_package(IntelSYCL REQUIRED)
 
 # L0 version required
-set (LEVEL_ZERO_COMMIT_ID "v1.26.0")
+set (LEVEL_ZERO_COMMIT_ID "v1.32.0")
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
 

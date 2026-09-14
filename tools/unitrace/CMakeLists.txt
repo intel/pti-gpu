@@ -263,7 +263,9 @@ endif()
 # GetComputeRuntimeHeaders is needed for both OpenCL tracing and Level Zero extension APIs
 GetComputeRuntimeHeaders(unitrace_tool)
 
-set (LEVEL_ZERO_COMMIT_ID "v1.26.0")
+# v1.32.0 is the first release with the stable graph API (zeGraphCreateExt and
+# friends), which SYCL uses instead of the Exp one.
+set (LEVEL_ZERO_COMMIT_ID "v1.32.0")
 GetLevelZeroHeaders(unitrace_tool)
 
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_common_header.py" "common_header.gen" gen_common_header)

@@ -4,7 +4,7 @@ import os
 import build_utils
 
 url = "https://github.com/intel/compute-runtime.git"
-commit = "aa5ab7a8288f96f1bed187cec0d359bd65354ef3"
+commit = "050536ff3b6f830199ec99cff8ffcac3d804c40a"  # release 26.31.39395.14
 
 def postprocess(file_path):
     """Post-process header file: remove non-local tracing header includes.
@@ -95,4 +95,5 @@ def main():
         return 1
 
 if __name__ == "__main__":
-  main()
+  # Fail the build when the headers could not be fetched.
+  sys.exit(main())
