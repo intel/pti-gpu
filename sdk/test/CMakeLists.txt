@@ -277,7 +277,7 @@ if(HAVE_SYCL)
   add_executable(dpcgemm_suite main_dpcgemm_fixture.cc)
   target_include_directories(
     dpcgemm_suite
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
            "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
@@ -291,7 +291,7 @@ if(HAVE_SYCL)
   add_executable(classapi_suite main_classapi_fixture.cc)
   target_include_directories(
     classapi_suite
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
            "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
@@ -305,7 +305,7 @@ if(HAVE_SYCL)
   add_executable(vecsqadd_suite main_vecsqadd_fixture.cc)
   target_include_directories(
     vecsqadd_suite
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -323,7 +323,7 @@ if(HAVE_SYCL)
   add_executable(vecsqadd_metrics_suite metrics_vecsqadd_fixture.cc)
   target_include_directories(
     vecsqadd_metrics_suite
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
 
@@ -346,7 +346,7 @@ if(HAVE_SYCL)
   add_executable(metric_enable_disable_test metric_enable_disable_test.cc)
   target_include_directories(
     metric_enable_disable_test
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -366,7 +366,7 @@ if(HAVE_SYCL)
   add_executable(metrics_scope_gemm_suite metrics_scope_gemm.cc)
   target_include_directories(
     metrics_scope_gemm_suite
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
 
@@ -386,7 +386,7 @@ if(HAVE_SYCL)
   add_executable(metrics_scope_buffer_handler_suite metrics_scope_buffer_handler.cc)
   target_include_directories(
     metrics_scope_buffer_handler_suite
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -396,7 +396,7 @@ if(HAVE_SYCL)
   add_executable(metrics_scope_parallel metrics_scope_parallel.cc)
   target_include_directories(
     metrics_scope_parallel
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
 
@@ -433,7 +433,7 @@ if(HAVE_SYCL)
     metrics_multi_thread.cc)
   target_include_directories(
     multi_thread_metrics_suite
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
             "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
             "${PROJECT_SOURCE_DIR}/samples/samples_utilities")
@@ -452,7 +452,7 @@ if(HAVE_SYCL)
   add_executable(no_kernel_overlap no_kernel_overlap.cc)
   target_include_directories(
     no_kernel_overlap
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -470,7 +470,7 @@ if(HAVE_SYCL)
   add_executable(startstop_suite main_startstop_fixture.cc)
   target_include_directories(
     startstop_suite
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -506,7 +506,7 @@ if(HAVE_SYCL)
 
   target_include_directories(
     sycl_queue_id
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
@@ -521,7 +521,7 @@ if(HAVE_SYCL)
 
   target_include_directories(
     zegemm_suite
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
@@ -540,7 +540,7 @@ if(HAVE_SYCL)
 
   target_include_directories(
     init_tests
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
     PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
@@ -558,7 +558,7 @@ if(HAVE_SYCL)
 
   target_include_directories(
     multi_threaded_submission
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
@@ -573,7 +573,7 @@ if(HAVE_SYCL)
 
   target_include_directories(
     callback_api_test
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
            "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero")
 
   target_compile_options(callback_api_test PUBLIC -fsycl)
@@ -586,7 +586,7 @@ if(HAVE_SYCL)
 
   target_include_directories(
     callback_kernel_lifecycle_test
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
       PRIVATE "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -606,13 +606,13 @@ if(HAVE_SYCL)
 
   target_include_directories(
     dpc_gemm_threaded_profiled
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/utils")
 
   target_include_directories(
     dpc_gemm_threaded_prof_print
-    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+    PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -854,7 +854,7 @@ if (HAVE_SYCL AND TARGET unified-runtime::loader)
 
     target_include_directories(
       urgemm_suite
-      PUBLIC "${CMAKE_BINARY_DIR}"
+      PUBLIC "${PROJECT_BINARY_DIR}"
              "${PROJECT_SOURCE_DIR}/include"
              "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
              "${PROJECT_SOURCE_DIR}/src"
@@ -900,7 +900,7 @@ add_executable(view_record_test view_buffer_test.cc)
 
 target_include_directories(
   view_record_test
-  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+  PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -912,7 +912,7 @@ add_executable(assert_exception_test assert_exception_test.cc)
 
 target_include_directories(
   assert_exception_test
-  PUBLIC "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/include"
+  PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src")
 
 target_link_libraries(assert_exception_test PUBLIC spdlog::spdlog
@@ -922,7 +922,7 @@ add_executable(subscribers_unit_test subscribers_unit_test.cc)
 
 target_include_directories(
   subscribers_unit_test
-  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+  PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -932,7 +932,7 @@ target_link_libraries(subscribers_unit_test PUBLIC GTest::gtest_main spdlog::spd
 add_executable(ze_events_pools_observer_test ze_events_pools_observer_test.cc)
 
 target_include_directories(ze_events_pools_observer_test
-  PUBLIC "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/include"
+  PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/include"
          "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/levelzero"
          "${PROJECT_SOURCE_DIR}/src/sycl" "${PROJECT_SOURCE_DIR}/src/utils")
 
@@ -945,7 +945,7 @@ add_executable(view_gpu_local_test view_gpu_local_test.cc)
 
 target_include_directories(
   view_gpu_local_test
-  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include")
+  PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include")
 
 target_link_libraries(view_gpu_local_test PUBLIC spdlog::spdlog Pti::pti_view
   GTest::gtest_main)
@@ -954,7 +954,7 @@ add_executable(pc_sampling_basic_test pc_sampling/pc_sampling_basic_test.cc)
 
 target_include_directories(
   pc_sampling_basic_test
-  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+  PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
           "${PROJECT_SOURCE_DIR}/src/utils"
           "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
@@ -966,7 +966,7 @@ add_executable(pc_sampling_internal_test pc_sampling/pc_sampling_internal_test.c
 
 target_include_directories(
   pc_sampling_internal_test
-  PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+  PUBLIC "${PROJECT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
   PRIVATE "${PROJECT_SOURCE_DIR}/src"
           "${PROJECT_SOURCE_DIR}/src/utils"
           "${CMAKE_CURRENT_SOURCE_DIR}/pc_sampling")
@@ -1074,8 +1074,8 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   if(DEFINED PTI_SANITIZER AND PTI_SANITIZER AND TEST_THREADS GREATER 8)
     set(TEST_THREADS 8)
   endif()
-  set(MT_AWK_TEST_OUT "${CMAKE_BINARY_DIR}/mt-awk-test.out")
-  set(MT_AWK_TEST_OUT_IMMEDIATE "${CMAKE_BINARY_DIR}/mt-awk-test-immediate.out")
+  set(MT_AWK_TEST_OUT "${PROJECT_BINARY_DIR}/mt-awk-test.out")
+  set(MT_AWK_TEST_OUT_IMMEDIATE "${PROJECT_BINARY_DIR}/mt-awk-test-immediate.out")
   add_test(
     NAME mt-awk-test
     COMMAND

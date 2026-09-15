@@ -299,15 +299,14 @@ target_compile_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
 
 target_link_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
 
-FindHeadersPath(
+FindTracedLibrariesHeaderPaths(
   pti "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py"
-  "tracing.gen" gen_tracing_header LevelZero::level-zero)
+  "tracing.gen" gen_tracing_libs_header LevelZero::level-zero)
 
 if(PROJECT_IS_TOP_LEVEL)
   AddApiGenTarget(
     "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py" "tracing.gen" LevelZero::level-zero)
-  add_dependencies(generate-ids gen_tracing_header)
-
+  add_dependencies(generate-ids gen_tracing_libs_header)
 endif()
 
 # Library that loads core (pti). User links to this one.

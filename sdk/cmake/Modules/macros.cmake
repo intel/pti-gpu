@@ -28,7 +28,7 @@ macro(SetBuildType)
   endif()
 endmacro()
 
-macro(FindHeadersPath TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET)
+macro(FindTracedLibrariesHeaderPaths TARGET L0_GEN_SCRIPT GEN_FILE_NAME custom_target L0_TARGET)
   RequirePythonInterp()
 
   # Use the target that links level zero to find the level zero library
