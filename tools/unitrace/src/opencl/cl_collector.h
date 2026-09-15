@@ -381,26 +381,24 @@ class ClCollector {
       }
 
       for (auto& props : device_kprops) {
-        // kernel properties file path: data_dir/.kprops.<device_id>.<pid>.txt
-        std::string fpath = data_dir_name_ + "/.kprops." + std::to_string(props.first) + "." + std::to_string(utils::GetPid()) + ".txt";
-        std::ofstream kpfs = std::ofstream(fpath, std::ios::out | std::ios::trunc);
+        std::shared_ptr<Logger> kpfs_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_KPROPS, props.first, true, true);
         uint64_t prev_base = 0;
         for (auto it = props.second.crbegin(); it != props.second.crend(); it++) {
-          kpfs << "\"" << utils::Demangle(it->second->name.c_str()) << "\"" << std::endl;
-          kpfs << std::to_string(it->second->base_addr) << std::endl;
+          kpfs_logger->Log("\"" + utils::Demangle(it->second->name.c_str()) + "\"\n");
+          kpfs_logger->Log(std::to_string(it->second->base_addr) + "\n");
           if (prev_base == 0) {
-            kpfs << std::to_string(it->second->size) << std::endl;
+            kpfs_logger->Log(std::to_string(it->second->size) + "\n");
           }
           else {
             size_t size = prev_base - it->second->base_addr;
             if (size > it->second->size) {
               size = it->second->size;
             }
-            kpfs << std::to_string(size) << std::endl;
+            kpfs_logger->Log(std::to_string(size) + "\n");
           }
           prev_base = it->second->base_addr;
         }
-        kpfs.close();
+        kpfs_logger->Flush();
       }
     }
 
@@ -423,18 +421,15 @@ class ClCollector {
       }
 
       for (const auto &dev_kprofile : device_kprofiles) {
-        std::ofstream ouf;
-        // kernel instance time file path: <data_dir>/.ktime.<device_id>.<pid>.txt
-        std::string fpath = data_dir_name_ + "/.ktime." + std::to_string(dev_kprofile.first) + "." + std::to_string(utils::GetPid()) + ".txt";
-        ouf = std::ofstream(fpath, std::ios::out | std::ios::trunc);
+        std::shared_ptr<Logger> ktime_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_KTIME, dev_kprofile.first, true, true);
         for (const auto &profile : dev_kprofile.second) {
-          ouf << std::to_string((-1)) << std::endl;
-          ouf << std::to_string(profile.global_instance_id_) << std::endl;
-          ouf << std::to_string(profile.device_started_) << std::endl;
-          ouf << std::to_string(profile.device_ended_) << std::endl;
-          ouf << "\"" << profile.kernel_name_ << "\"" << std::endl;
+          ktime_logger->Log(std::to_string((-1)) + "\n");
+          ktime_logger->Log(std::to_string(profile.global_instance_id_) + "\n");
+          ktime_logger->Log(std::to_string(profile.device_started_) + "\n");
+          ktime_logger->Log(std::to_string(profile.device_ended_) + "\n");
+          ktime_logger->Log("\"" + profile.kernel_name_ + "\"\n");
         }
-        ouf.close();
+        ktime_logger->Flush();
       }
     }
   }

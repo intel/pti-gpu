@@ -8,3 +8,4 @@ target_include_directories(cl_gemm PRIVATE "${PROJECT_SOURCE_DIR}/../../../../..
 target_link_libraries(cl_gemm PRIVATE OpenCL)
 
 add_test(NAME cl_gemm COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py -c ${CMAKE_SOURCE_DIR} cl_gemm GPU)
+add_test(NAME cl_gemm_metric COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py -c ${CMAKE_SOURCE_DIR} cl_gemm GPU 4096)

@@ -16,6 +16,11 @@
             "scenarios": ["-c --opencl", "-d -v --opencl", "--opencl --chrome-call-logging --chrome-kernel-logging", "-h --opencl", "-s --opencl"]
         },
         {
+            "name": "cl_gemm_metric",
+            "platform": ["Windows", "Linux"],
+            "scenarios": ["--opencl -k", "--opencl --result-dir -k"]
+        },
+        {
             "name": "graph",
             "platform": ["Windows", "Linux"],
             "skip_scenarios":["-t"]
