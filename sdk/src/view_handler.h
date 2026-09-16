@@ -1016,6 +1016,12 @@ inline void GenerateExternalCorrelationRecords(const ZeKernelCommandExecutionRec
     if (stack.empty()) {
       continue;
     }
+    // PTI-457: a kind that has been given a live id again is already reported by
+    // the loop above. Emitting the popped id as well labels one operation with
+    // two conflicting external ids, and the consumer keeps an arbitrary one.
+    if (thread_local_map_ext_corrid_vectors.count(kv.first) != 0) {
+      continue;
+    }
     auto ext_record = stack.top();  // copy for modification
     ext_record._correlation_id = rec.cid_;
     ext_record._view_kind._view_kind = pti_view_kind::PTI_VIEW_EXTERNAL_CORRELATION;

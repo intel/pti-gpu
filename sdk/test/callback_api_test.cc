@@ -92,6 +92,20 @@ struct ExternalCorrTestData {
   std::set<uint32_t> external_corr_seen_so_far;  // for ordering check
   std::set<uint32_t> callback_pushed_corr_ids;   // correlation_ids we pushed in callbacks
 
+  // PTI-457: every external correlation record sharing a (_correlation_id,
+  // _external_kind) pair must carry the same _external_id. If two records
+  // disagree, a consumer cannot tell which id labels the operation and keeps
+  // whichever it happened to see last. The record count itself is not the
+  // invariant -- a single operation may legitimately be reported by more than
+  // one collector path -- but the id they agree on is.
+  std::map<std::pair<uint32_t, uint32_t>, std::set<uint64_t>> ext_ids_per_corr_and_kind;
+  // The id pushed from inside the callback after popping, keyed by correlation
+  // id, so the view records can be checked against what was actually live.
+  std::map<uint32_t, uint64_t> repushed_in_callback;
+  // A failed re-push would leave repushed_in_callback empty and make the checks
+  // below vacuous, so it has to fail the test rather than be ignored.
+  std::atomic<int> repush_errors{0};
+
   // Violation tracking
   struct OrderViolation {
     uint32_t correlation_id;
@@ -162,6 +176,9 @@ struct CallbackData {
   }
 
   bool do_external_correlation_test{false};
+  // PTI-457: pop the id pushed on ENTER and immediately push a different one,
+  // all from inside the subscriber callback.
+  bool do_pop_then_push_in_callback{false};
   ExternalCorrTestData ext_correlation_data{};
 
   // ============================================================================
@@ -376,6 +393,11 @@ void BufferCompleted(unsigned char* buf, size_t buf_size, size_t used_bytes) {
         if (external_corr_test_data) {
           external_corr_test_data->view_external_to_corr[ext_id] = corr_id;
           external_corr_test_data->external_corr_seen_so_far.insert(corr_id);
+          // PTI-457: collect the distinct external ids reported for each
+          // (correlation id, kind) pair. More than one means they conflict.
+          external_corr_test_data
+              ->ext_ids_per_corr_and_kind[{corr_id, static_cast<uint32_t>(rec->_external_kind)}]
+              .insert(ext_id);
         }
 
         std::cout << "View: External Correlation (external_id=" << ext_id
@@ -781,6 +803,20 @@ class CallbackApiTest : public ::testing::TestWithParam<bool> {
 
       if (data->do_external_correlation_test) {
         PushOrPopExternalCorrelation(false, data, gpu_op_data->_correlation_id);
+
+        // PTI-457: having popped, push a different id from inside the same
+        // callback. The popped id must not be reported alongside this one.
+        if (data->do_pop_then_push_in_callback) {
+          const uint64_t repushed = data->ext_correlation_data.next_external_id.fetch_add(1);
+          if (ptiViewPushExternalCorrelationId(
+                  pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, repushed) ==
+              PTI_SUCCESS) {
+            data->ext_correlation_data.repushed_in_callback[gpu_op_data->_correlation_id] =
+                repushed;
+          } else {
+            data->ext_correlation_data.repush_errors++;
+          }
+        }
       }
     }
   }
@@ -2059,6 +2095,138 @@ TEST_P(CallbackApiTest, ExternalCorrelationInAppendCallbacks) {
             << callback_data_.completed_memory_id_to_corr_id.size() << std::endl;
 
   PrintOperationIdStats(&callback_data_, "ExternalCorrelationInAppendCallbacks");
+}
+
+//
+// PTI-457: an id popped from inside a subscriber callback must not be reported
+// alongside an id pushed after it. The invariant is that every external
+// correlation record sharing a (_correlation_id, _external_kind) pair carries
+// the *same* _external_id -- not that exactly one record exists. This test
+// enables both the Runtime and Driver views, and an operation reported by both
+// collector paths legitimately produces more than one record; those records
+// agree. When the stale popped id was emitted too, the records disagreed and a
+// consumer keyed on that pair could report the already-popped id.
+//
+TEST_P(CallbackApiTest, ExternalCorrelationPopThenPushInCallbackKeepsOneExternalIdPerPair) {
+  std::cout << "\n=== Test: ExternalCorrelationPopThenPushInCallbackKeepsOneExternalIdPerPair ==="
+            << std::endl;
+
+  callback_data_.do_external_correlation_test = true;
+  callback_data_.do_pop_then_push_in_callback = true;
+
+  pti_callback_subscriber_handle subscriber = nullptr;
+  EXPECT_EQ(ptiCallbackSubscribe(&subscriber, TestCallback, &callback_data_), PTI_SUCCESS);
+  EXPECT_NE(subscriber, nullptr);
+  subscribers_.push_back(subscriber);
+
+  EXPECT_EQ(ptiCallbackEnableDomain(subscriber, PTI_CB_DOMAIN_DRIVER_GPU_OPERATION_APPENDED, 1, 1),
+            PTI_SUCCESS);
+
+  EXPECT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), PTI_SUCCESS);
+  EXPECT_EQ(
+      ptiViewEnableDriverApiClass(1, PTI_API_CLASS_GPU_OPERATION_CORE, PTI_API_GROUP_LEVELZERO),
+      PTI_SUCCESS);
+  EXPECT_EQ(ptiViewEnable(PTI_VIEW_RUNTIME_API), PTI_SUCCESS);
+  EXPECT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), PTI_SUCCESS);
+
+  try {
+    command_list_immediate_ = GetParam();
+    sycl::device dev(sycl::gpu_selector_v);
+    if (SkipNonImmediateTestIfBMG(dev, command_list_immediate_)) {
+      GTEST_SKIP() << "Skipping Non-immediate command list test on BMG";
+    }
+    sycl::property_list prop;
+    if (command_list_immediate_) {
+      prop = sycl::property_list{sycl::property::queue::in_order(),
+                                 sycl::ext::intel::property::queue::immediate_command_list()};
+    } else {
+      prop = sycl::property_list{sycl::property::queue::in_order(),
+                                 sycl::ext::intel::property::queue::no_immediate_command_list()};
+    }
+    sycl::queue queue(dev, sycl::async_handler{}, prop);
+
+    unsigned size = kDefaultMatrixSize;
+    std::vector<float> a(size * size, A_VALUE);
+    std::vector<float> b(size * size, B_VALUE);
+    std::vector<float> c(size * size, 0.0f);
+
+    LaunchMultipleGEMMKernels(queue, a, b, c, size, kDefaultKernelCount);
+  } catch (const sycl::exception& e) {
+    FAIL() << "SYCL exception during kernel execution: " << e.what();
+  }
+
+  EXPECT_EQ(ptiViewDisable(PTI_VIEW_EXTERNAL_CORRELATION), PTI_SUCCESS);
+  EXPECT_EQ(ptiViewDisable(PTI_VIEW_RUNTIME_API), PTI_SUCCESS);
+  EXPECT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), PTI_SUCCESS);
+
+  StopCollectionCommon();
+  EXPECT_EQ(ptiFlushAllViews(), PTI_SUCCESS);
+
+  const auto& data = callback_data_.ext_correlation_data;
+
+  ASSERT_EQ(data.repush_errors.load(), 0)
+      << "a re-push from inside the callback failed, so the records below were never exercised";
+  ASSERT_FALSE(data.repushed_in_callback.empty())
+      << "no id was ever re-pushed from inside a callback, nothing was verified";
+  ASSERT_FALSE(data.ext_ids_per_corr_and_kind.empty())
+      << "no external correlation records were produced, nothing was verified";
+
+  // The defect: an id popped inside a subscriber callback was reported again on
+  // a later operation that already had a live id, so one pair carried two
+  // conflicting external ids -- the live one and the stale one.
+  int offending_pairs = 0;
+  for (const auto& [pair, ids] : data.ext_ids_per_corr_and_kind) {
+    if (ids.size() != 1) {
+      offending_pairs++;
+      std::string id_list;
+      for (auto id : ids) {
+        id_list += (id_list.empty() ? "" : ", ") + std::to_string(id);
+      }
+      ADD_FAILURE() << "correlation_id=" << pair.first << " kind=" << pair.second
+                    << " was labelled with " << ids.size() << " conflicting external ids {"
+                    << id_list
+                    << "}; a consumer cannot resolve which one labels this operation (PTI-457)";
+    }
+  }
+
+  std::cout << "Pairs checked: " << data.ext_ids_per_corr_and_kind.size()
+            << ", offending: " << offending_pairs << std::endl;
+
+  // Checking the ids merely agree is not enough on its own: a regression that
+  // dropped the live record and emitted only the stale popped one would still
+  // leave a single id per pair. Pin the id to the one the callback made live.
+  constexpr uint32_t kCustom0 =
+      static_cast<uint32_t>(pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0);
+  for (const auto& [corr_id, expected_id] : data.repushed_in_callback) {
+    const auto it = data.ext_ids_per_corr_and_kind.find({corr_id, kCustom0});
+    if (it == data.ext_ids_per_corr_and_kind.end()) {
+      ADD_FAILURE() << "correlation_id=" << corr_id << " pushed external id " << expected_id
+                    << " from inside its callback but produced no external correlation record";
+      continue;
+    }
+    EXPECT_TRUE(it->second.count(expected_id) != 0)
+        << "correlation_id=" << corr_id << " should carry the external id " << expected_id
+        << " made live from inside its callback, but did not";
+  }
+
+  // Each callback pops one id and pushes one, so the stack depth is unchanged
+  // and only the most recently re-pushed id sits on top -- the ids below it
+  // were pushed by the harness, not by the callbacks. So only the first pop has
+  // a value this test can predict; the rest just drain the stack.
+  auto newest = data.repushed_in_callback.rbegin();
+  if (newest != data.repushed_in_callback.rend()) {
+    uint64_t popped = 0;
+    EXPECT_EQ(ptiViewPopExternalCorrelationId(
+                  pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, &popped),
+              PTI_SUCCESS);
+    EXPECT_EQ(popped, newest->second)
+        << "the id pushed from inside the last callback did not stay live on the stack";
+    for (auto it = std::next(newest); it != data.repushed_in_callback.rend(); ++it) {
+      EXPECT_EQ(ptiViewPopExternalCorrelationId(
+                    pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_0, &popped),
+                PTI_SUCCESS);
+    }
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(Parametrized, CallbackApiTest, ::testing::Values(false, true),
