@@ -1823,20 +1823,12 @@ class ZeCollector {
     return command_list_info.immediate;
   }
 
-  static constexpr bool IsCommandListInfoInOrder(const ZeCommandListInfo& command_list_info) {
-    return command_list_info.immediate
-               ? command_list_info.immediate_flags != ZE_COMMAND_QUEUE_FLAG_FORCE_UINT32 &&
-                     (command_list_info.immediate_flags & ZE_COMMAND_QUEUE_FLAG_IN_ORDER) != 0
-               : command_list_info.flags != ZE_COMMAND_LIST_FLAG_FORCE_UINT32 &&
-                     (command_list_info.flags & ZE_COMMAND_LIST_FLAG_IN_ORDER) != 0;
-  }
-
   bool IsCommandListInOrder(ze_command_list_handle_t command_list) {
     {
       std::shared_lock lock1(command_list_map_mutex_);
       auto cmd_list_it = command_list_map_.find(command_list);
       if (cmd_list_it != command_list_map_.end()) {
-        return IsCommandListInfoInOrder(cmd_list_it->second);
+        return IsInOrder(cmd_list_it->second);
       }
     }
     if (RebuildCommandListInfo(command_list) != ZE_RESULT_SUCCESS) {
@@ -1847,7 +1839,7 @@ class ZeCollector {
     if (new_cmd_list_it == command_list_map_.end()) {
       return false;  // extremely rare case, the entry should be rebuilt.
     }
-    return IsCommandListInfoInOrder(new_cmd_list_it->second);
+    return IsInOrder(new_cmd_list_it->second);
   }
 
   void AddImage(ze_image_handle_t image, size_t size) {
@@ -2406,10 +2398,27 @@ class ZeCollector {
     // but with UR V2 in presence of counter-based events
     // - for Full and Hybrid modes the same event_swap mechanism is used
     if (command->event_swap.Get() != nullptr) {
-      SPDLOG_DEBUG("\t\t Will be appending WaitAndSignal command!");
-      bool append_res = A2AppendWaitAndSignalEvent(command->command_list, command->event_self,
+      bool append_result = false;
+      bool in_order = false;
+      {
+        std::shared_lock<std::shared_mutex> cl_lock(command_list_map_mutex_);
+        in_order = IsInOrder(command_list_info);
+      }
+      if (in_order) {
+        SPDLOG_DEBUG("Appending Signal event to command list {}, event: {}",
+                     static_cast<const void*>(command->command_list),
+                     static_cast<const void*>(command->event_self));
+        append_result = A2AppendSignalEvent(command->command_list, command->event_self);
+      } else {
+        SPDLOG_DEBUG(
+            "Appending Wait and Signal event to command list {}, signal event: {}, wait event: {}",
+            static_cast<const void*>(command->command_list),
+            static_cast<const void*>(command->event_self),
+            static_cast<const void*>(command->event_swap.Get()));
+        append_result = A2AppendWaitAndSignalEvent(command->command_list, command->event_self,
                                                    command->event_swap.Get());
-      PTI_ASSERT(append_res);
+      }
+      PTI_ASSERT(append_result);
     }
 
     // A shared pointer is being created here because the lifetime of this GPU execution command is

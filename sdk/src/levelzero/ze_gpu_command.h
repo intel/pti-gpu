@@ -295,4 +295,12 @@ struct ZeDeviceDescriptor {
   return transfer_properties;
 }
 
+constexpr bool IsInOrder(const ZeCommandListInfo& command_list_info) {
+  return command_list_info.immediate
+             ? command_list_info.immediate_flags != ZE_COMMAND_QUEUE_FLAG_FORCE_UINT32 &&
+                   (command_list_info.immediate_flags & ZE_COMMAND_QUEUE_FLAG_IN_ORDER) != 0
+             : command_list_info.flags != ZE_COMMAND_LIST_FLAG_FORCE_UINT32 &&
+                   (command_list_info.flags & ZE_COMMAND_LIST_FLAG_IN_ORDER) != 0;
+}
+
 #endif  // PTI_LEVELZERO_ZE_GPU_COMMAND_H_
