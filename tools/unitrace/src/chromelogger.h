@@ -165,7 +165,7 @@ static void EmitDeviceThreadMetadata(uint32_t device_pid, uint32_t device_tid,
   logger_->Flush();
 }
 
-static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device, uint32_t engine_ordinal, uint32_t engine_index, int host_pid, int host_tid, uint32_t track_id) {
+static std::tuple<uint32_t, uint32_t, int32_t> GetDevicePidTid(ze_device_handle_t device, uint32_t engine_ordinal, uint32_t engine_index, int host_pid, int host_tid, uint32_t track_id) {
   if (device_logging_no_thread_) {
     // map all threads to the process
     host_tid = host_pid;
@@ -289,7 +289,7 @@ static std::tuple<uint32_t, uint32_t> GetDevicePidTid(ze_device_handle_t device,
     EmitDeviceThreadMetadata(device_pid, device_tid, device_thread_name, start_time);
   }
 
-  return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
+  return std::tuple<uint32_t, uint32_t, int32_t>(device_pid, device_tid, device_id);
 }
 
 #if BUILD_WITH_OPENCL
@@ -309,23 +309,23 @@ struct ClDeviceTidKey {
   uint32_t track_id_;
 };
 
-std::string GetClDeviceName(cl_device_id device);
+std::pair<uint32_t, std::string> GetClDeviceName(cl_device_id device);
 
 struct ClDevicePidKeyCompare {
   bool operator()(const ClDevicePidKey& lhs, const ClDevicePidKey& rhs) const {
     return (memcmp((char *)(&lhs), (char *)(&rhs), sizeof(ClDevicePidKey)) < 0);
   }
 };
-static std::map<ClDevicePidKey, std::tuple<uint32_t, uint64_t>, ClDevicePidKeyCompare> cl_device_pid_map_;
+static std::map<ClDevicePidKey, std::tuple<uint32_t, uint32_t, uint64_t>, ClDevicePidKeyCompare> cl_device_pid_map_;
 struct ClDeviceTidKeyCompare {
   bool operator()(const ClDeviceTidKey& lhs, const ClDeviceTidKey& rhs) const {
     return (memcmp((char *)(&lhs), (char *)(&rhs), sizeof(ClDeviceTidKey)) < 0);
   }
 };
 
-static std::map<ClDeviceTidKey, std::tuple<uint32_t, uint32_t, uint64_t>, ClDeviceTidKeyCompare> cl_device_tid_map_;
+static std::map<ClDeviceTidKey, std::tuple<uint32_t, uint32_t, uint32_t, uint64_t>, ClDeviceTidKeyCompare> cl_device_tid_map_;
 
-static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_khr& pci, cl_device_id device, cl_command_queue queue, int host_pid, int host_tid, uint32_t track_id) {
+static std::tuple<uint32_t, uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_khr& pci, cl_device_id device, cl_command_queue queue, int host_pid, int host_tid, uint32_t track_id) {
   if (device_logging_no_thread_) {
     // map all threads to the process
     host_tid = host_pid;
@@ -338,6 +338,7 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
 
   uint32_t device_pid;
   uint32_t device_tid;
+  uint32_t device_id;
   const std::lock_guard<std::mutex> lock(device_pid_tid_map_lock_);
 
   ClDeviceTidKey tid_key;
@@ -352,8 +353,9 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
 
   auto it = cl_device_tid_map_.find(tid_key);
   if (it != cl_device_tid_map_.cend()) {
-    device_pid = std::get<0>(it->second);
-    device_tid = std::get<1>(it->second);
+    device_id = std::get<0>(it->second);
+    device_pid = std::get<1>(it->second);
+    device_tid = std::get<2>(it->second);
   }
   else {
     ClDevicePidKey pid_key;
@@ -364,12 +366,12 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
     pid_key.host_pid_ = host_pid;
     auto it2 = cl_device_pid_map_.find(pid_key);
     if (it2 != cl_device_pid_map_.cend()) {
-      device_pid = std::get<0>(it2->second);
+      device_id = std::get<0>(it2->second);
+      device_pid = std::get<1>(it2->second);
     }
     else {
       device_pid = next_device_pid_--;
       auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
-      cl_device_pid_map_.insert({pid_key, std::make_tuple(device_pid, start_time)});
 
       std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
@@ -382,10 +384,13 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
         device_proc_name = "RANK " + std::to_string(mpi_rank) + " DEVICE<" + pmi_hostname + ">";
       }
 
-      std::string device_name = GetClDeviceName(device);
-      if (device_name.size() > 0) {
-        device_proc_name += "[" + device_name + "] ";
+      std::pair<uint32_t, std::string> device_id_name = GetClDeviceName(device);
+      if (device_id_name.second.size() > 0) {
+        device_proc_name += "[" + device_id_name.second + "] ";
       }
+
+      device_id = device_id_name.first;
+      cl_device_pid_map_.insert({pid_key, std::make_tuple(device_id, device_pid, start_time)});
 
       char str2[128];
       snprintf(str2, sizeof(str2), "%x", pid_key.pci_addr_.pci_domain);
@@ -401,7 +406,7 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
     }
     device_tid = next_device_tid_--;
     auto start_time = UniTimer::GetEpochTimeInUs(UniTimer::GetHostTimestamp());
-    cl_device_tid_map_.insert({tid_key, std::make_tuple(device_pid, device_tid, start_time)});
+    cl_device_tid_map_.insert({tid_key, std::make_tuple(device_id, device_pid, device_tid, start_time)});
 
     std::lock_guard<std::recursive_mutex> lock(logger_lock_);
 
@@ -431,7 +436,7 @@ static std::tuple<uint32_t, uint32_t> ClGetDevicePidTid(cl_device_pci_bus_info_k
     EmitDeviceThreadMetadata(device_pid, device_tid, device_thread_name, start_time);
   }
 
-  return std::tuple<uint32_t, uint32_t>(device_pid, device_tid);
+  return std::tuple<uint32_t, uint32_t, uint32_t>(device_pid, device_tid, device_id);
 }
 #endif /* BUILD_WITH_OPENCL */
 
@@ -772,7 +777,7 @@ inline void PerfettoEmitHostEvent(HostEventRecord& rec, uint32_t pid, uint32_t t
 // metrics arg, and (non-implicit-scaling) the kid as a flow_id -- the device end
 // of the H2D submit -> kernel arrow (the host submit slice carries the same id).
 // Shared device-slice emit for both ZE and CL (the wrappers resolve the backend).
-inline void PerfettoEmitDeviceSlice(uint32_t seq_id, uint32_t pid, uint32_t tid,
+inline void PerfettoEmitDeviceSlice(uint32_t seq_id, uint32_t pid, uint32_t tid, uint32_t device_id,
                                     const std::string& kname, uint64_t kid,
                                     bool implicit_scaling, uint32_t tile,
                                     bool metrics_enabled, uint64_t start_time,
@@ -789,7 +794,8 @@ inline void PerfettoEmitDeviceSlice(uint32_t seq_id, uint32_t pid, uint32_t tid,
   opts.annotations.push_back(perfetto_emit::Annotation::Str("id", std::to_string(kid)));
   if (metrics_enabled) {
     opts.annotations.push_back(perfetto_emit::Annotation::Str(
-        "metrics", "http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(kid)));
+        "metrics", "http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(kid) +
+        (device_id != UINT32_MAX ? "/" + std::to_string(device_id) : "")));
   }
 
   uint64_t track_uuid = perfetto_emit::MakeUuid(pid, tid);
@@ -986,7 +992,7 @@ class TraceBuffer {
     std::string StringifyDeviceEvent(ZeKernelCommandExecutionRecord& rec) {
       auto& rdt = GetRecentDeviceTimestamps(rec.device_, rec.engine_ordinal_, rec.engine_index_);
       uint32_t track = GetDeviceEventTrack(rdt, rec.start_time_, rec.end_time_);
-      auto [pid, tid] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, pid_, rec.tid_, track);
+      auto [pid, tid, device_id] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, pid_, rec.tid_, track);
       std::string kname = GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
       std::string str = ",\n{";
 
@@ -1021,7 +1027,7 @@ class TraceBuffer {
       str += ", \"args\": {\"id\": \"" + std::to_string(rec.kid_) + "\"";
       if (metrics_enabled_) {
         // viewing the metrics on the same local host, no need to use https
-        str += ", \"metrics\": \"http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
+        str += ", \"metrics\": \"http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "/" + std::to_string(device_id) + "\"";
       }
       str += "}}";
 
@@ -1182,13 +1188,13 @@ class TraceBuffer {
     void PerfettoEmitDeviceEvent(ZeKernelCommandExecutionRecord& rec) {
       auto& rdt = GetRecentDeviceTimestamps(rec.device_, rec.engine_ordinal_, rec.engine_index_);
       uint32_t track = GetDeviceEventTrack(rdt, rec.start_time_, rec.end_time_);
-      auto [pid, tid] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, pid_, rec.tid_, track);
+      auto [pid, tid, deviceid] = GetDevicePidTid(rec.device_, rec.engine_ordinal_, rec.engine_index_, pid_, rec.tid_, track);
       std::string kname = GetZeKernelCommandName(rec.kernel_command_id_, rec.group_count_, rec.mem_size_);
       // GetZeKernelCommandName may return a quoted string; unquote for the proto.
       if (!kname.empty() && kname.front() == '"' && kname.back() == '"') {
         kname = kname.substr(1, kname.size() - 2);
       }
-      PerfettoEmitDeviceSlice(seq_id_, pid, tid, kname, rec.kid_, rec.implicit_scaling_,
+      PerfettoEmitDeviceSlice(seq_id_, pid, tid, deviceid, kname, rec.kid_, rec.implicit_scaling_,
                               rec.tile_, metrics_enabled_, rec.start_time_, rec.end_time_);
     }
 #endif /* BUILD_WITH_PERFETTO */
@@ -1493,7 +1499,7 @@ class ClTraceBuffer {
     std::string StringifyDeviceEvent(ClKernelCommandExecutionRecord& rec) {
       auto& rdt = GetRecentDeviceTimestamps(rec.device_, rec.queue_);
       uint32_t track = GetDeviceEventTrack(rdt, rec.start_time_, rec.end_time_);
-      auto [pid, tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_, track);
+      auto [pid, tid, device_id] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_, track);
       std::string kname = GetClKernelCommandName(rec.kernel_command_id_);
 
       std::string str = ",\n{";
@@ -1529,7 +1535,9 @@ class ClTraceBuffer {
       str += ", \"args\": {\"id\": \"" + std::to_string(rec.kid_) + "\"";
       if (metrics_enabled_) {
         // viewing the metrics on the same local host, so no need to use https
-        str += ", \"metrics\": \"http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) + "\"";
+        str += ", \"metrics\": \"http://localhost:8000/" + EncodeURI(kname) + "/" + std::to_string(rec.kid_) +
+               (device_id != UINT32_MAX ? "/" + std::to_string(device_id) : "") +
+               "\"";
       }
       str += "}}";
 
@@ -1565,12 +1573,12 @@ class ClTraceBuffer {
     void PerfettoEmitDeviceEvent(ClKernelCommandExecutionRecord& rec) {
       auto& rdt = GetRecentDeviceTimestamps(rec.device_, rec.queue_);
       uint32_t track = GetDeviceEventTrack(rdt, rec.start_time_, rec.end_time_);
-      auto [pid, tid] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_, track);
+      auto [pid, tid, device_id] = ClGetDevicePidTid(rec.pci_, rec.device_, rec.queue_, pid_, rec.tid_, track);
       std::string kname = GetClKernelCommandName(rec.kernel_command_id_);
       if (!kname.empty() && kname.front() == '"' && kname.back() == '"') {
         kname = kname.substr(1, kname.size() - 2);
       }
-      PerfettoEmitDeviceSlice(seq_id_, pid, tid, kname, rec.kid_, rec.implicit_scaling_,
+      PerfettoEmitDeviceSlice(seq_id_, pid, tid, device_id, kname, rec.kid_, rec.implicit_scaling_,
                               rec.tile_, metrics_enabled_, rec.start_time_, rec.end_time_);
     }
 #endif /* BUILD_WITH_PERFETTO */

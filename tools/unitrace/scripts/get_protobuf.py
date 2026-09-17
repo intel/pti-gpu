@@ -66,10 +66,11 @@ def main():
         "-Dprotobuf_WITH_ZLIB=OFF",
         "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
         "-DCMAKE_INSTALL_PREFIX=" + install,
+        "-Dprotobuf_DEBUG_POSTFIX="
     ]
     if os.name == "nt":
         # Dynamic CRT (not protobuf's default /MT) so the lib links into unitrace.
-        cfg += ["-Dprotobuf_MSVC_STATIC_RUNTIME=OFF", "-Dprotobuf_DEBUG_POSTFIX="]
+        cfg += ["-Dprotobuf_MSVC_STATIC_RUNTIME=OFF"]
         # Build version.rc without passing compiler flags (/bigobj etc.) to
         # rc.exe, which rejects them (RC1106). Redefine the RC command to drop
         # <FLAGS>, keeping only <DEFINES>. protobuf does this itself but only for

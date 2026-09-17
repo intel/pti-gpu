@@ -4,14 +4,6 @@
 # SPDX-License-Identifier: MIT
 # =============================================================
 
-
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages as pdf
-
-from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import unquote
-
 import os
 import io
 import socket
@@ -22,6 +14,302 @@ import shlex
 import subprocess
 import argparse
 import tempfile
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from matplotlib.backends.backend_pdf import PdfPages as pdf
+from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
+from urllib.parse import unquote
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Optional, List, Dict, Union
+from enum import Enum
+
+class MetricsMode(Enum):
+    SINGLE_FILE = "single_file"
+    RESULT_DIRECTORY = "result_directory"
+    
+@dataclass
+class DeviceInfo:
+    """Device-specific information only."""
+    device_id: int
+    metrics_file: Path
+    mode: MetricsMode = field(init=False)
+    
+    # Single file mode specific
+    header_line: Optional[int] = field(default=None)
+    last_line: Optional[int] = field(default=None)
+    
+
+    
+    def __post_init__(self):
+        if self.header_line is None and self.last_line is None:
+            self.mode = MetricsMode.RESULT_DIRECTORY
+        elif self.header_line is not None and self.last_line is not None:
+            self.mode = MetricsMode.SINGLE_FILE
+        else:
+            raise ValueError(
+                f"DeviceInfo for device {self.device_id}: "
+                "Must specify both header_line and last_line (single file mode), "
+                "or neither (result directory mode). "
+                f"Currently: header_line={self.header_line}, last_line={self.last_line}"
+            )
+
+        if not (self.metrics_file.exists() and 
+                self.metrics_file.is_file() and 
+                self.metrics_file.stat().st_size > 0):
+            raise ValueError(
+                f"DeviceInfo for device {self.device_id}: "
+                f"File '{self.metrics_file}' does not exist, is not a file, or is empty"
+        )
+
+    def __repr__(self) -> str:
+        return (f"DeviceInfo(device_id={self.device_id}, "
+                f"header_line={self.header_line}, "
+                f"last_line={self.last_line}, "
+                f"metrics_file={self.metrics_file})")
+        
+    def get_device_data(self) -> Optional[pd.DataFrame]:
+        """
+        Read the device-specific metrics data into a DataFrame.
+        """
+        header_line = 0
+        nrows = None
+        try:
+            if self.mode == MetricsMode.RESULT_DIRECTORY:
+                # Skip blank lines at start
+                with self.metrics_file.open('r') as f:
+                    for i, line in enumerate(f):
+                        if line.strip():  # Found non-empty line
+                            header_line = i
+                            break
+            elif self.mode == MetricsMode.SINGLE_FILE:
+                header_line = self.header_line
+                nrows = self.last_line - self.header_line - 1
+                if nrows <= 0:
+                    print(f"Warning: No data rows for device {self.device_id}")
+                    return None
+                
+            df = pd.read_csv(
+                self.metrics_file,
+                skiprows=header_line,
+                nrows=nrows,
+                skip_blank_lines=False,
+                skipinitialspace=True
+                )
+            return df
+        
+        except Exception as e:
+            print(f"Error reading device file {self.metrics_file}: {e}")
+            return None
+
+    def _print_data_from_df(self, df, eustall, of):
+        """
+        Print the relevant data from the DataFrame to the output file or stdout.
+        """
+        if (eustall == False):
+            for m in df.columns.values.tolist():
+                if (m == 'Kernel'):
+                    continue
+                print("        " + m, file = of)
+                if (m == 'StreamMarker'):
+                    break
+
+            kernel_and_instances = dict()
+            kernel = ""
+            for index, row in df.iterrows():
+                if (pd.isna(row['Kernel']) == True):
+                    if kernel in kernel_and_instances:
+                        kernel_and_instances[kernel] = kernel_and_instances[kernel] + 1
+                    else:
+                        if (kernel != ""):
+                            kernel_and_instances[kernel] = 1
+
+                    kernel = ""	# reset kernel name to empty
+                else:
+                    if (kernel == ""):
+                        kernel = row['Kernel']
+
+            print("    Kernel, Number of Instances", file = of)
+            for i, (kernel, instances) in enumerate(kernel_and_instances.items()):
+                print("        \"" + kernel + "\", " + str(instances), file = of)
+        else:
+            for m in df.columns.values.tolist():
+                if (m == 'Kernel' or m == "IP[Address]"):
+                    continue
+                print("        " + m, file = of)
+                if (m == 'OtherStall[Events]'):
+                    break
+
+            kernels = []
+            for index, row in df.iterrows():
+                kernel = row['Kernel']
+                if (kernel not in kernels):
+                    kernels.append(kernel)
+
+            print("    Kernel", file = of)
+            for kernel in kernels:
+                print("        \"" + kernel + "\"", file = of)
+
+    def print_data(self, eustall, of):
+        df = self.get_device_data()
+        print("Device " + str(self.device_id), file=of)
+        if df is None:
+            print(f"    No data available for device {self.device_id}", file=of)
+            return
+        
+        print("    Metric", file = of)
+        self._print_data_from_df(df, eustall, of)
+
+@dataclass
+class MetricsInfo:
+    """Database containing global info and all devices information."""
+    input_path: Union[Path, str]
+    is_result_directory: bool
+    mode: MetricsMode = field(init=False)
+    is_eustall: bool = field(init=False, default=False)
+    devices: Dict[int, DeviceInfo] = field(init=False, default_factory=dict)
+
+    def __post_init__(self):
+        self._validate_input()
+        self._init_devices()
+        self._init_is_eustall()
+
+    def _init_is_eustall(self):
+        if self.is_result_directory and not self.devices:
+            return
+
+        first_metrics_file = self.devices[next(iter(self.devices))].metrics_file if self.is_result_directory else self.input_path
+        
+        if not first_metrics_file.exists():
+            print(f"Warning: Metrics file {first_metrics_file} does not exist")
+        try:
+            with first_metrics_file.open('r') as f:
+                for line in f:
+                    if 'OtherStall[Events]' in line:
+                        self.is_eustall = True
+        except (IOError, OSError) as e:
+            print(f"Warning: Could not read file {first_metrics_file}: {e}")
+    
+    def _init_devices(self):
+        if self.is_result_directory:
+            self._init_devices_from_directory()
+        else:
+            self._init_devices_from_single_file()
+
+    def _init_devices_from_directory(self):
+        """
+        For result_directory mode scan all sub-directories to find metrics files.
+        """
+        # Scan the result directory for metrics files
+        filename_pattern = re.compile(r'^metrics_(\d+)\.csv$')
+        
+        for metrics_file in self.input_path.rglob('metrics/metrics_*.csv'):
+            match = filename_pattern.match(metrics_file.name)
+            if match and metrics_file.stat().st_size > 0:
+                try:
+                    device_id = int(match.group(1))
+                    self.devices[device_id] = DeviceInfo(device_id=device_id,
+                                                         metrics_file=metrics_file)
+                except (ValueError, OverflowError) as e:
+                    print(f"Warning: Invalid device ID in {metrics_file.name}: {e}")
+                    continue
+        if not self.devices:
+            print(f"Warning: No valid metrics files found in directory {self.input_path}")
+
+    def _init_devices_from_single_file(self):
+        """
+        Initialize devices by parsing a single metrics file.
+        """
+        with self.input_path.open('r') as f:
+            linenum = 0
+            current_device_id = 0 # Initialize to 0, will be updated when/if a device banner is found
+            header_line = None
+            first_device_found = False
+            
+            for row in f:
+                if ("=== Device" in row) and ("Metrics ===" in row):
+                    # Save previous device if found
+                    if header_line is not None:
+                        device_info = DeviceInfo(
+                            device_id=current_device_id,
+                            metrics_file=self.input_path,
+                            header_line=header_line,
+                            last_line=linenum  # Current line is start of next device
+                        )
+                        self.devices[current_device_id] = device_info
+                        header_line = None
+                    
+                    # Parse device ID from banner: "=== Device #X Metrics ==="
+                    words = row.split()
+                    for word in words:
+                        if word.startswith('#'):
+                            try:
+                                current_device_id = int(word[1:])  # Remove '#' and convert
+                                break
+                            except ValueError:
+                                print(f"Warning: Could not parse device ID from '{word}'")
+                                continue
+                
+                # Look for header line (after device banner)
+                elif (("OtherStall[Events]" in row) or (row.startswith("Kernel,"))):
+                    header_line = linenum
+                
+                linenum += 1
+            
+            # last device
+            if header_line is not None:
+                device_info = DeviceInfo(
+                    device_id=current_device_id,
+                    metrics_file=self.input_path,
+                    header_line=header_line,
+                    last_line=linenum  # End of file
+                )
+                self.devices[current_device_id] = device_info        
+
+    def _validate_input(self):
+        if isinstance(self.input_path, str):
+            self.input_path = Path(self.input_path).resolve()
+        elif isinstance(self.input_path, Path):
+            self.input_path = self.input_path.resolve()
+        else:
+            raise TypeError(f"input_path must be a Path object or string, got {type(self.input_path).__name__}")
+        
+        if not isinstance(self.is_result_directory, bool):
+            raise TypeError(f"is_result_directory must be a boolean, got {type(self.is_result_directory).__name__}")
+        
+        if not self.input_path.exists():
+            raise FileNotFoundError(f"Input path '{self.input_path}' does not exist.")
+
+        if self.is_result_directory:
+            if not self.input_path.is_dir():
+                raise NotADirectoryError(f"'{self.input_path}' is not a directory")
+        else:
+            if not self.input_path.is_file():
+                raise FileNotFoundError(f"'{self.input_path}' is not a file")
+            if self.input_path.stat().st_size == 0:
+                raise ValueError(f"File '{self.input_path}' is empty")
+    
+    def get_device(self, device_id: int) -> Optional[DeviceInfo]:
+        """Get device info by ID."""
+        return self.devices.get(device_id)
+    
+    def get_device_ids(self) -> List[int]:
+        """Get sorted list of all device IDs."""
+        return sorted(self.devices.keys())
+    
+    def has_device(self, device_id: int) -> bool:
+        """Check if device exists."""
+        return device_id in self.devices
+    
+    def print_data(self, output=None):
+        of = sys.stdout
+        if (output is not None):
+            of = open(output, "w")
+        for device in self.devices.values():
+            device.print_data(self.is_eustall, of)
+        if (output is not None):
+            of.close()
 
 class ReadOptionsFromFile(argparse.Action):
     def __call__ (self, parser, namespace, values, option_string = None):
@@ -53,6 +341,7 @@ def ParseArguments(argv):
     argparser.add_argument('-x', '--xlabel', default = "Time(in sampling intervals)", help = "label for X axis (defaut is \"Time(in sampling intervals)\")")
     argparser.add_argument('-t', '--title', default = "Performance Metrics", help = "performance metric plot title")
     argparser.add_argument('-f', '--config', type = open, action = ReadOptionsFromFile, help = "read command options from file")
+    argparser.add_argument('--result-dir', action = 'store_true', help = "Process metrics from structured result directory instead of single CSV file")
     argparser.add_argument('input', help = 'hardware performance metric data file in .csv format generated by unitrace -k/--stall-sampling')
 
     return argparser.parse_args(argv)
@@ -550,8 +839,7 @@ def WriteOutStallReport(report, p): # p is PDF object
 
     return
 
-def AnalyzeStallMetrics(args, header, last, kernel, http = False):
-
+def AnalyzeStallMetrics(args, device_data_df, kernel, http = False):
     if ((http == True) and (kernel is None)):
         return None, None
 
@@ -566,9 +854,6 @@ def AnalyzeStallMetrics(args, header, last, kernel, http = False):
         if ((http == False) and (args.report is not None)):
             stall_analysis_report_out = open(args.report, "w")
 
-    # only read lines from headerlinenumber to lastline
-    df = pd.read_csv(args.input, skiprows = header, nrows = last - header - 1, skip_blank_lines = False, skipinitialspace = True)
-
     stalls = ["ControlStall[Events]", "PipeStall[Events]", "SendStall[Events]", "DistStall[Events]", "SbidStall[Events]", "SyncStall[Events]", "InstrFetchStall[Events]", "OtherStall[Events]"]
 
     ins_per_page = 100  # number of instuctions to histogram per page
@@ -578,14 +863,14 @@ def AnalyzeStallMetrics(args, header, last, kernel, http = False):
         stop = -1
         kernel = ""
         p = None
-        for index, row in df.iterrows():
+        for index, row in device_data_df.iterrows():
             if (kernel == ""):
                 kernel = row['Kernel']
                 start = index
             else:
                 if (kernel != row['Kernel']):
                     stop = index
-                    df2 = df[start:stop]    # data frame of the kernel of interest
+                    df2 = device_data_df[start:stop]    # data frame of the kernel of interest
                     # remove rows with 0 stall events
                     df2 = df2.loc[(df2["ControlStall[Events]"] != 0) | (df2["PipeStall[Events]"] != 0) | (df2["SendStall[Events]"] != 0) | (df2["DistStall[Events]"] != 0) | (df2["SbidStall[Events]"] != 0) | (df2["SyncStall[Events]"] != 0) | (df2["InstrFetchStall[Events]"] != 0) | (df2["OtherStall[Events]"] != 0)]
                     df3 = df2[stalls]
@@ -648,8 +933,8 @@ def AnalyzeStallMetrics(args, header, last, kernel, http = False):
                     start = index
 
         # last kernel
-        stop = df.shape[0]
-        df2 = df[start : stop]    # data frame of the kernel of interest
+        stop = device_data_df.shape[0]
+        df2 = device_data_df[start : stop]    # data frame of the kernel of interest
 
         # remove rows with 0 stall events
         df2 = df2.loc[(df2["ControlStall[Events]"] != 0) | (df2["PipeStall[Events]"] != 0) | (df2["SendStall[Events]"] != 0) | (df2["DistStall[Events]"] != 0) | (df2["SbidStall[Events]"] != 0) | (df2["SyncStall[Events]"] != 0) | (df2["InstrFetchStall[Events]"] != 0) | (df2["OtherStall[Events]"] != 0)]
@@ -724,7 +1009,7 @@ def AnalyzeStallMetrics(args, header, last, kernel, http = False):
         stop = -1
         kernelfound = False
 
-        for index, row in df.iterrows():
+        for index, row in device_data_df.iterrows():
             if (row['Kernel'] == kernel):
                 if (kernelfound == False):
                     start = index
@@ -741,9 +1026,9 @@ def AnalyzeStallMetrics(args, header, last, kernel, http = False):
             return msg, None
 
         if (stop == -1):
-            stop = df.shape[0]
+            stop = device_data_df.shape[0]
 
-        df2 = df[start : stop]    # data frame of the kernel of interest
+        df2 = device_data_df[start : stop]    # data frame of the kernel of interest
 
         # remove rows with 0 stall events
         df2 = df2.loc[(df2["ControlStall[Events]"] != 0) | (df2["PipeStall[Events]"] != 0) | (df2["SendStall[Events]"] != 0) | (df2["DistStall[Events]"] != 0) | (df2["SbidStall[Events]"] != 0) | (df2["SyncStall[Events]"] != 0) | (df2["InstrFetchStall[Events]"] != 0) | (df2["OtherStall[Events]"] != 0)]
@@ -900,18 +1185,14 @@ def PlotKernelInstancePerfMetrics(args, kernel, df, metric_sets_cleansed, throug
     
     return analyzed, p
 
-def AnalyzePerfMetrics(args, header, last):
-
-    # only read lines from headerlinenumber to lastline
-    df = pd.read_csv(args.input, skiprows = header, nrows = last - header - 1, skip_blank_lines = False, skipinitialspace = True)
-
+def AnalyzePerfMetrics(args, device_data_df):
     metric_sets_cleansed = []
     for metric_set in args.metrics:
         metrics = metric_set.split(sep = ',')
         metrics_cleansed = []
         for metric in metrics:
             me = metric.strip()			# strip off leading and trailing whitespaces
-            if (me not in df.columns):
+            if (me not in device_data_df.columns):
                 print("No metric data for " + metric)
                 return
             else:
@@ -925,7 +1206,7 @@ def AnalyzePerfMetrics(args, header, last):
             throughputs_cleansed = ['GpuTime[ns]']
             for throughput in throughputs:
                 bw = throughput.strip()			# strip off leading and trailing whitespaces
-                if (bw not in df.columns):
+                if (bw not in device_data_df.columns):
                     print("No throughput data for " + bw)
                     return
                 else:
@@ -939,11 +1220,11 @@ def AnalyzePerfMetrics(args, header, last):
             start = 0
             stop = -1
             kernel = ""
-            for index, row in df.iterrows():
+            for index, row in device_data_df.iterrows():
                 if (pd.isna(row['Kernel']) == True):
                     stop = index	# current kernel instance ends
 
-                    df2 = df[start : stop]	# data frame of the instance of interest
+                    df2 = device_data_df[start : stop]	# data frame of the instance of interest
                     analyzed = False
                     for metrics_cleansed, label in zip(metric_sets_cleansed, args.ylabel):
                         df3 = df2[metrics_cleansed]
@@ -1002,12 +1283,12 @@ def AnalyzePerfMetrics(args, header, last):
 
         else:
             # specified instance of all kernels
-            kernels = df['Kernel'].unique()
+            kernels = device_data_df['Kernel'].unique()
             for kernel in kernels:
                 if (pd.isna(kernel) == True):
                     continue
 
-                analyzed, p = PlotKernelInstancePerfMetrics(args, kernel, df, metric_sets_cleansed, throughputs_sets_cleansed, p)
+                analyzed, p = PlotKernelInstancePerfMetrics(args, kernel, device_data_df, metric_sets_cleansed, throughputs_sets_cleansed, p)
                 if (analyzed == True):
                     print("Analyzed kernel " + kernel)
 
@@ -1018,7 +1299,7 @@ def AnalyzePerfMetrics(args, header, last):
             start = -1
             stop = -1
             instance = 0
-            for index, row in df.iterrows():
+            for index, row in device_data_df.iterrows():
                 if (pd.isna(row['Kernel']) == False):
                     if ((row['Kernel'] == args.kernel) and (counting == True)):
                         start = index			# found kernel of interest
@@ -1027,7 +1308,7 @@ def AnalyzePerfMetrics(args, header, last):
                     if (counting == False):
                         # instance ends
                         stop = index
-                        df2 = df[start : stop]	# data frame of the instance of interest
+                        df2 = device_data_df[start : stop]	# data frame of the instance of interest
                         analyzed = False
                         for metrics_cleansed, label in zip(metric_sets_cleansed, args.ylabel):
                             df3 = df2[metrics_cleansed]
@@ -1086,9 +1367,9 @@ def AnalyzePerfMetrics(args, header, last):
                         stop = -1
 
             if ((start != -1) and (stop == -1)):	# the instance of interest is at the end of data frame
-                stop = df.shape[0]
+                stop = device_data_df.shape[0]
 
-                df2 = df[start : stop]	# data frame of the instance of interest
+                df2 = device_data_df[start : stop]	# data frame of the instance of interest
                 analyzed = False
                 for metrics_cleansed, label in zip(metric_sets_cleansed, args.ylabel):
                     df3 = df2[metrics_clenased]
@@ -1143,7 +1424,7 @@ def AnalyzePerfMetrics(args, header, last):
 
         else:
             # specified kernel specified instance
-            analyzed, p = PlotKernelInstancePerfMetrics(args, args.kernel, df, metric_sets_cleansed, throughputs_sets_cleansed, p)
+            analyzed, p = PlotKernelInstancePerfMetrics(args, args.kernel, device_data_df, metric_sets_cleansed, throughputs_sets_cleansed, p)
             if (analyzed == True):
                 print("Performance metric chart for instance " + str(args.instance) + " of kernel " + args.kernel + " hsa been successfully generated")
             else:
@@ -1155,113 +1436,12 @@ def AnalyzePerfMetrics(args, header, last):
     else:
         print("No performance metric data for kernel or kernel instance")
 
-
-def List(args):
-    devices = []
-    with open(args.input, "r") as f:
-        linenum = 0
-        counting = False
-        for row in f:
-            if (("=== Device" in row) and ("Metrics ===" in row)):
-                words = row.split()
-                for word in words:
-                    if (word[0] == '#'):
-                        device = word[1:]
-                        devices.append(int(device))
-
-    of = sys.stdout
-    if (args.output is not None):
-        of = open(args.output, "w")
-
-    for device in devices:
-        header = 0
-        device_banner = "=== Device #" + str(device) + " Metrics ==="
-        last = 0
-        devicefound = False
-        eustall = False
-        with open(args.input, "r") as f:
-            linenum = 0
-            counting = False
-            for row in f:
-                if (("=== Device" in row) and ("Metrics ===" in row)):
-                    if (device_banner in row):		# found device
-                        counting = True
-                        devicefound = True
-                    else:
-                        if (devicefound == True):	# done with the device of interest
-                            break
-                if (counting == True):
-                    if (("OtherStall[Events]" in row) or (row.startswith("Kernel,"))):      # found header
-                        header = linenum
-                        counting = False
-                        if ("OtherStall[Events]" in row):
-                            eustall = True
-                linenum += 1
-
-            last = linenum
-
-        print("Device " + str(device), file = of)
-        # only read lines from headerlinenumber to lastline
-        df = pd.read_csv(args.input, skiprows = header, nrows = last - header - 1, skip_blank_lines = False, skipinitialspace = True)
-        print("    Metric", file = of)
-
-        if (eustall == False):
-            for m in df.columns.values.tolist():
-                if (m == 'Kernel'):
-                    continue
-                print("        " + m, file = of)
-                if (m == 'StreamMarker'):
-                    break
-
-            kernel_and_instances = dict()
-            kernel = ""
-            for index, row in df.iterrows():
-                if (pd.isna(row['Kernel']) == True):
-                    if kernel in kernel_and_instances:
-                        kernel_and_instances[kernel] = kernel_and_instances[kernel] + 1
-                    else:
-                        if (kernel != ""):
-                            kernel_and_instances[kernel] = 1
-
-                    kernel = ""	# reset kernel name to empty
-                else:
-                    if (kernel == ""):
-                        kernel = row['Kernel']
-
-            print("    Kernel, Number of Instances", file = of)
-            for i, (kernel, instances) in enumerate(kernel_and_instances.items()):
-                print("        \"" + kernel + "\", " + str(instances), file = of)
-        else:
-            for m in df.columns.values.tolist():
-                if (m == 'Kernel' or m == "IP[Address]"):
-                    continue
-                print("        " + m, file = of)
-                if (m == 'OtherStall[Events]'):
-                    break
-
-            kernels = []
-            for index, row in df.iterrows():
-                kernel = row['Kernel']
-                if (kernel not in kernels):
-                    kernels.append(kernel)
-
-            print("    Kernel", file = of)
-            for kernel in kernels:
-                print("        \"" + kernel + "\"", file = of)
-
-    if (args.output is not None):
-        of.close()
-
-def HttpAnalyzeStallMetrics(args, header, last, kname):
-    return AnalyzeStallMetrics(args, header, last, kname, http = True)
-
-def HttpAnalyzePerfMetrics(args, header, last, kname, instance):
+def HttpAnalyzePerfMetrics(args, device_data_df, kname, instance):
     if (args.metrics is None):
         return None, None
-
-    df = pd.read_csv(args.input, skiprows = header, nrows = last - header - 1, skip_blank_lines = False, skipinitialspace = True)
-    df = df.loc[df['GlobalInstanceId'] == float(instance)]
-    if (df.shape[0] == 0):
+    
+    device_data_df = device_data_df.loc[device_data_df['GlobalInstanceId'] == float(instance)]
+    if (device_data_df.shape[0] == 0):
         return None, None
     
     buf = None
@@ -1271,7 +1451,7 @@ def HttpAnalyzePerfMetrics(args, header, last, kname, instance):
         metrics_cleansed = []
         for metric in metrics:
             me = metric.strip()			# strip off leading and trailing whitespaces
-            if (me not in df.columns):
+            if (me not in device_data_df.columns):
                 msg = "No metric data for " + metric + ". Is the metric name correctly spelled?"
                 return msg, None
             else:
@@ -1285,7 +1465,7 @@ def HttpAnalyzePerfMetrics(args, header, last, kname, instance):
             throughputs_cleansed = ['GpuTime[ns]']
             for throughput in throughputs:
                 bw = throughput.strip()			# strip off leading and trailing whitespaces
-                if (bw not in df.columns):
+                if (bw not in device_data_df.columns):
                     msg = "No metric data for " + bw + ". Is the metric name correctly spelled?"
                     return msg, None
                 else:
@@ -1294,7 +1474,7 @@ def HttpAnalyzePerfMetrics(args, header, last, kname, instance):
 
     p = None
     for metrics_cleansed, label in zip(metric_sets_cleansed, args.ylabel):
-        df2 = df[metrics_cleansed]
+        df2 = device_data_df[metrics_cleansed]
         
         if (df2.shape[0] > 0):
             if (df2.shape[0] > 1):
@@ -1303,7 +1483,7 @@ def HttpAnalyzePerfMetrics(args, header, last, kname, instance):
                 ax = df2.plot(y = metrics_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = label)
             plt.grid(visible = True, which = 'both', axis = 'y')
             plt.legend(loc = 'best', fontsize = 4)
-            kernel = df.iloc[0]['Kernel']
+            kernel = device_data_df.iloc[0]['Kernel']
             plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
             plt.tight_layout()
         
@@ -1319,7 +1499,7 @@ def HttpAnalyzePerfMetrics(args, header, last, kname, instance):
 
     if (p != None):
         for throughputs_cleansed in throughputs_sets_cleansed:
-            df2 = df[throughputs_cleansed]
+            df2 = device_data_df[throughputs_cleansed]
             df2 = (df2.iloc[:, 1:]).div(df2.iloc[:, 0], axis = 0)
             if (df2.shape[0] > 0):
                 if (df2.shape[0] > 1):
@@ -1358,71 +1538,67 @@ def GenerateSelfSignedCertificate(cert, key):
     except subprocess.CalledProcessError as e:
         print(f"Error occurred while generating self-signed certificate: {e}", file = sys.stderr)
 
-def PerfMetricsHTTPServer(args):
+def PerfMetricsHTTPServer(args, metrics_info):
     try:
-        sections = []
-        with open(args.input, "r") as f:
-            linenum = 0
-            header = 0
-            devicefound = False
-            eustall = False
-            for row in f:
-                if (("OtherStall[Events]" in row) or (row.startswith("Kernel,"))):      # found header
-                    header = linenum
-                    if ("OtherStall[Events]" in row):
-                        eustall = True
-                if (("=== Device" in row) and ("Metrics ===" in row)):
-                    if (devicefound == False):		# found device
-                        devicefound = True
-                    else:
-                        if (devicefound == True):	# done with the device of interest
-                            sections.append([header, linenum])
-                            devicefound = False
-                linenum += 1
-
-            sections.append([header, linenum])
-
         class PerfMetricsRequestHandler(BaseHTTPRequestHandler):
+            def _send_invalid(self):
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b'Invalid')
+
             def do_GET(self):
                 if (self.client_address[0] != "127.0.0.1"):
                     return
-
                 request = unquote(self.path).split("/")  # format is name/instance
                 if (request[1] == "favicon.ico"): # ignore
                     return
-
+                
                 self.send_response(200)
-                if (len(request) < 3):
-                    self.send_header('Content-type', 'text/plain')
-                    self.end_headers()
-                    self.wfile.write(b'Invalid')
+                expected_request_params = 4 if args.result_dir else 3
+                if (len(request) < expected_request_params):
+                    self._send_invalid()
                     return
 
                 kname = request[1].strip('"')   # strip leading and trailing double quotes
                 instance = request[2]
-
                 if ((instance == "") or (instance.isdigit() == False)):
-                    self.send_header('Content-type', 'text/plain')
-                    self.end_headers()
-                    self.wfile.write(b'Invalid')
+                    self._send_invalid()
                     return
 
-                if (eustall == True):   # strip kernel shape for stall sampling
+                device_id = None
+                if args.result_dir:
+                    device_id = request[3]
+                    if ((device_id == "") or (device_id.isdigit() == False)):
+                        self._send_invalid()
+                        return
+
+                if (metrics_info.is_eustall):   # strip kernel shape for stall sampling
                     pos = kname.rfind('[')
                     if (pos != -1):
                         kname = kname[0:pos]
 
                 msg = None
                 buf = None
-                for sec in sections:
-                    # only read lines from headerlinenumber to lastline
+                target_devices = []
 
-                    last = sec[1]
-                    header = sec[0]
-                    if (eustall == True):
-                        msg, buf = HttpAnalyzeStallMetrics(args, header, last, kname)
+                # for result_directory mode. device id is taken from request
+                # and we can search the kernel instance in this device only (not for eustall case)
+                if device_id is not None and not metrics_info.is_eustall:
+                    device_info = metrics_info.get_device(int(device_id))
+                    if device_info:
+                        target_devices.append(device_info)
+                else:
+                    target_devices = list(metrics_info.devices.values())
+
+                for device_info in target_devices:
+                    device_data_df = device_info.get_device_data()
+                    if (device_data_df is None) or (device_data_df.shape[0] == 0):
+                        msg = f"No metric data for device {device_info.device_id}"
+                        continue
+                    if metrics_info.is_eustall:
+                        msg, buf = AnalyzeStallMetrics(args, device_data_df, kname, http = True)
                     else:
-                        msg, buf = HttpAnalyzePerfMetrics(args, header, last, kname, instance)
+                        msg, buf = HttpAnalyzePerfMetrics(args, device_data_df, kname, instance)                        
 
                     if (buf is not None):
                         buf.seek(0)
@@ -1432,8 +1608,8 @@ def PerfMetricsHTTPServer(args):
                             self.wfile.write(buf.read())
                         except BrokenPipeError:
                             print("Try again please")
-                        finally:
                             return
+                        return
                     else:
                         if (msg is not None):
                             break
@@ -1488,18 +1664,17 @@ def PerfMetricsHTTPServer(args):
         return
 
 def main(args):
-    if (os.path.isfile(args.input) == False):
-        print("File " + os.path.abspath(args.input) + " does not exist or cannot be opened")
+    try:
+        metrics_info = MetricsInfo(input_path=args.input,
+                                   is_result_directory=args.result_dir)
+    except Exception as e:
+        print(f"Error: {e}")
         return
-
-    if (os.stat(args.input).st_size ==0):
-        print("File " + args.input + " is empty")
-        return
-
+    
     if (args.list == True):
-        List(args)
+        metrics_info.print_data(args.output)
         return
-
+    
     metric_ylabel_match = True
     if (((args.metrics is not None) and (args.ylabel is None)) or ((args.metrics is None) and (args.ylabel is not None))):
         metric_ylabel_match = False
@@ -1518,44 +1693,24 @@ def main(args):
     if ((args.https == True) or (args.http == True)):
         print("No output to file")
         print("Options -o/--output, -r/--report, -k/--kernel, -i/--instance and -d/--device are ignored if they are present")
-        PerfMetricsHTTPServer(args)
+        PerfMetricsHTTPServer(args, metrics_info)
         return
 
     if (args.output is None):
         print("Error: -o/--output is missing")
         return
 
-    header = 0
-    device_banner = "=== Device #" + str(args.device) + " Metrics ==="
-    last = 0
-    devicefound = False
-    eustall = False
-    with open(args.input, "r") as f:
-        linenum = 0
-        counting = False
-        for row in f:
-            if (("=== Device" in row) and ("Metrics ===" in row)):
-                if (device_banner in row):		# found device
-                    counting = True
-                    devicefound = True
-                else:
-                    if (devicefound == True):	# done with the device of interest
-                        break
-            if (counting == True):
-                if (("OtherStall[Events]" in row) or (row.startswith("Kernel,"))):      # found header
-                    header = linenum
-                    counting = False
-                    if ("OtherStall[Events]" in row):
-                        eustall = True
-            linenum += 1
-
-        last = linenum;
-
-    if (devicefound == False):
-        print("Device " + str(args.device) + " not found in input file")
+    device_info = metrics_info.get_device(args.device)
+    if device_info is None:
+        print(f"Error: Device {args.device} not found in metrics data")
         return
 
-    if (eustall == False):
+    device_data_df = device_info.get_device_data()
+    if (device_data_df is None) or (device_data_df.shape[0] == 0):
+        print(f"No metric data for device {device_info.device_id}")
+        return
+
+    if (not metrics_info.is_eustall):
         if (args.metrics is None):
             print("-m option is missing")
             return
@@ -1565,9 +1720,9 @@ def main(args):
         if (len(args.metrics) != len(args.ylabel)):
             print("Numbers of -m options and -y options do not match")
             return
-        AnalyzePerfMetrics(args, header, last)
+        AnalyzePerfMetrics(args, device_data_df)
     else:
-        AnalyzeStallMetrics(args, header, last, args.kernel)
+        AnalyzeStallMetrics(args, device_data_df, args.kernel)
 
 if __name__== "__main__":
     main(ParseArguments(sys.argv[1:]))  # skip sys.argv[0]
