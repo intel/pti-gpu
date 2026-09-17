@@ -1177,17 +1177,83 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
                LevelZero::level-zero
                ${FS_LIB})
 
+  # Minimal external ITT collector used by
+  # IttTest.ExternalTrivialCollectorDisablesPtiTracing.
+  add_library(itt_trivial_collector SHARED itt_trivial_collector.cc)
+  target_link_libraries(itt_trivial_collector PRIVATE
+    ittapi::headers
+    spdlog::spdlog)
+  target_compile_definitions(itt_trivial_collector PRIVATE
+    SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
+  add_dependencies(itt_test_suite itt_trivial_collector)
+
   #
   # Bug warning in CMake: it does not accept LABELS separated by ';'.
   #
   gtest_discover_tests(
      itt_test_suite
      DISCOVERY_TIMEOUT 60
-     DISCOVERY_MODE PRE_TEST
      PROPERTIES
         ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
         LABELS "unit"
         LABELS "itt")
+
+  #
+  # Validates the self-registration path (GlobalIttInitializer sets
+  # INTEL_LIBITTNOTIFY64 at load time when it is not already set). Running
+  # only Task_Handlecreate_Begin_End is sufficient: if self-registration works,
+  # the ITT collector is loaded and records flow; the test body confirms that.
+  # INTEL_LIBITTNOTIFY64 is intentionally empty here.
+  #
+  add_test(
+    NAME itt_self_registration
+    COMMAND itt_test_suite --gtest_filter=IttTest.Task_Handlecreate_Begin_End)
+  set_tests_properties(itt_self_registration PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT "INTEL_LIBITTNOTIFY64="
+    FAIL_REGULAR_EXPRESSION "did not match any test"
+    LABELS "unit;itt")
+
+  # PTI is preloaded by a relative path. The child changes directory before
+  # loading PTI again, so the inherited collector path must be absolute.
+  string(CONCAT PTI_ITT_CHILD_COMMAND
+    "test -n \"$INTEL_LIBITTNOTIFY64\" && "
+    "unset LD_PRELOAD && cd /tmp && "
+    "exec \"$1\" --gtest_filter=IttTest.Task_Handlecreate_Begin_End")
+  add_test(
+    NAME itt_child_inherits_self_registration
+    COMMAND ${CMAKE_COMMAND} -E chdir
+            "$<TARGET_FILE_DIR:Pti::pti_view>"
+            ${CMAKE_COMMAND} -E env
+              "INTEL_LIBITTNOTIFY64="
+              "LD_PRELOAD=./$<TARGET_FILE_NAME:Pti::pti_view>"
+              /bin/sh -c "${PTI_ITT_CHILD_COMMAND}"
+              sh $<TARGET_FILE:itt_test_suite>)
+  set_tests_properties(itt_child_inherits_self_registration PROPERTIES
+    TIMEOUT 60
+    FAIL_REGULAR_EXPRESSION "did not match any test"
+    LABELS "unit;itt")
+
+  # A pre-set path to PTI remains valid and enables PTI collection.
+  #
+  add_test(
+    NAME itt_preconfigured_pti_collector_enables_pti_tracing
+    COMMAND itt_test_suite --gtest_filter=IttTest.PreconfiguredPtiCollectorEnablesPtiTracing)
+  set_tests_properties(itt_preconfigured_pti_collector_enables_pti_tracing PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>;PTI_TEST_EXPECT_PRECONFIGURED_PTI_COLLECTOR=1"
+    FAIL_REGULAR_EXPRESSION "did not match any test;\\[  SKIPPED \\]"
+    LABELS "unit;itt")
+
+  # itt_trivial_collector must receive the ITT calls while PTI remains disabled.
+  add_test(
+    NAME itt_external_trivial_collector_disables_pti_tracing
+    COMMAND itt_test_suite --gtest_filter=IttTest.ExternalTrivialCollectorDisablesPtiTracing)
+  set_tests_properties(itt_external_trivial_collector_disables_pti_tracing PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:itt_trivial_collector>;PTI_TEST_EXPECT_NO_ITT_COLLECTION=1"
+    FAIL_REGULAR_EXPRESSION "did not match any test;\\[  SKIPPED \\]"
+    LABELS "unit;itt")
 
   # CCL ITT shared libraries test
   add_subdirectory(ccl_itt_shared_libs)
@@ -1245,7 +1311,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
   target_link_libraries(itt_basic PRIVATE Pti::pti_view ittapi::ittnotify ${FS_LIB})
   add_test(NAME itt_basic COMMAND itt_basic)
   set_tests_properties(itt_basic PROPERTIES
-    ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
+    ENVIRONMENT "INTEL_LIBITTNOTIFY64="
     LABELS "functional;itt")
 
   if (TARGET sycl_allreduce_usm_test)
@@ -1254,9 +1320,11 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
 
     if (TARGET oneCCL AND MPI_FOUND)
       add_test(NAME sycl_allreduce_usm_test
-              COMMAND ${MPIEXEC_EXECUTABLE} -n 2 $<TARGET_FILE:sycl_allreduce_usm_test> gpu device)
+              COMMAND ${CMAKE_COMMAND} -E env
+                      "INTEL_LIBITTNOTIFY64="
+                      ${MPIEXEC_EXECUTABLE} -n 2
+                      $<TARGET_FILE:sycl_allreduce_usm_test> gpu device)
       set_tests_properties(sycl_allreduce_usm_test PROPERTIES
-        ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
         LABELS "functional;ccl;itt")
     endif()
   endif()
@@ -1267,9 +1335,11 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
 
     if (TARGET oneCCL AND MPI_FOUND)
       add_test(NAME sycl_allreduce_test
-              COMMAND ${MPIEXEC_EXECUTABLE} -n 2 $<TARGET_FILE:sycl_allreduce_test> gpu)
+              COMMAND ${CMAKE_COMMAND} -E env
+                      "INTEL_LIBITTNOTIFY64="
+                      ${MPIEXEC_EXECUTABLE} -n 2
+                      $<TARGET_FILE:sycl_allreduce_test> gpu)
       set_tests_properties(sycl_allreduce_test PROPERTIES
-        ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"
         LABELS "functional;ccl;itt")
     endif()
   endif()
@@ -1289,4 +1359,8 @@ endif()
 
 if(PTI_FUZZ)
   add_subdirectory(fuzz)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_subdirectory(itt_lib_env)
 endif()

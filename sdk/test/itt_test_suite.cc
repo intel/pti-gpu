@@ -6,16 +6,16 @@
 
 // ITT tests used for CCL.
 
+#include <dlfcn.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <ittnotify.h>
 
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <string>
@@ -29,9 +29,47 @@
 
 #include "pti/pti.h"
 #include "pti/pti_view.h"
-#include "pti_filesystem.h"
 #include "samples_utils.h"
 #include "utils.h"
+
+namespace {
+
+struct DlCloser {
+  void operator()(void *handle) const noexcept {
+    if (handle != nullptr) {
+      (void)dlclose(handle);
+    }
+  }
+};
+
+void ExpectTrivialCollectorTaskCounts(const char *ccl_domain, const char *trivial_domain) {
+  const auto collector_path = ::utils::GetEnv("INTEL_LIBITTNOTIFY64");
+  ASSERT_FALSE(collector_path.empty());
+
+  // Clear any existing errors
+  dlerror();
+
+  void *raw_handle = dlopen(collector_path.c_str(), RTLD_NOW | RTLD_NOLOAD);
+  ASSERT_NE(raw_handle, nullptr) << "ittnotify did not load the configured collector: "
+                                 << dlerror();
+  auto handle = std::unique_ptr<void, DlCloser>(raw_handle);
+
+  using Count = std::uint64_t (*)(const char *);
+  constexpr std::uint64_t kExpectedTaskCount = 1;
+  auto task_begin_count =
+      reinterpret_cast<Count>(dlsym(handle.get(), "IttTrivialCollectorGetTaskBeginCount"));
+  ASSERT_NE(task_begin_count, nullptr);
+  auto task_end_count =
+      reinterpret_cast<Count>(dlsym(handle.get(), "IttTrivialCollectorGetTaskEndCount"));
+  ASSERT_NE(task_end_count, nullptr);
+
+  EXPECT_EQ(task_begin_count(ccl_domain), kExpectedTaskCount);
+  EXPECT_EQ(task_end_count(ccl_domain), kExpectedTaskCount);
+  EXPECT_EQ(task_begin_count(trivial_domain), kExpectedTaskCount);
+  EXPECT_EQ(task_end_count(trivial_domain), kExpectedTaskCount);
+}
+
+}  // namespace
 
 // Test-specific assertion macro that uses GoogleTest instead of exit()
 #define ASSERT_PTI_SUCCESS(X)                                                         \
@@ -41,45 +79,12 @@
         << "PTI CALL FAILED: " #X << " WITH ERROR " << ptiResultTypeToString(result); \
   } while (0)
 
-class IttEnvVarInitializer {
- public:
-  enum class Status { Success, LibraryNotSet, LibraryNotFound };
-
-  IttEnvVarInitializer() : status_(initialize()) {}
-  Status getStatus() const { return status_; }
-  bool isValid() const { return status_ == Status::Success; }
-
- private:
-  Status initialize() {
-    const std::string itt_lib_path = samples_utils::GetEnv("INTEL_LIBITTNOTIFY64");
-
-    if (itt_lib_path.empty()) {
-      logWarning("INTEL_LIBITTNOTIFY64 environment variable not set");
-      return Status::LibraryNotSet;
-    }
-
-    if (!pti::utils::filesystem::exists(itt_lib_path)) {
-      logWarning("ITT library not found at: " + itt_lib_path);
-      return Status::LibraryNotFound;
-    }
-
-    std::cout << "Using ITT library: " << itt_lib_path << std::endl;
-    return Status::Success;
-  }
-
-  void logWarning(const std::string &message) const {
-    std::cerr << "Warning: " << message << std::endl;
-    std::cerr << "Warning: ITT collector inactive." << std::endl;
-  }
-
-  Status status_;
-};
-
 class IttTest : public ::testing::Test {
  protected:
   static inline std::vector<pti_view_record_comms> *comms_vector_ = nullptr;
   static inline std::mutex buffer_mutex_;
   static inline constexpr std::string_view kCclDomain = "oneCCL::API";
+  static inline constexpr std::string_view kTrivialDomain = "trivial::API";
   static constexpr uint32_t kSleepTimeMs = 5;
 
   // Functions for PTI buffer management
@@ -171,7 +176,6 @@ class IttTest : public ::testing::Test {
   // Collection Start and Stop helpers to avoid repetition in test bodies
 
   inline void PtiProlog() {
-    IttEnvVarInitializer();
     ASSERT_EQ(ptiViewSetCallbacks(IttTest::ProvideBuffer, IttTest::BufferCompletedMultiThreaded),
               pti_result::PTI_SUCCESS);
 
@@ -182,32 +186,81 @@ class IttTest : public ::testing::Test {
     ASSERT_PTI_SUCCESS(ptiViewDisable(PTI_VIEW_COMMUNICATION));
     ASSERT_PTI_SUCCESS(ptiFlushAllViews());
   }
+
+  void RunPtiCollectorScenario(std::string_view task_name) {
+    constexpr int kExpectedRecords = 1;
+    std::vector<pti_view_record_comms> local_records_vector;
+    comms_vector_ = &local_records_vector;
+
+    PtiProlog();
+
+    auto domain = __itt_domain_create(kCclDomain.data());
+    auto task = __itt_string_handle_create(task_name.data());
+    __itt_task_begin(domain, __itt_null, __itt_null, task);
+    std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+    __itt_task_end(domain);
+
+    PtiEpilog();
+
+    ASSERT_EQ(local_records_vector.size(), kExpectedRecords)
+        << "Expected " << kExpectedRecords << " record, collected " << local_records_vector.size();
+    ASSERT_STREQ(local_records_vector[0]._name, task_name.data());
+    ASSERT_GT(local_records_vector[0]._end_timestamp, local_records_vector[0]._start_timestamp);
+    ASSERT_EQ(local_records_vector[0]._process_id, utils::GetPid()) << "PID mismatch in ITT record";
+    ASSERT_EQ(local_records_vector[0]._thread_id, utils::GetTid()) << "TID mismatch in ITT record";
+  }
+
+  void RunExternalTrivialCollectorScenario() {
+    constexpr std::string_view task_name = "ExternalIttCollectorTask";
+    constexpr std::string_view trivial_task_name = "TrivialCollectorTask";
+    std::vector<pti_view_record_comms> local_records_vector;
+    comms_vector_ = &local_records_vector;
+
+    PtiProlog();
+
+    auto domain = __itt_domain_create(kCclDomain.data());
+    auto task = __itt_string_handle_create(task_name.data());
+    auto trivial_domain = __itt_domain_create(kTrivialDomain.data());
+    auto trivial_task = __itt_string_handle_create(trivial_task_name.data());
+
+    __itt_task_begin(domain, __itt_null, __itt_null, task);
+    std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+    __itt_task_end(domain);
+
+    __itt_task_begin(trivial_domain, __itt_null, __itt_null, trivial_task);
+    std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
+    __itt_task_end(trivial_domain);
+
+    ExpectTrivialCollectorTaskCounts(kCclDomain.data(), kTrivialDomain.data());
+
+    PtiEpilog();
+
+    EXPECT_TRUE(local_records_vector.empty())
+        << "collected " << local_records_vector.size()
+        << " oneCCL record(s) although INTEL_LIBITTNOTIFY64 was configured externally";
+  }
 };
 
 TEST_F(IttTest, Task_Handlecreate_Begin_End) {
-  constexpr std::string_view task_name = "Task_Handlecreate_Begin_End";
-  constexpr int kExpectedRecords = 1;  // Only one record should be generated for this test
-  std::vector<pti_view_record_comms> local_records_vector;
-  comms_vector_ = &local_records_vector;
+  RunPtiCollectorScenario("Task_Handlecreate_Begin_End");
+}
 
-  PtiProlog();
+// CTest configures INTEL_LIBITTNOTIFY64 before PTI initialization; otherwise
+// the collector decision has already latched before GoogleTest main().
+TEST_F(IttTest, PreconfiguredPtiCollectorEnablesPtiTracing) {
+  if (::utils::GetEnv("PTI_TEST_EXPECT_PRECONFIGURED_PTI_COLLECTOR").empty()) {
+    GTEST_SKIP() << "requires CTest to preconfigure INTEL_LIBITTNOTIFY64 with PTI";
+  }
 
-  auto domain = __itt_domain_create(kCclDomain.data());
-  auto task = __itt_string_handle_create(task_name.data());
-  __itt_task_begin(domain, __itt_null, __itt_null, task);
-  std::this_thread::sleep_for(std::chrono::milliseconds(kSleepTimeMs));
-  __itt_task_end(domain);
+  RunPtiCollectorScenario("PreconfiguredPtiCollector");
+}
 
-  PtiEpilog();
+TEST_F(IttTest, ExternalTrivialCollectorDisablesPtiTracing) {
+  if (::utils::GetEnv("PTI_TEST_EXPECT_NO_ITT_COLLECTION").empty()) {
+    GTEST_SKIP() << "requires ctest to configure INTEL_LIBITTNOTIFY64 externally";
+  }
 
-  ASSERT_EQ(local_records_vector.size(), kExpectedRecords)
-      << "Expected " << kExpectedRecords << " record, collected " << local_records_vector.size();
-  ASSERT_STREQ(local_records_vector[0]._name, task_name.data());
-  ASSERT_GT(local_records_vector[0]._end_timestamp, local_records_vector[0]._start_timestamp);
-
-  // Validate PID/TID fields
-  ASSERT_EQ(local_records_vector[0]._process_id, utils::GetPid()) << "PID mismatch in ITT record";
-  ASSERT_EQ(local_records_vector[0]._thread_id, utils::GetTid()) << "TID mismatch in ITT record";
+  RunExternalTrivialCollectorScenario();
 }
 
 TEST_F(IttTest, IttCallsBeforeViewInitAndNonStandardDomain) {

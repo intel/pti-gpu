@@ -29,8 +29,6 @@ using namespace sycl;
 #include <string_view>
 #include <vector>
 #include <mutex>
-#include "pti_filesystem.h"
-
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 
@@ -152,17 +150,6 @@ int main(int argc, char *argv[]) {
     }
 
 #if defined(USE_PTI_VIEW)
-    std::string itt_lib_path = samples_utils::GetEnv("INTEL_LIBITTNOTIFY64");
-    if (itt_lib_path.empty()) {
-        std::cerr << "Warning: INTEL_LIBITTNOTIFY64 environment variable not set." << std::endl;
-        std::cerr << "Warning: ITT collector inactive." << std::endl;
-    } else if (!pti::utils::filesystem::exists(itt_lib_path)) {
-        std::cerr << "Warning: ITT library defined in INTEL_LIBITTNOTIFY64 not found at: " << itt_lib_path << " ITT collector inactive." << std::endl;
-        std::cerr << "Warning: ITT collector inactive." << std::endl;
-    } else {
-        std::cout << "Using ITT library: " << itt_lib_path << std::endl;
-    }
-
     PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
     StartTracing();
 #endif

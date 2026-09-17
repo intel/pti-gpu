@@ -16,10 +16,23 @@
 #include <unordered_map>
 #include <utility>
 
+#include "itt/itt_lib_env.h"
 #include "pti_lib_handler.h"
 #include "utils/utils.h"
 
 namespace {
+
+// Registers this module as ittnotify collector when no collector was supplied
+// externally. It must run before oneCCL makes its first ITT call.
+class GlobalIttInitializer {
+ public:
+  static itt_lib_env::IttCollectorConfig Initialize() {
+    return itt_lib_env::ConfigureIttCollector(utils::GetPathToSharedObject(Initialize));
+  }
+
+  inline static const itt_lib_env::IttCollectorConfig config_ = Initialize();
+};
+
 static std::atomic<__itt_global *> g_itt_global_of_ccl_domain{nullptr};
 static std::atomic<const __itt_domain *> g_ccl_domain_cached{nullptr};
 
@@ -264,6 +277,26 @@ ITT_EXTERN_C void ITTAPI __itt_api_init(__itt_global *p,
   SPDLOG_DEBUG("{}() Adapter: {}", __FUNCTION__, p ? "non-NULL" : "NULL");
   if (p == nullptr) {
     return;
+  }
+
+  switch (GlobalIttInitializer::config_) {
+    case itt_lib_env::IttCollectorConfig::kConfigurationFailed:
+      SPDLOG_WARN("{}() Failed to configure {}; PTI oneCCL tracing is disabled", __FUNCTION__,
+                  itt_lib_env::kIttLibEnvVarName);
+      return;
+    case itt_lib_env::IttCollectorConfig::kExternalNotFound:
+    case itt_lib_env::IttCollectorConfig::kExternalLibrary:
+      // ITT normally calls the selected external collector instead of PTI.
+      // Return defensively if PTI initializer is invoked directly.
+      return;
+    case itt_lib_env::IttCollectorConfig::kAlreadyPti:
+      SPDLOG_WARN("{}() {} already points to PTI; PTI oneCCL tracing remains enabled", __FUNCTION__,
+                  itt_lib_env::kIttLibEnvVarName);
+      break;
+    case itt_lib_env::IttCollectorConfig::kSetByPti:
+      SPDLOG_WARN("{}() Adapter: {} set by PTI at load time", __FUNCTION__,
+                  itt_lib_env::kIttLibEnvVarName);
+      break;
   }
 
   FillFuncPtrPerLib(p);
