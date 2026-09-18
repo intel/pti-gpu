@@ -68,6 +68,9 @@ jobs:
         id: check
         uses: ./.github/actions/detectChanges
 
+      - name: Configure Git to use GitHub PAT
+        run: |
+          git config --global url."https://user:${{ secrets.pat_pti_tools }}@github.com".insteadOf "https://github.com"
       - name: Build
         if: steps.check.outputs.code == 'true'
         working-directory: sdk

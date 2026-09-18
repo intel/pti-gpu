@@ -86,6 +86,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Configure Git to use GitHub PAT
+        run: |
+          git config --global url."https://user:${{ secrets.pat_pti_tools }}@github.com".insteadOf "https://github.com"
       - name: Build
         working-directory: sdk
         run: |
