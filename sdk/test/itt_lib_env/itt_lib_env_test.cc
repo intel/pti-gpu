@@ -44,7 +44,7 @@ class IttLibEnvTest : public ::testing::Test {
     self_path_ = utils::GetPathToSharedObject(&IttLibEnvTest::SelfMarker);
     if (!self_path_.empty()) {
       std::error_code err;
-      auto abs = pti::utils::filesystem::absolute(self_path_, err);
+      auto abs = pti::utils::AbsolutePath(self_path_, err);
       if (!err) self_path_ = abs.string();
     }
   }
@@ -132,7 +132,7 @@ TEST_F(IttLibEnvTest, SymlinkToThisModuleComparesEqual) {
   std::error_code err;
   // dladdr reports the path as spelled on the command line, often relative. The
   // link lives elsewhere, so its target has to be absolute or it would dangle.
-  const auto self_absolute = pti::utils::filesystem::absolute(self_path_, err);
+  const auto self_absolute = pti::utils::AbsolutePath(self_path_, err);
   ASSERT_FALSE(err) << "could not absolutize " << self_path_ << ": " << err.message();
   pti::utils::filesystem::remove(link_path, err);
   pti::utils::filesystem::create_symlink(self_absolute, link_path, err);

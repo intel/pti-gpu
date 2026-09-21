@@ -7,6 +7,8 @@
 #ifndef UTILS_PTI_FILESYSTEM_H_
 #define UTILS_PTI_FILESYSTEM_H_
 
+#include <system_error>
+
 #include "platform_config.h"
 
 #if defined(PTI_EXPERIMENTAL_FILESYSTEM)
@@ -22,6 +24,14 @@ namespace filesystem = std::experimental::filesystem;
 #else
 namespace filesystem = std::filesystem;
 #endif
+
+inline filesystem::path AbsolutePath(const filesystem::path& path, std::error_code& error) {
+#if defined(PTI_EXPERIMENTAL_FILESYSTEM)
+  return filesystem::system_complete(path, error);
+#else
+  return filesystem::absolute(path, error);
+#endif
+}
 }  // namespace utils
 }  // namespace pti
 

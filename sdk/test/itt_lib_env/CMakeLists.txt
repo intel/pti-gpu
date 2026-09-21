@@ -15,6 +15,7 @@ target_link_libraries(itt_lib_env_test PUBLIC GTest::gtest_main
                                               spdlog::spdlog
                                               fmt::fmt
                                               ittapi::headers
+                                              ${CMAKE_DL_LIBS}
                                               ${FS_LIB})
 
 add_dependencies(itt_lib_env_test pti_view)

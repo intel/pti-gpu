@@ -55,7 +55,7 @@ inline IttCollectorConfig ConfigureIttCollector(const std::string& this_module_p
     // Preserve the module actually mapped into this process, but make its path
     // independent of the working directory inherited by child processes.
     std::error_code error;
-    const auto absolute_path = pti::utils::filesystem::absolute(this_module_path, error);
+    const auto absolute_path = pti::utils::AbsolutePath(this_module_path, error);
     if (error || absolute_path.empty() ||
         ::setenv(kIttLibEnvVarName, absolute_path.c_str(), 1) != 0) {
       return IttCollectorConfig::kConfigurationFailed;
