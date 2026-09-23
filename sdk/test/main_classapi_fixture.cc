@@ -41,6 +41,8 @@ struct ClassTestData {
   bool zecall_command_list_append_memory_copy_present = false;
   bool zecall_command_list_append_memory_fill_present = false;
   bool zecall_command_list_append_launch_kernel_present = false;
+  bool zecall_command_queue_execute_command_lists_present = false;
+  bool zecall_host_synch_class_rec_present = false;
   uint64_t zecall_count = 0;
   bool urcall_present = false;
   uint64_t urcall_count = 0;
@@ -66,6 +68,8 @@ struct ClassTestData {
     zecall_command_list_append_memory_copy_present = false;
     zecall_command_list_append_memory_fill_present = false;
     zecall_command_list_append_launch_kernel_present = false;
+    zecall_command_queue_execute_command_lists_present = false;
+    zecall_host_synch_class_rec_present = false;
     std::fill_n(device_uuid_test.begin(), device_uuid_test.size(), 0);
     queue_test = nullptr;
   }
@@ -231,6 +235,18 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
           if ((function_name.find("zeCommandListAppendLaunchKernel") != std::string::npos)) {
             ClassTestData::Get().zecall_command_list_append_launch_kernel_present = true;
           }
+          if ((function_name.find("zeCommandQueueExecuteCommandLists") != std::string::npos)) {
+            ClassTestData::Get().zecall_command_queue_execute_command_lists_present = true;
+          }
+          // Any member of kPtiClassLzHostSynchOpApis. Which one an in-order queue waits on varies
+          // by runtime, so all of them count.
+          if ((function_name.find("zeEventHostSynchronize") != std::string::npos) ||
+              (function_name.find("zeFenceHostSynchronize") != std::string::npos) ||
+              (function_name.find("zeCommandQueueSynchronize") != std::string::npos) ||
+              (function_name.find("zeCommandListHostSynchronize") != std::string::npos) ||
+              (function_name.find("zeDeviceSynchronize") != std::string::npos)) {
+            ClassTestData::Get().zecall_host_synch_class_rec_present = true;
+          }
           break;
         }
         case pti_view_kind::PTI_VIEW_RUNTIME_API: {
@@ -272,10 +288,16 @@ class ClassApiFixtureTest : public ::testing::TestWithParam<std::tuple<bool, boo
     ::operator delete(buf);
   }
 
-  void RunGemmNoTrace() {
-    sycl::property_list prop{sycl::property::queue::in_order(),
-                             sycl::property::queue::enable_profiling(),
-                             sycl::ext::intel::property::queue::immediate_command_list()};
+  // Non-immediate is a hint only: the adapter may ignore it, so callers must confirm what they got.
+  void RunGemmNoTrace(bool use_immediate_command_list = true) {
+    sycl::property_list prop =
+        use_immediate_command_list
+            ? sycl::property_list{sycl::property::queue::in_order(),
+                                  sycl::property::queue::enable_profiling(),
+                                  sycl::ext::intel::property::queue::immediate_command_list()}
+            : sycl::property_list{sycl::property::queue::in_order(),
+                                  sycl::property::queue::enable_profiling(),
+                                  sycl::ext::intel::property::queue::no_immediate_command_list()};
 
     sycl::queue queue(dev_, sycl::async_handler{}, prop);
 
@@ -363,6 +385,61 @@ TEST_F(ClassApiFixtureTest, EnableGPUCoreApisViaClassForLevelZero) {
   EXPECT_GE(ClassTestData::Get().zecall_count, 1ULL);
   EXPECT_EQ(ClassTestData::Get().zecall_command_list_append_memory_copy_present, true);
   EXPECT_EQ(ClassTestData::Get().zecall_command_list_append_launch_kernel_present, true);
+}
+
+// PTI_API_CLASS_GPU_OPERATION_CORE has to cover the command queue submission API, not just the
+// append APIs: with a non-immediate command list the appends only build the list, and the work
+// does not reach the GPU until zeCommandQueueExecuteCommandLists.
+TEST_F(ClassApiFixtureTest, GPUCoreApiClassForLevelZeroReportsCommandQueueExecute) {
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+
+  // Pass 1, control: every Level Zero API traced. Confirms this device really does submit through
+  // a command queue. Without this pass, pass 2 would pass vacuously instead of failing.
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiViewEnableDriverApiClass(1, pti_api_class::PTI_API_CLASS_ALL,
+                                        pti_api_group_id::PTI_API_GROUP_LEVELZERO),
+            pti_result::PTI_SUCCESS);
+  RunGemmNoTrace(false);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+
+  // Without this, a regression that emitted no driver records at all would take the skip below and
+  // report green, blaming the device.
+  ASSERT_EQ(ClassTestData::Get().zecall_present, true) << "pass 1 produced no driver API records";
+
+  if (!ClassTestData::Get().zecall_command_queue_execute_command_lists_present) {
+    GTEST_SKIP() << "Non-immediate command list hint not honored on this device";
+  }
+
+  // The host synchronization APIs are a different class, so their disappearance in pass 2 is the
+  // witness that tracing was narrowed rather than inherited from pass 1. Captured before the reset
+  // below clears it, and only usable if pass 1 saw one.
+  const bool host_synch_reported_with_all_apis =
+      ClassTestData::Get().zecall_host_synch_class_rec_present;
+
+  // Pass 2, subject: only the GPU operation core class. ptiViewEnable(PTI_VIEW_DRIVER_API) below
+  // unsets granularity, so EnableClassApis resets every Level Zero API to disabled before enabling
+  // the class, which also keeps the result independent of the order tests run in.
+  ClassTestData::Get().Reset();
+  ASSERT_EQ(ptiViewEnable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  EnableClassApis(true, pti_api_class::PTI_API_CLASS_GPU_OPERATION_CORE,
+                  pti_api_group_id::PTI_API_GROUP_LEVELZERO);
+  RunGemmNoTrace(false);
+  ASSERT_EQ(ptiViewDisable(PTI_VIEW_DRIVER_API), pti_result::PTI_SUCCESS);
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+
+  // Sanity: the class enable took effect.
+  EXPECT_EQ(ClassTestData::Get().zecall_present, true);
+  EXPECT_EQ(ClassTestData::Get().zecall_command_list_append_launch_kernel_present, true);
+  // Confirms the subject assertion is about the core class, not tracing left over from pass 1.
+  if (host_synch_reported_with_all_apis) {
+    EXPECT_EQ(ClassTestData::Get().zecall_host_synch_class_rec_present, false)
+        << "host synchronization APIs still reported under PTI_API_CLASS_GPU_OPERATION_CORE -- "
+           "tracing was not narrowed, so the zeCommandQueueExecuteCommandLists check is vacuous";
+  }
+  EXPECT_EQ(ClassTestData::Get().zecall_command_queue_execute_command_lists_present, true)
+      << "expected a zeCommandQueueExecuteCommandLists record under "
+         "PTI_API_CLASS_GPU_OPERATION_CORE";
 }
 
 TEST_F(ClassApiFixtureTest, EnableRuntimeApisViaClassSpecificGroup) {

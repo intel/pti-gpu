@@ -110,6 +110,7 @@ inline static constexpr std::array kPtiClassLzGpuOpsCoreApis{
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchKernelIndirect_id,
     pti_api_id_driver_levelzero::zeCommandListAppendLaunchMultipleKernelsIndirect_id,
     pti_api_id_driver_levelzero::zeCommandListImmediateAppendCommandListsExp_id,
+    pti_api_id_driver_levelzero::zeCommandQueueExecuteCommandLists_id,
 };
 
 inline constexpr size_t kPtiViewKindCount = 13;
