@@ -244,8 +244,24 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
             if is_chrome_logging_present:
                 output_files = [str(f.relative_to(result_dir)) for f in result_dir.rglob("chrome_trace.json")]
                 print(f"[INFO] Found chrome_trace.json files: {output_files}")
-            elif scenario in ["-k", "-q"]:
-                output_files = [str(f.relative_to(result_dir)) for f in result_dir.rglob("metrics_*")]
+            elif "-k" in scenario_set or "-q" in scenario_set:
+                # The metric data is the primary artifact of -k/-q. The file is
+                # metrics_<device>.csv when written by the in-process collector
+                # and metrics.csv when the parent computes it from raw data
+                # (Windows metric query).
+                output_files = [str(f.relative_to(result_dir))
+                                for pattern in ("metrics_*", "metrics.csv")
+                                for f in result_dir.rglob(pattern) if f.is_file()]
+                print(f"[INFO] Found metrics files: {output_files}")
+                # -k/-q also imply device timing when no chrome logging is
+                # requested, so require the timing report too: a missing report
+                # (e.g. lost during process teardown) must fail the test.
+                timing_files = [str(f.relative_to(result_dir))
+                                for f in result_dir.rglob("device_timing.txt") if f.is_file()]
+                print(f"[INFO] Found timing files: {timing_files}")
+                if not timing_files:
+                    print(f"[ERROR] device_timing.txt not found.", file = sys.stderr)
+                    output_files = []
             else:
                 file_patterns = [
                     "host_timing.txt",

@@ -2452,7 +2452,11 @@ class ZeCollector {
     // The format of each entry in the file is: device id (int32_t), size of kernel name (size_t), kernel name, instance (uin64_t), size of metric data (uint64_t), metric data
 
     std::string fpath = logger_factory_->GenerateLogFileName(LOGGER_TYPE_METRICS_QUERY_TEMP);
-    std::ofstream mf(fpath, std::ios::binary);
+    // Append: FlushData() can run more than once (an explicit flush and again
+    // from Finalize()); entries are erased from global_kernel_profiles_ once
+    // written, so appending never duplicates data, while truncation would
+    // discard everything dumped by an earlier flush.
+    std::ofstream mf(fpath, std::ios::binary | std::ios::app);
 
     if (!mf) {
         std::cerr << "[ERROR] Failed to create metric data file" << std::endl;

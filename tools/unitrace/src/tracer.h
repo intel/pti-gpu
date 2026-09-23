@@ -214,11 +214,21 @@ class UniTracer {
   ~UniTracer() {
     if (ze_collector_ != nullptr) {
       ze_collector_->DisableTracing();
-      ze_collector_->Finalize();
     }
 
+    // Write all reports before ZeCollector::Finalize(). On Windows, Finalize()
+    // deactivates metric groups and destroys metric contexts with Level Zero
+    // calls that run while the runtime may already be unloading
+    // (DLL_PROCESS_DETACH); those calls can intermittently take the process
+    // down. The raw metric (.q) data is dumped by FlushData() inside Flush()
+    // and survived, but the not-yet-written timing reports were lost. Flush
+    // first so the reports are on disk before the risky teardown.
     if (!data_flushed_) {
       Flush();
+    }
+
+    if (ze_collector_ != nullptr) {
+      ze_collector_->Finalize();
     }
 
 #if BUILD_WITH_ITT
