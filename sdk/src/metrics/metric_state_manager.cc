@@ -11,6 +11,7 @@
 #include <shared_mutex>
 #include <vector>
 
+#include "lz_api_tracing_api_loader.h"
 #include "pti/pti_metrics.h"
 #include "spdlog/spdlog.h"
 #include "utils/utils.h"
@@ -19,6 +20,24 @@
 
 namespace pti {
 namespace metrics {
+
+namespace {
+ze_result_t DeviceEnableMetricsExp(ze_device_handle_t device) {
+  auto enable_metrics = PtiLzTracerLoader::Instance().zetDeviceEnableMetricsExp_;
+  if (enable_metrics) {
+    return enable_metrics(device);
+  }
+  return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+}
+
+ze_result_t DeviceDisableMetricsExp(ze_device_handle_t device) {
+  auto disable_metrics = PtiLzTracerLoader::Instance().zetDeviceDisableMetricsExp_;
+  if (disable_metrics) {
+    return disable_metrics(device);
+  }
+  return ZE_RESULT_ERROR_UNSUPPORTED_FEATURE;
+}
+}  // namespace
 
 MetricStateManager& MetricStateManager::Instance() {
   static MetricStateManager instance;
@@ -32,7 +51,7 @@ pti_result MetricStateManager::EnableSingleDevice(ze_device_handle_t device) {
     return PTI_SUCCESS;
   }
 
-  ze_result_t status = zetDeviceEnableMetricsExp(device);
+  const auto status = DeviceEnableMetricsExp(device);
   if (status != ZE_RESULT_SUCCESS) {
     if (status == ZE_RESULT_ERROR_UNSUPPORTED_FEATURE) {
       SPDLOG_ERROR(
@@ -40,11 +59,10 @@ pti_result MetricStateManager::EnableSingleDevice(ze_device_handle_t device) {
           "WORKAROUND: Set the environment variable ZET_ENABLE_METRICS=1 before running your "
           "application.");
       return PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED;
-    } else {
-      SPDLOG_ERROR("zetDeviceEnableMetricsExp failed with status: 0x{:x}",
-                   static_cast<uint32_t>(status));
-      return PTI_ERROR_DRIVER;
     }
+    SPDLOG_ERROR("zetDeviceEnableMetricsExp failed with status: 0x{:x}",
+                 static_cast<uint32_t>(status));
+    return PTI_ERROR_DRIVER;
   }
 
   device_ref_counts_[device] = 1;
@@ -66,7 +84,7 @@ pti_result MetricStateManager::DisableSingleDevice(ze_device_handle_t device) {
 
   // This was the last reference, disable metrics on this device. The reference is kept on
   // failure so that a later call can retry the disable.
-  ze_result_t status = zetDeviceDisableMetricsExp(device);
+  const auto status = DeviceDisableMetricsExp(device);
   if (status != ZE_RESULT_SUCCESS) {
     SPDLOG_WARN("zetDeviceDisableMetricsExp failed with status: 0x{:x}",
                 static_cast<uint32_t>(status));
