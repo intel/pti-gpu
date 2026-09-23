@@ -116,12 +116,11 @@ jobs:
           mkdir -p "$TC"
           tar -xf toolchain.tar -C "$TC"
           rm -f toolchain.tar
-
-          # PATH order selects the compiler: dpclang_toolchain.cmake searches PATH
-          # for dpclang++. LD_LIBRARY_PATH is needed for libsycl at run time and for
-          # CMake to find libur_loader at configure time.
           echo "$TC/bin" >> "$GITHUB_PATH"
           echo "LD_LIBRARY_PATH=${TC}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=${TC}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}" >> "$GITHUB_ENV"
+          echo "CPLUS_INCLUDE_PATH=${TC}/include${CPLUS_INCLUDE_PATH:+:${CPLUS_INCLUDE_PATH}}" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${TC}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}" >> "$GITHUB_ENV"
 
       - name: Verify toolchain and GPU
         run: |
@@ -153,16 +152,13 @@ jobs:
       - name: Testing
         working-directory: sdk
         run: |
-          # LibLoadTest.CoreModuleLoadsWithLocalScope passes and then segfaults at
-          # process exit (139) under open-source DPC++ only; run separately below.
-          #
           # onemkl_gemm_exe and omp_vec_add report Not Run: their samples skip
           # themselves at configure time without oneMKL / icx, but the tests are
           # still registered.
           # TODO(PTI-480): Fix Graph Tests on Latest Driver Set
           ctest --output-on-failure --preset ${{ matrix.preset }} \
             -LE "performance|quarantine" \
-            -E "LibLoadTest.CoreModuleLoadsWithLocalScope|run-onemkl_gemm_exe|run-omp_vec_add|ZeGraphTestSuite.TestZeUsmGraphExecutionTracingGraphCreation|ZeGraphTestSuite.TestZeUsmGraphExecutionWithoutTracingGraphCreation"
+            -E "run-onemkl_gemm_exe|run-omp_vec_add|ZeGraphTestSuite.TestZeUsmGraphExecutionTracingGraphCreation|ZeGraphTestSuite.TestZeUsmGraphExecutionWithoutTracingGraphCreation"
 
       - name: Quarantined tests # performance and flaky tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -173,16 +169,4 @@ jobs:
             echo "Quarantined tests pass"
           else
             echo "::warning::Quarantined tests failed"
-          fi
-
-      - name: Known-failing test, tracked separately
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        continue-on-error: true
-        working-directory: sdk
-        run: |
-          if ctest --output-on-failure --preset ${{ matrix.preset }} \
-               -R "LibLoadTest.CoreModuleLoadsWithLocalScope"; then
-            echo "::warning::LibLoadTest.CoreModuleLoadsWithLocalScope now passes - remove the -E exclusion"
-          else
-            echo "::warning::LibLoadTest.CoreModuleLoadsWithLocalScope still fails (known, open-source DPC++ only)"
           fi
