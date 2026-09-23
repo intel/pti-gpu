@@ -1,0 +1,168 @@
+---
+
+# This is an experimental workflow exercising unification of the PTI
+# and Unitrace build.
+#
+# Avoid running on every PR until the tests are ported over.
+
+name: ci
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * *' # Daily 5:00 AM UTC
+  push:
+    branches: [ "master" ]
+    paths:
+      - .github/workflows/ci.yml
+      - VERSION
+      - '**/CMakeLists.txt'
+      - '**/*.cmake'
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - .github/workflows/ci.yml
+      - VERSION
+      - '**/CMakeLists.txt'
+      - '**/*.cmake'
+
+permissions:
+  contents: read
+
+jobs:
+  build-lin:
+    if: vars.PTI_RUN_TESTS == 1
+    name: Build PTI ${{ matrix.os_id }} ${{ matrix.tags }}
+    runs-on: ${{ fromJSON(matrix.tags) }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      matrix:
+        include:
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_ONEAPI_N }}
+            tags: '["self-hosted", "Linux", "pti", "PVC"]'
+            os_id: "ubuntu-24.04.server.2026.1"
+          - container: ${{ vars.PTI_DOCKER_UBUNTU_24_4_CLIENT_ONEAPI_N }}
+            tags: '["self-hosted", "Linux", "pti", "BMG"]'
+            os_id: "ubuntu-24.04.client.2026.1"
+    container:
+      image: ${{ matrix.container }}
+      options: --device=/dev/dri --cap-add CAP_PERFMON
+    steps:
+      - name: Clean
+        run: |
+          shopt -s dotglob
+          rm -rf ./*
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Environment
+        run: |
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$(($(nproc)/2))" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          source /opt/intel/oneapi/setvars.sh --include-intel-llvm
+          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      # TODO:
+      # - name: Test
+
+      - name: Package
+        run: |
+          source /opt/intel/oneapi/setvars.sh --include-intel-llvm
+          cpack -G TGZ --config build/CPackConfig.cmake
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: pti-gpu-${{ matrix.os_id }}
+          path: |
+            pti*.tar.gz*
+
+  build-win:
+    if: vars.PTI_RUN_TESTS == 1
+    name: Build PTI for Windows
+    runs-on: [self-hosted, Windows, pti, ARC]
+    timeout-minutes: 20
+    env:
+      LEVEL_ZERO_LOADER_VERSION: 1.32.0
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - name: Clean
+        shell: bash
+        run: |
+          shopt -s dotglob
+          rm -rf ./*
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Environment
+        run: |
+          set /A JOBS=%NUMBER_OF_PROCESSORS%/2
+          echo CMAKE_BUILD_PARALLEL_LEVEL=%JOBS%>>%GITHUB_ENV%
+
+      - name: Get Level Zero Loader Version
+        id: loader-ver
+        run: |
+          @echo off
+          REM Make sure there is no whitespace between ...>>...
+          echo ze_loader_ver=%LEVEL_ZERO_LOADER_VERSION%>>%GITHUB_OUTPUT%
+
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: sdk/level-zero-sdk
+          key: ${{ runner.os }}-ci-Ze-Loader-${{ steps.loader-ver.outputs.ze_loader_ver }}
+
+      - name: Download Dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          rmdir /S /Q sdk\level-zero-sdk
+          del /s level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
+          echo https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
+          curl.exe -L -O https://github.com/oneapi-src/level-zero/releases/download/v%LEVEL_ZERO_LOADER_VERSION%/level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip
+          7z x level-zero-win-sdk-%LEVEL_ZERO_LOADER_VERSION%.zip -osdk\level-zero-sdk
+          >>%GITHUB_STEP_SUMMARY% echo **Successfully Downloaded Level Zero Loader Version:** %LEVEL_ZERO_LOADER_VERSION%
+
+      - name: Build
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release ^
+            -DLevelZero_ROOT=${{ github.workspace }}/sdk/level-zero-sdk ^
+            -DFETCHCONTENT_BASE_DIR=${{ runner.temp }}/_deps ^
+            -DCMAKE_OBJECT_PATH_MAX=200
+          cmake --build build
+
+      # TODO:
+      # - name: Test
+
+      - name: Package
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          cpack -G ZIP --config build/CPackConfig.cmake
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: pti-gpu-windows
+          path: |
+            pti*.zip*
