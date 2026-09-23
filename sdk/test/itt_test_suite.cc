@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: MIT
 // =============================================================
 
-// ITT tests used for CCL.
+// Exercises PTI's oneCCL ITT collector: domain filtering, metadata, nested
+// tasks, enable/disable behavior, and multithreaded record consistency.
 
 #include <dlfcn.h>
 #include <gmock/gmock.h>

@@ -92,9 +92,7 @@ void ParseBuffer(unsigned char *buf, std::size_t buf_size, std::size_t valid_buf
   samples_utils::AlignedDealloc(buf);
 }
 
-//
-// We should generate 3 IIT records by this test.
-//
+// Generates three ITT records from the oneCCL::API domain; other domains are filtered.
 int main() {
   PTI_CHECK_SUCCESS(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
 

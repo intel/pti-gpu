@@ -1155,7 +1155,7 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
   set_tests_properties(run-omp_vec_add PROPERTIES LABELS "functional;samples")
 endif()
 
-# CCL ITT tests
+# oneCCL ITT collection and domain-filtering tests.
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
   get_itt()
 
@@ -1189,9 +1189,8 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
     SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
   add_dependencies(itt_test_suite itt_trivial_collector)
 
-  #
-  # Bug warning in CMake: it does not accept LABELS separated by ';'.
-  #
+  # Run each collector test with libpti_view.so preconfigured. Pass labels
+  # separately because gtest_discover_tests does not preserve a semicolon list.
   gtest_discover_tests(
      itt_test_suite
      DISCOVERY_TIMEOUT 60
@@ -1236,8 +1235,8 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
     FAIL_REGULAR_EXPRESSION "did not match any test"
     LABELS "unit;itt")
 
-  # A pre-set path to PTI remains valid and enables PTI collection.
-  #
+  # Preserve INTEL_LIBITTNOTIFY64 when it already points to libpti_view.so and
+  # verify that PTI tracing remains enabled.
   add_test(
     NAME itt_preconfigured_pti_collector_enables_pti_tracing
     COMMAND itt_test_suite --gtest_filter=IttTest.PreconfiguredPtiCollectorEnablesPtiTracing)
@@ -1247,7 +1246,8 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
     FAIL_REGULAR_EXPRESSION "did not match any test;\\[  SKIPPED \\]"
     LABELS "unit;itt")
 
-  # itt_trivial_collector must receive the ITT calls while PTI remains disabled.
+  # Preserve an externally configured collector: itt_trivial_collector receives
+  # the ITT calls and PTI tracing remains disabled.
   add_test(
     NAME itt_external_trivial_collector_disables_pti_tracing
     COMMAND itt_test_suite --gtest_filter=IttTest.ExternalTrivialCollectorDisablesPtiTracing)
@@ -1257,13 +1257,13 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
     FAIL_REGULAR_EXPRESSION "did not match any test;\\[  SKIPPED \\]"
     LABELS "unit;itt")
 
-  # CCL ITT shared libraries test
+  # Add linked and runtime-loaded variants of the oneCCL domain-filtering tests.
   add_subdirectory(ccl_itt_shared_libs)
 
-  # Real-library preload integration test. The stage models a wheel layout: Core is in
-  # pti/, while the interface and the complete non-system XPTI runtime closure are one
-  # directory above it. No ambient loader path is permitted.
-  if(TARGET Xpti::xpti)
+  # Stage a wheel-like layout and test loading Core (libpti.so) through libpti_view.so
+  # without LD_LIBRARY_PATH. Core remains in pti/, while XPTI and required non-system
+  # runtime dependencies are staged beside libpti_view.so.
+  if(TARGET Xpti::xpti AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.16")
     set(PTI_LIB_LOAD_PRELOAD_STAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/lib_load_preload")
     set(PTI_LIB_LOAD_PRELOAD_CORE_DIR
         "${PTI_LIB_LOAD_PRELOAD_STAGE_DIR}/${PTI_MODULE_SUBDIR}")
@@ -1275,9 +1275,8 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
               "${PTI_LIB_LOAD_PRELOAD_STAGE_DIR}"
       COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:pti>"
               "${PTI_LIB_LOAD_PRELOAD_CORE_DIR}"
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:Xpti::xpti>"
-              "${PTI_LIB_LOAD_PRELOAD_STAGE_DIR}"
       COMMAND ${CMAKE_COMMAND}
+              "-DPTI_CORE_LIBRARY=$<TARGET_FILE:pti>"
               "-DPTI_XPTI_LIBRARY=$<TARGET_FILE:Xpti::xpti>"
               "-DPTI_XPTI_RUNTIME_DIRECTORY=$<TARGET_FILE_DIR:Xpti::xpti>"
               "-DPTI_PRELOAD_STAGE_DIRECTORY=${PTI_LIB_LOAD_PRELOAD_STAGE_DIR}"
@@ -1287,6 +1286,9 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
 
     add_executable(lib_load_suite lib_load_suite.cc)
     add_dependencies(lib_load_suite lib_load_stage)
+    target_include_directories(
+      lib_load_suite
+      PRIVATE "${PROJECT_BINARY_DIR}/include" "${PROJECT_SOURCE_DIR}/include")
     target_compile_definitions(
       lib_load_suite
       PRIVATE
@@ -1301,10 +1303,13 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
       PROPERTIES
         ENVIRONMENT "LD_LIBRARY_PATH="
         LABELS "unit"
-        LABELS "libload"
-        LABELS "itt")
+        LABELS "libload")
+  elseif(TARGET Xpti::xpti)
+    message(STATUS "Skipping lib-load preload test: requires CMake 3.16 or newer")
   endif()
 
+  # Functional smoke test: self-register libpti_view.so and collect three ITT
+  # records from basic and nested oneCCL tasks.
   add_executable(itt_basic itt_basic.cc)
   target_link_options(itt_basic PUBLIC -fsycl)
   target_compile_options(itt_basic PUBLIC -fsycl)
@@ -1316,6 +1321,8 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND HAVE_SYCL)
     ENVIRONMENT "INTEL_LIBITTNOTIFY64="
     LABELS "functional;itt")
 
+  # Exercise self-registration with real oneCCL workloads. Keeping
+  # INTEL_LIBITTNOTIFY64 empty verifies registration before oneCCL's first ITT call.
   if (TARGET sycl_allreduce_usm_test)
     find_package(oneCCL 2021.17 QUIET)
     find_package(MPI QUIET)

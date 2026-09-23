@@ -20,6 +20,7 @@ target_link_libraries(itt_lib_env_test PUBLIC GTest::gtest_main
 
 add_dependencies(itt_lib_env_test pti_view)
 
+# Register each case separately for precise CTest failure reporting.
 gtest_discover_tests(
   itt_lib_env_test
   DISCOVERY_TIMEOUT 60
@@ -28,6 +29,8 @@ gtest_discover_tests(
     LABELS "unit"
     LABELS "itt")
 
+# Also run the complete suite in one process to verify that no helper state
+# leaks between cases.
 add_test(NAME itt_lib_env_standalone COMMAND itt_lib_env_test)
 set_tests_properties(itt_lib_env_standalone PROPERTIES
   ENVIRONMENT "INTEL_LIBITTNOTIFY64=$<TARGET_FILE:Pti::pti_view>"

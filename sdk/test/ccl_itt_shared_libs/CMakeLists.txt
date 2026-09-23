@@ -8,7 +8,7 @@
 add_subdirectory(ccladd)
 add_subdirectory(foomul)
 
-# CCL ITT libraries test
+# Linked-library variant of the oneCCL domain-filtering tests.
 add_executable(ccl_itt_libs_test ccl_itt_libs_test.cc)
 
 target_include_directories(
@@ -42,7 +42,7 @@ target_link_libraries(ccl_itt_libs_test PUBLIC
         LABELS "itt"
         LABELS "ccl-filter")
 
-# CCL ITT dlopen test — same domain-filter tests but libraries loaded at runtime
+# Runtime-loaded variant of the same domain-filtering tests.
 add_executable(ccl_itt_dlopen_test ccl_itt_dlopen_test.cc)
 target_include_directories(
   ccl_itt_dlopen_test
@@ -68,20 +68,9 @@ target_link_libraries(ccl_itt_dlopen_test PUBLIC
   ${FS_LIB})
 add_dependencies(ccl_itt_dlopen_test ccladd foomul)
 
-#
-# Validates that GlobalIttInitializer in libpti_view.so sets
-# INTEL_LIBITTNOTIFY64 at load time, so ccladd.so's ITT calls are collected
-# without any external env var setup. FiltersCclBasic is sufficient: it
-# exercises the full path from self-registration through record collection.
-# INTEL_LIBITTNOTIFY64 is intentionally empty here.
-#
-# ccladd.so is a minimal stand-in for oneCCL: a shared library that wraps
-# arithmetic operations with ITT task annotations under the "oneCCL::API"
-# domain. It models the critical topology - ITT calls coming from a separate
-# shared library - without requiring a real oneCCL installation. The ittnotify
-# latch fires when ccladd.so makes its first ITT call, which is exactly the
-# race condition GlobalIttInitializer is designed to win.
-#
+# Verify that libpti_view.so self-registers before ccladd.so's first ITT call
+# when INTEL_LIBITTNOTIFY64 is empty. ccladd.so models oneCCL calls originating
+# from a separate shared library, and FiltersCclBasic confirms their collection.
 add_test(
   NAME ccl_itt_collects_without_env_var
   COMMAND ccl_itt_libs_test --gtest_filter=CclDomainFilterTest.FiltersCclBasic)

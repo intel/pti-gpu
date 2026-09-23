@@ -1,4 +1,4 @@
-# file(GET_RUNTIME_DEPENDENCIES) correctly warns when XPTI's incomplete ELF metadata
+# file(GET_RUNTIME_DEPENDENCIES) correctly warns when resolving Core's dependency graph
 # requires the explicit compiler runtime directory. Run the scan in a child CMake process
 # so expected diagnostics do not pollute successful builds, but preserve all output on
 # failure.
@@ -6,6 +6,7 @@ if(NOT PTI_XPTI_RUNTIME_DEPENDENCY_SCAN)
   execute_process(
     COMMAND "${CMAKE_COMMAND}"
             "-DPTI_XPTI_RUNTIME_DEPENDENCY_SCAN=ON"
+            "-DPTI_CORE_LIBRARY=${PTI_CORE_LIBRARY}"
             "-DPTI_XPTI_LIBRARY=${PTI_XPTI_LIBRARY}"
             "-DPTI_XPTI_RUNTIME_DIRECTORY=${PTI_XPTI_RUNTIME_DIRECTORY}"
             "-DPTI_PRELOAD_STAGE_DIRECTORY=${PTI_PRELOAD_STAGE_DIRECTORY}"
@@ -19,11 +20,12 @@ if(NOT PTI_XPTI_RUNTIME_DEPENDENCY_SCAN)
   return()
 endif()
 
-# Copies the non-system runtime closure of Xpti into a staged interface directory.
+# Copies XPTI and Core's non-system compiler runtime closure into a staged interface directory.
 # The test runs with LD_LIBRARY_PATH empty, so LoadCoreLibrary must recursively pre-load
 # these files through the interface library's RUNPATH.
 
 foreach(required_variable
+        PTI_CORE_LIBRARY
         PTI_XPTI_LIBRARY
         PTI_XPTI_RUNTIME_DIRECTORY
         PTI_PRELOAD_STAGE_DIRECTORY)
@@ -32,9 +34,12 @@ foreach(required_variable
   endif()
 endforeach()
 
-file(REAL_PATH "${PTI_XPTI_RUNTIME_DIRECTORY}" PTI_XPTI_RUNTIME_ROOT)
+file(COPY "${PTI_XPTI_LIBRARY}" DESTINATION "${PTI_PRELOAD_STAGE_DIRECTORY}"
+     FOLLOW_SYMLINK_CHAIN)
+
+get_filename_component(PTI_XPTI_RUNTIME_ROOT "${PTI_XPTI_RUNTIME_DIRECTORY}" REALPATH)
 file(GET_RUNTIME_DEPENDENCIES
-  LIBRARIES "${PTI_XPTI_LIBRARY}"
+  LIBRARIES "${PTI_CORE_LIBRARY}" "${PTI_XPTI_LIBRARY}"
   DIRECTORIES "${PTI_XPTI_RUNTIME_ROOT}"
   RESOLVED_DEPENDENCIES_VAR PTI_XPTI_RESOLVED_DEPENDENCIES
   UNRESOLVED_DEPENDENCIES_VAR PTI_XPTI_UNRESOLVED_DEPENDENCIES)
@@ -45,10 +50,10 @@ if(PTI_XPTI_UNRESOLVED_DEPENDENCIES)
 endif()
 
 foreach(dependency IN LISTS PTI_XPTI_RESOLVED_DEPENDENCIES)
-  file(REAL_PATH "${dependency}" PTI_XPTI_RESOLVED_DEPENDENCY)
-  cmake_path(IS_PREFIX PTI_XPTI_RUNTIME_ROOT "${PTI_XPTI_RESOLVED_DEPENDENCY}" NORMALIZE
-             is_xpti_runtime_dependency)
-  if(is_xpti_runtime_dependency)
+  get_filename_component(PTI_XPTI_RESOLVED_DEPENDENCY "${dependency}" REALPATH)
+  file(RELATIVE_PATH PTI_XPTI_RUNTIME_RELATIVE_DEPENDENCY
+       "${PTI_XPTI_RUNTIME_ROOT}" "${PTI_XPTI_RESOLVED_DEPENDENCY}")
+  if(NOT PTI_XPTI_RUNTIME_RELATIVE_DEPENDENCY MATCHES "^\\.\\.(/|$)")
     file(COPY "${dependency}" DESTINATION "${PTI_PRELOAD_STAGE_DIRECTORY}"
          FOLLOW_SYMLINK_CHAIN)
   endif()
