@@ -1,2 +1,7 @@
+# Packages of the Python scripts of unitrace, uniview.py and the scripts of
+# scripts/, installed with: python -m pip install -r requirements.txt
+#
+# Known-good versions: bokeh 3.9.0, pandas 3.0.1, matplotlib 3.10.8.
 pandas >= 2.2.1
 matplotlib >= 3.8.0
+bokeh >= 3.9

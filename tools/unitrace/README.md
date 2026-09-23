@@ -20,6 +20,7 @@ Intel(R) GPU applications.
 - Python 3.9 or later
 - Matplotlib 3.8 or later (https://matplotlib.org/)
 - Pandas 2.2.1 or later (https://pandas.pydata.org/)
+- Bokeh 3.9 or later (https://bokeh.org/)
 - Intel(R) MPI (optional)
 
 ## Build and Install

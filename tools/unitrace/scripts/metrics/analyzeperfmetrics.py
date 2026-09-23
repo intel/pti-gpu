@@ -28,20 +28,20 @@ from enum import Enum
 class MetricsMode(Enum):
     SINGLE_FILE = "single_file"
     RESULT_DIRECTORY = "result_directory"
-    
+
 @dataclass
 class DeviceInfo:
     """Device-specific information only."""
     device_id: int
     metrics_file: Path
     mode: MetricsMode = field(init=False)
-    
+
     # Single file mode specific
     header_line: Optional[int] = field(default=None)
     last_line: Optional[int] = field(default=None)
-    
 
-    
+
+
     def __post_init__(self):
         if self.header_line is None and self.last_line is None:
             self.mode = MetricsMode.RESULT_DIRECTORY
@@ -68,7 +68,7 @@ class DeviceInfo:
                 f"header_line={self.header_line}, "
                 f"last_line={self.last_line}, "
                 f"metrics_file={self.metrics_file})")
-        
+
     def get_device_data(self) -> Optional[pd.DataFrame]:
         """
         Read the device-specific metrics data into a DataFrame.
@@ -89,7 +89,7 @@ class DeviceInfo:
                 if nrows <= 0:
                     print(f"Warning: No data rows for device {self.device_id}")
                     return None
-                
+
             df = pd.read_csv(
                 self.metrics_file,
                 skiprows=header_line,
@@ -98,7 +98,7 @@ class DeviceInfo:
                 skipinitialspace=True
                 )
             return df
-        
+
         except Exception as e:
             print(f"Error reading device file {self.metrics_file}: {e}")
             return None
@@ -157,7 +157,7 @@ class DeviceInfo:
         if df is None:
             print(f"    No data available for device {self.device_id}", file=of)
             return
-        
+
         print("    Metric", file = of)
         self._print_data_from_df(df, eustall, of)
 
@@ -180,7 +180,7 @@ class MetricsInfo:
             return
 
         first_metrics_file = self.devices[next(iter(self.devices))].metrics_file if self.is_result_directory else self.input_path
-        
+
         if not first_metrics_file.exists():
             print(f"Warning: Metrics file {first_metrics_file} does not exist")
         try:
@@ -190,7 +190,7 @@ class MetricsInfo:
                         self.is_eustall = True
         except (IOError, OSError) as e:
             print(f"Warning: Could not read file {first_metrics_file}: {e}")
-    
+
     def _init_devices(self):
         if self.is_result_directory:
             self._init_devices_from_directory()
@@ -203,7 +203,7 @@ class MetricsInfo:
         """
         # Scan the result directory for metrics files
         filename_pattern = re.compile(r'^metrics_(\d+)\.csv$')
-        
+
         for metrics_file in self.input_path.rglob('metrics/metrics_*.csv'):
             match = filename_pattern.match(metrics_file.name)
             if match and metrics_file.stat().st_size > 0:
@@ -226,7 +226,7 @@ class MetricsInfo:
             current_device_id = 0 # Initialize to 0, will be updated when/if a device banner is found
             header_line = None
             first_device_found = False
-            
+
             for row in f:
                 if ("=== Device" in row) and ("Metrics ===" in row):
                     # Save previous device if found
@@ -239,7 +239,7 @@ class MetricsInfo:
                         )
                         self.devices[current_device_id] = device_info
                         header_line = None
-                    
+
                     # Parse device ID from banner: "=== Device #X Metrics ==="
                     words = row.split()
                     for word in words:
@@ -250,13 +250,13 @@ class MetricsInfo:
                             except ValueError:
                                 print(f"Warning: Could not parse device ID from '{word}'")
                                 continue
-                
+
                 # Look for header line (after device banner)
                 elif (("OtherStall[Events]" in row) or (row.startswith("Kernel,"))):
                     header_line = linenum
-                
+
                 linenum += 1
-            
+
             # last device
             if header_line is not None:
                 device_info = DeviceInfo(
@@ -265,7 +265,7 @@ class MetricsInfo:
                     header_line=header_line,
                     last_line=linenum  # End of file
                 )
-                self.devices[current_device_id] = device_info        
+                self.devices[current_device_id] = device_info
 
     def _validate_input(self):
         if isinstance(self.input_path, str):
@@ -274,10 +274,10 @@ class MetricsInfo:
             self.input_path = self.input_path.resolve()
         else:
             raise TypeError(f"input_path must be a Path object or string, got {type(self.input_path).__name__}")
-        
+
         if not isinstance(self.is_result_directory, bool):
             raise TypeError(f"is_result_directory must be a boolean, got {type(self.is_result_directory).__name__}")
-        
+
         if not self.input_path.exists():
             raise FileNotFoundError(f"Input path '{self.input_path}' does not exist.")
 
@@ -289,19 +289,19 @@ class MetricsInfo:
                 raise FileNotFoundError(f"'{self.input_path}' is not a file")
             if self.input_path.stat().st_size == 0:
                 raise ValueError(f"File '{self.input_path}' is empty")
-    
+
     def get_device(self, device_id: int) -> Optional[DeviceInfo]:
         """Get device info by ID."""
         return self.devices.get(device_id)
-    
+
     def get_device_ids(self) -> List[int]:
         """Get sorted list of all device IDs."""
         return sorted(self.devices.keys())
-    
+
     def has_device(self, device_id: int) -> bool:
         """Check if device exists."""
         return device_id in self.devices
-    
+
     def print_data(self, output=None):
         of = sys.stdout
         if (output is not None):
@@ -827,7 +827,7 @@ def WriteOutStallReport(report, p): # p is PDF object
                 plt.close(fig) # close figure
                 page = ""  # reset for next page
                 num = 0
-            
+
     # don't forget the last page
     if (num != 0):
         fig = plt.figure()
@@ -924,7 +924,7 @@ def AnalyzeStallMetrics(args, device_data_df, kernel, http = False):
                             if (p == None):
                                 p = pdf(args.output)
                             WriteOutStallReport(report, p)
-            
+
                         print("\nAnalyzed kernel " + kernel)
                     else:
                         print("\nNo stall events for kernel " + kernel)
@@ -1163,13 +1163,13 @@ def PlotKernelInstancePerfMetrics(args, kernel, df, metric_sets_cleansed, throug
         for throughputs_cleansed in throughputs_sets_cleansed:
             df3 = df2[throughputs_cleansed]
             df3 = (df3.iloc[:, 1:]).div(df3.iloc[:, 0], axis = 0)
-    
+
             if (df3.shape[0] > 0):
                 if (df3.shape[0] > 1):
                     ax = df3.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                 else:
                     ax = df3.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
-    
+
                 plt.grid(visible = True, which = 'both', axis = 'y')
                 plt.legend(loc = 'best', fontsize = 4)
                 plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
@@ -1182,7 +1182,7 @@ def PlotKernelInstancePerfMetrics(args, kernel, df, metric_sets_cleansed, throug
 
             else:
                 break
-    
+
     return analyzed, p
 
 def AnalyzePerfMetrics(args, device_data_df):
@@ -1233,7 +1233,7 @@ def AnalyzePerfMetrics(args, device_data_df):
                                 ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = label)
                             else:
                                 ax = df3.plot(y = metrics_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = label)
-    
+
                             plt.grid(visible = True, which = 'both', axis = 'y')
                             plt.legend(loc = 'best', fontsize = 4)
                             plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
@@ -1251,13 +1251,13 @@ def AnalyzePerfMetrics(args, device_data_df):
                         for throughputs_cleansed in throughputs_sets_cleansed:
                             df3 = df2[throughputs_cleansed]
                             df3 = (df3.iloc[:, 1:]).div(df3.iloc[:, 0], axis = 0)
-    
+
                             if (df3.shape[0] > 0):
                                 if (df3.shape[0] > 1):
                                     ax = df3.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                                 else:
                                     ax = df3.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
-        
+
                                 plt.grid(visible = True, which = 'both', axis = 'y')
                                 plt.legend(loc = 'best', fontsize = 4)
                                 plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
@@ -1270,7 +1270,7 @@ def AnalyzePerfMetrics(args, device_data_df):
                                 analyzed = True
                             else:
                                 break
-    
+
                         print("Analyzed kernel " + kernel)
                     else:
                         print("No samples for kernel " + kernel)
@@ -1337,13 +1337,13 @@ def AnalyzePerfMetrics(args, device_data_df):
                             for throughputs_cleansed in throughputs_sets_cleansed:
                                 df3 = df2[throughputs_cleansed]
                                 df3 = (df3.iloc[:, 1:]).div(df3.iloc[:, 0], axis = 0)
-        
+
                                 if (df3.shape[0] > 0):
                                     if (df3.shape[0] > 1):
                                         ax = df3.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                                     else:
                                         ax = df3.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
-            
+
                                     plt.grid(visible = True, which = 'both', axis = 'y')
                                     plt.legend(loc = 'best', fontsize = 4)
                                     plt.title(label = args.title + "\n(" + args.kernel + ")", loc = 'center', fontsize = 8, wrap = True)
@@ -1356,7 +1356,7 @@ def AnalyzePerfMetrics(args, device_data_df):
                                     analyzed = True
                                 else:
                                     break
-    
+
                             print("Analyzed instance " + str(instance) + " of kernel " + args.kernel)
                         else:
                             print("No samples for instance " + str(instance) + " of kernel " + args.kernel)
@@ -1398,13 +1398,13 @@ def AnalyzePerfMetrics(args, device_data_df):
                     for throughputs_cleansed in throughputs_sets_cleansed:
                         df3 = df2[throughputs_cleansed]
                         df3 = (df3.iloc[:, 1:]).div(df3.iloc[:, 0], axis = 0)
-    
+
                         if (df3.shape[0] > 0):
                             if (df3.shape[0] > 1):
                                 ax = df3.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                             else:
                                 ax = df3.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
-    
+
                             plt.grid(visible = True, which = 'both', axis = 'y')
                             plt.legend(loc = 'best', fontsize = 4)
                             plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
@@ -1439,11 +1439,11 @@ def AnalyzePerfMetrics(args, device_data_df):
 def HttpAnalyzePerfMetrics(args, device_data_df, kname, instance):
     if (args.metrics is None):
         return None, None
-    
+
     device_data_df = device_data_df.loc[device_data_df['GlobalInstanceId'] == float(instance)]
     if (device_data_df.shape[0] == 0):
         return None, None
-    
+
     buf = None
     metric_sets_cleansed = []
     for metric_set in args.metrics:
@@ -1475,7 +1475,7 @@ def HttpAnalyzePerfMetrics(args, device_data_df, kname, instance):
     p = None
     for metrics_cleansed, label in zip(metric_sets_cleansed, args.ylabel):
         df2 = device_data_df[metrics_cleansed]
-        
+
         if (df2.shape[0] > 0):
             if (df2.shape[0] > 1):
                 ax = df2.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = label)
@@ -1486,7 +1486,7 @@ def HttpAnalyzePerfMetrics(args, device_data_df, kname, instance):
             kernel = device_data_df.iloc[0]['Kernel']
             plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
             plt.tight_layout()
-        
+
             fig = ax.get_figure()
             if (p == None):
                 tmpdir = tempfile.TemporaryDirectory()
@@ -1506,7 +1506,7 @@ def HttpAnalyzePerfMetrics(args, device_data_df, kname, instance):
                     ax = df2.plot(y = throughputs_cleansed[1:], kind = 'line', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
                 else:
                     ax = df2.plot(y = throughputs_cleansed[1:], kind = 'bar', xlabel = args.xlabel, ylabel = 'Throughput(GB/s)')
-    
+
                 plt.grid(visible = True, which = 'both', axis = 'y')
                 plt.legend(loc = 'best', fontsize = 4)
                 plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
@@ -1526,7 +1526,7 @@ def HttpAnalyzePerfMetrics(args, device_data_df, kname, instance):
         tmpdir.cleanup()
 
     return None, buf 
-    
+
 
 def GenerateSelfSignedCertificate(cert, key):
     # construct command to generate a self-signed certificate and private key
@@ -1598,7 +1598,7 @@ def PerfMetricsHTTPServer(args, metrics_info):
                     if metrics_info.is_eustall:
                         msg, buf = AnalyzeStallMetrics(args, device_data_df, kname, http = True)
                     else:
-                        msg, buf = HttpAnalyzePerfMetrics(args, device_data_df, kname, instance)                        
+                        msg, buf = HttpAnalyzePerfMetrics(args, device_data_df, kname, instance)
 
                     if (buf is not None):
                         buf.seek(0)
@@ -1643,7 +1643,7 @@ def PerfMetricsHTTPServer(args, metrics_info):
                 if (key is None):
                     print("Private key file is missing")
                     return
-    
+
                 if (os.path.isfile(cert) == False):
                     print("Certificate file " + cert + " does not exist")
                     return

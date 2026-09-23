@@ -23,6 +23,7 @@ sys.path.append(modpath + "/metrics")
 sys.path.append(modpath + "/tracemerge")
 
 import analyzeperfmetrics as apm
+import perfdashboard
 from mergetrace import merge_trace_files, MergePerfettoTraces
 
 def parse_args(argparser):
@@ -52,6 +53,7 @@ def ParseArguments():
     argparser.add_argument('-m', '--metrics', help = "hardware performance metrics file in CSV format")
     argparser.add_argument('-n', '--numtopstalls', type = int, default = 10, help = "number of top most expensive stalls of each type to report for stall analysis(10 default, -1 unlimited)")
     argparser.add_argument('-g', '--demangler', help = "symbol demangler if c++filt is not available")
+    argparser.add_argument('--dashboard', action = 'store_true', help = "open the interactive Bokeh dashboard instead of the default static matplotlib PDF")
     argparser.add_argument('--result-dir', help = "directory that holds metrics files and trace file")
     argparser.add_argument('--ranks', type=int, nargs='+', help='list of MPI ranks to include in merge (e.g., --ranks 0 1 2)')
     
@@ -60,6 +62,10 @@ def ParseArguments():
     return args
 
 class TraceLoadingHttpHandler(http.server.SimpleHTTPRequestHandler):
+    def log_request(self, code='-', size='-'):
+        if isinstance(code, int) and code >= 400:
+            super().log_request(code, size)
+
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin',  'https://ui.perfetto.dev')
         self.send_header('Cache-Control', 'no-cache')
@@ -203,14 +209,14 @@ def main():
                 if ('IP[Address]' in line):
                     break
 
-        if (eustall is False):
-            if (args.config is None):
+        if not args.dashboard and not eustall:
+            # OA metrics select their view with a config file; stall data does not
+            if args.config is None:
                 print(f'Config file is missing')
                 return 1
-            else:
-                if not os.path.exists(args.config):
-                    print(f'Config file {args.config} is not found')
-                    return 1
+            if not os.path.exists(args.config):
+                print(f'Config file {args.config} is not found')
+                return 1
 
         if (args.shaderdump is not None):
             if not os.path.exists(args.shaderdump):
@@ -272,45 +278,64 @@ def main():
         print("Trace file " + trace_file_path + " is empty")
         return 1
 
-    LoadTrace(trace_file_path)
+    dbs = None
+    try:
+        if args.dashboard and args.metrics is not None:
+            dbs = perfdashboard.start_server_process(
+                args.metrics, trace = args.trace, eustall = eustall)
+            if dbs is None:
+                return 1
 
-    if metrics_files_paths:
-        https = False
-        # The https-vs-local decision is driven by a metrics URL embedded in the
-        # trace. For JSON it can be found by a text scan; the binary
-        # Perfetto trace carries it in a debug annotation, so skip the scan and
-        # use the local (-q) path, matching the http://localhost URL the emitter
-        # writes for protobuf output.
-        if (is_perfetto == False):
-            with open(trace_file_path, 'r') as fp:
-                for num, line in enumerate(fp):
-                    if ("https://" in line):
-                        https = True
-                        break
-                    elif ("http://" in line):
-                        break
+        LoadTrace(args.trace)
 
-        options = []
-        if (eustall is True):
-            if (args.shaderdump is not None):
-                options.extend(['-s', args.shaderdump])
-            if (args.demangler is not None):
-                options.extend(['-g', args.demangler])
-            options.extend(['-n', str(args.numtopstalls)])
-        else:
-            if (args.config is not None):
-                options = ['-f', str(args.config)]
+        if dbs is not None:
+            return perfdashboard.wait_for_exit(dbs)
+          
+        if metrics_files_paths:
+            https = False
+            # The https-vs-local decision is driven by a metrics URL embedded in the
+            # trace. For JSON it can be found by a text scan; the binary
+            # Perfetto trace carries it in a debug annotation, so skip the scan and
+            # use the local (-q) path, matching the http://localhost URL the emitter
+            # writes for protobuf output.
+            if (is_perfetto == False):
+                with open(trace_file_path, 'r') as fp:
+                    for num, line in enumerate(fp):
+                        if ("https://" in line):
+                            https = True
+                            break
+                        elif ("http://" in line):
+                            break
 
-        if (https == True):
-            options.append('-p')
-        else:
-            options.append('-q')
-        if args.result_dir:
-            options.extend(['--result-dir', str(args.result_dir)])
-        else:
-            options.append(str(first_metrics_file))
+            options = []
+            if (eustall is True):
+                if (args.shaderdump is not None):
+                    options.extend(['-s', args.shaderdump])
+                if (args.demangler is not None):
+                    options.extend(['-g', args.demangler])
+                options.extend(['-n', str(args.numtopstalls)])
+            else:
+                if (args.config is not None):
+                    options = ['-f', str(args.config)]
 
-        apm.main(apm.ParseArguments(options))
+            if (https == True):
+                options.append('-p')
+            else:
+                options.append('-q')
+            if args.result_dir:
+                options.extend(['--result-dir', str(args.result_dir)])
+            else:
+                options.append(str(first_metrics_file))
+
+            apm.main(apm.ParseArguments(options))
+    except (OSError, ValueError) as error:
+        print(f"Error: {error}")
+        return 1
+    except KeyboardInterrupt:
+        print("\nStopping metrics server.")
+        return 0
+    finally:
+        perfdashboard.stop_owned_process(dbs)
 
 if __name__ == '__main__':
     sys.exit(main())
