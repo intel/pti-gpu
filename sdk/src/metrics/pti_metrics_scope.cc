@@ -121,10 +121,10 @@ void CollectQueryDataForKernel(pti_scope_collection_handle_t scope_collection_ha
   auto& profiler = profiler_it->second;
 
   // Get query from profiler (single source of truth)
-  auto query = profiler->GetQueryForKernel(kernel_id);
-  auto completion_event = profiler->GetEventForQuery(query);
+  auto [query, completion_event] = profiler->GetSlotForKernel(kernel_id);
 
   if (!ValidateQueryAndEvent(query, completion_event, kernel_id)) {
+    // Keep the slot: its data has not been read, so it must not be reused.
     return;
   }
 
@@ -165,14 +165,8 @@ void CollectQueryDataForKernel(pti_scope_collection_handle_t scope_collection_ha
         kernel_id, static_cast<void*>(device));
   }
 
-  // Clean up
-  profiler->RemoveKernelQuery(kernel_id);
-
-  ze_result_t destroy_status = zeEventDestroy(completion_event);
-  if (destroy_status != ZE_RESULT_SUCCESS) {
-    SPDLOG_WARN("CollectQueryDataForKernel: Failed to destroy completion event: 0x{:x}",
-                static_cast<uint32_t>(destroy_status));
-  }
+  // The data has been read, so the slot can serve another kernel.
+  profiler->RecycleKernelSlot(kernel_id, static_cast<ze_device_handle_t>(device));
 }
 
 /**

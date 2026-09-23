@@ -381,7 +381,7 @@ if(HAVE_SYCL)
   target_compile_definitions(metrics_scope_gemm_suite PUBLIC PTI_LEVEL_ZERO=1)
 
   target_link_libraries(metrics_scope_gemm_suite PUBLIC spdlog::spdlog
-    GTest::gtest_main Pti::pti_view ${FS_LIB})
+    GTest::gtest_main Pti::pti_view LevelZero::level-zero LevelZero::level-zero-ext ${FS_LIB})
 
   add_executable(metrics_scope_buffer_handler_suite metrics_scope_buffer_handler.cc)
   target_include_directories(

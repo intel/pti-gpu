@@ -116,8 +116,18 @@ struct pti_metrics_device_descriptor_t {
   std::condition_variable profiling_thread_start_cv_;
   bool profiling_thread_initialized_ = false;  // Protected by profiling_thread_start_mutex_
 
-  // Query-specific fields
-  zet_metric_query_pool_handle_t query_pool_ = nullptr;
+  // Query-specific fields. Capacity grows by adding a chunk rather than
+  // resizing, so slots already handed out keep their handles.
+  std::vector<zet_metric_query_pool_handle_t> query_pool_chunks_;
+  std::vector<ze_event_pool_handle_t> event_pool_chunks_;
+
+  // A query paired 1:1 with the event that signals its data is ready.
+  using MetricQuerySlot = std::pair<zet_metric_query_handle_t, ze_event_handle_t>;
+
+  // all_slots_ owns every slot taken from the pools, for teardown; free_slots_
+  // holds the ones available for reuse.
+  std::vector<MetricQuerySlot> all_slots_;
+  std::vector<MetricQuerySlot> free_slots_;
 };
 
 class PtiMetricsProfiler {
@@ -1166,11 +1176,12 @@ class PtiStreamMetricsProfiler : public PtiMetricsProfiler {
 
 class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
  private:
-  std::unordered_map<uint64_t, zet_metric_query_handle_t> kernel_to_query_map_;
-  std::unordered_map<zet_metric_query_handle_t, ze_event_handle_t> query_to_event_map_;
+  using MetricQuerySlot = pti_metrics_device_descriptor_t::MetricQuerySlot;
+
+  // Slot held by each kernel between its query-begin and its data collection.
+  std::unordered_map<uint64_t, MetricQuerySlot> kernel_to_slot_map_;
   std::mutex query_injection_mutex_;
-  std::atomic<uint32_t> next_query_index_ = 0;
-  std::atomic<uint32_t> next_event_index_ = 0;
+  std::atomic<bool> exhaustion_reported_ = false;
 
  public:
   PtiQueryMetricsProfiler() = delete;
@@ -1186,11 +1197,9 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
   ~PtiQueryMetricsProfiler() {
     ze_result_t status = ZE_RESULT_SUCCESS;
 
-    // Clear correlation maps
     {
       std::lock_guard<std::mutex> lock(query_injection_mutex_);
-      kernel_to_query_map_.clear();
-      query_to_event_map_.clear();
+      kernel_to_slot_map_.clear();
     }
 
     for (auto &[device, desc] : device_descriptors_) {
@@ -1198,14 +1207,25 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
         continue;
       }
 
-      // Destroy query pool if exists
-      if (desc->query_pool_ != nullptr) {
-        status = zetMetricQueryPoolDestroy(desc->query_pool_);
+      // Slots must go before their pools: the driver refuses to destroy a pool
+      // whose objects are still alive.
+      DestroyAllSlots(desc);
+
+      for (auto *pool : desc->event_pool_chunks_) {
+        status = zeEventPoolDestroy(pool);
+        if (status != ZE_RESULT_SUCCESS) {
+          SPDLOG_DEBUG("~PtiQueryMetricsProfiler(): Failed to destroy event pool");
+        }
+      }
+      desc->event_pool_chunks_.clear();
+
+      for (auto *pool : desc->query_pool_chunks_) {
+        status = zetMetricQueryPoolDestroy(pool);
         if (status != ZE_RESULT_SUCCESS) {
           SPDLOG_DEBUG("~PtiQueryMetricsProfiler(): Failed to destroy query pool: ");
         }
-        desc->query_pool_ = nullptr;
       }
+      desc->query_pool_chunks_.clear();
 
       // Deactivate metric groups
       status = zetContextActivateMetricGroups(desc->context_, device, 0, nullptr);
@@ -1236,28 +1256,43 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
       it->second->profiling_state_.store(ptiMetricProfilerState::PROFILER_DISABLED,
                                          std::memory_order_release);
     }
+
+    // A slot still mapped never had its data collected. Retire it rather than
+    // recycle it: the device may still reference a query whose end never ran.
+    {
+      std::lock_guard<std::mutex> lock(query_injection_mutex_);
+      if (!kernel_to_slot_map_.empty()) {
+        SPDLOG_DEBUG("StopProfiling(): retiring {} uncollected query slots",
+                     kernel_to_slot_map_.size());
+        kernel_to_slot_map_.clear();
+      }
+    }
     return PTI_SUCCESS;
   }
 
-  zet_metric_query_handle_t GetQueryForKernel(uint64_t kernel_id) {
+  MetricQuerySlot GetSlotForKernel(uint64_t kernel_id) {
     std::lock_guard<std::mutex> lock(query_injection_mutex_);
-    auto it = kernel_to_query_map_.find(kernel_id);
-    return (it != kernel_to_query_map_.end()) ? it->second : nullptr;
+    auto it = kernel_to_slot_map_.find(kernel_id);
+    return (it != kernel_to_slot_map_.end()) ? it->second : MetricQuerySlot{nullptr, nullptr};
   }
 
-  ze_event_handle_t GetEventForQuery(zet_metric_query_handle_t query) {
+  // Caller must have finished reading the query's data.
+  void RecycleKernelSlot(uint64_t kernel_id, ze_device_handle_t device) {
     std::lock_guard<std::mutex> lock(query_injection_mutex_);
-    auto it = query_to_event_map_.find(query);
-    return (it != query_to_event_map_.end()) ? it->second : nullptr;
-  }
-
-  void RemoveKernelQuery(uint64_t kernel_id) {
-    std::lock_guard<std::mutex> lock(query_injection_mutex_);
-    auto query_it = kernel_to_query_map_.find(kernel_id);
-    if (query_it != kernel_to_query_map_.end()) {
-      query_to_event_map_.erase(query_it->second);
-      kernel_to_query_map_.erase(query_it);
+    auto it = kernel_to_slot_map_.find(kernel_id);
+    if (it == kernel_to_slot_map_.end()) {
+      return;
     }
+    const MetricQuerySlot slot = it->second;
+    kernel_to_slot_map_.erase(it);
+
+    auto desc_it = device_descriptors_.find(device);
+    if (desc_it == device_descriptors_.end() || !desc_it->second) {
+      SPDLOG_DEBUG("RecycleKernelSlot: no descriptor for device {}, slot leaked",
+                   static_cast<void *>(device));
+      return;
+    }
+    ReleaseSlot(desc_it->second, slot);
   }
 
   pti_result HandleKernelAppendEnter(ze_command_list_handle_t cmd_list, ze_device_handle_t device,
@@ -1284,6 +1319,131 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
   }
 
  private:
+  // Add one query pool and one event pool, each backing kMetricPoolEventCount
+  // slots. Caller holds query_injection_mutex_.
+  bool AddPoolChunk(ze_device_handle_t device,
+                    const std::shared_ptr<pti_metrics_device_descriptor_t> &desc) {
+    zet_metric_query_pool_desc_t query_pool_desc = {};
+    query_pool_desc.stype = ZET_STRUCTURE_TYPE_METRIC_QUERY_POOL_DESC;
+    query_pool_desc.pNext = nullptr;
+    query_pool_desc.type = ZET_METRIC_QUERY_POOL_TYPE_PERFORMANCE;
+    query_pool_desc.count = kMetricPoolEventCount;
+
+    zet_metric_query_pool_handle_t query_pool = nullptr;
+    ze_result_t status = zetMetricQueryPoolCreate(desc->context_, device, desc->metrics_group_,
+                                                  &query_pool_desc, &query_pool);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("AddPoolChunk: zetMetricQueryPoolCreate failed: 0x{:x}",
+                   static_cast<unsigned int>(status));
+      return false;
+    }
+
+    const ze_event_pool_desc_t event_pool_desc = {ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
+                                                  ZE_EVENT_POOL_FLAG_HOST_VISIBLE,
+                                                  kMetricPoolEventCount};
+    ze_event_pool_handle_t event_pool = nullptr;
+    status = zeEventPoolCreate(desc->context_, &event_pool_desc, 1, &device, &event_pool);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("AddPoolChunk: zeEventPoolCreate failed: 0x{:x}",
+                   static_cast<unsigned int>(status));
+      zetMetricQueryPoolDestroy(query_pool);
+      return false;
+    }
+
+    desc->query_pool_chunks_.push_back(query_pool);
+    desc->event_pool_chunks_.push_back(event_pool);
+    SPDLOG_DEBUG("AddPoolChunk: chunk {} of {} slots added for device {}",
+                 desc->query_pool_chunks_.size(), kMetricPoolEventCount,
+                 static_cast<void *>(device));
+    return true;
+  }
+
+  // Reuse a free slot, else take the next one from the pools, adding a pool when
+  // the existing ones are fully handed out.
+  // Caller holds query_injection_mutex_.
+  MetricQuerySlot AcquireSlot(ze_device_handle_t device,
+                              const std::shared_ptr<pti_metrics_device_descriptor_t> &desc) {
+    if (!desc->free_slots_.empty()) {
+      MetricQuerySlot slot = desc->free_slots_.back();
+      desc->free_slots_.pop_back();
+      return slot;
+    }
+
+    const size_t slot_index = desc->all_slots_.size();
+    const size_t capacity = desc->query_pool_chunks_.size() * kMetricPoolEventCount;
+    if (slot_index >= capacity && !AddPoolChunk(device, desc)) {
+      // Warn once per profiler: skipping silently is indistinguishable from a
+      // workload that ran no kernels.
+      if (!exhaustion_reported_.exchange(true)) {
+        SPDLOG_WARN(
+            "Metrics scope: {} query slots on device {} are in flight and no further pool could "
+            "be added; metrics are skipped for further concurrent scopes",
+            slot_index, static_cast<void *>(device));
+      }
+      return MetricQuerySlot{nullptr, nullptr};
+    }
+
+    const size_t chunk = slot_index / kMetricPoolEventCount;
+    const uint32_t index_in_chunk = static_cast<uint32_t>(slot_index % kMetricPoolEventCount);
+
+    zet_metric_query_handle_t query = nullptr;
+    ze_result_t status =
+        zetMetricQueryCreate(desc->query_pool_chunks_[chunk], index_in_chunk, &query);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("AcquireSlot: zetMetricQueryCreate failed at chunk {} index {}: 0x{:x}", chunk,
+                   index_in_chunk, static_cast<unsigned int>(status));
+      return MetricQuerySlot{nullptr, nullptr};
+    }
+
+    ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr, index_in_chunk,
+                                  ZE_EVENT_SCOPE_FLAG_HOST, ZE_EVENT_SCOPE_FLAG_HOST};
+    ze_event_handle_t event = nullptr;
+    status = zeEventCreate(desc->event_pool_chunks_[chunk], &event_desc, &event);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("AcquireSlot: zeEventCreate failed at chunk {} index {}: 0x{:x}", chunk,
+                   index_in_chunk, static_cast<unsigned int>(status));
+      zetMetricQueryDestroy(query);
+      return MetricQuerySlot{nullptr, nullptr};
+    }
+
+    const MetricQuerySlot slot{query, event};
+    desc->all_slots_.push_back(slot);
+    return slot;
+  }
+
+  // Caller holds query_injection_mutex_.
+  void ReleaseSlot(const std::shared_ptr<pti_metrics_device_descriptor_t> &desc,
+                   const MetricQuerySlot &slot) {
+    ze_result_t status = zetMetricQueryReset(slot.first);
+    if (status != ZE_RESULT_SUCCESS) {
+      // A slot that cannot be reset would hand stale data to the next kernel,
+      // so retire it instead of recycling it.
+      SPDLOG_DEBUG("ReleaseSlot: zetMetricQueryReset failed (0x{:x}); retiring slot",
+                   static_cast<unsigned int>(status));
+      return;
+    }
+    status = zeEventHostReset(slot.second);
+    if (status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("ReleaseSlot: zeEventHostReset failed (0x{:x}); retiring slot",
+                   static_cast<unsigned int>(status));
+      return;
+    }
+    desc->free_slots_.push_back(slot);
+  }
+
+  static void DestroyAllSlots(const std::shared_ptr<pti_metrics_device_descriptor_t> &desc) {
+    for (const auto &slot : desc->all_slots_) {
+      if (slot.second != nullptr) {
+        zeEventDestroy(slot.second);
+      }
+      if (slot.first != nullptr) {
+        zetMetricQueryDestroy(slot.first);
+      }
+    }
+    desc->all_slots_.clear();
+    desc->free_slots_.clear();
+  }
+
   pti_result InitializeQueryResources() {
     ze_result_t status = ZE_RESULT_SUCCESS;
 
@@ -1376,67 +1536,18 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
 
-    // Create metric query pool with detailed logging
-    zet_metric_query_pool_desc_t query_pool_desc = {};
-    query_pool_desc.stype = ZET_STRUCTURE_TYPE_METRIC_QUERY_POOL_DESC;
-    query_pool_desc.pNext = nullptr;
-    query_pool_desc.type = ZET_METRIC_QUERY_POOL_TYPE_PERFORMANCE;
-    query_pool_desc.count = kMetricPoolEventCount;
+    std::lock_guard<std::mutex> lock(query_injection_mutex_);
 
-    status = zetMetricQueryPoolCreate(desc->context_, device, desc->metrics_group_,
-                                      &query_pool_desc, &desc->query_pool_);
-
-    if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_DEBUG("CreateQueryEventPool: Failed to create metric query pool: 0x{:x}",
-                   static_cast<unsigned int>(status));
-
-      // Provide specific error guidance
-      switch (status) {
-        case ZE_RESULT_ERROR_INVALID_ARGUMENT:
-          SPDLOG_DEBUG("  -> Invalid argument: Check context, device, or metric group validity");
-          SPDLOG_DEBUG("  -> Context: {}, Device: {}, MetricGroup: {}",
-                       static_cast<void *>(desc->context_), static_cast<void *>(device),
-                       static_cast<void *>(desc->metrics_group_));
-          break;
-        case ZE_RESULT_ERROR_UNSUPPORTED_FEATURE:
-          SPDLOG_DEBUG("  -> Metric queries not supported on this device/driver combination");
-          SPDLOG_DEBUG("  -> Try updating GPU drivers or check device capabilities");
-          break;
-        case ZE_RESULT_ERROR_OUT_OF_HOST_MEMORY:
-        case ZE_RESULT_ERROR_OUT_OF_DEVICE_MEMORY:
-          SPDLOG_DEBUG("  -> Insufficient memory for query pool");
-          SPDLOG_DEBUG("  -> Try reducing query pool size or closing other GPU applications");
-          break;
-        default:
-          SPDLOG_DEBUG("  -> Unknown error (0x{:x})", static_cast<unsigned int>(status));
-          break;
-      }
-
-      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
+    // Pools and their recycled slots survive a stop/start cycle. Recreating them
+    // here would leak the old ones and desynchronize the slot indices.
+    if (!desc->query_pool_chunks_.empty()) {
+      return PTI_SUCCESS;
     }
 
-    SPDLOG_TRACE("CreateQueryEventPool - Query pool created successfully: {}",
-                 reinterpret_cast<void *>(desc->query_pool_));
-
-    // Create event pool for completion events
-    if (desc->event_pool_ == nullptr) {
-      ze_event_pool_desc_t event_pool_desc = {
-          ZE_STRUCTURE_TYPE_EVENT_POOL_DESC, nullptr,
-          ZE_EVENT_POOL_FLAG_HOST_VISIBLE,  // flags
-          kMetricPoolEventCount             // count.
-      };
-
-      status = zeEventPoolCreate(desc->context_, &event_pool_desc, 1, &device, &desc->event_pool_);
-      if (status != ZE_RESULT_SUCCESS) {
-        SPDLOG_DEBUG("CreateQueryEventPool - Failed to create event pool: ");
-        status = zetMetricQueryPoolDestroy(desc->query_pool_);
-        if (status != ZE_RESULT_SUCCESS) {
-          SPDLOG_DEBUG("CreateQueryEventPool: Failed to destroy query pool: ");
-        }
-        desc->query_pool_ = nullptr;
-        desc->event_pool_ = nullptr;
-        return PTI_ERROR_DRIVER;
-      }
+    if (!AddPoolChunk(device, desc)) {
+      SPDLOG_DEBUG("CreateQueryEventPool: Failed to create the first pool chunk for device {}",
+                   static_cast<void *>(device));
+      return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
 
     return PTI_SUCCESS;
@@ -1455,38 +1566,32 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
 
     auto &desc = it->second;
 
-    if (desc->query_pool_ == nullptr) {
+    if (desc->query_pool_chunks_.empty()) {
       SPDLOG_DEBUG("InjectQueryBegin: Query pool not initialized for device");
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
 
-    // Create a new query from the pool
-    zet_metric_query_handle_t query;
-    ze_result_t status =
-        zetMetricQueryCreate(desc->query_pool_, next_query_index_.fetch_add(1), &query);
-    SPDLOG_TRACE(
-        "Injecting Query Begin for command list: {}, on device: {}, query index: {},"
-        " query handle: {}",
-        static_cast<void *>(command_list), static_cast<void *>(device),
-        next_query_index_.load() - 1, static_cast<void *>(query));
-
-    if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_DEBUG("InjectQueryBegin: Failed to create metric query for injection: {}",
-                   static_cast<uint32_t>(status));
+    const MetricQuerySlot slot = AcquireSlot(device, desc);
+    if (slot.first == nullptr) {
+      // AcquireSlot already logged the reason.
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
+    SPDLOG_TRACE(
+        "Injecting Query Begin for command list: {}, on device: {}, query handle: {},"
+        " event handle: {}",
+        static_cast<void *>(command_list), static_cast<void *>(device),
+        static_cast<void *>(slot.first), static_cast<void *>(slot.second));
 
     // Inject query begin into command list
-    status = zetCommandListAppendMetricQueryBegin(command_list, query);
+    ze_result_t status = zetCommandListAppendMetricQueryBegin(command_list, slot.first);
     if (status != ZE_RESULT_SUCCESS) {
       SPDLOG_DEBUG("InjectQueryBegin: Failed to inject query begin: {}",
                    static_cast<uint32_t>(status));
-      zetMetricQueryDestroy(query);
+      ReleaseSlot(desc, slot);
       return PTI_ERROR_INTERNAL;
     }
 
-    // Store query for later end injection
-    kernel_to_query_map_[operation_id] = query;
+    kernel_to_slot_map_[operation_id] = slot;
 
     SPDLOG_TRACE("InjectQueryBegin: Successfully injected query begin for command list: {}",
                  reinterpret_cast<void *>(command_list));
@@ -1497,50 +1602,33 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
                             uint64_t operation_id) {
     std::lock_guard<std::mutex> lock(query_injection_mutex_);
 
-    auto query_it = kernel_to_query_map_.find(operation_id);
-    if (query_it == kernel_to_query_map_.end()) {
+    auto slot_it = kernel_to_slot_map_.find(operation_id);
+    if (slot_it == kernel_to_slot_map_.end()) {
       SPDLOG_DEBUG(
           "InjectQueryEnd: No active query found for operation_id {} in query end injection",
           operation_id);
       return PTI_ERROR_BAD_ARGUMENT;
     }
-    auto it = device_descriptors_.find(device);
-    if (it == device_descriptors_.end()) {
+    if (device_descriptors_.find(device) == device_descriptors_.end()) {
       SPDLOG_DEBUG("InjectQueryEnd: Device not found in descriptors for query end injection");
       return PTI_ERROR_BAD_ARGUMENT;
     }
 
-    auto &desc = it->second;
-    zet_metric_query_handle_t query = query_it->second;
+    // The event was paired with the query when the slot was acquired.
+    const MetricQuerySlot slot = slot_it->second;
+    SPDLOG_TRACE("Injecting Query End for command list: {}, query handle: {}, event handle: {}",
+                 static_cast<void *>(command_list), static_cast<void *>(slot.first),
+                 static_cast<void *>(slot.second));
 
-    // Create completion event
-    ze_event_handle_t event;
-    ze_event_desc_t event_desc = {ZE_STRUCTURE_TYPE_EVENT_DESC, nullptr,
-                                  next_event_index_.fetch_add(1), ZE_EVENT_SCOPE_FLAG_HOST,
-                                  ZE_EVENT_SCOPE_FLAG_HOST};
-
-    ze_result_t status = zeEventCreate(desc->event_pool_, &event_desc, &event);
-    SPDLOG_TRACE(
-        "Injecting Query End for command list: {}, query handle: {}"
-        ", event index: {}, event handle: {}",
-        static_cast<void *>(command_list), static_cast<void *>(query), next_event_index_.load() - 1,
-        static_cast<void *>(event));
-    if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_DEBUG("InjectQueryEnd: Failed to create completion event: {}",
-                   static_cast<uint32_t>(status));
-      return PTI_ERROR_INTERNAL;
-    }
-
-    // Inject query end into command list
-    status = zetCommandListAppendMetricQueryEnd(command_list, query, event, 0, nullptr);
+    ze_result_t status =
+        zetCommandListAppendMetricQueryEnd(command_list, slot.first, slot.second, 0, nullptr);
     if (status != ZE_RESULT_SUCCESS) {
       SPDLOG_DEBUG("InjectQueryEnd: Failed to inject query end: {}", static_cast<uint32_t>(status));
-      zeEventDestroy(event);
+      // The begin is already in the command list, so the device may still touch
+      // this query. Retire the slot rather than resetting it under the device.
+      kernel_to_slot_map_.erase(slot_it);
       return PTI_ERROR_INTERNAL;
     }
-
-    // Store for data retrieval later
-    query_to_event_map_[query] = event;
 
     SPDLOG_TRACE("InjectQueryEnd: Successfully injected query end for command list: {}",
                  reinterpret_cast<void *>(command_list));

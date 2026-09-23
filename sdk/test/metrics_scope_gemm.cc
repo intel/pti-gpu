@@ -28,6 +28,7 @@
 #include <thread>
 #include <vector>
 
+#include "metrics/metrics_handler.h"
 #include "metrics_utils.h"
 #include "pti/pti_metrics_scope.h"
 #include "utils.h"
@@ -189,6 +190,28 @@ void RunGemm(unsigned size = 1024, unsigned repeat_count = 1,
     std::cerr << "Error: Unknown exception caught." << '\n';
     throw;
   }
+}
+
+zet_metric_group_handle_t FindEventBasedMetricGroup(ze_device_handle_t device) {
+  uint32_t group_count = 0;
+  if (zetMetricGroupGet(device, &group_count, nullptr) != ZE_RESULT_SUCCESS || group_count == 0) {
+    return nullptr;
+  }
+
+  std::vector<zet_metric_group_handle_t> groups(group_count);
+  if (zetMetricGroupGet(device, &group_count, groups.data()) != ZE_RESULT_SUCCESS) {
+    return nullptr;
+  }
+
+  for (auto* group : groups) {
+    zet_metric_group_properties_t props = {};
+    props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
+    if (zetMetricGroupGetProperties(group, &props) == ZE_RESULT_SUCCESS &&
+        (props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED) != 0) {
+      return group;
+    }
+  }
+  return nullptr;
 }
 }  // namespace
 
@@ -1188,6 +1211,111 @@ TEST_F(GemmMetricsScopeFixtureTest, ScopeBufferRotationStress) {
   }
 
   EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
+}
+
+// Collection must survive more kernels than the query slot pool holds.
+TEST_F(GemmMetricsScopeFixtureTest, ScopeCollectsBeyondQueryPoolCapacity) {
+  if (devices.empty()) {
+    GTEST_SKIP() << "No devices available";
+  }
+
+  // Mirrors kMetricPoolEventCount in src/metrics/metrics_handler.h.
+  constexpr size_t kQueryPoolCapacity = 1000;
+  constexpr unsigned kKernelsToLaunch = 1200;
+  static_assert(kKernelsToLaunch > kQueryPoolCapacity);
+
+  pti_scope_collection_handle_t scope_handle = nullptr;
+  ASSERT_EQ(ptiMetricsScopeEnable(&scope_handle), PTI_SUCCESS);
+
+  pti_device_handle_t device = devices.at(0)._handle;
+  auto kMetricNames = std::array{"GpuTime", "GpuCoreClocks"};
+  ConfigureOrSkipIfNonUniform(scope_handle, &device, 1, kMetricNames.data(),
+                              static_cast<uint32_t>(kMetricNames.size()));
+
+  // Size one buffer to hold every record, so buffer rotation is not a variable here.
+  ASSERT_EQ(ptiMetricsScopeSetCollectionBufferSize(scope_handle, 8 * 1024 * 1024), PTI_SUCCESS);
+  ASSERT_EQ(ptiMetricsScopeStartCollection(scope_handle), PTI_SUCCESS);
+
+  auto match = FindSyclDeviceForPtiHandle(device);
+  ASSERT_TRUE(match.has_value()) << "Could not map pti_device_handle to sycl::device";
+  RunGemm(32, kKernelsToLaunch, &(*match));
+
+  ASSERT_EQ(ptiMetricsScopeStopCollection(scope_handle), PTI_SUCCESS);
+
+  std::set<pti_device_handle_t> expected_devices{device};
+  std::set<pti_device_handle_t> seen_devices;
+  const size_t total_records =
+      IterateBuffersCheckDevices(scope_handle, expected_devices, seen_devices);
+
+  std::cout << "Launched " << kKernelsToLaunch << " kernels, collected " << total_records
+            << " metric records" << std::endl;
+  EXPECT_GT(total_records, kQueryPoolCapacity)
+      << "collection stopped at the query pool capacity (" << kQueryPoolCapacity << ")";
+
+  EXPECT_EQ(ptiMetricsScopeDisable(scope_handle), PTI_SUCCESS);
+}
+
+// A slot is released only once its kernel's data is collected, and nothing
+// appended to this command list ever executes. Every acquisition therefore needs
+// new capacity rather than reuse.
+TEST(MetricsSlotPool, AcquiresMoreSlotsThanOnePoolHolds) {
+  if (utils::GetEnv("ZET_ENABLE_METRICS") != "1") {
+    GTEST_SKIP() << "ZET_ENABLE_METRICS=1 is required to enumerate metric groups";
+  }
+  ASSERT_EQ(zeInit(ZE_INIT_FLAG_GPU_ONLY), ZE_RESULT_SUCCESS);
+
+  ze_driver_handle_t driver = utils::ze::GetGpuDriver(0);
+  ze_device_handle_t device = utils::ze::GetGpuDevice(0);
+  if (driver == nullptr || device == nullptr) {
+    GTEST_SKIP() << "No GPU device available";
+  }
+
+  zet_metric_group_handle_t metric_group = FindEventBasedMetricGroup(device);
+  if (metric_group == nullptr) {
+    GTEST_SKIP() << "No event-based metric group on this device";
+  }
+
+  const ze_context_desc_t context_desc = {ZE_STRUCTURE_TYPE_CONTEXT_DESC, nullptr, 0};
+  ze_context_handle_t context = nullptr;
+  ASSERT_EQ(zeContextCreate(driver, &context_desc, &context), ZE_RESULT_SUCCESS);
+
+  const ze_command_list_desc_t list_desc = {ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC, nullptr, 0, 0};
+  ze_command_list_handle_t cmd_list = nullptr;
+  ASSERT_EQ(zeCommandListCreate(context, device, &list_desc, &cmd_list), ZE_RESULT_SUCCESS);
+
+  constexpr uint64_t kSlotsToAcquire = 2ULL * kMetricPoolEventCount;
+  uint64_t first_failure = kSlotsToAcquire;
+  pti_result failure_result = PTI_SUCCESS;
+
+  {
+    PtiQueryMetricsProfiler profiler(static_cast<pti_device_handle_t>(device),
+                                     static_cast<pti_metrics_group_handle_t>(metric_group));
+    ASSERT_EQ(profiler.StartProfiling(false), PTI_SUCCESS);
+
+    // Record rather than assert, so teardown below always runs.
+    for (uint64_t operation_id = 0; operation_id < kSlotsToAcquire; ++operation_id) {
+      const pti_result result = profiler.HandleKernelAppendEnter(cmd_list, device, operation_id);
+      if (result != PTI_SUCCESS) {
+        first_failure = operation_id;
+        failure_result = result;
+        break;
+      }
+    }
+
+    EXPECT_EQ(profiler.StopProfiling(), PTI_SUCCESS);
+
+    // The command list references every query appended into it, so it has to go
+    // before the profiler destroys them.
+    EXPECT_EQ(zeCommandListDestroy(cmd_list), ZE_RESULT_SUCCESS);
+    cmd_list = nullptr;
+  }
+
+  EXPECT_EQ(zeContextDestroy(context), ZE_RESULT_SUCCESS);
+
+  EXPECT_EQ(first_failure, kSlotsToAcquire)
+      << "slot acquisition failed at operation " << first_failure << " of " << kSlotsToAcquire
+      << " with result " << static_cast<int>(failure_result) << "; a single pool holds "
+      << kMetricPoolEventCount;
 }
 
 // Test buffer access with invalid indices
