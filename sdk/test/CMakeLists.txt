@@ -833,7 +833,9 @@ if(HAVE_SYCL)
     LABELS "performance")
 
   set_tests_properties(
-    perf-overhead-view PROPERTIES LABELS "performance;functional")
+    perf-overhead-view PROPERTIES
+    SKIP_RETURN_CODE 77
+    LABELS "performance;functional")
 
   # Add interoperability test
   add_test(

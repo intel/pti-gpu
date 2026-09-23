@@ -1,49 +1,157 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from collections.abc import Callable
+from enum import Enum, auto
 import os
 import re
-import sys
-import subprocess
-import traceback
 import statistics
+import subprocess
+import sys
 
 # reconfigure stdout/stderr to utf-8 to support unicode characters in output
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# Strings that could be dumped to stderr due to different Level-Zero driver versions behavior
-expected_stderr_strings = [
-    "ZE_LOADER_DEBUG_TRACE:zeInitDrivers called first, "
-    "but not supported by driver, returning uninitialized."
-]
-
 # Sometimes we might run it with different number of threads
 num_threads_str = "5"
+skip_return_code = 77
 
 # fmt: off
-test_profiled = [["dpc_gemm_threaded_profiled", "-t", num_threads_str, "-r", "50", "-s", "32",
-                  "-c", "gpu", "-c", "sycl", "-c" , "overhead"]]
-test_prof_gpu = [["dpc_gemm_threaded_profiled", "-t", num_threads_str, "-r", "50", "-s", "32",
-                  "-c", "gpu"]]
-test_linkonly = [["dpc_gemm_threaded_linkonly", "-t", num_threads_str, "-r", "50", "-s", "32"]]
-test_baseline = [["dpc_gemm_threaded_baseline", "-t", num_threads_str, "-r", "50", "-s", "32"]]
+test_profiled = ["dpc_gemm_threaded_profiled", "-t", num_threads_str, "-r", "50", "-s", "32",
+                 "-c", "gpu", "-c", "sycl", "-c" , "overhead"]
+test_prof_gpu = ["dpc_gemm_threaded_profiled", "-t", num_threads_str, "-r", "50", "-s", "32",
+                 "-c", "gpu"]
+test_linkonly = ["dpc_gemm_threaded_linkonly", "-t", num_threads_str, "-r", "50", "-s", "32"]
+test_baseline = ["dpc_gemm_threaded_baseline", "-t", num_threads_str, "-r", "50", "-s", "32"]
 
 # For Overhead View test, we run the baseline with 1 thread and bigger GPU kernel.
 # The test checks if the accumulated Overhead View time is at least
 # the threshold ratio (test parameter) multiplied by the difference between
 # the elapsed times of the baseline and the test under profiling.
-test_overhead = [["dpc_gemm_threaded_profiled", "-t", "1", "-r", "200", "-s", "32",
-                  "-c", "gpu", "-c",  "overhead"]]
-test_baseline_t_1 = [["dpc_gemm_threaded_baseline", "-t", "1", "-r", "200", "-s", "32"]]
+test_overhead = ["dpc_gemm_threaded_profiled", "-t", "1", "-r", "200", "-s", "32",
+                 "-c", "gpu", "-c",  "overhead"]
+test_baseline_t_1 = ["dpc_gemm_threaded_baseline", "-t", "1", "-r", "200", "-s", "32"]
 # fmt: on
 
 
-def check_expected_content(text):
-    """
-    Check if the text contains expected strings
-    """
-    for line in text.splitlines():
-        if not (line in expected_stderr_strings):
-            return False
-    return True
+def analyze_default(threshold_overhead, _results, diff_med):
+    if diff_med > threshold_overhead:
+        print(
+            f"\nTest failed - Measured overhead {diff_med:.2f}% exceeds threshold {threshold_overhead}%"
+        )
+        return 1
+
+    print(
+        f"\nTest passed - Measured overhead {diff_med:.2f}% is within threshold {threshold_overhead}%"
+    )
+    return 0
+
+
+def collect_default_test_specific_values(_stdout):
+    return {}
+
+
+@dataclass(frozen=True)
+class TestConfig:
+    baseline_command: list[str]
+    test_command: list[str]
+    repetitions: int = 15
+    warm_up_runs: int = 1
+    analyze: Callable[[float, "TestResults", float], int] = analyze_default
+    collect_test_specific_values: Callable[[str], dict[str, float] | None] = (
+        collect_default_test_specific_values
+    )
+
+
+@dataclass
+class TestResults:
+    throughput_baseline: list[float]
+    throughput_test: list[float]
+    elapsed_baseline: list[float]
+    elapsed_test: list[float]
+    test_specific_values: dict[str, list[float]]
+
+
+class CommandStatus(Enum):
+    PASS = auto()
+    FAIL = auto()
+    SKIPPED = auto()
+    HANGED = auto()
+
+
+@dataclass
+class CommandResult:
+    status: CommandStatus
+    stdout: str
+    stderr: str
+
+
+def analyze_overhead_view(threshold_overhead, results, _diff_med):
+    captured_overhead_values = results.test_specific_values.get("Overhead time", [])
+    if not (
+        len(captured_overhead_values) == 1
+        and len(results.elapsed_test) == 1
+        and len(results.elapsed_baseline) == 1
+    ):
+        print("Test failed - Overhead analysis expects exactly one measurement")
+        return 1
+    captured_overhead_elapsed = captured_overhead_values[0]
+
+    elapsed_diff = (float)(results.elapsed_test[0]) - (float)(
+        results.elapsed_baseline[0]
+    )
+    print("\nElapsed time diff:                                 " + str(elapsed_diff))
+
+    threshold_ratio = 0.01 * (  # percent -> ratio
+        threshold_overhead  # collected L0 overhead expected to account,
+    )
+    print(
+        "Expect captured Overhead View time to be at least: "
+        + str(threshold_ratio * elapsed_diff)
+        + " sec, Ratio: "
+        + str(threshold_ratio)
+    )
+    if elapsed_diff <= 0.0:
+        print("Test failed - Non-positive elapsed diff captured")
+        return 1
+    print(
+        "Captured by PTI Overhead View overhead time:       "
+        + str(captured_overhead_elapsed)
+        + " sec, Ratio: "
+        + str(captured_overhead_elapsed / elapsed_diff)
+    )
+    if captured_overhead_elapsed < threshold_ratio * elapsed_diff:
+        print("Test failed - Too small Overhead View captured")
+        return 1
+    return 0
+
+
+def collect_overhead_view_values(stdout):
+    captured_overhead = get_value("Overhead time", stdout)
+    if captured_overhead is None:
+        print("FAILED (no overhead data)")
+        return None
+    print(
+        "Overhead due to profiling reported by PTI Overhead View (sec): "
+        + str(captured_overhead)
+    )
+    return {"Overhead time": captured_overhead}
+
+
+test_configs = {
+    "profiled": TestConfig(test_baseline, test_profiled),
+    "prof-gpu": TestConfig(test_baseline, test_prof_gpu),
+    "linkonly": TestConfig(test_baseline, test_linkonly),
+    "overhead": TestConfig(
+        test_baseline_t_1,
+        test_overhead,
+        repetitions=1,
+        warm_up_runs=0,
+        analyze=analyze_overhead_view,
+        collect_test_specific_values=collect_overhead_view_values,
+    ),
+}
 
 
 def get_value(name, text):
@@ -57,10 +165,8 @@ def get_value(name, text):
         return None
 
 
-process_timeout_sec = 60  # approximate; overridden in main() from argv[4]
-
-
-def run_process(command, path, environ=None):
+def run_process(command, path, timeout_sec, environ=None):
+    command = command.copy()
     command[0] = os.path.join(path, command[0])
 
     p = subprocess.Popen(
@@ -74,7 +180,7 @@ def run_process(command, path, environ=None):
         text=True,
     )
     try:
-        stdout, stderr = p.communicate(timeout=process_timeout_sec)
+        stdout, stderr = p.communicate(timeout=timeout_sec)
     except subprocess.TimeoutExpired:
         if sys.platform == "win32":
             subprocess.run(
@@ -84,51 +190,79 @@ def run_process(command, path, environ=None):
         else:
             p.kill()
         try:
-            p.communicate(timeout=10)
+            stdout, stderr = p.communicate(timeout=10)
         except subprocess.TimeoutExpired:
             if p.stdout:
                 p.stdout.close()
             if p.stderr:
                 p.stderr.close()
-        print(f"ERROR: process timed out after {process_timeout_sec}s: {command[0]}")
-        return None, None
+            stdout, stderr = "", ""
+        print(f"ERROR: process timed out after {timeout_sec}s: {command[0]}")
+        return CommandResult(CommandStatus.HANGED, stdout, stderr)
 
-    return stdout, stderr
-
-
-def run_test(path, test_type="profiled", repetitions=15, warm_up_runs=1):
-    command_baseline = test_baseline[0]
-    command_test = test_profiled[0]
-    if test_type == "profiled":
-        command_test = test_profiled[0]
-    elif test_type == "prof-gpu":
-        command_test = test_prof_gpu[0]
-    elif test_type == "linkonly":
-        command_test = test_linkonly[0]
-    elif test_type == "overhead":
-        command_test = test_overhead[0]
-        command_baseline = test_baseline_t_1[0]
-        repetitions = 1
-        warm_up_runs = 0  # No warm-up for overhead test
+    if p.returncode == 0:
+        status = CommandStatus.PASS
+    elif p.returncode == skip_return_code:
+        status = CommandStatus.SKIPPED
     else:
-        print("Invalid test type")
-        return False, None, None, None, None, None
+        status = CommandStatus.FAIL
+    return CommandResult(status, stdout, stderr)
 
-    print("Test baseline command:    ", command_baseline)
-    print("Test type " + test_type + " command: ", command_test)
-    print("Repetitions: " + str(repetitions))
-    print("Warm-up runs: " + str(warm_up_runs))
+
+def check_process_status(baseline_result, test_result):
+    results = (baseline_result, test_result)
+    if any(result.status == CommandStatus.FAIL for result in results):
+        print("FAILED (benchmark process failed)")
+        status = CommandStatus.FAIL
+    elif any(result.status == CommandStatus.SKIPPED for result in results):
+        print("SKIPPED (benchmark reported unsupported configuration)")
+        status = CommandStatus.SKIPPED
+    elif any(result.status == CommandStatus.HANGED for result in results):
+        print("FAILED (benchmark process timed out)")
+        status = CommandStatus.HANGED
+    else:
+        status = CommandStatus.PASS
+
+    stderr_output = [result.stderr for result in results if result.stderr]
+    if stderr_output:
+        if status in (CommandStatus.PASS, CommandStatus.SKIPPED):
+            print("WARNING (Detected stderr output)")
+        for output in stderr_output:
+            print(output)
+
+    return status
+
+
+def run_test(path, test_type, test_timeout=60):
+    config = test_configs[test_type]
+
+    total_invocations = (config.repetitions + config.warm_up_runs) * 2
+    timeout_sec = max(10, test_timeout // total_invocations)
+
+    print("Test baseline command:    ", config.baseline_command)
+    print("Test type " + test_type + " command: ", config.test_command)
+    print("Repetitions: " + str(config.repetitions))
+    print("Warm-up runs: " + str(config.warm_up_runs))
+    print(
+        f"Process timeout: {timeout_sec}s per invocation "
+        f"(total budget: {test_timeout}s, invocations: {total_invocations})"
+    )
 
     # Warm-up phase to stabilize CPU frequency and thermal state
-    if warm_up_runs > 0:
+    if config.warm_up_runs > 0:
         print("\nWarm-up phase:")
-        for i in range(warm_up_runs):
+        for i in range(config.warm_up_runs):
             print("  Warm-up run " + str(i + 1) + "...", end=" ", flush=True)
-            wb, _ = run_process(command_baseline, path)
-            wt, _ = run_process(command_test, path)
-            if wb is None or wt is None:
-                print("FAILED (timeout during warm-up)")
-                return False, None, None, None, None, None
+            baseline_result = run_process(config.baseline_command, path, timeout_sec)
+            test_result = run_process(config.test_command, path, timeout_sec)
+            status = check_process_status(baseline_result, test_result)
+            if status == CommandStatus.HANGED:
+                print("Continuing after warm-up process timed out")
+                continue
+            if status != CommandStatus.PASS:
+                print("Warm-up terminated the test")
+                return status, None
+
             print("✓")
 
     print("\nMeasurement phase - runs: ")
@@ -136,59 +270,62 @@ def run_test(path, test_type="profiled", repetitions=15, warm_up_runs=1):
     throughput_baseline = []
     elapsed_test = []
     elapsed_baseline = []
-    captured_overhead = None
-    for i in range(repetitions):
-        print(str(i + 1) + "/" + str(repetitions) + ", ", end="", flush=True)
+    test_specific_values = {}
+    failed_measurements = 0
+    for i in range(config.repetitions):
+        print(str(i + 1) + "/" + str(config.repetitions) + ", ", end="", flush=True)
         # Interleaved: baseline first, then test (keeps CPU state similar)
-        stdout_b, stderr_b = run_process(command_baseline, path)
-        stdout_t, stderr_t = run_process(command_test, path)
-        if stdout_b is None or stdout_t is None:
-            print("FAILED (timeout)")
-            throughput_test.append(None)
-            throughput_baseline.append(None)
-            elapsed_test.append(None)
-            elapsed_baseline.append(None)
+        baseline_result = run_process(config.baseline_command, path, timeout_sec)
+        test_result = run_process(config.test_command, path, timeout_sec)
+        status = check_process_status(baseline_result, test_result)
+        if status == CommandStatus.SKIPPED:
+            return CommandStatus.SKIPPED, None
+        elif status != CommandStatus.PASS:
+            failed_measurements += 1
             continue
-        if stderr_t or stderr_b:
-            print("WARNING (Detected stderr output)")
-            print(stderr_t)
-            print(stderr_b)
-            # If something not expected detected in stderr - fail the test
-            # if some new benign stderr detected - add it to the expected list
-            if not (check_expected_content(stderr_t)):
-                print("Test failed due to unexpected stderr content (see above)")
-                return False, None, None, None, None, None
 
-            print("stderr content was expected - proceeding with the test...")
-
-        tp_t = get_value("Throughput", stdout_t)
-        tp_b = get_value("Throughput", stdout_b)
-        el_t = get_value("Total execution time", stdout_t)
-        el_b = get_value("Total execution time", stdout_b)
+        tp_t = get_value("Throughput", test_result.stdout)
+        tp_b = get_value("Throughput", baseline_result.stdout)
+        el_t = get_value("Total execution time", test_result.stdout)
+        el_b = get_value("Total execution time", baseline_result.stdout)
 
         if tp_t is None or tp_b is None or el_t is None or el_b is None:
             print("FAILED (no data)")
+            failed_measurements += 1
+            continue
+
+        captured_test_values = config.collect_test_specific_values(test_result.stdout)
+        if captured_test_values is None:
+            failed_measurements += 1
             continue
 
         throughput_test.append(tp_t)
         throughput_baseline.append(tp_b)
         elapsed_test.append(el_t)
         elapsed_baseline.append(el_b)
-
-        if test_type == "overhead":
-            captured_overhead = get_value("Overhead time", stdout_t)
-            print(
-                "Overhead due to profiling reported by PTI Overhead View (sec): "
-                + str(captured_overhead)
-            )
+        for name, value in captured_test_values.items():
+            test_specific_values.setdefault(name, []).append(value)
     print()
-    return (
-        True,
+
+    valid_measurements = config.repetitions - failed_measurements
+    if valid_measurements * 2 <= config.repetitions:
+        print(
+            f"Too many measurement runs failed: {failed_measurements}/"
+            f"{config.repetitions}"
+        )
+        return CommandStatus.FAIL, None
+    if failed_measurements:
+        print(
+            f"Warning: some measurement runs failed: {failed_measurements}/"
+            f"{config.repetitions}"
+        )
+
+    return CommandStatus.PASS, TestResults(
         throughput_baseline,
         throughput_test,
         elapsed_baseline,
         elapsed_test,
-        captured_overhead,
+        test_specific_values,
     )
 
 
@@ -213,224 +350,139 @@ def remove_extreme_outliers(values):
 
 
 def process_data(values):
-    max_v = 0.0
-    min_v = 1000000.0
-    avg_v = 0.0
-    count = len(values)
-    # With 2025.0.4 compiler started to get some random failures on Win when profiling -
-    # - adding processing of such - for now ignoring their data
-    # TODO to investigate
-    valid_count = count
-    valid_values = []
-    for i in range(count):
-        if not (values[i] is None):
-            valid_values.append(values[i])
-            avg_v += values[i]
-            max_v = max(max_v, values[i])
-            min_v = min(min_v, values[i])
-        else:
-            valid_count -= 1
+    filtered_values = remove_extreme_outliers(values)
+    standard_deviation = (
+        statistics.stdev(filtered_values) if len(filtered_values) > 1 else 0.0
+    )
+    return (
+        min(filtered_values),
+        statistics.mean(filtered_values),
+        statistics.median(filtered_values),
+        max(filtered_values),
+        standard_deviation,
+    )
 
-    if valid_count <= count / 2:
-        print(
-            f"Too many runs failed, count of runs: {count}, valid of them: {valid_count}"
-        )
-        return None, None, None, None, None
-    elif valid_count < count:
-        print(
-            f"Warning: some runs failed, count of runs: {count}, valid of them: {valid_count}"
-        )
 
-    # Remove extreme outliers to get more robust statistics
-    valid_values = remove_extreme_outliers(valid_values)
+def analyze_results(
+    test_type,
+    threshold_overhead,
+    results,
+):
+    config = test_configs[test_type]
+    print("Processing baseline results: ", end="")
+    min_base, avg_base, med_base, max_base, std_base = process_data(
+        results.throughput_baseline
+    )
+    print("Processing test results: ", end="")
+    min_test, avg_test, med_test, max_test, std_test = process_data(
+        results.throughput_test
+    )
 
-    avg_v = sum(valid_values) / len(valid_values)
-    med_v = statistics.median(valid_values)
-
-    # Calculate standard deviation
-    if len(valid_values) > 1:
-        std_v = statistics.stdev(valid_values)
+    units_str = "items/s"
+    if test_type != "overhead":
+        print("\nThreshold Overhead to pass: " + str(threshold_overhead) + "% =>")
+        print(" Measured overhead should not exceed Threshold Overhead\n")
     else:
-        std_v = 0.0
+        units_str = "sec"
+        print("\nThreshold Ratio to pass: " + str(threshold_overhead * 0.01) + " =>")
+        print(
+            " Reported PTI Overhead View time should account for at least for "
+            "Threshold Ratio of the Elapsed Time Diff between the test and the baseline\n"
+        )
 
-    return min_v, avg_v, med_v, max_v, std_v
-
-
-def usage():
-    print(f"Usage: {sys.argv[0]} <executable_path> [threshold] [test_type] [timeout]")
-    print("  executable_path  directory containing test binaries (required)")
-    print("  threshold        overhead threshold % to pass, default: 60")
     print(
-        "  test_type        profiled | prof-gpu | linkonly | overhead, default: profiled"
+        "Baseline ("
+        + units_str
+        + "): min "
+        + format(min_base, ".2f")
+        + " avg: "
+        + format(avg_base, ".2f")
+        + " ± "
+        + format(std_base, ".2f")
+        + " med: "
+        + format(med_base, ".2f")
+        + " max: "
+        + format(max_base, ".2f")
     )
     print(
-        "  timeout          approximate budget in seconds divided across all process invocations"
-        " (10s floor per process), default: 60"
+        "Test ("
+        + units_str
+        + "):     min "
+        + format(min_test, ".2f")
+        + " avg: "
+        + format(avg_test, ".2f")
+        + " ± "
+        + format(std_test, ".2f")
+        + " med: "
+        + format(med_test, ".2f")
+        + " max: "
+        + format(max_test, ".2f")
     )
+
+    diff_med = 100.0 * (float)(med_base - med_test) / (float(med_base))
+    diff_min = 100.0 * (float)(min_base - min_test) / (float(min_base))
+    diff_max = 100.0 * (float)(max_base - max_test) / (float(max_base))
+    diff_avg = 100.0 * (float)(avg_base - avg_test) / (float(avg_base))
+
+    print(
+        "\nOverhead (%): med: "
+        + format(diff_med, ".2f")
+        + " (PRIMARY) avg: "
+        + format(diff_avg, ".2f")
+        + " min: "
+        + format(diff_min, ".2f")
+        + " max: "
+        + format(diff_max, ".2f")
+    )
+
+    return config.analyze(threshold_overhead, results, diff_med)
+
+
+def parse_arguments(argv):
+    if len(argv) < 4:
+        print(
+            f"Usage: {sys.argv[0]} <executable_path> <threshold> <test_type> [timeout]"
+        )
+        print("  executable_path  directory containing test binaries (required)")
+        print("  threshold        overhead threshold % to pass (required)")
+        print(f"  test_type        {' | '.join(test_configs)} (required)")
+        print(
+            "  timeout          approximate budget in seconds divided across all process invocations"
+            " (10s floor per process), default: 60"
+        )
+        return None
+
+    executable_path = argv[1]
+    threshold_overhead = float(argv[2])
+    test_type = argv[3]
+    if test_type not in test_configs:
+        print(
+            f"Invalid test type '{test_type}'. Expected one of: "
+            f"{' | '.join(test_configs)}"
+        )
+        return None
+    test_timeout = int(argv[4]) if len(argv) > 4 else 60
+    return executable_path, threshold_overhead, test_type, test_timeout
 
 
 def main():
-    global process_timeout_sec
-
-    if len(sys.argv) < 2:
-        usage()
+    arguments = parse_arguments(sys.argv)
+    if arguments is None:
         return 1
 
-    executable_path = sys.argv[1]
+    executable_path, threshold_overhead, test_type, test_timeout = arguments
     print(" executable path: " + executable_path)
-    threshold_overhead = float(sys.argv[2]) if len(sys.argv) > 2 else 60
-    test_type = sys.argv[3] if len(sys.argv) > 3 else "profiled"
-    test_timeout = int(sys.argv[4]) if len(sys.argv) > 4 else 60
 
-    # Each repetition runs two processes (baseline + test), plus warm-up (also two).
-    # Distribute the approximate budget evenly; a 10s floor ensures each process
-    # gets a reasonable minimum even if the budget divided by invocations is small.
-    # Actual worst-case runtime may exceed test_timeout due to the floor.
-    repetitions = 1 if test_type == "overhead" else 15
-    warm_up_runs = 0 if test_type == "overhead" else 1
-    total_invocations = (repetitions + warm_up_runs) * 2
-    process_timeout_sec = max(10, test_timeout // total_invocations)
-    print(
-        f"Process timeout: {process_timeout_sec}s per invocation "
-        f"(total budget: {test_timeout}s, invocations: {total_invocations})"
-    )
-
-    (
-        Result,
-        throughput_baseline,
-        throughput_test,
-        elapsed_baseline,
-        elapsed_test,
-        captured_overhead_elapsed,
-    ) = run_test(executable_path, test_type)
-    if not Result:
+    result, test_results = run_test(executable_path, test_type, test_timeout)
+    if result is CommandStatus.SKIPPED:
+        print("Test skipped")
+        return skip_return_code
+    if result is CommandStatus.FAIL:
         print("Test failed")
         return 1
-    else:
-        print("Processing baseline results: ", end="")
-        min_base, avg_base, med_base, max_base, std_base = process_data(
-            throughput_baseline
-        )
-        print("Processing test results: ", end="")
-        min_test, avg_test, med_test, max_test, std_test = process_data(throughput_test)
+    print("Test completed successfully")
 
-        if (
-            min_base is None
-            or avg_base is None
-            or med_base is None
-            or max_base is None
-            or min_test is None
-            or avg_test is None
-            or med_test is None
-            or max_test is None
-        ):
-            print("Test failed")
-            return 1
-
-        units_str = "items/s"
-        if test_type != "overhead":
-            print("\nThreshold Overhead to pass: " + str(threshold_overhead) + "% =>")
-            print(" Measured overhead should not exceed Threshold Overhead\n")
-        else:
-            units_str = "sec"
-            print(
-                "\nThreshold Ratio to pass: " + str(threshold_overhead * 0.01) + " =>"
-            )
-            print(
-                " Reported PTI Overhead View time should account for at least for "
-                "Threshold Ratio of the Elapsed Time Diff between the test and the baseline\n"
-            )
-
-        print(
-            "Baseline ("
-            + units_str
-            + "): min "
-            + format(min_base, ".2f")
-            + " avg: "
-            + format(avg_base, ".2f")
-            + " ± "
-            + format(std_base, ".2f")
-            + " med: "
-            + format(med_base, ".2f")
-            + " max: "
-            + format(max_base, ".2f")
-        )
-        print(
-            "Test ("
-            + units_str
-            + "):     min "
-            + format(min_test, ".2f")
-            + " avg: "
-            + format(avg_test, ".2f")
-            + " ± "
-            + format(std_test, ".2f")
-            + " med: "
-            + format(med_test, ".2f")
-            + " max: "
-            + format(max_test, ".2f")
-        )
-
-        diff_med = 100.0 * (float)(med_base - med_test) / (float(med_base))
-        diff_min = 100.0 * (float)(min_base - min_test) / (float(min_base))
-        diff_max = 100.0 * (float)(max_base - max_test) / (float(max_base))
-        diff_avg = 100.0 * (float)(avg_base - avg_test) / (float(avg_base))
-
-        print(
-            "\nOverhead (%): med: "
-            + format(diff_med, ".2f")
-            + " (PRIMARY) avg: "
-            + format(diff_avg, ".2f")
-            + " min: "
-            + format(diff_min, ".2f")
-            + " max: "
-            + format(diff_max, ".2f")
-        )
-
-        if test_type == "overhead":
-            if captured_overhead_elapsed is None:
-                print("Test failed")
-                return 1
-
-            elapsed_diff = (float)(elapsed_test[0]) - (float)(elapsed_baseline[0])
-            print(
-                "\nElapsed time diff:                                 "
-                + str(elapsed_diff)
-            )
-
-            threshold_ratio = 0.01 * (  # percent -> ratio
-                threshold_overhead  # collected L0 overhead expected to account,
-            )
-            print(
-                "Expect captured Overhead View time to be at least: "
-                + str(threshold_ratio * elapsed_diff)
-                + " sec, Ratio: "
-                + str(threshold_ratio)
-            )
-            print(
-                "Captured by PTI Overhead View overhead time:       "
-                + str(captured_overhead_elapsed)
-                + " sec, Ratio: "
-                + str(captured_overhead_elapsed / elapsed_diff)
-            )
-            if elapsed_diff < 0.0:
-                print("Test failed - Negative elapsed diff captured")
-                return 1
-            elif captured_overhead_elapsed < threshold_ratio * elapsed_diff:
-                print("Test failed - Too small Overhead View captured")
-                return 1
-            else:
-                return 0
-
-        if test_type != "overhead" and diff_med > threshold_overhead:
-            print(
-                f"\nTest failed - Measured overhead {diff_med:.2f}% exceeds threshold {threshold_overhead}%"
-            )
-            return 1
-
-        print(
-            f"\nTest passed - Measured overhead {diff_med:.2f}% is within threshold {threshold_overhead}%"
-        )
-        return 0
+    return analyze_results(test_type, threshold_overhead, test_results)
 
 
 if __name__ == "__main__":
