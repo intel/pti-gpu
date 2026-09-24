@@ -1361,7 +1361,13 @@ class ZeMetricProfiler {
         std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
         break;
       }
-      if (size < MAX_METRIC_BUFFER)
+      //
+      // If less data than requested was read, we can assume that we have reached the end of the stream and
+      // can exit the loop however, it might be that less data was read because there was no space available in the buffer
+      // and not because we reached the end of the stream. To be safe, we will read again and if we get less than half of the
+      // buffer size, we will assume that we have reached the end of the stream.
+      //
+      if (size < MAX_METRIC_BUFFER / 2)
         break;
       size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
     }
