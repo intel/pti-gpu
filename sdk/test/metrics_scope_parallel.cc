@@ -67,6 +67,24 @@ void SafePrint(Args&&... args) {
   (std::cout << ... << args) << std::endl;
 }
 
+// A PTI device handle is a Level Zero handle, so pair it with a SYCL device by native
+// handle. Position in get_devices() is not a valid pairing: other backends may
+// enumerate their GPUs first.
+sycl::device FindSyclDeviceForPtiHandle(pti_device_handle_t pti_handle) {
+  for (const auto& platform : sycl::platform::get_platforms()) {
+    if (platform.get_backend() != sycl::backend::ext_oneapi_level_zero) {
+      continue;
+    }
+    for (const auto& device : platform.get_devices(sycl::info::device_type::gpu)) {
+      auto* native = sycl::get_native<sycl::backend::ext_oneapi_level_zero>(device);
+      if (static_cast<pti_device_handle_t>(native) == pti_handle) {
+        return device;
+      }
+    }
+  }
+  throw std::runtime_error("No Level Zero SYCL device matches the PTI device handle");
+}
+
 // Device workload runner
 class DeviceWorkloadRunner {
  private:
@@ -79,19 +97,13 @@ class DeviceWorkloadRunner {
  public:
   DeviceWorkloadRunner(pti_device_handle_t device_handle, int device_id)
       : device_handle_(device_handle), device_id_(device_id) {
-    // Find corresponding SYCL device
-    auto sycl_devices = sycl::device::get_devices(sycl::info::device_type::gpu);
-    if (device_id < static_cast<int>(sycl_devices.size())) {
-      sycl_device_ = sycl_devices[device_id];
-      device_name_ = sycl_device_.get_info<sycl::info::device::name>();
+    sycl_device_ = FindSyclDeviceForPtiHandle(device_handle);
+    device_name_ = sycl_device_.get_info<sycl::info::device::name>();
 
-      sycl::property_list prop_list{sycl::property::queue::in_order()};
-      queue_ = sycl::queue(sycl_device_, sycl::async_handler{}, prop_list);
+    sycl::property_list prop_list{sycl::property::queue::in_order()};
+    queue_ = sycl::queue(sycl_device_, sycl::async_handler{}, prop_list);
 
-      SafePrint("[Device ", device_id_, "] Using device: ", device_name_);
-    } else {
-      throw std::runtime_error("Device index out of range");
-    }
+    SafePrint("[Device ", device_id_, "] Using device: ", device_name_);
   }
 
   pti_device_handle_t GetDeviceHandle() const { return device_handle_; }
