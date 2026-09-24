@@ -1120,6 +1120,9 @@ class ZeMetricProfiler {
                 }
               }
               value += samples[i];
+              if (kit == kinfo.end()) {
+                break;
+              }
             }
           }
         }
