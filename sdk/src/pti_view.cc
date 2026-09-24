@@ -209,7 +209,7 @@ pti_result ptiViewPopExternalCorrelationId(pti_view_external_kind external_kind,
 // Capture all overhead_kind types and associate strings to static storage
 //
 inline constexpr static std::array<const char* const, 6> kOverheadKindType = {
-    "INVALID", "UNKNOWN", "RESOURCE", "BUFFER_FLUSH", "BUFFER_DRIVER", "BUFFER_TIME"};
+    "INVALID", "UNKNOWN", "RESOURCE", "BUFFER_FLUSH", "BUFFER_DRIVER", "Instrumentation"};
 
 // Returns the stringified version of overhead kind type back.
 const char* ptiViewOverheadKindToString(pti_view_overhead_kind type) {

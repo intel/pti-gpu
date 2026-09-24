@@ -133,7 +133,8 @@ typedef enum _pti_view_overhead_kind {
   PTI_VIEW_OVERHEAD_KIND_RESOURCE = 2,       //!< Overhead due to a resource
   PTI_VIEW_OVERHEAD_KIND_BUFFER_FLUSH = 3,   //!< Overhead due to a buffer flush
   PTI_VIEW_OVERHEAD_KIND_DRIVER = 4,         //!< Overhead due to driver
-  PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to L0 api processing time
+  PTI_VIEW_OVERHEAD_KIND_TIME = 5,           //!< Overhead due to instrumentation: time spent
+                                             //!< in PTI tracing code around Level Zero API calls
   PTI_VIEW_OVERHEAD_KIND_FORCE_UINT32 = 0x7fffffff
 } pti_view_overhead_kind;
 

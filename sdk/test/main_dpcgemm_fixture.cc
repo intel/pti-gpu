@@ -344,8 +344,8 @@ class MainFixtureTest : public ::testing::TestWithParam<std::tuple<bool, bool, b
           num_of_overhead_counts += record->_overhead_count;
           num_of_overhead_recs++;
           overhead_kind_stringified =
-              (std::strcmp(ptiViewOverheadKindToString(record->_overhead_kind), "BUFFER_TIME") ==
-               0);
+              (std::strcmp(ptiViewOverheadKindToString(record->_overhead_kind),
+                           "Instrumentation") == 0);
           break;
         }
         case pti_view_kind::PTI_VIEW_DEVICE_GPU_MEM_FILL:
