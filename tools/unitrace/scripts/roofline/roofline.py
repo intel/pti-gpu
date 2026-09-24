@@ -3,7 +3,9 @@ import datetime
 import roofline_libs as tools  # Ensure this module is available in your environment
 import os
 import glob
+import shlex
 import shutil
+import subprocess
 import textwrap 
 
 
@@ -93,6 +95,15 @@ def create_output_directory():
 
 def run_unitrace_commands(app, output_dir, unitrace_path):
     """Run unitrace commands to generate metrics files."""
+    # --app is either a bare application path (possibly containing spaces) or
+    # an application plus its arguments in one string. Treat an existing file
+    # as a single token; otherwise split it with shell-like rules instead of
+    # handing the whole line to a shell (shell=False prevents metacharacter
+    # injection).
+    if os.path.isfile(app):
+        app_command = [app]
+    else:
+        app_command = shlex.split(app)
     commands = [
         [
             unitrace_path,
@@ -100,7 +111,7 @@ def run_unitrace_commands(app, output_dir, unitrace_path):
             '--demangle', '-q',
             '--chrome-kernel-logging',
             '-o', os.path.join(output_dir, '_IntelGPUBasic'),
-            app
+            *app_command
         ],
         [
             unitrace_path,
@@ -108,14 +119,14 @@ def run_unitrace_commands(app, output_dir, unitrace_path):
             '--demangle', '-q',
             '--chrome-kernel-logging',
             '-o', os.path.join(output_dir, '_IntelGPUCompute'),
-            app
+            *app_command
         ]
     ]
 
     # Execute the commands
     for command in commands:
         print("The command is", command)
-        os.system(' '.join(command))
+        subprocess.run(command, check=True)
 
 
 def merge_metrics_files(output_dir, pattern, output_file):
@@ -144,7 +155,15 @@ def main():
     if args.app:
         unitrace_path = find_unitrace(args.unitrace)
         output_dir = create_output_directory()
-        run_unitrace_commands(args.app, output_dir, unitrace_path)
+        try:
+            run_unitrace_commands(args.app, output_dir, unitrace_path)
+        except BaseException:
+            # A failed or interrupted unitrace run must not leave partial
+            # metric files behind: the directory name has one-second
+            # granularity, so an immediate retry could reuse it and merge
+            # stale partial results.
+            shutil.rmtree(output_dir, ignore_errors=True)
+            raise
         merged_flops_path = merge_metrics_files(output_dir, '*_IntelGPUCompute.metrics*', 'flops.txt')
         merged_bytes_path = merge_metrics_files(output_dir, '*_IntelGPUBasic.metrics*', 'bytes.txt')
     else:

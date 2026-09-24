@@ -32,20 +32,20 @@ def build(build_dir, install_path):
   curr_wrkng_dir = os.getcwd()
   itt_dir = build_dir + "/ittapi"
   os.chdir(itt_dir)
-  cmake_flags = ""
+  cmake_flags = []
   if (install_path != ""):
-    cmake_flags += "-DCMAKE_INSTALL_PREFIX={} ".format(install_path)
+    cmake_flags.append("-DCMAKE_INSTALL_PREFIX=" + install_path)
   if platform.system() == 'Windows':
-    os.system("cmake -G \"NMake Makefiles\" {} .".format(cmake_flags))
-    os.system("nmake")
+    subprocess.check_call(["cmake", "-G", "NMake Makefiles"] + cmake_flags + ["."])
+    subprocess.check_call(["nmake"])
     if (install_path != ""):
-      os.system("nmake install")
+      subprocess.check_call(["nmake", "install"])
     shutil.copyfile("./bin/libittnotify.lib", build_dir + "/libittnotify.lib")
   else :
-    os.system("cmake {} .".format(cmake_flags))
-    os.system("make")
+    subprocess.check_call(["cmake"] + cmake_flags + ["."])
+    subprocess.check_call(["make"])
     if (install_path != ""):
-      os.system("make install")
+      subprocess.check_call(["make", "install"])
     shutil.copyfile("./bin/libittnotify.a", build_dir + "/libittnotify.a")
 
   # Restore back the location
