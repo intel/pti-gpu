@@ -81,9 +81,15 @@ def get_traceconv():
       os.remove(cache)
   if not os.path.exists(cache):
     url = _LAUNCHER_URL.format(tag=tag)
+    # Defense in depth for the sha256-pinned download below: the URL comes from
+    # the https constant above, so any other scheme means tampering.
+    if not url.startswith("https://"):
+      fail("refusing non-https traceconv URL: {}".format(url))
     try:
       os.makedirs(_BUILD_DIR, exist_ok=True)
-      with urllib.request.urlopen(url, timeout=60) as resp:
+      # nosec B310: https enforced above; the payload is sha256-verified below
+      # against the pinned launcher hash before it is written or used.
+      with urllib.request.urlopen(url, timeout=60) as resp:  # nosec B310
         data = resp.read()
     except Exception as ex:
       fail("could not download traceconv ({}): {}".format(url, ex))
@@ -94,7 +100,9 @@ def get_traceconv():
            "vetted binary).".format(tag, digest, expected))
     with open(cache, "wb") as f:
       f.write(data)
-    os.chmod(cache, 0o755)
+    # Owner-only: the launcher is always invoked via sys.executable (see
+    # traceconv_to_json), so no execute or group/other bits are needed.
+    os.chmod(cache, 0o700)
   return cache
 
 

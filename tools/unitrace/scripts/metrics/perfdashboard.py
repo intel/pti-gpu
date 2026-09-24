@@ -1368,7 +1368,9 @@ def prewarm_session(port=DEFAULT_PORT, timeout=60):
     event trace opens, so that the first kernel a user clicks renders at once.
     """
     try:
-        with urllib.request.urlopen(dashboard_url(port), timeout=timeout):
+        # Constant-scheme localhost URL (see dashboard_url); this only prewarms
+        # the Bokeh server this process just started, so B310 does not apply.
+        with urllib.request.urlopen(dashboard_url(port), timeout=timeout):  # nosec B310
             pass
     except Exception:
         pass    # non-fatal; the first kernel click is just slightly slower
