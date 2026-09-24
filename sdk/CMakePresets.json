@@ -10,10 +10,11 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
-        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -D_FORTIFY_SOURCE=2",
-        "CMAKE_C_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -D_FORTIFY_SOURCE=2",
-        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack",
-        "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack"
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2",
+        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
+        "CMAKE_MODULE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
+        "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1"
       }
     },
     {
@@ -25,10 +26,11 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
-        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Werror -Wformat-security -Werror=format-security -g -fstack-protector-strong -D_FORTIFY_SOURCE=2",
-        "CMAKE_C_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Werror -Wformat-security -Werror=format-security -g -fstack-protector-strong -D_FORTIFY_SOURCE=2",
-        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack",
-        "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack"
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Werror -Wformat-security -Werror=format-security -g -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -Wextra-semi -Wformat -Werror -Wformat-security -Werror=format-security -g -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2",
+        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
+        "CMAKE_MODULE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
+        "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1"
       }
     },
     {
@@ -57,6 +59,7 @@
         "CMAKE_CXX_FLAGS_COVERAGE": "-g3 -O0 -Xarch_host -fprofile-instr-generate -Xarch_host -fcoverage-mapping -Xarch_host -mllvm=-runtime-counter-relocation=true",
         "CMAKE_C_FLAGS_COVERAGE": "-g3 -O0 -Xarch_host -fprofile-instr-generate -Xarch_host -fcoverage-mapping -Xarch_host -mllvm=-runtime-counter-relocation=true",
         "CMAKE_SHARED_LINKER_FLAGS_COVERAGE": "-Xarch_host -fprofile-instr-generate",
+        "CMAKE_MODULE_LINKER_FLAGS_COVERAGE": "-Xarch_host -fprofile-instr-generate",
         "CMAKE_EXE_LINKER_FLAGS_COVERAGE": "-Xarch_host -fprofile-instr-generate",
         "PTI_ENABLE_LOGGING": "ON"
       }
@@ -180,10 +183,11 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
-        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -O3 -D_FORTIFY_SOURCE=2",
-        "CMAKE_C_FLAGS": "-Wall -Wextra -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -O3 -D_FORTIFY_SOURCE=2",
-        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack",
-        "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack"
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wextra-semi -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -O3 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -pedantic -Wformat -Werror -Wformat-security -Werror=format-security -fstack-protector-strong -O3 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2",
+        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
+        "CMAKE_MODULE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
+        "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1"
       }
     },
     {
@@ -196,10 +200,11 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
-        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wformat -Wformat-security -fstack-protector-strong -g -O2 -D_FORTIFY_SOURCE=2",
-        "CMAKE_C_FLAGS": "-Wall -Wextra -Wformat -Wformat-security -fstack-protector-strong -g -O2 -D_FORTIFY_SOURCE=2",
-        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack",
-        "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack",
+        "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wformat -Wformat-security -fstack-protector-strong -g -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2",
+        "CMAKE_C_FLAGS": "-Wall -Wextra -Wformat -Wformat-security -fstack-protector-strong -g -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2",
+        "CMAKE_SHARED_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
+        "CMAKE_MODULE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
+        "CMAKE_EXE_LINKER_FLAGS": "-Wl,-z,relro,-z,now,-z,noexecstack,--build-id=sha1",
         "PTI_BUILD_SAMPLES": "OFF",
         "PTI_BUILD_TESTING": "OFF",
         "PTI_BUILD_URGEMM": "OFF"
@@ -216,6 +221,7 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
         "CMAKE_CXX_FLAGS": "/W4 /MDd /EHcs /fp:precise -Qstd:c++17 /sdl /GS /Gy /DYNAMICBASE /guard:cf /RTCsu -Wno-error=character-conversion",
         "CMAKE_SHARED_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /guard:cf",
+        "CMAKE_MODULE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /guard:cf",
         "CMAKE_EXE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /guard:cf",
         "PTI_ENABLE_LOGGING": "ON"
       }
@@ -231,6 +237,7 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
         "CMAKE_CXX_FLAGS": "/W4 /WX /MD /EHcs /fp:precise -Qstd:c++17 /sdl /GS /Gy /DYNAMICBASE /guard:cf",
         "CMAKE_SHARED_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf",
+        "CMAKE_MODULE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf",
         "CMAKE_EXE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf"
       }
     },
@@ -245,6 +252,7 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
         "CMAKE_CXX_FLAGS": "/W4 /WX /MD /EHcs /fp:precise -Qstd:c++17 /sdl /GS /Gy /DYNAMICBASE /guard:cf",
         "CMAKE_SHARED_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf",
+        "CMAKE_MODULE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf",
         "CMAKE_EXE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /guard:cf"
       }
     },
@@ -259,6 +267,7 @@
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/icpx_toolchain.cmake",
         "CMAKE_CXX_FLAGS_COVERAGE": "/MD /EHcs /fp:precise -Qstd:c++17 /Zi -fprofile-instr-generate -fcoverage-mapping",
         "CMAKE_SHARED_LINKER_FLAGS_COVERAGE": "-fprofile-instr-generate",
+        "CMAKE_MODULE_LINKER_FLAGS_COVERAGE": "-fprofile-instr-generate",
         "CMAKE_EXE_LINKER_FLAGS_COVERAGE": "-fprofile-instr-generate",
         "PTI_ENABLE_LOGGING": "ON"
       }
@@ -308,6 +317,7 @@
         "CMAKE_CXX_COMPILER": "cl.exe",
         "CMAKE_CXX_FLAGS": "/MP /W4 /MDd /EHcs /sdl /analyze /wd6326 /wd28020 /Gy /GS /DYNAMICBASE /guard:cf /RTCsu",
         "CMAKE_SHARED_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /guard:cf",
+        "CMAKE_MODULE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /guard:cf",
         "CMAKE_EXE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /guard:cf",
         "PTI_ENABLE_LOGGING": "ON"
       }
@@ -324,6 +334,7 @@
         "CMAKE_CXX_COMPILER": "cl.exe",
         "CMAKE_CXX_FLAGS": "/MP /W4 /WX /MD /EHcs /sdl /analyze /wd6326 /wd28020 /Gy /GS /DYNAMICBASE /guard:cf",
         "CMAKE_SHARED_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /LTCG /sdl /guard:cf",
+        "CMAKE_MODULE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /LTCG /sdl /guard:cf",
         "CMAKE_EXE_LINKER_FLAGS": "/DEPENDENTLOADFLAG:0x2000 /DYNAMICBASE /NXCOMPAT /LTCG /sdl /guard:cf"
       }
     }
