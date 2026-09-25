@@ -53,7 +53,7 @@ jobs:
             os_id: "ubuntu-24.04.client.2026.1"
     container:
       image: ${{ matrix.container }}
-      options: --device=/dev/dri --cap-add CAP_PERFMON
+      options: --device=/dev/dri --cap-add CAP_PERFMON --shm-size=24G --volume=/dev/dri/by-path:/dev/dri/by-path
     steps:
       - name: Clean
         run: |
@@ -70,11 +70,19 @@ jobs:
       - name: Build
         run: |
           source /opt/intel/oneapi/setvars.sh --include-intel-llvm
-          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build \
+            -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_C_COMPILER=icx \
+            -GNinja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON
           cmake --build build
 
-      # TODO:
-      # - name: Test
+      - name: Test
+        run: |
+          source /opt/intel/oneapi/setvars.sh --include-intel-llvm
+          ctest --test-dir build --no-tests=error --output-on-failure \
+                -LE "performance|quarantine" \
+                -E "ZeGraphTestSuite.TestZeUsmGraphExecutionTracingGraphCreation|ZeGraphTestSuite.TestZeUsmGraphExecutionWithoutTracingGraphCreation|test_unitrace"
 
       - name: Package
         run: |
@@ -144,14 +152,25 @@ jobs:
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release ^
+          cmake -S . -B build ^
+            -DCMAKE_CXX_COMPILER=icx ^
+            -DCMAKE_C_COMPILER=icx ^
+            -GNinja -DCMAKE_BUILD_TYPE=Release ^
+            -DBUILD_TESTING=ON ^
             -DLevelZero_ROOT=${{ github.workspace }}/sdk/level-zero-sdk ^
             -DFETCHCONTENT_BASE_DIR=${{ runner.temp }}/_deps ^
             -DCMAKE_OBJECT_PATH_MAX=200
           cmake --build build
 
-      # TODO:
-      # - name: Test
+      - name: Test
+        run: |
+          @echo off
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat"
+          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          REM TODO(PTI-88): OverheadRecordsCountsAllOnesViewRecords fails on Windows. Investigation needed. Bug filed.
+          ctest --test-dir build --no-tests=error --output-on-failure ^
+            -LE "performance|quarantine" ^
+            -E "MainFixtureTest.OverheadRecordsCountsAllOnesViewRecords|test_unitrace"
 
       - name: Package
         run: |

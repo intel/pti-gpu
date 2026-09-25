@@ -1162,6 +1162,15 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
 
   # It is enabled only for functional test as there is an issue observed with Intel OpenMP with Address Sanitizer.
   set_tests_properties(run-omp_vec_add PROPERTIES LABELS "functional;samples")
+
+  # If ze_loader is built (not LevelZero::levelzero because that could be the
+  # system L0), add it to the LD_LIBRARY_PATH for the omp_vec_add
+  # test or there could be a mismatch between PTI and the loader.
+  if(UNIX AND TARGET ze_loader)
+    set_tests_properties(
+      run-omp_vec_add PROPERTIES ENVIRONMENT
+      "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:ze_loader>:$ENV{LD_LIBRARY_PATH}")
+  endif()
 endif()
 
 # oneCCL ITT collection and domain-filtering tests.

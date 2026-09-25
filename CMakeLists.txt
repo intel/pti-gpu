@@ -17,6 +17,8 @@ project(
   LANGUAGES C CXX)
 
 if(PROJECT_IS_TOP_LEVEL)
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin CACHE STRING "")
+  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE STRING "")
   if(NOT APPLE)
     list(APPEND CMAKE_BUILD_RPATH $ORIGIN)
   endif()
@@ -25,9 +27,9 @@ endif()
 
 option(PTI_GPU_BUILD_SDK "Build PTI" ON)
 option(PTI_GPU_BUILD_UNITRACE "Build unitrace" ON)
-# TODO(PTI/UNITRACE): Enable Testing from Top-Level CMakeLists.txt.
+# TODO(UNITRACE): Enable Testing from Top-Level CMakeLists.txt.
 # For now, one must build from the component subdirectories
-# (e.g., sdk or tools/unitrace) to enable testing.
+# (e.g., tools/unitrace) to enable testing.
 option(BUILD_TESTING "Build tests" OFF)
 
 include(CTest)
