@@ -75,6 +75,8 @@ target_link_libraries(
          LevelZero::level-zero-ext spdlog::spdlog fmt::fmt
          ${CMAKE_DL_LIBS})
 
+add_spirv(ze_graph_integration_tests ${PROJECT_SOURCE_DIR}/test/gemm.spv)
+
 gtest_discover_tests(
   ze_graph_integration_tests DISCOVERY_TIMEOUT 60
   PROPERTIES LABELS

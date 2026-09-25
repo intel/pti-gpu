@@ -68,12 +68,21 @@ endif()
 
 GetLevelZeroExtensions()
 
-# Multi-config generators not supported yet, this is an incomplete bandage.
-set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin")
-get_property(PTI_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if(PTI_IS_MULTI_CONFIG)
-  set(PTI_TEST_BIN_DIR "${PROJECT_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}")
+if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+  set(PTI_TOP_LEVEL_TEST_BIN_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+else()
+  set(PTI_TOP_LEVEL_TEST_BIN_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
+
+# Multi-config generators not supported yet, this is an incomplete bandage.
+get_property(PTI_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+
+if(PTI_IS_MULTI_CONFIG)
+  string(APPEND PTI_TOP_LEVEL_TEST_BIN_DIR "/${CMAKE_BUILD_TYPE}")
+endif()
+
+set(PTI_TOP_LEVEL_TEST_BIN_DIR "${PTI_TOP_LEVEL_TEST_BIN_DIR}" CACHE INTERNAL
+  "Top-level test binary directory.")
 
 # Dependency pre-load tests. libld_dependency_preload_test.cc documents the layout
 # these libraries make up: the test executable stands in for the PTI interface
@@ -803,28 +812,28 @@ if(HAVE_SYCL)
   add_test(
     NAME perf-profiling-overhead
     COMMAND
-      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 60 profiled
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TOP_LEVEL_TEST_BIN_DIR}" 60 profiled
       ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
 
   add_test(
     NAME perf-prof-gpu-overhead
     COMMAND
-      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" 32.5 prof-gpu
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TOP_LEVEL_TEST_BIN_DIR}" 32.5 prof-gpu
       ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
 
   add_test(
     NAME perf-link-overhead
     COMMAND
-      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" ${LINK_OVERHEAD_THRESHOLD} linkonly
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TOP_LEVEL_TEST_BIN_DIR}" ${LINK_OVERHEAD_THRESHOLD} linkonly
       ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
 
   add_test(
     NAME perf-overhead-view
     COMMAND
-      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}" ${L0_OVERHEAD_THRESHOLD} overhead
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TOP_LEVEL_TEST_BIN_DIR}" ${L0_OVERHEAD_THRESHOLD} overhead
       ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
 
@@ -840,7 +849,7 @@ if(HAVE_SYCL)
   # Add interoperability test
   add_test(
     NAME xpti_interop_test
-    COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/xpti_interop_test.py "${PTI_TEST_BIN_DIR}"
+    COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/xpti_interop_test.py "${PTI_TOP_LEVEL_TEST_BIN_DIR}"
   )
   set_tests_properties(
     xpti_interop_test PROPERTIES LABELS "interop;functional")
@@ -1082,14 +1091,14 @@ if(PTI_BUILD_SAMPLES AND HAVE_SYCL)
     NAME mt-awk-test
     COMMAND
       bash -c
-      "${PTI_TEST_BIN_DIR}/dpc_gemm_threaded -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT} &&
+      "$<TARGET_FILE:dpc_gemm_threaded> -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT} &&
           awk -f ${CMAKE_CURRENT_SOURCE_DIR}/multi_thread_correlation.awk ${MT_AWK_TEST_OUT}"
   )
   add_test(
     NAME mt-awk-test-immediate
     COMMAND
       bash -c
-      "${PTI_TEST_BIN_DIR}/dpc_gemm_threaded -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT_IMMEDIATE} &&
+      "$<TARGET_FILE:dpc_gemm_threaded> -t ${TEST_THREADS} > ${MT_AWK_TEST_OUT_IMMEDIATE} &&
           awk -f ${CMAKE_CURRENT_SOURCE_DIR}/multi_thread_correlation.awk ${MT_AWK_TEST_OUT_IMMEDIATE}"
   )
   set_property(TEST mt-awk-test-immediate PROPERTY ENVIRONMENT SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=1)

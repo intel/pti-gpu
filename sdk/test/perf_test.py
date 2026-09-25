@@ -8,10 +8,13 @@ import re
 import statistics
 import subprocess
 import sys
+import io
 
 # reconfigure stdout/stderr to utf-8 to support unicode characters in output
-sys.stdout.reconfigure(encoding="utf-8")
-sys.stderr.reconfigure(encoding="utf-8")
+if isinstance(sys.stdout, io.TextIOWrapper):
+    sys.stdout.reconfigure(encoding="utf-8")
+if isinstance(sys.stderr, io.TextIOWrapper):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # Sometimes we might run it with different number of threads
 num_threads_str = "5"
