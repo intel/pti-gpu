@@ -23,7 +23,6 @@ sys.path.append(modpath + "/metrics")
 sys.path.append(modpath + "/tracemerge")
 
 import analyzeperfmetrics as apm
-import perfdashboard
 from mergetrace import merge_trace_files, MergePerfettoTraces
 
 def parse_args(argparser):
@@ -279,16 +278,21 @@ def main():
         return 1
 
     dbs = None
+    perfdashboard = None
     try:
-        if args.dashboard and args.metrics is not None:
+        if args.dashboard and metrics_files_paths:
+            if len(metrics_files_paths) > 1:
+                print("--dashboard option is not supported with multi metrics files in a result directory")
+                return 1
+            import perfdashboard as perfdashboard
             dbs = perfdashboard.start_server_process(
-                args.metrics, trace = args.trace, eustall = eustall)
+                first_metrics_file, trace = trace_file_path, eustall = eustall)
             if dbs is None:
                 return 1
 
-        LoadTrace(args.trace)
+        LoadTrace(trace_file_path)
 
-        if dbs is not None:
+        if dbs is not None and perfdashboard is not None:
             return perfdashboard.wait_for_exit(dbs)
           
         if metrics_files_paths:
@@ -335,7 +339,8 @@ def main():
         print("\nStopping metrics server.")
         return 0
     finally:
-        perfdashboard.stop_owned_process(dbs)
+        if perfdashboard is not None and dbs is not None:
+            perfdashboard.stop_owned_process(dbs)
 
 if __name__ == '__main__':
     sys.exit(main())
