@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 
 #include "pti/pti.h"
 
@@ -20,7 +21,7 @@ bool InitializeProfilingEnvironment();
 // Enable PC sampling and create a collection handle.
 // This corresponds to ptiPcSamplingEnable().
 // Must be called before ConfigurePcSampling() and StartPcSamplingCollection().
-bool EnablePcSampling();
+pti_result EnablePcSampling();
 
 // Configure PC sampling with device selection and sampling period.
 // Parameters:
@@ -30,8 +31,8 @@ bool EnablePcSampling();
 // This corresponds to ptiPcSamplingConfigure().
 // Optional: skip it to collect with the PTI defaults. When used, it must be called after
 // EnablePcSampling() and before StartPcSamplingCollection().
-bool ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count,
-                         uint32_t sampling_period_ns);
+pti_result ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count,
+                               uint32_t sampling_period_ns);
 
 // Start PC sampling collection.
 // This corresponds to ptiPcSamplingStartCollection().
@@ -53,7 +54,10 @@ bool DisablePcSampling();
 // Must be called after StopPcSamplingCollection() and before DisablePcSampling().
 // Prints stall reason descriptions, per-device collection statistics, per-kernel
 // aggregated stall counts, and per-instruction stall breakdowns.
-bool PrintPcSamplingData();
+bool PrintPcSamplingData(std::ostream& output = std::cout);
+
+// Returns true when at least one kernel has sampled instructions.
+bool HasObservedPcSamplingKernels();
 
 // Cleanup PTI view subsystem.
 // Should be called at the end of the program.

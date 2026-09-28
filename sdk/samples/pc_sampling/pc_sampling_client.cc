@@ -94,27 +94,27 @@ bool InitializeProfilingEnvironment() {
   return true;
 }
 
-bool EnablePcSampling() {
+pti_result EnablePcSampling() {
   std::cout << "\n=== Enabling PC Sampling ===" << std::endl;
 
   pti_result status = ptiPcSamplingEnable(&g_pc_sampling_handle);
   if (status != PTI_SUCCESS) {
     std::cerr << "Failed to enable PC sampling: " << ptiResultTypeToString(status) << " ("
               << static_cast<int>(status) << ")" << std::endl;
-    return false;
+    return status;
   }
 
   std::cout << "PC Sampling enabled successfully" << std::endl;
-  return true;
+  return PTI_SUCCESS;
 }
 
-bool ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count,
-                         uint32_t sampling_period_ns) {
+pti_result ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count,
+                               uint32_t sampling_period_ns) {
   std::cout << "\n=== Configuring PC Sampling ===" << std::endl;
 
   if (!g_pc_sampling_handle) {
     std::cerr << "PC sampling handle is null. Call EnablePcSampling() first." << std::endl;
-    return false;
+    return PTI_ERROR_BAD_ARGUMENT;
   }
 
   // Configure PC sampling with specified devices and sampling period.
@@ -125,7 +125,7 @@ bool ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count
   if (status != PTI_SUCCESS) {
     std::cerr << "Failed to configure PC sampling: " << ptiResultTypeToString(status) << " ("
               << static_cast<int>(status) << ")" << std::endl;
-    return false;
+    return status;
   }
 
   if (devices == nullptr) {
@@ -136,7 +136,7 @@ bool ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count
               << " device(s) (sampling period: " << sampling_period_ns << " ns)" << std::endl;
   }
 
-  return true;
+  return PTI_SUCCESS;
 }
 
 bool StartPcSamplingCollection() {
@@ -197,13 +197,46 @@ bool DisablePcSampling() {
   return true;
 }
 
-bool PrintPcSamplingData() {
+bool HasObservedPcSamplingKernels() {
+  if (!g_pc_sampling_handle) {
+    std::cerr << "PC sampling handle is null. Cannot query observed kernels." << std::endl;
+    return false;
+  }
+
+  size_t device_count = 0;
+  pti_result status = ptiPcSamplingGetProfiledDevices(g_pc_sampling_handle, nullptr, &device_count);
+  if (status != PTI_SUCCESS || device_count == 0) {
+    return false;
+  }
+
+  std::vector<pti_device_handle_t> devices(device_count);
+  status = ptiPcSamplingGetProfiledDevices(g_pc_sampling_handle, devices.data(), &device_count);
+  if (status != PTI_SUCCESS) {
+    return false;
+  }
+
+  for (pti_device_handle_t device : devices) {
+    size_t kernel_count = 0;
+    status =
+        ptiPcSamplingGetObservedKernelHandles(g_pc_sampling_handle, device, nullptr, &kernel_count);
+    if (status != PTI_SUCCESS) {
+      return false;
+    }
+    if (kernel_count != 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool PrintPcSamplingData(std::ostream& output) {
   if (!g_pc_sampling_handle) {
     std::cerr << "PC sampling handle is null. Cannot print stall data." << std::endl;
     return false;
   }
 
-  std::cout << "\n=== PC Sampling Stall Data ===" << std::endl;
+  output << "\n=== PC Sampling Stall Data ===" << std::endl;
 
   // Print Stall Reasons types and descriptions
   size_t reason_count = 0;
@@ -224,11 +257,11 @@ bool PrintPcSamplingData() {
     return false;
   }
 
-  std::cout << "Stall reasons (" << reason_count << "):" << std::endl;
+  output << "Stall reasons (" << reason_count << "):" << std::endl;
   for (size_t i = 0; i < reason_count; ++i) {
     const char* name = reasons[i]._name ? reasons[i]._name : "<null>";
     const char* desc = reasons[i]._description ? reasons[i]._description : "<null>";
-    std::cout << "  [" << i << "] " << name << ": " << desc << std::endl;
+    output << "  [" << i << "] " << name << ": " << desc << std::endl;
   }
 
   // Print profiled devices
@@ -241,7 +274,7 @@ bool PrintPcSamplingData() {
   }
 
   if (device_count == 0) {
-    std::cout << "No profiled devices found." << std::endl;
+    output << "No profiled devices found." << std::endl;
     return true;
   }
 
@@ -255,17 +288,17 @@ bool PrintPcSamplingData() {
 
   // Print device specific data
   for (size_t d = 0; d < device_count; ++d) {
-    std::cout << "\n--- Device " << (d + 1) << "/" << device_count << " ---" << std::endl;
+    output << "\n--- Device " << (d + 1) << "/" << device_count << " ---" << std::endl;
 
     // Print device status
     pti_pc_sampling_device_status_t device_status{};
     device_status._struct_size = sizeof(device_status);
     status = ptiPcSamplingGetDeviceStatus(g_pc_sampling_handle, devices[d], &device_status);
     if (status == PTI_SUCCESS) {
-      std::cout << "  Total samples collected : " << device_status._total_sample_count << std::endl;
-      std::cout << "  Total PCs sampled       : " << device_status._total_pc_count << std::endl;
-      std::cout << "  Samples dropped         : " << (device_status._samples_dropped ? "Yes" : "No")
-                << std::endl;
+      output << "  Total samples collected : " << device_status._total_sample_count << std::endl;
+      output << "  Total PCs sampled       : " << device_status._total_pc_count << std::endl;
+      output << "  Samples dropped         : " << (device_status._samples_dropped ? "Yes" : "No")
+             << std::endl;
     } else {
       std::cerr << "  Warning: Failed to get device status: " << ptiResultTypeToString(status)
                 << std::endl;
@@ -282,7 +315,7 @@ bool PrintPcSamplingData() {
     }
 
     if (kernel_count == 0) {
-      std::cout << "  No kernels with samples found for this device." << std::endl;
+      output << "  No kernels with samples found for this device." << std::endl;
       continue;
     }
 
@@ -295,7 +328,7 @@ bool PrintPcSamplingData() {
       continue;
     }
 
-    std::cout << "  Kernels with samples: " << kernel_count << std::endl;
+    output << "  Kernels with samples: " << kernel_count << std::endl;
 
     // Print per kernel data
     for (size_t k = 0; k < kernel_count; ++k) {
@@ -314,23 +347,23 @@ bool PrintPcSamplingData() {
       }
 
       const char* kernel_name = kernel_info._kernel_name ? kernel_info._kernel_name : "<unknown>";
-      std::cout << "\n  Kernel [" << (k + 1) << "/" << kernel_count << "]: " << kernel_name
-                << std::endl;
-      std::cout << "    Instructions with samples: " << kernel_info._instructions_with_samples_count
-                << std::endl;
+      output << "\n  Kernel [" << (k + 1) << "/" << kernel_count << "]: " << kernel_name
+             << std::endl;
+      output << "    Instructions with samples: " << kernel_info._instructions_with_samples_count
+             << std::endl;
 
       // Aggregated stall counts across all instructions in this kernel
-      std::cout << "    Aggregated stall samples:" << std::endl;
+      output << "    Aggregated stall samples:" << std::endl;
       bool any_nonzero = false;
       for (size_t r = 0; r < reason_count; ++r) {
         if (aggregated_samples[r] > 0) {
           const char* rname = reasons[r]._name ? reasons[r]._name : "<unknown>";
-          std::cout << "      " << rname << ": " << aggregated_samples[r] << std::endl;
+          output << "      " << rname << ": " << aggregated_samples[r] << std::endl;
           any_nonzero = true;
         }
       }
       if (!any_nonzero) {
-        std::cout << "      (no stall samples recorded)" << std::endl;
+        output << "      (no stall samples recorded)" << std::endl;
       }
 
       const size_t instr_count = kernel_info._instructions_with_samples_count;
@@ -363,36 +396,36 @@ bool PrintPcSamplingData() {
         }
       }
 
-      std::cout << "    Per-instruction stall samples:" << std::endl;
+      output << "    Per-instruction stall samples:" << std::endl;
 
       // Header row
-      std::cout << "      " << std::left << std::setw(10) << "Offset";
+      output << "      " << std::left << std::setw(10) << "Offset";
       for (size_t r = 0; r < reason_count; ++r) {
         const char* rname = reasons[r]._name ? reasons[r]._name : "<unknown>";
-        std::cout << " | " << std::left << std::setw(col_widths[r]) << rname;
+        output << " | " << std::left << std::setw(col_widths[r]) << rname;
       }
-      std::cout << std::endl;
+      output << std::endl;
 
       // Separator row
-      std::cout << "      " << std::string(10, '-');
+      output << "      " << std::string(10, '-');
       for (size_t r = 0; r < reason_count; ++r) {
-        std::cout << "-+-" << std::string(col_widths[r], '-');
+        output << "-+-" << std::string(col_widths[r], '-');
       }
-      std::cout << std::endl;
+      output << std::endl;
 
       // Data rows
       for (size_t i = 0; i < instr_count; ++i) {
-        std::cout << "      0x" << std::right << std::hex << std::setw(8) << std::setfill('0')
-                  << instructions[i]._instruction_offset << std::setfill(' ') << std::dec;
+        output << "      0x" << std::right << std::hex << std::setw(8) << std::setfill('0')
+               << instructions[i]._instruction_offset << std::setfill(' ') << std::dec;
         if (instructions[i]._source_info && instructions[i]._source_info->_file_path) {
-          std::cout << " [" << instructions[i]._source_info->_file_path << ":"
-                    << instructions[i]._source_info->_file_line << "]";
+          output << " [" << instructions[i]._source_info->_file_path << ":"
+                 << instructions[i]._source_info->_file_line << "]";
         }
         for (size_t r = 0; r < reason_count; ++r) {
-          std::cout << " | " << std::right << std::setw(col_widths[r])
-                    << samples[i * reason_count + r];
+          output << " | " << std::right << std::setw(col_widths[r])
+                 << samples[i * reason_count + r];
         }
-        std::cout << std::endl;
+        output << std::endl;
       }
     }
   }

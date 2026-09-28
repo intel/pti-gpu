@@ -279,7 +279,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Step 2: Enable PC sampling (ptiPcSamplingEnable)
-  if (!EnablePcSampling()) {
+  if (EnablePcSampling() != PTI_SUCCESS) {
     std::cerr << "Failed to enable PC sampling" << std::endl;
     CleanupProfilingEnvironment();
     return EXIT_FAILURE;
@@ -291,7 +291,7 @@ int main(int argc, char* argv[]) {
   // Users can pass specific device handles to profile a subset:
   //   pti_device_handle_t devices[] = {device_handle_1, device_handle_2};
   //   ConfigurePcSampling(devices, 2, config.sampling_period_ns);
-  if (!ConfigurePcSampling(nullptr, 0, config.sampling_period_ns)) {
+  if (ConfigurePcSampling(nullptr, 0, config.sampling_period_ns) != PTI_SUCCESS) {
     std::cerr << "Failed to configure PC sampling" << std::endl;
     DisablePcSampling();
     CleanupProfilingEnvironment();

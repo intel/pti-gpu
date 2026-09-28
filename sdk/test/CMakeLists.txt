@@ -612,6 +612,9 @@ if(HAVE_SYCL)
   add_executable(dpc_gemm_threaded_baseline perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_linkonly perf_dpc_gemm_threaded.cc)
   add_executable(dpc_gemm_threaded_prof_print perf_dpc_gemm_threaded.cc)
+  add_executable(pc_sampling_perf_profiled perf_pc_sampling.cc
+    "${PROJECT_SOURCE_DIR}/samples/pc_sampling/pc_sampling_client.cc")
+  add_executable(pc_sampling_perf_baseline perf_pc_sampling.cc)
 
   target_include_directories(
     dpc_gemm_threaded_profiled
@@ -625,19 +628,31 @@ if(HAVE_SYCL)
          "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
          "${PROJECT_SOURCE_DIR}/src/utils")
 
+  target_include_directories(
+    pc_sampling_perf_profiled
+    PUBLIC "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/include"
+           "${PROJECT_SOURCE_DIR}/samples/pc_sampling"
+           "${PROJECT_SOURCE_DIR}/samples/samples_utilities"
+           "${PROJECT_SOURCE_DIR}/src/utils")
+
   target_compile_options(dpc_gemm_threaded_profiled PRIVATE -fsycl)
   target_compile_options(dpc_gemm_threaded_baseline PRIVATE -fsycl)
   target_compile_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl)
   target_compile_options(dpc_gemm_threaded_prof_print PRIVATE -fsycl)
+  target_compile_options(pc_sampling_perf_profiled PRIVATE -fsycl)
+  target_compile_options(pc_sampling_perf_baseline PRIVATE -fsycl)
 
   target_compile_definitions(dpc_gemm_threaded_baseline PRIVATE NO_PTI)
   target_compile_definitions(dpc_gemm_threaded_linkonly PRIVATE NO_PTI)
   target_compile_definitions(dpc_gemm_threaded_prof_print PRIVATE  RECORD_PARSE_AND_PRINT)
+  target_compile_definitions(pc_sampling_perf_profiled PRIVATE PC_SAMPLING)
 
   target_link_options(dpc_gemm_threaded_profiled PRIVATE -fsycl)
   target_link_options(dpc_gemm_threaded_baseline PRIVATE -fsycl)
   target_link_options(dpc_gemm_threaded_linkonly PRIVATE -fsycl)
   target_link_options(dpc_gemm_threaded_prof_print PRIVATE -fsycl)
+  target_link_options(pc_sampling_perf_profiled PRIVATE -fsycl)
+  target_link_options(pc_sampling_perf_baseline PRIVATE -fsycl)
 
   target_link_libraries(dpc_gemm_threaded_profiled PUBLIC spdlog::spdlog
     Threads::Threads Pti::pti_view)
@@ -649,6 +664,11 @@ if(HAVE_SYCL)
 
   target_link_libraries(dpc_gemm_threaded_prof_print PUBLIC spdlog::spdlog
     Threads::Threads Pti::pti_view)
+
+  target_link_libraries(pc_sampling_perf_profiled PUBLIC spdlog::spdlog
+    Threads::Threads Pti::pti_view)
+
+  target_link_libraries(pc_sampling_perf_baseline PUBLIC Threads::Threads)
 
   gtest_discover_tests(
     dpcgemm_suite
@@ -783,6 +803,7 @@ if(HAVE_SYCL)
 
   set(L0_OVERHEAD_THRESHOLD 17)
   set(LINK_OVERHEAD_THRESHOLD 3)
+  set(PC_SAMPLING_OVERHEAD_THRESHOLD 75)
   if (WIN32)
     # Timer we use on Windows (as of implementation 02.14.25) has 100 ns resolution,
     # due to that some functions latency measured as zero, so accumulated overhead is less than on Linux
@@ -837,6 +858,14 @@ if(HAVE_SYCL)
       ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
 
+  add_test(
+    NAME perf-pc-sampling-overhead
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}"
+      ${PC_SAMPLING_OVERHEAD_THRESHOLD} pc-sampling
+      ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
+  )
+
   set_tests_properties(
     ${PTI_PERF_TESTS} PROPERTIES
     LABELS "performance")
@@ -845,6 +874,12 @@ if(HAVE_SYCL)
     perf-overhead-view PROPERTIES
     SKIP_RETURN_CODE 77
     LABELS "performance;functional")
+
+  set_tests_properties(
+    perf-pc-sampling-overhead PROPERTIES
+    ${PTI_METRIC_TEST_PROPS}
+    SKIP_RETURN_CODE 77
+    LABELS "performance;functional;metrics;hw-metrics")
 
   # Add interoperability test
   add_test(

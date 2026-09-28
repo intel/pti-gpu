@@ -35,6 +35,31 @@ test_baseline = ["dpc_gemm_threaded_baseline", "-t", num_threads_str, "-r", "50"
 test_overhead = ["dpc_gemm_threaded_profiled", "-t", "1", "-r", "200", "-s", "32",
                  "-c", "gpu", "-c",  "overhead"]
 test_baseline_t_1 = ["dpc_gemm_threaded_baseline", "-t", "1", "-r", "200", "-s", "32"]
+
+test_pc_sampling = ["pc_sampling_perf_profiled", "-r", "10", "-s", "2048"]
+test_pc_sampling_baseline = ["pc_sampling_perf_baseline", "-r", "10", "-s", "2048"]
+
+pc_sampling_profiled_phases = [
+    "PC Sampling enable and configure time",
+    "PC Sampling start collection time",
+    "Workload execution time",
+    "PC Sampling stop collection time",
+    "PC Sampling post-processing time",
+    "PC Sampling teardown time",
+    "Total execution time",
+]
+pc_sampling_baseline_phases = ["Workload execution time", "Total execution time"]
+pc_sampling_collection_phases = [
+    "PC Sampling start collection time",
+    "Workload execution time",
+    "PC Sampling stop collection time",
+]
+pc_sampling_cpu_metrics = [
+    "Workload user CPU time",
+    "Workload system CPU time",
+    "Workload total CPU time",
+    "Workload CPU utilization",
+]
 # fmt: on
 
 
@@ -51,8 +76,49 @@ def analyze_default(threshold_overhead, _results, diff_med):
     return 0
 
 
-def collect_default_test_specific_values(_stdout):
+def collect_default_test_specific_values(_stdout_b, _stdout_t):
     return {}
+
+
+def get_phase_timings(text, phases):
+    timings = {phase: get_value(phase, text) for phase in phases}
+    return timings if all(value is not None for value in timings.values()) else None
+
+
+def collect_pc_sampling_values(stdout_b, stdout_t):
+    profiled_timings = get_phase_timings(stdout_t, pc_sampling_profiled_phases)
+    baseline_timings = get_phase_timings(stdout_b, pc_sampling_baseline_phases)
+    if profiled_timings is None or baseline_timings is None:
+        return None
+
+    values = {
+        "PC Sampling profiled " + phase: value
+        for phase, value in profiled_timings.items()
+    }
+    values.update(
+        {
+            "PC Sampling baseline " + phase: value
+            for phase, value in baseline_timings.items()
+        }
+    )
+
+    profiled_cpu_timings = get_phase_timings(stdout_t, pc_sampling_cpu_metrics)
+    baseline_cpu_timings = get_phase_timings(stdout_b, pc_sampling_cpu_metrics)
+    if profiled_cpu_timings is not None and baseline_cpu_timings is not None:
+        values.update(
+            {
+                "PC Sampling profiled " + metric: value
+                for metric, value in profiled_cpu_timings.items()
+            }
+        )
+        values.update(
+            {
+                "PC Sampling baseline " + metric: value
+                for metric, value in baseline_cpu_timings.items()
+            }
+        )
+
+    return values
 
 
 @dataclass(frozen=True)
@@ -62,9 +128,10 @@ class TestConfig:
     repetitions: int = 15
     warm_up_runs: int = 1
     analyze: Callable[[float, "TestResults", float], int] = analyze_default
-    collect_test_specific_values: Callable[[str], dict[str, float] | None] = (
+    collect_test_specific_values: Callable[[str, str], dict[str, float] | None] = (
         collect_default_test_specific_values
     )
+    requires_throughput: bool = True
 
 
 @dataclass
@@ -130,8 +197,8 @@ def analyze_overhead_view(threshold_overhead, results, _diff_med):
     return 0
 
 
-def collect_overhead_view_values(stdout):
-    captured_overhead = get_value("Overhead time", stdout)
+def collect_overhead_view_values(_stdout_b, stdout_t):
+    captured_overhead = get_value("Overhead time", stdout_t)
     if captured_overhead is None:
         print("FAILED (no overhead data)")
         return None
@@ -140,6 +207,103 @@ def collect_overhead_view_values(stdout):
         + str(captured_overhead)
     )
     return {"Overhead time": captured_overhead}
+
+
+def format_duration(value):
+    if value >= 1.0:
+        return f"{value:.2f} s"
+    return f"{value * 1_000.0:.1f} ms"
+
+
+def print_pc_sampling_summary(results):
+    profiled_medians = {
+        phase: statistics.median(
+            results.test_specific_values["PC Sampling profiled " + phase]
+        )
+        for phase in pc_sampling_profiled_phases
+    }
+    baseline_medians = {
+        phase: statistics.median(
+            results.test_specific_values["PC Sampling baseline " + phase]
+        )
+        for phase in pc_sampling_baseline_phases
+    }
+
+    print("\nPC Sampling phase summary (median):")
+    for label, phase in [
+        ("PC Sampling enable/configure", "PC Sampling enable and configure time"),
+        ("Start collection", "PC Sampling start collection time"),
+        ("Workload execution", "Workload execution time"),
+        ("Stop collection", "PC Sampling stop collection time"),
+        ("Post-processing", "PC Sampling post-processing time"),
+        ("Teardown", "PC Sampling teardown time"),
+        ("Total execution time", "Total execution time"),
+    ]:
+        print("  " + label.ljust(32) + format_duration(profiled_medians[phase]))
+
+    print("\nNo PC Sampling (median):")
+    for label, phase in [
+        ("Workload execution", "Workload execution time"),
+        ("Total execution time", "Total execution time"),
+    ]:
+        print("  " + label.ljust(32) + format_duration(baseline_medians[phase]))
+
+
+def print_pc_sampling_cpu_summary(results):
+    prefix = "PC Sampling profiled "
+    if any(
+        prefix + metric not in results.test_specific_values
+        for metric in pc_sampling_cpu_metrics
+    ):
+        return
+
+    print("\nWorkload CPU usage (median):")
+    for label, metric in [
+        ("User CPU time", "Workload user CPU time"),
+        ("System CPU time", "Workload system CPU time"),
+        ("Total CPU time", "Workload total CPU time"),
+    ]:
+        baseline = statistics.median(
+            results.test_specific_values["PC Sampling baseline " + metric]
+        )
+        profiled = statistics.median(results.test_specific_values[prefix + metric])
+        print(
+            "  "
+            + label.ljust(20)
+            + format_duration(baseline)
+            + " baseline, "
+            + format_duration(profiled)
+            + " PC Sampling"
+        )
+
+    baseline_utilization = statistics.median(
+        results.test_specific_values["PC Sampling baseline Workload CPU utilization"]
+    )
+    profiled_utilization = statistics.median(
+        results.test_specific_values[prefix + "Workload CPU utilization"]
+    )
+    print(
+        f"  CPU utilization     {baseline_utilization:.1f}% baseline, "
+        f"{profiled_utilization:.1f}% PC Sampling"
+    )
+
+
+def analyze_pc_sampling(threshold_overhead, results, _diff_med):
+    profiled_values = [
+        results.test_specific_values["PC Sampling profiled " + phase]
+        for phase in pc_sampling_collection_phases
+    ]
+    profiled_elapsed = [sum(values) for values in zip(*profiled_values)]
+    baseline_elapsed = results.test_specific_values[
+        "PC Sampling baseline Workload execution time"
+    ]
+    median_profiled = statistics.median(remove_extreme_outliers(profiled_elapsed))
+    median_baseline = statistics.median(remove_extreme_outliers(baseline_elapsed))
+    diff_med = 100.0 * (median_profiled - median_baseline) / median_baseline
+
+    print_pc_sampling_summary(results)
+    print_pc_sampling_cpu_summary(results)
+    return analyze_default(threshold_overhead, results, diff_med)
 
 
 test_configs = {
@@ -153,6 +317,14 @@ test_configs = {
         warm_up_runs=0,
         analyze=analyze_overhead_view,
         collect_test_specific_values=collect_overhead_view_values,
+    ),
+    "pc-sampling": TestConfig(
+        test_pc_sampling_baseline,
+        test_pc_sampling,
+        repetitions=10,
+        analyze=analyze_pc_sampling,
+        collect_test_specific_values=collect_pc_sampling_values,
+        requires_throughput=False,
     ),
 }
 
@@ -170,12 +342,16 @@ def get_value(name, text):
 
 def run_process(command, path, timeout_sec, environ=None):
     command = command.copy()
-    command[0] = os.path.join(path, command[0])
+    shell = False
+    if sys.platform == "win32":
+        shell = True
+    else:
+        command[0] = os.path.join(path, command[0])
 
     p = subprocess.Popen(
         command,
         cwd=path,
-        shell=False,
+        shell=shell,
         env=environ,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -189,6 +365,7 @@ def run_process(command, path, timeout_sec, environ=None):
             subprocess.run(
                 ["taskkill", "/F", "/T", "/PID", str(p.pid)],
                 capture_output=True,
+                check=False,
             )
         else:
             p.kill()
@@ -238,7 +415,9 @@ def check_process_status(baseline_result, test_result):
 
 def run_test(path, test_type, test_timeout=60):
     config = test_configs[test_type]
-
+    environ = None
+    if test_type == "pc-sampling":
+        environ = {**os.environ, "ONEAPI_DEVICE_SELECTOR": "level_zero:0"}
     total_invocations = (config.repetitions + config.warm_up_runs) * 2
     timeout_sec = max(10, test_timeout // total_invocations)
 
@@ -256,8 +435,10 @@ def run_test(path, test_type, test_timeout=60):
         print("\nWarm-up phase:")
         for i in range(config.warm_up_runs):
             print("  Warm-up run " + str(i + 1) + "...", end=" ", flush=True)
-            baseline_result = run_process(config.baseline_command, path, timeout_sec)
-            test_result = run_process(config.test_command, path, timeout_sec)
+            baseline_result = run_process(
+                config.baseline_command, path, timeout_sec, environ
+            )
+            test_result = run_process(config.test_command, path, timeout_sec, environ)
             status = check_process_status(baseline_result, test_result)
             if status == CommandStatus.HANGED:
                 print("Continuing after warm-up process timed out")
@@ -265,7 +446,6 @@ def run_test(path, test_type, test_timeout=60):
             if status != CommandStatus.PASS:
                 print("Warm-up terminated the test")
                 return status, None
-
             print("✓")
 
     print("\nMeasurement phase - runs: ")
@@ -278,8 +458,10 @@ def run_test(path, test_type, test_timeout=60):
     for i in range(config.repetitions):
         print(str(i + 1) + "/" + str(config.repetitions) + ", ", end="", flush=True)
         # Interleaved: baseline first, then test (keeps CPU state similar)
-        baseline_result = run_process(config.baseline_command, path, timeout_sec)
-        test_result = run_process(config.test_command, path, timeout_sec)
+        baseline_result = run_process(
+            config.baseline_command, path, timeout_sec, environ
+        )
+        test_result = run_process(config.test_command, path, timeout_sec, environ)
         status = check_process_status(baseline_result, test_result)
         if status == CommandStatus.SKIPPED:
             return CommandStatus.SKIPPED, None
@@ -292,18 +474,25 @@ def run_test(path, test_type, test_timeout=60):
         el_t = get_value("Total execution time", test_result.stdout)
         el_b = get_value("Total execution time", baseline_result.stdout)
 
-        if tp_t is None or tp_b is None or el_t is None or el_b is None:
+        if (
+            el_t is None
+            or el_b is None
+            or (config.requires_throughput and (tp_t is None or tp_b is None))
+        ):
             print("FAILED (no data)")
             failed_measurements += 1
             continue
 
-        captured_test_values = config.collect_test_specific_values(test_result.stdout)
+        captured_test_values = config.collect_test_specific_values(
+            baseline_result.stdout, test_result.stdout
+        )
         if captured_test_values is None:
             failed_measurements += 1
             continue
 
-        throughput_test.append(tp_t)
-        throughput_baseline.append(tp_b)
+        if config.requires_throughput:
+            throughput_test.append(tp_t)
+            throughput_baseline.append(tp_b)
         elapsed_test.append(el_t)
         elapsed_baseline.append(el_b)
         for name, value in captured_test_values.items():
@@ -372,6 +561,9 @@ def analyze_results(
     results,
 ):
     config = test_configs[test_type]
+    if not config.requires_throughput:
+        return config.analyze(threshold_overhead, results, 0.0)
+
     print("Processing baseline results: ", end="")
     min_base, avg_base, med_base, max_base, std_base = process_data(
         results.throughput_baseline
