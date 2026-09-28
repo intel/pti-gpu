@@ -222,7 +222,8 @@ jobs:
           # today's CMakeLists.
           cp -r "${BASE}/samples/." "${GITHUB_WORKSPACE}/sdk/samples/"
 
-          cmake -S "${GITHUB_WORKSPACE}/sdk" --preset "$API_PRESET" 2>&1 | tee configure.log
+          # Current tests may depend on sample APIs added after the baseline.
+          cmake -S "${GITHUB_WORKSPACE}/sdk" --preset "$API_PRESET" -DPTI_BUILD_TESTING=OFF 2>&1 | tee configure.log
           [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "::error::configuring with the ${BASE_VER} samples failed"; exit 1; }
 
           # A sample returns early when a compiler or dependency check fails, which
