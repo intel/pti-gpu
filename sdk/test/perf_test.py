@@ -648,6 +648,17 @@ def parse_arguments(argv):
         return None
 
     executable_path = argv[1]
+    # An empty or missing directory almost always means the caller expanded an
+    # undefined CMake variable. Report it here: run_process() passes this path as
+    # the subprocess cwd, so otherwise the run dies in a bare Popen traceback that
+    # never names the directory it was handed.
+    if not executable_path:
+        print("Empty executable_path: expected a directory containing test binaries")
+        return None
+    if not os.path.isdir(executable_path):
+        print(f"executable_path '{executable_path}' is not an existing directory")
+        return None
+
     threshold_overhead = float(argv[2])
     test_type = argv[3]
     if test_type not in test_configs:

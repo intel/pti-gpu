@@ -674,7 +674,7 @@ if(HAVE_SYCL)
     dpcgemm_suite
     DISCOVERY_TIMEOUT 60
     TEST_PREFIX "RuntimeOpsUnset"
-    PROPERTIES LABELS "unit")
+    PROPERTIES LABELS "functional")
 
   gtest_discover_tests(
     dpcgemm_suite
@@ -682,7 +682,7 @@ if(HAVE_SYCL)
     TEST_PREFIX "RuntimeOpsSetOff"
     PROPERTIES ENVIRONMENT PTI_VIEW_RUNTIME_API=0
     PROPERTIES ENVIRONMENT PTI_VIEW_DRIVER_API=0
-    PROPERTIES LABELS "unit")
+    PROPERTIES LABELS "functional")
 
   gtest_discover_tests(
     dpcgemm_suite
@@ -690,14 +690,13 @@ if(HAVE_SYCL)
     TEST_PREFIX "RuntimeOpsSetOn"
     PROPERTIES ENVIRONMENT PTI_VIEW_RUNTIME_API=1
     PROPERTIES ENVIRONMENT PTI_VIEW_DRIVER_API=1
-    PROPERTIES LABELS "unit")
+    PROPERTIES LABELS "functional")
 
   gtest_discover_tests(
     mem_ops_test
     DISCOVERY_TIMEOUT 60
-    TEST_LIST MEM_OPS_TEST_LIST
     PROPERTIES ENVIRONMENT "ONEAPI_DEVICE_SELECTOR=level_zero:*,*.*"
-    PROPERTIES LABELS "unit" )
+    PROPERTIES LABELS "functional" )
 
   gtest_discover_tests(
     classapi_suite
@@ -861,7 +860,7 @@ if(HAVE_SYCL)
   add_test(
     NAME perf-pc-sampling-overhead
     COMMAND
-      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TEST_BIN_DIR}"
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TOP_LEVEL_TEST_BIN_DIR}"
       ${PC_SAMPLING_OVERHEAD_THRESHOLD} pc-sampling
       ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
