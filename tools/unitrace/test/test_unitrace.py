@@ -75,7 +75,7 @@ def clean_up_testing_folder(test_dir, test_name=None):
         return 0
 
 
-def build(test_dir, test_name=None):
+def build(test_dir, test_name=None, unitrace_build_dir=None):
     """Build the test project. If test_name is provided, build only that test."""
     if not os.path.exists(test_dir):
         raise FileNotFoundError(f"[ERROR] Test directory does not exist: {test_dir}")
@@ -88,7 +88,10 @@ def build(test_dir, test_name=None):
     os.chdir(build_dir)
     try:
         print("Build started ... ")
-        subprocess.run(['cmake', '..', '-G', 'Ninja'], check = True)
+        configure = ['cmake', '..', '-G', 'Ninja']
+        if unitrace_build_dir:
+            configure.append(f"-DUNITRACE_BUILD_ROOT={unitrace_build_dir}")
+        subprocess.run(configure, check = True)
         
         # Build only the specific test if test_name is provided, otherwise build all
         if test_name:
@@ -196,21 +199,50 @@ def test_name_matches(name, test_name):
         return fnmatch.fnmatch(name, test_name)
     return name == test_name
 
+def build_target_of(test):
+    """The ninja target of a test's workload, or None when there is no
+    dedicated target (check scripts, python tests) and the whole project
+    must be built. A test name is not necessarily a target: e.g.
+    selective_kernels builds 'graph' and the event_reset variants build
+    'event_reset'."""
+    tokens = test["command"].split()
+    # skip leading NAME=VALUE environment prefixes
+    while tokens and "=" in tokens[0] and not tokens[0].endswith(".py"):
+        tokens.pop(0)
+    if not tokens or not tokens[0].endswith("run_test.py"):
+        return None
+    skip_next = False
+    for token in tokens[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in ("-e", "-t", "-n", "-c", "-s", "--scenario"):
+            skip_next = True
+            continue
+        if token.startswith("-"):
+            continue
+        if "{" in token or "/" in token:
+            return None
+        return token
+    return None
+
 def test_group_of(test):
     # python tests are the ones rooted at python_test/
     return "python-test" if "python_test/" in test["command"] else "cpp-test"
 
-def resolve_unitrace_exe(test_dir):
+def resolve_unitrace_exe(test_dir, unitrace_exe=None):
+    if unitrace_exe:
+        return unitrace_exe
     exe_name = "unitrace.exe" if platform.system() == "Windows" else "unitrace"
     return os.path.join(test_dir, "..", "..", "build", exe_name)
 
-def build_test_command(test_entry, test_dir, scenario):
+def build_test_command(test_entry, test_dir, scenario, unitrace_exe=None, skip_golden_compare=False):
     """Expand one tests.txt command line for one scenario.
 
     Returns the command and the extra environment set by leading NAME=VALUE
     tokens (formerly per-test ctest ENVIRONMENT properties)."""
     tokens = [token.format(python=sys.executable,
-                           unitrace=resolve_unitrace_exe(test_dir))
+                           unitrace=resolve_unitrace_exe(test_dir, unitrace_exe))
               for token in test_entry["cmd"].split()]
     extra_env = {}
     while "=" in tokens[0] and not tokens[0].endswith(".py"):
@@ -219,19 +251,28 @@ def build_test_command(test_entry, test_dir, scenario):
     if tokens[0].endswith("run_test.py"):
         # --scenario=<value> form: scenario values start with '-'
         tokens.insert(1, f"--scenario={scenario}")
+        if unitrace_exe:
+            tokens[2:2] = ["--unitrace-exe", unitrace_exe]
+        if skip_golden_compare:
+            tokens.insert(2, "--skip-golden-compare")
     return [sys.executable] + tokens, extra_env
 
-def launch_test_with_scenarios(test_entry, scenarios, test_dir, total_tests):
+def launch_test_with_scenarios(test_entry, scenarios, test_dir, total_tests, unitrace_exe=None, skip_golden_compare=False):
     test = test_entry["name"]
     failed_options = []
     sub_tests = 0
 
     # "native" runs the app without unitrace first, as a driver/environment
     # sanity check; if it fails, skip the unitrace scenarios (not our problem).
+    # Commands not using run_test.py ignore the scenario, so they run once.
+    if any(token.endswith("run_test.py") for token in test_entry["cmd"].split()):
+        run_list = ["native"] + scenarios
+    else:
+        run_list = ["check"]
     native_failed = False
-    for cmd in ["native"] + scenarios:
+    for cmd in run_list:
         sub_tests += 1
-        command, extra_env = build_test_command(test_entry, test_dir, cmd)
+        command, extra_env = build_test_command(test_entry, test_dir, cmd, unitrace_exe, skip_golden_compare)
         result = subprocess.run(command, capture_output=True, text=True,
                                 env={**os.environ, **extra_env},
                                 cwd=os.path.dirname(os.path.abspath(__file__)))
@@ -266,7 +307,7 @@ def launch_test_with_scenarios(test_entry, scenarios, test_dir, total_tests):
             break
     return sub_tests, failed_options
 
-def run_tests(test_dir, test_group, test_name=None):
+def run_tests(test_dir, test_group, test_name=None, unitrace_exe=None, skip_golden_compare=False):
     failed_test_flag = 0
     failed_options = []
     total_tests = 0
@@ -282,7 +323,7 @@ def run_tests(test_dir, test_group, test_name=None):
         if scenarios is None:
             continue
         test_entry = {"name": test["name"], "cmd": test["command"]}
-        total_sub_tests, tests_status = launch_test_with_scenarios(test_entry, scenarios, test_dir, total_tests)
+        total_sub_tests, tests_status = launch_test_with_scenarios(test_entry, scenarios, test_dir, total_tests, unitrace_exe, skip_golden_compare)
         total_tests += total_sub_tests
         for test_status in tests_status:
             failed_options.append(test_status)
@@ -363,7 +404,7 @@ def list_tests(test_group, test_name=None):
         print(f"{test['name']}")
         print(f"  command: {test['command']}")
         if not any(token.endswith("run_test.py") for token in test["command"].split()):
-            print("  scenarios: scenario-independent (single check + native)")
+            print("  scenarios: scenario-independent (single check)")
         elif scenarios == [""]:
             print("  scenarios: none (single run + native)")
         else:
@@ -407,20 +448,57 @@ def parse_arguments():
         action="store_true",
         help="List each test with its command and resolved scenarios, without running anything."
     )
+    parser.add_argument(
+        "--unitrace-exe",
+        type=str,
+        default=None,
+        help="Path to the unitrace binary when it is not at the standalone "
+             "location <test-dir>/../build/unitrace (e.g. a top-level build "
+             "or a prebuilt package)."
+    )
+    parser.add_argument(
+        "--unitrace-build-dir",
+        type=str,
+        default=None,
+        help="Path to the unitrace build directory holding build-time "
+             "artifacts the test workloads reuse (ITT library, downloaded "
+             "Level Zero headers) when unitrace was built outside the "
+             "standalone tools/unitrace layout. Forwarded to the workload "
+             "configure step as -DUNITRACE_BUILD_ROOT."
+    )
+    parser.add_argument(
+        "--skip-golden-compare",
+        action="store_true",
+        help="Skip golden-output content comparisons (for environments "
+             "without validated golden files); execution and output checks "
+             "still apply. Forwarded to run_test.py."
+    )
     return parser.parse_args()
 
 def main():
     args = parse_arguments()
+    if args.unitrace_exe:
+        args.unitrace_exe = os.path.abspath(args.unitrace_exe)
+    if args.unitrace_build_dir:
+        args.unitrace_build_dir = os.path.abspath(args.unitrace_build_dir)
 
+    build_target = None
     if args.test_name is not None:
         _, tests = load_test_definitions()
-        known = [t["name"] for t in tests if test_group_of(t) == args.test_group]
-        if not any(test_name_matches(name, args.test_name) for name in known):
+        group_tests = [t for t in tests if test_group_of(t) == args.test_group]
+        matched = [t for t in group_tests
+                   if test_name_matches(t["name"], args.test_name)]
+        if not matched:
             print(f"[ERROR] No test matches '{args.test_name}' in group "
                   f"'{args.test_group}'. Available tests:")
-            for name in known:
-                print(f"  {name}")
+            for t in group_tests:
+                print(f"  {t['name']}")
             return 1
+        # Build only the matched workload when it is unambiguous; a test
+        # name is not necessarily a ninja target (see build_target_of).
+        targets = {build_target_of(t) for t in matched}
+        if len(targets) == 1:
+            build_target = targets.pop()
 
     if args.list:
         return list_tests(args.test_group, args.test_name)
@@ -436,15 +514,11 @@ def main():
         if status == 0:
             print("Cleaning up test folder ...")
             status = clean_up_testing_folder(args.test_dir, args.test_name)
-            # A glob selector is not a ninja target; build everything then.
-            exact = args.test_name
-            if exact is not None and any(ch in exact for ch in "*?["):
-                exact = None
-            status = build(args.test_dir, exact)
+            status = build(args.test_dir, build_target, args.unitrace_build_dir)
         if status != 0: #build error check and return
             return status
     print("Start testing...")
-    status = run_tests(args.test_dir, args.test_group, args.test_name)
+    status = run_tests(args.test_dir, args.test_group, args.test_name, args.unitrace_exe, args.skip_golden_compare)
     return(status)
 
 if __name__ == "__main__":

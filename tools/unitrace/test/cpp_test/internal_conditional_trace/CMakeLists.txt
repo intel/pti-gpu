@@ -5,7 +5,14 @@ add_sycl_to_target(internal_conditional_trace)
 
 # Reuse the ITT headers and static library produced by the main unitrace build,
 # so the workload can emit __itt_resume / __itt_pause / __itt_detach.
-set(UNITRACE_BUILD_DIR "${CMAKE_SOURCE_DIR}/../../build")
+# UNITRACE_BUILD_ROOT (forwarded by test_unitrace.py --unitrace-build-dir) takes
+# precedence, so builds outside the standalone tools/unitrace layout (e.g. the
+# repository's top-level build) can point at their unitrace build directory.
+if(DEFINED UNITRACE_BUILD_ROOT)
+  set(UNITRACE_BUILD_DIR "${UNITRACE_BUILD_ROOT}")
+else()
+  set(UNITRACE_BUILD_DIR "${CMAKE_SOURCE_DIR}/../../build")
+endif()
 
 target_include_directories(internal_conditional_trace PRIVATE "${UNITRACE_BUILD_DIR}/ittapi/include")
 

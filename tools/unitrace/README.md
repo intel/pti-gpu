@@ -89,7 +89,17 @@ cmake -DBUILD_WITH_ITT=0 -DBUILD_WITH_XPTI=0 -DBUILD_WITH_MPI=0 -DBUILD_WITH_OPE
 
 ## Test
 
-After unitrace is built, run test_unitrace.py from the test folder
+After unitrace is built, run test_unitrace.py from the test folder. When
+unitrace was built outside the standalone tools/unitrace layout (for example
+the repository's top-level build, which places binaries under `<build>/bin`),
+point the harness at it explicitly:
+
+```sh
+python test_unitrace.py --unitrace-exe <build>/bin/unitrace --unitrace-build-dir <build>
+```
+
+For a standalone tools/unitrace build no flags are needed; run it from the
+test folder
 
 ```sh
 cd test
