@@ -126,6 +126,37 @@ void StartTracing() {
   ASSERT_EQ(ptiViewEnable(PTI_VIEW_EXTERNAL_CORRELATION), pti_result::PTI_SUCCESS);
 }
 
+// Submits one trivial kernel and drains the view buffers, so that the records left in
+// the global maps afterwards belong to this launch only.
+template <typename T>
+void RunSingleKernelAndFlush(sycl::queue &q, std::vector<T> &v) {
+  {
+    sycl::buffer v_buf(v);
+    q.submit([&](sycl::handler &h) {
+      sycl::accessor a(v_buf, h, sycl::read_write);
+      h.parallel_for(sycl::range<1>{v.size()}, [=](auto i) { a[i] = a[i] + static_cast<T>(1); });
+    });
+    q.wait();
+  }
+  ASSERT_EQ(ptiFlushAllViews(), pti_result::PTI_SUCCESS);
+}
+
+// Checks every external correlation record collected so far carries `expected_kind` and
+// `expected_id`, and returns how many were inspected so the caller can reject a vacuous
+// pass. PTI never emits external correlation records on its own: every one traces back to
+// a ptiViewPushExternalCorrelationId call, so any other kind here is a real failure.
+size_t CountExternalIdsAndExpectAllAre(pti_view_external_kind expected_kind, uint64_t expected_id) {
+  size_t inspected = 0;
+  for (const auto &entry : external_corr_map) {
+    EXPECT_EQ(entry.second.first, expected_kind)
+        << "correlation id " << entry.first << " carries the wrong external kind";
+    EXPECT_EQ(entry.second.second, expected_id)
+        << "correlation id " << entry.first << " carries the wrong external id";
+    inspected++;
+  }
+  return inspected;
+}
+
 void StopTracing() {
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL), pti_result::PTI_SUCCESS);
   ASSERT_EQ(ptiViewDisable(PTI_VIEW_DEVICE_GPU_MEM_COPY), pti_result::PTI_SUCCESS);
@@ -373,6 +404,55 @@ TEST_P(VecsqaddFixtureTest, CorrelationIdsAndExternalCorrelationMatchForSq) {
   for (auto &elem : runtime_enq_2_gpu_mem_op_name_map) {
     EXPECT_NE(elem.second.find("Copy"), std::string::npos);
   }
+}
+
+// Simplest external correlation nesting case, exercised on the plain View API with no
+// Callback API subscriber involved: push(outer) then push(inner) with no pop in between
+// must label subsequent work with the *inner* id, and popping the inner id must restore
+// the outer one rather than leave the stack empty or keep reporting the inner id.
+TEST_P(VecsqaddFixtureTest, ExternalCorrelationIdNestsAndRestoresOuterId) {
+  constexpr auto kKind = pti_view_external_kind::PTI_VIEW_EXTERNAL_KIND_CUSTOM_3;
+  constexpr uint64_t kOuterId = 0x11;
+  constexpr uint64_t kInnerId = 0x12;
+
+  EXPECT_EQ(ptiViewSetCallbacks(BufferRequested, BufferCompleted), pti_result::PTI_SUCCESS);
+
+  sycl::queue q(sycl::gpu_selector_v, sycl::property_list{sycl::property::queue::in_order()});
+  std::vector<float> v(kVectorSize, 1.0F);
+
+  StartTracing();
+
+  ASSERT_EQ(ptiViewPushExternalCorrelationId(kKind, kOuterId), pti_result::PTI_SUCCESS);
+  external_corr_map.clear();
+  RunSingleKernelAndFlush(q, v);
+  EXPECT_GT(CountExternalIdsAndExpectAllAre(kKind, kOuterId), 0U)
+      << "no external correlation records were collected for the outer id";
+
+  // A second push with no intervening pop: the inner id takes over from here on.
+  ASSERT_EQ(ptiViewPushExternalCorrelationId(kKind, kInnerId), pti_result::PTI_SUCCESS);
+  external_corr_map.clear();
+  RunSingleKernelAndFlush(q, v);
+  EXPECT_GT(CountExternalIdsAndExpectAllAre(kKind, kInnerId), 0U)
+      << "no external correlation records were collected for the inner id";
+
+  uint64_t popped_id = 0;
+  ASSERT_EQ(ptiViewPopExternalCorrelationId(kKind, &popped_id), pti_result::PTI_SUCCESS);
+  EXPECT_EQ(popped_id, kInnerId);
+
+  // Nesting, not reset: the outer id is live again after the inner one is popped.
+  external_corr_map.clear();
+  RunSingleKernelAndFlush(q, v);
+  EXPECT_GT(CountExternalIdsAndExpectAllAre(kKind, kOuterId), 0U)
+      << "no external correlation records were collected after popping the inner id";
+
+  popped_id = 0;
+  ASSERT_EQ(ptiViewPopExternalCorrelationId(kKind, &popped_id), pti_result::PTI_SUCCESS);
+  EXPECT_EQ(popped_id, kOuterId);
+
+  ASSERT_EQ(ptiViewPopExternalCorrelationId(kKind, &popped_id),
+            pti_result::PTI_ERROR_EXTERNAL_ID_QUEUE_EMPTY);
+
+  StopTracing();
 }
 
 void EnableIndividualRuntimeApis() {
