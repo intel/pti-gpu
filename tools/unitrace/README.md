@@ -621,8 +621,6 @@ The **--metric-sampling [-k]** option alone samples all devices, but it can be u
 
 The **--stall-sampling** option works on Intel(R) Data Center GPU Max Series and later products.
 
-![Stall Sampling!](/tools/unitrace/doc/images/stall-sampling.png)
-
 The metrics file holds one section per kernel. Each section has two subsections: a subsection of the kernel's name, the pid of the process and its kernel id, followed by a subsection of the stall data with one row per sampled instruction:
 
 ```sh
