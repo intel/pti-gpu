@@ -48,10 +48,8 @@ def ParseArguments():
     argparser = argparse.ArgumentParser(description = "View trace and hardware metrics in https://ui.perfetto.dev")
     argparser.add_argument('-t', '--trace', help = "trace file (.pftrace or legacy .json)")
     argparser.add_argument('-f', '--config', help = "metric view config file ")
-    argparser.add_argument('-s', '--shaderdump', help = "shader dump folder for stall analysis")
-    argparser.add_argument('-m', '--metrics', help = "hardware performance metrics file in CSV format")
+    argparser.add_argument('-m', '--metrics', help = "hardware performance metrics file (stall sampling, or query/time-based with -f)")
     argparser.add_argument('-n', '--numtopstalls', type = int, default = 10, help = "number of top most expensive stalls of each type to report for stall analysis(10 default, -1 unlimited)")
-    argparser.add_argument('-g', '--demangler', help = "symbol demangler if c++filt is not available")
     argparser.add_argument('--dashboard', action = 'store_true', help = "open the interactive Bokeh dashboard instead of the default static matplotlib PDF")
     argparser.add_argument('--result-dir', help = "directory that holds metrics files and trace file")
     argparser.add_argument('--ranks', type=int, nargs='+', help='list of MPI ranks to include in merge (e.g., --ranks 0 1 2)')
@@ -191,22 +189,35 @@ def main():
 
     trace_file_path = get_trace_file_path(args)
     metrics_files_paths = get_metrics_files_paths(args)
-    eustall = True
+    eustall = False
     if metrics_files_paths:
         for metrics_file in metrics_files_paths:
             if not metrics_file.exists():
                 print(f'Metrics file {metrics_file} is not found')
                 return 1
-            
-        # Use the first file to check EU stall type
+
+        # Classify the first file from the label line that opens its first block. All
+        # three collectors write blocks and all three are comma-separated, so the
+        # discriminator is the label itself: stall sampling names the kernel and the two
+        # values that identify it, while the query and time-based collectors name the
+        # kernel and its instance. analyzeperfmetrics tells them apart for its own
+        # reading, so ask it rather than keeping a second copy of the format here.
         first_metrics_file = metrics_files_paths[0]
+        kind = None
         with first_metrics_file.open('r') as fp:
             for line in fp:
-                if ('GlobalInstanceId' in line):
-                    eustall = False
+                kind = apm.ClassifyHeaderRow(line)
+                if (kind is not None):
                     break
-                if ('IP[Address]' in line):
-                    break
+                if ((line.strip() == '') or ('=== Device' in line)):
+                    continue    # blank lines and the device banner precede the header
+                break           # first non-blank, non-banner line is not a header
+
+        if (kind is None):
+            print(f'Metrics file {first_metrics_file} does not have a recognizable metrics header')
+            return 1
+
+        eustall = (kind == 'stall')
 
         if not args.dashboard and not eustall:
             # OA metrics select their view with a config file; stall data does not
@@ -217,13 +228,8 @@ def main():
                 print(f'Config file {args.config} is not found')
                 return 1
 
-        if (args.shaderdump is not None):
-            if not os.path.exists(args.shaderdump):
-                print(f'Shader dump folder {args.shaderdump} is not found')
-                return 1
-
     else:
-        if ((args.config is not None) or (args.shaderdump is not None)):
+        if (args.config is not None):
             print(f'Metrics file is missing')
             return 1
 
@@ -241,7 +247,7 @@ def main():
                     data = json.load(fp)
                     del data
                     gc.collect()
-                except Exception as ex:
+                except Exception:
                     valid = False
             if (valid == False):
                 # trace file may not be closely closed
@@ -249,7 +255,7 @@ def main():
                 with open(trace_file_path, 'a') as fp:
                     try:
                         fp.write("\n]\n}\n")
-                    except Exception as ex:
+                    except Exception:
                         # give up
                         print("Failed to add closing tags to trace file " + trace_file_path)
                         return 1
@@ -260,14 +266,14 @@ def main():
                         data = json.load(fp)
                         del data
                         gc.collect()
-                    except Exception as ex:
+                    except Exception:
                         # give up, but need to roll back the changes made to the file
                         rollback = True
                 if (rollback == True):
                     with open(trace_file_path, 'a') as fp:
                         try:
                             fp.truncate(fsize)
-                        except Exception as ex:
+                        except Exception:
                             print("Failed to rollback the changes to trace file " + trace_file_path)
                     print("Trace file " + trace_file_path + " is invalid")
                     return 1
@@ -304,7 +310,7 @@ def main():
             # writes for protobuf output.
             if (is_perfetto == False):
                 with open(trace_file_path, 'r') as fp:
-                    for num, line in enumerate(fp):
+                    for line in fp:
                         if ("https://" in line):
                             https = True
                             break
@@ -313,14 +319,9 @@ def main():
 
             options = []
             if (eustall is True):
-                if (args.shaderdump is not None):
-                    options.extend(['-s', args.shaderdump])
-                if (args.demangler is not None):
-                    options.extend(['-g', args.demangler])
                 options.extend(['-n', str(args.numtopstalls)])
             else:
-                if (args.config is not None):
-                    options = ['-f', str(args.config)]
+                options.extend(['-f', str(args.config)])
 
             if (https == True):
                 options.append('-p')
@@ -329,7 +330,7 @@ def main():
             if args.result_dir:
                 options.extend(['--result-dir', str(args.result_dir)])
             else:
-                options.append(str(first_metrics_file))
+                options.append(str(metrics_files_paths[0]))
 
             apm.main(apm.ParseArguments(options))
     except (OSError, ValueError) as error:

@@ -1,6 +1,6 @@
-import io
 import json
 import sys
+import tempfile
 import unittest
 from unittest.mock import mock_open, patch
 from pathlib import Path
@@ -39,8 +39,14 @@ class DataTest(unittest.TestCase):
         self.assertEqual(len(app.metric_plot_layout.children), 1)
         self.assertEqual(app.metric_plot_layout.children[0].children[0].renderers[0].data_source.data["y"], [42.])
 
+    def read(self, source):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "metrics.csv"
+            path.write_text(source)
+            return app.read_metrics(str(path))
+
     def test_stalls_select_trace_kernel_not_gid_order(self):
-        frame = app.pd.DataFrame({"Kernel": ["first", "second"], "IP[Address]": ["100", "200"]})
+        frame = app.pd.DataFrame({"Kernel": ["first", "second"], "Offset": ["0x00000100", "0x00000200"]})
         trace = {"traceEvents": [{"name": "second[SIMD32 {1} {2}]",
                                  "args": {"id": "19", "metrics": "http://localhost:8000/second/19"}}]}
         with patch("builtins.open", mock_open(read_data=json.dumps(trace))):
@@ -52,32 +58,74 @@ class DataTest(unittest.TestCase):
 
     def test_hex_offsets(self):
         for value, expected in (("100", "0x0100"), (" 1a0", "0x01a0"),
-                                ("0x100", "0x0100"), (256, "0x0100")):
+                                ("0x100", "0x0100"), ("0x000001a8", "0x01a8"), (256, "0x0100")):
             self.assertEqual(app.fmt_ip(value), expected)
-        frame = app.read_csv_smart(io.StringIO("Kernel,IP[Address],Active[Events]\nkernel,100,1\n"))
-        self.assertEqual(app.fmt_ip(frame.iloc[0]["IP[Address]"]), "0x0100")
 
-    def test_different_section_schemas(self):
-        source = "=== Device #0 Metrics ===\nKernel,GlobalInstanceId,CounterA\nfirst,1,10\n=== Device #1 Metrics ===\nKernel,GlobalInstanceId,CounterB\nsecond,2,99\n"
-        frame = app.read_csv_smart(io.StringIO(source))
-        self.assertEqual(frame.loc[0, "CounterA"], 10)
-        self.assertEqual(frame.loc[1, "CounterB"], 99)
-        self.assertTrue(app.pd.isna(frame.loc[1, "CounterA"]))
+    def test_stall_sections(self):
+        source = (
+            '\nKernel,Pid,KernelId\n"GEMM",7,1\n'
+            'Source,Offset,Instruction,Dependency,Active[Events],SbidStall[Events]\n'
+            '"gemm.cl:12",0x00000080,"mov (1|M0) r1.0<1>:ud r0.0<0;1,0>:ud","NA",1,2\n'
+            '\nKernel,Pid,KernelId\n"GEMM",7,2\n'
+            'Source,Offset,Instruction,Dependency,Active[Events],SbidStall[Events]\n'
+            '"NA",0x000001a8,"unknown","NA",0,5\n'
+        )
+        frame = self.read(source)
+        self.assertEqual(frame["KernelId"].tolist(), [1, 2])
+        self.assertEqual(frame["Instruction"].tolist(), ["mov (1|M0) r1.0<1>:ud r0.0<0;1,0>:ud", "unknown"])
+        self.assertEqual(app.fmt_ip(frame.loc[1, "Offset"]), "0x01a8")
+        self.assertEqual(frame["SbidStall[Events]"].tolist(), [2, 5])
+        chart = app.build_eu_stall_chart(frame)
+        self.assertEqual(len(chart.children), 2)
 
-    def test_repeated_header_and_quoted_kernel(self):
-        source = 'Kernel, GlobalInstanceId, CounterA\n"kernel,one", 1, 10\nKernel, GlobalInstanceId, CounterA\nsecond, 2, 20\n'
-        frame = app.read_csv_smart(io.BytesIO(source.encode()))
-        self.assertEqual(frame["Kernel"].tolist(), ["kernel,one", "second"])
-        self.assertEqual(frame["GlobalInstanceId"].tolist(), [1, 2])
+    def test_stall_sections_with_spaces(self):
+        source = (
+            '\nKernel, Pid, KernelId\n"GEMM", 7, 1\n'
+            'Source, Offset, Instruction, Dependency, Active[Events], SbidStall[Events]\n'
+            '"gemm.cl:12", 0x00000080, "mov (1|M0) r1.0<1>:ud r0.0<0;1,0>:ud", "NA", 1, 2\n'
+        )
+        frame = self.read(source)
+        self.assertEqual(frame["Pid"].tolist(), [7])
+        self.assertEqual(frame["KernelId"].tolist(), [1])
+        self.assertEqual(frame["Instruction"].tolist(), ["mov (1|M0) r1.0<1>:ud r0.0<0;1,0>:ud"])
+        self.assertEqual(frame["SbidStall[Events]"].tolist(), [2])
 
-    def test_sample_files(self):
-        root = Path(__file__).resolve().parents[1] / "scripts" / "data"
-        for filename in ("computebasics.metrics.2543699.csv", "stalls.metrics.1908650.csv"):
-            if not (root / filename).exists():
-                continue
-            with (root / filename).open("rb") as source:
-                self.assertFalse(app.read_csv_smart(source).empty)
+    def test_classify_header_row(self):
+        for row in ("Kernel,Pid,KernelId\n", "Kernel, Pid, KernelId\n", " Kernel , Pid , KernelId \n"):
+            self.assertEqual(app.apm.ClassifyHeaderRow(row), "stall", row)
+        for row in ("Kernel, GlobalInstanceId\n", "Kernel ,GlobalInstanceId\n"):
+            self.assertEqual(app.apm.ClassifyHeaderRow(row), "time", row)
+        for row in ("Kernel\n", "Source,Offset\n", "\n", "kernel,pid,kernelid\n"):
+            self.assertIsNone(app.apm.ClassifyHeaderRow(row), row)
 
+    def test_query_sections_of_two_devices(self):
+        source = (
+            "\n=== Device #0 Metrics ===\n\n"
+            'Kernel, GlobalInstanceId\n"kernel,one", 1\nSubDeviceId, GpuTime[ns], CounterA[%]\n'
+            "0, 10, 1.5\n1, 11, 2.5\n"
+            "\n=== Device #1 Metrics ===\n\n"
+            'Kernel, GlobalInstanceId\n"second", 2\nSubDeviceId, GpuTime[ns], CounterB[%]\n0, 20, 99\n'
+        )
+        frame = self.read(source)
+        self.assertEqual(frame["Kernel"].tolist(), ["kernel,one", "kernel,one", "second"])
+        self.assertEqual(frame["GlobalInstanceId"].tolist(), [1, 1, 2])
+        self.assertEqual(frame["SubDeviceId"].tolist(), [0, 1, 0])
+        self.assertEqual(frame["CounterA[%]"].tolist()[:2], [1.5, 2.5])
+        self.assertEqual(frame.loc[2, "CounterB[%]"], 99)
+        self.assertTrue(app.pd.isna(frame.loc[2, "CounterA[%]"]))
+
+    def test_time_sections_drop_instance_separators(self):
+        source = (
+            'Kernel, GlobalInstanceId\n"GEMM", 1\nGpuTime[ns], XVE_ACTIVE[%]\n1, 90\n2, 80\n'
+            'Kernel, GlobalInstanceId\n"GEMM", 2\nGpuTime[ns], XVE_ACTIVE[%]\n3, 70\n'
+        )
+        frame = self.read(source)
+        self.assertEqual(frame["GlobalInstanceId"].tolist(), [1, 1, 2])
+        self.assertEqual(frame["XVE_ACTIVE[%]"].tolist(), [90, 80, 70])
+
+    def test_no_sections(self):
+        with self.assertRaises(ValueError):
+            self.read("nothing here\n")
 
 if __name__ == "__main__":
     unittest.main()

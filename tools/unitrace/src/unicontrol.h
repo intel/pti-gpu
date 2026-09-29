@@ -303,7 +303,7 @@ class UniController{
         return (state == TEMPORAL_RESUMED);
       }
 
-      if (conditional_collection_) {
+      if (start_paused_) {
         // The parent process owns the sampling thread and always creates the
         // metric-sampling shared memory, so its state is authoritative here.
         // The child pushes its PTI_ENABLE_COLLECTION-derived state into this
@@ -367,7 +367,7 @@ class UniController{
         return (state == TEMPORAL_RESUMED);
       }
 
-      if (conditional_collection_) {
+      if (start_paused_) {
         if (itt_paused_) {
           return false;
         }
@@ -437,7 +437,7 @@ class UniController{
     }
 
   private:
-    // Propagate the env-derived conditional-collection state into the
+    // Propagate the env-derived start-paused state into the
     // metric-sampling shared memory so the parent process (which owns the
     // sampling thread and cannot see this child's PTI_ENABLE_COLLECTION) can
     // pause/resume/stop sampling in step with the application. Only relevant
@@ -457,7 +457,7 @@ class UniController{
     }
 
     // Shared by IsCollectionEnabled() and IsMetricSamplingEnabled() under
-    // conditional collection (--start-paused): consult the
+    // --start-paused: consult the
     // PTI_ENABLE_COLLECTION environment variable, which the application (or
     // an outside controller that exported it) uses to gate collection, and
     // mirror the resulting state into the metric-sampling shared memory.
@@ -523,7 +523,7 @@ class UniController{
       return true;
     }
 
-    inline static bool conditional_collection_ = (utils::GetEnv("UNITRACE_StartPaused") == "1") ? true : false;
+    inline static bool start_paused_ = (utils::GetEnv("UNITRACE_StartPaused") == "1") ? true : false;
     inline static bool itt_paused_ = false;
     inline static bool itt_stopped_ = false;
     // when the session is stopped, the shared memory will be removed so processes started afterwards

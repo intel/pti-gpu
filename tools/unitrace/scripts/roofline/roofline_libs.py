@@ -1,6 +1,6 @@
 import pandas as pd
+import csv
 import re
-from io import StringIO
 import math
 
 
@@ -459,82 +459,77 @@ def add_to_html(html_str, sep, data_to_add):
     return html_str
 
 
-def file_to_json_old(file_name):
-    results = []
-    start_reading = False  # Flag to control reading
-    found_kernel = False  # Flag to indicate if "Kernel" was found
-    try:
-        with open(file_name, "r") as file:
-            for line in file:
-                # Start reading after finding the marker line
-                if "Metrics ==" in line:
-                    start_reading = True
-
-                # If reading started and haven't found Kernel yet
-                if start_reading and not found_kernel:
-                    if re.search(fr"{'Kernel,'}", line):
-                        found_kernel = True
-                        clean_line = line.strip()
-                        if clean_line not in results:
-                            results.append(clean_line)
-
-                # If reading started, found Kernel, and encountering SIMD
-                if start_reading and found_kernel and re.search(fr"{'SIMD'}", line):
-                    clean_line = line.strip()
-                    if clean_line not in results:
-                        results.append(clean_line)
-
-        # Handle the case where the marker line is not found
-        if not start_reading:
-            print("Warning: Marker line ' Metrics ==' not found in the file.")
-
-        data_string = "\n".join(results)
-        data_io = StringIO(data_string)
-        df = pd.read_csv(data_io)
-        return df
-    except FileNotFoundError:
-        print(f"The file {file_name} not found.")
-    except Exception as e:
-        print(f"An error occurred : {e}")
-
-
 def file_to_json(file_name):
-    results = []
-    start_reading = False  # Flag to control reading
-    found_kernel = False  # Flag to indicate if "Kernel" was found
-    unique_lines = set()  # Use a set for faster membership testing
+    """Read the metrics of a unitrace query profile into one flat frame, a row per instance.
+
+    Metrics come in blocks: a label line naming the identity columns the block carries, then
+    those values, then the counter names, then the counter values. The identity is copied
+    onto every counter row so the frame can be grouped by 'Kernel', and because the label is
+    what names the identity columns, the SubDeviceId or Device an older unitrace wrote there
+    needs no special case here; a current one writes SubDeviceId as the first counter.
+
+    Reading starts at the metrics banner, as it always has: the timing summary ahead of it
+    has a 'Kernel'-headed table of its own that would otherwise be taken for a block. Only
+    kernels are of interest, so rows whose name carries no SIMD width - memory copies and
+    the like - are dropped at the end, as they were when this read the flat format.
+    """
+    identity_columns = None
+    identity = None
+    columns = None
+    rows = []
+    pending = None
+    reading = False
 
     try:
-        with open(file_name, "r") as file:
-            for line in file:
-                # Start reading after finding the marker line
-                if "Metrics ==" in line:
-                    start_reading = True
+        with open(file_name, "r", newline="") as file:
+            lines = file.readlines()
 
-                # If reading started and haven't found Kernel yet
-                if start_reading and not found_kernel:
-                    if 'Kernel,' in line:
-                        found_kernel = True
-                        clean_line = line.strip()
-                        if clean_line not in unique_lines:
-                            unique_lines.add(clean_line)
-                            results.append(clean_line)
+        for fields in csv.reader(lines, skipinitialspace=True):
+            if len(fields) == 1 and 'Metrics ==' in fields[0]:
+                reading = True    # a banner, and in a merged file there is one per profile
+                continue
+            if not reading:
+                continue
+            if len(fields) == 0:
+                # The blank line between blocks. Nothing a block is waiting for, so skip it rather
+                # than let it fill the pending identity or counter-header slot: a file truncated
+                # between an identity line and its counter header would otherwise latch an empty
+                # column list and drop every row that follows.
+                continue
+            if fields[0] == 'Kernel':
+                if identity_columns is None:
+                    identity_columns = fields  # identical across every block
+                identity = None
+                pending = 'identity'
+                continue
+            if pending == 'identity':
+                identity = fields[0:len(identity_columns)]
+                pending = 'columns'
+                continue
+            if pending == 'columns':
+                if columns is None:
+                    columns = fields
+                pending = None
+                continue
+            # A counter row of the block in progress. Anything of the wrong width - a stray
+            # banner, a truncated last line - is skipped rather than padded.
+            if columns is not None and identity is not None \
+                    and len(identity) == len(identity_columns) and len(fields) == len(columns):
+                rows.append(identity + fields)
 
-                # If reading started, found Kernel, and encountering SIMD
-                if start_reading and found_kernel and 'SIMD' in line:
-                    clean_line = line.strip()
-                    if clean_line not in unique_lines:
-                        unique_lines.add(clean_line)
-                        results.append(clean_line)
+        if not reading:
+            print(f"Warning: marker line 'Metrics ==' not found in {file_name}.")
+            return None
+        if columns is None:
+            print(f"Warning: no metric blocks found in {file_name}.")
+            return None
 
-        # Handle the case where the marker line is not found
-        if not start_reading:
-            print("Warning: Marker line 'Metrics ==' not found in the file.")
+        df = pd.DataFrame(rows, columns=identity_columns + columns)
+        for column in df.columns:
+            if column != 'Kernel':
+                df[column] = pd.to_numeric(df[column], errors='coerce')
 
-        data_string = "\n".join(results)
-        data_io = StringIO(data_string)
-        df = pd.read_csv(data_io)
-        return df
+        return df[df['Kernel'].str.contains('SIMD')]
     except FileNotFoundError:
         print(f"The file {file_name} not found.")
     except Exception as e:

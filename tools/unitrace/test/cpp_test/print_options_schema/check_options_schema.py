@@ -57,7 +57,7 @@ def main():
         group_ids.add(group["id"])
 
     # Every flag must carry the mechanical fields the extension relies on.
-    valid_types = {"bool", "int", "string", "enum", "path", "action"}
+    valid_types = {"bool", "int", "float", "string", "enum", "path", "action"}
     names = set()
     for flag in schema["flags"]:
         for field in ("name", "type", "group", "help"):

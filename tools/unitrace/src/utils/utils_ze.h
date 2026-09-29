@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include <chrono>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -20,6 +21,7 @@
 #include "ze_loader.h"
 
 #include "demangle.h"
+#include "logger_factory.h"
 #include "pti_assert.h"
 #include "utils.h"
 
@@ -441,5 +443,66 @@ inline void GetZeDevicesStringToSet(std::set<int>& device_ids_to_sample, std::st
         }
       }
   }
+}
+
+// Write a module's native binary verbatim - the bytes zeModuleGetNativeBinary returns -
+// as the file module_id names in data_dir, for unitrace's own process to read back. The
+// collector's whole part in the module-binary half of the kernel handoff: it never reads
+// one back, so no IGA, ELF or DWARF code is linked into the traced application. See
+// ZeMetricProfiler::ReadModuleAndKernelProps, which documents the handoff.
+//
+// The path is built here and not by the caller, which has only the id and the bytes. Its
+// counterpart, ReadBackModuleNativeBinary below, builds it from the same LoggerFactory:
+// that is the one thing the two sides have to agree about, since the bytes pass through
+// unaltered.
+inline bool WriteOutModuleNativeBinary(const LoggerFactory* logger_factory,
+                                       const std::string& data_dir, uint32_t module_id,
+                                       const uint8_t* data, size_t size) {
+  const std::string path =
+      data_dir + "/" + logger_factory->GetModuleBinaryFileName(utils::GetPid(), module_id);
+
+  std::ofstream file(path, std::ios::binary | std::ios::trunc);
+  if (!file.is_open()) {
+    std::cerr << "[ERROR] Failed to open file for writing: " << path << std::endl;
+    return false;
+  }
+
+  file.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
+
+  // Check after close(), which flushes the last buffered write: a full disk shows
+  // up there rather than on write(), and reporting success on a short file would
+  // surface later as an undiagnosable "failed to disassemble".
+  file.close();
+  if (!file.good()) {
+    std::cerr << "[ERROR] Error writing module binary to: " << path << std::endl;
+    return false;
+  }
+
+  return true;
+}
+
+// Read back a dumped module binary.
+inline bool ReadBackModuleNativeBinary(const std::string& path,
+                                       std::vector<uint8_t>& out_binary) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    std::cerr << "[WARNING] Failed to open module binary file: " << path << std::endl;
+    return false;
+  }
+
+  std::streampos size = file.tellg();
+  if (size <= 0) {
+    return false;
+  }
+  file.seekg(0, std::ios::beg);
+
+  out_binary.resize(static_cast<size_t>(size));
+  file.read(reinterpret_cast<char*>(out_binary.data()), size);
+  if (file.gcount() != size) {
+    std::cerr << "[WARNING] Module binary file is incomplete: " << path << std::endl;
+    return false;
+  }
+
+  return true;
 }
 #endif // PTI_UTILS_ZE_UTILS_H_

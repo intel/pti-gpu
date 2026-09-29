@@ -359,9 +359,9 @@ inline constexpr CliOption kCliOptions[] = {
   Opt::Value("--group", "-g", "enum", "metrics", "metric-group",
         "Hardware metric group (ComputeBasic by default)", "UNITRACE_MetricGroup", nullptr, "ComputeBasic")
       .ChoicesFrom("metric-groups").Requires("--metric-query,--metric-sampling,--stall-sampling"),
-  Opt::Value("--sampling-interval", "-i", "int", "metrics", "interval",
-        "Hardware performance metric sampling interval in us (default is 50 us) in time-based mode",
-        "UNITRACE_SamplingInterval", nullptr, "50")
+  Opt::Value("--sampling-interval", "-i", "float", "metrics", "interval",
+        "Hardware performance metric sampling interval in us, fractional values allowed (default is " DEFAULT_SAMPLING_INTERVAL_US_STR " us) in time-based mode",
+        "UNITRACE_SamplingInterval", nullptr, DEFAULT_SAMPLING_INTERVAL_US_STR)
       .Requires("--metric-query,--metric-sampling,--stall-sampling"),
   Opt::ValueH("--ranks-to-sample", nullptr, "string", "metrics", "ranks",
          "MPI ranks to sample. The argument <ranks> is a list of comma separated MPI ranks", OnRanksToSample),
@@ -644,10 +644,10 @@ static int FinalizeParse(ArgParseState& st) {
       utils::SetEnv("UNITRACE_MetricGroup", "ComputeBasic");
     }
 
-    // default sampling interval is 50 us
+    // default sampling interval is DEFAULT_SAMPLING_INTERVAL_US
     // does not hurt to set UNITRACE_SamplingInterval in query mode
     if (utils::GetEnv("UNITRACE_SamplingInterval").empty()) {
-      utils::SetEnv("UNITRACE_SamplingInterval", "50");
+      utils::SetEnv("UNITRACE_SamplingInterval", DEFAULT_SAMPLING_INTERVAL_US_STR);
     }
   }
 
@@ -789,7 +789,7 @@ void TearDown() {
     }
   } else if (utils::GetEnv("UNITRACE_StartPaused") == "1" &&
              utils::GetEnv("UNITRACE_KernelMetrics") == "1") {
-    // Nameless conditional-collection session created the flush control above;
+    // Nameless start-paused session created the flush control above;
     // release it here (no-op if it was never created).
     UniController::ReleaseMetricFlushControl();
   }
@@ -1161,7 +1161,7 @@ int main(int argc, char *argv[]) {
       UniController::CreateMetricFlushControl();
     }
   } else if (app_can_stop_collection) {
-    // Nameless conditional-collection session: enable the flush handshake so the
+    // Nameless start-paused session: enable the flush handshake so the
     // parent can wait for the child to flush metric data on an in-application
     // __itt_detach()/PTI_ENABLE_COLLECTION=-1 stop, just like a named session.
     UniController::CreateMetricFlushControl();

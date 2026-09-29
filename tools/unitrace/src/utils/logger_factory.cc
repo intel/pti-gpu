@@ -14,6 +14,7 @@
 #define CXX_STD_FILESYSTEM_NAMESPACE std::filesystem
 #endif /* CXX_STD_FILESYSTEM_EXPERIMENTAL */
 
+#include <cstdlib>
 #include <thread>
 
 // LoggerFactory base constructor
@@ -50,6 +51,71 @@ void LoggerFactory::RemoveDirectoryIfEmpty(const std::string& dir) const {
     } catch (const std::exception& e) {
         std::cerr << "[WARNING] Failed to remove directory '" << dir << "': " << e.what() << std::endl;
     }
+}
+
+// Where the per-kernel assembly files are written. See the declaration for why this
+// is not under UNITRACE_DataDir.
+std::string LoggerFactory::GetDisasmDirPath() const {
+    // dir_path_ is the run's output directory: the result directory in result-dir
+    // mode, and UNITRACE_TraceOutputDir (possibly unset) in legacy mode. Fall back
+    // to the current directory, which is where legacy mode puts its other output.
+    std::string dir = dir_path_.empty() ? std::string(".") : dir_path_;
+    dir += "/asm";
+    // A result directory is already per-run (app name and pid are in its name), but
+    // a legacy output directory is shared, so qualify it there to keep concurrent
+    // runs - and the ranks of one MPI run - from writing into each other's files.
+    if (IsLegacy()) {
+        dir += "." + std::to_string(app_id_);
+        if (!rank_.empty()) {
+            dir += "." + rank_;
+        }
+    }
+    CreateDirectory(dir);
+    disasm_dir_path_ = dir;
+    return dir;
+}
+
+// See the declaration for the naming and why the pid is part of it.
+std::string LoggerFactory::GetDisasmFileName(const std::string& disasm_dir, int32_t device_id,
+                                             uint32_t pid, uint64_t kernel_id,
+                                             const std::string& ext) const {
+    return disasm_dir + "/" + std::to_string(device_id) + "." + std::to_string(pid) + "." +
+           std::to_string(kernel_id) + "." + ext;
+}
+
+// See the declaration for why this is shared and why there is no device id in it.
+std::string LoggerFactory::GetModuleBinaryFileName(uint32_t pid, uint32_t index) const {
+    return (IsLegacy() ? ".module." : "module_") + std::to_string(pid) + "." +
+           std::to_string(index) + ".bin";
+}
+
+// See the declaration for what this is the counterpart of.
+uint32_t LoggerFactory::GetFileNamePid(const std::string& path) {
+    const std::string ext = ".txt";
+    if (path.size() <= ext.size() || path.compare(path.size() - ext.size(), ext.size(), ext) != 0) {
+        return 0;
+    }
+
+    // The field before the extension, which is where the writer put its app id.
+    size_t end = path.size() - ext.size();
+    size_t begin = path.rfind('.', end - 1);
+    if (begin == std::string::npos) {
+        return 0;
+    }
+    ++begin;
+
+    // Digits only: rejecting anything else keeps a name of some other shape from
+    // yielding a pid that happens to parse, which would be read as another rank's.
+    if (begin == end) {
+        return 0;
+    }
+    for (size_t i = begin; i < end; ++i) {
+        if (path[i] < '0' || path[i] > '9') {
+            return 0;
+        }
+    }
+
+    return static_cast<uint32_t>(std::strtoul(path.substr(begin, end - begin).c_str(), nullptr, 10));
 }
 
 // LoggerFactory singleton implementation
@@ -311,6 +377,10 @@ std::vector<std::string> LegacyLoggerFactory::SearchFilesByType(LoggerType type,
         case LOGGER_TYPE_KPROPS:
             prefix = ".kprops.";
             break;
+        // Nothing searches for .kdisasm files: they are results, written under
+        // GetDisasmDirPath() rather than into the data directory this searches, and
+        // the process that writes them is the one that built them, so it has the
+        // paths already.
         case LOGGER_TYPE_KTIME:
             prefix = ".ktime.";
             break;
@@ -363,9 +433,13 @@ ResultDirLoggerFactory::~ResultDirLoggerFactory() {
     // directories for emptiness.
     loggers_.clear();
 
-    // Remove the metrics subdirectory first so that its removal may in turn
-    // leave the parent result directory empty and eligible for removal.
+    // Remove the subdirectories first so that their removal may in turn leave the
+    // parent result directory empty and eligible for removal. disasm_dir_path_ is
+    // empty unless GetDisasmDirPath() was called, and the directory it names can be
+    // empty even then: it is created before the first kernel is disassembled, and
+    // every disassembly may still have failed.
     RemoveDirectoryIfEmpty(metrics_dir_path_);
+    RemoveDirectoryIfEmpty(disasm_dir_path_);
     RemoveDirectoryIfEmpty(dir_path_);
 }
 
@@ -474,6 +548,7 @@ std::vector<std::string> ResultDirLoggerFactory::SearchFilesByType(LoggerType ty
         case LOGGER_TYPE_KPROPS:
             prefix = "kprops_";
             break;
+        // No .kdisasm search here either: see the note in the Legacy counterpart.
         case LOGGER_TYPE_KTIME:
             prefix = "ktime_";
             break;

@@ -83,7 +83,10 @@ class BridgeTest(unittest.TestCase):
     def test_idle_connection_does_not_block_kernel_redirect(self):
         with tempfile.TemporaryDirectory() as directory:
             metrics = Path(directory) / "metrics.csv"
-            metrics.write_text("Kernel,GlobalInstanceId,QueryBeginTime[ns],Counter\nkernel,9,100,42\nother,4,200,12\n")
+            metrics.write_text(
+                'Kernel, GlobalInstanceId\n"kernel", 9\nSubDeviceId, QueryBeginTime[ns], Counter[%]\n0, 100, 42\n'
+                'Kernel, GlobalInstanceId\n"other", 4\nSubDeviceId, QueryBeginTime[ns], Counter[%]\n0, 200, 12\n'
+            )
             args = SimpleNamespace(input=str(metrics), trace=None, eustall=False)
             loop = IOLoop()
             server = create_server(args, loop, port=0)

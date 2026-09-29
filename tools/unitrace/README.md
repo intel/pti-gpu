@@ -249,10 +249,10 @@ In case of stall sampling, for example:
     ```sh
      $ unitrace --stall-sampling --chrome-kernel-logging -o perfstall.csv ./testapp
     ```
-To view the source stall analysis report, you also need to provide the shaderdump (see details in [Sample Stalls at Instruction Level](#analyze-stalls-at-instruction-level)) folder path to **uniview.py**:
+To view the source stall analysis report, pass the metrics file to **uniview.py**:
 
     ```sh
-    python uniview.py -t testapp.1092793.json -m ./perfstall.metrics.564289.csv -s ./dump.1
+    python uniview.py -t testapp.1092793.json -m ./perfstall.metrics.564289.csv
     ```
 
 ![Stall Statistics!](/tools/unitrace/doc/images/stallstatistics.png)
@@ -266,22 +266,7 @@ Please note that **-f <config>** is not needed for viewing stall sampling report
 Only the top 10 most expensive stalls of each type are reported by default. You can change the number of top expensive stalls of each type to report using **-n** option, for example:
 
     ```sh
-    python uniview.py -t testapp.1092793.json -m ./perfstall.metrics.564289.csv -s ./dump.1 -n 5
-    ```
-
-The stall analysis reporting uses a demangler utility and the default is **c++filt**. If **c++filt** is missing, you either need to install it or force **uniview.py** to use a different demangler using **-g <demanger>** option:
-
-You can even use an online demangler, for example:
-
-    ```sh
-    python uniview.py -t testapp.1092793.json -m ./perfstall.metrics.564289.csv -s ./dump.1 -n 5 -g mydemangler.bat
-    ```
-    
-and the **mydemangler.bat** has:
-
-    ```sh
-    @echo off
-    curl -s -d "input=%1" https://demangler.com/raw
+    python uniview.py -t testapp.1092793.json -m ./perfstall.metrics.564289.csv -n 5
     ```
 
 If you just want to view only the .json trace, alternatively, you can open **https://ui.perfetto.dev/** in either Google Chrome or Microsoft Edge browser and load the .json file manually. **Do NOT use chrome://tracing/**! 
@@ -582,6 +567,22 @@ Performance metrics data are stored in **perfquery.\<pid\>.csv** file.
 
 ![Metric Query!](/tools/unitrace/doc/images/metric-query.png)
 
+The metrics file holds one section per kernel instance. Each section has two subsections: a subsection of the kernel's name with shape and its global instance id followed by a subsection of the metric data:
+
+```sh
+Kernel, GlobalInstanceId
+"GEMM[SIMD32 {8192; 1; 1} {128; 1; 1}]", 4
+SubDeviceId, GpuTime[ns], GpuCoreClocks[cycles], AvgGpuCoreFrequencyMHz[MHz], XVE_ACTIVE[%], XVE_STALL[%]
+0, 41360937, 74196135, 1793, 82.172699, 17.319138
+
+Kernel, GlobalInstanceId
+"GEMM[SIMD32 {8192; 1; 1} {128; 1; 1}]", 5
+SubDeviceId, GpuTime[ns], GpuCoreClocks[cycles], AvgGpuCoreFrequencyMHz[MHz], XVE_ACTIVE[%], XVE_STALL[%]
+0, 41425831, 74306291, 1794, 82.201385, 17.290176
+```
+
+The **GlobalInstanceId** uniquely identifies a kernel dispatch on a device in the process.
+
 By default, counters in **ComputeBasic** metric group are profiled. You can use the **--group [-g]** option to specify a different group. All available metric groups can be listed by **--metric-list** option.
 
 #### Sample Metrics in Time-based Mode
@@ -594,6 +595,17 @@ Different from the **--metric-query [-q]** option, the **--metric-sampling [-k]*
 Performance metrics data are stored in **perfmetrics.\<pid\>.csv** file.
 
 ![Metric Sampling!](/tools/unitrace/doc/images/metric-sampling.png)
+
+The metrics file has the same format as the **--metric-query [-q]** file, one section per kernel instance:
+
+```sh
+Kernel, GlobalInstanceId
+"GEMM[SIMD32 {2; 2048; 1} {1024; 1; 1}]", 1
+GpuTime[ns], GpuCoreClocks[cycles], AvgGpuCoreFrequencyMHz[MHz], XVE_ACTIVE[%], XVE_STALL[%]
+26666, 31998, 1199, 99.906242, 0.000000
+26666, 31998, 1199, 90.833801, 0.000000
+26666, 31998, 1199, 0.000000, 0.000000
+```
 
 For kernels that take a short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option, for example:
 
@@ -609,7 +621,25 @@ The **--metric-sampling [-k]** option alone samples all devices, but it can be u
 
 The **--stall-sampling** option works on Intel(R) Data Center GPU Max Series and later products.
 
-![Metric Query!](/tools/unitrace/doc/images/stall-sampling.png)
+![Stall Sampling!](/tools/unitrace/doc/images/stall-sampling.png)
+
+The metrics file holds one section per kernel. Each section has two subsections: a subsection of the kernel's name, the pid of the process and its kernel id, followed by a subsection of the stall data with one row per sampled instruction:
+
+```sh
+Kernel,Pid,KernelId
+"GEMM",3315113,120
+Source,Offset,Instruction,Dependency,Active[Events],ControlStall[Events],SbidStall[Events]
+"gemm.cl:12",0x00000080,"(W) and (1|M0) r127.0<1>:ud r0.0<0;1,0>:ud 0xFFFFFFC0:ud {$0.src}","NA",0,2,0
+"gemm.cl:17:41",0x000001b8,"(W) macl (1|M0) r22.0<1>:d r3.8<0;1,0>:d r4.4<0;1,0>:d {Compacted}","0x000001a8 (gemm.cl:17:34): (W) mul (1|M0) acc0.0<1>:d r3.8<0;1,0>:d r4.8<0;1,0>:uw {I@1}",4,0,3
+```
+
+| Column | Meaning |
+|--------|---------|
+| Source | Source location of the instruction, as `<file>:<line>[:<column>]`, or `NA` where the module carries no line information |
+| Offset | Offset of the instruction from the start of the kernel's code |
+| Instruction | The instruction the sample landed on, or `unknown` where the kernel could not be disassembled |
+| Dependency | The instructions the stalled instruction depends on, each as `<offset>[ (<source>)][: <instruction>]` and joined by ` \| `, or `NA` where none is known |
+| the rest | One column per stall type, counting the sampled events of that type at this instruction. `Active[Events]` counts executing rather than stalling |
 
 For kernels that take a short time, you may find that the default sampling rate is not high enough and the sampling rate or the sampling interval needs to be adjusted using **--sampling-interval [-i]** option.
 
@@ -764,11 +794,11 @@ You can also use the **-b** option together with one or more **-m** options to g
 
 ![Analyze Multiple Performance Metric Sets and Throughputs!](/tools/unitrace/doc/images/throughput.png)
 
-If the input metric data file has stall sampling events collected using **--stall-sampling** option, the chart generated shows stall events and instruction addresses.
+If the input metric data file has stall sampling events collected using **--stall-sampling** option, the chart generated shows stall events and instruction offsets.
 
 ![Analyze Stall Metrics!](/tools/unitrace/doc/images/stallchart.png)
 
-From this chart, we can easily see that the most stalls are **SbidStalls** at instruction **0x000001B8**. To reduce or eliminate the stalls, we need to analyze the stalls at instruction level to find out the cause of the stalls.
+From this chart, we can easily see that the most stalls are **SbidStalls** at instruction **0x000001b8**. To reduce or eliminate the stalls, we need to analyze the stalls at instruction level to find out the cause of the stalls.
 
 ###### Use Pre-configured Options #####
 
@@ -784,62 +814,27 @@ You may also want to create configurations for other metric groups and/or device
 
 ##### Analyze Stalls at Instruction Level
 
-To pinpoint stalls to exact instructions, you need kernel shader dump. If you want to pinpoint to the source lines and source files, you also need to use the compiler option **-gline-tables-only**, for example:
+Stalls are pinpointed to exact instructions without any extra setup. If you want to pinpoint to the source lines and source files as well, use the compiler option **-g**, for example:
 
     ```sh
-    icpx -fsycl -gline-tables-only -O2 -o mytest mytest.cpp
+    icpx -fsycl -g -O2 -o mytest mytest.cpp
     ````
 
-To get a kernel shader dump, run the application with environment variables **IGC_ShaderDumpEnable** and **IGC_DumpToCustomDir** set:
-
-    ```sh
-    IGC_ShaderDumpEnable=1 IGC_DumpToCustomDir=dump mytest
-    ````
+Note that specifying **-g** may lower the default optimization level to **-O0**, so also specify the desired optimization level, for example **-O2**.
 
 After you run unitrace using **--stall-sampling**, you can run the same script to analyze stalls:
 
     ```sh
-     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf ./stallmetrics.56789.csv
+     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -o stallchart.pdf ./stallmetrics.56789.csv
     ```
 
-In addition to the stall statistics chart, a stall analysis report is also generated:
-
-```sh
-Kernel: main::{lambda(auto:1)#3}
-Assembly with instruction addresses: ./dump.3/OCL_asme5a3f8d8dcdadd7e_simd32_entry_0003.asm.ip
-***********************************************************************************************
-Sbid Stalls:
-
-Instruction
-  /* [000001B8] */         sync.nop                             null                             {Compacted,$5.dst}     // $15
-  Line 40:  c[index] = a[index] + b[index];
-  File: /nfs/pdx/home/zma2/Box/PVC/grf.cpp
-is stalled potentially by
-  instruction
-    /* [00000198] */         load.ugm.d32.a64 (32|M0)  r18:2         [r14:4]            {I@1,$5} // ex_desc:0x0; desc:0x8200580 // $14
-    Line 40:  c[index] = a[index] + b[index];
-    File: /nfs/pdx/home/zma2/Box/PVC/grf.cpp
-
-Instruction
-  /* [00000118] */ (W)     mul (1|M0)               acc0.0<1>:d   r5.0<0;1,0>:d     r0.2<0;1,0>:uw   {Compacted,A@1,$3.dst} //  ALU pipe: int; $4
-  Line 96:  return __spirv_BuiltInGlobalInvocationId.x;
-  File: /opt/hpc_software/compilers/intel/nightly/20240527/compiler/latest/bin/compiler/../../include/sycl/CL/__spirv/spirv_vars.hpp
-is stalled potentially by
-  instruction
-    /* [00000100] */ (W)     load.ugm.d32x8t.a32.ca.ca (1|M0)  r5:1  bti[255][r126:1]   {I@1,$3} // ex_desc:0xFF000000; desc:0x6218C500 //
-    Line 1652:  }
-    File: /opt/hpc_software/compilers/intel/nightly/20240527/compiler/latest/bin/compiler/../../include/sycl/handler.hpp
-```
-
-The report shows not only the instruction and the location (address, source line and source file if available) of each stall, but also the instruction and the location if available that causes the stall.
-
-To eliminate or reduce the stalls, you need to fix the cause.
+In addition to the stall statistics chart, a stall analysis report is also generated. The report shows not only the instruction and the location (instruction offset, and source file and line if available) of each stall, but also the instruction and the location if available that causes the stall.
 
 The stall analysis report can also be stored in a text file if you prefer:
 
 
     ```sh
-     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -s ./dump -o stallchart.pdf -r stallreport.txt ./stallmetrics.56789.csv
+     python analyzeperfmetrics.py -k "main::{lambda(auto:1)#3}" -o stallchart.pdf -r stallreport.txt ./stallmetrics.56789.csv
     ```
 
 ##### View Kernel Performance Metrics in a Browser
@@ -895,7 +890,7 @@ In case of stall sampling, for example:
 The **-m** option is not required for **analyzeperfmetrics.py**:
 
     ```sh
-    python analyzeperfmetrics.py -s ./dump.1 -p ./perfstall.metrics.564289.csv -t "XVE Stall Statistics and Report"
+    python analyzeperfmetrics.py -p ./perfstall.metrics.564289.csv -t "XVE Stall Statistics and Report"
     ```
 
 Refreshing the same link will show stall statistics by type and instruction address:
@@ -1290,6 +1285,6 @@ Typically, you need options to enable profiling both host activities and device 
 
 It is also recommended to start with device timing (**-d**) and/or host timing (**-h**) summaries. From the summaries, you can quickly spot the hot spots or the expensive kernels on device or calls on host. From the device summary, you will also learn if each kernel has occupancy and/or register spilling issues. Next, from the detailed timelines you will determine if these expensive device kernels or host calls are indeed performance bottlenecks to the overall performance.
 
-Once a kernel is determined to be a performance bottleneck, it is time to figure out why its performance is not optimal. There can be multiple reasons why the kernel is not performant: cache misses, low occupancy, low ALU utilizations, execution unit stalls, etc. You can get answers from metric profiles using **-k"", **-q** or **--stall-sampling** option. In case of execution unit stall analysis, the **--stall-sampling** will give you instruction addresses and reasons of stalls.
+Once a kernel is determined to be a performance bottleneck, it is time to figure out why its performance is not optimal. There can be multiple reasons why the kernel is not performant: cache misses, low occupancy, low ALU utilizations, execution unit stalls, etc. You can get answers from metric profiles using **-k"", **-q** or **--stall-sampling** option. In case of execution unit stall analysis, the **--stall-sampling** will give you instruction offsets, source lines and reasons of stalls.
 
 In an interactive, for example Python, session, the **-t** option can be very useful with the kernel queuing, submission and execution data are output immediately after each kernel completes while your session is active.

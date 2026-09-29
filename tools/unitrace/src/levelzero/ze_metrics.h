@@ -16,11 +16,14 @@
 #include "ze_loader.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
 #include <algorithm>
 #include <map>
 #include <set>
+#include <tuple>
 #include <vector>
 #include <atomic>
 #include <thread>
@@ -32,10 +35,19 @@
 #include "pti_assert.h"
 #include "logger_factory.h"
 #include "unicontrol.h"
+#include "kernel_disassembler.h"
+#include "kernel_extractor.h"
+#include "source_resolver.h"
 #include <inttypes.h>
 
-constexpr static uint64_t min_dummy_instance_id = 1024 * 1024;  // min dummy instance id if idle sampling is enabled
+constexpr static uint64_t min_dummy_instance_id = 1024 * 1024;  // offset of idle-sampling instance ids
 constexpr static uint32_t max_metric_samples = 32768;
+// Default UNITRACE_SamplingInterval in us; single source for both the numeric and string forms
+#define DEFAULT_SAMPLING_INTERVAL_US 50
+#define DEFAULT_SAMPLING_INTERVAL_US_STR_(x) #x
+#define DEFAULT_SAMPLING_INTERVAL_US_STR_X_(x) DEFAULT_SAMPLING_INTERVAL_US_STR_(x)
+#define DEFAULT_SAMPLING_INTERVAL_US_STR DEFAULT_SAMPLING_INTERVAL_US_STR_X_(DEFAULT_SAMPLING_INTERVAL_US)
+constexpr static double default_sampling_interval_us = DEFAULT_SAMPLING_INTERVAL_US;
 
 #define MAX_METRIC_BUFFER  (8ULL * 1024ULL * 1024ULL)
 
@@ -222,8 +234,7 @@ class ZeMetricProfiler {
     std::vector<zet_metric_group_handle_t> groups;
     ze_result_t status = ZE_RESULT_SUCCESS;
 
-    // get handle of the metric group on each device
-    // but initialize L0 first
+    // initialize L0, then get the metric group of each device
     if (ZE_FUNC(zeInit)(ZE_INIT_FLAG_GPU_ONLY) != ZE_RESULT_SUCCESS) {
       std::cerr << "[ERROR] Failed to initialize Level Zero runtime" << std::endl;
       return;
@@ -289,14 +300,12 @@ class ZeMetricProfiler {
                 }
               }
               if (k == num_groups) {
-                // no metric group found
-                // should not get here
+                // no metric group found; should not happen
                 groups.push_back(nullptr);
               }
             }
             else {
-              // unable to get metric groups
-              // should get here
+              // unable to get metric groups; should not happen
               groups.push_back(nullptr);
             }
           }
@@ -312,7 +321,7 @@ class ZeMetricProfiler {
       std::cerr << "[ERROR] Failed to create metric data file" << std::endl;
     }
 
-    // raw metrics data is stored in ".metrics.<pid>.q" in the folder stored in UNITRACE_DataDir
+    // raw metrics are in <UNITRACE_DataDir>/.metrics.<pid>.q
     std::ifstream mf(metrics_file_name, std::ios::binary);
     if (!mf) {
       std::cerr << "[ERROR] Could not open the metric data file" << std::endl;
@@ -321,6 +330,7 @@ class ZeMetricProfiler {
     int did = -1;
     zet_metric_group_handle_t group = nullptr;
     std::vector<std::string> metric_names;
+    std::string counter_header;
     while (!mf.eof()) {
       int32_t device;
       size_t kname_size;
@@ -370,12 +380,20 @@ class ZeMetricProfiler {
            metrics_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
         }
        
-        std::string header("\nKernel,GlobalInstanceId,SubDeviceId");
-        for (auto& metric : metric_names) {
-          header += "," + metric;
+        // Query metrics are written as a self-contained section per kernel-instance, the
+        // shape stall and time-based sampling also use:
+        //   Kernel, GlobalInstanceId              <- section label, naming the identity
+        //   "<name>", <instance id>                  the section carries
+        //   SubDeviceId, <counter names...>       <- column header: the sub-device, then
+        //   <sub-device>, <counter values...>        all metrics in metric_names order;
+        //                                            one row per sub-device
+        // The counter column header is the same for every section of a device, so build
+        // it once per device change.
+        counter_header = "SubDeviceId";
+        for (size_t i = 0; i < metric_names.size(); i++) {
+          counter_header += ", " + metric_names[i];
         }
-        header += "\n";
-        metrics_logger->Log(header);
+        counter_header += "\n";
       }
 
       // compute metrics
@@ -396,22 +414,20 @@ class ZeMetricProfiler {
           samples.data(), computed_metrics.data());
 
         if (status == ZE_RESULT_SUCCESS) {
-          std::string str;
+          // The leading newline puts a blank line before every section.
+          std::string str = "\nKernel, GlobalInstanceId\n" + kname + ", " +
+                            std::to_string(instance_id) + "\n" + counter_header;
           for (uint32_t i = 0; i < num_samples; ++i) {
-            str = kname + ",";
-            str += std::to_string(instance_id) + ",";
-            str += std::to_string(i);
-
             uint32_t size = samples[i];
+
+            // A sample per sub-device, i being the sub-device
+            str += std::to_string(i);
             const zet_typed_value_t *value = computed_metrics.data() + i * size;
-            for (int j = 0; j < size; ++j) {
-              str += ",";
-              str += PrintTypedValue(value[j]);
+            for (uint32_t j = 0; j < size; ++j) {
+              str += ", " + PrintTypedValue(value[j]);
             }
             str += "\n";
           }
-          str += "\n";
-
           metrics_logger->Log(str);
         }
         else {
@@ -521,7 +537,7 @@ class ZeMetricProfiler {
         PTI_ASSERT(metrics_ts_prop.timestampValidBits != 0);
 
         desc->metric_timer_frequency_ = metrics_ts_prop.timerResolution;
-        // specially handling certain older devices
+        // special handling for certain older devices
         uint32_t device_gen = (props.deviceId & 0xFF00);
         if (device_gen == 0x0B00) {
           if (desc->metric_timer_frequency_ > desc->device_timer_frequency_) {
@@ -660,13 +676,851 @@ class ZeMetricProfiler {
     return (iv1.metric_start < iv2.metric_start);
   }
 
+  // 0: mangled name, which names the kernel's ".text.<mangled name>" section
+  // 1: kernel command id
+  // 2: code size (extent) of the section, 0 until the section is found
+  // 3: assembly listing
+  // 4: source locations of the instructions
+  // 5: view of the kernel's bytes in ModuleProps::native_binary_
+  // 6: defs and uses read from the listing
+  // 7: IGA refused to disassemble the kernel, so it is not retried
+  // 2 and 5 are filled when the search first reaches the kernel, 3, 4 and 6 when a sample
+  // is first attributed to it.
+  using KernelProps = std::tuple<std::string, uint64_t, uint64_t, std::string,
+                                 std::vector<SourceLocation>, KernelBinaryView, DefsAndUses,
+                                 bool>;
+
+  // native_binary_ is read once, when a kernel of the module first needs it, and shared by
+  // all its kernels. native_binary_loaded_ records that it was read, since a missing binary
+  // also reads back empty.
+  struct ModuleProps {
+    bool native_binary_loaded_ = false;
+    std::vector<uint8_t> native_binary_;
+    std::map<uint64_t, KernelProps> kernels_;
+  };
+
+  // One device's modules, keyed by (module id, pid): ids are only unique within a process,
+  // and the ranks of an MPI run share the data directory.
+  using DeviceModuleProps = std::map<std::pair<uint32_t, uint32_t>, ModuleProps>;
+
+  // Reads every .kprops file of the device (one per traced process) into modules. A
+  // duplicate base address within one (module, pid) keeps the first record.
+  //
+  // The collectors (ze_collector.h at zeKernelCreate, cl_collector.h) write one record per
+  // kernel to .kprops.<device_id>.<pid>.txt, and one binary per module. A record holds only
+  // what the application alone knows: mangled name, base address, command id and module
+  // id. Everything else is derived here from the module binary. The files are
+  // intermediates under UNITRACE_DataDir, removed at exit, so they carry no version.
+  DeviceModuleProps ReadModuleAndKernelProps(int32_t device_id) const {
+    // One line per field, in the order the collectors write them.
+    enum Field {
+      kName,
+      kBaseAddr,
+      kKernelId,
+      kModuleId,
+      kFieldCount
+    };
+
+    DeviceModuleProps props;
+    // enumerate all kernel property files
+    std::vector<std::string> props_file_paths = logger_factory_->SearchFilesByType(LOGGER_TYPE_KPROPS, device_id);
+    for (const auto& props_file: props_file_paths) {
+      // kernel properties file path: <data_dir>/.kprops.<device_id>.<pid>.txt
+      std::ifstream kpf = std::ifstream(props_file);
+      if (!kpf.is_open()) {
+        continue;
+      }
+
+      // The pid of the process that wrote the file, from its name (logger_factory.h).
+      const uint32_t pid = LoggerFactory::GetFileNamePid(props_file);
+
+      // A truncated last record (abnormal exit) is dropped; the ones before it are kept.
+      for (;;) {
+        std::string field[kFieldCount];
+        bool complete = true;
+        for (std::string& line : field) {
+          if (!std::getline(kpf, line)) {
+            complete = false;
+            break;
+          }
+        }
+        if (!complete) {
+          break;
+        }
+
+        // Strip the quotes the writer put around the name.
+        std::string& kname = field[kName];
+        if (kname.size() >= 2 && kname.front() == '"' && kname.back() == '"') {
+          kname = kname.substr(1, kname.size() - 2);
+        }
+
+        // strtoull: an address needs 64 bits, and long is 32-bit on Windows.
+        const uint64_t base_addr = std::strtoull(field[kBaseAddr].c_str(), nullptr, 0);
+        const uint64_t kernel_id = std::strtoull(field[kKernelId].c_str(), nullptr, 0);
+        const uint32_t mod =
+            static_cast<uint32_t>(std::strtoul(field[kModuleId].c_str(), nullptr, 0));
+
+        // Module 0 means the collector has no binary for the kernel (e.g. an OpenCL kernel,
+        // or a module created before tracing started). No sample can be attributed to it,
+        // so it is dropped.
+        if (mod == 0) {
+          std::cerr << "[ERROR] No module binary for kernel "
+                    << utils::Demangle(kname.c_str()) << " of process " << pid
+                    << ": its stall samples cannot be reported" << std::endl;
+          continue;
+        }
+
+        // Everything but the name and id is filled in from the module binary during the
+        // walk, for the kernels samples land in.
+        props[{mod, pid}].kernels_.insert(
+            {base_addr, std::make_tuple(std::move(kname), kernel_id, uint64_t{0}, std::string(),
+                                        std::vector<SourceLocation>(), KernelBinaryView(),
+                                        DefsAndUses(), false)});
+      }
+      kpf.close();
+    }
+
+    return props;
+  }
+
+  // The module's binary, read from the data directory on first use and cached in the
+  // entry. Empty if the file is missing or truncated (an abnormal exit).
+  const std::vector<uint8_t>& GetModuleBinary(
+      DeviceModuleProps::value_type& entry) const {
+    ModuleProps& module = entry.second;
+    if (module.native_binary_loaded_) {
+      return module.native_binary_;
+    }
+
+    // Named as WriteOutModuleNativeBinary() (utils_ze.h) wrote it, with the traced
+    // process's pid.
+    const std::string path =
+        data_dir_name_ + "/" +
+        logger_factory_->GetModuleBinaryFileName(/* pid = */ entry.first.second,
+                                                 /* module_id = */ entry.first.first);
+    if (!ReadBackModuleNativeBinary(path, module.native_binary_)) {
+      // Discard a partial read.
+      module.native_binary_.clear();
+    }
+
+    // Set even on failure, so a missing binary is not looked for again.
+    module.native_binary_loaded_ = true;
+    return module.native_binary_;
+  }
+
+  // A CSV string cell (RFC 4180): quoted, with embedded quotes doubled. Every string cell
+  // needs it, since instruction text and demangled names contain commas.
+  static std::string Quote(const std::string& value) {
+    std::string cell("\"");
+    for (const char c : value) {
+      if (c == '"') {
+        cell += '"';
+      }
+      cell += c;
+    }
+    cell += '"';
+    return cell;
+  }
+
+  // The Source cell: "<file>:<line>[:<column>]", or "NA" for no location, no file or
+  // line 0 (no statement). Unquoted; the caller applies Quote().
+  static std::string FormatSourceLocation(const SourceLocation* location) {
+    if (location == nullptr || location->file_path_.empty() || location->line_ == 0) {
+      return "NA";
+    }
+
+    std::string cell = location->file_path_ + ":" + std::to_string(location->line_);
+    if (location->column_ != 0) {
+      cell += ":" + std::to_string(location->column_);
+    }
+    return cell;
+  }
+
+  // The Dependency cell: the instructions producing the values this one reads, each as
+  // "<offset> (<source>)[: <instruction>]", joined by " | ", or "NA" if none. Live-ins and
+  // defs with no instruction offset are skipped. Consumers split on " (", ")" and ": ".
+  // Unquoted; the caller applies Quote().
+  std::string FormatDependencies(const DefsAndUses& defs,
+                                 const std::vector<SourceLocation>& locations,
+                                 const UsedBy* instruction) const {
+    if (instruction == nullptr) {
+      return "NA";
+    }
+
+    std::string cell;
+    for (const DefinedBy& def : instruction->defs_) {
+      if (def.live_in_ || def.offset_ == kNoInstructionOffset) {
+        continue;
+      }
+      if (!cell.empty()) {
+        cell += " | ";
+      }
+      cell += HexOffset(def.offset_) + " (" +
+              FormatSourceLocation(FindSourceLocation(locations, def.offset_)) + ")";
+
+      // The producer's text, if the listing has a line for it.
+      const UsedBy* producer = defs.FindByOffset(def.offset_);
+      if (producer != nullptr && !producer->text_.empty()) {
+        cell += ": " + producer->text_;
+      }
+    }
+    return cell.empty() ? "NA" : cell;
+  }
+
+  // Writes <device>.<pid>.<kernel id>.asm to disasm_dir: the IGA listing, the source
+  // locations and the defs of one disassembled kernel. A plain stream, since a per-kernel
+  // file does not fit a Logger's (type, device) naming.
+  bool WriteOutKernelAssembly(const std::string& disasm_dir, int32_t device_id, uint32_t pid,
+                              uint64_t kernel_id, const std::string& kname,
+                              const std::string& disassembly,
+                              const std::vector<SourceLocation>& locations,
+                              const KernelBinaryView& isa, const DefsAndUses& defs) const {
+    const std::string path =
+        logger_factory_->GetDisasmFileName(disasm_dir, device_id, pid, kernel_id, "asm");
+    std::ofstream file(path, std::ios::out | std::ios::trunc);
+    if (!file.is_open()) {
+      std::cerr << "[ERROR] Failed to open file for writing: " << path << std::endl;
+      return false;
+    }
+
+    file << "// Kernel: " << utils::Demangle(kname.c_str()) << "\n";
+    file << "// Mangled name: " << kname << "\n";
+    file << "// Device #" << device_id << ", pid " << pid << ", kernel id " << kernel_id
+         << "\n";
+    file << "// ISA: " << isa.size_ << " bytes of section " << isa.section_name_ << "\n\n";
+
+    // Empty when IGA refused the kernel, which it has already said.
+    file << "// Assembly\n";
+    if (disassembly.empty()) {
+      file << "// None\n";
+    } else {
+      file << disassembly;
+      if (disassembly.back() != '\n') {
+        file << "\n";
+      }
+    }
+
+    // By kernel offset, matching the report's Offset column. None without -g.
+    file << "\n// Source locations, by offset in the kernel:\n";
+    if (locations.empty()) {
+      file << "// None\n";
+    }
+    for (const SourceLocation& location : locations) {
+      // Line 0 (no statement) prints as NA; a column of 0 is omitted.
+      file << "// " << std::hex << location.range_offset_ << "-"
+           << (location.range_offset_ + location.range_size_) << std::dec << " "
+           << (location.file_path_.empty() ? "NA" : location.file_path_) << ":";
+      if (location.line_ == 0) {
+        file << "NA";
+      } else {
+        file << location.line_;
+      }
+      if (location.column_ != 0) {
+        file << ":" << location.column_;
+      }
+      if (!location.is_statement_) {
+        file << " [not a statement]";
+      }
+      file << "\n";
+    }
+
+    // "<offset> #<id> <- <offset> #<id>{<registers>}, ...": each instruction, then the
+    // producers of the values it reads. A live-in is "IN", a producer with no offset "NA".
+    // The listing's own def comments show the same; this is what the tool parsed.
+    file << "\n// Defs, by offset in the kernel:\n";
+    if (defs.Empty()) {
+      file << "// None\n";
+    }
+    for (const UsedBy& instruction : defs.instructions_) {
+      file << "// " << std::hex << instruction.offset_ << std::dec << " #" << instruction.id_;
+      const char* separator = " <- ";
+      for (const DefinedBy& def : instruction.defs_) {
+        file << separator;
+        separator = ", ";
+        if (def.live_in_) {
+          file << "IN";
+        } else if (def.offset_ == kNoInstructionOffset) {
+          file << "NA #" << def.id_;
+        } else {
+          file << std::hex << def.offset_ << std::dec << " #" << def.id_;
+        }
+        file << "{" << def.registers_ << "}";
+      }
+      file << "\n";
+    }
+
+    // Checked after close(), which flushes, so write errors such as a full disk show.
+    file.close();
+    if (!file.good()) {
+      std::cerr << "[ERROR] Error writing disassembly to: " << path << std::endl;
+      return false;
+    }
+
+    return true;
+  }
+
+  // The stall-sampling half of ComputeMetricsSampled: correlate one device's EU stall
+  // samples with the kernels the collector recorded and write the report. raw_metrics is
+  // the caller's buffer, reused across devices. Returns false when the run cannot be
+  // continued at all, as opposed to this device having nothing to report.
+  bool ComputeStallMetrics(const ZeDeviceDescriptor* device,
+                           const std::shared_ptr<Logger>& metric_logger,
+                           uint8_t* raw_metrics) {
+    DeviceModuleProps modules = ReadModuleAndKernelProps(device->device_id_);
+    if (modules.size() == 0) {
+      return true;
+    }
+
+    std::vector<std::string> metric_list;
+    metric_list = GetMetricList(device->metric_group_);
+    PTI_ASSERT(!metric_list.empty());
+
+    uint32_t ip_idx = GetMetricId(metric_list, "IP");
+    if (ip_idx >= metric_list.size()) {
+      // no IP metric
+      return true;
+    }
+
+    constexpr uint32_t max_num_of_stall_types = 16;  // should be enough for all current platforms
+
+    if ((metric_list.size() - 1) > max_num_of_stall_types) { // metric_list.size() includes IP
+      std::cerr << "[ERROR] Number of stall types exceeds supported limit of " << max_num_of_stall_types << std::endl;
+      return false;
+    }
+
+    std::ifstream inf = std::ifstream(device->metric_file_name_, std::ios::in | std::ios::binary);
+    if (!inf.is_open()) {
+      return true;
+    }
+
+    std::map<uint64_t, std::array<uint64_t, max_num_of_stall_types>> eustalls;
+
+    while (!inf.eof()) {
+      // each segment is its size in bytes, then the data
+      uint64_t data_size;
+      inf.read(reinterpret_cast<char *>(&data_size), sizeof(data_size));
+      if (inf.eof()) {
+        // no more segments
+        break;
+      }
+      if (inf.gcount() != sizeof(data_size)) {
+        std::cerr << "[WARNING] Intermediate metrics file is invalid. Cannot find the size of the next data segment. Output likely to be incomplete." << std::endl;
+        break;
+      }
+      if (data_size > MAX_METRIC_BUFFER) {
+        std::cerr << "[WARNING] Intermediate metrics file is invalid. Next chunk cannot be larger than the allocated buffer. Output likely to be incomplete." << std::endl;
+        break;
+      }
+      inf.read(reinterpret_cast<char *>(raw_metrics), data_size);
+      int raw_size = inf.gcount();
+      if (raw_size < data_size) {
+        std::cerr << "[WARNING] Intermediate metrics file is incomplete. Expecting " << data_size << " bytes but only " << raw_size << " bytes were found. Output likely to be incomplete." << std::endl;
+        break;
+      }
+      if (raw_size > 0) {
+        uint32_t num_samples = 0;
+        uint32_t num_metrics = 0;
+        auto status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
+          device->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+          raw_size, raw_metrics, &num_samples, &num_metrics,
+          nullptr, nullptr);
+        if ((status != ZE_RESULT_SUCCESS) || (num_samples == 0) || (num_metrics == 0)) {
+          std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
+          continue;
+        }
+
+        std::vector<uint32_t> samples(num_samples);
+        std::vector<zet_typed_value_t> metrics(num_metrics);
+
+        status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
+          device->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+          raw_size, raw_metrics, &num_samples, &num_metrics,
+          samples.data(), metrics.data());
+
+        if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
+          std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
+          continue;
+        }
+
+        const zet_typed_value_t *value = metrics.data();
+        for (uint32_t i = 0; i < num_samples; ++i) {
+          std::string str;
+
+          uint32_t size = samples[i];
+          for (uint32_t j = 0; j < size; j += metric_list.size()) {
+            uint64_t ip;
+            ip = (value[j + 0].value.ui64 << 3);
+            if (ip == 0) {
+              continue;
+            }
+
+            std::array<uint64_t, max_num_of_stall_types> stall;
+
+            // value[j] is the IP; the (metric_list.size() - 1) stall counts follow
+            for (uint32_t k = 0; k <  (metric_list.size() - 1); k++) {
+              stall[k] = value[j + k + 1].value.ui64;
+            }
+            if (auto eit = eustalls.find(ip); eit != eustalls.end()) {
+              for (uint32_t k = 0; k <  (metric_list.size() - 1); k++) {
+                eit->second[k] += stall[k];
+              }
+            }
+            else {
+              eustalls.insert({ip, std::move(stall)});
+            }
+          }
+          value += samples[i];
+        }
+      }
+    }
+    inf.close();
+
+    if (eustalls.size() == 0) {
+      return true;
+    }
+
+    if (logger_factory_->IsLegacy()) {
+      std::string banner("\n=== Device #");
+      banner += std::to_string(device->device_id_) + " Metrics ===\n";
+      metric_logger->Log(banner);
+    }
+
+    // The column header repeated in every kernel section. metric_list[0] is the IP
+    // (reported as Offset); the rest are the stall types, in row order.
+    std::string column_header("Source,Offset,Instruction,Dependency");
+    for (size_t i = 1; i < metric_list.size(); i++) {
+      column_header += "," + metric_list[i];
+    }
+    column_header += "\n";
+
+    // Fetched on the first .asm file, since fetching it creates the directory.
+    std::string disasm_dir;
+
+    // The kernel the walk is on and its module. No kernel is current while current_module
+    // is modules.end(); current_kernel is only valid otherwise.
+    DeviceModuleProps::iterator current_module = modules.end();
+    std::map<uint64_t, KernelProps>::reverse_iterator current_kernel;
+
+    // The last source location found in the current kernel's locations, or null.
+    const SourceLocation* current_source_location = nullptr;
+
+    for (auto [ip, stall] : eustalls) {
+      // Samples come in ascending IP order, so most fall in the current kernel. Search only
+      // when there is none or the IP is outside it; an IP below the base wraps and fails
+      // the unsigned test.
+      if ((current_module == modules.end()) ||
+          ((ip - current_kernel->first) >= std::get<2>(current_kernel->second))) {
+        bool attributed = false;
+
+        // Modules interleave in the address space, so every module is searched; the first
+        // kernel containing the IP wins.
+        for (auto mod = modules.begin(); mod != modules.end(); ++mod) {
+          std::map<uint64_t, KernelProps>& kernels = mod->second.kernels_;
+
+          // Highest base address first: within a module, kernels do not overlap, so the
+          // nearest kernel at or below the IP is the only candidate.
+          for (auto it = kernels.rbegin(); it != kernels.rend(); ++it) {
+            const uint64_t base_addr = it->first;
+            KernelProps& props = it->second;
+
+            if (base_addr > ip) {
+              continue;
+            }
+
+            // The extent comes from the kernel's section in the module binary. If there is
+            // no binary or no section it stays 0, the kernel matches no sample, and the
+            // lookup is repeated each time the search reaches it.
+            if (!std::get<2>(props)) {
+              const std::vector<uint8_t>& binary = GetModuleBinary(*mod);
+              if (!binary.empty() &&
+                  GetKernelBinary(binary.data(), binary.size(), std::get<0>(props),
+                                  std::get<5>(props))) {
+                std::get<2>(props) = std::get<5>(props).Size();
+              }
+            }
+
+            // Past this kernel's end: try the rest. An extent of 0 matches nothing, so a
+            // found kernel always has its ISA.
+            if ((ip - base_addr) >= std::get<2>(props)) {
+              continue;
+            }
+
+            // Found: make it current, and drop the previous kernel's source location.
+            current_module = mod;
+            current_kernel = it;
+            current_source_location = nullptr;
+
+            attributed = true;
+            break;
+          }
+
+          if (attributed) {
+            break;
+          }
+        }
+
+        // No row for a sample in no known kernel.
+        if (!attributed) {
+          continue;
+        }
+
+        KernelProps& props = current_kernel->second;
+
+        // First time this kernel is found: resolve its source and disassemble it, unless
+        // IGA already refused.
+        if (std::get<3>(props).empty() && !std::get<7>(props)) {
+          // Source locations from the module's line information; none without -g. Needs
+          // no disassembly, so a kernel IGA refuses still has them.
+          const std::vector<uint8_t>& binary = GetModuleBinary(*current_module);
+          if (!ResolveAllKernelInstructions(binary.data(), binary.size(),
+                                            std::get<0>(props), std::get<4>(props))) {
+            std::get<4>(props).clear();
+          }
+
+          // With defs (each instruction names the instructions producing its inputs),
+          // without register-level deps; see DisassembleKernelInstructions() for costs.
+          if (DisassembleKernelInstructions(std::get<5>(props), std::get<3>(props),
+                                            /* with_deps = */ false,
+                                            /* with_defs = */ true)) {
+            // Parse the listing's defs into records looked up by offset.
+            ConstructDefsAndUses(std::get<3>(props), std::get<6>(props));
+          } else {
+            // Drop any partial listing and mark the kernel so it is not retried. Its rows
+            // report source and counts only.
+            std::get<3>(props).clear();
+            std::get<7>(props) = true;
+            std::cerr << "[ERROR] Unable to disassemble kernel "
+                      << utils::Demangle(std::get<0>(props).c_str()) << " of process "
+                      << current_module->first.second << std::endl;
+          }
+
+          // Write the kernel's .asm file, creating the directory on the first one.
+          if (disasm_dir.empty()) {
+            disasm_dir = logger_factory_->GetDisasmDirPath();
+          }
+          WriteOutKernelAssembly(disasm_dir, device->device_id_,
+                                 current_module->first.second,
+                                 std::get<1>(props), std::get<0>(props),
+                                 std::get<3>(props), std::get<4>(props),
+                                 std::get<5>(props), std::get<6>(props));
+        }
+
+        // Open a self-contained section for the new kernel: its demangled name, pid and
+        // kernel id (which also name its .asm file), then the column header.
+        std::string header("\nKernel,Pid,KernelId\n");
+        header += Quote(utils::Demangle(std::get<0>(props).c_str())) + "," +
+                  std::to_string(current_module->first.second) + "," +
+                  std::to_string(std::get<1>(props)) + "\n";
+        header += column_header;
+        metric_logger->Log(header);
+      }
+
+      const uint64_t base_addr = current_kernel->first;
+      KernelProps& props = current_kernel->second;
+
+      const uint64_t offset = ip - base_addr;
+
+      // Null for a kernel that could not be disassembled; the row still has its source
+      // and counts.
+      const UsedBy* instruction = std::get<6>(props).FindByOffset(offset);
+      const std::string text =
+          (instruction != nullptr && !instruction->text_.empty()) ? instruction->text_
+                                                                 : "unknown";
+
+      // Reuse the current source location while it covers the offset, else look it up.
+      if (current_source_location == nullptr ||
+          offset - current_source_location->range_offset_ >=
+              current_source_location->range_size_) {
+        current_source_location = FindSourceLocation(std::get<4>(props), offset);
+      }
+
+      std::string row = Quote(FormatSourceLocation(current_source_location)) + "," +
+                        HexOffset(offset) + "," + Quote(text) + "," +
+                        Quote(FormatDependencies(std::get<6>(props), std::get<4>(props),
+                                                 instruction));
+
+      // One count per stall type, in header order.
+      for (size_t k = 0; k < (metric_list.size() - 1); k++) {
+        row += "," + std::to_string(stall[k]);
+      }
+      row += "\n";
+      metric_logger->Log(row);
+    }
+
+    return true;
+  }
+
+  // The time-based half of ComputeMetricsSampled: line one device's metric samples up
+  // against the intervals the kernels ran in and write the report. raw_metrics is the
+  // caller's buffer, reused across devices.
+  void ComputeTimedMetrics(const ZeDeviceDescriptor* device,
+                           const std::shared_ptr<Logger>& metric_logger,
+                           uint8_t* raw_metrics) {
+    std::vector<ZeKernelInfo> kinfo;
+    uint64_t max_global_instance_id = 0;
+    double device_ns_per_cycle = (static_cast<double>(NSEC_IN_SEC) / static_cast<double>(device->device_timer_frequency_));
+    double metric_ns_per_cycle = (static_cast<double>(NSEC_IN_SEC) / static_cast<double>(device->metric_timer_frequency_));
+
+    // enumerate all kernel time files
+    std::vector<std::string> ktime_file_paths = logger_factory_->SearchFilesByType(LOGGER_TYPE_KTIME, device->device_id_);
+    for (const auto& ktime_path: ktime_file_paths) {
+      std::ifstream kf = std::ifstream(ktime_path);
+      if (!kf.is_open()) {
+        continue;
+      }
+
+      while (!kf.eof()) {
+        ZeKernelInfo info;
+        std::string line;
+
+        std::getline(kf, line);
+        if (kf.eof()) {
+          break;
+        }
+        info.subdevice_id = std::strtol(line.c_str(), nullptr, 0);
+        line.clear();
+        std::getline(kf, line);
+        if (kf.eof()) {
+          break;
+        }
+        info.global_instance_id = std::strtoll(line.c_str(), nullptr, 0);
+        if (info.global_instance_id > max_global_instance_id) {
+          max_global_instance_id = info.global_instance_id;
+        }
+        line.clear();
+
+        std::getline(kf, line);
+        if (kf.eof()) {
+          break;
+        }
+        info.metric_start = std::strtoll(line.c_str(), nullptr, 0);
+        line.clear();
+
+        std::getline(kf, line);
+        if (kf.eof()) {
+          break;
+        }
+        info.metric_end = std::strtoll(line.c_str(), nullptr, 0);
+
+        uint64_t kstart;
+        uint64_t kend;
+        uint64_t elapsed;
+
+        kstart = info.metric_start & device->device_timer_mask_;
+        kstart = static_cast<double>(kstart) * device_ns_per_cycle;
+
+        kend = info.metric_end & device->device_timer_mask_;
+        kend = static_cast<double>(kend) * device_ns_per_cycle;
+
+        while (kend <= kstart) {
+          kend += static_cast<double>(device->device_timer_mask_ + 1UL) * device_ns_per_cycle;
+        }
+        elapsed = kend - kstart;
+
+        info.metric_start = info.metric_start & device->metric_timer_mask_;
+        info.metric_start = static_cast<double>(info.metric_start) * metric_ns_per_cycle;
+
+        info.metric_end = info.metric_start + elapsed;
+
+        std::getline(kf, info.kernel_name);
+        if ((info.metric_start != 0) && (info.metric_end != 0) && (!info.kernel_name.empty())) {
+          kinfo.push_back(std::move(info));
+        }
+      }
+      kf.close();
+    }
+
+    if (kinfo.empty()) {
+      return;
+    }
+    std::sort(kinfo.begin(), kinfo.end(), CompareInterval);
+
+    auto metric_list = GetMetricList(device->metric_group_);
+    PTI_ASSERT(!metric_list.empty());
+
+    uint32_t ts_idx = GetMetricId(metric_list, "QueryBeginTime");
+    if (ts_idx >= metric_list.size()) {
+      // no QueryBeginTime metric
+      return;
+    }
+
+    //TODO: handle subdevices in case of implicit scaling
+    uint64_t time_span_between_clock_resets = static_cast<double>(device->metric_timer_mask_ + 1ull) * metric_ns_per_cycle;
+
+    std::ifstream inf = std::ifstream(device->metric_file_name_, std::ios::in | std::ios::binary);
+    if (!inf.is_open()) {
+      return;
+    }
+
+    std::string header;
+    if (logger_factory_->IsLegacy()) {
+      header = "\n=== Device #";
+      header += std::to_string(device->device_id_) + " Metrics ===\n";
+      metric_logger->Log(header);
+    }
+
+    // Time-based sampling is written as a self-contained section per kernel-instance:
+    //   Kernel, GlobalInstanceId          <- section label (distinguishes this format
+    //   "<name>", <global_instance_id>       from the stall one, "Kernel,Pid,KernelId")
+    //   <counter names...>                <- column header: all metrics, in metric_list order
+    //   <counter values...>               <- one row per time sample
+    // The counter column header is the same for every section, so build it once.
+    std::string counter_header;
+    for (size_t i = 0; i < metric_list.size(); i++) {
+      if (i != 0) {
+        counter_header += ", ";
+      }
+      counter_header += metric_list[i];
+    }
+    counter_header += "\n";
+
+    uint64_t current_instance = (std::numeric_limits<uint64_t>::max)();
+    auto WriteOutInstanceHeader = [&metric_logger, &counter_header]
+                                  (const std::string& kernel_name, uint64_t id) {
+      // The leading newline puts a blank line before every instance.
+      metric_logger->Log("\nKernel, GlobalInstanceId\n" + kernel_name + ", " +
+                         std::to_string(id) + "\n");
+      metric_logger->Log(counter_header);
+    };
+
+    uint64_t dummy_global_instance_id = max_global_instance_id + min_dummy_instance_id;  // for idle samples
+
+    uint64_t cur_sampling_ts = 0;
+    auto kit = kinfo.begin();
+    while (!inf.eof() && kit != kinfo.end()) {
+      // each segment is its size in bytes, then the data
+      uint64_t data_size;
+      inf.read(reinterpret_cast<char *>(&data_size), sizeof(data_size));
+      if (inf.eof()) {
+        // no more segments
+        break;
+      }
+      if (inf.gcount() != sizeof(data_size)) {
+        std::cerr << "[WARNING] Intermediate metrics file is invalid. Cannot find the size of the next data segment. Output likely to be incomplete." << std::endl;
+        break;
+      }
+      if (data_size > MAX_METRIC_BUFFER) {
+        std::cerr << "[WARNING] Intermediate metrics file is invalid. Next chunk cannot be larger than the allocated buffer. Output likely to be incomplete." << std::endl;
+        break;
+      }
+      inf.read(reinterpret_cast<char *>(raw_metrics), data_size);
+      size_t raw_size = inf.gcount();
+      if (raw_size < data_size) {
+        std::cerr << "[WARNING] Intermediate metrics file is incomplete. Expecting " << data_size << " bytes but only " << raw_size << " bytes were found. Output likely to be incomplete." << std::endl;
+        break;
+      }
+      if (raw_size > 0) {
+        uint32_t num_samples = 0;
+        uint32_t num_metrics = 0;
+        auto status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
+          device->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+          raw_size, raw_metrics, &num_samples, &num_metrics,
+          nullptr, nullptr);
+        if ((status != ZE_RESULT_SUCCESS) || (num_samples == 0) || (num_metrics == 0)) {
+          std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
+          continue;
+        }
+
+        std::vector<uint32_t> samples(num_samples);
+        std::vector<zet_typed_value_t> metrics(num_metrics);
+
+        status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
+          device->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
+          raw_size, raw_metrics, &num_samples, &num_metrics,
+          samples.data(), metrics.data());
+        if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
+          std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
+          continue;
+        }
+
+        const zet_typed_value_t *value = metrics.data();
+        for (uint32_t i = 0; i < num_samples; ++i) {
+          uint32_t size = samples[i];
+
+          for (uint32_t j = 0; j < (size / metric_list.size()); ++j) {
+            std::string str;
+            const zet_typed_value_t *v = value + j * metric_list.size();
+            uint64_t ts = v[ts_idx].value.ui64;
+            if (cur_sampling_ts != 0) {
+              while (cur_sampling_ts >= ts) { // clock overflow
+                  ts += time_span_between_clock_resets;
+              }
+            }
+            cur_sampling_ts = ts;
+            if ((ts >= kit->metric_start) && (ts <= kit->metric_end)) {
+              if (current_instance != kit->global_instance_id) {
+                WriteOutInstanceHeader(kit->kernel_name, kit->global_instance_id);
+                current_instance = kit->global_instance_id;
+              }
+
+              for (size_t k = 0; k < metric_list.size(); k++) {
+                if (k != 0) {
+                  str += ", ";
+                }
+                if (k == ts_idx) {
+                  str += std::to_string(ts);
+                }
+                else{
+                  str += PrintTypedValue(v[k]);
+                }
+              }
+              str += "\n";
+              metric_logger->Log(str);
+            }
+            else {
+              if (ts > kit->metric_end) {
+                kit++;  // move to next kernel
+                dummy_global_instance_id++;
+                if (kit == kinfo.end()) {
+                  break;  // we are done
+                }
+              }
+              else { // ts < kit->metric_start
+                // does not belong to any kernel/command
+                if (idle_sampling_) {
+                  // one idle section per gap: dummy_global_instance_id advances with kit,
+                  // so each gap preceding a different kernel becomes its own section
+                  if (current_instance != dummy_global_instance_id) {
+                    auto sz = kit->kernel_name.size();
+                    std::string idle_name;
+                    if (sz > 2) {
+                      idle_name = "\"NoKernel(Before " + kit->kernel_name.substr(1, sz - 2)  + ")\"";
+                    }
+                    else {
+                      idle_name = "\"NoKernel\"";
+                    }
+                    WriteOutInstanceHeader(idle_name, dummy_global_instance_id);
+                    current_instance = dummy_global_instance_id;
+                  }
+
+                  // sample row: counter values only
+                  for (size_t k = 0; k < metric_list.size(); k++) {
+                    if (k != 0) {
+                      str += ", ";
+                    }
+                    if (k == ts_idx) {
+                      str += std::to_string(ts);
+                    }
+                    else{
+                      str += PrintTypedValue(v[k]);
+                    }
+                  }
+                  str += "\n";
+                  metric_logger->Log(str);
+                }
+              }
+            }
+          }
+          value += samples[i];
+        }
+      }
+    }
+    inf.close();
+  }
+
   void ComputeMetricsSampled() {
-    // The .kprops/.ktime files iterated below (and the metric binary blobs)
-    // are written by the instrumented child processes when their tracing
-    // sessions stop. The parent may reach this point as soon as
-    // CheckChildDataReadyState() flips to 1 (or as a fallback when waitpid()
-    // reports no more children). The caller of this function needs make sure 
-    // these files are ready before calling this function
+    // The .kprops/.ktime files and metric blobs read below are written by the child
+    // processes when their tracing stops. The caller must make sure they are ready.
     auto *raw_metrics = static_cast<uint8_t*>(malloc(sizeof(uint8_t)*MAX_METRIC_BUFFER));
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
 
@@ -680,450 +1534,13 @@ class ZeMetricProfiler {
 
       metric_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_METRICS_SAMPLING, device->device_id_, true, true);
       if (device->stall_sampling_) {
-        std::map<uint64_t, std::pair<std::string, size_t>> kprops;
-        size_t max_kname_size = 0;
-        // enumerate all kernel property files
-        std::vector<std::string> kprops_file_paths = logger_factory_->SearchFilesByType(LOGGER_TYPE_KPROPS, device->device_id_);
-        for (const auto& kprop_path: kprops_file_paths) {
-          // kernel properties file path: <data_dir>/.kprops.<device_id>.<pid>.txt
-          std::ifstream kpf = std::ifstream(kprop_path);
-          if (!kpf.is_open()) {
-            continue;
-          }
-
-          while (!kpf.eof()) {
-            std::string kname;
-            std::string line;
-            size_t size;
-            uint64_t base_addr;
-
-            std::getline(kpf, kname);
-            if (kpf.eof()) {
-              break;
-            }
-
-            std::getline(kpf, line);
-            if (kpf.eof()) {
-              break;
-            }
-            base_addr = std::strtol(line.c_str(), nullptr, 0);
-
-            line.clear();
-            std::getline(kpf, line);
-            size = std::strtol(line.c_str(), nullptr, 0);
-
-            if (kname.size() > max_kname_size) {
-              max_kname_size = kname.size();
-            }
-            kprops.insert({base_addr, {std::move(kname), size}});
-          }
-          kpf.close();
-        }
-        if (kprops.size() == 0) {
-          continue;
-        }
-
-        std::vector<std::string> metric_list;
-        metric_list = GetMetricList(device->metric_group_);
-        PTI_ASSERT(!metric_list.empty());
-
-        uint32_t ip_idx = GetMetricId(metric_list, "IP");
-        if (ip_idx >= metric_list.size()) {
-          // no IP metric
-          continue;
-        }
-
-        constexpr uint32_t max_num_of_stall_types = 16;  // should be enough for all current platforms
-
-        if ((metric_list.size() - 1) > max_num_of_stall_types) { // metric_list.size() includes IP
-          std::cerr << "[ERROR] Number of stall types exceeds supported limit of " << max_num_of_stall_types << std::endl;
-          free (raw_metrics);
+        if (!ComputeStallMetrics(device, metric_logger, raw_metrics)) {
+          free(raw_metrics);
           return;
-        }
-
-        std::ifstream inf = std::ifstream(device->metric_file_name_, std::ios::in | std::ios::binary);
-        if (!inf.is_open()) {
-          continue;
-        }
-
-        std::map<uint64_t, std::array<uint64_t, max_num_of_stall_types>> eustalls;
-
-        while (!inf.eof()) {
-          // Read metric data in two stages, first actual size (in bytes), followed by actual metrics
-          uint64_t data_size;
-          inf.read(reinterpret_cast<char *>(&data_size), sizeof(data_size));
-          if (inf.eof()) {
-            // If we reached EOF, we can stop processing
-            break;
-          }
-          if (inf.gcount() != sizeof(data_size)) {
-            std::cerr << "[WARNING] Intermediate metrics file is invalid. Cannot find the size of the next data segment. Output likely to be incomplete." << std::endl;
-            break;
-          }
-          if (data_size > MAX_METRIC_BUFFER) {
-            std::cerr << "[WARNING] Intermediate metrics file is invalid. Next chunk cannot be larger than the allocated buffer. Output likely to be incomplete." << std::endl;
-            break;
-          }
-          inf.read(reinterpret_cast<char *>(raw_metrics), data_size);
-          int raw_size = inf.gcount();
-          if (raw_size < data_size) {
-            std::cerr << "[WARNING] Intermediate metrics file is incomplete. Expecting " << data_size << " bytes but only " << raw_size << " bytes were found. Output likely to be incomplete." << std::endl;
-            break;
-          }
-          if (raw_size > 0) {
-            uint32_t num_samples = 0;
-            uint32_t num_metrics = 0;
-            auto status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
-              device->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-              raw_size, raw_metrics, &num_samples, &num_metrics,
-              nullptr, nullptr);
-            if ((status != ZE_RESULT_SUCCESS) || (num_samples == 0) || (num_metrics == 0)) {
-              std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
-              continue;
-            }
-
-            std::vector<uint32_t> samples(num_samples);
-            std::vector<zet_typed_value_t> metrics(num_metrics);
-
-            status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
-              device->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-              raw_size, raw_metrics, &num_samples, &num_metrics,
-              samples.data(), metrics.data());
-
-            if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
-              std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
-              continue;
-            }
-
-            const zet_typed_value_t *value = metrics.data();
-            for (uint32_t i = 0; i < num_samples; ++i) {
-              std::string str;
-
-              uint32_t size = samples[i];
-              for (uint32_t j = 0; j < size; j += metric_list.size()) {
-                uint64_t ip;
-                ip = (value[j + 0].value.ui64 << 3);
-                if (ip == 0) {
-                  continue;
-                }
-
-                std::array<uint64_t, max_num_of_stall_types> stall;
-
-                // IP address is already processed. (metric_list.size() - 1) is the number of types of stall
-                for (uint32_t k = 0; k <  (metric_list.size() - 1); k++) {
-                  stall[k] = value[j + k + 1].value.ui64;
-                }
-                if (auto eit = eustalls.find(ip); eit != eustalls.end()) {
-                  for (uint32_t k = 0; k <  (metric_list.size() - 1); k++) {
-                    eit->second[k] += stall[k];
-                  }
-                }
-                else {
-                  eustalls.insert({ip, std::move(stall)});
-                }
-              }
-              value += samples[i];
-            }
-          }
-        }
-        inf.close();
-
-        if (eustalls.size() == 0) {
-          continue;
-        }
-
-        std::string header;
-        if (logger_factory_->IsLegacy()) {
-          header = "\n=== Device #";
-          header += std::to_string(device->device_id_) + " Metrics ===\n\n";
-        }
-        
-        int field_sizes[11];
-        field_sizes[0] = max_kname_size;
-        field_sizes[1] = std::max(sizeof("0x00000000") - 1, metric_list[0].size());
-        header += std::string(std::max(int(field_sizes[0] + 1 - sizeof("Kernel")), 0), ' ') + "Kernel, ";
-        metric_logger->Log(header);  // in case the kernel name is too long 
-        header = std::string(std::max(int(field_sizes[1] - metric_list[0].length()), 0), ' ') + metric_list[0];
-        for (size_t i = 1; i <  metric_list.size(); i++) {
-          field_sizes[i + 1] = metric_list[i].size();
-          header += ", " + metric_list[i];
-        }
-
-        header += "\n";
-        metric_logger->Log(header);
-
-        for (auto [ip, stall] : eustalls) {
-          for (auto rit = kprops.crbegin(); rit != kprops.crend(); ++rit) {
-            if ((rit->first <= ip) && ((ip - rit->first) < rit->second.second)) {
-              std::string line;
-
-              char offset[128];
-              snprintf(offset, sizeof(offset), "%" PRIx64, (ip - rit->first));
-              line = std::string(std::max(int(field_sizes[0] - rit->second.first.length()), 0), ' ') +
-                     rit->second.first + ", ";
-              metric_logger->Log(line);
-              line = std::string(std::max(int(field_sizes[1] - std::string(offset).length()), 0), ' ') +
-                     std::string(offset) + ", ";
-              // the last stall type is processed after this loop
-              for (uint32_t k = 0; k < (metric_list.size() - 2); k++) {
-                line += std::string(std::max(int(field_sizes[k + 2] - std::to_string(stall[k]).length()), 0), ' ') +
-                        std::to_string(stall[k]) + ", ";
-              }
-              // do not forget the last stall type
-              line += std::string(std::max(int(field_sizes[metric_list.size() - 2] - std::to_string(stall[metric_list.size() - 2]).length()), 0), ' ') +
-                      std::to_string(stall[metric_list.size() - 2]) + "\n";
-              metric_logger->Log(line);
-              break;
-            }
-          }
         }
       }
       else {
-        std::vector<ZeKernelInfo> kinfo;
-        uint64_t max_global_instance_id = 0;
-        double device_ns_per_cycle = (static_cast<double>(NSEC_IN_SEC) / static_cast<double>(device->device_timer_frequency_));
-        double metric_ns_per_cycle = (static_cast<double>(NSEC_IN_SEC) / static_cast<double>(device->metric_timer_frequency_));
-
-        // enumerate all kernel time files
-        std::vector<std::string> ktime_file_paths = logger_factory_->SearchFilesByType(LOGGER_TYPE_KTIME, device->device_id_);
-        for (const auto& ktime_path: ktime_file_paths) {
-          std::ifstream kf = std::ifstream(ktime_path);
-          if (!kf.is_open()) {
-            continue;
-          }
-
-          while (!kf.eof()) {
-            ZeKernelInfo info;
-            std::string line;
-
-            std::getline(kf, line);
-            if (kf.eof()) {
-              break;
-            }
-            info.subdevice_id = std::strtol(line.c_str(), nullptr, 0);
-            line.clear();
-            std::getline(kf, line);
-            if (kf.eof()) {
-              break;
-            }
-            info.global_instance_id = std::strtoll(line.c_str(), nullptr, 0);
-            if (info.global_instance_id > max_global_instance_id) {
-              max_global_instance_id = info.global_instance_id;
-            }
-            line.clear();
-
-            std::getline(kf, line);
-            if (kf.eof()) {
-              break;
-            }
-            info.metric_start = std::strtoll(line.c_str(), nullptr, 0);
-            line.clear();
-
-            std::getline(kf, line);
-            if (kf.eof()) {
-              break;
-            }
-            info.metric_end = std::strtoll(line.c_str(), nullptr, 0);
-            
-            uint64_t kstart;
-            uint64_t kend;
-            uint64_t elapsed;
-
-            kstart = info.metric_start & device->device_timer_mask_;
-            kstart = static_cast<double>(kstart) * device_ns_per_cycle;
-
-            kend = info.metric_end & device->device_timer_mask_;
-            kend = static_cast<double>(kend) * device_ns_per_cycle;
-
-            while (kend <= kstart) {
-              kend += static_cast<double>(device->device_timer_mask_ + 1UL) * device_ns_per_cycle;
-            }
-            elapsed = kend - kstart;
-
-            info.metric_start = info.metric_start & device->metric_timer_mask_;
-            info.metric_start = static_cast<double>(info.metric_start) * metric_ns_per_cycle;
-
-            info.metric_end = info.metric_start + elapsed;
-
-            std::getline(kf, info.kernel_name);
-            if ((info.metric_start != 0) && (info.metric_end != 0) && (!info.kernel_name.empty())) {
-              kinfo.push_back(std::move(info));
-            }
-          }
-          kf.close();
-        }
-
-        if (kinfo.empty()) {
-          continue;
-        }
-        std::sort(kinfo.begin(), kinfo.end(), CompareInterval);
-
-        auto metric_list = GetMetricList(device->metric_group_);
-        PTI_ASSERT(!metric_list.empty());
-
-        uint32_t ts_idx = GetMetricId(metric_list, "QueryBeginTime");
-        if (ts_idx >= metric_list.size()) {
-          // no QueryBeginTime metric
-          continue;
-        }
-
-        //TODO: handle subdevices in case of implicit scaling
-        uint64_t time_span_between_clock_resets = static_cast<double>(device->metric_timer_mask_ + 1ull) * metric_ns_per_cycle;
-
-        std::ifstream inf = std::ifstream(device->metric_file_name_, std::ios::in | std::ios::binary);
-        if (!inf.is_open()) {
-          continue;
-        }
-
-        std::string header;
-        if (logger_factory_->IsLegacy()) {
-          header = "\n=== Device #";
-          header += std::to_string(device->device_id_) + " Metrics ===\n";
-          metric_logger->Log(header);
-        }
-
-        header = "\nKernel, GlobalInstanceId";
-        for (size_t i = 0; i <  metric_list.size(); i++) {
-          header += ", " + metric_list[i];
-        }
-
-        header += "\n";
-        metric_logger->Log(header);
-
-        uint64_t dummy_global_instance_id = max_global_instance_id + min_dummy_instance_id;  // for samples that do not belong to any kernel
-
-        uint64_t cur_sampling_ts = 0;
-        auto kit = kinfo.begin();
-        while (!inf.eof() && kit != kinfo.end()) {
-          // Read metric data in two stages, first actual size (in bytes), followed by actual metrics
-          uint64_t data_size;
-          inf.read(reinterpret_cast<char *>(&data_size), sizeof(data_size));
-          if (inf.eof()) {
-            // If we reached EOF, we can stop processing
-            break;
-          }
-          if (inf.gcount() != sizeof(data_size)) {
-            std::cerr << "[WARNING] Intermediate metrics file is invalid. Cannot find the size of the next data segment. Output likely to be incomplete." << std::endl;
-            break;
-          }
-          if (data_size > MAX_METRIC_BUFFER) {
-            std::cerr << "[WARNING] Intermediate metrics file is invalid. Next chunk cannot be larger than the allocated buffer. Output likely to be incomplete." << std::endl;
-            break;
-          }
-          inf.read(reinterpret_cast<char *>(raw_metrics), data_size);
-          size_t raw_size = inf.gcount();
-          if (raw_size < data_size) {
-            std::cerr << "[WARNING] Intermediate metrics file is incomplete. Expecting " << data_size << " bytes but only " << raw_size << " bytes were found. Output likely to be incomplete." << std::endl;
-            break;
-          }
-          if (raw_size > 0) {
-            uint32_t num_samples = 0;
-            uint32_t num_metrics = 0;
-            auto status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
-              device->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-              raw_size, raw_metrics, &num_samples, &num_metrics,
-              nullptr, nullptr);
-            if ((status != ZE_RESULT_SUCCESS) || (num_samples == 0) || (num_metrics == 0)) {
-              std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
-              continue;
-            }
-
-            std::vector<uint32_t> samples(num_samples);
-            std::vector<zet_typed_value_t> metrics(num_metrics);
-
-            status = ZE_FUNC(zetMetricGroupCalculateMultipleMetricValuesExp)(
-              device->metric_group_, ZET_METRIC_GROUP_CALCULATION_TYPE_METRIC_VALUES,
-              raw_size, raw_metrics, &num_samples, &num_metrics,
-              samples.data(), metrics.data());
-            if ((status != ZE_RESULT_SUCCESS) && (status != ZE_RESULT_WARNING_DROPPED_DATA)) {
-              std::cerr << "[WARNING] Unable to calculate metrics (status = 0x" << std::hex << status << std::dec << ") num_samples = " << num_samples << " num_metrics = " << num_metrics << std::endl;
-              continue;
-            }
-
-            const zet_typed_value_t *value = metrics.data();
-            bool kernelsampled = false;
-            bool idle = false;  // is the sample collected while the device is idle?
-            for (uint32_t i = 0; i < num_samples; ++i) {
-              uint32_t size = samples[i];
-
-              for (uint32_t j = 0; j < (size / metric_list.size()); ++j) {
-                std::string str;
-                const zet_typed_value_t *v = value + j * metric_list.size();
-                uint64_t ts = v[ts_idx].value.ui64;
-                if (cur_sampling_ts != 0) {
-                  while (cur_sampling_ts >= ts) { // clock overflow
-                      ts += time_span_between_clock_resets;
-                  }
-                }
-                cur_sampling_ts = ts;
-                if ((ts >= kit->metric_start) && (ts <= kit->metric_end)) {
-                  if (idle) {
-                    metric_logger->Log("\n");	// separate from samples that do not belong to any kernels/commands
-                    idle = false;
-                  }
-
-                  // belong to this kernel
-                  kernelsampled = true;
-                  str = kit->kernel_name + ", ";
-                  metric_logger->Log(str);	// in case the kernel name is too long
-                  str = std::to_string(kit->global_instance_id);
-                  for (size_t k = 0; k < metric_list.size(); k++) {
-                    str += ", ";
-                    if (k == ts_idx) {
-                      str += std::to_string(ts);
-                    }
-                    else{
-                      str += PrintTypedValue(v[k]);
-                    }
-                  }
-                  str += "\n";
-                  metric_logger->Log(str);
-                }
-                else {
-                  if (ts > kit->metric_end) {
-                    if (kernelsampled) {
-                      metric_logger->Log("\n");
-                      kernelsampled = false;	// reset for next kernel
-                    }
-                    kit++;  // move to next kernel
-                    dummy_global_instance_id++;
-                    if (kit == kinfo.end()) {
-                      break;  // we are done
-                    }
-                  }
-                  else { // ts < kit->metric_start
-                    // does not belong to any kernel/command
-                    if (idle_sampling_) {
-                      auto sz = kit->kernel_name.size();
-                      if (sz > 2) {
-                        str = "\"NoKernel(Before " + kit->kernel_name.substr(1, sz - 2)  + ")\", ";
-                      }
-                      else {
-                        str = "\"NoKernel\", ";
-                      }
-                      metric_logger->Log(str);	// in case the kernel name is too long
-                      str = std::to_string(dummy_global_instance_id);
-                      for (size_t k = 0; k < metric_list.size(); k++) {
-                        str += ", ";
-                        if (k == ts_idx) {
-                          str += std::to_string(ts);
-                        }
-                        else{
-                          str += PrintTypedValue(v[k]);
-                        }
-                      }
-                      str += "\n";
-                      metric_logger->Log(str);
-                      idle = true;
-                    }
-                  }
-                }
-              }
-              value += samples[i];
-            }
-          }
-        }
-        inf.close();
+        ComputeTimedMetrics(device, metric_logger, raw_metrics);
       }
       metric_logger->Flush();
     }
@@ -1291,9 +1708,24 @@ class ZeMetricProfiler {
     PTI_ASSERT(status == ZE_RESULT_SUCCESS);
 
     zet_metric_streamer_handle_t streamer = nullptr;
-    uint32_t interval = std::stoi(utils::GetEnv("UNITRACE_SamplingInterval")) * 1000;  // convert us to ns
+    // UNITRACE_SamplingInterval is in us and may be fractional (e.g. "0.5")
+    double interval_us = default_sampling_interval_us;
+    try {
+      interval_us = std::stod(utils::GetEnv("UNITRACE_SamplingInterval"));
+    } catch (...) {
+      std::cerr << "[WARNING] Invalid sampling interval \"" << utils::GetEnv("UNITRACE_SamplingInterval") << "\", using default " << default_sampling_interval_us << " us" << std::endl;
+    }
+    if (!(interval_us > 0.0) || interval_us * 1000.0 > double(UINT32_MAX)) {
+      std::cerr << "[WARNING] Sampling interval " << interval_us << " us is out of range, using default " << default_sampling_interval_us << " us" << std::endl;
+      interval_us = default_sampling_interval_us;
+    }
+    uint32_t interval = static_cast<uint32_t>(std::llround(interval_us * 1000.0));  // convert us to ns
+    if (interval == 0) {
+      interval = 1;
+    }
 
-    // Note: It is a workaround of a driver bug where zetMetricStreamerOpen fails if metric_sample size is out of HW supported range.
+    // Work around a driver bug: zetMetricStreamerOpen fails if the sample count is out of
+    // the HW-supported range, so retry with fewer samples.
     uint32_t metric_sample_sz = max_metric_samples;
     while (1) {
       zet_metric_streamer_desc_t streamer_desc = {ZET_STRUCTURE_TYPE_METRIC_STREAMER_DESC, nullptr, metric_sample_sz, interval};
@@ -1332,7 +1764,7 @@ class ZeMetricProfiler {
     UniMemory::ExitIfOutOfMemory((void *)raw_metrics);
 
     auto dump_metrics = [](uint8_t *buffer, uint64_t size, std::ofstream *f) -> bool {
-      // Write metric data in two stages, first actual size (in bytes), followed by actual metrics
+      // write the size in bytes, then the data
       if (f->good()) {
         f->write(reinterpret_cast<char*>(&size), sizeof(size));
       }
@@ -1346,7 +1778,7 @@ class ZeMetricProfiler {
     while (desc->profiling_state_.load(std::memory_order_acquire) != PROFILER_DISABLED) {
       auto size = EventBasedReadMetrics(event, streamer, raw_metrics, MAX_METRIC_BUFFER);
       if (size > 0) {
-        // If we have data, dump it to the intermediate file
+        // dump the data to the intermediate file
         if (UniController::IsMetricSamplingEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {
           std::cerr << "[ERROR] Failed to write to sampling metrics file " << desc->metric_file_name_ << std::endl;
           break;
@@ -1354,7 +1786,7 @@ class ZeMetricProfiler {
       }
     }
 
-    // Flush the remaining metrics after the profiler has stopped
+    // flush the remaining metrics
     auto size = ReadMetrics(streamer, raw_metrics, MAX_METRIC_BUFFER);
     while (size > 0) {
       if (UniController::IsMetricSamplingEnabled() && !dump_metrics (raw_metrics, size, &desc->metric_file_stream_)) {

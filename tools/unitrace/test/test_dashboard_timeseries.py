@@ -69,7 +69,11 @@ class TimeseriesTest(unittest.TestCase):
             self.assertNotIn("UniTrace Counter Viewer", widget.text)
 
     def test_csv_upload_populates_counters(self):
-        encoded = base64.b64encode(app.df_input1.to_csv(index=False).encode()).decode()
+        text = "".join(
+            f'Kernel, GlobalInstanceId\n"{kernel}", {gid}\n'
+            + group.drop(columns=["Kernel", "GlobalInstanceId"]).to_csv(index=False)
+            for (kernel, gid), group in app.df_input1.groupby(["Kernel", "GlobalInstanceId"]))
+        encoded = base64.b64encode(text.encode()).decode()
         app.upload_csv_input1("value", "", encoded)
         self.assertIn("Active[%]", app.counter_multi_choice.options)
         self.assertEqual(app.counter_multi_choice.value, [])

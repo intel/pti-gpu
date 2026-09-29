@@ -6,6 +6,7 @@
 
 import os
 import io
+import csv
 import socket
 import ssl
 import sys
@@ -17,97 +18,44 @@ import tempfile
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from itertools import islice
+
 from matplotlib.backends.backend_pdf import PdfPages as pdf
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import unquote
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Union
-from enum import Enum
-
-class MetricsMode(Enum):
-    SINGLE_FILE = "single_file"
-    RESULT_DIRECTORY = "result_directory"
 
 @dataclass
 class DeviceInfo:
-    """Device-specific information only."""
+    """One device's metric table: which file holds it and which lines of that file."""
     device_id: int
     metrics_file: Path
-    mode: MetricsMode = field(init=False)
-
-    # Single file mode specific
-    header_line: Optional[int] = field(default=None)
-    last_line: Optional[int] = field(default=None)
-
-
+    header_line: int
+    kind: str                                           # what ClassifyHeaderRow made of the header row
+    last_line: Optional[int] = field(default = None)    # None means "to the end of the file"
 
     def __post_init__(self):
-        if self.header_line is None and self.last_line is None:
-            self.mode = MetricsMode.RESULT_DIRECTORY
-        elif self.header_line is not None and self.last_line is not None:
-            self.mode = MetricsMode.SINGLE_FILE
-        else:
-            raise ValueError(
-                f"DeviceInfo for device {self.device_id}: "
-                "Must specify both header_line and last_line (single file mode), "
-                "or neither (result directory mode). "
-                f"Currently: header_line={self.header_line}, last_line={self.last_line}"
-            )
-
-        if not (self.metrics_file.exists() and 
-                self.metrics_file.is_file() and 
+        if not (self.metrics_file.exists() and
+                self.metrics_file.is_file() and
                 self.metrics_file.stat().st_size > 0):
             raise ValueError(
                 f"DeviceInfo for device {self.device_id}: "
                 f"File '{self.metrics_file}' does not exist, is not a file, or is empty"
         )
 
-    def __repr__(self) -> str:
-        return (f"DeviceInfo(device_id={self.device_id}, "
-                f"header_line={self.header_line}, "
-                f"last_line={self.last_line}, "
-                f"metrics_file={self.metrics_file})")
-
     def get_device_data(self) -> Optional[pd.DataFrame]:
-        """
-        Read the device-specific metrics data into a DataFrame.
-        """
-        header_line = 0
-        nrows = None
+        """Read the device's metric table into a DataFrame."""
         try:
-            if self.mode == MetricsMode.RESULT_DIRECTORY:
-                # Skip blank lines at start
-                with self.metrics_file.open('r') as f:
-                    for i, line in enumerate(f):
-                        if line.strip():  # Found non-empty line
-                            header_line = i
-                            break
-            elif self.mode == MetricsMode.SINGLE_FILE:
-                header_line = self.header_line
-                nrows = self.last_line - self.header_line - 1
-                if nrows <= 0:
-                    print(f"Warning: No data rows for device {self.device_id}")
-                    return None
-
-            df = pd.read_csv(
-                self.metrics_file,
-                skiprows=header_line,
-                nrows=nrows,
-                skip_blank_lines=False,
-                skipinitialspace=True
-                )
-            return df
-
+            return ReadMetricFrame(self.metrics_file, self.header_line, self.last_line, self.kind)
         except Exception as e:
             print(f"Error reading device file {self.metrics_file}: {e}")
             return None
 
-    def _print_data_from_df(self, df, eustall, of):
-        """
-        Print the relevant data from the DataFrame to the output file or stdout.
-        """
-        if (eustall == False):
+    def _print_data_from_df(self, df, of):
+        """Print the device's metrics and kernels to of."""
+        if (self.kind != "stall"):
             for m in df.columns.values.tolist():
                 if (m == 'Kernel'):
                     continue
@@ -131,27 +79,26 @@ class DeviceInfo:
                         kernel = row['Kernel']
 
             print("    Kernel, Number of Instances", file = of)
-            for i, (kernel, instances) in enumerate(kernel_and_instances.items()):
+            for kernel, instances in kernel_and_instances.items():
                 print("        \"" + kernel + "\", " + str(instances), file = of)
         else:
             for m in df.columns.values.tolist():
-                if (m == 'Kernel' or m == "IP[Address]"):
+                if (m in STALL_INFO_COLUMNS):   # describes the instruction, not a metric
                     continue
                 print("        " + m, file = of)
-                if (m == 'OtherStall[Events]'):
-                    break
 
+            # By identity, so same-named kernels are separate entries; -k takes the
+            # quoted name.
             kernels = []
-            for index, row in df.iterrows():
-                kernel = row['Kernel']
-                if (kernel not in kernels):
-                    kernels.append(kernel)
+            for kernel, pid, kernelid, start, stop in KernelRanges(df):
+                if ((kernel, pid, kernelid) not in kernels):
+                    kernels.append((kernel, pid, kernelid))
 
-            print("    Kernel", file = of)
-            for kernel in kernels:
-                print("        \"" + kernel + "\"", file = of)
+            print("    Kernel, Pid, KernelId", file = of)
+            for kernel, pid, kernelid in kernels:
+                print("        \"" + str(kernel) + "\", " + str(pid) + ", " + str(kernelid), file = of)
 
-    def print_data(self, eustall, of):
+    def print_data(self, of):
         df = self.get_device_data()
         print("Device " + str(self.device_id), file=of)
         if df is None:
@@ -159,14 +106,13 @@ class DeviceInfo:
             return
 
         print("    Metric", file = of)
-        self._print_data_from_df(df, eustall, of)
+        self._print_data_from_df(df, of)
 
 @dataclass
 class MetricsInfo:
     """Database containing global info and all devices information."""
     input_path: Union[Path, str]
     is_result_directory: bool
-    mode: MetricsMode = field(init=False)
     is_eustall: bool = field(init=False, default=False)
     devices: Dict[int, DeviceInfo] = field(init=False, default_factory=dict)
 
@@ -176,20 +122,11 @@ class MetricsInfo:
         self._init_is_eustall()
 
     def _init_is_eustall(self):
-        if self.is_result_directory and not self.devices:
+        """Whether the lowest-numbered device's table is a stall table."""
+        if not self.devices:
             return
 
-        first_metrics_file = self.devices[next(iter(self.devices))].metrics_file if self.is_result_directory else self.input_path
-
-        if not first_metrics_file.exists():
-            print(f"Warning: Metrics file {first_metrics_file} does not exist")
-        try:
-            with first_metrics_file.open('r') as f:
-                for line in f:
-                    if 'OtherStall[Events]' in line:
-                        self.is_eustall = True
-        except (IOError, OSError) as e:
-            print(f"Warning: Could not read file {first_metrics_file}: {e}")
+        self.is_eustall = (self.devices[min(self.devices)].kind == "stall")
 
     def _init_devices(self):
         if self.is_result_directory:
@@ -198,74 +135,37 @@ class MetricsInfo:
             self._init_devices_from_single_file()
 
     def _init_devices_from_directory(self):
-        """
-        For result_directory mode scan all sub-directories to find metrics files.
-        """
-        # Scan the result directory for metrics files
+        """For result_directory mode, find metrics/metrics_<device>.csv files."""
         filename_pattern = re.compile(r'^metrics_(\d+)\.csv$')
 
-        for metrics_file in self.input_path.rglob('metrics/metrics_*.csv'):
+        for metrics_file in sorted(self.input_path.rglob('metrics/metrics_*.csv')):
             match = filename_pattern.match(metrics_file.name)
             if match and metrics_file.stat().st_size > 0:
                 try:
                     device_id = int(match.group(1))
-                    self.devices[device_id] = DeviceInfo(device_id=device_id,
-                                                         metrics_file=metrics_file)
                 except (ValueError, OverflowError) as e:
                     print(f"Warning: Invalid device ID in {metrics_file.name}: {e}")
                     continue
+                # One device per file, named by the file; its table runs to the end.
+                header_line, kind = ScanFirstHeader(metrics_file)
+                if kind is None:
+                    print(f"Warning: No metrics table found in {metrics_file}")
+                    continue
+                self.devices[device_id] = DeviceInfo(device_id=device_id,
+                                                     metrics_file=metrics_file,
+                                                     header_line=header_line,
+                                                     kind=kind)
         if not self.devices:
             print(f"Warning: No valid metrics files found in directory {self.input_path}")
 
     def _init_devices_from_single_file(self):
-        """
-        Initialize devices by parsing a single metrics file.
-        """
-        with self.input_path.open('r') as f:
-            linenum = 0
-            current_device_id = 0 # Initialize to 0, will be updated when/if a device banner is found
-            header_line = None
-            first_device_found = False
-
-            for row in f:
-                if ("=== Device" in row) and ("Metrics ===" in row):
-                    # Save previous device if found
-                    if header_line is not None:
-                        device_info = DeviceInfo(
-                            device_id=current_device_id,
-                            metrics_file=self.input_path,
-                            header_line=header_line,
-                            last_line=linenum  # Current line is start of next device
-                        )
-                        self.devices[current_device_id] = device_info
-                        header_line = None
-
-                    # Parse device ID from banner: "=== Device #X Metrics ==="
-                    words = row.split()
-                    for word in words:
-                        if word.startswith('#'):
-                            try:
-                                current_device_id = int(word[1:])  # Remove '#' and convert
-                                break
-                            except ValueError:
-                                print(f"Warning: Could not parse device ID from '{word}'")
-                                continue
-
-                # Look for header line (after device banner)
-                elif (("OtherStall[Events]" in row) or (row.startswith("Kernel,"))):
-                    header_line = linenum
-
-                linenum += 1
-
-            # last device
-            if header_line is not None:
-                device_info = DeviceInfo(
-                    device_id=current_device_id,
-                    metrics_file=self.input_path,
-                    header_line=header_line,
-                    last_line=linenum  # End of file
-                )
-                self.devices[current_device_id] = device_info
+        """Find the devices in a single metrics file."""
+        for device_id, header_line, last_line, kind in ScanDeviceSections(self.input_path):
+            self.devices[device_id] = DeviceInfo(device_id=device_id,
+                                                 metrics_file=self.input_path,
+                                                 header_line=header_line,
+                                                 last_line=last_line,
+                                                 kind=kind)
 
     def _validate_input(self):
         if isinstance(self.input_path, str):
@@ -298,25 +198,21 @@ class MetricsInfo:
         """Get sorted list of all device IDs."""
         return sorted(self.devices.keys())
 
-    def has_device(self, device_id: int) -> bool:
-        """Check if device exists."""
-        return device_id in self.devices
-
     def print_data(self, output=None):
         of = sys.stdout
         if (output is not None):
             of = open(output, "w")
-        for device in self.devices.values():
-            device.print_data(self.is_eustall, of)
+        for device_id in self.get_device_ids():
+            self.devices[device_id].print_data(of)
         if (output is not None):
             of.close()
 
 class ReadOptionsFromFile(argparse.Action):
     def __call__ (self, parser, namespace, values, option_string = None):
-        inputfile = vars(namespace)['input']    # save input file argument in case it is already parsed
+        inputfile = vars(namespace)['input']    # save the input file argument
         with values as f:
             options = shlex.split(f.read().strip())
-            options.append("dummyinput")    # add a dummy input file argument to please parse_args() because input file argument is required
+            options.append("dummyinput")    # parse_args() requires an input file
             parser.parse_args(options, namespace)
             vars(namespace)['input'] = inputfile # restore input file
 
@@ -333,9 +229,7 @@ def ParseArguments(argv):
     argparser.add_argument('-q', '--http', action = 'store_true', help = "start http server")
     argparser.add_argument('-c', '--certificate', help = "certificate file for https server")
     argparser.add_argument('-e', '--key', help = "private key file for https server")
-    argparser.add_argument('-s', '--shaderdump', help = "shader dump folder for stall analysis")
     argparser.add_argument('-n', '--numtopstalls', type = int, default = 10, help = "number of top most expensive stalls of each type to report for stall analysis(10 default, -1 unlimited)")
-    argparser.add_argument('-g', '--demangler', help = "symbol demangler if c++filt is not available")
     argparser.add_argument('-r', '--report', help = "stall analysis report in plain text")
     argparser.add_argument('-y', '--ylabel', action = 'append', help = "label for Y axis")
     argparser.add_argument('-x', '--xlabel', default = "Time(in sampling intervals)", help = "label for X axis (defaut is \"Time(in sampling intervals)\")")
@@ -346,397 +240,340 @@ def ParseArguments(argv):
 
     return argparser.parse_args(argv)
 
-class Demangler:
-    def __init__(self, demangler):
-        self.available = True
-        if (demangler is not None):
-            self.demangler = os.path.abspath(demangler)
+# Every collector writes sections, one per kernel (stall sampling) or kernel instance
+# (query, time-based sampling), each opened by a label line naming its identity columns:
+#     Kernel,Pid,KernelId           stall sampling
+#     Kernel, GlobalInstanceId      query and time-based sampling
+# (a query section's first counter is SubDeviceId, a row per sub-device). The stall label
+# is matched in full, first; a first column of "Kernel" routes the other two to one reader.
+# Labels are compared field by field, ignoring spacing (NormalizeFields).
+
+# A stall section's identity, copied onto its rows. Pid and KernelId also name the
+# kernel's <device>.<pid>.<kernel id>.asm file.
+STALL_IDENTITY_COLUMNS = ["Kernel", "Pid", "KernelId"]
+STALL_BLOCK_HEADER_FIELDS = STALL_IDENTITY_COLUMNS
+
+# The first column of every label line, and of no other line.
+BLOCK_LABEL_FIRST_COLUMN = "Kernel"
+
+# Stall columns that are not metrics; every column after Dependency is one.
+STALL_INFO_COLUMNS = STALL_IDENTITY_COLUMNS + ["Source", "Offset", "Instruction", "Dependency"]
+
+# What unitrace writes for an unresolved source or dependency list, and for an
+# instruction it could not disassemble.
+NOT_AVAILABLE = "NA"
+UNKNOWN_INSTRUCTION = "unknown"
+
+def NormalizeFields(fields):
+    """Fields stripped of surrounding whitespace; applied once per row, before any comparison."""
+    return [f.strip() for f in fields]
+
+def IsBlockLabel(fields):
+    """Whether the normalized fields open a section: a first column of Kernel, then its identity columns."""
+    return ((len(fields) >= 2) and (fields[0] == BLOCK_LABEL_FIRST_COLUMN))
+
+def ClassifyHeaderRow(row):
+    """The kind of table a label line opens: "stall", "time" or None."""
+    fields = NormalizeFields(next(csv.reader([row], skipinitialspace = True), []))
+    if (fields == STALL_BLOCK_HEADER_FIELDS):
+        return "stall"
+    if (IsBlockLabel(fields)):
+        return "time"
+
+    return None
+
+def ScanFirstHeader(inputfile):
+    """(line, kind) of the first label line of a one-device file, or (None, None)."""
+    with open(inputfile, "r") as f:
+        for linenum, row in enumerate(f):
+            kind = ClassifyHeaderRow(row)
+            if (kind is not None):
+                return linenum, kind
+
+    return None, None
+
+def ScanDeviceSections(inputfile):
+    """Locate every device's metric table in a metrics file.
+
+    Returns a list of (device, header, last, kind): header is the 0-based line of the
+    device's first label line, last the line after its table (None for the end of the
+    file), and kind ClassifyHeaderRow's. A device with no label line is left out.
+    """
+    sections = []
+    device = 0		# a file with no banner at all is one unnamed device
+    header = None
+    kind = None
+    linenum = 0
+
+    with open(inputfile, "r") as f:
+        for row in f:
+            if (("=== Device" in row) and ("Metrics ===" in row)):
+                if (header is not None):	# the banner ends the section before it
+                    sections.append((device, header, linenum, kind))
+                    header = None
+                    kind = None
+                for word in row.split():	# "=== Device #N Metrics ==="
+                    if (word.startswith('#')):
+                        try:
+                            device = int(word[1:])
+                        except ValueError:
+                            print(f"Warning: Could not parse device ID from '{word}'")
+                        break
+            elif (header is None):
+                kind = ClassifyHeaderRow(row)
+                if (kind is not None):
+                    header = linenum
+            linenum += 1
+
+    if (header is not None):
+        sections.append((device, header, None, kind))
+
+    return sections
+
+def ReadStallFrame(inputfile, header, last):
+    """Read one device's stall sections, lines header to last, into one frame.
+
+    Each section's Kernel, Pid and KernelId are copied onto its rows. The csv module
+    handles the quoted cells, which contain commas; skipinitialspace lets a ", " delimiter
+    through too.
+    """
+    identity = None
+    columns = None
+    rows = []
+    pending = None
+
+    with open(inputfile, "r", newline = "") as f:
+        # Sliced lazily by line, since the table is bounded by line numbers.
+        for fields in csv.reader(islice(f, header, last), skipinitialspace = True):
+            if (len(fields) == 0):
+                # The blank line between sections, which must not fill a pending slot.
+                continue
+            fields = NormalizeFields(fields)
+            if (fields == STALL_BLOCK_HEADER_FIELDS):
+                pending = "identity"
+                continue
+            if (pending == "identity"):
+                identity = fields[0 : len(STALL_IDENTITY_COLUMNS)]
+                pending = "columns"
+                continue
+            if (pending == "columns"):
+                if (columns is None):
+                    columns = fields		# identical across every block
+                pending = None
+                continue
+            # A row of the current section; wrong-width lines are skipped.
+            if ((columns is not None) and (identity is not None)
+                    and (len(identity) == len(STALL_IDENTITY_COLUMNS)) and (len(fields) == len(columns))):
+                rows.append(identity + fields)
+
+    if (columns is None):
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows, columns = STALL_IDENTITY_COLUMNS + columns)
+
+    # The counts to integers; the text columns stay strings, "NA" included.
+    numeric = ["Pid", "KernelId"]
+    if ("Dependency" in columns):
+        numeric += columns[columns.index("Dependency") + 1:]
+    for column in numeric:
+        df[column] = pd.to_numeric(df[column], errors = "coerce").fillna(0).astype("int64")
+
+    return df
+
+def ReadTimedFrame(inputfile, header, last):
+    """Read one device's query or time-based sections, lines header to last, into one frame.
+
+    Each section (label, identity, counter names, one row per sample, or one for query) has
+    its identity, whose columns the label names, copied onto its rows. Instances are ended
+    by an all-NaN row. skipinitialspace matches the writer's ", " delimiter.
+    """
+    identity_columns = None
+    identity = None
+    columns = None
+    rows = []
+    pending = None
+
+    with open(inputfile, "r", newline = "") as f:
+        # Sliced lazily by line, since the table is bounded by line numbers.
+        for fields in csv.reader(islice(f, header, last), skipinitialspace = True):
+            if (len(fields) == 0):
+                # The blank line between sections, which must not fill a pending slot.
+                continue
+            fields = NormalizeFields(fields)
+            if (IsBlockLabel(fields)):
+                # A new section: end the previous instance with an all-NaN row.
+                if (len(rows) > 0):
+                    rows.append([float("nan")] * len(rows[-1]))
+                if (identity_columns is None):
+                    identity_columns = fields		# identical across every block
+                identity = None
+                pending = "identity"
+                continue
+            if (pending == "identity"):
+                identity = fields[0 : len(identity_columns)]
+                pending = "columns"
+                continue
+            if (pending == "columns"):
+                if (columns is None):
+                    columns = fields		# identical across every block
+                pending = None
+                continue
+            # A row of the current section; wrong-width lines are skipped.
+            if ((columns is not None) and (identity is not None)
+                    and (len(identity) == len(identity_columns)) and (len(fields) == len(columns))):
+                rows.append(identity + fields)
+
+    if (columns is None):
+        return pd.DataFrame()
+
+    # End the last instance too.
+    if (len(rows) > 0):
+        rows.append([float("nan")] * (len(identity_columns) + len(columns)))
+
+    df = pd.DataFrame(rows, columns = identity_columns + columns)
+
+    # Everything but Kernel to numbers.
+    for column in df.columns:
+        if (column != "Kernel"):
+            df[column] = pd.to_numeric(df[column], errors = "coerce")
+
+    return df
+
+def ReadMetricFrame(inputfile, header, last, kind):
+    """Read one device's metric table, lines header to last."""
+    if (kind == "stall"):
+        return ReadStallFrame(inputfile, header, last)
+
+    return ReadTimedFrame(inputfile, header, last)
+
+def PrepareStallFrame(df):
+    """The stall count columns: those after Dependency, except Active[Events]."""
+    cols = list(df.columns)
+    if ("Dependency" not in cols):
+        return df, []
+
+    stalls = [c for c in cols[cols.index("Dependency") + 1:] if c != "Active[Events]"]
+
+    return df, stalls
+
+def NonZeroStallRows(df, stalls):
+    """Drop the rows in which no stall of any type was sampled."""
+    if (len(stalls) == 0):
+        return df.iloc[0:0]
+
+    return df[(df[stalls] != 0).any(axis = 1)]
+
+def KernelRanges(df):
+    """Split the frame into (kernel, pid, kernelid, start, stop) ranges, one per kernel.
+
+    A change of any of the three identity columns ends a range, so same-named kernels
+    stay apart. start/stop are positions for iloc.
+    """
+    # an empty frame has no columns
+    if (not set(STALL_IDENTITY_COLUMNS).issubset(df.columns)):
+        return []
+
+    ranges = []
+    identity = None
+    start = 0
+    for index, row in enumerate(zip(df['Kernel'], df['Pid'], df['KernelId'])):
+        if (identity is None):
+            identity = row
+            start = index
         else:
-            self.demangler = None
+            if (identity != row):
+                ranges.append(identity + (start, index))
+                identity = row
+                start = index
 
-    def Demangle(self, name):
-        if (self.available == True):
-            if (self.demangler is None):
-                cxxfilt = ['c++filt']
-                cxxfilt.append(name)
+    # don't forget the last kernel
+    if (identity is not None):
+        ranges.append(identity + (start, df.shape[0]))
 
-                try:
-                    p = subprocess.Popen(cxxfilt, stdin = subprocess.PIPE, stdout = subprocess.PIPE, text = True)
-                    stdout, _ = p.communicate()
-                    demangled = stdout.split("\n")[0]
-                    if ("typeinfo name for" not in demangled):   # name is not mangled
-                        return name
-                    else:
-                        return demangled[18:]	#skip leading "typeinfo name for "
-                except (FileNotFoundError, PermissionError, subprocess.SubprocessError) as e:
-                    print(f"Error executing c++filt: {e}")
-                    self.available = False
-                    return name
-            else:
-                command = [self.demangler, name]
+    return ranges
 
-                try:
-                    p = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, text = True)
-                    stdout, _ = p.communicate()
-                    demangled = stdout
-                    if (demangled.endswith("\n")):
-                        demangled = stdout.split("\n")[0]
-                    if ("typeinfo name for" in demangled):   # name is not mangled
-                        return demangled[18:]   #skip leading "typeinfo name for "
-                    else:
-                        return demangled
-                except Exception as e:
-                    print(e)
-                    print(self.demangler + " is not found or fails to run")
-                    self.available = False
-                    return name
+def StallKernelLabel(kernel, pid, kernelid):
+    """How a stall report names a kernel; pid and kernel id also name its .asm file."""
+    return str(kernel) + " (pid " + str(pid) + ", kernel id " + str(kernelid) + ")"
+
+DEPENDS_ON_SEPARATOR = " | "
+# One producer, as FormatDependencies() in src/levelzero/ze_metrics.h writes it:
+# "0x<offset> (<source>)[: <text>]", joined by DEPENDS_ON_SEPARATOR.
+DEPENDS_ON_ENTRY = re.compile(r"^(0x[0-9a-fA-F]+)(?:\s+\(([^)]*)\))?(?::\s(.*))?$")
+
+def ParseDependency(cell):
+    """Split a Dependency cell into (offset, source, text) producers.
+
+    Missing parts are None; an unrecognized entry is kept as (None, None, entry).
+    """
+    producers = []
+    if ((cell is None) or (cell == "") or (cell == NOT_AVAILABLE)):
+        return producers
+
+    for entry in cell.split(DEPENDS_ON_SEPARATOR):
+        entry = entry.strip()
+        if (entry == ""):
+            continue
+        m = DEPENDS_ON_ENTRY.match(entry)
+        if (m is None):
+            producers.append((None, None, entry))
         else:
-            return name
+            producers.append((m.group(1), m.group(2), m.group(3)))
 
+    return producers
 
-class BB:
-    def __init__(self, bid, start, end, preds, succs):
-        self.bid = bid
-        self.start = start
-        self.end = end
-        self.preds = preds
-        self.succs = succs
+def FormatStallInstruction(offset, source, text, indent, missing = "<no disassembly available>"):
+    """One instruction of a stall report: offset, text and source."""
+    if ((text is None) or (text == "") or (text == UNKNOWN_INSTRUCTION)):
+        text = missing
 
-    def in_bb(self, ins):	# is ins in this basic block
-        if ((ins >= self.start) and (ins <= self.end)):
-            return True
-        else:
-            return False
+    line = indent
+    if ((offset is not None) and (offset != "")):
+        line += str(offset) + ": "
+    line += text + "\n"
 
-    def get_bid(self): # get basic block id
-        return self.bid
+    if ((source is not None) and (source != "") and (source != NOT_AVAILABLE)):
+        line += indent + "Source: " + source + "\n"
 
-    def get_preds(self): # get predecessors
-        return self.preds
+    return line
 
-    def get_head(self):	# get basic lock head instruction address
-        return self.start
+def BuildStallReport(label, args, stalldf, stalls):
+    """Report a kernel's most expensive stalls and the instructions they wait on.
 
-    def get_tail(self):	# get basic block tail instruction address
-        return self.end
-
-
-def ConstructCFG(instructions):
-    bb_head = None
-    in_bb = False
-    bb_id = None
-    preds = []
-    succs = []
-    bbs = dict()
-    for addr, ins in enumerate(instructions):
-        if ((re.match("// *B", ins) is not None) and ("Preds" in ins) and ("Succs" in ins)):
-            if (in_bb):	# previous bb ends
-                bb = BB(bb_id, bb_head, addr - 1, preds, succs)
-                bbs[bb_id] = bb
-            in_bb = True
-            bb_head = addr
-            bb_id = ins.split(" ")[1].split(":")[0].strip()
-            preds = []
-            for b in ins.split("Preds")[1].split("{")[1].split("}")[0].split(","):
-                if (b.strip() != ""):
-                    preds.append(b.strip())
-
-            succs = []
-            for b in ins.split("Succs")[1].split("{")[1].split("}")[0].split(","):
-                if (b.strip() != ""):
-                    succs.append(b.strip())
-
-    # don't forget the last bb
-    if (in_bb):
-        bb = BB(bb_id, bb_head, len(instructions) - 1, preds, succs)
-        bbs[bb_id] = bb
-
-    if (len(bbs) == 0):	# at least one BB exits
-        bb = BB("B000", 0, len(instructions) - 1, [], [])
-        bbs["B000"] = bb	# dummy basic block id "B000"
-
-    return bbs
-
-def FindBB(bbs, ins):	# find BB of an instruction
-    for bb_id, bb in bbs.items():
-        if (bb.in_bb(ins)):
-            return bb_id, bb
-
-    return None, None	# never reaches here
-
-def AnalyzeStalls(kernel, args, stalldf):
-    shaders = os.listdir(args.shaderdump)
-    files = []	# .asm files
-    demangler = Demangler(args.demangler)
-
-    for f in shaders:
-        if f.endswith(".asm"):
-            files.append(args.shaderdump + "/" + f)
-
-    asmfiles = []
-    for f in files:
-        with open(f, "r") as inf:
-            for row in inf:
-                if row.startswith("//.kernel"):
-                    kname = row.split()[1]
-                    kname = demangler.Demangle(kname)
-                    if (kernel == kname):
-                        asmfiles.append(f)
-
-    if (len(asmfiles) == 0):
-        msg = "Not found .asm file for " + kernel
-        print(msg)
-        return msg
-
-    asm = asmfiles[0]
-    if (len(asmfiles) > 1):	# kernel has been retried, found the latest one
-        # find the longest name length
-        # the latest one has the longest name
-        max_asm_file_name_len = 0
-        for f in asmfiles:
-            if (len(f) > max_asm_file_name_len):
-                max_asm_file_name_len = len(f)
-                asm = f
-        # find the largest name in alphabetical order
-        # the latest one has the largest name
-        for f in asmfiles:
-            if (len(f) == max_asm_file_name_len):
-                if (asm < f):
-                    asm = f
-
-    ip = 0
-    addressed = True
-    with open(asm, "r") as inf:
-        for row in inf:
-            if ((row.startswith("//") == False) and ("//" in row)):
-                if (row.startswith("/* [" + str('{:08X}'.format(ip)) + "] */ ") == False):	# no ip in asm
-                    addressed = False
-                if ("Compacted" in row):
-                    ip = ip + 0x8
-                else:
-                    ip = ip + 0x10
-
-    if (addressed == False):	# add ip addresses
-        ip = 0
-        with open(asm, "r") as inf:
-            with open(asm + ".ip", "w") as outf:
-                for row in inf:
-                    if ((row.startswith("//") == False) and ("//" in row)):
-                        outf.write("/* [" + str('{:08X}'.format(ip)) + "] */ " + row)
-                        if ("Compacted" in row):
-                            ip = ip + 0x8
-                        else:
-                            ip = ip + 0x10
-                    else:
-                        outf.write(row)
-
-        asm = asm + ".ip"
-
-    source_available = False
-    instructions = []
-    with open(asm, "r") as inf:
-        for row in inf:
-            ins = row.split("\n")
-            if (len(ins) > 0):
-                instructions.append(ins[0])
-            else:
-                instructions.append("")
-            if (re.match("// *Line", row) is not None):
-                source_available = True
-
-    bbs = ConstructCFG(instructions)
-
-    df = stalldf[["IP[Address]", "SbidStall[Events]"]]
-    df = df[df["SbidStall[Events]"] > 0]	# drop 0s
-    df = df.sort_values(by = ["SbidStall[Events]"], ascending = False)
-
-    report = "Kernel: " + kernel + "\n"
-    report += "Assembly with instruction addresses: " + asm + "\n"
+    The instructions, sources and producers all come from the metrics file. label is
+    StallKernelLabel's.
+    """
+    report = "Kernel: " + label + "\n"
     if (args.numtopstalls >= 0):
         report += "\nReport of Top " + str(args.numtopstalls) + " Stalls of Each Type\n"
     else:
         report += "\nReport of Stalls of Each Type\n"
 
+    totals = []
+    for t in stalls:
+        total = int(stalldf[t].sum())
+        if (total > 0):
+            totals.append((t, total))
+
     report += "***********************************************************************************************\n"
-    report += "Sbid Stalls: \n"
+    report += "Stall events by type: \n"
+    if (len(totals) == 0):
+        report += "  none\n"
+    else:
+        for t, total in sorted(totals, key = lambda e: e[1], reverse = True):
+            report += "  " + t + ": " + str(total) + "\n"
 
-    num_stalls_reported = 0
-    for index, row in df.iterrows():
-        if ((args.numtopstalls >= 0) and (num_stalls_reported >= args.numtopstalls)):
-            break
+    if ((stalldf["Instruction"] == UNKNOWN_INSTRUCTION).any()):
+        report += "\nSome instructions could not be disassembled and are reported by offset only.\n"
 
-        ip = row["IP[Address]"]
-        pc = int(ip, 16)
-        for addr, ins in enumerate(instructions):
-            if ((ins.startswith("//") == False) and ("//" in ins)):
-                if (ins.startswith("/* [" + str('{:08X}'.format(pc))+ "] */ ") == True):	# found stalled instruction
-                    words = ins.split("{")
-                    sbids_stalled = []
-                    if (len(words) >= 2):
-                        for token in words[1].split("}")[0].split(","):
-                            if (token.startswith("$") == True):
-                                if (("load" in ins) or ("store" in ins) or ("send" in ins) or ("EOT" in ins)):
-                                    if (len(token.split(".")) > 1): # .src or .dst
-                                        sbids_stalled.append(token)
-                                else:
-                                    sbids_stalled.append(token)
-                    if (len(sbids_stalled) == 0):
-                        words = ins.split("(")	# check if SBID tokens are in (...)
-                        if (len(words) >= 2):
-                            i = 1
-                            done = False
-                            while (done == False):
-                                for token in words[i].split(")")[0].split(","):
-                                    if (token.startswith("$") == True):
-                                        if (("load" in ins) or ("store" in ins) or ("send" in ins) or ("EOT" in ins)):
-                                            if (len(token.split(".")) > 1): # .src or .dst
-                                                sbids_stalled.append(token)
-                                        else:
-                                            sbids_stalled.append(token)
-                                        done = True
-                                i = i + 1
-                                if (i == len(words)):	# all words are inspected
-                                    break
-
-                    ins_stalled_not_line_resolved = addr
-                    ins_stalled_not_file_resolved = addr
-                    ins_stall_not_line_resolved = []
-                    ins_stall_not_file_resolved = []
-                    source_line_stalled = None
-                    source_file_stalled = None
-                    source_lines_stall = dict()
-                    source_files_stall = dict()
-
-                    bbid, bb = FindBB(bbs, addr)
-                    bbs_to_check = [(bbid, bb.get_head(), addr - 1)]	# instrction at addr is the instruction stalled
-                    j = 0
-                    done = False
-                    while (done == False):
-                        if (len(bbs_to_check) <= j):
-                            break
-                        bid, start, end = bbs_to_check[j]
-                        break_at = end
-                        for addr2, ins2 in enumerate(reversed(instructions[start : end + 1])):
-                            if (len(sbids_stalled) > 0):
-                                if ((ins2.startswith("//") == False) and ("//" in ins2) and (re.match(r"/\* *\[", ins2) is not None)):
-                                    tokens = ins2.split("{")
-                                    if (len(tokens) > 1):
-                                        sbids_stall = []
-                                        for token in tokens[1].split("}")[0].split(","):
-                                            if (token.startswith("$") == True):
-                                                sbids_stall.append(token)
-                                        for sbid in sbids_stalled:
-                                            for sbid2 in sbids_stall:
-                                                if (len(sbid.split(".")) > 1): # .dst or .src in bid
-                                                    if (sbid2 == sbid.split(".")[0]):
-                                                        sbids_stalled.remove(sbid)	# remove sbid from the sbids of the instruction stalled
-                                                        ins_stall_not_line_resolved.append(end - addr2)	# source lines/files to be resolved
-                                                        ins_stall_not_file_resolved.append(end - addr2)
-                                                else:
-                                                    if (sbid == sbid2.split(".")[0]): # stalled ins depends on ins2 or dependency already resolved
-                                                        if ((sbid == sbid2) and ("sync." not in ins2)): # ins2 not a sync. ins depends on ins2
-                                                            sbids_stalled.remove(sbid)	# remove sbid from the sbids of the instruction stalled
-                                                            ins_stall_not_line_resolved.append(end - addr2) # source lines/files to be resolved
-                                                            ins_stall_not_file_resolved.append(end - addr2)
-
-                            if (re.match("// *Line", ins2) is not None):
-                                if (ins_stalled_not_line_resolved != None): # source line of stalled instruction
-                                    source_line_stalled = end - addr2
-                                    ins_stalled_not_line_resolved = None
-
-                                for i in ins_stall_not_line_resolved:
-                                    source_lines_stall[i] = end - addr2
-                                ins_stall_not_line_resolved.clear()
-
-                            if (re.match("// *File", ins2) is not None):
-                                if (ins_stalled_not_file_resolved != None): # source file of stalled instruction
-                                    source_file_stalled = end - addr2
-                                    ins_stalled_not_file_resolved = None
-
-                                for i in ins_stall_not_file_resolved:
-                                    source_files_stall[i] = end - addr2
-                                ins_stall_not_file_resolved.clear()
-
-                            if (len(sbids_stalled) == 0):
-                                if (source_available == False):
-                                    done = True
-                                else:
-                                    if ((ins_stalled_not_line_resolved == None) and (ins_stalled_not_file_resolved == None)):
-                                        if ((len(ins_stall_not_line_resolved) == 0) and (len(ins_stall_not_file_resolved) == 0)):
-                                            done = True
-
-                                break_at = end - addr2
-                                break
-
-                        if (done == False):
-                            if (len(sbids_stalled) == 0):
-                                # scan backward for source line and file
-                                for addr3, ins3 in enumerate(reversed(instructions[0 : break_at])):
-                                    if (re.match("// *Line", ins3) is not None):
-                                        if (ins_stalled_not_line_resolved != None): # source line of stalled instruction
-                                            source_line_stalled = break_at - 1 - addr3
-                                            ins_stalled_not_line_resolved = None
-
-                                        for i in ins_stall_not_line_resolved:
-                                            source_lines_stall[i] = break_at - 1 - addr3
-                                        ins_stall_not_line_resolved.clear()
-
-                                    if (re.match("// *File", ins3) is not None):
-                                        if (ins_stalled_not_file_resolved != None): # source file of stalled instruction
-                                            source_file_stalled = break_at - 1 - addr3
-                                            ins_stalled_not_file_resolved = None
-
-                                        for i in ins_stall_not_file_resolved:
-                                            source_files_stall[i] = break_at - 1 - addr3
-                                        ins_stall_not_file_resolved.clear()
-
-                                done = True
-                                break
-                            else:
-                                for b in bbs[bid].get_preds():
-                                    bb = bbs[b]
-                                    bbs_to_check.append((b, bb.get_head(), bb.get_tail()))
-                        else:
-                            break
-
-                        j = j + 1
-
-                    report += "\nInstruction\n"
-                    report += "  " + ins + "\n";
-                    if (source_line_stalled != None):
-                        report += "  " + instructions[source_line_stalled][3:] + "\n"
-                        if (source_file_stalled != None):
-                            report += "  " + instructions[source_file_stalled][3:] + "\n"
-
-                    if ((len(source_lines_stall) > 0) or (len(ins_stall_not_line_resolved) > 0)):
-                        report += "is stalled potentially by\n"
-                        for i, line in source_lines_stall.items():
-                            report += "  instruction\n"
-                            report += "    " + instructions[i] + "\n"
-                            report += "    " + instructions[line][3:] + "\n"
-                            if (i in source_files_stall):
-                                report += "    " + instructions[source_files_stall[i]][3:] + "\n"
-                            else:
-                                report += "    File: unknown\n"
-                        for i in ins_stall_not_line_resolved:
-                            report += "  instruction\n"
-                            report += "    " + instructions[i] + "\n"
-                    else:
-                        report += "is stalled\n"
-
-                    break
-
-        num_stalls_reported = num_stalls_reported + 1 
-
-    # analyze stalls of other types
-
-    type = ["ControlStall[Events]", "PipeStall[Events]", "SendStall[Events]", "DistStall[Events]", "SyncStall[Events]", "InstrFetchStall[Events]", "OtherStall[Events]"]
-    for t in type:
-        df = stalldf[["IP[Address]", t]]
-        df = df[df[t] > 0]	# drop 0s
-        if (df.shape[0] == 0):	# zero stalls. move to the next type
+    # one section per stall type, in the order the metrics file lists them
+    for t in stalls:
+        df = stalldf[stalldf[t] > 0]    # drop 0s
+        if (df.shape[0] == 0):  # zero stalls of this type. move to the next one
             continue
-        df = df.sort_values(by = [t], ascending = False)
+
+        # Offset breaks ties, for a stable order.
+        df = df.sort_values(by = [t, "Offset"], ascending = [False, True])
 
         report += "***********************************************************************************************\n"
         report += t.split("Stall")[0] + " Stalls: \n"
@@ -745,43 +582,24 @@ def AnalyzeStalls(kernel, args, stalldf):
         for index, row in df.iterrows():
             if ((args.numtopstalls >= 0) and (num_stalls_reported >= args.numtopstalls)):
                 break
-            ip = row["IP[Address]"]
-            pc = int(ip, 16)
-            for addr, ins in enumerate(instructions):
-                if ((ins.startswith("//") == False) and ("//" in ins)):
-                    if (ins.startswith("/* [" + str('{:08X}'.format(pc))+ "] */ ") == True):	# found stalled instruction
-                        if (source_available == True):
-                            ins_stalled_not_line_resolved = addr
-                            ins_stalled_not_file_resolved = addr
-                            source_line_stalled = None
-                            source_file_stalled = None
 
-                            for addr2, ins2 in enumerate(reversed(instructions[0: addr])):
-                                if (re.match("// *Line", ins2) is not None):
-                                    if (ins_stalled_not_line_resolved != None): # source line of stalled instruction
-                                        source_line_stalled = addr - 1 - addr2
-                                        ins_stalled_not_line_resolved = None
+            report += "\nInstruction\n"
+            report += FormatStallInstruction(row["Offset"], row["Source"], row["Instruction"], "  ")
+            report += "  " + t + ": " + str(row[t])
+            if ("Active[Events]" in row.index):
+                report += "   (Active[Events]: " + str(row["Active[Events]"]) + ")"
+            report += "\n"
 
-                                if (re.match("// *File", ins2) is not None):
-                                    if (ins_stalled_not_file_resolved != None): # source file of stalled instruction
-                                        source_file_stalled = addr - 1 - addr2
-                                        ins_stalled_not_file_resolved = None
+            producers = ParseDependency(row["Dependency"])
+            if (len(producers) == 0):
+                report += "is stalled (no dependency information)\n"
+            else:
+                report += "is stalled potentially by\n"
+                for offset, source, text in producers:
+                    report += "  instruction\n"
+                    report += FormatStallInstruction(offset, source, text, "    ", missing = "<instruction not available>")
 
-                                if ((ins_stalled_not_line_resolved == None) and (ins_stalled_not_file_resolved == None)):
-                                    break	# we are done
-
-                        report += "\nInstruction\n"
-                        report += "  " + ins + "\n"
-                        if (source_line_stalled != None):
-                            report += "  " + instructions[source_line_stalled][3:] + "\n"
-                            if (source_file_stalled != None):
-                                report += "  " + instructions[source_file_stalled][3:] + "\n"
-
-                        report += "is stalled\n"
-
-                        break
-
-            num_stalls_reported = num_stalls_reported + 1 
+            num_stalls_reported = num_stalls_reported + 1
 
     report += "===============================================================================================\n"
     return report
@@ -839,272 +657,132 @@ def WriteOutStallReport(report, p): # p is PDF object
 
     return
 
+def PlotStallChart(args, kernel, df2, stalls, p):
+    """Chart the stall counts of one kernel, splitting a long kernel over pages.
+
+    Creates the PDF on first use if p is None, and returns it either way.
+    """
+    ins_per_page = 100  # number of instructions to chart per page
+
+    xlabels = []
+    xticks = []
+    for i, offset in enumerate(df2["Offset"]):
+        xlabels.append(offset)
+        xticks.append(i)
+
+    df3 = df2[stalls]
+    df3 = df3.reset_index()
+    numpages = (df3.shape[0] + (ins_per_page - 1)) // ins_per_page # multiple charts if more than ins_per_page instructions are stalled
+    for page in range(1, numpages + 1):
+        first = ins_per_page * (page - 1)
+        beyond = min([ins_per_page * page, df3.shape[0]])
+        df4 = df3[first : beyond]
+        if (df4.shape[0] > 1):	# draw line chart if there are at least 2 data points
+            ax = df4.plot(y = stalls, kind = 'line', xlabel = "Offset", ylabel = "Events", fontsize = 6)
+        else:	# draw bar chart otherwise
+            ax = df4.plot(y = stalls, kind = 'bar', xlabel = "Offset", ylabel = "Events", fontsize = 6)
+        ax.set_xticks(xticks[first : beyond], labels = xlabels[first : beyond], rotation = 90, fontsize = 4)
+        plt.grid(visible = True, which = 'both', axis = 'y')
+        plt.legend(loc = 'best', fontsize = 4)
+        title = args.title + "\n(" + kernel + ")"
+        if (numpages > 1):
+            title += "(" + str(page) + "/" + str(numpages) + ")"
+        plt.title(label = title, loc = 'center', fontsize = 8, wrap = True)
+        plt.tight_layout()
+        fig = ax.get_figure()
+        if (p == None):
+            p = pdf(args.output)
+        fig.savefig(p, format = 'pdf')
+        plt.close(fig)	# close figure to save memory
+
+    return p
+
 def AnalyzeStallMetrics(args, device_data_df, kernel, http = False):
     if ((http == True) and (kernel is None)):
         return None, None
 
     buf = None
     stall_analysis_report_out = None
-    if (args.shaderdump is not None):
-        if (os.path.isdir(args.shaderdump) == False):
-            msg = "Shader dump folder " + args.shaderdump + " does not exist"
-            if (http == False):
-                print(msg)
-            return msg, None
-        if ((http == False) and (args.report is not None)):
-            stall_analysis_report_out = open(args.report, "w")
+    if ((http == False) and (args.report is not None)):
+        stall_analysis_report_out = open(args.report, "w")
 
-    stalls = ["ControlStall[Events]", "PipeStall[Events]", "SendStall[Events]", "DistStall[Events]", "SbidStall[Events]", "SyncStall[Events]", "InstrFetchStall[Events]", "OtherStall[Events]"]
-
-    ins_per_page = 100  # number of instuctions to histogram per page
-    if (kernel is None):    # http is False
-        # all kernels
-        start = 0
-        stop = -1
-        kernel = ""
-        p = None
-        for index, row in device_data_df.iterrows():
-            if (kernel == ""):
-                kernel = row['Kernel']
-                start = index
-            else:
-                if (kernel != row['Kernel']):
-                    stop = index
-                    df2 = device_data_df[start:stop]    # data frame of the kernel of interest
-                    # remove rows with 0 stall events
-                    df2 = df2.loc[(df2["ControlStall[Events]"] != 0) | (df2["PipeStall[Events]"] != 0) | (df2["SendStall[Events]"] != 0) | (df2["DistStall[Events]"] != 0) | (df2["SbidStall[Events]"] != 0) | (df2["SyncStall[Events]"] != 0) | (df2["InstrFetchStall[Events]"] != 0) | (df2["OtherStall[Events]"] != 0)]
-                    df3 = df2[stalls]
-
-                    if (df3.shape[0] > 0):
-                        xlabels = []
-                        xticks = []
-                        for i, ip in enumerate(df2["IP[Address]"]):
-                            xlabels.append(ip)
-                            xticks.append(i)
-
-                        df3 = df3.reset_index()
-                        numpages = (df3.shape[0] + (ins_per_page - 1)) // ins_per_page # multiple charts if more than ins_per_page instructions are stalled
-                        if (numpages > 1):
-                            for page in range(1, numpages + 1):
-                                df4 = df3[ins_per_page * (page - 1) : min([ins_per_page * page, df3.shape[0]])]
-                                if (df4.shape[0] > 1):
-                                    ax = df4.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                                else:
-                                    ax = df4.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                                ax.set_xticks(xticks[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], labels = xlabels[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], rotation = 90, fontsize = 4)
-                                plt.grid(visible = True, which = 'both', axis = 'y')
-                                plt.legend(loc = 'best', fontsize = 4)
-                                plt.title(label = args.title + "\n(" + kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
-                                plt.tight_layout()
-                                fig = ax.get_figure()
-                                if (p == None):
-                                    p = pdf(args.output)
-                                fig.savefig(p, format = 'pdf')
-                                plt.close(fig)	# close figure to save memory
-                        else:
-                            if (df3.shape[0] > 1):	# draw line chart if there are at least 2 data points
-                                ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                            else:	# draw bar chart otherwise
-                                ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                            ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
-                            plt.grid(visible = True, which = 'both', axis = 'y')
-                            plt.legend(loc = 'best', fontsize = 4)
-                            plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-                            plt.tight_layout()
-                            fig = ax.get_figure()
-                            if (p == None):
-                                p = pdf(args.output)
-                            fig.savefig(p, format = 'pdf')
-                            plt.close(fig)	# close figure to save memory
-
-                        if (args.shaderdump is not None):
-                            report = AnalyzeStalls(kernel, args, df2)
-                            if (stall_analysis_report_out is not None):
-                                print(report, file = stall_analysis_report_out)
-                            if (p == None):
-                                p = pdf(args.output)
-                            WriteOutStallReport(report, p)
-
-                        print("\nAnalyzed kernel " + kernel)
-                    else:
-                        print("\nNo stall events for kernel " + kernel)
-
-                    kernel = row['Kernel']
-                    start = index
-
-        # last kernel
-        stop = device_data_df.shape[0]
-        df2 = device_data_df[start : stop]    # data frame of the kernel of interest
-
-        # remove rows with 0 stall events
-        df2 = df2.loc[(df2["ControlStall[Events]"] != 0) | (df2["PipeStall[Events]"] != 0) | (df2["SendStall[Events]"] != 0) | (df2["DistStall[Events]"] != 0) | (df2["SbidStall[Events]"] != 0) | (df2["SyncStall[Events]"] != 0) | (df2["InstrFetchStall[Events]"] != 0) | (df2["OtherStall[Events]"] != 0)]
-        df3 = df2[stalls]
-
-        if (df3.shape[0] > 0):
-            xlabels = []
-            xticks = []
-            for i, ip in enumerate(df2["IP[Address]"]):
-                xlabels.append(ip)
-                xticks.append(i)
-
-            df3 = df3.reset_index()
-            numpages = (df3.shape[0] + (ins_per_page - 1)) // ins_per_page  # multiple charts if more than ins_per_page instructions are stalled
-            if (numpages > 1):
-                for page in range(1, numpages + 1):
-                    df4 = df3[ins_per_page * (page - 1) : min([ins_per_page * page, df3.shape[0]])]
-                    if (df4.shape[0] > 1):
-                        ax = df4.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                    else:
-                        ax = df4.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                    ax.set_xticks(xticks[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], labels = xlabels[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], rotation = 90, fontsize = 4)
-                    plt.grid(visible = True, which = 'both', axis = 'y')
-                    plt.legend(loc = 'best', fontsize = 4)
-                    plt.title(label = args.title + "\n(" + kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
-                    plt.tight_layout()
-                    fig = ax.get_figure()
-                    if (p == None):
-                        p = pdf(args.output)
-                    fig.savefig(p, format = 'pdf')
-                    plt.close(fig)	# close figure to save memory
-            else:
-                if (df3.shape[0] > 1):
-                    ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                else:
-                    ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-
-                ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
-                plt.grid(visible = True, which = 'both', axis = 'y')
-                plt.legend(loc = 'best', fontsize = 4)
-                plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-                plt.tight_layout()
-                fig = ax.get_figure()
-                if (p == None):
-                    p = pdf(args.output)
-                fig.savefig(p, format = 'pdf')
-                plt.close(fig)	# close figure to save memory
-
-            if (args.shaderdump is not None):
-                report = AnalyzeStalls(kernel, args, df2)
-                if (stall_analysis_report_out is not None):
-                    print(report, file = stall_analysis_report_out)
-                if (p == None):
-                    p = pdf(args.output)
-                WriteOutStallReport(report, p)
-
-            print("\nAnalyzed kernel " + kernel)
-        else:
-            print("\nNo stall events for kernel " + kernel)
-
-        if (p != None):
-            p.close()
-            print("\nStall metric charts are stored in file " + args.output + " in PDF format")
-
-        if ((args.shaderdump is not None) and (args.report is not None) and (stall_analysis_report_out is not None)):
+    df, stalls = PrepareStallFrame(device_data_df)
+    if (len(stalls) == 0):
+        msg = "No stall metrics in the input data. Was it collected with unitrace --stall-sampling?"
+        if (http == False):
+            print(msg)
+        if (stall_analysis_report_out is not None):
             stall_analysis_report_out.close()
-            print("Stall report is also stored in file " + args.report)
+        return msg, None
 
-    else:
-        counting = True
-        start = -1
-        stop = -1
-        kernelfound = False
-
-        for index, row in device_data_df.iterrows():
-            if (row['Kernel'] == kernel):
-                if (kernelfound == False):
-                    start = index
-                    kernelfound = True
-            else:
-                if (kernelfound == True):
-                    stop = index
-                    break
-
-        if (kernelfound == False):
+    ranges = KernelRanges(df)
+    if (kernel is not None):
+        kernels = [r for r in ranges if (r[0] == kernel)]
+        if (len(kernels) == 0):
+            # the name may still carry the kernel shape the trace shows
+            pos = kernel.rfind('[')
+            if (pos != -1):
+                kernel = kernel[0:pos]
+                kernels = [r for r in ranges if (r[0] == kernel)]
+        if (len(kernels) == 0):
             msg = "No metric data for kernel " + kernel
             if (http == False):
                 print(msg)
+            if (stall_analysis_report_out is not None):
+                stall_analysis_report_out.close()
             return msg, None
+        ranges = kernels
 
-        if (stop == -1):
-            stop = device_data_df.shape[0]
+    p = None
+    tmpdir = None
+    tmpfile = None
+    if (http == True):
+        tmpdir = tempfile.TemporaryDirectory()
+        tmpfile = os.path.join(tmpdir.name, "stallchart.pdf")
+        p = pdf(tmpfile)
 
-        df2 = device_data_df[start : stop]    # data frame of the kernel of interest
+    analyzed = 0
+    for kname, pid, kernelid, start, stop in ranges:
+        label = StallKernelLabel(kname, pid, kernelid)
+        df2 = NonZeroStallRows(df.iloc[start : stop], stalls)   # data frame of the kernel of interest
+        if (df2.shape[0] == 0):
+            print("\nNo stall events for kernel " + label)
+            continue
 
-        # remove rows with 0 stall events
-        df2 = df2.loc[(df2["ControlStall[Events]"] != 0) | (df2["PipeStall[Events]"] != 0) | (df2["SendStall[Events]"] != 0) | (df2["DistStall[Events]"] != 0) | (df2["SbidStall[Events]"] != 0) | (df2["SyncStall[Events]"] != 0) | (df2["InstrFetchStall[Events]"] != 0) | (df2["OtherStall[Events]"] != 0)]
-        df3 = df2[stalls]
+        p = PlotStallChart(args, label, df2, stalls, p)
 
-        if (df3.shape[0] > 0):
-            xlabels = []
-            xticks = []
-            for i, ip in enumerate(df2["IP[Address]"]):
-                xlabels.append(ip)
-                xticks.append(i)
+        report = BuildStallReport(label, args, df2, stalls)
+        if (stall_analysis_report_out is not None):
+            print(report, file = stall_analysis_report_out)
+        WriteOutStallReport(report, p)
 
-            df3 = df3.reset_index()
-            numpages = (df3.shape[0] + (ins_per_page - 1)) // ins_per_page # multiple charts if more than ins_per_page instructions are stalled
-            p = None
-            if (http == False):
-                p = pdf(args.output)
-            else:
-                tmpdir = tempfile.TemporaryDirectory()
-                tmpfile = os.path.join(tmpdir.name, "stallchart.pdf")
-                p = pdf(tmpfile)
+        analyzed = analyzed + 1
+        print("\nAnalyzed kernel " + label)
 
-            if (numpages > 1):
-                for page in range(1, numpages + 1):
-                    df4 = df3[ins_per_page * (page - 1) : min([ins_per_page * page, df3.shape[0]])]
-                    if (df4.shape[0] > 1):
-                        ax = df4.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                    else:
-                        ax = df4.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                    ax.set_xticks(xticks[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], labels = xlabels[ins_per_page * (page - 1) :  min([ins_per_page * page, df3.shape[0]])], rotation = 90, fontsize = 4)
-                    plt.grid(visible = True, which = 'both', axis = 'y')
-                    plt.legend(loc = 'best', fontsize = 4)
-                    plt.title(label = args.title + "\n(" + kernel + ")(" + str(page) + "/" + str(numpages) + ")", loc = 'center', fontsize = 8, wrap = True)
-                    plt.tight_layout()
-                    fig = ax.get_figure()
-                    fig.savefig(p, format = 'pdf')
-                    plt.close(fig)	# close figure to save memory
-            else:
-                if (df3.shape[0] > 1):
-                    ax = df3.plot(y = stalls, kind = 'line', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                else:
-                    ax = df3.plot(y = stalls, kind = 'bar', xlabel = "IP[Address]", ylabel = "Events", fontsize = 6)
-                ax.set_xticks(xticks, labels = xlabels, rotation = 90, fontsize = 4)
-                plt.grid(visible = True, which = 'both', axis = 'y')
-                plt.legend(loc = 'best', fontsize = 4)
-                plt.title(label = args.title + "\n(" + kernel + ")", loc = 'center', fontsize = 8, wrap = True)
-                plt.tight_layout()
-                fig = ax.get_figure()
-                fig.savefig(p, format = 'pdf')
-                plt.close(fig)
+    if (p != None):
+        p.close()
 
-            if (args.shaderdump is not None):
-                report = AnalyzeStalls(kernel, args, df2)
-                if ((http == False) and (stall_analysis_report_out is not None)):
-                    print(report, file = stall_analysis_report_out)
-                WriteOutStallReport(report, p)
-
-            if (p != None):
-                p.close()
-
-            if (http == True):
-                buf = io.BytesIO()
-                fp = open(tmpfile, "rb")
-                buf.write(fp.read())
-                fp.close()
-                os.remove(tmpfile)
-                tmpdir.cleanup()
-
-            if (http == False):
-                print("\nStall metric chart in file " + args.output + " has been successfully generated.")
-        else:
-            print("\nNo stall events for kernel " + kernel + " in the input data")
-
-        if ((http == False) and (args.shaderdump is not None) and (args.report is not None) and (stall_analysis_report_out is not None)):
+    if (http == True):
+        if (analyzed > 0):
+            buf = io.BytesIO()
+            fp = open(tmpfile, "rb")
+            buf.write(fp.read())
+            fp.close()
+            os.remove(tmpfile)
+        tmpdir.cleanup()
+    else:
+        if (analyzed > 0):
+            print("\nStall metric charts are stored in file " + args.output + " in PDF format")
+        if (stall_analysis_report_out is not None):
             stall_analysis_report_out.close()
-            print("Stall report is also stored in file " + args.report)
+            if (analyzed > 0):
+                print("Stall report is also stored in file " + args.report)
+
+    if (analyzed == 0):
+        msg = "No stall events in the input data"
+        if (kernel is not None):
+            msg = "No stall events for kernel " + kernel + " in the input data"
+        return msg, None
 
     return None, buf
 
@@ -1372,14 +1050,14 @@ def AnalyzePerfMetrics(args, device_data_df):
                 df2 = device_data_df[start : stop]	# data frame of the instance of interest
                 analyzed = False
                 for metrics_cleansed, label in zip(metric_sets_cleansed, args.ylabel):
-                    df3 = df2[metrics_clenased]
+                    df3 = df2[metrics_cleansed]
 
                     instance = instance + 1
                     if (df3.shape[0] > 0):
                         if (df3.shape[0] > 1):
-                            ax = df3.plot(y = metric_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = label)
+                            ax = df3.plot(y = metrics_cleansed, kind = 'line', xlabel = args.xlabel, ylabel = label)
                         else:
-                            ax = df3.plot(y = metric_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = label)
+                            ax = df3.plot(y = metrics_cleansed, kind = 'bar', xlabel = args.xlabel, ylabel = label)
 
                         plt.grid(visible = True, which = 'both', axis = 'y')
                         plt.legend(loc = 'best', fontsize = 4)
@@ -1525,7 +1203,7 @@ def HttpAnalyzePerfMetrics(args, device_data_df, kname, instance):
         os.remove(tmpfile)
         tmpdir.cleanup()
 
-    return None, buf 
+    return None, buf
 
 
 def GenerateSelfSignedCertificate(cert, key):
@@ -1552,7 +1230,7 @@ def PerfMetricsHTTPServer(args, metrics_info):
                 request = unquote(self.path).split("/")  # format is name/instance
                 if (request[1] == "favicon.ico"): # ignore
                     return
-                
+
                 self.send_response(200)
                 expected_request_params = 4 if args.result_dir else 3
                 if (len(request) < expected_request_params):
@@ -1670,11 +1348,11 @@ def main(args):
     except Exception as e:
         print(f"Error: {e}")
         return
-    
+
     if (args.list == True):
         metrics_info.print_data(args.output)
         return
-    
+
     metric_ylabel_match = True
     if (((args.metrics is not None) and (args.ylabel is None)) or ((args.metrics is None) and (args.ylabel is not None))):
         metric_ylabel_match = False
@@ -1710,7 +1388,8 @@ def main(args):
         print(f"No metric data for device {device_info.device_id}")
         return
 
-    if (not metrics_info.is_eustall):
+    # The selected device's format, not is_eustall, which is the lowest-numbered device's.
+    if (device_info.kind != "stall"):
         if (args.metrics is None):
             print("-m option is missing")
             return

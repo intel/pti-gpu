@@ -146,7 +146,11 @@ static void Compute(cl_device_id device, const std::vector<float>& a,
   cl_program program = clCreateProgramWithSource(context, 1, &kKernelSource,
                                                  nullptr, &status);
   PTI_ASSERT(status == CL_SUCCESS && program != nullptr);
-  status = clBuildProgram(program, 1, &device, nullptr, nullptr, nullptr);
+  // Kernel line info comes from the runtime build options, not the host build:
+  // -gline-tables-only emits .debug_line, -s names the source built from a string.
+  status = clBuildProgram(program, 1, &device,
+                          "-gline-tables-only -s cl_gemm_kernel.cl",
+                          nullptr, nullptr);
   PTI_ASSERT(status == CL_SUCCESS);
 
   cl_kernel kernel = clCreateKernel(program, "GEMM", &status);

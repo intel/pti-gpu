@@ -36,7 +36,7 @@ template <typename Ctx>
 struct CliOption {
   const char* name_;        // "--call-logging"
   const char* alias_;       // "-c" or nullptr
-  const char* type_;        // schema only: "bool"|"int"|"string"|"enum"|"path"|"action"
+  const char* type_;        // schema only: "bool"|"int"|"float"|"string"|"enum"|"path"|"action"
   bool        takes_value_; // consumes the next argv token (set by the factory below)
   const char* group_;       // caller-defined group id, e.g. "core"|"output"
   const char* value_hint_;  // "number-of-events" -> "<number-of-events>"; nullptr for bool/action

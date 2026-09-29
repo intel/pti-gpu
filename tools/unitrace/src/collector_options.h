@@ -27,7 +27,7 @@ struct CollectorOptions {
       unsigned int metric_stream : 1;
       unsigned int stall_sampling : 1;
       unsigned int opencl : 1;
-      unsigned int conditional_collection : 1;
+      unsigned int start_paused : 1;
 
       // Chrome logging flags
       unsigned int chrome_call_logging : 1;

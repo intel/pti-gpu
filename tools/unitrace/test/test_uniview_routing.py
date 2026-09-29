@@ -48,15 +48,13 @@ class RoutingTest(unittest.TestCase):
 
     def test_pdf_mode_forwards_stall_options(self):
         with tempfile.TemporaryDirectory() as directory:
-            dump = Path(directory) / "shaders"
-            dump.mkdir()
             forwarded, metrics = self.run_pdf_mode(
-                directory, "Kernel,IP[Address],Active[Events]",
+                directory,
+                '\nKernel,Pid,KernelId\n"kernel",1,2\nSource,Offset,Instruction,Dependency,Active[Events]',
                 "http://localhost:8000/kernel/9",
-                ["-s", str(dump), "-g", "llvm-cxxfilt", "-n", "3"],
+                ["-n", "3"],
             )
-        self.assertEqual(forwarded, ["-s", str(dump), "-g", "llvm-cxxfilt", "-n", "3",
-                                     "-q", metrics])
+        self.assertEqual(forwarded, ["-n", "3", "-q", metrics])
 
     def test_pdf_mode_forwards_config_and_https_links(self):
         with tempfile.TemporaryDirectory() as directory:

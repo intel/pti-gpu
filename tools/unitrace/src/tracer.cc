@@ -137,7 +137,7 @@ static CollectorOptions ReadArgs() {
 
   value = utils::GetEnv("UNITRACE_StartPaused");
   if (!value.empty() && value == "1") {
-    options.conditional_collection = 1;
+    options.start_paused = 1;
   }
 
   value = utils::GetEnv("UNITRACE_TraceOutputDirPath");
@@ -288,7 +288,7 @@ void CONSTRUCTOR Init(void) {
     UniController::AttachTemporalControlRead(utils::GetEnv("UNITRACE_Session").c_str());
     UniController::SetSessionStoppedCallback(OnSessionStopped);
   } else if (utils::GetEnv("UNITRACE_StartPaused") == "1") {
-    // No named session, but conditional collection is on (--start-paused), so
+    // No named session, but --start-paused is on, so
     // the application can still stop the tool from within via __itt_detach()
     // (UniController::IttStop). Register the flush callback so that stop has
     // somewhere to flush; without this the callback stays null and the data

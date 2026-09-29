@@ -23,13 +23,16 @@ from bokeh.transform import dodge
 import argparse
 from html import escape
 import base64
-import csv
-import io
 import json
 import os.path as osp
 import sys
+import tempfile
 import pandas as pd
 import re
+
+# The metrics file parsers live next to this file, whichever way it is launched.
+sys.path.insert(0, osp.dirname(osp.abspath(__file__)))
+import analyzeperfmetrics as apm
 
 
 # ── Startup arguments (bokeh serve --args --csv PATH) ─────────────────────────
@@ -126,9 +129,7 @@ def init_from_csv_path(csv_path):
     """Load a metrics CSV directly from *csv_path* (no base64 / file-upload)."""
     global df_input1, df_kernel, csv1_col_map
     try:
-        with open(csv_path, "rb") as raw:
-            content = raw.read()
-        df_input1 = read_csv_smart(io.BytesIO(content))
+        df_input1 = read_metrics(csv_path)
     except Exception as exc:
         print(f"Error loading CSV from {csv_path}: {exc}")
         return False
@@ -173,7 +174,7 @@ eustall_plot_layout = column()
 
 
 def fmt_ip(val):
-    """Format an IP address value as a hex string (e.g. 0x0280)."""
+    """Format an instruction offset as a hex string (e.g. 0x0280)."""
     try:
         address = int(val.strip(), 16) if isinstance(val, str) else int(val)
         return f'0x{address:04x}'
@@ -188,15 +189,15 @@ def build_eu_stall_chart(df):
         X axis : stall category names (one bar per category per kernel)
         Y axis : total event count (summed across all IPs for that kernel)
 
-    Panel 2 — IP Hotspots (horizontal stacked bars):
-        Y axis : top-20 IP addresses ranked by total stall count
+    Panel 2 — Instruction Hotspots (horizontal stacked bars):
+        Y axis : top-20 instruction offsets ranked by total stall count
         X axis : stall event counts, stacked by category
     """
     df = df.copy()
     df.columns = df.columns.str.strip()
 
-    kernel_col = df.columns[0]
-    ip_col = df.columns[1] if len(df.columns) > 1 else None
+    kernel_col = 'Kernel'
+    ip_col = 'Offset' if 'Offset' in df.columns else None
 
     # Filter to stall columns present in this CSV
     available = [(col, label, color)
@@ -276,7 +277,7 @@ def build_eu_stall_chart(df):
     fig1.legend.location    = 'top_right'
     fig1.legend.click_policy = 'hide'
 
-    # ── Panel 2: IP Hotspots ─────────────────────────────────────────────
+    # ── Panel 2: Instruction Hotspots ─────────────────────────────────────────────
     if ip_col and stall_only_cols:
         df_ip = df.copy()
         df_ip['_ip_str']   = df_ip[ip_col].apply(fmt_ip)
@@ -307,7 +308,7 @@ def build_eu_stall_chart(df):
             y_range=Range1d(-0.5, m - 0.5),
             height=max(350, m * 28 + 120),
             width=max(800, 1000),
-            title='EU Stall Sampling — Top 20 IP Hotspots (Stall Events by Category)',
+            title='EU Stall Sampling — Top 20 Instruction Hotspots (Stall Events by Category)',
             x_axis_label='Stall Event Count',
             toolbar_location='above',
             tools='pan,wheel_zoom,box_zoom,reset,save',
@@ -328,7 +329,7 @@ def build_eu_stall_chart(df):
             fig2.add_tools(HoverTool(
                 renderers=[renderer],
                 tooltips=[
-                    ('IP',       '@ip'),
+                    ('Offset',   '@ip'),
                     ('Category', lbl),
                     ('Count',    f'@val_{i}{{0,}}'),
                 ],
@@ -376,9 +377,7 @@ def init_eustall_from_csv_path(csv_path):
     import traceback
     global df_input1
     try:
-        with open(csv_path, 'rb') as raw:
-            content = raw.read()
-        df_input1 = read_csv_smart(io.BytesIO(content))
+        df_input1 = read_metrics(csv_path)
         df_input1 = select_eustall_kernel(
             df_input1, session_argument("gid"), session_argument("kernel"), startup_args.trace_path
         )
@@ -402,7 +401,7 @@ def init_eustall_from_csv_path(csv_path):
     ]
     eustall_status.text = (
         f"<b>EU Stall CSV loaded:</b> {osp.basename(csv_path)} — "
-        f"{df_input1.shape[0]} IP row(s), aggregated by kernel name across invocations."
+        f"{df_input1.shape[0]} instruction row(s), aggregated by kernel name across invocations."
     )
     return True
 
@@ -769,84 +768,19 @@ GRAPH_MODES = ["plotOverlaid", "plotAllSampleAsTabs", "plotAllSampleAsStack"]
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 
-def read_csv_smart(f):
-    """Parse each metric section with its own header and align columns by name."""
-    f.seek(0)
-    content = f.read()
-    if isinstance(content, bytes):
-        content = content.decode("utf-8-sig")
-    sections = []
-    header = None
-    rows = []
+def read_metrics(path):
+    """Read every device's metric table in *path* into one frame, aligned by column name.
 
-    def finish_section():
-        if header is not None and rows:
-            buffer = io.StringIO()
-            writer = csv.writer(buffer)
-            writer.writerow(header)
-            writer.writerows(rows)
-            buffer.seek(0)
-            sections.append(pd.read_csv(buffer, skipinitialspace=True,
-                                        dtype={"IP[Address]": str}))
-
-    for fields in csv.reader(io.StringIO(content), skipinitialspace=True):
-        if not fields or not any(value.strip() for value in fields):
-            continue
-        first = fields[0].strip().lstrip("\ufeff")
-        if first.startswith("==="):
-            finish_section()
-            header, rows = None, []
-            continue
-        if len(fields) < 2 and header is None:
-            continue
-        is_header = first.lower() == "kernel" and any(
-            value.strip().lower() in ("globalinstanceid", "ip[address]") for value in fields[1:]
-        )
-        if header is None or is_header:
-            finish_section()
-            header = [value.strip().lstrip("\ufeff") for value in fields]
-            rows = []
-        else:
-            if len(fields) != len(header):
-                raise ValueError(f"Metrics row has {len(fields)} values; expected {len(header)}")
-            rows.append(fields)
-    finish_section()
-    if not sections:
-        raise ValueError("No metric data rows found in CSV")
-    return clean_csv_df(pd.concat(sections, ignore_index=True, sort=False))
-
-
-def clean_csv_df(df):
-    """Remove device-banner rows and repeated header rows from a DataFrame.
-
-    unitrace multi-device CSVs look like:
-        === Device #0 Metrics ===
-        Kernel,GlobalInstanceId,...
-        data rows ...
-        === Device #1 Metrics ===
-        Kernel,GlobalInstanceId,...
-        data rows ...
-
-    After pd.read_csv, the banners and duplicate headers become data rows
-    with string values in numeric columns.  Drop them and coerce types.
+    The sections are parsed by analyzeperfmetrics, which reads all three layouts unitrace
+    writes: query, time-based and stall. The all-NaN rows it ends each instance with are
+    dropped; the dashboard tells instances apart by GlobalInstanceId.
     """
-    if df.empty:
-        return df
-    # Strip leading/trailing whitespace from column names (unitrace CSVs
-    # use "Kernel, GlobalInstanceId, ..." with spaces after commas).
-    df.columns = df.columns.str.strip()
-    first_col = df.columns[0]
-    # Drop rows whose first column looks like a '=== Device' banner
-    mask_banner = df[first_col].astype(str).str.contains(r"^===\s*Device", na=False)
-    # Drop rows that are repeated header lines (first column equals its header name)
-    mask_header = df[first_col].astype(str).str.strip() == first_col.strip()
-    df = df[~mask_banner & ~mask_header].reset_index(drop=True)
-
-    # Coerce columns that should be numeric (GlobalInstanceId, counters)
-    for col in df.columns:
-        if col.strip().lower() in ("globalinstanceid", "reportid"):
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
+    frames = [apm.ReadMetricFrame(path, header, last, kind)
+              for _, header, last, kind in apm.ScanDeviceSections(path)]
+    frames = [frame.dropna(how="all") for frame in frames if not frame.empty]
+    if not frames:
+        raise ValueError("No metric data rows found in CSV")
+    return pd.concat(frames, ignore_index=True, sort=False)
 
 
 def index_kernels(df):
@@ -883,11 +817,13 @@ def index_kernels(df):
 def upload_csv_input1(attr, old, new):
     global df_input1, df_kernel, df_kernel2, csv1_col_map
 
-    decoded = base64.b64decode(new)
-    f = io.BytesIO(decoded)
-
     try:
-        df_input1 = read_csv_smart(f)
+        # The parsers read by line number from a path, so the upload goes to a file.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = osp.join(tmpdir, "upload.csv")
+            with open(path, "wb") as upload:
+                upload.write(base64.b64decode(new))
+            df_input1 = read_metrics(path)
     except Exception as e:
         print("Error: Could not read file as CSV.", e)
         status_div.text = "<b style='color:red'>Error: Could not read file as CSV.</b>"
@@ -1271,16 +1207,7 @@ def create_server(args, io_loop=None, port=DEFAULT_PORT):
     arguments = ["--csv", os.path.abspath(args.input)]
     if args.trace:
         arguments.extend(["--trace", os.path.abspath(args.trace)])
-    eustall = args.eustall
-    if not eustall:
-        with open(args.input) as source:
-            for line in source:
-                if "IP[Address]" in line:
-                    eustall = True
-                    break
-                if "GlobalInstanceId" in line:
-                    break
-    if eustall:
+    if args.eustall or apm.ScanFirstHeader(args.input)[1] == "stall":
         arguments.append("--eustall")
     handler = ScriptHandler(filename=script, argv=arguments)
     return Server(

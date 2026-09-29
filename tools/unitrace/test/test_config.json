@@ -133,6 +133,26 @@
             "scenarios": ["--chrome-omp-logging"]
         },
         {
+            "name": "gemm_stall_sampling_scenario1",
+            "platform": ["Linux"],
+            "scenarios": ["--stall-sampling"]
+        },
+        {
+            "name": "gemm_stall_sampling_scenario2",
+            "platform": ["Linux"],
+            "scenarios": ["--stall-sampling"]
+        },
+        {
+            "name": "gemm_stall_sampling_scenario3",
+            "platform": ["Linux"],
+            "scenarios": ["--stall-sampling"]
+        },
+        {
+            "name": "gemm_stall_sampling_scenario4",
+            "platform": ["Linux"],
+            "scenarios": ["--stall-sampling"]
+        },
+        {
             "_comment": "scenario-independent; runs a single scenario (plus the harness's native run) instead of the full matrix",
             "name": "print_options_schema",
             "platform": ["Windows", "Linux"],

@@ -8,6 +8,8 @@
 #define PTI_TOOLS_UNITRACE_CL_COLLECTOR_H_
 
 #include <atomic>
+#include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <list>
@@ -51,6 +53,8 @@ struct ClEnqueueData {
 
 struct ClKernelProps {
   std::string name;
+  // Never demangled: the .kprops reader matches it against .text.<mangled name>.
+  std::string mangled_name;
   size_t simd_width;
   size_t bytes_transferred;
   size_t global_size[3];
@@ -58,6 +62,10 @@ struct ClKernelProps {
   uint64_t base_addr;
   uint32_t size;
   cl_device_id device_id;
+  // For .kprops: kernel id from UniKernelId (unique across backends); module id of the
+  // dumped binary holding the ISA, 0 if none.
+  uint64_t kernel_command_id = 0;
+  uint32_t module_id = 0;
 };
 
 struct ClKernelInstance {
@@ -147,7 +155,7 @@ using ClFunctionInfoMap = std::map<std::string, ClFunction>;
 static std::shared_mutex cl_kernel_command_properties_mutex_;
 static std::map<uint64_t, ClKernelProps> cl_kernel_command_properties_;
 
-// Keeps track of all active cl device name
+// Names of all active OpenCL devices
 std::map<cl_device_id, std::pair<uint32_t, std::string>>& GetDevicesNameMap() {
   static std::map<cl_device_id, std::pair<uint32_t, std::string>> devices_id_name;
   return devices_id_name;
@@ -184,7 +192,7 @@ inline cl_device_pci_bus_info_khr GetDevicePciInfo(cl_device_id device) {
   return pci_info;
 }
 
-//TODO: this can be done when the device is enumerated at startup
+// TODO: compute when devices are enumerated at startup
 inline double GetZeDeviceTimerNsPerCycle(cl_device_id device_id) {
   if (device_id == nullptr) {
     return 0;
@@ -375,28 +383,34 @@ class ClCollector {
           std::cerr<<"Invalid device is found\n";
           return;
         }
-        std::map<uint64_t, const ClKernelProps *> prop;
-        prop.insert({it->second.base_addr, &(it->second)});
-        device_kprops.insert({dev_id->second,std::move(prop)});
+        // Add to the device's existing map; inserting a new map would be a no-op.
+        auto dkit = device_kprops.find(dev_id->second);
+        if (dkit == device_kprops.end()) {
+          std::map<uint64_t, const ClKernelProps *> prop;
+          prop.insert({it->second.base_addr, &(it->second)});
+          device_kprops.insert({dev_id->second, std::move(prop)});
+        }
+        else {
+          // Keyed by base address: kernels sharing one keep the first seen.
+          dkit->second.insert({it->second.base_addr, &(it->second)});
+        }
       }
 
+      // Same record format as ze_collector.h, one line each: quoted mangled name, base
+      // address, kernel command id, module id. The pid is in the file name. Module 0 means
+      // no binary was dumped, and the reader drops the record.
       for (auto& props : device_kprops) {
-        std::shared_ptr<Logger> kpfs_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_KPROPS, props.first, true, true);
-        uint64_t prev_base = 0;
-        for (auto it = props.second.crbegin(); it != props.second.crend(); it++) {
-          kpfs_logger->Log("\"" + utils::Demangle(it->second->name.c_str()) + "\"\n");
-          kpfs_logger->Log(std::to_string(it->second->base_addr) + "\n");
-          if (prev_base == 0) {
-            kpfs_logger->Log(std::to_string(it->second->size) + "\n");
-          }
-          else {
-            size_t size = prev_base - it->second->base_addr;
-            if (size > it->second->size) {
-              size = it->second->size;
-            }
-            kpfs_logger->Log(std::to_string(size) + "\n");
-          }
-          prev_base = it->second->base_addr;
+        std::shared_ptr<Logger> kpfs_logger =
+            logger_factory_->GetDeviceLogger(LOGGER_TYPE_KPROPS, props.first, true, true);
+        if (kpfs_logger == nullptr) {
+          std::cerr << "[ERROR] Failed to create kernel properties data file" << std::endl;
+          exit(-1);
+        }
+        for (auto it = props.second.cbegin(); it != props.second.cend(); it++) {
+          kpfs_logger->Log("\"" + it->second->mangled_name + "\"\n" +
+                           std::to_string(it->second->base_addr) + "\n" +
+                           std::to_string(it->second->kernel_command_id) + "\n" +
+                           std::to_string(it->second->module_id) + "\n");
         }
         kpfs_logger->Flush();
       }
@@ -883,6 +897,15 @@ class ClCollector {
     kernel_tracing_points_enabled[CL_FUNCTION_clReleaseCommandQueue] = true;
     kernel_tracing_points_enabled[CL_FUNCTION_clReleaseEvent] = true;
     kernel_tracing_points_enabled[CL_FUNCTION_clWaitForEvents] = true;
+
+    // Program hooks that dump kernel binaries, needed only for stall sampling. Kernel
+    // creation needs no hook: RegisterProgramModule gets all kernel names at build time.
+    // Delivered even while paused; see IsProgramTracingPoint.
+    if (options_.stall_sampling) {
+      kernel_tracing_points_enabled[CL_FUNCTION_clBuildProgram] = true;
+      kernel_tracing_points_enabled[CL_FUNCTION_clLinkProgram] = true;
+      kernel_tracing_points_enabled[CL_FUNCTION_clReleaseProgram] = true;
+    }
   }
 
   void EnableTracing(ClApiTracer* tracer) {
@@ -891,27 +914,7 @@ class ClCollector {
     for (int id = 0; id < CL_FUNCTION_COUNT; ++id) {
       if (options_.api_tracing || (kernel_tracing_points_enabled[id] && options_.kernel_tracing)) {
         bool set = tracer->SetTracingFunction(static_cast<ClFunctionId>(id));
-        // Older runtime versions may not support newer function IDs.
-        // Core APIs (id <= CL_FUNCTION_clWaitForEvents) must always succeed.
-        if (!set) {
-          PTI_ASSERT(id > CL_FUNCTION_clWaitForEvents);
-          break;
-        }
-      }
-    }
-
-    bool enabled = tracer->Enable();
-    PTI_ASSERT(enabled);
-  }
-
-  void EnableKernelTracing(ClApiTracer* tracer) {
-    PTI_ASSERT(tracer != nullptr);
-
-    for (int id = 0; id < CL_FUNCTION_COUNT; ++id) {
-      if (kernel_tracing_points_enabled[id]) {
-        bool set = tracer->SetTracingFunction(static_cast<ClFunctionId>(id));
-        // Older runtime versions may not support newer function IDs.
-        // Core APIs (id <= CL_FUNCTION_clWaitForEvents) must always succeed.
+        // Older runtimes may lack newer functions; core APIs (up to clWaitForEvents) must succeed.
         if (!set) {
           PTI_ASSERT(id > CL_FUNCTION_clWaitForEvents);
           break;
@@ -991,11 +994,11 @@ class ClCollector {
     //PTI_ASSERT(submitted > 0);
 
     //PTI_ASSERT(instance->device_sync <= queued);
-    // This is workaround due to driver bug. In some cases driver does not give right timestamp
+    // Workaround for a driver bug: the queued timestamp is sometimes wrong
     int64_t time_diff = 0 < queued ? (queued - instance->device_sync) : 0;
     uint64_t time_shift = ((time_diff > 0) ? time_diff : 0);
     host_queued = instance->host_sync + time_shift;
-    //Win_Todo: Investigate why sometime "submitted > started" is happening
+    // TODO(Windows): find out why submitted > started sometimes
 #ifdef _WIN32
     time_diff = queued <= submitted ? (submitted - queued) : 0;
     host_submitted = host_queued + time_diff;
@@ -1296,7 +1299,7 @@ class ClCollector {
       reinterpret_cast<const cl_params_clCreateCommandQueue*>(
           data->functionParams);
     PTI_ASSERT(params != nullptr);
-    // Cast away const to modify properties - needed to enable profiling for timing
+    // Cast away const to enable profiling, which kernel timing needs
     *const_cast<cl_command_queue_properties*>(params->properties) |=
       static_cast<unsigned long>(CL_QUEUE_PROFILING_ENABLE);
   }
@@ -1347,7 +1350,11 @@ class ClCollector {
       instance->event = **(params->event);
 
       cl_kernel kernel = *(params->kernel);
-      instance->props.name = utils::cl::GetKernelName(kernel, collector->options_.demangle);
+      // name is for reports, mangled_name for .kprops
+      instance->props.mangled_name = utils::cl::GetKernelName(kernel);
+      instance->props.name = collector->options_.demangle
+                                 ? utils::Demangle(instance->props.mangled_name.c_str())
+                                 : instance->props.mangled_name;
 
       cl_command_queue queue = *(params->commandQueue);
       PTI_ASSERT(queue != nullptr);
@@ -1379,6 +1386,13 @@ class ClCollector {
 
       auto it = collector->kprops_.find(instance->props.name);
       if (it == collector->kprops_.end()) {
+        // Set the .kprops values on first sight; kprops_ keeps the first of a repeated
+        // name. The module id was recorded at build time; 0 means no binary was dumped.
+        if (collector->options_.stall_sampling) {
+          instance->props.kernel_command_id = UniKernelId::GetKernelId();
+          instance->props.module_id =
+              collector->GetKernelModuleId(instance->props.mangled_name);
+        }
         collector->kprops_.insert(std::pair<std::string, ClKernelProps>(instance->props.name, instance->props));
       }
 
@@ -1715,6 +1729,150 @@ class ClCollector {
     }
   }
 
+  // Dump the program's device binary (for IGC, the zebin as is) and map its kernel names
+  // to the module id, as Level Zero does at zeModuleCreate; see
+  // ZeMetricProfiler::ReadModuleAndKernelProps for the reader. Idempotent per cl_program,
+  // since both build and link reach here, and both CPU and GPU collectors see every build.
+  // Currently disabled (#if 0), so every module id is 0.
+  void RegisterProgramModule(cl_program program) {
+#if 0
+    if (!options_.stall_sampling || program == nullptr) {
+      return;
+    }
+
+    const std::lock_guard<std::mutex> lock(module_lock_);
+    if (program_module_ids_.count(program) != 0) {
+      return;
+    }
+
+    // Find this collector's device, sub-devices included, via device_map_
+    std::vector<cl_device_id> devices = utils::cl::GetDeviceList(program);
+    size_t slot = devices.size();
+    for (size_t i = 0; i < devices.size(); ++i) {
+      if (device_map_.count(devices[i]) != 0) {
+        slot = i;
+        break;
+      }
+    }
+    if (slot == devices.size()) {
+      return;
+    }
+
+    // CL_PROGRAM_BINARIES writes every device's binary, so every slot needs a buffer
+    std::vector<size_t> sizes(devices.size(), 0);
+    if (clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, sizes.size() * sizeof(size_t),
+                         sizes.data(), nullptr) != CL_SUCCESS) {
+      return;
+    }
+    if (sizes[slot] == 0) {
+      return;
+    }
+
+    std::vector<std::vector<uint8_t>> binaries(devices.size());
+    std::vector<uint8_t*> pointers(devices.size(), nullptr);
+    for (size_t i = 0; i < devices.size(); ++i) {
+      binaries[i].resize(sizes[i] == 0 ? 1 : sizes[i]);
+      pointers[i] = binaries[i].data();
+    }
+    if (clGetProgramInfo(program, CL_PROGRAM_BINARIES, pointers.size() * sizeof(uint8_t*),
+                         pointers.data(), nullptr) != CL_SUCCESS) {
+      return;
+    }
+
+    const uint32_t module_id = UniModuleId::GetModuleId();
+    if (!WriteOutModuleNativeBinary(logger_factory_, data_dir_name_, module_id,
+                                    binaries[slot].data(), sizes[slot])) {
+      return;
+    }
+    program_module_ids_.insert({program, module_id});
+
+    // Map every exported kernel name to this module. insert keeps an earlier program's
+    // claim, as kprops_ does.
+    size_t names_size = 0;
+    if (clGetProgramInfo(program, CL_PROGRAM_KERNEL_NAMES, 0, nullptr, &names_size) !=
+            CL_SUCCESS ||
+        names_size == 0) {
+      return;
+    }
+    std::vector<char> names(names_size, '\0');
+    if (clGetProgramInfo(program, CL_PROGRAM_KERNEL_NAMES, names_size, names.data(),
+                         nullptr) != CL_SUCCESS) {
+      return;
+    }
+    const std::string name_list(names.data());
+    for (size_t start = 0; start <= name_list.size();) {
+      const size_t end = name_list.find(';', start);
+      const std::string name = name_list.substr(
+          start, (end == std::string::npos) ? std::string::npos : end - start);
+      if (!name.empty()) {
+        kernel_module_ids_.insert({name, module_id});
+      }
+      if (end == std::string::npos) {
+        break;
+      }
+      start = end + 1;
+    }
+#endif /* 0 */
+  }
+
+  uint32_t GetKernelModuleId(const std::string& mangled_name) {
+    const std::lock_guard<std::mutex> lock(module_lock_);
+    auto it = kernel_module_ids_.find(mangled_name);
+    return (it == kernel_module_ids_.end()) ? 0 : it->second;
+  }
+
+  static void OnExitBuildProgram(cl_callback_data* data, ClCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    const cl_int* return_value = reinterpret_cast<const cl_int*>(data->functionReturnValue);
+    if (*return_value != CL_SUCCESS) {
+      return;
+    }
+    const cl_params_clBuildProgram* params =
+        reinterpret_cast<const cl_params_clBuildProgram*>(data->functionParams);
+    PTI_ASSERT(params != nullptr);
+    collector->RegisterProgramModule(*(params->program));
+  }
+
+  // clLinkProgram returns the program, not a status
+  static void OnExitLinkProgram(cl_callback_data* data, ClCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    cl_program* program = reinterpret_cast<cl_program*>(data->functionReturnValue);
+    if (program != nullptr) {
+      collector->RegisterProgramModule(*program);
+    }
+  }
+
+  // On the last release, forget the program: the runtime reuses handles. Runs while
+  // paused, like the build hook. kernel_module_ids_ is kept for writing .kprops later.
+  static void OnEnterReleaseProgram(cl_callback_data* data, ClCollector* collector) {
+    PTI_ASSERT(data != nullptr);
+    PTI_ASSERT(collector != nullptr);
+
+    if (!collector->options_.stall_sampling) {
+      return;
+    }
+    const cl_params_clReleaseProgram* params =
+        reinterpret_cast<const cl_params_clReleaseProgram*>(data->functionParams);
+    PTI_ASSERT(params != nullptr);
+    cl_program program = *(params->program);
+    if (program == nullptr) {
+      return;
+    }
+
+    cl_uint ref_count = 0;
+    if (clGetProgramInfo(program, CL_PROGRAM_REFERENCE_COUNT, sizeof(ref_count), &ref_count,
+                         nullptr) != CL_SUCCESS ||
+        ref_count > 1) {
+      return;
+    }
+    const std::lock_guard<std::mutex> lock(collector->module_lock_);
+    collector->program_module_ids_.erase(program);
+  }
+
   static void KernelTracingCallBackOnEnter(ClFunctionId function, ClCollector *collector, cl_callback_data *callback_data, uint64_t * /* kid */) {
     switch (function) {
       case CL_FUNCTION_clCreateCommandQueueWithProperties:
@@ -1772,6 +1930,12 @@ class ClCollector {
         OnEnterReleaseEvent(callback_data, collector);
         break;
       case CL_FUNCTION_clWaitForEvents:
+        break;
+      case CL_FUNCTION_clReleaseProgram:
+        OnEnterReleaseProgram(callback_data, collector);
+        break;
+      case CL_FUNCTION_clBuildProgram:
+      case CL_FUNCTION_clLinkProgram:
         break;
       default:
         break;
@@ -1838,9 +2002,26 @@ class ClCollector {
       case CL_FUNCTION_clWaitForEvents:
         OnExitWaitForEvents(callback_data, collector);
         break;
+      case CL_FUNCTION_clBuildProgram:
+        OnExitBuildProgram(callback_data, collector);
+        break;
+      case CL_FUNCTION_clLinkProgram:
+        OnExitLinkProgram(callback_data, collector);
+        break;
+      case CL_FUNCTION_clReleaseProgram:
+        break;
       default:
         break;
     }
+  }
+
+  // Program hooks run even while paused: programs are usually built before a resume, and
+  // skipping them would lose the binaries of kernels run later. Level Zero does the same.
+  // clReleaseProgram is included so a reused handle does not inherit a stale module id.
+  static bool IsProgramTracingPoint(ClFunctionId function) {
+    return (function == CL_FUNCTION_clBuildProgram) ||
+           (function == CL_FUNCTION_clLinkProgram) ||
+           (function == CL_FUNCTION_clReleaseProgram);
   }
 
   static void TracingCallBack(ClFunctionId function, cl_callback_data* callback_data, void* user_data) {
@@ -1851,14 +2032,16 @@ class ClCollector {
 
     ClCollector* collector = reinterpret_cast<ClCollector*>(user_data);
     if (callback_data->site == CL_CALLBACK_SITE_ENTER) {
-      if (UniController::IsCollectionEnabled()) {
+      const bool collection_enabled = UniController::IsCollectionEnabled();
+      if (collection_enabled || IsProgramTracingPoint(function)) {
         collector->TracingNowOn();
         uint64_t kid = KERNEL_INSTANCE_ID_INVALID;
         if (collector->options_.kernel_tracing && collector->kernel_tracing_points_enabled[function]) {
           KernelTracingCallBackOnEnter(function, collector, callback_data, &kid);
         }
 
-        if (collector->options_.call_logging) {
+        // Only the kernel tracing above bypasses the pause
+        if (collection_enabled && collector->options_.call_logging) {
           OnEnterFunction(function, callback_data, collector->GetTimestamp(), collector);
         }
 
@@ -1873,12 +2056,15 @@ class ClCollector {
       collector->TracingNowOn();
       uint64_t start_time = collector->GetTraceStartTimeAndPopTraceNesting();
 
-      if (UniController::IsCollectionEnabled()) {
-        uint64_t kid = KERNEL_INSTANCE_ID_INVALID;
-        if (collector->options_.kernel_tracing && collector->kernel_tracing_points_enabled[function]) {
-          KernelTracingCallBackOnExit(function, collector, callback_data, &kid);
-        }
+      const bool collection_enabled = UniController::IsCollectionEnabled();
+      // Read below by the flow callback
+      uint64_t kid = KERNEL_INSTANCE_ID_INVALID;
+      if ((collection_enabled || IsProgramTracingPoint(function)) &&
+          collector->options_.kernel_tracing && collector->kernel_tracing_points_enabled[function]) {
+        KernelTracingCallBackOnExit(function, collector, callback_data, &kid);
+      }
 
+      if (collection_enabled) {
         if (collector->options_.host_timing) {
           collector->AddFunctionTime(callback_data->functionName, end_time - start_time);
         }
@@ -2010,10 +2196,17 @@ class ClCollector {
   std::map<std::string, ClKernelProps> kprops_;
   std::string data_dir_name_;
 
+  // Module bookkeeping for --stall-sampling; separate from lock_, which is held during flush
+  std::mutex module_lock_;
+  // Dumped programs; erased on release because handles are reused
+  std::map<cl_program, uint32_t> program_module_ids_;
+  // Mangled kernel name -> module id. Never evicted: .kprops is written after programs are released.
+  std::map<std::string, uint32_t> kernel_module_ids_;
+
   std::vector<ClKernelProfileRecord> profile_records_;
   std::map<cl_device_id, uint32_t> present_cl_devices_;
 
-  std::shared_mutex cl_ext_func_lock_;	// lock for extension function table
+  std::shared_mutex cl_ext_func_lock_;  // for cl_ext_func_
   void *cl_ext_func_[ClExtApiEnd - ClExtApiStart] = {nullptr};
 
   inline static ClCollector *cl_gpu_collector_ = nullptr;

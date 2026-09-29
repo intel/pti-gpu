@@ -37,6 +37,21 @@ class UniKernelInstanceId{
     inline static std::atomic<uint64_t> kernel_instance_id_ = 1;  // start with 1
 };
 
+// Ids for the module binaries dumped for stall sampling. Process-wide rather than
+// per collector: the id names a file in the shared data directory
+// (LoggerFactory::GetModuleBinaryFileName) and is what a kernel record points at, so
+// two collectors counting separately - Level Zero and OpenCL, or the OpenCL CPU and
+// GPU collectors - would have one module's binary overwrite another's.
+class UniModuleId{
+  public:
+    static uint32_t GetModuleId(void) {
+        return module_id_.fetch_add(1, std::memory_order::memory_order_relaxed);
+    }
+
+  private:
+    inline static std::atomic<uint32_t> module_id_ = 1;  // 0 means "no module binary"
+};
+
 enum FLOW_DIR {
   FLOW_NUL = 0,
   FLOW_D2H = 1,

@@ -268,6 +268,21 @@ GetComputeRuntimeHeaders(unitrace_tool)
 set (LEVEL_ZERO_COMMIT_ID "v1.32.0")
 GetLevelZeroHeaders(unitrace_tool)
 
+# Add IGA support for kernel disassembly.
+# Only the IGA C API headers are needed at build time, and only by the unitrace
+# executable: unitrace_tool - the library injected into the traced application -
+# collects the kernel records and module binaries but decodes nothing, so it needs
+# no IGA header, calls no IGA function and loads no iga64. The disassembly runs in
+# unitrace, which resolves iga64 dynamically via LibraryLoader on both Windows and
+# Linux.
+# Unitrace owns its IGA header fetch (see cmake/IGAUtils.cmake) so it can pin a
+# revision that defines IGA_XE2 and shield itself from a stale /usr/include/iga.
+include(IGAUtils)
+# intel-graphics-compiler revision to fetch IGA API headers from. Pinned to a
+# revision that defines IGA_XE2 (XE_VER(2,0)) so BMG/Xe2 kernels disassemble.
+# Consumed by the UnitraceGetIGAHeaders(unitrace ...) call further down.
+set (IGA_COMMIT_ID "4ba3c2aaab4f189b143ef288bc3e75eb02ad6f82")
+
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_common_header.py" "common_header.gen" gen_common_header)
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_tracing_callbacks.py" "tracing.gen" gen_tracing_header)
 FindHeadersPath(unitrace_tool "${PROJECT_SOURCE_DIR}/scripts/gen_l0_loader.py" "l0_loader.gen" gen_l0_loader_header)
@@ -289,6 +304,13 @@ add_executable(unitrace
 )
 # unitrace to depend on gen_l0_loader_header to ensure that it exists
 add_dependencies(unitrace gen_l0_loader_header)
+
+# unitrace is where the disassembler actually runs, so it needs the full IGA API - and
+# it is the only target that needs it at all. UnitraceGetIGAHeaders adds the fetched
+# build-dir path with BEFORE so it wins over any stale /usr/include/iga (which may
+# predate IGA_XE2), and adds the fetch dependency.
+UnitraceGetIGAHeaders(unitrace ${IGA_COMMIT_ID})
+
 # unitrace_tool to depend on unitrace to build unitrace first and then we can
 # remove l0_loader.gen when unitrace_tool is built
 add_dependencies(unitrace_tool unitrace)
@@ -355,9 +377,16 @@ target_include_directories(unitrace
   PRIVATE "${PROJECT_SOURCE_DIR}/src/utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../utils"
   PRIVATE "${PROJECT_SOURCE_DIR}/../../utils")
+
+# IGA headers only (needed by kernel_disassembler.h, which unitrace reaches through
+# ze_metrics.h). The iga64 shared library is loaded at runtime, so there is nothing to
+# link: unitrace gets the fetched IGA include path via UnitraceGetIGAHeaders() above,
+# and only the dlopen/pthread/rt libs remain.
 if(UNIX)
-  target_link_libraries(unitrace pthread dl rt)
-  target_link_libraries(unitrace_tool rt)
+  # ${CMAKE_DL_LIBS} provides dlopen()/dlsym(). unitrace uses it to load iga64;
+  # unitrace_tool needs it for the Level Zero loader regardless (ze_loader.h).
+  target_link_libraries(unitrace pthread ${CMAKE_DL_LIBS} rt)
+  target_link_libraries(unitrace_tool ${CMAKE_DL_LIBS} rt)
 endif()
 
 GetLevelZeroHeaders(unitrace)

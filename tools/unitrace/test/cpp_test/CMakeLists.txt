@@ -28,6 +28,7 @@ add_subdirectory(dpc_gemm)
 add_subdirectory(device_and_rank_to_sample)
 add_subdirectory(print_options_schema)
 add_subdirectory(event_reset)
+add_subdirectory(gemm_stall_sampling)
 add_subdirectory(graph)
 add_subdirectory(grf)
 # internal_conditional_trace exercises the in-application stop control

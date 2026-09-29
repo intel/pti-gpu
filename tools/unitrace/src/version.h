@@ -1,7 +1,7 @@
 #ifndef PTI_TOOLS_UNITRACE_VERSION_H_
 #define PTI_TOOLS_UNITRACE_VERSION_H_
 
-#define UNITRACE_VERSION  "2.4.0"
+#define UNITRACE_VERSION  "2.4.1"
 
 std::string get_version();
 

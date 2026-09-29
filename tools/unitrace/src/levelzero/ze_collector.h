@@ -13,6 +13,7 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <set>
@@ -67,9 +68,7 @@ struct ZeMetricQueryPoolKeyCompare {
 };
 
 struct ZeMetricQueryPools {
-  // The pool size was reduced from 128 to 64 to optimize memory usage
-  // and align with typical workload requirements, ensuring efficient
-  // resource utilization without compromising performance.
+  // 64 rather than 128, to save memory
   constexpr static uint32_t pool_size_ = 64;
   std::mutex query_pool_mutex_;
   std::map<zet_metric_query_handle_t, ZeMetricQueryPoolKey> query_pool_map_;
@@ -903,8 +902,8 @@ struct ZeDeviceSubmissions {
 
       // back fill kernel instance id and reset event
       cmd->instance_id_ = UniKernelInstanceId::GetKernelInstanceId();
-      // Do not reset cmd->event_ here. The command may have already completed so the cmd->event_ may have already been signaled.
-      // cmd->event_ is reset inside ProcessComamndSubmitted()
+      // Do not reset cmd->event_ here: the command may have completed and signaled it.
+      // ProcessCommandSubmitted() resets it.
 
       if (kids) {
         kids->push_back(cmd->instance_id_);
@@ -1047,7 +1046,6 @@ thread_local ZeDeviceSubmissions local_device_submissions_;
 
 struct ZeKernelCommandProperties {
   uint64_t id_;    // unique identifier
-  uint64_t size_;  // kernel binary size
   uint64_t base_addr_;  // kernel base address
   ze_device_handle_t device_;
   int32_t device_id_;
@@ -1063,6 +1061,9 @@ struct ZeKernelCommandProperties {
   bool aot_;    // AOT or JIT
   std::string name_;  // kernel or command name
   bool skip_;  // skip this kernel in the trace
+  // Id (ZeModule::id_) of the module the kernel came from, which also names the module's
+  // dumped binary. 0 if the module was created before tracing started.
+  uint32_t module_ = 0;
 };
 
 // these will not go away when ZeCollector is destructed
@@ -1073,8 +1074,11 @@ static std::map<uint64_t, ZeKernelCommandProperties> *active_command_properties_
 
 struct ZeModule {
   ze_device_handle_t device_;
-  size_t size_;
   bool aot_;  // AOT or JIT
+  // From UniModuleId, never 0. Identifies the module within the process and names its
+  // dumped binary (LoggerFactory::GetModuleBinaryFileName). The binary itself is not
+  // kept, so it does not stay resident for the whole run.
+  uint32_t id_;
 };
 
 static std::shared_mutex modules_on_devices_mutex_;
@@ -1106,7 +1110,7 @@ struct ZeDevice {
   std::vector<ZeQueueEngineType> queue_engine_prop_;
 };
 
-// these will no go away when ZeCollector is destructed
+// these will not go away when ZeCollector is destructed
 static std::shared_mutex devices_mutex_;
 static std::map<ze_device_handle_t, ZeDevice> *devices_ = nullptr;
 
@@ -1967,7 +1971,7 @@ class ZeCollector {
             desc.parent_device_ = nullptr;
             desc.subdevice_id_ = -1;  // not a subdevice
 
-            ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
+            ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2};
             ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(device, &props);
             PTI_ASSERT(status == ZE_RESULT_SUCCESS);
             PTI_ASSERT(props.timerResolution != 0);
@@ -2119,7 +2123,7 @@ class ZeCollector {
                 sub_desc.subdevice_id_ = j;
                 sub_desc.id_ = did;  // take parent device's id
 
-                ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2, };
+                ze_device_properties_t props{ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES_1_2};
                 ze_result_t status = ZE_FUNC(zeDeviceGetProperties)(sub_devices[j], &props);
                 PTI_ASSERT(status == ZE_RESULT_SUCCESS);
                 PTI_ASSERT(props.timerResolution != 0);
@@ -2336,58 +2340,6 @@ class ZeCollector {
 
   void DumpKernelProfiles(void) {
 
-    if (options_.stall_sampling) {
-      kernel_command_properties_mutex_.lock();
-      std::map<int32_t, std::map<uint64_t, ZeKernelCommandProperties *>> device_kprops; // sorted by device id then base address;
-      for (auto it = kernel_command_properties_->begin(); it != kernel_command_properties_->end(); it++) {
-        if (it->second.type_ != KERNEL_COMMAND_TYPE_COMPUTE) {
-          continue;
-        }
-        auto dkit = device_kprops.find(it->second.device_id_);
-        if (dkit == device_kprops.end()) {
-          std::map<uint64_t, ZeKernelCommandProperties *> kprops;
-          kprops.insert({it->second.base_addr_, &(it->second)});
-          device_kprops.insert({it->second.device_id_, std::move(kprops)});
-        }
-        else {
-          if (dkit->second.find(it->second.base_addr_) != dkit->second.end()) {
-            // already inserted
-            continue;
-          }
-          dkit->second.insert({it->second.base_addr_, &(it->second)});
-        }
-      }
-
-      // TODO: add optional argument to control whether to delete.
-      for (auto& props : device_kprops) {
-        std::shared_ptr<Logger> kpfs_logger = logger_factory_->GetDeviceLogger(LOGGER_TYPE_KPROPS, props.first, true, true);
-        if (kpfs_logger == nullptr) {
-              std::cerr << "[ERROR] Failed to create kernel properties data file" << std::endl;
-              exit(-1);
-        }
-        uint64_t prev_base = 0;
-        for (auto it = props.second.crbegin(); it != props.second.crend(); it++) {
-          // quote kernel name which may contain ","
-          kpfs_logger->Log("\"" + utils::Demangle(it->second->name_.c_str()) + "\"\n");
-          kpfs_logger->Log(std::to_string(it->second->base_addr_) + "\n");
-          if (prev_base == 0) {
-            kpfs_logger->Log(std::to_string(it->second->size_) + "\n");
-          }
-          else {
-            size_t size = prev_base - it->second->base_addr_;
-            if (size > it->second->size_) {
-              size = it->second->size_;
-            }
-            kpfs_logger->Log(std::to_string(size) + "\n");
-          }
-          prev_base = it->second->base_addr_;
-        }
-        kpfs_logger->Flush();
-      }
-
-      kernel_command_properties_mutex_.unlock();
-    }
-
     const std::lock_guard<std::mutex> lock(global_kernel_profiles_mutex_);
     if (global_kernel_profiles_.size() == 0) {
       return;
@@ -2446,10 +2398,10 @@ class ZeCollector {
     // metric query
 
 #ifdef _WIN32
-    // On Windows, L0 may have been unloaded or be being unloaded at this point
-    // So we save the metric data in a file and the saved metrics will be computed in the parent process
-    // The metric data file path: <data_dir>/.metrics.<pid>.q
-    // The format of each entry in the file is: device id (int32_t), size of kernel name (size_t), kernel name, instance (uin64_t), size of metric data (uint64_t), metric data
+    // On Windows, L0 may be unloaded by now, so the metric data is saved to
+    // <data_dir>/.metrics.<pid>.q and computed in the parent process. Each entry: device id
+    // (int32_t), kernel name size (size_t), kernel name, instance id (uint64_t), metric
+    // data size (uint64_t), metric data.
 
     std::string fpath = logger_factory_->GenerateLogFileName(LOGGER_TYPE_METRICS_QUERY_TEMP);
     // Append: FlushData() can run more than once (an explicit flush and again
@@ -2500,8 +2452,7 @@ class ZeCollector {
 
         std::string kname = GetZeKernelCommandName(it->second.kernel_command_id_, it->second.group_count_, it->second.mem_size_);
         if (kname.empty()) {
-          // skip invalid kernels
-          // should never get here
+          // skip invalid kernels; should never get here
           it = global_kernel_profiles_.erase(it);
           continue;
         }
@@ -2532,6 +2483,7 @@ class ZeCollector {
       int did = -1;
       zet_metric_group_handle_t group = nullptr;
       std::vector<std::string> metric_names;
+      std::string counter_header;
       for (auto it = global_kernel_profiles_.begin(); it != global_kernel_profiles_.end();) {
         if ((it->second.metrics_ == nullptr) || it->second.metrics_->empty()) {
           it = global_kernel_profiles_.erase(it);
@@ -2539,7 +2491,7 @@ class ZeCollector {
         }
 
         if (it->second.device_ == nullptr) {
-          // shoule never get here
+          // should never get here
           it = global_kernel_profiles_.erase(it);
           continue;
         }
@@ -2572,12 +2524,19 @@ class ZeCollector {
             metric_logger->Log("\n=== Device #" + std::to_string(did) + " Metrics ===\n");
           }
 
-          std::string header("\nKernel,GlobalInstanceId,SubDeviceId");
-          for (auto& metric : metric_names) {
-            header += "," + metric;
+          // Query metrics are written as a self-contained section per kernel-instance, the
+          // shape stall and time-based sampling also use:
+          //   Kernel, GlobalInstanceId              <- section label, naming the identity
+          //   "<name>", <instance id>                  the section carries
+          //   SubDeviceId, <counter names...>       <- column header: the sub-device, then
+          //   <sub-device>, <counter values...>        all metrics in metric_names order;
+          //                                            one row per sub-device
+          // The counter column header is the same for every section, so build it once.
+          counter_header = "SubDeviceId";
+          for (size_t i = 0; i < metric_names.size(); i++) {
+            counter_header += ", " + metric_names[i];
           }
-          header += "\n";
-          metric_logger->Log(header);
+          counter_header += "\n";
         }
         else {
           if (it->second.device_ != device) {
@@ -2604,24 +2563,21 @@ class ZeCollector {
             samples.data(), metrics.data());
 
           if (status == ZE_RESULT_SUCCESS) {
-            std::string str;
+            // The leading newline puts a blank line before every section.
+            std::string str = "\nKernel, GlobalInstanceId\n" + kname + ", " +
+                              std::to_string(it->second.instance_id_) + "\n" + counter_header;
             for (uint32_t i = 0; i < num_samples; ++i) {
-              str = kname + ",";
-              str += std::to_string(it->second.instance_id_) + ",";
-              str += std::to_string(i);
-
               uint32_t size = samples[i];
               PTI_ASSERT(size == metric_names.size());
 
+              // A sample per sub-device, i being the sub-device
+              str += std::to_string(i);
               const zet_typed_value_t *value = metrics.data() + i * size;
               for (uint32_t j = 0; j < size; ++j) {
-                str += ",";
-                str += PrintTypedValue(value[j]);
+                str += ", " + PrintTypedValue(value[j]);
               }
               str += "\n";
             }
-            str += "\n";
-
             metric_logger->Log(str);
           }
           else {
@@ -5796,20 +5752,37 @@ class ZeCollector {
     }
   }
 
-  static void OnExitModuleCreate(ze_module_create_params_t* params, ze_result_t result, void* /* global_data */, void** /* instance_user_data */) {
+  static void OnExitModuleCreate(ze_module_create_params_t* params, ze_result_t result, void* global_data, void** /* instance_user_data */) {
     if (result == ZE_RESULT_SUCCESS) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
       ze_module_handle_t mod = **(params->pphModule);
       ze_device_handle_t device = *(params->phDevice);
-      size_t binary_size;
-      if (ZE_FUNC(zeModuleGetNativeBinary)(mod, &binary_size, nullptr) != ZE_RESULT_SUCCESS) {
-        binary_size = (size_t)(-1);
-      }
 
       ZeModule m;
 
       m.device_ = device;
-      m.size_ = binary_size;
       m.aot_ = (*(params->pdesc))->format;
+      // Every module gets an id, stall sampling or not; the binary below is named by it.
+      m.id_ = UniModuleId::GetModuleId();
+
+      // For stall sampling, write out the module's native binary now, for disassembly after
+      // the run; the module handle is gone by then. It is written rather than kept, so no
+      // binary stays resident, and not decoded, since only the reader knows which kernels
+      // were sampled. No lock is held across the I/O.
+      if (collector->options_.stall_sampling) {
+        size_t binary_size = 0;
+        if ((ZE_FUNC(zeModuleGetNativeBinary)(mod, &binary_size, nullptr) == ZE_RESULT_SUCCESS) &&
+            (binary_size > 0)) {
+          std::vector<uint8_t> native_binary(binary_size);
+          if (ZE_FUNC(zeModuleGetNativeBinary)(mod, &binary_size, native_binary.data()) ==
+              ZE_RESULT_SUCCESS) {
+            // A failed write is not recorded: the reader finds no binary, and the
+            // module's kernels match no sample.
+            WriteOutModuleNativeBinary(collector->logger_factory_, collector->data_dir_name_,
+                                       m.id_, native_binary.data(), native_binary.size());
+          }
+        }
+      }
 
       modules_on_devices_mutex_.lock();
       modules_on_devices_.insert({mod, std::move(m)});
@@ -5877,14 +5850,15 @@ typedef struct _zex_kernel_register_file_size_exp_t {
 
       ze_module_handle_t mod = *(params->phModule);
       ze_device_handle_t device = nullptr;
-      size_t module_binary_size = (size_t)(-1);
       bool aot = false;
+      // Id of the kernel's module; 0 if the module was created before tracing started.
+      uint32_t module = 0;
       modules_on_devices_mutex_.lock_shared();
       auto mit = modules_on_devices_.find(mod);
       if (mit != modules_on_devices_.end()) {
         device = mit->second.device_;
-        module_binary_size = mit->second.size_;
         aot = mit->second.aot_;
+        module = mit->second.id_;
       }
       modules_on_devices_mutex_.unlock_shared();
 
@@ -5959,14 +5933,12 @@ typedef struct _zex_kernel_register_file_size_exp_t {
 
       // for stall sampling
       uint64_t base_addr = 0;
-      uint64_t binary_size = 0;
       if (collector->options_.stall_sampling && (ZexKernelGetBaseAddress != nullptr) && (ZexKernelGetBaseAddress(kernel, &base_addr) == ZE_RESULT_SUCCESS)) {
         base_addr &= 0xFFFFFFFF;
-        binary_size = module_binary_size;  // store module binary size. only an upper bound is needed
       }
 
       desc.base_addr_ = base_addr;
-      desc.size_ = binary_size;
+      desc.module_ = module;
 
       // First, check include_kernels_ to see if the kernel should be included (if any match, skip=false).
       // Then, check exclude_kernels_ to see if the kernel should be excluded (if any match, skip=true).
@@ -5993,6 +5965,25 @@ typedef struct _zex_kernel_register_file_size_exp_t {
         }
       }
 
+      // For stall sampling, write the kernel's record now: it is final here, so repeated
+      // flushes need no special handling. The reader derives the rest from the module
+      // binary (ZeMetricProfiler::ReadModuleAndKernelProps). Kernels skipped by
+      // --include-kernels/--exclude-kernels get no record, so their samples are attributed
+      // to no known kernel. A kernel created repeatedly writes identical records, which
+      // the reader merges.
+      if (collector->options_.stall_sampling && base_addr != 0 && !desc.skip_) {
+        // Not lock-free: concurrent zeKernelCreate calls would splice records. Lazy flush:
+        // an abnormal exit loses at most a partial last record, which the reader drops.
+        std::shared_ptr<Logger> kprops_logger =
+            collector->logger_factory_->GetDeviceLogger(LOGGER_TYPE_KPROPS, did, true, false);
+        if (kprops_logger) {
+          // One line each: quoted mangled name (which has no quote or newline to escape),
+          // base address, kernel command id and module id. The pid is in the file name.
+          kprops_logger->Log("\"" + desc.name_ + "\"\n" + std::to_string(base_addr) + "\n" +
+                             std::to_string(desc.id_) + "\n" + std::to_string(module) + "\n");
+          kprops_logger->Flush();
+        }
+      }
 
       ZeKernelCommandProperties desc2 = desc;
       active_kernel_properties_->insert({kernel, std::move(desc)});
@@ -6355,6 +6346,8 @@ typedef struct _zex_kernel_register_file_size_exp_t {
   std::vector<std::string> include_kernels_;
   std::vector<std::string> exclude_kernels_;
 
+  // Module ids come from UniModuleId (unikernel.h), shared with the OpenCL collector,
+  // whose module binaries go to the same directory under the same naming.
 };
 
 #endif // PTI_TOOLS_UNITRACE_LEVEL_ZERO_COLLECTOR_H_

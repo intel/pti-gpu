@@ -5,6 +5,7 @@
 # =============================================================
 
 import os
+import re
 import subprocess
 import shutil
 import argparse
@@ -184,12 +185,15 @@ def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
     # "native" runs the app without unitrace first, as a driver/environment
     # sanity check; if it fails, skip the unitrace scenarios (not our problem).
     native_failed = False
+    # -R takes a regex, so anchor it: an unanchored "conditional_trace" also selects
+    # "internal_conditional_trace" and runs it under this test's scenarios.
+    ctest_filter = '^' + re.escape(test) + '$'
     for cmd in ["native"] + scenarios:
         os.environ['UNITRACE_OPTION'] = cmd
         sub_tests += 1
         try:
             subprocess.run(
-                ['ctest', '-C', 'Release', '-V', '-R', test, '-Q'],
+                ['ctest', '-C', 'Release', '-V', '-R', ctest_filter, '-Q'],
                 check=True,
                 text=True,
                 env=os.environ,
