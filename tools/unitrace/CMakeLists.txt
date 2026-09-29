@@ -401,10 +401,6 @@ else()
   add_custom_command(TARGET unitrace_tool POST_BUILD COMMAND "del" "unitrace_tool_commit_hash.h")
 endif()
 
-# Testing
-enable_testing()
-add_test(NAME test_unitrace COMMAND "${Python_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/test/test_unitrace.py" --test-dir "${PROJECT_SOURCE_DIR}/test" --config "${PROJECT_SOURCE_DIR}/test/test_config.json")
-
 # Clearning files only for release build, for any other build types lets skip deletion for better debuggability
 string(TOLOWER "${CMAKE_BUILD_TYPE}" LOWER_CMAKE_BUILD_TYPE)
 if(NOT LOWER_CMAKE_BUILD_TYPE STREQUAL "debug")

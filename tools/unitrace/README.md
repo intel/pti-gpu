@@ -89,12 +89,7 @@ cmake -DBUILD_WITH_ITT=0 -DBUILD_WITH_XPTI=0 -DBUILD_WITH_MPI=0 -DBUILD_WITH_OPE
 
 ## Test
 
-After unitrace is built, run ctest from the build folder:
-
-```sh
-ctest -V
-```
-or run test_unitrace.py from the test folder
+After unitrace is built, run test_unitrace.py from the test folder
 
 ```sh
 cd test
@@ -108,36 +103,31 @@ cd test
 python test_unitrace.py --run
 ```
 
-The default testing scenarios are defined in file **test/scenarios.txt**. You can edit this file to change the scenarios. You can also create your own testing scenarios in a .txt file, for example, **myscenarios.txt**:
+The test suite is defined in **test/tests.txt**: each test is a block with
+its command line, the platforms it runs on, and the unitrace option scenarios
+it is exercised with (defaulting to the shared `[defaults]` scenario matrix).
+The file's header documents the full format.
 
-```sh
-    -c
-    -h
-    --chrome-call-logging 
-    --chrome-kernel-logging
-```
-
-and test the scenarios:
+To see every test with its resolved scenario matrix on the current platform:
 
 ```sh
 cd test
-python test_unitrace.py --config myscenarios.txt
+python test_unitrace.py --list
 ```
 
-To create and add a new test, for example, **mytest**, you need to add the following statement in the **CMakeLists.txt** file of the new test:
+To add a new test, for example **mytest**: add its workload under
+**test/cpp_test/mytest/** with a `CMakeLists.txt` building it (plus an
+`add_subdirectory(mytest)` line in **test/cpp_test/CMakeLists.txt**), and
+declare it in **test/tests.txt**:
 
-```sh
-add_test(NAME mytest COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/run_test.py ${CMAKE_SOURCE_DIR} mytest <args>)
+```
+[mytest]
+command  = run_test.py mytest <args>
 ```
 
-The arguments of the test can be passed in **args**.
-
-
-If the new test is in a new folder, for example, **mytestdir**, you also need to add the new folder to the top **CMakeLists.txt** file:
-
-```sh
-add_subdirectory(mytestdir)
-```
+With no further keys it runs the default scenario matrix on all platforms;
+add `platform`, `scenario`, `skip-scenario` or `options` lines to specialize
+(see the header of tests.txt).
 
 ## Run
 

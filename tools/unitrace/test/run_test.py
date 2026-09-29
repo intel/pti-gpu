@@ -131,7 +131,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
     command.append(unitrace_exe)
     
     for scenario in scenarios.split(" "):
-        if scenario != "--result-dir":
+        if scenario and scenario != "--result-dir":
             command.append(scenario)
 
     test_output_name = specific_test_case if specific_test_case else os.path.basename(test_case) #graph
@@ -153,24 +153,24 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
         output_file = f"output{scenarios}_{test_output_name}.txt".replace("--", "_").replace("-", "_").replace(" ","") #output_k_result_dir_graph.txt
         output_file_path = os.path.join(output_dir, output_file).replace("\\", "/")
         
-    is_chrome_logging_present = False
+    # Dispatch on the scenario's token set, not on any single token's position.
+    is_chrome_logging_present = any(token.startswith("--chrome") for token in scenario_set)
+    is_metrics_scenario = not scenario_set.isdisjoint({"-k", "-q"})
     if is_result_dir:
         command += ["--result-dir", output_result_dir_path]
-        for scenario in scenarios.split(" "):
-            if scenario.startswith("--chrome"):
-                is_chrome_logging_present = True
     else:
-        if scenario.startswith("--chrome"):
-            is_chrome_logging_present = True
-
-        need_output_directory = False
-        if scenario in ["--chrome-call-logging", "--chrome-device-logging","--chrome-kernel-logging", "--chrome-sycl-logging", "--chrome-itt-logging", "--chrome-omp-logging"]:
-            need_output_directory = True
-
-        if need_output_directory:
+        if is_chrome_logging_present:
             command += ["--output-dir-path", output_dir]
-        elif scenario in ["-k", "-q"]:
-            command += ["-o", "metric"]
+        elif is_metrics_scenario:
+            # Metric files are written next to the -o base name; anchor it at
+            # the workload build directory (where the collection glob below
+            # looks) so the run does not depend on the working directory.
+            if is_python_test and specific_test_case is not None:
+                metric_dir = os.path.join(cmake_root_path, "build", specific_test_case)
+            else:
+                metric_dir = os.path.join(cmake_root_path, "build", test_case_name)
+            os.makedirs(metric_dir, exist_ok = True)
+            command += ["-o", os.path.join(metric_dir, "metric")]
         else:
             command += ["-o", output_file_path]
 
@@ -193,7 +193,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
         
         if not is_result_dir:
             # Metric logs need to be moved to result folder
-            if scenario in ["-k", "-q"]:
+            if is_metrics_scenario:
                 if is_python_test and specific_test_case is not None:
                     test_case_path = os.path.join(cmake_root_path, "build", specific_test_case)
                 else:
@@ -283,7 +283,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
                     and (test_case_name.replace("/","_").split(".")[0] in result_file_pattern[0] or (specific_test_case is not None and specific_test_case in result_file_pattern[0]))
                 ):
                     output_files.append(f)
-                elif scenario in ["-k", "-q"] and f.endswith(output_file) and "metrics" in f:
+                elif is_metrics_scenario and f.endswith(output_file) and "metrics" in f:
                     output_files.append(f)
                 elif output_file.startswith(result_file_pattern[0]):
                     output_files.append(f)
@@ -473,10 +473,14 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
 def main():
     parser = argparse.ArgumentParser(prog="run_test.py", description="Run unitrace test")
     parser.add_argument('-e', '--extra_test_prog', type=str)
-    parser.add_argument('-c', '--cmake_root_path', type=str, required=True, help='Path to the root of the CMake project')
+    parser.add_argument('-c', '--cmake_root_path', type=str, default=None,
+                        help='Test root (workloads under <root>/build, results under <root>/build/results). '
+                             'Defaults to cpp_test next to this script, or python_test for python tests.')
     parser.add_argument('--mpiexec', action='store_true', help='Run unitrace with mpiexec')
     parser.add_argument('-n', '--num_ranks', type=int, default=1, help='Number of MPI ranks (default: 1)')
     parser.add_argument('-t','--test_case', type=str, default=None, help='Specific test case name (not the test executable name)')
+    parser.add_argument('-s', '--scenario', type=str, required=True,
+                        help='Unitrace scenario options to run, or "native" to run the application without unitrace')
     parser.add_argument('args', nargs=argparse.REMAINDER, help='Application and its arguments (parsing stops here)')
     args = parser.parse_args()
 
@@ -486,7 +490,12 @@ def main():
     elif args.args[0] == "--":
         args.args = args.args[1:]
 
-    scenario = os.environ["UNITRACE_OPTION"]
+    scenario = args.scenario
+
+    if args.cmake_root_path is None:
+        base = os.path.dirname(os.path.abspath(__file__))
+        is_python = "python" in os.path.basename(args.args[0])
+        args.cmake_root_path = os.path.join(base, "python_test" if is_python else "cpp_test")
 
     return run_unitrace(args.cmake_root_path, scenario, args.args[0], args.args[1:], 
                        args.extra_test_prog, args.mpiexec, args.num_ranks, args.test_case)

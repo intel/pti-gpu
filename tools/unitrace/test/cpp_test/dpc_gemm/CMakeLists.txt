@@ -25,5 +25,3 @@ target_include_directories(dpc_gemm PRIVATE "${PROJECT_SOURCE_DIR}/../../../../u
 #   (icpx -fsycl -gline-tables-only -O2) has it for this reason.
 target_compile_options(dpc_gemm PRIVATE -O2 -g -gline-tables-only)
 target_link_options(dpc_gemm PRIVATE -O2 -g -Xs "-gline-tables-only")
-
-add_test(NAME dpc_gemm COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py -c ${CMAKE_SOURCE_DIR} dpc_gemm GPU)

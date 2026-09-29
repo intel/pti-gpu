@@ -1,0 +1,271 @@
+# ============================================================================
+# Unitrace test suite definition (consumed by test_unitrace.py).
+# Run 'python test_unitrace.py --list' to see the resolved matrix.
+#
+# Each [name] block defines one test. Keys:
+#
+#   command  = <command line>
+#       What to run (paths relative to this directory).
+#       - run_test.py commands are executed once per resolved scenario,
+#         with --scenario=<value> appended, after one "native" run of the
+#         bare application (driver/environment sanity check).
+#       - Any other command (e.g. a check script) is scenario-independent
+#         and runs as-is.
+#       - Leading NAME=VALUE tokens set environment variables for this
+#         test only, e.g.:  command = FOO=1 run_test.py kuku GPU
+#       - Placeholders: {python}   = the python interpreter
+#                       {unitrace} = the unitrace binary under test
+#
+#   options  = <unitrace options>
+#       Unitrace options shared by ALL scenarios of this test, appended to
+#       every scenario before the run (keeps scenario lines down to what
+#       actually varies):
+#           options  = --opencl
+#           scenario = -c            -->  runs "unitrace -c --opencl ..."
+#           scenario = -h            -->  runs "unitrace -h --opencl ..."
+#
+#   platform = <OS> [<OS>...]
+#       On which OS this test exists at all (Windows, Linux). A test absent
+#       here never runs there, regardless of scenarios. Omitted: inherited
+#       from [defaults].
+#
+#   scenario = <unitrace options>
+#       One scenario per line; the test runs once per line.
+#       - If a block has NO scenario lines, it inherits the full [defaults]
+#         scenario list.
+#       - If it has ANY applicable scenario lines, those REPLACE the
+#         defaults completely (they do not add to them).
+#
+#   defaults-scenario = True | False   (case-insensitive)
+#       Overrides that implicit choice explicitly:
+#       - True: include the [defaults] list in addition to the block's own
+#         scenario lines (common matrix + per-test extras):
+#             defaults-scenario = True
+#             scenario          = -k
+#       - False with no scenario lines: an empty matrix - the test runs
+#         exactly once, with only its 'options' (plus the native run).
+#
+#   skip-scenario = <unitrace options>
+#       Removes scenarios from the inherited/declared list. A skip line
+#       matches every scenario that CONTAINS ALL of its tokens, in any
+#       order, with or without extra tokens. Examples against defaults:
+#           skip-scenario = -q
+#               removes "-q" and "-q --result-dir"
+#           skip-scenario = --result-dir
+#               removes all eight "... --result-dir" variants
+#           skip-scenario = -q --result-dir
+#               removes only "-q --result-dir" (both tokens required)
+#
+# ----------------------------------------------------------------------------
+# Per-platform lines: scenario, skip-scenario and options accept an :OS
+# qualifier (OS = Windows or Linux). Unqualified lines apply to every OS;
+# ":OS" lines apply only there.
+#
+# Resolution, done independently per OS:
+#   1. platform gate: if the current OS is not in 'platform', the test
+#      does not run here. Done.
+#   2. Collect scenario lines that apply here (unqualified + :thisOS).
+#      Non-empty -> that is the scenario list. Empty -> take [defaults].
+#   3. Remove everything matched by applicable skip-scenario lines
+#      (unqualified + :thisOS).
+#   4. Append applicable 'options' to each remaining scenario.
+#
+# Examples:
+#
+#   Different matrix per OS (own lines on both sides):
+#       [kuku]
+#       command          = run_test.py kuku GPU
+#       scenario:Linux   = -c
+#       scenario:Linux   = -q
+#       scenario:Windows = -h
+#     Linux runs -c and -q; Windows runs -h. Defaults unused.
+#
+#   Shared lines plus per-OS extras:
+#       scenario         = -c        # both
+#       scenario:Linux   = -q        # Linux also runs -q
+#     Linux: -c, -q.  Windows: -c.
+#
+#   Own scenarios on one OS only:
+#       scenario:Windows = -h
+#     Windows runs just -h. Linux has no applicable lines -> full defaults.
+#
+#   Defaults everywhere, trimmed on one OS:
+#       skip-scenario:Windows = -q
+#     Linux: all 16 defaults. Windows: 14 (both -q variants removed).
+#
+#   Test exists on one OS only:
+#       platform = Linux
+#     Runs the resolved scenarios on Linux; never runs on Windows.
+# ============================================================================
+
+[defaults]
+platform = Windows Linux
+scenario = -c
+scenario = -h
+scenario = -d
+scenario = -t
+scenario = -s
+scenario = --chrome-call-logging --chrome-kernel-logging
+scenario = --chrome-device-logging
+scenario = -q
+scenario = -c --result-dir
+scenario = -h --result-dir
+scenario = -d --result-dir
+scenario = -t --result-dir
+scenario = -s --result-dir
+scenario = --chrome-call-logging --chrome-kernel-logging --result-dir
+scenario = --chrome-device-logging --result-dir
+scenario = -q --result-dir
+
+[cl_gemm]
+command  = run_test.py cl_gemm GPU
+options  = --opencl
+scenario = -c
+scenario = -d -v
+scenario = --chrome-call-logging --chrome-kernel-logging
+scenario = -h
+scenario = -s
+
+[cl_gemm_metric]
+command  = run_test.py cl_gemm GPU 4096
+options  = --opencl
+scenario = -k
+scenario = --result-dir -k
+
+[conditional_trace]
+platform = Linux
+command  = run_test.py conditional_trace GPU
+options  = --opencl --start-paused
+scenario = -d
+
+[dpc_gemm]
+command  = run_test.py dpc_gemm GPU
+
+[mpi_test_4_ranks_filter_0_2]
+platform = Linux
+command  = run_test.py --mpiexec -n 4 -t mpi_test_4_ranks_filter_0_2 device_and_rank_to_sample
+options  = --ranks-to-sample 0,2
+scenario = -d
+scenario = -d --result-dir
+
+[mpi_test_1_rank_sample_device_0]
+platform = Linux
+command  = run_test.py --mpiexec -n 1 -t mpi_test_1_rank_sample_device_0 device_and_rank_to_sample
+options  = --devices-to-sample 0
+scenario = -d
+scenario = -d --result-dir
+
+[mpi_test_1_rank_sample_device_256]
+platform = Linux
+command  = run_test.py --mpiexec -n 1 -t mpi_test_1_rank_sample_device_256 device_and_rank_to_sample
+options  = --devices-to-sample 256
+scenario = -d
+
+[print_options_schema]
+command           = cpp_test/print_options_schema/check_options_schema.py {unitrace}
+defaults-scenario = False
+
+[event_reset_immediate_cl]
+command  = run_test.py event_reset -- -im
+scenario = -h
+
+[event_reset_cl_with_fence]
+command  = run_test.py event_reset -- -1nicl -f
+scenario = -h
+
+[event_reset_cl_with_barrier]
+command  = run_test.py event_reset -- -1nicl -b
+scenario = -h
+
+[event_reset_cl_with_queue_sync]
+command  = run_test.py event_reset -- -1nicl
+scenario = -h
+
+[gemm_stall_sampling_scenario1]
+platform = Linux
+command  = run_test.py -e cpp_test/gemm_stall_sampling/check_outfiles.py -t gemm_stall_sampling_scenario1 gemm_stall_sampling --scenario 1 --size 256 --iterations 2
+scenario = --stall-sampling
+
+[gemm_stall_sampling_scenario2]
+platform = Linux
+command  = run_test.py -e cpp_test/gemm_stall_sampling/check_outfiles.py -t gemm_stall_sampling_scenario2 gemm_stall_sampling --scenario 2 --size 256 --iterations 2
+scenario = --stall-sampling
+
+[gemm_stall_sampling_scenario3]
+platform = Linux
+command  = run_test.py -e cpp_test/gemm_stall_sampling/check_outfiles.py -t gemm_stall_sampling_scenario3 gemm_stall_sampling --scenario 3 --size 256 --iterations 2
+scenario = --stall-sampling
+
+[gemm_stall_sampling_scenario4]
+platform = Linux
+command  = run_test.py -e cpp_test/gemm_stall_sampling/check_outfiles.py -t gemm_stall_sampling_scenario4 gemm_stall_sampling --scenario 4 --size 256 --iterations 2
+scenario = --stall-sampling
+
+[graph]
+command       = run_test.py graph
+skip-scenario = -t
+
+[selective_kernels]
+command  = run_test.py -e cpp_test/graph/check_outfiles.py graph
+options  = -d
+scenario = --include-kernels not_exists
+scenario = --include-kernels sycl
+scenario = --exclude-kernels sycl
+scenario = --include-kernels sycl --exclude-kernels 2},EE1_
+
+[grf]
+platform      = Linux
+command       = run_test.py grf
+skip-scenario = --result-dir
+
+[internal_conditional_trace]
+command           = run_test.py internal_conditional_trace GPU
+options           = --start-paused
+defaults-scenario = True
+scenario          = -k
+skip-scenario     = --result-dir
+
+[omp_gemm]
+command  = run_test.py omp_gemm GPU
+
+[omp_cpu_gemm]
+command  = run_test.py omp_cpu_gemm
+scenario = --chrome-omp-logging
+
+[sycl_graph_with_v2_adaptor]
+command  = SYCL_UR_USE_LEVEL_ZERO_V2=1 run_test.py sycl_graph_with_v2_adaptor
+
+[temporal]
+command  = run_test.py temporal
+options  = --session test --start-paused
+scenario = -d
+scenario = --chrome-call-logging --chrome-kernel-logging
+scenario = -h
+scenario = -t
+
+[ze_gemm]
+command  = run_test.py ze_gemm
+
+[ze_gemm_metric]
+command  = run_test.py ze_gemm 4096
+scenario = -k
+scenario = -q
+
+[ze_grph_api]
+platform      = Windows
+command       = run_test.py ze_graph_api
+skip-scenario = -q
+
+[ze_counterbased_events]
+platform = Linux
+command  = run_test.py -e cpp_test/ze_counterbased_events/check_outfiles.py ze_counterbased_events
+scenario = --chrome-device-logging
+
+[vec_add]
+platform = Linux
+command  = run_test.py -t vec_add {python} python_test/vec_add/vecAdd.py
+
+[mat_mul]
+platform      = Linux
+command       = run_test.py -t mat_mul {python} python_test/mat_mul/matMul.py
+skip-scenario = -q

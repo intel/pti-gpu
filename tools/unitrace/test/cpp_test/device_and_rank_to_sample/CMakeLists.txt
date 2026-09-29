@@ -10,20 +10,3 @@ else()
     target_link_libraries(device_and_rank_to_sample PRIVATE -lze_loader)
 endif()
 
-add_test(NAME mpi_test_4_ranks_filter_0_2 COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py
-    --mpiexec -n 4 -t mpi_test_4_ranks_filter_0_2
-    -c ${CMAKE_SOURCE_DIR}
-    device_and_rank_to_sample
-)
-
-add_test(NAME mpi_test_1_rank_sample_device_0 COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py
-    --mpiexec -n 1 -t mpi_test_1_rank_sample_device_0
-    -c ${CMAKE_SOURCE_DIR}
-    device_and_rank_to_sample
-)
-
-add_test(NAME mpi_test_1_rank_sample_device_256 COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py
-    --mpiexec -n 1 -t mpi_test_1_rank_sample_device_256
-    -c ${CMAKE_SOURCE_DIR}
-    device_and_rank_to_sample
-)

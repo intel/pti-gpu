@@ -12,5 +12,3 @@ add_executable(omp_gemm main.cc)
 if(WIN32)
   target_link_libraries(omp_gemm PRIVATE "$ENV{ONEAPI_ROOT}/compiler/latest/lib/libiomp5md.lib")
 endif()
-
-add_test(NAME omp_gemm COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py -c ${CMAKE_SOURCE_DIR} omp_gemm GPU)

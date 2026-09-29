@@ -5,32 +5,12 @@
 # =============================================================
 
 import os
-import re
 import subprocess
 import shutil
 import argparse
 import sys
 import platform
-import json
-
-def load_json_config(config_file):
-    try:
-        with open(config_file, 'r') as file:
-            data = json.load(file)
-        return data
-    except Exception as e:
-        print(f"[ERROR] Failed to read test scenario config file: {e}")
-        return None
-
-def load_config(config_file):
-    try:
-        with open(config_file, 'r') as file:
-            # Read all lines, strip whitespace, and filter out empty lines
-            scenarios = [line.strip() for line in file.readlines() if line.strip()]
-        return scenarios
-    except Exception as e:
-        print(f"[ERROR] Failed to read test scenario config file: {e}")
-        return None
+import fnmatch
 
 def clean_up_testing_folder(test_dir, test_name=None):
     # Construct the path to the 'Testing' folder
@@ -41,15 +21,13 @@ def clean_up_testing_folder(test_dir, test_name=None):
     
     if test_name is not None:
         # Clean up only the specific test folders
-        test_testing_folder = os.path.join(test_dir, 'build', 'Testing', 'Temporary')
         test_result_folder = os.path.join(test_dir, 'build', 'results', test_name)
-        
-        # Remove test-specific Testing/Temporary folder if it exists
-        if os.path.exists(test_testing_folder):
-            # Clean up temporary folders related to this test
-            for item in os.listdir(test_testing_folder):
-                if item.startswith(test_name):
-                    item_path = os.path.join(test_testing_folder, item)
+
+        # Remove this test's per-scenario Testing/Temporary_<name>* log folders
+        if os.path.exists(testing_folder):
+            for item in os.listdir(testing_folder):
+                if item.startswith(f"Temporary_{test_name}."):
+                    item_path = os.path.join(testing_folder, item)
                     if os.path.isfile(item_path):
                         os.remove(item_path)
                         print(f"Removed file: {item_path}")
@@ -133,89 +111,154 @@ def build(test_dir, test_name=None):
         print(f"Unexpected [ERROR]: {ex}")
         return 1
 
-def get_tests_in_ctest(test_dir):
-    result = subprocess.run(['ctest', '--show-only=json-v1'], capture_output=True, text=True, env=os.environ, cwd=os.path.join(test_dir, 'build'))
-    if result.returncode != 0:
-        return []
-    try:
-        ctest_data = json.loads(result.stdout)
-    except json.JSONDecodeError as e:
-        return []
-    tests = ctest_data.get("tests", [])
-    uni_tests = []
-    for test in tests:
-        test_name = test.get("name")
-        if test_name:
-            uni_tests.append(test_name)
-    return uni_tests
+def load_test_definitions():
+    """Parse tests.txt into ([defaults] block, list of test blocks)."""
+    manifest_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests.txt")
+    blocks = []
+    current = None
+    with open(manifest_path, 'r') as manifest:
+        for line in manifest:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if line.startswith('[') and line.endswith(']'):
+                current = {"name": line[1:-1], "command": None, "platform": None,
+                           "options": [], "scenarios": [], "skips": [],
+                           "defaults_scenario": []}
+                blocks.append(current)
+                continue
+            if current is None:
+                raise ValueError(f"line outside a [test] block in {manifest_path}: {line}")
+            key, _, value = line.partition('=')
+            key, value = key.strip(), value.strip()
+            base, _, os_qualifier = key.partition(':')
+            os_qualifier = os_qualifier.strip() or None
+            if base == "command":
+                current["command"] = value
+            elif base == "platform":
+                current["platform"] = value.split()
+            elif base == "options":
+                current["options"].append((os_qualifier, value))
+            elif base == "scenario":
+                current["scenarios"].append((os_qualifier, value))
+            elif base == "skip-scenario":
+                current["skips"].append((os_qualifier, value))
+            elif base == "defaults-scenario":
+                current["defaults_scenario"].append((os_qualifier, value))
+            else:
+                raise ValueError(f"unknown key '{key}' in {manifest_path}")
+    defaults = next((b for b in blocks if b["name"] == "defaults"), None)
+    if defaults is None:
+        raise ValueError(f"no [defaults] block in {manifest_path}")
+    return defaults, [b for b in blocks if b["name"] != "defaults"]
 
-def get_filter_tests(tests_configs, default_cmd_list):
-    filter_tests = {}
-    for test_config in tests_configs:
-        test_name = test_config.get("name")
-        platforms = test_config.get("platform")
-        scenarios = test_config.get("scenarios")
-        skip_scenarios = test_config.get("skip_scenarios")
-        skip_gpus = test_config.get("skip_gpus")
-        enabled_scenarios = []
-        if scenarios:
-            for scenario in scenarios:
-                if scenario == "default_scenarios":
-                    enabled_scenarios.extend(default_cmd_list[:])
-                else:
-                    enabled_scenarios.append(scenario)
-        else:
-            enabled_scenarios = default_cmd_list[:]
-        if skip_scenarios:
-            # Match by token subset so a skip entry covers every scenario that
-            # contains all of its options, regardless of order or extra flags.
-            # e.g. "-q" skips "-q", "-q --result-dir" and "--result-dir -q".
-            enabled_scenarios = [
-                s for s in enabled_scenarios
-                if not any(set(skip.split()) <= set(s.split()) for skip in skip_scenarios)
-            ]
-        filter_tests[test_name] = {"platforms":platforms, "scenarios":enabled_scenarios, "skip_gpus":skip_gpus}
-    return filter_tests
+def applicable(qualified_values, current_os):
+    return [value for (os_qualifier, value) in qualified_values
+            if os_qualifier in (None, current_os)]
 
-def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
-    ctest_output_dir = os.path.join(test_dir, 'build', 'Testing', 'Temporary')  # Path to the CTest output directory
+def resolve_test(test, defaults, current_os):
+    """Resolve one test block for one OS: platform gate, scenario list
+    (own lines, else defaults), skip-scenario subtraction, options merge.
+    Returns the resolved scenario list, or None if the test does not run."""
+    platforms = test["platform"] or defaults["platform"] or []
+    if current_os not in platforms:
+        return None
+    scenarios = applicable(test["scenarios"], current_os)
+    # defaults-scenario = True/False decides whether the [defaults] list is
+    # included; when the key is absent, a block with its own scenario lines
+    # replaces the defaults and a block without any inherits them.
+    include_defaults = applicable(test["defaults_scenario"], current_os)
+    if include_defaults:
+        value = include_defaults[-1].strip().lower()
+        if value == "true":
+            scenarios = applicable(defaults["scenarios"], current_os) + scenarios
+        elif value != "false":
+            raise ValueError(f"[{test['name']}] defaults-scenario must be "
+                             f"True or False, got '{include_defaults[-1]}'")
+        elif not scenarios:
+            # defaults-scenario = False with no scenario lines: an empty
+            # matrix - the test runs once (plus the native run).
+            scenarios = [""]
+    elif not scenarios:
+        scenarios = applicable(defaults["scenarios"], current_os)
+    skips = applicable(test["skips"], current_os)
+    # A skip matches every scenario containing all of its tokens.
+    scenarios = [s for s in scenarios
+                 if not any(set(skip.split()) <= set(s.split()) for skip in skips)]
+    options = " ".join(applicable(test["options"], current_os))
+    if options:
+        scenarios = [f"{s} {options}".strip() for s in scenarios]
+    return scenarios
+
+def test_name_matches(name, test_name):
+    """Exact match, or fnmatch glob when the selector contains wildcards."""
+    if any(ch in test_name for ch in "*?["):
+        return fnmatch.fnmatch(name, test_name)
+    return name == test_name
+
+def test_group_of(test):
+    # python tests are the ones rooted at python_test/
+    return "python-test" if "python_test/" in test["command"] else "cpp-test"
+
+def resolve_unitrace_exe(test_dir):
+    exe_name = "unitrace.exe" if platform.system() == "Windows" else "unitrace"
+    return os.path.join(test_dir, "..", "..", "build", exe_name)
+
+def build_test_command(test_entry, test_dir, scenario):
+    """Expand one tests.txt command line for one scenario.
+
+    Returns the command and the extra environment set by leading NAME=VALUE
+    tokens (formerly per-test ctest ENVIRONMENT properties)."""
+    tokens = [token.format(python=sys.executable,
+                           unitrace=resolve_unitrace_exe(test_dir))
+              for token in test_entry["cmd"].split()]
+    extra_env = {}
+    while "=" in tokens[0] and not tokens[0].endswith(".py"):
+        name, _, value = tokens.pop(0).partition("=")
+        extra_env[name] = value
+    if tokens[0].endswith("run_test.py"):
+        # --scenario=<value> form: scenario values start with '-'
+        tokens.insert(1, f"--scenario={scenario}")
+    return [sys.executable] + tokens, extra_env
+
+def launch_test_with_scenarios(test_entry, scenarios, test_dir, total_tests):
+    test = test_entry["name"]
     failed_options = []
     sub_tests = 0
 
     # "native" runs the app without unitrace first, as a driver/environment
     # sanity check; if it fails, skip the unitrace scenarios (not our problem).
     native_failed = False
-    # -R takes a regex, so anchor it: an unanchored "conditional_trace" also selects
-    # "internal_conditional_trace" and runs it under this test's scenarios.
-    ctest_filter = '^' + re.escape(test) + '$'
     for cmd in ["native"] + scenarios:
-        os.environ['UNITRACE_OPTION'] = cmd
         sub_tests += 1
-        try:
-            subprocess.run(
-                ['ctest', '-C', 'Release', '-V', '-R', ctest_filter, '-Q'],
-                check=True,
-                text=True,
-                env=os.environ,
-                cwd=os.path.join(test_dir, 'build')
-            )
+        command, extra_env = build_test_command(test_entry, test_dir, cmd)
+        result = subprocess.run(command, capture_output=True, text=True,
+                                env={**os.environ, **extra_env},
+                                cwd=os.path.dirname(os.path.abspath(__file__)))
+
+        # Keep the per-scenario log layout the ctest harness used, so the
+        # failure report and cleanup logic stay unchanged.
+        # '.' delimits the test name from the scenario so per-test cleanup
+        # cannot match tests whose names extend this one (ze_gemm vs
+        # ze_gemm_metric).
+        new_dir_name = test+"."+cmd.replace('--', '_').replace('-', '_').replace(" ", "")
+        log_dir = os.path.join(test_dir, 'build', 'Testing', f"Temporary_{new_dir_name}")
+        os.makedirs(log_dir, exist_ok=True)
+        with open(os.path.join(log_dir, "LastTest.log"), 'w') as log_file:
+            env_prefix = "".join(f"{k}={v} " for k, v in extra_env.items())
+            log_file.write("Command: " + env_prefix + " ".join(command) + "\n")
+            log_file.write(result.stdout or "")
+            log_file.write(result.stderr or "")
+
+        if result.returncode == 0:
             print(str(total_tests+sub_tests)+" : "+test+cmd+" : Passed")
-        except subprocess.CalledProcessError as e:
+        else:
             native_failed = cmd == "native"
-            new_dir_name = test+cmd.replace('--', '_').replace('-', '_').replace(" ", "")
-            failed_path = os.path.join(test_dir, 'build', 'Testing', f"Temporary_{new_dir_name}")
-            failed_options.append((cmd, failed_path))
+            failed_options.append((cmd, log_dir))
             error_message = str(total_tests+sub_tests)+" : "+test+cmd+" : Failed"
             RED = '\033[31m'
             RESET = '\033[0m' # Resets text formatting to default
             print(f"{RED}{error_message}{RESET}")
-
-        if os.path.exists(ctest_output_dir):
-            new_dir_name = test+cmd.replace('--', '_').replace('-', '_').replace(" ", "")
-            new_dir_path = f"{ctest_output_dir}_{new_dir_name}"
-            shutil.move(str(ctest_output_dir), str(new_dir_path))
-        else:
-            print(f"[ERROR] CTest output directory not found for option {cmd}. Skipping move operation.")
 
         if native_failed:
             print(f"[ERROR] '{test}' failed to run natively (driver/environment issue, "
@@ -223,39 +266,26 @@ def launch_test_with_scenarios(test, scenarios, test_dir, total_tests):
             break
     return sub_tests, failed_options
 
-def run_ctest(test_dir, scenarios, test_name=None):
+def run_tests(test_dir, test_group, test_name=None):
     failed_test_flag = 0
     failed_options = []
     total_tests = 0
+    current_os = platform.system()
 
-    # Findout default configuration
-    default_config = scenarios.get("default_configuration")
-    default_platforms = default_config.get("platform")
-    default_scenarios = default_config.get("scenarios")
-
-    if platform.system() not in default_platforms:
-        print("[INFO] Tests are not enabled for current platform.")
-        return 0
-
-    tests = get_tests_in_ctest(test_dir)
-    tests_configs = scenarios.get("test_configuration") # some tests need special handling
-    filter_tests = get_filter_tests(tests_configs, default_scenarios)
-
+    defaults, tests = load_test_definitions()
     for test in tests:
-        if test_name is not None:
-            if test != test_name:
-                continue
-        total_sub_tests = 0
-        tests_status = []
-        if test in filter_tests:
-            if not filter_tests[test]["platforms"] or platform.system() in filter_tests[test]["platforms"]:
-                total_sub_tests, tests_status = launch_test_with_scenarios(test, filter_tests[test]["scenarios"], test_dir, total_tests)
-        else:
-            total_sub_tests, tests_status = launch_test_with_scenarios(test, default_scenarios, test_dir, total_tests)
+        if test_group_of(test) != test_group:
+            continue
+        if test_name is not None and not test_name_matches(test["name"], test_name):
+            continue
+        scenarios = resolve_test(test, defaults, current_os)
+        if scenarios is None:
+            continue
+        test_entry = {"name": test["name"], "cmd": test["command"]}
+        total_sub_tests, tests_status = launch_test_with_scenarios(test_entry, scenarios, test_dir, total_tests)
         total_tests += total_sub_tests
-        if len(tests_status) > 0:
-            for test_status in tests_status:
-                failed_options.append(test_status)
+        for test_status in tests_status:
+            failed_options.append(test_status)
     print("\n\n------------------------------------------------------------")
     print("Total test run "+str(total_tests)+ "  Failed tests : "+str(len(failed_options)))
     print("------------------------------------------------------------")
@@ -315,6 +345,34 @@ def run_ctest(test_dir, scenarios, test_name=None):
             print("{:<20} {:<50} {:<30}".format(failed_option, log_file_path, "\n" + errors_str))
     return failed_test_flag
 
+def list_tests(test_group, test_name=None):
+    """Print each test's command line and its resolved scenario matrix."""
+    current_os = platform.system()
+    defaults, tests = load_test_definitions()
+    for test in tests:
+        if test_group_of(test) != test_group:
+            continue
+        if test_name is not None and not test_name_matches(test["name"], test_name):
+            continue
+        scenarios = resolve_test(test, defaults, current_os)
+        if scenarios is None:
+            print(f"{test['name']}  [not enabled on {current_os}]")
+            print(f"  command: {test['command']}")
+            print()
+            continue
+        print(f"{test['name']}")
+        print(f"  command: {test['command']}")
+        if not any(token.endswith("run_test.py") for token in test["command"].split()):
+            print("  scenarios: scenario-independent (single check + native)")
+        elif scenarios == [""]:
+            print("  scenarios: none (single run + native)")
+        else:
+            print(f"  scenarios ({len(scenarios)} + native):")
+            for scenario in scenarios:
+                print(f"    {scenario}")
+        print()
+    return 0
+
 def parse_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Unitrace Test Script")
@@ -339,49 +397,54 @@ def parse_arguments():
         help="Run tests only."
     )
     parser.add_argument(
-        "--config",
-        type=str,
-        default= os.path.join(os.getcwd(), "test_config.json"),
-        help="Path to the config file. If no path is defined it will take 'test_config.json' present in the test_dir"
-    )
-
-    parser.add_argument(
         "--test-name",
         type=str,
         default=None,
         help="Name of the test to run."
     )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List each test with its command and resolved scenarios, without running anything."
+    )
     return parser.parse_args()
 
 def main():
     args = parse_arguments()
-    config_file = args.config
 
-    # Check the directory and load scenarios
-    if os.path.exists(config_file):
-        scenarios = load_json_config(config_file)
-        if (scenarios is None) or (len(scenarios) == 0):
-            print("[ERROR] No scenarios found in config file")
+    if args.test_name is not None:
+        _, tests = load_test_definitions()
+        known = [t["name"] for t in tests if test_group_of(t) == args.test_group]
+        if not any(test_name_matches(name, args.test_name) for name in known):
+            print(f"[ERROR] No test matches '{args.test_name}' in group "
+                  f"'{args.test_group}'. Available tests:")
+            for name in known:
+                print(f"  {name}")
             return 1
-    else:
-        print("[ERROR] No config file is present")
-        return 1
+
+    if args.list:
+        return list_tests(args.test_group, args.test_name)
+
+    if args.test_group == "cpp-test":
+        args.test_dir = os.path.join(args.test_dir, "cpp_test")
+    elif args.test_group == "python-test":
+        args.test_dir = os.path.join(args.test_dir, "python_test")
 
     if args.run == False:
         status = 0
         # Build the tests now
         if status == 0:
-            if args.test_group == "cpp-test":
-                args.test_dir = os.path.join(args.test_dir, "cpp_test")
-            elif args.test_group == "python-test":
-                args.test_dir = os.path.join(args.test_dir, "python_test")
             print("Cleaning up test folder ...")
             status = clean_up_testing_folder(args.test_dir, args.test_name)
-            status = build(args.test_dir, args.test_name)
+            # A glob selector is not a ninja target; build everything then.
+            exact = args.test_name
+            if exact is not None and any(ch in exact for ch in "*?["):
+                exact = None
+            status = build(args.test_dir, exact)
         if status != 0: #build error check and return
             return status
     print("Start testing...")
-    status = run_ctest(args.test_dir, scenarios, args.test_name)
+    status = run_tests(args.test_dir, args.test_group, args.test_name)
     return(status)
 
 if __name__ == "__main__":

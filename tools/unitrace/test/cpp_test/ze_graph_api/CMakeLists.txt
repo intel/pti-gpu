@@ -26,4 +26,3 @@ endif()
 add_custom_command(TARGET ze_graph_api POST_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/graph_kernels.spv ${CMAKE_CURRENT_BINARY_DIR}/graph_kernels.spv)
 
-add_test(NAME ze_grph_api COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py -c ${CMAKE_SOURCE_DIR} ze_graph_api)

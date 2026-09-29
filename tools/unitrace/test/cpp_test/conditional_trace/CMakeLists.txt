@@ -7,4 +7,3 @@ target_include_directories(conditional_trace PRIVATE "${PROJECT_SOURCE_DIR}/../.
   
 target_link_libraries(conditional_trace PRIVATE OpenCL)
 
-add_test(NAME conditional_trace COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py -c ${CMAKE_SOURCE_DIR} conditional_trace GPU)

@@ -24,29 +24,3 @@ foreach(spv_module gemm_single gemm_multi gemm_aux)
                              ${CMAKE_CURRENT_SOURCE_DIR}/${spv_module}.spv
                              ${CMAKE_CURRENT_BINARY_DIR}/${spv_module}.spv)
 endforeach()
-
-# One ctest entry per scenario, all running the same executable with a different
-# --scenario.
-#
-# The names deliberately avoid a "ze_gemm" prefix: test_unitrace.py selects a
-# test with "ctest -R <name>", which is a regex, so anything starting with
-# "ze_gemm" would also be matched by "ctest -R ze_gemm" and would run under the
-# ze_gemm test's scenario list (-k/-q) instead of its own --stall-sampling entry.
-# No other configured test name is a substring of these, so each is matched only
-# by its own entry, and "ctest -R gemm_stall_sampling" runs all four.
-#
-# -t names the sub-test so each scenario's output file is distinct
-#    (run_test.py builds the output file name from it).
-# -e points at the validator, which checks the metrics file is non-empty.
-#
-# --size 256 keeps runtime reasonable: stall sampling is slow and scenario 3
-# launches 9 kernels per iteration. 256 is a multiple of the tiled kernel's
-# 16x16 work group, which that kernel requires.
-foreach(scenario_num RANGE 1 4)
-  add_test(NAME gemm_stall_sampling_scenario${scenario_num}
-           COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/../run_test.py
-                   -e ${CMAKE_CURRENT_SOURCE_DIR}/check_outfiles.py
-                   -c ${CMAKE_SOURCE_DIR}
-                   -t gemm_stall_sampling_scenario${scenario_num}
-                   gemm_stall_sampling --scenario ${scenario_num} --size 256 --iterations 2)
-endforeach()

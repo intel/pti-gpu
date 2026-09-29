@@ -19,14 +19,11 @@ set (LEVEL_ZERO_COMMIT_ID "v1.32.0")
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
 
-# Enable testing
-enable_testing()
 
 add_subdirectory(cl_gemm)
 add_subdirectory(conditional_trace)
 add_subdirectory(dpc_gemm)
 add_subdirectory(device_and_rank_to_sample)
-add_subdirectory(print_options_schema)
 add_subdirectory(event_reset)
 add_subdirectory(gemm_stall_sampling)
 add_subdirectory(graph)
