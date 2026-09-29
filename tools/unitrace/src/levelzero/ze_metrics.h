@@ -1096,10 +1096,13 @@ class ZeMetricProfiler {
     // Fetched on the first .asm file, since fetching it creates the directory.
     std::string disasm_dir;
 
-    // The kernel the walk is on and its module. No kernel is current while current_module
-    // is modules.end(); current_kernel is only valid otherwise.
+    // The kernel the walk is on and its module. No kernel is current while current_props
+    // is null; current_module and current_base are only valid otherwise. A base address
+    // and a KernelProps pointer are kept instead of a map iterator so there is no
+    // singular iterator to misuse (std::map nodes are pointer-stable). (CID 802278)
     DeviceModuleProps::iterator current_module = modules.end();
-    std::map<uint64_t, KernelProps>::reverse_iterator current_kernel;
+    uint64_t current_base = 0;
+    KernelProps* current_props = nullptr;
 
     // The last source location found in the current kernel's locations, or null.
     const SourceLocation* current_source_location = nullptr;
@@ -1108,8 +1111,8 @@ class ZeMetricProfiler {
       // Samples come in ascending IP order, so most fall in the current kernel. Search only
       // when there is none or the IP is outside it; an IP below the base wraps and fails
       // the unsigned test.
-      if ((current_module == modules.end()) ||
-          ((ip - current_kernel->first) >= std::get<2>(current_kernel->second))) {
+      if ((current_props == nullptr) ||
+          ((ip - current_base) >= std::get<2>(*current_props))) {
         bool attributed = false;
 
         // Modules interleave in the address space, so every module is searched; the first
@@ -1147,7 +1150,8 @@ class ZeMetricProfiler {
 
             // Found: make it current, and drop the previous kernel's source location.
             current_module = mod;
-            current_kernel = it;
+            current_base = base_addr;
+            current_props = &props;
             current_source_location = nullptr;
 
             attributed = true;
@@ -1164,7 +1168,7 @@ class ZeMetricProfiler {
           continue;
         }
 
-        KernelProps& props = current_kernel->second;
+        KernelProps& props = *current_props;
 
         // First time this kernel is found: resolve its source and disassemble it, unless
         // IGA already refused.
@@ -1215,8 +1219,8 @@ class ZeMetricProfiler {
         metric_logger->Log(header);
       }
 
-      const uint64_t base_addr = current_kernel->first;
-      KernelProps& props = current_kernel->second;
+      const uint64_t base_addr = current_base;
+      KernelProps& props = *current_props;
 
       const uint64_t offset = ip - base_addr;
 
