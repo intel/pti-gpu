@@ -73,8 +73,8 @@ void ParseBuffer(unsigned char* buf, std::size_t buf_size, std::size_t valid_buf
 
 }  // namespace
 
-bool InitializeProfilingEnvironment() {
-  std::cout << "=== Initializing Profiling Environment ===" << std::endl;
+bool InitializeProfilingEnvironment(std::ostream& output) {
+  output << "=== Initializing Profiling Environment ===" << std::endl;
 
   // Set up buffer callbacks for PTI view
   pti_result status = ptiViewSetCallbacks(ProvideBuffer, ParseBuffer);
@@ -90,12 +90,12 @@ bool InitializeProfilingEnvironment() {
     return false;
   }
 
-  std::cout << "Kernel view enabled successfully" << std::endl;
+  output << "Kernel view enabled successfully" << std::endl;
   return true;
 }
 
-pti_result EnablePcSampling() {
-  std::cout << "\n=== Enabling PC Sampling ===" << std::endl;
+pti_result EnablePcSampling(std::ostream& output) {
+  output << "\n=== Enabling PC Sampling ===" << std::endl;
 
   pti_result status = ptiPcSamplingEnable(&g_pc_sampling_handle);
   if (status != PTI_SUCCESS) {
@@ -104,13 +104,13 @@ pti_result EnablePcSampling() {
     return status;
   }
 
-  std::cout << "PC Sampling enabled successfully" << std::endl;
+  output << "PC Sampling enabled successfully" << std::endl;
   return PTI_SUCCESS;
 }
 
 pti_result ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count,
-                               uint32_t sampling_period_ns) {
-  std::cout << "\n=== Configuring PC Sampling ===" << std::endl;
+                               uint32_t sampling_period_ns, std::ostream& output) {
+  output << "\n=== Configuring PC Sampling ===" << std::endl;
 
   if (!g_pc_sampling_handle) {
     std::cerr << "PC sampling handle is null. Call EnablePcSampling() first." << std::endl;
@@ -129,18 +129,18 @@ pti_result ConfigurePcSampling(const pti_device_handle_t* devices, size_t device
   }
 
   if (devices == nullptr) {
-    std::cout << "PC Sampling configured for all available devices (sampling period: "
-              << sampling_period_ns << " ns)" << std::endl;
+    output << "PC Sampling configured for all available devices (sampling period: "
+           << sampling_period_ns << " ns)" << std::endl;
   } else {
-    std::cout << "PC Sampling configured for " << device_count
-              << " device(s) (sampling period: " << sampling_period_ns << " ns)" << std::endl;
+    output << "PC Sampling configured for " << device_count
+           << " device(s) (sampling period: " << sampling_period_ns << " ns)" << std::endl;
   }
 
   return PTI_SUCCESS;
 }
 
-bool StartPcSamplingCollection() {
-  std::cout << "\n=== Starting PC Sampling Collection ===" << std::endl;
+bool StartPcSamplingCollection(std::ostream& output) {
+  output << "\n=== Starting PC Sampling Collection ===" << std::endl;
 
   if (!g_pc_sampling_handle) {
     std::cerr << "PC sampling handle is null. Call EnablePcSampling() first." << std::endl;
@@ -154,12 +154,12 @@ bool StartPcSamplingCollection() {
     return false;
   }
 
-  std::cout << "PC Sampling collection started successfully" << std::endl;
+  output << "PC Sampling collection started successfully" << std::endl;
   return true;
 }
 
-bool StopPcSamplingCollection() {
-  std::cout << "\n=== Stopping PC Sampling Collection ===" << std::endl;
+bool StopPcSamplingCollection(std::ostream& output) {
+  output << "\n=== Stopping PC Sampling Collection ===" << std::endl;
 
   if (!g_pc_sampling_handle) {
     std::cerr << "PC sampling handle is null. Nothing to stop." << std::endl;
@@ -173,12 +173,12 @@ bool StopPcSamplingCollection() {
     return false;
   }
 
-  std::cout << "PC Sampling collection stopped successfully" << std::endl;
+  output << "PC Sampling collection stopped successfully" << std::endl;
   return true;
 }
 
-bool DisablePcSampling() {
-  std::cout << "\n=== Disabling PC Sampling ===" << std::endl;
+bool DisablePcSampling(std::ostream& output) {
+  output << "\n=== Disabling PC Sampling ===" << std::endl;
 
   if (!g_pc_sampling_handle) {
     std::cerr << "PC sampling handle is null. Nothing to disable." << std::endl;
@@ -192,7 +192,7 @@ bool DisablePcSampling() {
     return false;
   }
 
-  std::cout << "PC Sampling disabled and resources freed successfully" << std::endl;
+  output << "PC Sampling disabled and resources freed successfully" << std::endl;
   g_pc_sampling_handle = nullptr;
   return true;
 }
@@ -333,16 +333,24 @@ bool PrintPcSamplingData(std::ostream& output) {
     // Print per kernel data
     for (size_t k = 0; k < kernel_count; ++k) {
       // Print kernel info
-      std::vector<uint64_t> aggregated_samples(reason_count, 0);
       pti_pc_sampling_kernel_info_t kernel_info{};
       kernel_info._struct_size = sizeof(kernel_info);
-      kernel_info._aggregated_samples = aggregated_samples.data();
-
       status = ptiPcSamplingGetObservedKernelInfo(g_pc_sampling_handle, devices[d],
                                                   kernel_handles[k], &kernel_info);
       if (status != PTI_SUCCESS) {
         std::cerr << "  Failed to retrieve kernel info: " << ptiResultTypeToString(status)
                   << std::endl;
+        continue;
+      }
+
+      const size_t kernel_reason_count = kernel_info._reason_count;
+      std::vector<uint64_t> aggregated_samples(kernel_reason_count, 0);
+      kernel_info._aggregated_samples = aggregated_samples.data();
+      status = ptiPcSamplingGetObservedKernelInfo(g_pc_sampling_handle, devices[d],
+                                                  kernel_handles[k], &kernel_info);
+      if (status != PTI_SUCCESS) {
+        std::cerr << "  Failed to retrieve aggregated kernel samples: "
+                  << ptiResultTypeToString(status) << std::endl;
         continue;
       }
 
@@ -355,9 +363,9 @@ bool PrintPcSamplingData(std::ostream& output) {
       // Aggregated stall counts across all instructions in this kernel
       output << "    Aggregated stall samples:" << std::endl;
       bool any_nonzero = false;
-      for (size_t r = 0; r < reason_count; ++r) {
+      for (size_t r = 0; r < kernel_reason_count; ++r) {
         if (aggregated_samples[r] > 0) {
-          const char* rname = reasons[r]._name ? reasons[r]._name : "<unknown>";
+          const char* rname = r < reason_count && reasons[r]._name ? reasons[r]._name : "<unknown>";
           output << "      " << rname << ": " << aggregated_samples[r] << std::endl;
           any_nonzero = true;
         }
@@ -367,13 +375,13 @@ bool PrintPcSamplingData(std::ostream& output) {
       }
 
       const size_t instr_count = kernel_info._instructions_with_samples_count;
-      if (instr_count == 0) {
+      if (instr_count == 0 || kernel_reason_count == 0) {
         continue;
       }
 
       // Print per-instruction stall breakdown
       std::vector<pti_pc_sampling_instruction_t> instructions(instr_count);
-      std::vector<uint64_t> samples(instr_count * reason_count, 0);
+      std::vector<uint64_t> samples(instr_count * kernel_reason_count, 0);
       status = ptiPcSamplingGetSamplesPerInstruction(g_pc_sampling_handle, devices[d],
                                                      kernel_handles[k], instructions.data(),
                                                      instr_count, samples.data(), samples.size());
@@ -384,14 +392,14 @@ bool PrintPcSamplingData(std::ostream& output) {
       }
 
       // Pre-compute per-column width: max(header name length, max value digits)
-      std::vector<size_t> col_widths(reason_count);
-      for (size_t r = 0; r < reason_count; ++r) {
-        const char* rname = reasons[r]._name ? reasons[r]._name : "<unknown>";
+      std::vector<size_t> col_widths(kernel_reason_count);
+      for (size_t r = 0; r < kernel_reason_count; ++r) {
+        const char* rname = r < reason_count && reasons[r]._name ? reasons[r]._name : "<unknown>";
         col_widths[r] = std::strlen(rname);
       }
       for (size_t i = 0; i < instr_count; ++i) {
-        for (size_t r = 0; r < reason_count; ++r) {
-          size_t val_width = CountDecimalDigits(samples[i * reason_count + r]);
+        for (size_t r = 0; r < kernel_reason_count; ++r) {
+          size_t val_width = CountDecimalDigits(samples[i * kernel_reason_count + r]);
           col_widths[r] = std::max(col_widths[r], val_width);
         }
       }
@@ -400,15 +408,15 @@ bool PrintPcSamplingData(std::ostream& output) {
 
       // Header row
       output << "      " << std::left << std::setw(10) << "Offset";
-      for (size_t r = 0; r < reason_count; ++r) {
-        const char* rname = reasons[r]._name ? reasons[r]._name : "<unknown>";
+      for (size_t r = 0; r < kernel_reason_count; ++r) {
+        const char* rname = r < reason_count && reasons[r]._name ? reasons[r]._name : "<unknown>";
         output << " | " << std::left << std::setw(col_widths[r]) << rname;
       }
       output << std::endl;
 
       // Separator row
       output << "      " << std::string(10, '-');
-      for (size_t r = 0; r < reason_count; ++r) {
+      for (size_t r = 0; r < kernel_reason_count; ++r) {
         output << "-+-" << std::string(col_widths[r], '-');
       }
       output << std::endl;
@@ -421,9 +429,9 @@ bool PrintPcSamplingData(std::ostream& output) {
           output << " [" << instructions[i]._source_info->_file_path << ":"
                  << instructions[i]._source_info->_file_line << "]";
         }
-        for (size_t r = 0; r < reason_count; ++r) {
+        for (size_t r = 0; r < kernel_reason_count; ++r) {
           output << " | " << std::right << std::setw(col_widths[r])
-                 << samples[i * reason_count + r];
+                 << samples[i * kernel_reason_count + r];
         }
         output << std::endl;
       }
@@ -433,20 +441,20 @@ bool PrintPcSamplingData(std::ostream& output) {
   return true;
 }
 
-void CleanupProfilingEnvironment() {
-  std::cout << "\n=== Cleaning Up Profiling Environment ===" << std::endl;
+void CleanupProfilingEnvironment(std::ostream& output) {
+  output << "\n=== Cleaning Up Profiling Environment ===" << std::endl;
 
   // Disable kernel view
   pti_result status = ptiViewDisable(PTI_VIEW_DEVICE_GPU_KERNEL);
   if (status != PTI_SUCCESS) {
     std::cerr << "Failed to disable kernel view: " << ptiResultTypeToString(status) << std::endl;
   } else {
-    std::cout << "Kernel view disabled successfully" << std::endl;
+    output << "Kernel view disabled successfully" << std::endl;
   }
   status = ptiFlushAllViews();
   if (status != PTI_SUCCESS) {
     std::cerr << "Failed to flush PTI views: " << ptiResultTypeToString(status) << std::endl;
   } else {
-    std::cout << "PTI views flushed successfully" << std::endl;
+    output << "PTI views flushed successfully" << std::endl;
   }
 }

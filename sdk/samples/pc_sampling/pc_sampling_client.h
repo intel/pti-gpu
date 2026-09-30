@@ -16,12 +16,12 @@
 // Must be called before EnablePcSampling().
 // Note: This is a temporary requirement which will be removed in future when
 //  PC sampling can be enabled without enabling kernel view from the app.
-bool InitializeProfilingEnvironment();
+bool InitializeProfilingEnvironment(std::ostream& output = std::cout);
 
 // Enable PC sampling and create a collection handle.
 // This corresponds to ptiPcSamplingEnable().
 // Must be called before ConfigurePcSampling() and StartPcSamplingCollection().
-pti_result EnablePcSampling();
+pti_result EnablePcSampling(std::ostream& output = std::cout);
 
 // Configure PC sampling with device selection and sampling period.
 // Parameters:
@@ -32,23 +32,23 @@ pti_result EnablePcSampling();
 // Optional: skip it to collect with the PTI defaults. When used, it must be called after
 // EnablePcSampling() and before StartPcSamplingCollection().
 pti_result ConfigurePcSampling(const pti_device_handle_t* devices, size_t device_count,
-                               uint32_t sampling_period_ns);
+                               uint32_t sampling_period_ns, std::ostream& output = std::cout);
 
 // Start PC sampling collection.
 // This corresponds to ptiPcSamplingStartCollection().
 // Must be called after EnablePcSampling(). Applies the default configuration when
 // ConfigurePcSampling() was not called.
-bool StartPcSamplingCollection();
+bool StartPcSamplingCollection(std::ostream& output = std::cout);
 
 // Stop PC sampling collection.
 // This corresponds to ptiPcSamplingStopCollection().
 // Must be called after StartPcSamplingCollection() and before DisablePcSampling().
-bool StopPcSamplingCollection();
+bool StopPcSamplingCollection(std::ostream& output = std::cout);
 
 // Disable PC sampling and free resources.
 // This corresponds to ptiPcSamplingDisable().
 // Must be called after StopPcSamplingCollection().
-bool DisablePcSampling();
+bool DisablePcSampling(std::ostream& output = std::cout);
 
 // Retrieve and print PC sampling data collected during the last sampling session.
 // Must be called after StopPcSamplingCollection() and before DisablePcSampling().
@@ -61,6 +61,6 @@ bool HasObservedPcSamplingKernels();
 
 // Cleanup PTI view subsystem.
 // Should be called at the end of the program.
-void CleanupProfilingEnvironment();
+void CleanupProfilingEnvironment(std::ostream& output = std::cout);
 
 #endif  // PC_SAMPLING_H_
