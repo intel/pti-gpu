@@ -5,9 +5,11 @@ from collections.abc import Callable
 from enum import Enum, auto
 import os
 import re
+import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 import io
 
 # reconfigure stdout/stderr to utf-8 to support unicode characters in output
@@ -340,45 +342,56 @@ def get_value(name, text):
         return None
 
 
-def run_process(command, path, timeout_sec, environ=None):
-    command = command.copy()
-    shell = False
+def kill_process_tree(p):
     if sys.platform == "win32":
-        shell = True
-    else:
-        command[0] = os.path.join(path, command[0])
-
-    p = subprocess.Popen(
-        command,
-        cwd=path,
-        shell=shell,
-        env=environ,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        encoding="latin-1",
-        text=True,
-    )
-    try:
-        stdout, stderr = p.communicate(timeout=timeout_sec)
-    except subprocess.TimeoutExpired:
-        if sys.platform == "win32":
-            subprocess.run(
+        # p.kill() only terminates the direct child; /T also takes its descendants
+        try:
+            result = subprocess.run(
                 ["taskkill", "/F", "/T", "/PID", str(p.pid)],
                 capture_output=True,
                 check=False,
+                timeout=30,
             )
-        else:
-            p.kill()
-        try:
-            stdout, stderr = p.communicate(timeout=10)
+            if result.returncode == 0:
+                return
+            print(
+                f"WARNING: taskkill failed for process {p.pid} "
+                f"(exit code {result.returncode})"
+            )
         except subprocess.TimeoutExpired:
-            if p.stdout:
-                p.stdout.close()
-            if p.stderr:
-                p.stderr.close()
-            stdout, stderr = "", ""
-        print(f"ERROR: process timed out after {timeout_sec}s: {command[0]}")
-        return CommandResult(CommandStatus.HANGED, stdout, stderr)
+            print(f"WARNING: taskkill timed out for process {p.pid}")
+    p.kill()
+
+
+def read_output(f):
+    f.seek(0)
+    return f.read().decode("latin-1")
+
+
+def run_process(command, path, work_dir, timeout_sec, environ=None):
+    command = command.copy()
+    command[0] = os.path.join(os.path.abspath(path), command[0])
+
+    # Output goes to temp files, not pipes: with pipes, a killed process that
+    # is stuck in the GPU driver keeps the pipe open and reading its output
+    # blocks forever (the test then hangs until the CI job is cancelled).
+    # The process runs in work_dir, not in the binaries dir, so a stuck
+    # process does not also hold that dir as its current directory.
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        p = subprocess.Popen(command, cwd=work_dir, env=environ, stdout=out, stderr=err)
+        try:
+            p.wait(timeout=timeout_sec)
+        except subprocess.TimeoutExpired:
+            kill_process_tree(p)
+            try:
+                p.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                print(f"WARNING: process {p.pid} did not exit after kill")
+            print(f"ERROR: process timed out after {timeout_sec}s: {command[0]}")
+            return CommandResult(
+                CommandStatus.HANGED, read_output(out), read_output(err)
+            )
+        stdout, stderr = read_output(out), read_output(err)
 
     if p.returncode == 0:
         status = CommandStatus.PASS
@@ -413,7 +426,30 @@ def check_process_status(baseline_result, test_result):
     return status
 
 
-def run_test(path, test_type, test_timeout=60):
+def run_warm_up(config, path, work_dir, timeout_sec, environ):
+    """Warm-up phase to stabilize CPU frequency and thermal state.
+
+    Returns PASS, or the status of the first warm-up run that did not pass.
+    """
+    if config.warm_up_runs > 0:
+        print("\nWarm-up phase:")
+    for i in range(config.warm_up_runs):
+        print("  Warm-up run " + str(i + 1) + "...", end=" ", flush=True)
+        baseline_result = run_process(
+            config.baseline_command, path, work_dir, timeout_sec, environ
+        )
+        test_result = run_process(
+            config.test_command, path, work_dir, timeout_sec, environ
+        )
+        status = check_process_status(baseline_result, test_result)
+        if status != CommandStatus.PASS:
+            print("Warm-up terminated the test")
+            return status
+        print("✓")
+    return CommandStatus.PASS
+
+
+def run_test(path, work_dir, test_type, test_timeout=60):
     config = test_configs[test_type]
     environ = None
     if test_type == "pc-sampling":
@@ -430,23 +466,11 @@ def run_test(path, test_type, test_timeout=60):
         f"(total budget: {test_timeout}s, invocations: {total_invocations})"
     )
 
-    # Warm-up phase to stabilize CPU frequency and thermal state
-    if config.warm_up_runs > 0:
-        print("\nWarm-up phase:")
-        for i in range(config.warm_up_runs):
-            print("  Warm-up run " + str(i + 1) + "...", end=" ", flush=True)
-            baseline_result = run_process(
-                config.baseline_command, path, timeout_sec, environ
-            )
-            test_result = run_process(config.test_command, path, timeout_sec, environ)
-            status = check_process_status(baseline_result, test_result)
-            if status == CommandStatus.HANGED:
-                print("Continuing after warm-up process timed out")
-                continue
-            if status != CommandStatus.PASS:
-                print("Warm-up terminated the test")
-                return status, None
-            print("✓")
+    warm_up_status = run_warm_up(config, path, work_dir, timeout_sec, environ)
+    if warm_up_status == CommandStatus.SKIPPED:
+        return CommandStatus.SKIPPED, None
+    if warm_up_status != CommandStatus.PASS:
+        return CommandStatus.FAIL, None
 
     print("\nMeasurement phase - runs: ")
     throughput_test = []
@@ -456,12 +480,18 @@ def run_test(path, test_type, test_timeout=60):
     test_specific_values = {}
     failed_measurements = 0
     for i in range(config.repetitions):
+        # Test fails below anyway; stop so repeated hangs don't eat the
+        # CI job timeout
+        if failed_measurements * 2 >= config.repetitions:
+            break
         print(str(i + 1) + "/" + str(config.repetitions) + ", ", end="", flush=True)
         # Interleaved: baseline first, then test (keeps CPU state similar)
         baseline_result = run_process(
-            config.baseline_command, path, timeout_sec, environ
+            config.baseline_command, path, work_dir, timeout_sec, environ
         )
-        test_result = run_process(config.test_command, path, timeout_sec, environ)
+        test_result = run_process(
+            config.test_command, path, work_dir, timeout_sec, environ
+        )
         status = check_process_status(baseline_result, test_result)
         if status == CommandStatus.SKIPPED:
             return CommandStatus.SKIPPED, None
@@ -649,9 +679,8 @@ def parse_arguments(argv):
 
     executable_path = argv[1]
     # An empty or missing directory almost always means the caller expanded an
-    # undefined CMake variable. Report it here: run_process() passes this path as
-    # the subprocess cwd, so otherwise the run dies in a bare Popen traceback that
-    # never names the directory it was handed.
+    # undefined CMake variable. Report it here, otherwise the run dies in a bare
+    # Popen traceback that never names the directory it was handed.
     if not executable_path:
         print("Empty executable_path: expected a directory containing test binaries")
         return None
@@ -679,7 +708,14 @@ def main():
     executable_path, threshold_overhead, test_type, test_timeout = arguments
     print(" executable path: " + executable_path)
 
-    result, test_results = run_test(executable_path, test_type, test_timeout)
+    work_dir = tempfile.mkdtemp(prefix="pti_perf_")
+    try:
+        result, test_results = run_test(
+            executable_path, work_dir, test_type, test_timeout
+        )
+    finally:
+        # A process that did not exit after kill may still hold the dir
+        shutil.rmtree(work_dir, ignore_errors=True)
     if result is CommandStatus.SKIPPED:
         print("Test skipped")
         return skip_return_code
