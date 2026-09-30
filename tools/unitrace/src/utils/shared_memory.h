@@ -7,13 +7,16 @@
 #ifndef PTI_TOOLS_UNITRACE_UTILS_SHARED_MEMORY_H_
 #define PTI_TOOLS_UNITRACE_UTILS_SHARED_MEMORY_H_
 
+#include <cctype>
 #include <memory>
+#include <string>
 
 #ifdef _WIN32
 #include <windows.h>
 #else /* _WIN32 */
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
@@ -23,6 +26,32 @@
 
 #define SHM_NAME_MAX 256
 #define SHM_NAME_PREFIX "/uctrl"
+
+// Tag that scopes every shared memory name to the invoking user, so users on a
+// shared host get separate control channels. Without it all users collide on
+// one global name: concurrently, one user's --start/--stop reaches the other's
+// run; and a segment left behind by another user's crashed launcher is fatal,
+// because /dev/shm is sticky and only the owner can unlink it (UNITRACEI-127).
+// A stale segment from the SAME user is recreated by Create(force_recreate).
+inline const std::string& GetShmUserTag() {
+    static const std::string tag = [] {
+#ifdef _WIN32
+        char name[256];
+        DWORD len = sizeof(name);
+        std::string user = GetUserNameA(name, &len) ? std::string(name, len - 1) : "unknown";
+        // The tag is part of a kernel object name: keep it to a safe subset.
+        for (char& c : user) {
+            if (!isalnum(static_cast<unsigned char>(c))) {
+                c = '_';
+            }
+        }
+        return user + "_";
+#else /* _WIN32 */
+        return std::to_string(getuid()) + "_";
+#endif /* _WIN32 */
+    }();
+    return tag;
+}
 
 enum SharedMemoryReturnStatus
 {
@@ -61,13 +90,15 @@ private:
     HANDLE hMapFile_ = nullptr;
 #endif /* _WIN32 */
     bool ValidateSessionName(const char* session) {
-        if (strlen(session) > (SHM_NAME_MAX - strlen(SHM_NAME_PREFIX) - 1)) {
-            std::cerr << "[ERROR] Session identifier is too long (maximum " << SHM_NAME_MAX - strlen(SHM_NAME_PREFIX) - 1 << " }" << std::endl;
+        const size_t max_len = SHM_NAME_MAX - strlen(SHM_NAME_PREFIX) - GetShmUserTag().size() - 1;
+        if (strlen(session) > max_len) {
+            std::cerr << "[ERROR] Session identifier is too long (maximum " << max_len << " }" << std::endl;
             return false;
         }
         return true;
     }
 
+    // Name layout: <prefix><uid or user name>_<session>, e.g. /uctrl1001_mysession.
     bool SetSessionNameSize(const char* session, size_t size) {
         if (!ValidateSessionName(session)) {
             return false;
@@ -75,6 +106,7 @@ private:
 
         shm_size_ = size;
         strcpy(shm_name_, SHM_NAME_PREFIX);
+        strcat(shm_name_, GetShmUserTag().c_str());
         strcat(shm_name_, session);
         return true;
     }
@@ -95,8 +127,13 @@ public:
         handle_ = shm_open(shm_name_, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
         if (handle_ == -1) {
             if (errno == EEXIST && force_recreate) {
-                // Stale shared memory from abnormal termination; clean up and recreate
-                shm_unlink(shm_name_);
+                // Stale shared memory from abnormal termination; clean up and recreate.
+                // The name is per-user, so this process owns the stale segment and
+                // may unlink it. Report if it still fails so the retry's EEXIST
+                // below is diagnosable.
+                if (shm_unlink(shm_name_) != 0 && errno != ENOENT) {
+                    std::cerr << "[WARNING] Failed to remove stale shared memory " << shm_name_ << " (" << GetErrorMessage(errno) << ")" << std::endl;
+                }
                 handle_ = shm_open(shm_name_, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
             } else if (errno == EEXIST) {
                 handle_ = shm_open(shm_name_, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
