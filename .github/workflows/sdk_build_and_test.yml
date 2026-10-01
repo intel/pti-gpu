@@ -20,7 +20,13 @@ on:
       - .github/actions/**
   workflow_dispatch:
   schedule:
-    - cron: '30 5 * * *' # Daily 5:30 AM UTC / 12:30 AM EST
+    # Daily 4:00 AM UTC - staggered vs nightly_build_and_test (5:30 UTC) so the
+    # two heavy scheduled runs do not compete for the same runners (PTI-511)
+    - cron: '0 4 * * *'
+
+concurrency:
+  group: sdk-build-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

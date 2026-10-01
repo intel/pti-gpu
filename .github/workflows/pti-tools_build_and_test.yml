@@ -13,6 +13,10 @@ on:
       - sdk/**
       - .github/**
 
+concurrency:
+  group: pti-tools-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 defaults:
   run:
     shell: bash
