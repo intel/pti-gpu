@@ -244,8 +244,9 @@ def ParseArguments(argv):
 # (query, time-based sampling), each opened by a label line naming its identity columns:
 #     Kernel,Pid,KernelId           stall sampling
 #     Kernel, GlobalInstanceId      query and time-based sampling
-# (a query section's first counter is SubDeviceId, a row per sub-device). The stall label
-# is matched in full, first; a first column of "Kernel" routes the other two to one reader.
+# (a query section has a row per sub-device, and a first column SubDeviceId only if there
+# is more than one). The stall label is matched in full, first; a first column of
+# "Kernel" routes the other two to one reader.
 # Labels are compared field by field, ignoring spacing (NormalizeFields).
 
 # A stall section's identity, copied onto its rows. Pid and KernelId also name the

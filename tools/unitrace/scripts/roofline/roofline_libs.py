@@ -466,7 +466,8 @@ def file_to_json(file_name):
     those values, then the counter names, then the counter values. The identity is copied
     onto every counter row so the frame can be grouped by 'Kernel', and because the label is
     what names the identity columns, the SubDeviceId or Device an older unitrace wrote there
-    needs no special case here; a current one writes SubDeviceId as the first counter.
+    needs no special case here; a current one writes SubDeviceId as the first counter when
+    there is more than one sub-device.
 
     Reading starts at the metrics banner, as it always has: the timing summary ahead of it
     has a 'Kernel'-headed table of its own that would otherwise be taken for a block. Only

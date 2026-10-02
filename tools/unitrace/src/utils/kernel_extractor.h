@@ -8,8 +8,8 @@
 //
 // Given a module's native binary (zeModuleGetNativeBinary()), GetKernelBinary() finds a
 // named kernel's ISA and the architecture it was compiled for. The ISA is the kernel's
-// ".text.<mangled name>" section; the architecture is in IGC's compatibility notes.
-// Container reading is elf64_reader.h's.
+// ".text.<mangled name>" section, without its padding (GenCodeSize()); the architecture
+// is in IGC's compatibility notes. Container reading is elf64_reader.h's.
 //
 // The ISA is a view into the caller's buffer, which must outlive it.
 //
@@ -167,6 +167,79 @@ inline bool ReadGenArchitectureNotes(const uint8_t* binary, size_t binary_size,
 }
 
 // ---------------------------------------------------------------------------
+// The encoding, only as far as an instruction's length
+// ---------------------------------------------------------------------------
+
+constexpr uint32_t kGenIsaCompactedSize = 8;
+constexpr uint32_t kGenIsaUncompactedSize = 16;
+// Compaction control: bit 29 of the first dword, on every platform IGA supports.
+constexpr uint32_t kGenIsaCompactionBit = 29;
+
+// The encoded length of the instruction at 'instruction', whose first four bytes must
+// be readable. Read byte by byte, since the buffer may be unaligned.
+inline uint32_t GenIsaInstructionLength(const uint8_t* instruction) {
+  const uint32_t word = static_cast<uint32_t>(instruction[0]) |
+                        (static_cast<uint32_t>(instruction[1]) << 8) |
+                        (static_cast<uint32_t>(instruction[2]) << 16) |
+                        (static_cast<uint32_t>(instruction[3]) << 24);
+  return ((word >> kGenIsaCompactionBit) & 1u) != 0 ? kGenIsaCompactedSize
+                                                    : kGenIsaUncompactedSize;
+}
+
+// Where the trailing run of zero bytes (IGC's alignment padding) begins, or isa_size
+// if the last byte is not zero.
+inline size_t GenIsaPaddingStart(const uint8_t* isa, size_t isa_size) {
+  if (isa == nullptr) {
+    return 0;
+  }
+  size_t start = isa_size;
+  while (start > 0 && isa[start - 1] == 0) {
+    --start;
+  }
+  return start;
+}
+
+// Whether the instruction has nothing but an opcode: a bare "nop" or all zeros, which
+// after the kernel's last instruction is padding. Checked by encoding, not opcode
+// number, since opcodes differ across platforms. 'length' must be the instruction's
+// own length, with all its bytes readable.
+inline bool GenIsaIsPaddingInstruction(const uint8_t* instruction, uint32_t length) {
+  // Every bit after the opcode byte must be clear, except the compaction bit.
+  constexpr uint8_t kCompactionByteBit = 1u << (kGenIsaCompactionBit - 24);
+  if (instruction[1] != 0 || instruction[2] != 0 ||
+      (instruction[3] & static_cast<uint8_t>(~kCompactionByteBit)) != 0) {
+    return false;
+  }
+  for (uint32_t i = 4; i < length; ++i) {
+    if (instruction[i] != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// The size of the code in an ISA buffer: the end of the last whole instruction that
+// is not padding. Walks instruction lengths from the start, since the zero run can
+// begin inside an instruction and a trailing nop is padding too. 0 if there is no
+// code.
+inline uint64_t GenCodeSize(const uint8_t* isa, size_t isa_size) {
+  const size_t padding_start = GenIsaPaddingStart(isa, isa_size);
+  uint64_t at = 0;
+  uint64_t code_end = 0;
+  while (at < padding_start && at + kGenIsaCompactedSize <= isa_size) {
+    const uint32_t length = GenIsaInstructionLength(isa + at);
+    if (length > isa_size - at) {
+      break;
+    }
+    if (!GenIsaIsPaddingInstruction(isa + at, length)) {
+      code_end = at + length;
+    }
+    at += length;
+  }
+  return code_end;
+}
+
+// ---------------------------------------------------------------------------
 // One kernel's code, and what decodes it
 // ---------------------------------------------------------------------------
 
@@ -180,8 +253,8 @@ struct KernelBinaryView {
   // What the module was compiled for; not Valid() if the binary does not record it.
   GenArchitecture architecture_;
 
-  // The section size in bytes, padding included; the extent IPs are matched against.
-  // 0 if never filled.
+  // The code size in bytes (GenCodeSize()), the extent IPs are matched against. 0 if
+  // never filled, or if the section holds no code.
   size_t Size() const { return size_; }
 };
 
@@ -239,7 +312,8 @@ inline bool GetKernelBinary(const uint8_t* binary, size_t binary_size,
 
   // The narrowing is safe: the section is inside a buffer of size_t bytes.
   out_kernel_binary.data_ = section.data_;
-  out_kernel_binary.size_ = static_cast<size_t>(section.size_);
+  out_kernel_binary.size_ = static_cast<size_t>(
+      GenCodeSize(section.data_, static_cast<size_t>(section.size_)));
   out_kernel_binary.section_name_ = want;
   out_kernel_binary.architecture_ = architecture;
   return true;

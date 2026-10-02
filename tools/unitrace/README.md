@@ -572,13 +572,13 @@ The metrics file holds one section per kernel instance. Each section has two sub
 ```sh
 Kernel, GlobalInstanceId
 "GEMM[SIMD32 {8192; 1; 1} {128; 1; 1}]", 4
-SubDeviceId, GpuTime[ns], GpuCoreClocks[cycles], AvgGpuCoreFrequencyMHz[MHz], XVE_ACTIVE[%], XVE_STALL[%]
-0, 41360937, 74196135, 1793, 82.172699, 17.319138
+GpuTime[ns], GpuCoreClocks[cycles], AvgGpuCoreFrequencyMHz[MHz], XVE_ACTIVE[%], XVE_STALL[%]
+41360937, 74196135, 1793, 82.172699, 17.319138
 
 Kernel, GlobalInstanceId
 "GEMM[SIMD32 {8192; 1; 1} {128; 1; 1}]", 5
-SubDeviceId, GpuTime[ns], GpuCoreClocks[cycles], AvgGpuCoreFrequencyMHz[MHz], XVE_ACTIVE[%], XVE_STALL[%]
-0, 41425831, 74306291, 1794, 82.201385, 17.290176
+GpuTime[ns], GpuCoreClocks[cycles], AvgGpuCoreFrequencyMHz[MHz], XVE_ACTIVE[%], XVE_STALL[%]
+41425831, 74306291, 1794, 82.201385, 17.290176
 ```
 
 The **GlobalInstanceId** uniquely identifies a kernel dispatch on a device in the process.

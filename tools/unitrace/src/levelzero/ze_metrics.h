@@ -384,14 +384,18 @@ class ZeMetricProfiler {
         // shape stall and time-based sampling also use:
         //   Kernel, GlobalInstanceId              <- section label, naming the identity
         //   "<name>", <instance id>                  the section carries
-        //   SubDeviceId, <counter names...>       <- column header: the sub-device, then
-        //   <sub-device>, <counter values...>        all metrics in metric_names order;
+        //   [SubDeviceId, ]<counter names...>     <- column header: the sub-device, then
+        //   [<sub-device>, ]<counter values...>      all metrics in metric_names order;
         //                                            one row per sub-device
-        // The counter column header is the same for every section of a device, so build
-        // it once per device change.
-        counter_header = "SubDeviceId";
+        // SubDeviceId is written only when there is more than one sub-device.
+        // The counter names are the same for every section of a device, so build them
+        // once per device change.
+        counter_header.clear();
         for (size_t i = 0; i < metric_names.size(); i++) {
-          counter_header += ", " + metric_names[i];
+          if (i > 0) {
+            counter_header += ", ";
+          }
+          counter_header += metric_names[i];
         }
         counter_header += "\n";
       }
@@ -414,17 +418,24 @@ class ZeMetricProfiler {
           samples.data(), computed_metrics.data());
 
         if (status == ZE_RESULT_SUCCESS) {
+          const bool with_sub_device = (num_samples > 1);
           // The leading newline puts a blank line before every section.
           std::string str = "\nKernel, GlobalInstanceId\n" + kname + ", " +
-                            std::to_string(instance_id) + "\n" + counter_header;
+                            std::to_string(instance_id) + "\n" +
+                            (with_sub_device ? "SubDeviceId, " : "") + counter_header;
           for (uint32_t i = 0; i < num_samples; ++i) {
             uint32_t size = samples[i];
 
             // A sample per sub-device, i being the sub-device
-            str += std::to_string(i);
+            if (with_sub_device) {
+              str += std::to_string(i) + ", ";
+            }
             const zet_typed_value_t *value = computed_metrics.data() + i * size;
             for (uint32_t j = 0; j < size; ++j) {
-              str += ", " + PrintTypedValue(value[j]);
+              if (j > 0) {
+                str += ", ";
+              }
+              str += PrintTypedValue(value[j]);
             }
             str += "\n";
           }
@@ -887,7 +898,8 @@ class ZeMetricProfiler {
     file << "// Mangled name: " << kname << "\n";
     file << "// Device #" << device_id << ", pid " << pid << ", kernel id " << kernel_id
          << "\n";
-    file << "// ISA: " << isa.size_ << " bytes of section " << isa.section_name_ << "\n\n";
+    file << "// ISA: " << isa.size_ << " bytes of code in section " << isa.section_name_
+         << "\n\n";
 
     // Empty when IGA refused the kernel, which it has already said.
     file << "// Assembly\n";
@@ -1130,9 +1142,9 @@ class ZeMetricProfiler {
               continue;
             }
 
-            // The extent comes from the kernel's section in the module binary. If there is
-            // no binary or no section it stays 0, the kernel matches no sample, and the
-            // lookup is repeated each time the search reaches it.
+            // The extent is the code size of the kernel's section in the module binary. If
+            // there is no binary, no section or no code it stays 0, the kernel matches no
+            // sample, and the lookup is repeated each time the search reaches it.
             if (!std::get<2>(props)) {
               const std::vector<uint8_t>& binary = GetModuleBinary(*mod);
               if (!binary.empty() &&

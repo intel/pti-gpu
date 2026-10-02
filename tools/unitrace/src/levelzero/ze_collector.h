@@ -2528,13 +2528,17 @@ class ZeCollector {
           // shape stall and time-based sampling also use:
           //   Kernel, GlobalInstanceId              <- section label, naming the identity
           //   "<name>", <instance id>                  the section carries
-          //   SubDeviceId, <counter names...>       <- column header: the sub-device, then
-          //   <sub-device>, <counter values...>        all metrics in metric_names order;
+          //   [SubDeviceId, ]<counter names...>     <- column header: the sub-device, then
+          //   [<sub-device>, ]<counter values...>      all metrics in metric_names order;
           //                                            one row per sub-device
-          // The counter column header is the same for every section, so build it once.
-          counter_header = "SubDeviceId";
+          // SubDeviceId is written only when there is more than one sub-device.
+          // The counter names are the same for every section, so build them once.
+          counter_header.clear();
           for (size_t i = 0; i < metric_names.size(); i++) {
-            counter_header += ", " + metric_names[i];
+            if (i > 0) {
+              counter_header += ", ";
+            }
+            counter_header += metric_names[i];
           }
           counter_header += "\n";
         }
@@ -2563,18 +2567,25 @@ class ZeCollector {
             samples.data(), metrics.data());
 
           if (status == ZE_RESULT_SUCCESS) {
+            const bool with_sub_device = (num_samples > 1);
             // The leading newline puts a blank line before every section.
             std::string str = "\nKernel, GlobalInstanceId\n" + kname + ", " +
-                              std::to_string(it->second.instance_id_) + "\n" + counter_header;
+                              std::to_string(it->second.instance_id_) + "\n" +
+                              (with_sub_device ? "SubDeviceId, " : "") + counter_header;
             for (uint32_t i = 0; i < num_samples; ++i) {
               uint32_t size = samples[i];
               PTI_ASSERT(size == metric_names.size());
 
               // A sample per sub-device, i being the sub-device
-              str += std::to_string(i);
+              if (with_sub_device) {
+                str += std::to_string(i) + ", ";
+              }
               const zet_typed_value_t *value = metrics.data() + i * size;
               for (uint32_t j = 0; j < size; ++j) {
-                str += ", " + PrintTypedValue(value[j]);
+                if (j > 0) {
+                  str += ", ";
+                }
+                str += PrintTypedValue(value[j]);
               }
               str += "\n";
             }
