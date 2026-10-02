@@ -12,7 +12,20 @@ endif()
 project(UnitraceTest C CXX)
 
 find_package(PythonInterp 3.9 REQUIRED)
-find_package(IntelSYCL REQUIRED)
+
+# Some compiler distributions ship an IntelSYCLConfig.cmake whose SYCL
+# feature test fails even though icpx -fsycl works. With this option ON,
+# add_sycl_to_target() applies plain -fsycl instead of using the package.
+option(UNITRACE_PLAIN_SYCL
+  "Use plain -fsycl flags instead of the IntelSYCL cmake package" OFF)
+if (UNITRACE_PLAIN_SYCL)
+  function(add_sycl_to_target target)
+    target_compile_options(${target} PRIVATE -fsycl)
+    target_link_options(${target} PRIVATE -fsycl)
+  endfunction()
+else()
+  find_package(IntelSYCL REQUIRED)
+endif()
 
 # L0 version required
 set (LEVEL_ZERO_COMMIT_ID "v1.32.0")
