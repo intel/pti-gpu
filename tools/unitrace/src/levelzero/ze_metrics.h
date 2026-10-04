@@ -1450,7 +1450,7 @@ class ZeMetricProfiler {
         }
 
         const zet_typed_value_t *value = metrics.data();
-        for (uint32_t i = 0; i < num_samples; ++i) {
+        for (uint32_t i = 0; i < num_samples && kit != kinfo.end(); ++i) {
           uint32_t size = samples[i];
 
           for (uint32_t j = 0; j < (size / metric_list.size()); ++j) {
