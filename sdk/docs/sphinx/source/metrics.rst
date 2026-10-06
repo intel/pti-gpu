@@ -32,10 +32,11 @@ Detailed API Documentation
 Enable/Disable Functions
 ------------------------
 
-``ptiMetricsEnable`` must be called before any other Metrics API function. It replaces the need to set
-the ``ZET_ENABLE_METRICS=1`` environment variable before the process starts, provided the installed
-driver supports enabling metrics at runtime; otherwise it returns
-``PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED`` and the environment variable must be used instead.
+Metrics must be enabled before any other Metrics API function is called, either by calling
+``ptiMetricsEnable`` or by setting the ``ZET_ENABLE_METRICS=1`` environment variable before the process
+starts. ``ptiMetricsEnable`` works only if the installed driver supports enabling metrics at runtime;
+otherwise it returns ``PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED`` and the environment variable must
+be used instead (this is the case with LTS drivers).
 
 Calls are reference counted per device, so every ``ptiMetricsEnable`` call must be matched with a
 ``ptiMetricsDisable`` call. Metrics are disabled on a device only once its last reference is released.
@@ -93,6 +94,8 @@ Structures
 
 .. doxygenstruct:: pti_metrics_group_collection_params_t
    :members:
+
+.. doxygenunion:: pti_value_t
 
 Enumerators
 -----------

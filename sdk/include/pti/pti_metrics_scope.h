@@ -28,9 +28,14 @@ extern "C" {
  * - Metrics evaluation
  *
  * Configuration flow:
+ *   0. Enable a Level Zero GPU view kind with ptiViewEnable (e.g. PTI_VIEW_DEVICE_GPU_KERNEL;
+ *      see ptiCallbackSubscribe in pti_callback.h for the list); ptiMetricsScopeStartCollection
+ *      fails with PTI_ERROR_NO_GPU_VIEWS_ENABLED otherwise
  *   1. Call ptiMetricsScopeEnable to create a scope collection handle
- *   2. Call ptiMetricsGetDevices to get available devices (defined in pti_metrics.h)
- *   3. Call ptiMetricsScopeConfigure to pass desired metrics for a specific device
+ *   2. (optional) Call ptiMetricsGetDevices to get available devices (defined in pti_metrics.h);
+ *                 needed only to profile an explicit list of devices
+ *   3. Call ptiMetricsScopeConfigure to pass the desired metrics and the devices to profile:
+ *                 either an explicit list of devices, or none to profile every device the workload uses
  *   4. (optional) Call ptiMetricsScopeQueryCollectionBufferSize to query the estimated buffer size
  *   5. (optional) Call ptiMetricsScopeSetCollectionBufferSize to set the desired collection buffer size;
  *                 a default of 2048 bytes is used if this is skipped
@@ -128,12 +133,20 @@ ptiMetricsScopeEnable(pti_scope_collection_handle_t* scope_collection_handle);
  * @param[in] collection_mode                Collection mode;
  *                                           currently only PTI_METRICS_SCOPE_AUTO_KERNEL is supported
  * @param[in] devices_to_profile             Array of device handles for target devices;
- *                                           currently only one device per MetricsScope is supported
- * @param[in] device_count                   Number of devices in the devices_to_profile array
+ *                                           NULL (with device_count 0) profiles every device the workload uses;
+ *                                           all devices profiled by one MetricsScope must report the same
+ *                                           _model_name in pti_device_properties_t. With NULL, this is checked
+ *                                           across every device returned by ptiMetricsGetDevices, not only the
+ *                                           ones the workload uses; on systems with mixed GPU models, pass an
+ *                                           explicit list of same-model devices
+ * @param[in] device_count                   Number of devices in the devices_to_profile array;
+ *                                           must be 0 if devices_to_profile is NULL
  * @param[in] metric_names                   Array of metric names to collect
  * @param[in] metric_count                   Number of metric names in the metric_names array
  *
  * @return pti_result
+ *         - PTI_ERROR_METRICS_SCOPE_DEVICE_TYPE_NOT_UNIFORM if the devices to profile (with NULL, all devices
+ *           returned by ptiMetricsGetDevices) do not all report the same _model_name
  *
  */
 pti_result PTI_EXPORT
@@ -180,6 +193,8 @@ ptiMetricsScopeSetCollectionBufferSize(pti_scope_collection_handle_t scope_colle
  * @param[in] scope_collection_handle        Scope collection handle
  *
  * @return pti_result
+ *         - PTI_ERROR_NO_GPU_VIEWS_ENABLED if no Level Zero GPU view kind is enabled
+ *           (see ptiCallbackSubscribe in pti_callback.h for the list)
  */
 pti_result PTI_EXPORT
 ptiMetricsScopeStartCollection(pti_scope_collection_handle_t scope_collection_handle);

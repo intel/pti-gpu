@@ -32,7 +32,8 @@ extern "C" {
 typedef enum _pti_view_kind {
   PTI_VIEW_INVALID = 0,                      //!< Invalid
   PTI_VIEW_DEVICE_GPU_KERNEL = 1,            //!< Device kernels
-  PTI_VIEW_DEVICE_CPU_KERNEL = 2,            //!< Host (CPU) kernels
+  PTI_VIEW_DEVICE_CPU_KERNEL = 2,            //!< Host (CPU) kernels; not implemented,
+                                             //!< ptiViewEnable returns PTI_ERROR_NOT_IMPLEMENTED
   PTI_VIEW_DRIVER_API = 3,                   //!< Driver (aka back-end) API tracing
   PTI_VIEW_RESERVED = 4,                     //!< For future use
   PTI_VIEW_COLLECTION_OVERHEAD = 5,          //!< Collection overhead
@@ -125,7 +126,7 @@ typedef enum _pti_view_external_kind {
 PTI_STATIC_ASSERT(sizeof(pti_view_external_kind) == sizeof(uint32_t), "pti_view_external_kind enum should be equal to size of uint32_t");
 
 /**
- *  @brief Collection Overhead kinds
+ *  @brief Collection Overhead kinds; currently only PTI_VIEW_OVERHEAD_KIND_TIME is reported
  */
 typedef enum _pti_view_overhead_kind {
   PTI_VIEW_OVERHEAD_KIND_INVALID = 0,        //!< Invalid overhead kind
@@ -163,8 +164,10 @@ PTI_STATIC_ASSERT(sizeof(pti_api_group_id) == sizeof(uint32_t), "pti_api_group_i
  */
  typedef enum _pti_api_class {
   PTI_API_CLASS_RESERVED = 0,
-  PTI_API_CLASS_GPU_OPERATION_CORE = 1,                    //!< any memory or kernel APIs submitting some work to GPU
-                                                           //!< -- only Sycl Runtime mem/kernel apis covered for now.
+  PTI_API_CLASS_GPU_OPERATION_CORE = 1,                    //!< any memory or kernel APIs submitting some work to GPU:
+                                                           //!< SYCL runtime mem/kernel APIs, and Level Zero append APIs,
+                                                           //!< zeCommandListImmediateAppendCommandListsExp and
+                                                           //!< zeCommandQueueExecuteCommandLists
   PTI_API_CLASS_HOST_OPERATION_SYNCHRONIZATION = 2,        //!< Host synchronization APIs (no barriers)
                                                            //!< -- only LZ synch apis covered for now.
   PTI_API_CLASS_ALL = 0x7fffffff,                          //!< all APIs, makes all valid values positive numbers
@@ -197,7 +200,7 @@ typedef struct pti_view_record_kernel {
   pti_backend_ctx_t _context_handle;                //!< Context handle
   const char* _name;                                //!< Kernel name
   const char* _source_file_name;                    //!< Kernel source file,
-                                                    //!< null if no information
+                                                    //!< empty string if no information
   uint64_t _source_line_number;                     //!< Kernel beginning source line number,
                                                     //!< 0 if no information
   uint64_t _kernel_id;                              //!< Kernel instance ID,
@@ -227,7 +230,7 @@ typedef struct pti_view_record_kernel_v2 {
   pti_backend_ctx_t _context_handle;                //!< Context handle
   const char* _name;                                //!< Kernel name
   const char* _source_file_name;                    //!< Kernel source file,
-                                                    //!< null if no information
+                                                    //!< empty string if no information
   uint64_t _source_line_number;                     //!< Kernel beginning source line number,
                                                     //!< 0 if no information
   uint64_t _kernel_id;                              //!< Kernel instance ID,
@@ -626,7 +629,7 @@ ptiViewPushExternalCorrelationId(pti_view_external_kind external_kind, uint64_t 
  * @brief Pops ExternalCorrelationId kind and id for generation of external correlation records
  *
  * @param external_kind
- * @param external_id
+ * @param p_external_id
  * @return pti_result
  */
 pti_result PTI_EXPORT
@@ -657,7 +660,7 @@ PTI_EXPORT const char*
 ptiViewMemcpyTypeToString( pti_view_memcpy_type type );
 
 /**
- * @brief Returns current Intel(R) PTI host timestamp in nanoseconds. The timestamp is in the same api_group as view records timestamps.
+ * @brief Returns current Intel(R) PTI host timestamp in nanoseconds. The timestamp is in the same time domain as view records timestamps.
  *
  * @return uint64_t
  */
@@ -675,7 +678,7 @@ typedef uint64_t (*pti_fptr_get_timestamp)( void );
 /**
  * @brief Sets callback to user provided timestamping function.  This will replace the default Intel(R) PTI host timestamper.
  *        Multiple callbacks that set differing timestamp function, through the session; will result in differing
- *        timestamp api_groups in the view record buffer.
+ *        time domains in the view record buffer.
  *
  * @return pti_result
  */
@@ -685,7 +688,7 @@ ptiViewSetTimestampCallback(pti_fptr_get_timestamp fptr_timestampRequested);
 /**
  * @brief Gets api name for api id to user -- the api is embedded in the pti_view_record_api.
  * Sample usage -  const char* pName = nullptr;
- *              -  pti_result status = ptiViewGetApiIdName(pti_cb_api_function_type::PTI_CB_DRIVER, rec._api_id, &pName);
+ *              -  pti_result status = ptiViewGetApiIdName(PTI_API_GROUP_LEVELZERO, rec._api_id, &pName);
  *
  * @return pti_result
  */

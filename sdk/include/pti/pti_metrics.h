@@ -120,7 +120,7 @@ PTI_STATIC_ASSERT(sizeof(pti_metric_type) == sizeof(uint32_t), "pti_metric_type 
 
 typedef union _pti_value_t {
     uint32_t ui32;                               //!< 32-bit unsigned-integer
-    uint64_t ui64;                               //1< 64-bit unsigned-integer
+    uint64_t ui64;                               //!< 64-bit unsigned-integer
     float fp32;                                  //!< 32-bit floating-point
     double fp64;                                 //!< 64-bit floating-point
     bool b8;                                     //!< 8-bit boolean
@@ -168,13 +168,13 @@ typedef struct _pti_metrics_group_properties_t {
 
 /**
  * @brief Get the properties of all devices on the system on which metric collection can be done
- * usage: 1- Call ptiMetricsEnable(device) to enable metrics collection on the specified device, before calling ptiMetricsGetDevices.
+ * usage: 1- Call ptiMetricsEnable(NULL) to enable metrics collection on all devices, before calling ptiMetricsGetDevices.
  *        2- Call ptiMetricsGetDevices(NULL, device_count) to discover the required buffer size; the required buffer size will be written to device_count.
  *        3- Allocate devices buffer of size sizeof(pti_device_properties_t) * device_count
  *        4- Call ptiMetricsGetDevices(devices, device_count) to get the properties of the discovered devices written to devices
  *
  * @param[in/out] devices                   Pointer to the array of devices. If NULL, the number of devices is returned in *device_count
- *                                          if not NULL, it should point to the buffer of size: sizeof(pti_device_description_t) * (*device_count)
+ *                                          if not NULL, it should point to the buffer of size: sizeof(pti_device_properties_t) * (*device_count)
  * @param[in/out] device_count              Number of devices
  *                                          in - if devices is NULL or if device_count is less than the required minimum buffer size,
  *                                          device_count will contain the required buffer size
@@ -189,7 +189,7 @@ ptiMetricsGetDevices(pti_device_properties_t* devices,
 
 /**
  * @brief Get the properties of the metric groups supported by the device
- * Usage: 1- Call ptiMetricsEnable(device) to enable metrics collection on the specified device, before calling ptiMetricsGetMetricGroups.
+ * Usage: 1- Call ptiMetricsEnable(NULL) to enable metrics collection on all devices, before calling ptiMetricsGetMetricGroups.
  *        2- Call ptiMetricsGetMetricGroups(device_handle, null, metrics_group_count) to discover the required buffer size; the required buffer size will be written
  *        to metrics_group_count.
  *        3- Allocate metrics_groups buffer of size sizeof(pti_metrics_group_properties_t) * metrics_group_count
@@ -213,7 +213,7 @@ ptiMetricsGetMetricGroups(pti_device_handle_t device_handle,
 
 /**
  * @brief Get properties for all metrics in a metric group.
- * Usage: 1- Call ptiMetricsEnable(device) to enable metrics collection on the specified device, before calling ptiMetricsGetMetricsProperties.
+ * Usage: 1- Call ptiMetricsEnable(NULL) to enable metrics collection on all devices, before calling ptiMetricsGetMetricsProperties.
  *        2- Get available metric groups on a specified device using ptiMetricsGetMetricGroups
  *        3- In the metric group properties structure of the metric group of interest, allocate buffer _metric_properties of size sizeof(pti_metric_properties_t) * _metric_count
  *        4- call ptiMetricsGetMetricsProperties(metrics_group_handle, _metric_properties) to get the metric properties written to the supplied buffer
@@ -238,11 +238,11 @@ typedef struct _pti_metrics_group_collection_params_t {
 
 /**
  * @brief Configure metric groups of interest. Call ptiMetricsEnable to enable metrics collection before calling ptiMetricsConfigureCollection.
- * Note: only 1 metric group of type PTI_METRIC_GROUP_TYPE_TIME_BASED can be specified at this time.
- * TODO: add support for multiple metric groups and different types
+ * Note: only 1 metric group can be specified at this time (metrics_group_count must be 1).
+ * Time-based and event-based metric groups are supported.
  *
  * @param[in] device_handle                  Device handle
- * @param[in] metric_config_params           Buffer of input parameters structures. Note: only 1 is supported at this time
+ * @param[in] metrics_group_collection_params Buffer of input parameters structures. Note: only 1 is supported at this time
  * @param[in] metrics_group_count            Number of configuration structures in the configuration buffer
  *
  * @return pti_result

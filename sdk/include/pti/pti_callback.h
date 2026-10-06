@@ -20,7 +20,7 @@
  * The Callback API is useful for many purposes,
  * including the implementation of `MetricsScope` functionality that needs to subscribe to
  * domains such as kernel append to a command list, and potentially other domains.
- * The `MetricsScope` API is under development and is the first (internal) user of the Callback API.
+ * `MetricsScope` and `PcSampling` are internal users of the Callback API.
  */
 
 
@@ -126,9 +126,9 @@ typedef enum _pti_gpu_operation_kind {
 PTI_STATIC_ASSERT(sizeof(pti_gpu_operation_kind) == sizeof(uint32_t), "pti_gpu_operation_kind enum should be equal to size of uint32_t");
 
 typedef struct _pti_gpu_op_details {
-  pti_gpu_operation_kind             _operation_kind; //<! Kind of the operation: kernel, mem op
-  uint64_t                           _operation_id;   //<! GPU kernel or memory operation instance ID,
-                                                      //<! uniquely throughout the process
+  pti_gpu_operation_kind             _operation_kind; //!< Kind of the operation: kernel, mem op
+  uint64_t                           _operation_id;   //!< GPU kernel or memory operation instance ID,
+                                                      //!< uniquely throughout the process
   uint64_t                           _kernel_handle;  //!< a handle uniquely identifying kernel object as
                                                       //!< contained in the module at the specific offset
                                                       //!< it will be zero in case of not implemented yet or
@@ -191,9 +191,10 @@ typedef void (*pti_callback_function)(
                                             //!< although the current implementation is only for L0
   uint32_t             driver_api_id,
   pti_backend_ctx_t    backend_context,     //!< Driver (L0) level context handle
-  void*                cb_data, //!< depending on the domain, it should be type-casted to the pointer
-                                //!< to either pti_callback_gpu_op_data, pti_internal_callback_data,
-                                //!< or to other types to be defined
+  void*                cb_data, //!< depending on the domain, it should be type-casted to the pointer to:
+                                //!<   - pti_callback_gpu_op_data for GPU_OPERATION_APPENDED / GPU_OPERATION_COMPLETED
+                                //!<   - pti_callback_kernel_data for KERNEL_CREATED / KERNEL_DESTROYED
+                                //!<   - pti_internal_callback_data for the internal domains
   void*                global_user_data,    //!< Any global data defined by user returned
                                             //!< to every callback from a same subscriber
   void**         instance_user_data);       //!< Data that could be passed between ENTER and EXIT
@@ -202,16 +203,23 @@ typedef void (*pti_callback_function)(
 /**
  * Callback API functions
  * None of the PTI API functions should be called from within a Callback function.
- * Exceptions are helper functions that return character representations of enums.
+ * Exceptions are helper functions that return character representations of enums,
+ * and ptiViewPushExternalCorrelationId / ptiViewPopExternalCorrelationId.
  */
 
 /**
  * @brief Initialize Callback subscriber
  *
+ * A Level Zero GPU view kind must be enabled with ptiViewEnable first. These are:
+ * PTI_VIEW_DEVICE_GPU_KERNEL, PTI_VIEW_DEVICE_GPU_MEM_COPY, PTI_VIEW_DEVICE_GPU_MEM_FILL,
+ * PTI_VIEW_DEVICE_GPU_MEM_COPY_P2P, PTI_VIEW_DEVICE_SYNCHRONIZATION and PTI_VIEW_DRIVER_API.
+ * PTI_VIEW_RUNTIME_API and PTI_VIEW_EXTERNAL_CORRELATION do not count.
+ *
  * @param subscriber - subscriber handle
  * @param callback   - pointer to the callback function
  * @param user_data  - user data to be passed to the callback function
  * @return pti_result
+ *         - PTI_ERROR_NO_GPU_VIEWS_ENABLED if none of the Level Zero GPU view kinds listed above is enabled
  */
 pti_result PTI_EXPORT
 ptiCallbackSubscribe(pti_callback_subscriber_handle* subscriber,

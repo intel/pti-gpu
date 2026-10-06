@@ -24,14 +24,16 @@ Configuration Functions
 =======================
 
 * :ref:`ptiPcSamplingEnable <ptiPcSamplingEnable>` - Create a collection handle
-* :ref:`ptiPcSamplingConfigure <ptiPcSamplingConfigure>` - Configure devices and sampling period (optional)
-* :ref:`ptiPcSamplingQueryCollectionBufferSize <ptiPcSamplingQueryCollectionBufferSize>` - Query recommended buffer size
-* :ref:`ptiPcSamplingSetCollectionBufferSize <ptiPcSamplingSetCollectionBufferSize>` - Set collection buffer size
+* :ref:`ptiPcSamplingConfigure <ptiPcSamplingConfigure>` - Configure the device and sampling period (optional)
+* :ref:`ptiPcSamplingQueryCollectionBufferSize <ptiPcSamplingQueryCollectionBufferSize>` - Query recommended buffer size (not implemented yet)
+* :ref:`ptiPcSamplingSetCollectionBufferSize <ptiPcSamplingSetCollectionBufferSize>` - Set collection buffer size (not implemented yet)
 
 .. note::
    ``ptiPcSamplingConfigure`` is optional and is only needed to override the defaults. When it is
-   skipped, ``ptiPcSamplingStartCollection`` applies the default configuration: the device(s) PTI
-   selects and the default sampling period of 100000 ns. The collection lifecycle is therefore
+   skipped, ``ptiPcSamplingStartCollection`` applies the default configuration: the first device
+   that supports PC sampling and the default sampling period of 100000 ns. Only one device is
+   sampled per handle; pass an explicit list to ``ptiPcSamplingConfigure`` to choose another (the
+   first supported device in the list is used). The collection lifecycle is therefore
    ``ptiPcSamplingEnable`` → ``ptiPcSamplingConfigure`` (optional) → ``ptiPcSamplingStartCollection``
    → ``ptiPcSamplingStopCollection``.
 

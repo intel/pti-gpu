@@ -21,7 +21,7 @@ This guide provides instructions for building and installing the PTI SDK.
 - **Git**: Version 1.8 or higher
 - **Ninja**: Version 1.10.1 or higher (optional for Linux, required for Windows)
 - **Intel(R) oneAPI Base Toolkit**: See [tested versions](#tested-versions) below
-- **Level Zero Loader**: Version 1.28.0 or higher
+- **Level Zero Loader**: headers version 1.32.0 or higher (downloaded automatically by CMake if not found); version 1.14.0 or higher at runtime
 
 ### Platform-Specific Requirements
 
@@ -40,10 +40,9 @@ This guide provides instructions for building and installing the PTI SDK.
 
 | Support | Linux | Windows |
 | -------- | ------- | ------- |
-| Full | 2025.1.0 - 2025.3.0 | 2025.1.0 - 2025.3.0 |
-| Tested | 2026.0 | 2026.0 |
+| Full | 2026.0, 2026.1 | 2026.0 |
 
-**Note**: Full support indicates regular testing with all features. Tested versions may have limited validation.
+**Note**: Full support indicates regular testing with all features.
 
 #### Regularly Tested Configurations
 
@@ -191,7 +190,8 @@ g++ -I<install-prefix>/include \
   - Windows: Run `<path_to_oneapi>\setvars.bat` in cmd
 
 **Level Zero headers not found:**
-- Verify Level Zero Loader is installed (version >= 1.28.0)
+- CMake fetches the Level Zero headers when it does not find version >= 1.32.0, so this error means the download failed (for example, an offline build) or an older system Level Zero header set was picked up
+- Install Level Zero loader headers >= 1.32.0, or allow network access during configuration
 - Ensure oneAPI environment is properly sourced/initialized
 
 **Build fails with compiler errors:**

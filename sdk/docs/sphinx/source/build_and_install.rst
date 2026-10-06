@@ -27,9 +27,9 @@ Prerequisites
 
 * **CMake**: Version 3.14 or higher
 * **Git**: Version 1.8 or higher
-* **Intel(R) oneAPI Base Toolkit**: 2025.1.0 or higher (2026.0 tested)
-* **Level Zero Loader**: Version 1.28.0 or higher
-* **C++17 compatible compiler**: GCC, Intel C++ Compiler (icpx)
+* **Intel(R) oneAPI Base Toolkit**: 2026.0 or higher (PTI is tested with 2026.x; see :ref:`tested versions <oneAPITestedVersions>`)
+* **Level Zero Loader**: version 1.14.0 or higher at runtime; building requires headers version 1.32.0 or higher (downloaded automatically by CMake if not found)
+* **C++17 compatible compiler**: GCC, Intel C++ Compiler (icpx), or the open-source DPC++ compiler
 
 **Platform-Specific:**
 
@@ -182,13 +182,16 @@ Ensure you've sourced the oneAPI environment:
 Level Zero headers not found
 -----------------------------
 
-* Verify Level Zero Loader is installed (version >= 1.28.0)
+* CMake fetches the Level Zero headers when it does not find version >= 1.32.0, so this error means
+  the download failed (for example, an offline build) or an older system Level Zero header set was picked up
+* Install Level Zero loader headers >= 1.32.0, or allow network access during configuration
+* The runtime Level Zero loader itself only needs version >= 1.14.0
 * Ensure oneAPI environment is properly sourced/initialized
 
 Build fails with compiler errors
 ---------------------------------
 
-* Ensure you're using a supported oneAPI version (2025.1.0 - 2025.3.0, or 2026.0)
+* Ensure you're using a supported oneAPI version (2026.x)
 * Verify C++17 support is available
 * Try cleaning the build directory and reconfiguring
 
