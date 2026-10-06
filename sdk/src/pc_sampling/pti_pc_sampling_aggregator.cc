@@ -323,14 +323,23 @@ pti_result AggregateCollectedData(pti_device_handle_t device,
     return persist_status;
   }
 
-  if (!scratch.dropped_pcs.empty() || scratch.dropped_sample_count != 0) {
-    SPDLOG_INFO("{}: dropped {} samples across {} unmapped PC(s)", __FUNCTION__,
-                scratch.dropped_sample_count, scratch.dropped_pcs.size());
+  if (!scratch.dropped_pcs.empty()) {
+    if (scratch.unique_pcs.empty() && KernelInfoStorage::Instance().Size() != 0) {
+      SPDLOG_WARN(
+          "{}: device={} has {} unmapped stall samples across {} PCs; none matched a "
+          "tracked kernel binary, so kernel sampling data cannot be attributed",
+          __FUNCTION__, static_cast<const void*>(device), scratch.dropped_sample_count,
+          scratch.dropped_pcs.size());
+    } else {
+      SPDLOG_INFO("{}: device={} dropped {} unmapped stall samples across {} PCs", __FUNCTION__,
+                  static_cast<const void*>(device), scratch.dropped_sample_count,
+                  scratch.dropped_pcs.size());
+    }
   }
 
-  SPDLOG_DEBUG("{}: kernels={}, total_sample_count={}, total_pc_count={}", __FUNCTION__,
-               device_aggregate->kernels.size(), device_status._total_sample_count,
-               device_status._total_pc_count);
+  SPDLOG_DEBUG("{}: device={}, kernels={}, mapped_sample_count={}, mapped_pc_count={}",
+               __FUNCTION__, static_cast<const void*>(device), device_aggregate->kernels.size(),
+               device_status._total_sample_count, device_status._total_pc_count);
   return PTI_SUCCESS;
 }
 
