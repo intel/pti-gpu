@@ -26,7 +26,7 @@ Demonstrates how to use the :doc:`ptiView API <view_api_ref>` for tracing GPU op
      - Description
      - ``PTI_VIEW_...``
    * - **vector_sq_add**
-     - SYCL vector square-add kernel
+     - SYCL vector square-add kernel (binary: ``vec_sqadd``)
      - ``DEVICE_GPU_KERNEL``, ``DEVICE_GPU_MEM_COPY``, ``DEVICE_GPU_MEM_FILL``, ``RUNTIME_API``, ``EXTERNAL_CORRELATION``
    * - **dpc_gemm**
      - DPC++ matrix multiplication with comprehensive tracing
@@ -80,7 +80,7 @@ From the SDK build directory:
 
 .. code-block:: bash
 
-   ./build/bin/vector_sq_add
+   ./build/bin/vec_sqadd
    ./build/bin/dpc_gemm
    ./build/bin/metrics_scope
 
@@ -88,7 +88,7 @@ From the SDK build directory:
 
 .. code-block:: batch
 
-   build\bin\vector_sq_add.exe
+   build\bin\vec_sqadd.exe
    build\bin\dpc_gemm.exe
    build\bin\metrics_scope.exe
 

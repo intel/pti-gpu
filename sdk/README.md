@@ -70,11 +70,13 @@ Please, check [TODO](TODO.md) list. We are aware of many shortcomings and ineffi
 
 ## Prerequisites
 
-- [CMake](https://cmake.org/) (version 3.12 and above. For presets, >= 3.20)
+- [CMake](https://cmake.org/) (version 3.14 and above. For presets, >= 3.20)
 - [Git](https://git-scm.com/) (version 1.8 and above)
 - [Ninja](https://github.com/ninja-build/ninja) (optional, version >= 1.10.1)
 - [Intel(R) oneAPI Base Toolkit](https://software.intel.com/content/www/us/en/develop/tools/oneapi/base-toolkit.html) ([version](#intelr-oneapi-base-toolkit-tested-versions))
-- [Level Zero Loader](https://github.com/oneapi-src/level-zero) (>= 1.16.15)
+- [Level Zero Loader](https://github.com/oneapi-src/level-zero) (>= 1.14.0 at runtime; building requires headers >= 1.32.0, which CMake downloads if they are not found)
+
+> **Note:** For the best experience, use a recent Rolling GPU driver ([compute-runtime](https://github.com/intel/compute-runtime/releases)) and Level Zero loader (for reference, PTI 1.2.0 is validated with Level Zero loader 1.32.0 and compute-runtime 26.31.39395.13). Graph profiling and on-demand collection require Rolling drivers.
 
 ### Windows Specific Prerequisites
 
@@ -86,11 +88,9 @@ Please, check [TODO](TODO.md) list. We are aware of many shortcomings and ineffi
 
 | Support | Linux | Windows |
 | -------- | ------- | ------- |
-| Full | 2024.1.1 - 2024.1.2 | n/a |
-| Partial | 2024.1.0 | 2024.1.1 |
+| Full | 2026.0, 2026.1 | 2026.0 |
 
-Partial support means that some features may not work as expected or may not
-work at all.
+Full support indicates regular testing with all features.
 
 ## Build
 

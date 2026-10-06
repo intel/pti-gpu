@@ -17,14 +17,14 @@ PTI SDK provides the following groups of APIs:
 * ``ptiMetricsScope`` - to collect and annotate GPU kernel instances with GPU hardware performance metrics, such as EU utilization, memory bandwidth, cache statistics, and others;
 * ``ptiMetrics`` - to discover available GPU hardware performance metrics and metrics sets, and collect them over time;
 * ``ptiPcSampling`` - to collect statistical per-instruction stall sampling data for GPU kernels, enabling fine-grained performance analysis by identifying instruction-level bottlenecks and stall reasons (Experimental);
-* ``ptiCallback`` - to subscribe to the notifications about GPU resources and operation lifecycle events (append, dispatch, complete) with a low-level synchronous callback API.
+* ``ptiCallback`` - to subscribe to the notifications about GPU resources and operation lifecycle events (append, complete) and kernel creation and destruction, with a low-level callback API (Experimental). Append and kernel creation/destruction callbacks are synchronous; completion callbacks are asynchronous.
 
 PTI SDK supports **on-demand** profiling for most use cases - the application can start and stop profiling with ``ptiViewEnable()`` and ``ptiViewDisable()`` calls correspondingly.
 Outside the profiled region(s), PTI SDK incurs zero overhead.
 ``ptiView`` API, among other things, allows users to correlate GPU activities with application-level operations via external correlation IDs,
 which helps to connect GPU activities with higher-level application logic and analyze performance in the context of the application behavior.
 
-For ``ptiView`` the user controls the buffers management for the profiling records delivery, and can choose to flush the buffers at any time with ``ptiViewFlush()`` to get the collected data delivered
+For ``ptiView`` the user controls the buffers management for the profiling records delivery, and can choose to flush the buffers at any time with ``ptiFlushAllViews()`` to get the collected data delivered
 to the registered callbacks.
 
 For the APIs whose profiling results require significant post-processing, such as ``ptiMetricsScope`` and ``ptiMetrics``, the results delivery is done as the post-collection step.

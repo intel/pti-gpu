@@ -15,7 +15,7 @@ This section provides API documentation for the PTI Callback API (synchronous GP
 Overview
 ========
 
-The PTI Callback API provides a low-level subscription mechanism for receiving synchronous notifications about GPU operations as they are appended, dispatched, or completed. Unlike the View API which delivers buffered profiling records, the Callback API delivers real-time callbacks during specific GPU operation lifecycle events.
+The PTI Callback API provides a low-level subscription mechanism for receiving notifications about GPU operations as they are appended or completed, and about kernels as they are created or destroyed. Append and kernel creation/destruction callbacks are synchronous: they run inside the Level Zero API call. GPU operation completion callbacks are asynchronous: they are delivered later, from the exit of the API call in which PTI collects the completed operations. Unlike the View API which delivers buffered profiling records, the Callback API delivers real-time callbacks during specific GPU operation lifecycle events.
 
 The Callback API is primarily designed for:
 
@@ -61,6 +61,9 @@ Structures
 ----------
 
 .. doxygenstruct:: pti_callback_gpu_op_data
+   :members:
+
+.. doxygenstruct:: pti_callback_kernel_data
    :members:
 
 .. doxygenstruct:: pti_gpu_op_details

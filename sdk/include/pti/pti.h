@@ -54,7 +54,8 @@ typedef enum {
   PTI_ERROR_BAD_TIMESTAMP = 6,            //!< error in timestamp conversion, might be related with the user
                                           //!< provided TimestampCallback
   PTI_ERROR_BAD_API_ID = 7,               //!< invalid api_id when enable/disable runtime/driver specific api_id
-  PTI_ERROR_NO_GPU_VIEWS_ENABLED = 8,     //!< at least one GPU view must be enabled for kernel tracing
+  PTI_ERROR_NO_GPU_VIEWS_ENABLED = 8,     //!< at least one Level Zero GPU view kind must be enabled
+                                          //!< (see ptiCallbackSubscribe for the list)
 
   PTI_ERROR_DRIVER = 50,                  //!< unknown driver error
   PTI_ERROR_TRACING_NOT_INITIALIZED = 51,  //!< installed driver requires tracing enabling with

@@ -25,11 +25,12 @@ extern "C" {
  *
  * Configuration:
  *   1. Call ptiPcSamplingEnable to create a collection handle
- *   2. Call ptiPcSamplingConfigure to select the devices to profile and the sampling period (optional).
- *      Skip it to collect with the default configuration: the device(s) PTI selects and the default
- *      sampling period of 100000 ns. When used, it must be called before ptiPcSamplingStartCollection.
- *   3. Call ptiPcSamplingQueryCollectionBufferSize to query the recommended collection buffer size (optional)
- *   4. Call ptiPcSamplingSetCollectionBufferSize to set the collection buffer size (optional)
+ *   2. Call ptiPcSamplingConfigure to select the device to profile and the sampling period (optional).
+ *      Skip it to collect with the default configuration: the first device that supports PC sampling
+ *      and the default sampling period of 100000 ns. When used, it must be called before
+ *      ptiPcSamplingStartCollection.
+ *   3. ptiPcSamplingQueryCollectionBufferSize - not implemented yet (returns PTI_ERROR_NOT_IMPLEMENTED); skip
+ *   4. ptiPcSamplingSetCollectionBufferSize - not implemented yet (returns PTI_ERROR_NOT_IMPLEMENTED); skip
  *
  * Collection:
  *   5. Call ptiPcSamplingStartCollection to begin sampling
@@ -47,7 +48,9 @@ extern "C" {
  *  13. Call ptiPcSamplingDisable to free all PTI-owned resources
  *
  * Device support:
- *   - Current implementations may support collection on only a single device.
+ *   - Only one device is sampled per collection handle. With no configuration (or devices == NULL)
+ *     PTI picks the first device that supports PC sampling, in Level Zero enumeration order;
+ *     pass an explicit list to choose another (the first supported device in the list is used).
  *   - Future multi-device support is expected to provide two flows:
  *     1. The caller explicitly selects devices to profile.
  *     2. The caller passes NULL for the device array and PTI profiles devices
@@ -98,7 +101,7 @@ typedef struct _pti_pc_sampling_source_info_t {
  */
 typedef struct _pti_pc_sampling_instruction_t {
   uint64_t  _instruction_offset;                  //!< Instruction offset within kernel
-  pti_pc_sampling_source_info_t*  _source_info;   //!< Source information; null if unavailable; owned by PTI
+  pti_pc_sampling_source_info_t*  _source_info;   //!< Source information; currently always null (source line mapping is not implemented yet)
 } pti_pc_sampling_instruction_t;
 
 /**
@@ -135,6 +138,10 @@ typedef struct _pti_pc_sampling_device_status_t {
  * @return PTI_ERROR_PC_SAMPLING_ALREADY_ENABLED if another PC sampling handle is still enabled
  * @return PTI_ERROR_INTERNAL if PTI cannot allocate the collection handle
  * @return PTI_ERROR_PC_SAMPLING_UNSUPPORTED if the PC Sampling is not supported on the current system
+ * @return PTI_ERROR_NO_GPU_VIEWS_ENABLED if no Level Zero GPU view kind is enabled (see ptiCallbackSubscribe for the list)
+ * @return PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED if the driver cannot enable metrics at runtime;
+ *         set ZET_ENABLE_METRICS=1 before the process starts instead
+ * @return PTI_ERROR_DRIVER if enabling metrics fails in the driver
  */
 pti_result PTI_EXPORT
 ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle);
@@ -147,7 +154,8 @@ ptiPcSamplingEnable(pti_pc_sampling_handle_t* handle);
  * ptiPcSamplingStartCollection.
  *
  * @param[in] handle               Collection handle
- * @param[in] devices              Device filter; NULL profiles all available devices
+ * @param[in] devices              Device filter; NULL selects the first device that supports PC sampling;
+ *                                 otherwise the first supported device in the list is used and unsupported devices are ignored
  * @param[in] device_count         Number of entries in devices; ignored when devices is NULL
  * @param[in] sampling_period_ns   Sampling period in nanoseconds for all selected devices; 0 makes PTI use the default period of 100000 ns
  *
