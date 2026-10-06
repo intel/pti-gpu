@@ -62,8 +62,8 @@ struct GenArchitecture {
   // PRODUCT_FAMILY, e.g. IGFX_TIGERLAKE_LP = 29, IGFX_PVC = 1271.
   uint32_t product_family_ = 0;
   // The AOT product config, packed like ze_device_ip_version_ext_t::ipVersion, and
-  // superseding the two above. IpVersionToIgaGen() (kernel_disassembler.h) takes it as
-  // is, so the binary alone picks the disassembler.
+  // superseding the two above. ArchitectureToIgaGen() (kernel_disassembler.h) takes it
+  // as is, falling back to gfx_core_family_, so the binary alone picks the disassembler.
   uint32_t product_config_ = 0;
 
   bool Valid() const {

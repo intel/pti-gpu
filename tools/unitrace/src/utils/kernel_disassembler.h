@@ -47,74 +47,71 @@ inline std::string HexOffset(uint64_t offset) {
 }
 
 // ---------------------------------------------------------------------------
-// Device IP version -> IGA architecture
+// Product config or device IP -> IGA architecture
 // ---------------------------------------------------------------------------
 
-// A device IP version packs bitfields (compute-runtime NEO::HardwareIpVersion):
+// A product config or device IP packs bitfields
+// (compute-runtime NEO::HardwareIpVersion):
 //
 //   bits 31:22  architecture (10 bits)
 //   bits 21:14  release       (8 bits)
 //   bits 13:6   reserved
 //   bits  5:0   revision      (6 bits)
-//
-// For example (compute-runtime's AOT product-config table):
-//
-//   0x03000000 = 12.0.0   TGL      Xe-LP
-//   0x030c8004 = 12.50.4  XEHP_SDV Xe-HP
-//   0x030dc008 = 12.55.8  DG2 G10  Xe-HPG
-//   0x030f0007 = 12.60.7  PVC XT   Xe-HPC
-//   0x0311c004 = 12.71.4  MTL H    Xe-LPG
-//   0x05004000 = 20.1.0   BMG G21  Xe2-HPG
-//   0x07800000 = 30.0.0   PTL H    Xe3-LPG
 
-// Maps a device IP version (ze_device_ip_version_ext_t::ipVersion) to an iga_gen_t,
-// as IGC's getIGAPlatform() does. Release ranges keep new steppings on the right
-// decoder. IGA_GEN_INVALID for versions not covered.
-constexpr iga_gen_t IpVersionToIgaGen(uint32_t ip_version) {
-  const uint32_t architecture = (ip_version >> 22) & 0x3FF;
-  const uint32_t release = (ip_version >> 14) & 0xFF;
+constexpr iga_gen_t ProductConfigToIgaGen(uint32_t product_config) {
+  const uint32_t architecture = (product_config >> 22) & 0x3FF;
+  const uint32_t release = (product_config >> 14) & 0xFF;
 
   switch (architecture) {
-    // Pre-Xe, best effort: only the base gen, not IGA's sub-platforms.
     case 8:  return IGA_GEN8;
     case 9:  return IGA_GEN9;
     case 10: return IGA_GEN10;
     case 11: return IGA_GEN11;
     case 12:
-      // Xe; the release picks the sub-platform. IGA_GEN12p1 is the old name of IGA_XE,
-      // kept for older libiga64.
-      if (release < 50) return IGA_GEN12p1;  // 12.0-12.10 Xe-LP: TGL, RKL, ADL, DG1
-      if (release < 55) return IGA_XE_HP;    // 12.50      Xe-HP: XEHP_SDV
-      if (release < 60) return IGA_XE_HPG;   // 12.55-57   Xe-HPG: DG2 G10/G11/G12
-      if (release < 62) return IGA_XE_HPC;   // 12.60-61   Xe-HPC: PVC, PVC VG
-      // 12.70-74 Xe-LPG / Xe-LPG+: MTL, ARL. IGC decodes both as Xe-HPG.
+      if (release < 50) return IGA_XE;
+      if (release < 55) return IGA_XE_HP;
+      if (release < 60) return IGA_XE_HPG;
+      if (release < 62) return IGA_XE_HPC;
       if (release >= 70 && release < 80) return IGA_XE_HPG;
       return IGA_GEN_INVALID;
-    case 20: return IGA_XE2;       // 20.1 BMG G21, 20.2 BMG G31, 20.4 LNL
-    case 30: return IGA_XE3;       // 30.0-1 PTL, 30.3 WCL, 30.4-5 NVL
-    case 35: return IGA_XE3P_XPC;  // 35.11 CRI
+    case 20: return IGA_XE2;
+    case 30: return IGA_XE3;
+    case 35: return IGA_XE3P_XPC;
     default: return IGA_GEN_INVALID;
   }
 }
 
-// Pins the mapping, using product configs from compute-runtime's AOT table.
-static_assert(IpVersionToIgaGen(0x03000000) == IGA_GEN12p1, "12.0.0 TGL -> Xe-LP");
-static_assert(IpVersionToIgaGen(0x0300c000) == IGA_GEN12p1, "12.3.0 ADL-P -> Xe-LP");
-static_assert(IpVersionToIgaGen(0x03028000) == IGA_GEN12p1, "12.10.0 DG1 -> Xe-LP");
-static_assert(IpVersionToIgaGen(0x030c8004) == IGA_XE_HP, "12.50.4 XEHP_SDV -> Xe-HP");
-static_assert(IpVersionToIgaGen(0x030dc000) == IGA_XE_HPG, "12.55.0 DG2 G10 A0 -> Xe-HPG");
-static_assert(IpVersionToIgaGen(0x030dc008) == IGA_XE_HPG, "12.55.8 DG2 G10 C0 -> Xe-HPG");
-static_assert(IpVersionToIgaGen(0x030e4000) == IGA_XE_HPG, "12.57.0 DG2 G12 A0 -> Xe-HPG");
-static_assert(IpVersionToIgaGen(0x030f0007) == IGA_XE_HPC, "12.60.7 PVC XT C0 -> Xe-HPC");
-static_assert(IpVersionToIgaGen(0x030f4007) == IGA_XE_HPC, "12.61.7 PVC XT C0 VG -> Xe-HPC");
-static_assert(IpVersionToIgaGen(0x0311c004) == IGA_XE_HPG, "12.71.4 MTL H B0 -> Xe-HPG");
-static_assert(IpVersionToIgaGen(0x03128004) == IGA_XE_HPG, "12.74.4 ARL H B0 -> Xe-HPG");
-static_assert(IpVersionToIgaGen(0x05004000) == IGA_XE2, "20.1.0 BMG G21 A0 -> Xe2");
-static_assert(IpVersionToIgaGen(0x05010004) == IGA_XE2, "20.4.4 LNL B0 -> Xe2");
-static_assert(IpVersionToIgaGen(0x07800000) == IGA_XE3, "30.0.0 PTL H A0 -> Xe3");
-static_assert(IpVersionToIgaGen(0x07814004) == IGA_XE3, "30.5.4 NVL U B0 -> Xe3");
-static_assert(IpVersionToIgaGen(0x08c2c000) == IGA_XE3P_XPC, "35.11.0 CRI A0 -> Xe3P");
-static_assert(IpVersionToIgaGen(0) == IGA_GEN_INVALID, "unset ipVersion -> invalid");
+// Maps a GFXCORE_FAMILY (igfxfmid.h, not included) to an iga_gen_t.
+constexpr iga_gen_t GfxCoreFamilyToIgaGen(uint32_t gfx_core_family) {
+  switch (gfx_core_family) {
+    case 11:     return IGA_GEN8;
+    case 12:     return IGA_GEN9;
+    case 13:
+    case 14:     return IGA_GEN10;
+    case 15:
+    case 16:     return IGA_GEN11;
+    case 17:
+    case 18:     return IGA_XE;
+    case 0x0c05: return IGA_XE_HP;
+    case 0x0c07: return IGA_XE_HPG;
+    case 0x0c08: return IGA_XE_HPC;
+    case 0x0c09: return IGA_XE2;
+    case 0x1e00: return IGA_XE3;
+    default:     return IGA_GEN_INVALID;
+  }
+}
+
+// The architecture a binary was built for: the product config if recorded, which is
+// the finer of the two, else the core family.
+constexpr iga_gen_t ArchitectureToIgaGen(const GenArchitecture& architecture) {
+  if (architecture.product_config_ != 0) {
+    const iga_gen_t gen = ProductConfigToIgaGen(architecture.product_config_);
+    if (gen != IGA_GEN_INVALID) {
+      return gen;
+    }
+  }
+  return GfxCoreFamilyToIgaGen(architecture.gfx_core_family_);
+}
 
 // ---------------------------------------------------------------------------
 // The iga64 library, loaded at runtime
@@ -208,7 +205,7 @@ inline const IgaDisassembler& KernelDisassembler() {
 
 // Disassembles a kernel's Gen ISA, without its padding, into IGA's listing, each
 // instruction prefixed with its kernel-relative PC ("/* [00A0] */"). gen is the
-// architecture to decode as (see IpVersionToIgaGen()).
+// architecture to decode as (see ProductConfigToIgaGen()).
 //
 // with_deps (PRINT_DEPS) adds comment lines naming the registers each instruction
 // writes and reads; it roughly doubles the listing and triples the time.
@@ -290,13 +287,13 @@ inline bool DisassembleKernelInstructions(const uint8_t* isa, size_t isa_size, i
   return true;
 }
 
-// As above, with the architecture from the view's product config. Without one it
-// fails; a caller can put the device's ipVersion, packed the same way, in
-// architecture_.product_config_.
+// As above, with the architecture from the view's product config, or its core family
+// if there is none (ArchitectureToIgaGen()). Without either it fails; a caller can put
+// the device's ipVersion, packed the same way, in architecture_.product_config_.
 inline bool DisassembleKernelInstructions(const KernelBinaryView& isa, std::string& out_text,
                                           bool with_deps = false, bool with_defs = false) {
   return DisassembleKernelInstructions(isa.data_, isa.size_,
-                                       IpVersionToIgaGen(isa.architecture_.product_config_),
+                                       ArchitectureToIgaGen(isa.architecture_),
                                        out_text, with_deps, with_defs);
 }
 
