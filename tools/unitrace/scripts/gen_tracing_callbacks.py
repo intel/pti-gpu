@@ -1134,6 +1134,7 @@ def main():
       "zeCommandListReset",
       "zeCommandQueueCreate",
       "zeCommandQueueSynchronize",
+      "zeDeviceSynchronize",
       "zeCommandQueueDestroy",
       "zeImageCreate",
       "zeImageDestroy",
@@ -1199,6 +1200,7 @@ def main():
       "zeEventQueryStatus",
       "zeFenceHostSynchronize",
       "zeCommandQueueSynchronize",
+      "zeDeviceSynchronize",
       "zeCommandListHostSynchronize"]
 
   enum_map = get_enum_map(l0_path)

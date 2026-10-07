@@ -1453,12 +1453,12 @@ class ZeMetricProfiler {
         for (uint32_t i = 0; i < num_samples && kit != kinfo.end(); ++i) {
           uint32_t size = samples[i];
 
-          for (uint32_t j = 0; j < (size / metric_list.size()); ++j) {
+          for (uint32_t j = 0; j < (size / metric_list.size()); ) {
             std::string str;
             const zet_typed_value_t *v = value + j * metric_list.size();
             uint64_t ts = v[ts_idx].value.ui64;
             if (cur_sampling_ts != 0) {
-              while (cur_sampling_ts >= ts) { // clock overflow
+              while (cur_sampling_ts > ts) { // clock overflow
                   ts += time_span_between_clock_resets;
               }
             }
@@ -1482,6 +1482,7 @@ class ZeMetricProfiler {
               }
               str += "\n";
               metric_logger->Log(str);
+              ++j; // move to next sample
             }
             else {
               if (ts > kit->metric_end) {
@@ -1492,6 +1493,7 @@ class ZeMetricProfiler {
                 }
               }
               else { // ts < kit->metric_start
+                ++j; // move to next sample
                 // does not belong to any kernel/command
                 if (idle_sampling_) {
                   // one idle section per gap: dummy_global_instance_id advances with kit,

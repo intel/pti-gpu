@@ -5724,6 +5724,15 @@ class ZeCollector {
     }
   }
 
+  static void OnExitDeviceSynchronize(
+    ze_device_synchronize_params_t* /* params */,
+    ze_result_t result, void* global_data, void** /* instance_data */, std::vector<uint64_t> *kids) {
+    if (result == ZE_RESULT_SUCCESS) {
+      ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
+      collector->ProcessAllCommandsSubmitted(kids);
+    }
+  }
+
   static void OnExitCommandQueueCreate(ze_command_queue_create_params_t* params, ze_result_t /* result */, void* global_data, void** /* instance_data */) {
     ZeCollector* collector = reinterpret_cast<ZeCollector*>(global_data);
     ze_device_handle_t* device = params->phDevice;
