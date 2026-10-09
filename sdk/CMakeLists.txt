@@ -141,6 +141,7 @@ set(PTI_API_SOVERSION "${PROJECT_VERSION_MAJOR}")
 
 CheckSOVersion(${PTI_API_SOVERSION})
 CheckExperimentalFilesystem()
+PtiCheckLinkerFlag(EXCLUDE_LIBS_ALL "LINKER:--exclude-libs,ALL")
 
 # Check and Get Dependencies
 GetSpdlog()
@@ -297,7 +298,7 @@ target_link_libraries(
 
 target_compile_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
 
-target_link_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+target_link_options(pti PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS} ${PTI_EXCLUDE_LIBS_ALL})
 
 FindTracedLibrariesHeaderPaths(
   pti "${PROJECT_SOURCE_DIR}/src/gen_tracing_callbacks.py"
@@ -361,7 +362,7 @@ target_link_libraries(
 
 target_compile_options(pti_view PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
 
-target_link_options(pti_view PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS})
+target_link_options(pti_view PRIVATE ${PTI_INTEL_LLVM_EXCLUDE_LIBS} ${PTI_EXCLUDE_LIBS_ALL})
 
 target_link_libraries(
   pti_all INTERFACE Pti::pti_view)
