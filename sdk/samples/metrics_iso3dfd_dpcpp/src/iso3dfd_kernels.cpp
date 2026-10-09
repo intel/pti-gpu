@@ -365,10 +365,7 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev, float *ptr_
           group_name =
               "ComputeBasic";  //"GpuOffload" "ComputeBasic" "MemProfile" "DataportProfile"
                                //"L1ProfileReads"  "L1ProfileSlmBankConflicts" "L1ProfileWrites"
-
-          // TRACE metric groups
-          // group_name = "tpcs_utilization_and_bw" /* "nic_stms" "dcore0_bmons_bw"*/;
-          group_type = /*PTI_METRIC_GROUP_TYPE_TRACE_BASED*/ PTI_METRIC_GROUP_TYPE_TIME_BASED;
+          group_type = PTI_METRIC_GROUP_TYPE_TIME_BASED;
         } else {  // collect a different metric group for the second half of the iterations
           // Stop the collection for the first half of the iterations
           if (MetricsProfiler::MetricsProfilerInstance().StopCollection() != true) {
@@ -399,10 +396,7 @@ bool Iso3dfdDevice(sycl::queue &q, float *ptr_next, float *ptr_prev, float *ptr_
           group_name =
               "ComputeBasic";  //"GpuOffload" "ComputeBasic" "MemProfile" "DataportProfile"
                                //"L1ProfileReads"  "L1ProfileSlmBankConflicts" "L1ProfileWrites"
-
-          // TRACE metric groups
-          // group_name = "tpcs_utilization_and_bw" /* "nic_stms" "dcore0_bmons_bw"*/;
-          group_type = /*PTI_METRIC_GROUP_TYPE_TRACE_BASED*/ PTI_METRIC_GROUP_TYPE_TIME_BASED;
+          group_type = PTI_METRIC_GROUP_TYPE_TIME_BASED;
         }
         std::cout << "Collecting metrics group ***" << group_name << "***" << std::endl;
         lib_filename =

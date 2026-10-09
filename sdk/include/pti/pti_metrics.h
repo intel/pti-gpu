@@ -145,7 +145,7 @@ typedef void* pti_metrics_group_handle_t; //!< Abstraction of a metric group han
 typedef enum _pti_metrics_group_type {
   PTI_METRIC_GROUP_TYPE_EVENT_BASED = 0x01,    //!< Event based sampling (Query)
   PTI_METRIC_GROUP_TYPE_TIME_BASED = 0x02,     //!< Time based sampling (Stream)
-  PTI_METRIC_GROUP_TYPE_TRACE_BASED = 0x04,    //!< Trace based sampling (Trace)
+  PTI_METRIC_GROUP_TYPE_TRACE_BASED = 0x04,    //!< Not supported
 
   PTI_METRIC_GROUP_TYPE_FORCE_UINT32 = 0x7fffffff
 } pti_metrics_group_type;
@@ -232,8 +232,7 @@ typedef struct _pti_metrics_group_collection_params_t {
   pti_metrics_group_handle_t _group_handle;       //!< [in] Metric group handle.
   uint32_t _sampling_interval;                    //!< [in] Set the sampling interval in nsec.
                                                   //!<      This field is applicable for PTI_METRIC_GROUP_TYPE_TIME_BASED metrics groups only.
-  uint64_t _time_aggr_window;                     //!< [in] Set the time aggregation window in nsec.
-                                                  //!<      This field is applicable for PTI_METRIC_GROUP_TYPE_TRACE_BASED metrics groups only.
+  uint64_t _time_aggr_window;                     //!< [in] Unused, ignored.
 } pti_metrics_group_collection_params_t;
 
 /**

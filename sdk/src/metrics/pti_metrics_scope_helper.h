@@ -28,7 +28,7 @@
 
 // Forward declarations
 struct _pti_scope_collection_handle_t;
-struct kernel_metric_data;
+struct KernelMetricData;
 
 namespace {
 // Global mutex to serialize Level Zero API calls
@@ -548,7 +548,7 @@ inline void ConvertTypedValueToPtiValue(const zet_typed_value_t& src, pti_value_
 }
 
 inline uint8_t* ProcessMetricValues(pti_scope_collection_handle_t scope_collection_handle,
-                                    const kernel_metric_data* kernel_data,
+                                    const KernelMetricData* kernel_data,
                                     pti_metrics_scope_record_t* record,
                                     zet_metric_group_handle_t metric_group, uint8_t* current_pos) {
   if (!kernel_data->raw_data || kernel_data->data_size == 0) {
@@ -600,7 +600,7 @@ inline uint8_t* ProcessSingleRecord(pti_scope_collection_handle_t scope_collecti
                                     pti_metrics_scope_record_t* records,
                                     zet_metric_group_handle_t metric_group, size_t record_index,
                                     uint8_t* current_pos) {
-  const kernel_metric_data* kernel_data = found_buffer->GetRecord(record_index);
+  const KernelMetricData* kernel_data = found_buffer->GetRecord(record_index);
   if (!kernel_data) return current_pos;
 
   pti_metrics_scope_record_t* record = &records[record_index];
@@ -610,7 +610,8 @@ inline uint8_t* ProcessSingleRecord(pti_scope_collection_handle_t scope_collecti
   record->_queue = kernel_data->queue;
 
   // Point directly to kernel_data's kernel_name
-  record->_kernel_name = kernel_data->kernel_name;
+  record->_kernel_name =
+      kernel_data->kernel_name.empty() ? nullptr : kernel_data->kernel_name.c_str();
 
   // Process metric values
   current_pos =
@@ -619,45 +620,23 @@ inline uint8_t* ProcessSingleRecord(pti_scope_collection_handle_t scope_collecti
   return current_pos;
 }
 
-// Helper function to get metric name from properties
-inline const char* GetMetricName(pti_scope_collection_handle_t scope_collection_handle,
-                                 size_t index) {
-  return (index < scope_collection_handle->requested_metric_properties_.size())
-             ? scope_collection_handle->requested_metric_properties_[index]._name
-             : nullptr;
-}
-
-// Helper to create kernel_metric_data with dynamic name allocation
-inline std::unique_ptr<kernel_metric_data> CreateKernelMetricData(
-    uint64_t kernel_id, const char* kernel_name, uint64_t start_time, uint64_t end_time,
-    const uint8_t* raw_data, size_t data_size, ze_context_handle_t context,
-    ze_command_queue_handle_t queue, pti_backend_command_list_type submit_type) {
-  auto data = std::make_unique<kernel_metric_data>();
+// Helper to create KernelMetricData
+inline std::unique_ptr<KernelMetricData> CreateKernelMetricData(uint64_t kernel_id,
+                                                                const char* kernel_name,
+                                                                const uint8_t* raw_data,
+                                                                size_t data_size,
+                                                                ze_command_queue_handle_t queue) {
+  auto data = std::make_unique<KernelMetricData>();
   if (!data) {
-    SPDLOG_DEBUG("CreateKernelMetricData: Failed to allocate kernel_metric_data structure");
+    SPDLOG_DEBUG("CreateKernelMetricData: Failed to allocate KernelMetricData structure");
     return nullptr;
   }
 
   data->kernel_id = kernel_id;
-  data->start_time = start_time;
-  data->end_time = end_time;
   data->data_size = data_size;
-  data->context = context;
   data->queue = queue;
-  data->submit_type = submit_type;
-
-  // Handle kernel name
   if (kernel_name) {
-    size_t name_len = strlen(kernel_name) + 1;
-    data->kernel_name = new char[name_len];
-    if (!data->kernel_name) {
-      SPDLOG_WARN("CreateKernelMetricData: Kernel name allocation failed.");
-      return nullptr;
-    }
-    snprintf(data->kernel_name, name_len, "%s", kernel_name);
-    data->kernel_name[name_len - 1] = '\0';
-  } else {
-    data->kernel_name = nullptr;
+    data->kernel_name = kernel_name;
   }
 
   // Handle raw data
@@ -816,14 +795,14 @@ inline bool GetRawMetricData(zet_metric_query_handle_t query, std::vector<uint8_
  */
 inline bool StoreKernelData(pti_scope_collection_handle_t scope_collection_handle,
                             pti_device_handle_t device,
-                            std::unique_ptr<kernel_metric_data> kernel_data, size_t raw_data_size) {
+                            std::unique_ptr<KernelMetricData> kernel_data, size_t raw_data_size) {
   SPDLOG_DEBUG("StoreKernelData: Storing data for kernel ID: {}, raw data size: {} bytes",
                kernel_data->kernel_id, raw_data_size);
   PtiMetricsScopeBuffer* current_buffer =
       scope_collection_handle->buffer_manager_->GetCurrentBuffer(device);
 
   // Check if current buffer has space
-  size_t required_space = raw_data_size + sizeof(struct kernel_metric_data);
+  size_t required_space = raw_data_size + sizeof(struct KernelMetricData);
   if (!current_buffer || !current_buffer->HasSpace(required_space)) {
     // Current buffer is full, finalize it and create new one
     if (current_buffer) {
@@ -877,9 +856,7 @@ inline bool ValidateAppendedOperation(pti_callback_gpu_op_data* callback_data,
 // Forward declaration for the helper function
 void CollectQueryDataForKernel(pti_scope_collection_handle_t scope_collection_handle,
                                uint64_t kernel_id, const char* kernel_name,
-                               ze_context_handle_t context, ze_command_queue_handle_t queue,
-                               pti_backend_command_list_type submit_type,
-                               pti_device_handle_t device);
+                               ze_command_queue_handle_t queue, pti_device_handle_t device);
 
 inline void HandleGpuOperationCompleted(pti_scope_collection_handle_t scope_collection_handle,
                                         pti_callback_gpu_op_data* callback_data,
@@ -901,8 +878,7 @@ inline void HandleGpuOperationCompleted(pti_scope_collection_handle_t scope_coll
       SPDLOG_TRACE("\tKernel ID: {}, Name: {}", kernel_id, kernel_name);
 
       // Collect query data for this completed kernel
-      CollectQueryDataForKernel(scope_collection_handle, kernel_id, kernel_name, ctx.context,
-                                ctx.queue, ctx.submit_type,
+      CollectQueryDataForKernel(scope_collection_handle, kernel_id, kernel_name, ctx.queue,
                                 static_cast<pti_device_handle_t>(ctx.device));
     }
   }

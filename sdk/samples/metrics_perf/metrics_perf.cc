@@ -163,8 +163,7 @@ static bool StartMetricsCollection(pti_device_handle_t device_handle,
   pti_metrics_group_collection_params_t config_params = {};
   config_params._struct_size = sizeof(config_params);
   config_params._group_handle = metrics_group_handle;
-  config_params._sampling_interval = 100000;   // 100μs
-  config_params._time_aggr_window = 10000000;  // 10ms
+  config_params._sampling_interval = 100000;  // 100μs
 
   if (ptiMetricsConfigureCollection(device_handle, &config_params, 1) != PTI_SUCCESS) {
     std::cerr << "Failed to configure metrics collection" << std::endl;
@@ -400,11 +399,6 @@ void PrintAllMetrics() {
       if (group._type & PTI_METRIC_GROUP_TYPE_TIME_BASED) {
         if (!first) std::cout << " | ";
         std::cout << "TIME";
-        first = false;
-      }
-      if (group._type & PTI_METRIC_GROUP_TYPE_TRACE_BASED) {
-        if (!first) std::cout << " | ";
-        std::cout << "TRACE";
       }
       std::cout << ")" << std::endl;
 

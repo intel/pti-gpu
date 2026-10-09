@@ -30,9 +30,6 @@
 #include "utils/ze_utils.h"
 #include "ze_driver_init.h"
 
-// Not needed once trace API symbols and structures are available externally
-#include "trace_metrics.h"
-
 namespace {
 // Metrics collection constants
 constexpr uint32_t kMaxMetricCountPerGroup = 512;
@@ -55,14 +52,6 @@ constexpr size_t kMaxMetricBufferSize =
 
 // Sampling and aggregation defaults
 constexpr uint32_t kDefaultSamplingIntervalNs = 1'000'000U;  // 1 millisecond
-constexpr uint32_t kDefaultTimeAggrWindowUs = 10'000U;  // 10 milliseconds, only for Trace metrics
-
-// File and library names
-#ifdef _WIN32
-constexpr const char *kLoaderLibraryName = "libze_loader.dll";
-#else
-constexpr const char *kLoaderLibraryName = "libze_loader.so.1";
-#endif
 
 // Important constants for metrics collection and handling
 constexpr uint64_t kMask64Bits = 0xFFFFFFFFFFFFFFFF;
@@ -1532,7 +1521,7 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
     if (!(group_props.samplingType & ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EVENT_BASED)) {
       SPDLOG_DEBUG("CreateQueryEventPool - Metric group is not event-based! Sampling type: 0x{:x}",
                    group_props.samplingType);
-      SPDLOG_DEBUG("  Available types: TIME_BASED=0x2, EVENT_BASED=0x1, TRACER_BASED=0x4");
+      SPDLOG_DEBUG("  Available types: TIME_BASED=0x2, EVENT_BASED=0x1");
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
     }
 
@@ -1636,522 +1625,16 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
   }
 };
 
-/* Trace metrics API hooks */
-
-// These are available as experimental as part of loader version 1.19.2
-// The loader with these symbols hasn't been released as of yet.
-// Using the symbols directly will cause symbols not found compilation errors if the system does not
-// have a suitable loader version with these symbols.
-// We are attempting to hook the symbols dynamically to decide whether we can use the trace metrics
-// functionality or not without causing compilation errors.
-// Essentially, having a built in backwards compatibility mechanism
-using importTracerCreatePtrFnt = ze_result_t (*)(
-    zet_context_handle_t context_handle, zet_device_handle_t device_handle, uint32_t,
-    zet_metric_group_handle_t *metric_group_handle,
-    external::L0::zet_metric_tracer_exp_desc_t *tracer_desc, ze_event_handle_t event_handle,
-    external::L0::zet_metric_tracer_exp_handle_t *tracer_handle);
-
-using importTracerDestroyPtrFnt =
-    ze_result_t (*)(external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle);
-
-using importTracerEnablePtrFnt = ze_result_t (*)(
-    external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle, ze_bool_t synchronous);
-
-using importTracerDisablePtrFnt = ze_result_t (*)(
-    external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle, ze_bool_t synchronous);
-
-using importTracerReadPtrFnt =
-    ze_result_t (*)(external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle,
-                    size_t *raw_data_size, uint8_t *raw_data);
-using importDecoderCreatePtrFnt =
-    ze_result_t (*)(external::L0::zet_metric_tracer_exp_handle_t metric_tracer_handle,
-                    external::L0::zet_metric_decoder_exp_handle_t *metric_decoder_handle);
-
-using importDecoderDestroyPtrFnt =
-    ze_result_t (*)(external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle);
-
-using importTracerDecodePtrFnt = ze_result_t (*)(
-    external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle, size_t *raw_data_size,
-    const uint8_t *raw_data, uint32_t metric_count, zet_metric_handle_t *metric_handle,
-    uint32_t *metric_entries_count, external::L0::zet_metric_entry_exp_t *metric_entries);
-
-using importDecoderGetDecodableMetricsPtrFnt =
-    ze_result_t (*)(external::L0::zet_metric_decoder_exp_handle_t metric_decoder_handle,
-                    uint32_t *count, zet_metric_handle_t *metric_handle);
-
-// These are available internally only as of 12/24
-using importIntelMetricCalculateOperationCreatePtrFnt = ze_result_t (*)(
-    zet_context_handle_t context_handle, zet_device_handle_t device_handle,
-    external::L0::zet_intel_metric_calculate_exp_desc_t *calculate_desc,
-    external::L0::zet_intel_metric_calculate_operation_exp_handle_t *calculate_op_handle);
-
-using importIntelMetricCalculateOperationDestroyPtrFnt = ze_result_t (*)(
-    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle);
-
-using importIntelMetricCalculateGetReportFormaPtrFnt = ze_result_t (*)(
-    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle,
-    uint32_t *metric_count, zet_metric_handle_t *metrics_handles);
-
-using importIntelMetricDecodeCalculateMultipleValuesPtrFnt = ze_result_t (*)(
-    external::L0::zet_metric_decoder_exp_handle_t decoder_handle, size_t *raw_data_size,
-    const uint8_t *raw_data,
-    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle,
-    uint32_t *set_count, uint32_t *report_count_per_set, uint32_t *metric_report_count,
-    external::L0::zet_intel_metric_result_exp_t *metric_results);
-
-using importIntelMetricDecodeToBinaryBufferPtrFnt = ze_result_t (*)(
-    external::L0::zet_metric_decoder_exp_handle_t decoder_handle, size_t *raw_data_size,
-    const uint8_t *raw_data,
-    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle,
-    external::L0::zet_intel_metric_decoded_buffer_exp_properties_t *decoded_buffer_props,
-    size_t *decoded_buffer_size, uint8_t *decoded_buffer);
-
-struct pti_metrics_tracer_functions_t {
-  // These symbols are available only with later versions of the loader.
-  importTracerCreatePtrFnt zetMetricTracerCreateExp = nullptr;
-  importTracerDestroyPtrFnt zetMetricTracerDestroyExp = nullptr;
-  importTracerEnablePtrFnt zetMetricTracerEnableExp = nullptr;
-  importTracerDisablePtrFnt zetMetricTracerDisableExp = nullptr;
-  importTracerReadPtrFnt zetMetricTracerReadDataExp = nullptr;
-  importDecoderCreatePtrFnt zetMetricDecoderCreateExp = nullptr;
-  importDecoderDestroyPtrFnt zetMetricDecoderDestroyExp = nullptr;
-  importTracerDecodePtrFnt zetMetricTracerDecodeExp = nullptr;
-  importDecoderGetDecodableMetricsPtrFnt zetMetricDecoderGetDecodableMetricsExp = nullptr;
-
-  // These symbols are available internally only
-  importIntelMetricCalculateOperationCreatePtrFnt zetIntelMetricCalculateOperationCreateExp =
-      nullptr;
-  importIntelMetricCalculateOperationDestroyPtrFnt zetIntelMetricCalculateOperationDestroyExp =
-      nullptr;
-  importIntelMetricCalculateGetReportFormaPtrFnt zetIntelMetricCalculateGetReportFormatExp =
-      nullptr;
-  importIntelMetricDecodeCalculateMultipleValuesPtrFnt
-      zetIntelMetricDecodeCalculateMultipleValuesExp = nullptr;
-  importIntelMetricDecodeToBinaryBufferPtrFnt zetIntelMetricDecodeToBinaryBufferExp = nullptr;
-};
-
-inline pti_metrics_tracer_functions_t tf;
-
-class PtiTraceMetricsProfiler : public PtiMetricsProfiler {
- private:
-  uint64_t time_aggr_window_;
-  external::L0::zet_metric_decoder_exp_handle_t metric_decoder_;
-
- public:
-  PtiTraceMetricsProfiler() = delete;
-  PtiTraceMetricsProfiler(const PtiTraceMetricsProfiler &) = delete;
-  PtiTraceMetricsProfiler &operator=(const PtiTraceMetricsProfiler &) = delete;
-  PtiTraceMetricsProfiler(PtiTraceMetricsProfiler &&) = delete;
-  PtiTraceMetricsProfiler &operator=(PtiTraceMetricsProfiler &&) = delete;
-
-  PtiTraceMetricsProfiler(pti_device_handle_t device_handle,
-                          pti_metrics_group_handle_t metrics_group_handle,
-                          uint64_t time_aggr_window)
-      : PtiMetricsProfiler(device_handle, metrics_group_handle) {
-    time_aggr_window_ = time_aggr_window;
-    metric_decoder_ = nullptr;
+// Trace-based groups are not supported, so they are not reported to users
+inline bool IsTraceBasedGroup(zet_metric_group_handle_t group) {
+  zet_metric_group_properties_t group_props;
+  std::memset(&group_props, 0, sizeof(group_props));
+  group_props.stype = ZET_STRUCTURE_TYPE_METRIC_GROUP_PROPERTIES;
+  if (zetMetricGroupGetProperties(group, &group_props) != ZE_RESULT_SUCCESS) {
+    return false;
   }
-
-  ~PtiTraceMetricsProfiler() {}
-
-  pti_result StartProfiling(bool start_paused) {
-    for (auto it = device_descriptors_.begin(); it != device_descriptors_.end(); ++it) {
-      if (it->second->parent_device_ != nullptr) {
-        // subdevice
-        continue;
-      }
-
-      // Collection should be stopped before start is called
-      if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_ENABLED) {
-        SPDLOG_DEBUG("Attempting to start a metrics collection that isn't stopped");
-        return PTI_ERROR_METRICS_COLLECTION_ALREADY_ENABLED;
-      }
-
-      if (it->second->profiling_state_ == ptiMetricProfilerState::PROFILER_PAUSED) {
-        SPDLOG_DEBUG("Attempting to start instead of resume a metrics collection that is paused");
-        return PTI_ERROR_METRICS_COLLECTION_ALREADY_PAUSED;
-      }
-
-      // Reset initialization flag before launching thread
-      it->second->profiling_thread_initialized_ = false;
-      it->second->profiling_thread_ = std::make_unique<std::thread>(
-          &PtiTraceMetricsProfiler::PerDeviceTraceMetricsProfilingThread, this, it->second,
-          &(this->metric_decoder_), start_paused);
-
-      // Wait for thread initialization and check result
-      pti_result result = WaitForProfilingThreadInitialization(it->second);
-      if (result != PTI_SUCCESS) {
-        return result;
-      }
-    }
-    return PTI_SUCCESS;
-  }
-
-  // PauseProfiling(), ResumeProfiling and StopProfiling() are same for all profiler types and are
-  // implemented in the parent class PtiMetricsProfiler
-
-  pti_result GetCalculatedData(pti_metrics_group_handle_t metrics_group_handle,
-                               pti_value_t *metrics_values_buffer, uint32_t *metrics_values_count) {
-    pti_result result = PtiMetricsProfiler::GetCalculatedData(
-        metrics_group_handle, metrics_values_buffer, metrics_values_count);
-    if (result != PTI_SUCCESS) {
-      return result;
-    }
-    ComputeMetrics(metrics_group_handle, metrics_values_buffer, metrics_values_count);
-    return PTI_SUCCESS;
-  }
-
- private:
-  void ComputeMetrics(pti_metrics_group_handle_t metrics_group_handle,
-                      pti_value_t *metrics_values_buffer, uint32_t *metrics_values_count) {
-    PTI_ASSERT(metrics_values_count != nullptr);
-    ze_result_t status;
-
-    // Search for the top/parent device; it doesn't have a parent
-    auto it = device_descriptors_.begin();
-    while (it != device_descriptors_.end() && it->second->parent_device_ != nullptr) {
-      it++;
-    }
-
-    if (it == device_descriptors_.end() || it->second->metrics_group_ != metrics_group_handle) {
-      SPDLOG_DEBUG("Could not find device and metric group");
-      SPDLOG_DEBUG("Unable to calculate required data buffer size");
-      return;
-    }
-
-    std::ifstream inf =
-        std::ifstream(it->second->metric_file_name_, std::ios::in | std::ios::binary);
-    PTI_ASSERT(inf.is_open());
-
-    uint64_t time_aggr_window = time_aggr_window_ / 1000;  // ns to us
-    if (time_aggr_window_ == 0) {
-      // TODO: Should there be a min and/or max?
-      // TODO: Log message saying that default is used
-      time_aggr_window = kDefaultTimeAggrWindowUs;
-    }
-
-    // calculate operation description
-    external::L0::zet_intel_metric_calculate_exp_desc_t calculate_desc{
-        external::L0::ZET_INTEL_STRUCTURE_TYPE_METRIC_CALCULATE_DESC_EXP,
-        nullptr,                      // pNext
-        1,                            // metricGroupCount
-        &it->second->metrics_group_,  // phMetricGroups
-        0,                            // metricCount
-        nullptr,                      // phMetrics
-        0,                            // timeWindowsCount
-        nullptr,                      // pCalculateTimeWindows
-        time_aggr_window,             // timeAggregationWindow
-        external::L0::ZET_INTEL_METRIC_CALCULATE_OPERATION_EXP_FLAG_AVERAGE,  // operation
-        0                                                                     // startingTime
-    };
-
-    // Create calaculate operation
-    external::L0::zet_intel_metric_calculate_operation_exp_handle_t calculate_op_handle = nullptr;
-    status = tf.zetIntelMetricCalculateOperationCreateExp(it->second->context_, it->second->device_,
-                                                          &calculate_desc, &calculate_op_handle);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    // Option 1: user wants metrics values count
-    if (metrics_values_buffer == nullptr) {
-      inf.seekg(0, inf.end);
-      std::streamsize stream_file_size = inf.tellg();
-      PTI_ASSERT(stream_file_size >= 0);
-      size_t file_size = static_cast<size_t>(stream_file_size);
-
-      inf.seekg(0, inf.beg);  // rewind
-      std::vector<uint8_t> raw_metrics(file_size);
-
-      inf.read(reinterpret_cast<char *>(raw_metrics.data()), file_size);
-      size_t raw_size = inf.gcount();
-      if (raw_size > 0) {
-        uint32_t num_metrics = 0;
-        status = zetMetricGet(it->second->metrics_group_, &num_metrics, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-        std::vector<zet_metric_handle_t> metrics(num_metrics);
-        status = zetMetricGet(it->second->metrics_group_, &num_metrics, metrics.data());
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-        uint32_t report_size = 0;
-        status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
-                                                              nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-        // get report format
-        std::vector<zet_metric_handle_t> metrics_in_report(report_size);
-        status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
-                                                              metrics_in_report.data());
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-        // Get total number of sets and reports
-        uint32_t total_report_count = 0;
-        uint32_t set_count = 0;
-        status = tf.zetIntelMetricDecodeCalculateMultipleValuesExp(
-            metric_decoder_, &raw_size, raw_metrics.data(), calculate_op_handle, &set_count,
-            nullptr, &total_report_count, nullptr);
-        PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-        // Note: report size is the number of metrics in the metric group + 2 synthetically added
-        // timestamp markers: start and stop timestamps. Total number of values that will be written
-        // to the buffer is the total number of reports multiplied by the size of each report
-        // (metric_count + 2timestamps)
-        *metrics_values_count = total_report_count * report_size;
-      }
-    } else {
-      // Option 2: user wants the buffer filled.
-      std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());
-
-      uint32_t buffer_idx = 0;
-      // Read and process input file stream where metrics data is saved
-      while (!inf.eof()) {
-        inf.read(reinterpret_cast<char *>(raw_metrics.data()),
-                 PtiMetricsProfiler::GetMaxMetricBufferSize());
-        size_t raw_size = inf.gcount();
-        if (raw_size > 0) {
-          // get report size
-          uint32_t report_size = 0;
-          status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
-                                                                nullptr);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-          // get report format
-          std::vector<zet_metric_handle_t> metrics_in_report(report_size);
-          status = tf.zetIntelMetricCalculateGetReportFormatExp(calculate_op_handle, &report_size,
-                                                                metrics_in_report.data());
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-          // Get total number of sets and reports
-          uint32_t total_report_count = 0;
-          uint32_t set_count = 0;
-          status = tf.zetIntelMetricDecodeCalculateMultipleValuesExp(
-              metric_decoder_, &raw_size, raw_metrics.data(), calculate_op_handle, &set_count,
-              nullptr, &total_report_count, nullptr);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-          // Decode and calculate metrics
-          std::vector<uint32_t> report_count_per_set(set_count);
-          std::vector<external::L0::zet_intel_metric_result_exp_t> metric_results(
-              total_report_count * report_size);
-
-          status = tf.zetIntelMetricDecodeCalculateMultipleValuesExp(
-              metric_decoder_, &raw_size, raw_metrics.data(), calculate_op_handle, &set_count,
-              report_count_per_set.data(), &total_report_count, metric_results.data());
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-          uint32_t output_index = 0;
-          std::string valid_value;
-          // walk through the sets
-          for (uint32_t set_index = 0; set_index < set_count; set_index++) {
-            // For each set, walk through the reports
-            for (uint32_t report_index = 0; report_index < report_count_per_set[set_index];
-                 report_index++) {
-              // For each report, walk through the results
-              for (uint32_t result_index = 0; result_index < report_size; result_index++) {
-                zet_metric_properties_t metric_properties = {};
-                status =
-                    zetMetricGetProperties(metrics_in_report[result_index], &metric_properties);
-                PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-                valid_value.assign((metric_results[output_index].resultStatus ==
-                                    external::L0::ZET_INTEL_METRIC_CALCULATE_EXP_RESULT_VALID)
-                                       ? " Valid"
-                                       : "Invalid");
-                switch (metric_properties.resultType) {
-                  case ZET_VALUE_TYPE_UINT32:
-                  case ZET_VALUE_TYPE_UINT8:
-                  case ZET_VALUE_TYPE_UINT16:
-                    metrics_values_buffer[buffer_idx++].ui32 =
-                        metric_results[output_index].value.ui32;
-                    break;
-                  case ZET_VALUE_TYPE_UINT64:
-                    metrics_values_buffer[buffer_idx++].ui64 =
-                        metric_results[output_index].value.ui64;
-                    break;
-                  case ZET_VALUE_TYPE_FLOAT32:
-                    metrics_values_buffer[buffer_idx++].fp32 =
-                        metric_results[output_index].value.fp32;
-                    break;
-                  case ZET_VALUE_TYPE_FLOAT64:
-                    metrics_values_buffer[buffer_idx++].fp64 =
-                        metric_results[output_index].value.fp64;
-                    break;
-                  case ZET_VALUE_TYPE_BOOL8:
-                    metrics_values_buffer[buffer_idx++].b8 = metric_results[output_index].value.b8;
-                    break;
-                  default:
-                    break;
-                }
-                output_index++;
-              }
-            }
-          }
-        }
-      }
-    }
-    inf.close();
-    status = tf.zetIntelMetricCalculateOperationDestroyExp(calculate_op_handle);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    status = tf.zetMetricDecoderDestroyExp(metric_decoder_);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-  }
-
-  void CaptureRawMetrics(external::L0::zet_metric_tracer_exp_handle_t tracer, uint8_t *storage,
-                         size_t ssize, std::shared_ptr<pti_metrics_device_descriptor_t> desc,
-                         bool immediate_save_to_disc = false) {
-    PTI_ASSERT(desc != nullptr);
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
-    size_t data_size = ssize;
-    status = tf.zetMetricTracerReadDataExp(tracer, &data_size, storage);
-    if (status == ZE_RESULT_WARNING_DROPPED_DATA) {
-      SPDLOG_DEBUG("Metric samples dropped.");
-    } else if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_DEBUG("zetMetricTracerReadData failed with error code {:x}",
-                   static_cast<std::size_t>(status));
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    }
-
-    SaveRawData(std::move(desc), storage, data_size, immediate_save_to_disc);
-  }
-
-  void EventBasedCaptureRawMetrics(external::L0::zet_metric_tracer_exp_handle_t tracer,
-                                   uint8_t *storage, size_t ssize,
-                                   std::shared_ptr<pti_metrics_device_descriptor_t> desc) {
-    PTI_ASSERT(desc != nullptr);
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
-    status = zeEventQueryStatus(desc->event_);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS || status == ZE_RESULT_NOT_READY);
-    if (status == ZE_RESULT_SUCCESS) {
-      status = zeEventHostReset(desc->event_);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    } else { /* ZE_RESULT_NOT_READY */
-      return;
-    }
-    bool immediate_save_to_disc = false;
-    CaptureRawMetrics(tracer, storage, ssize, std::move(desc), immediate_save_to_disc);
-  }
-
-  void PerDeviceTraceMetricsProfilingThread(
-      std::shared_ptr<pti_metrics_device_descriptor_t> desc,
-      external::L0::zet_metric_decoder_exp_handle_t *metric_decoder, bool start_paused) {
-    PTI_ASSERT(desc != nullptr);
-
-    ze_result_t status = ZE_RESULT_SUCCESS;
-
-    pti_result result = CollectionInitialize(desc);
-    PTI_ASSERT(result == PTI_SUCCESS);
-
-    external::L0::zet_metric_tracer_exp_handle_t tracer = nullptr;
-
-    external::L0::zet_metric_tracer_exp_desc_t tracer_desc;
-    tracer_desc.stype = external::L0::ZET_STRUCTURE_TYPE_METRIC_TRACER_EXP_DESC;
-    tracer_desc.pNext = nullptr;
-    tracer_desc.notifyEveryNBytes = max_metric_samples_;
-
-    bool tracer_enabled = false;
-    ptiMetricProfilerState profiling_state = start_paused
-                                                 ? ptiMetricProfilerState::PROFILER_PAUSED
-                                                 : ptiMetricProfilerState::PROFILER_ENABLED;
-
-    // Try to create the tracer before notifying the main thread
-    // Only notify after we know if the tracer was created successfully
-    status = tf.zetMetricTracerCreateExp(desc->context_, desc->device_, 1, &(desc->metrics_group_),
-                                         &tracer_desc, desc->event_, &tracer);
-    if (status != ZE_RESULT_SUCCESS) {
-      SPDLOG_DEBUG(
-          "Failed to create metric tracer during initialization. "
-          "UMD driver returned {:x}",
-          static_cast<std::size_t>(status));
-      // Signal failure to main thread by keeping state as DISABLED
-      SignalThreadInitialized(desc, ptiMetricProfilerState::PROFILER_DISABLED);
-      result = CollectionFinalize(std::move(desc));
-      return;
-    }
-
-    // TODO: check if notifyEveryNBytes works well with max_metric_samples_ for tracer
-    if (tracer_desc.notifyEveryNBytes > max_metric_samples_) {
-      max_metric_samples_ = tracer_desc.notifyEveryNBytes;
-    }
-
-    auto metrics_list = utils::ze::GetMetricList(desc->metrics_group_);
-    PTI_ASSERT(!metrics_list.empty());
-
-    std::vector<uint8_t> raw_metrics(PtiMetricsProfiler::GetMaxMetricBufferSize());
-
-    // Signal successful initialization to main thread
-    SignalThreadInitialized(desc, profiling_state);
-
-    bool immediate_save_to_disc = true;
-    while (desc->profiling_state_.load(std::memory_order_acquire) !=
-           ptiMetricProfilerState::PROFILER_DISABLED) {
-      if (desc->profiling_state_.load(std::memory_order_acquire) ==
-          ptiMetricProfilerState::PROFILER_PAUSED) {
-        // close the tracer when profiler is paused
-        if (tracer_enabled == true) {
-          // Capture hw buffered raw data and immediately write it to disc before disabling the
-          // tracer
-          CaptureRawMetrics(tracer, raw_metrics.data(),
-                            PtiMetricsProfiler::GetMaxMetricBufferSize(), desc,
-                            immediate_save_to_disc);
-
-          status = tf.zetMetricTracerDisableExp(tracer, false);
-          PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-          tracer_enabled = false;
-        }
-        // Wait for the profiling state to change
-        std::mutex pause_mutex;
-        std::unique_lock pause_lock(pause_mutex);
-        while (desc->profiling_state_.load(std::memory_order_acquire) ==
-               ptiMetricProfilerState::PROFILER_PAUSED) {
-          cv_pause_.wait(pause_lock);
-        }
-      } else {  // PROFILER_ENABLED
-        // open the tracer when profiler is enabled
-        if (tracer_enabled == false) {
-          status = tf.zetMetricTracerEnableExp(tracer, true);
-          if (status != ZE_RESULT_SUCCESS) {
-            SPDLOG_DEBUG("Failed to open metric tracer.");
-#ifndef _WIN32
-            SPDLOG_DEBUG(
-                "Please also make sure: "
-                "on PVC: /proc/sys/dev/i915/perf_stream_paranoid "
-                "OR on BMG (or later): /proc/sys/dev/xe/observation_paranoid "
-                "is set to 0.");
-#endif /* _WIN32 */
-            break;
-          }
-          tracer_enabled = true;
-        }
-        // Capture hw buffered raw data to local memory. Local memory is not written to disc
-        // immediately, It is written to disc after a few hw buffer reads or if local buffer is not
-        // empty but no data is captured from the hw buffer in this iteration
-        EventBasedCaptureRawMetrics(tracer, raw_metrics.data(),
-                                    PtiMetricsProfiler::GetMaxMetricBufferSize(), desc);
-      }
-    }
-
-    // Create raw data decoder before disabling and destroying the tracer
-    status = tf.zetMetricDecoderCreateExp(tracer, metric_decoder);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    if (tracer_enabled) {
-      // Capture hw buffered raw data and immediately write it to disc before disabling the tracer
-      CaptureRawMetrics(tracer, raw_metrics.data(), PtiMetricsProfiler::GetMaxMetricBufferSize(),
-                        desc, immediate_save_to_disc);
-
-      status = tf.zetMetricTracerDisableExp(tracer, false);
-      PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-    }
-
-    status = tf.zetMetricTracerDestroyExp(tracer);
-    PTI_ASSERT(status == ZE_RESULT_SUCCESS);
-
-    result = CollectionFinalize(std::move(desc));
-    PTI_ASSERT(result == PTI_SUCCESS);
-  }
-};
+  return (group_props.samplingType & static_cast<uint32_t>(PTI_METRIC_GROUP_TYPE_TRACE_BASED)) != 0;
+}
 
 class PtiMetricsCollectorHandler {
  public:
@@ -2178,15 +1661,6 @@ class PtiMetricsCollectorHandler {
     // enabled later via ptiMetricsEnable(), which triggers RefreshMetricState(). The status is
     // reported to the caller by the individual metrics APIs, which gate on metrics_enabled_.
     static_cast<void>(InitializeDevicesWithMetrics());
-
-    std::string loader_lib_name = kLoaderLibraryName;
-
-    // get loader handle to verify trace metric API exists in the loader
-    loader_lib_ = utils::LoadLibrary(loader_lib_name.c_str());
-
-    // TraceMetricsProfiler relies on L0 Trace Metrics API extensions
-    // First hook the API symbols successfully before enabling the collection
-    trace_api_enabled_ = (HookTraceMetricsAPI() == PTI_SUCCESS) ? true : false;
   }
 
   ~PtiMetricsCollectorHandler() {
@@ -2197,156 +1671,7 @@ class PtiMetricsCollectorHandler {
     metric_groups_.clear();
     stream_metrics_profilers_.clear();
     query_metrics_profilers_.clear();
-    trace_metrics_profilers_.clear();
     device_collection_active_.clear();
-    utils::UnloadLibrary(loader_lib_);
-  }
-
-  inline pti_result ptiDriverGetExtensionFunctionAddress(HMODULE lib, const char *symbol_name,
-                                                         void **function_address) {
-    if (function_address == nullptr) {
-      return PTI_ERROR_DRIVER;
-    }
-    *function_address = utils::GetFunctionPtr(lib, symbol_name);
-
-    return PTI_SUCCESS;
-  }
-
-  inline pti_result HookTraceMetricsAPI() {
-    // Deliberately not MetricsUsable(): this is reached from RefreshMetricState() while
-    // refresh_mutex_ is held, and MetricsUsable() can call RefreshMetricState() again.
-    if (!MetricsCachedStateUsable()) {
-      return PTI_ERROR_DRIVER;
-    }
-
-    // TODO: Do full discovery instead of using the first GPU driver instance.
-    ze_driver_handle_t driver = utils::ze::GetGpuDriver(0);
-    if (loader_lib_ == nullptr || driver == nullptr) {
-      SPDLOG_WARN("Could not enable trace metrics");
-      return PTI_ERROR_DRIVER;
-    }
-
-    // These symbols are available only with the latest version of the loader
-    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
-                            loader_lib_, "zetMetricTracerCreateExp",
-                            reinterpret_cast<void **>(&tf.zetMetricTracerCreateExp))) ||
-        tf.zetMetricTracerCreateExp == nullptr) {
-      SPDLOG_DEBUG("the zetMetricTracerCreateExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
-                            loader_lib_, "zetMetricTracerDestroyExp",
-                            reinterpret_cast<void **>(&tf.zetMetricTracerDestroyExp))) ||
-        (tf.zetMetricTracerDestroyExp == nullptr)) {
-      SPDLOG_DEBUG("the zetMetricTracerDestroyExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
-                            loader_lib_, "zetMetricTracerEnableExp",
-                            reinterpret_cast<void **>(&tf.zetMetricTracerEnableExp))) ||
-        (tf.zetMetricTracerEnableExp == nullptr)) {
-      SPDLOG_DEBUG("the zetMetricTracerEnableExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
-                            loader_lib_, "zetMetricTracerDisableExp",
-                            reinterpret_cast<void **>(&tf.zetMetricTracerDisableExp))) ||
-        (tf.zetMetricTracerDisableExp == nullptr)) {
-      SPDLOG_DEBUG("the zetMetricTracerDisableExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
-                            loader_lib_, "zetMetricTracerReadDataExp",
-                            reinterpret_cast<void **>(&tf.zetMetricTracerReadDataExp))) ||
-        (tf.zetMetricTracerReadDataExp == nullptr)) {
-      SPDLOG_DEBUG("the zetMetricTracerReadDataExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
-                            loader_lib_, "zetMetricDecoderCreateExp",
-                            reinterpret_cast<void **>(&tf.zetMetricDecoderCreateExp))) ||
-        (tf.zetMetricDecoderCreateExp == nullptr)) {
-      SPDLOG_DEBUG("the zetMetricDecoderCreateExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
-                            loader_lib_, "zetMetricDecoderDestroyExp",
-                            reinterpret_cast<void **>(&tf.zetMetricDecoderDestroyExp))) ||
-        (tf.zetMetricDecoderDestroyExp == nullptr)) {
-      SPDLOG_DEBUG("the zetMetricDecoderDestroyExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((PTI_SUCCESS != ptiDriverGetExtensionFunctionAddress(
-                            loader_lib_, "zetMetricTracerDecodeExp",
-                            reinterpret_cast<void **>(&tf.zetMetricTracerDecodeExp))) ||
-        (tf.zetMetricTracerDecodeExp == nullptr)) {
-      SPDLOG_DEBUG("the zetMetricTracerDecodeExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((PTI_SUCCESS !=
-         ptiDriverGetExtensionFunctionAddress(
-             loader_lib_, "zetMetricDecoderGetDecodableMetricsExp",
-             reinterpret_cast<void **>(&tf.zetMetricDecoderGetDecodableMetricsExp))) ||
-        (tf.zetMetricDecoderGetDecodableMetricsExp == nullptr)) {
-      SPDLOG_DEBUG("the zetMetricDecoderGetDecodableMetricsExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    // These symbols are internal only as of 12/24
-    if ((ZE_RESULT_SUCCESS !=
-         zeDriverGetExtensionFunctionAddress(
-             driver, "zetIntelMetricCalculateOperationCreateExp",
-             reinterpret_cast<void **>(&tf.zetIntelMetricCalculateOperationCreateExp))) ||
-        (tf.zetIntelMetricCalculateOperationCreateExp == nullptr)) {
-      SPDLOG_DEBUG("the zetIntelMetricCalculateOperationCreateExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((ZE_RESULT_SUCCESS !=
-         zeDriverGetExtensionFunctionAddress(
-             driver, "zetIntelMetricCalculateOperationDestroyExp",
-             reinterpret_cast<void **>(&tf.zetIntelMetricCalculateOperationDestroyExp))) ||
-        (tf.zetIntelMetricCalculateOperationDestroyExp == nullptr)) {
-      SPDLOG_DEBUG("the zetIntelMetricCalculateOperationDestroyExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((ZE_RESULT_SUCCESS !=
-         zeDriverGetExtensionFunctionAddress(
-             driver, "zetIntelMetricCalculateGetReportFormatExp",
-             reinterpret_cast<void **>(&tf.zetIntelMetricCalculateGetReportFormatExp))) ||
-        (tf.zetIntelMetricCalculateGetReportFormatExp == nullptr)) {
-      SPDLOG_DEBUG("the zetIntelMetricCalculateGetReportFormatExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((ZE_RESULT_SUCCESS !=
-         zeDriverGetExtensionFunctionAddress(
-             driver, "zetIntelMetricDecodeCalculateMultipleValuesExp",
-             reinterpret_cast<void **>(&tf.zetIntelMetricDecodeCalculateMultipleValuesExp))) ||
-        (tf.zetIntelMetricDecodeCalculateMultipleValuesExp == nullptr)) {
-      SPDLOG_DEBUG("the zetIntelMetricDecodeCalculateMultipleValuesExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    if ((ZE_RESULT_SUCCESS !=
-         zeDriverGetExtensionFunctionAddress(
-             driver, "zetIntelMetricDecodeToBinaryBufferExp",
-             reinterpret_cast<void **>(&tf.zetIntelMetricDecodeToBinaryBufferExp))) ||
-        (tf.zetIntelMetricDecodeToBinaryBufferExp == nullptr)) {
-      SPDLOG_DEBUG("the zetIntelMetricDecodeToBinaryBufferExp symbol could not be loaded");
-      return PTI_ERROR_DRIVER;
-    }
-
-    return PTI_SUCCESS;
   }
 
   inline bool IsDeviceHandleValid(ze_device_handle_t device_handle) const {
@@ -2361,9 +1686,6 @@ class PtiMetricsCollectorHandler {
   // Non-refreshing form of MetricsUsable(): true only if the cached device/metric-group state is
   // valid and metrics are still enabled in the driver. A cached flag alone cannot see a
   // ptiMetricsDisable() that dropped the last reference, so MetricStateManager is consulted too.
-  //
-  // Only HookTraceMetricsAPI() should call this: it runs under RefreshMetricState()'s
-  // refresh_mutex_, so it must not take a path that re-enters that non-recursive mutex.
   inline bool MetricsCachedStateUsable() const {
     if (!metrics_enabled_.load(std::memory_order_acquire)) {
       return false;
@@ -2407,11 +1729,6 @@ class PtiMetricsCollectorHandler {
     auto status = InitializeDevicesWithMetrics();
     if (status != PTI_SUCCESS) {
       return status;
-    }
-
-    // Re-hook trace metrics API if not already enabled
-    if (!trace_api_enabled_) {
-      trace_api_enabled_ = (HookTraceMetricsAPI() == PTI_SUCCESS) ? true : false;
     }
     return PTI_SUCCESS;
   }
@@ -2711,10 +2028,6 @@ class PtiMetricsCollectorHandler {
         query_metrics_profilers_[device_handle].reset();
         query_metrics_profilers_.erase(device_handle);
       }
-      if (trace_metrics_profilers_.find(device_handle) != trace_metrics_profilers_.end()) {
-        trace_metrics_profilers_[device_handle].reset();
-        trace_metrics_profilers_.erase(device_handle);
-      }
     }
 
     zet_metric_group_properties_t group_props;
@@ -2741,18 +2054,6 @@ class PtiMetricsCollectorHandler {
           std::unique_ptr<PtiQueryMetricsProfiler> query_metrics_profiler =
               std::make_unique<PtiQueryMetricsProfiler>(device_handle, group);
           query_metrics_profilers_[device_handle] = std::move(query_metrics_profiler);
-          break;
-        }
-        case external::L0::ZET_METRIC_GROUP_SAMPLING_TYPE_FLAG_EXP_TRACER_BASED: {
-          if (trace_api_enabled_) {
-            uint64_t time_aggr_window = metric_config_params->_time_aggr_window;
-            std::unique_ptr<PtiTraceMetricsProfiler> trace_metrics_profiler =
-                std::make_unique<PtiTraceMetricsProfiler>(device_handle, group, time_aggr_window);
-            trace_metrics_profilers_[device_handle] = std::move(trace_metrics_profiler);
-          } else {
-            SPDLOG_DEBUG("Trace metrics cannot be collected on this system");
-            return PTI_ERROR_DRIVER;
-          }
           break;
         }
         default: {
@@ -2806,7 +2107,6 @@ class PtiMetricsCollectorHandler {
     {
       std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
       if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-          trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
           query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
         SPDLOG_DEBUG(
             "Attempted to start a metrics collection on a device that has not been configured.");
@@ -2831,15 +2131,6 @@ class PtiMetricsCollectorHandler {
         status = query_it->second->StartProfiling(start_paused);
         if (status != PTI_SUCCESS) {
           SPDLOG_DEBUG("Failed to start query profiler");
-          result = status;
-        }
-      }
-
-      auto trace_it = trace_metrics_profilers_.find(device_handle);
-      if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
-        status = trace_it->second->StartProfiling(start_paused);
-        if (status != PTI_SUCCESS) {
-          SPDLOG_DEBUG("Failed to start trace profiler");
           result = status;
         }
       }
@@ -2887,7 +2178,6 @@ class PtiMetricsCollectorHandler {
       std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
 
       if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-          trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
           query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
         SPDLOG_DEBUG(
             "Attempted to pause a metrics collection on a device that has not been "
@@ -2906,14 +2196,6 @@ class PtiMetricsCollectorHandler {
       auto query_it = query_metrics_profilers_.find(device_handle);
       if (query_it != query_metrics_profilers_.end() && query_it->second) {
         status = query_it->second->PauseProfiling();
-        if (status != PTI_SUCCESS) {
-          result = status;
-        }
-      }
-
-      auto trace_it = trace_metrics_profilers_.find(device_handle);
-      if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
-        status = trace_it->second->PauseProfiling();
         if (status != PTI_SUCCESS) {
           result = status;
         }
@@ -2956,7 +2238,6 @@ class PtiMetricsCollectorHandler {
       std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
 
       if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-          trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
           query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
         SPDLOG_DEBUG(
             "Attempted to resume a metrics collection on a device that has not been configured.");
@@ -2974,14 +2255,6 @@ class PtiMetricsCollectorHandler {
       auto query_it = query_metrics_profilers_.find(device_handle);
       if (query_it != query_metrics_profilers_.end() && query_it->second) {
         status = query_it->second->ResumeProfiling();
-        if (status != PTI_SUCCESS) {
-          result = status;
-        }
-      }
-
-      auto trace_it = trace_metrics_profilers_.find(device_handle);
-      if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
-        status = trace_it->second->ResumeProfiling();
         if (status != PTI_SUCCESS) {
           result = status;
         }
@@ -3030,7 +2303,6 @@ class PtiMetricsCollectorHandler {
       std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
 
       if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-          trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
           query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
         SPDLOG_DEBUG(
             "Attempted to stop a metrics collection on a device that has not been configured.");
@@ -3051,15 +2323,6 @@ class PtiMetricsCollectorHandler {
         status = query_it->second->StopProfiling();
         if (status != PTI_SUCCESS) {
           SPDLOG_DEBUG("Failed to stop query profiler");
-          result = status;
-        }
-      }
-
-      auto trace_it = trace_metrics_profilers_.find(device_handle);
-      if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
-        status = trace_it->second->StopProfiling();
-        if (status != PTI_SUCCESS) {
-          SPDLOG_DEBUG("Failed to stop trace profiler");
           result = status;
         }
       }
@@ -3105,7 +2368,6 @@ class PtiMetricsCollectorHandler {
     std::shared_lock<std::shared_mutex> profiler_lock(profilers_mutex_);
 
     if (stream_metrics_profilers_.find(device_handle) == stream_metrics_profilers_.end() &&
-        trace_metrics_profilers_.find(device_handle) == trace_metrics_profilers_.end() &&
         query_metrics_profilers_.find(device_handle) == query_metrics_profilers_.end()) {
       SPDLOG_DEBUG("Attempted to calculate metrics on a device that has not been configured.");
       return PTI_ERROR_METRICS_BAD_COLLECTION_CONFIGURATION;
@@ -3131,14 +2393,6 @@ class PtiMetricsCollectorHandler {
         result = status;
       }
     }
-    auto trace_it = trace_metrics_profilers_.find(device_handle);
-    if (trace_it != trace_metrics_profilers_.end() && trace_it->second) {
-      status = trace_it->second->GetCalculatedData(metrics_group_handle, metrics_values_buffer,
-                                                   metrics_values_count);
-      if (status != PTI_SUCCESS) {
-        result = status;
-      }
-    }
 
     return result;
   }
@@ -3152,8 +2406,6 @@ class PtiMetricsCollectorHandler {
       stream_metrics_profilers_;
   std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiQueryMetricsProfiler>>
       query_metrics_profilers_;
-  std::unordered_map<pti_device_handle_t, std::unique_ptr<PtiTraceMetricsProfiler>>
-      trace_metrics_profilers_;
   mutable std::shared_mutex profilers_mutex_;  // Protects: all profiler maps
 
   std::unordered_map<pti_device_handle_t, std::mutex> device_mutexes_;
@@ -3167,11 +2419,9 @@ class PtiMetricsCollectorHandler {
   // mutable so that the const MetricsCachedStateUsable() can clear it when it observes that
   // metrics have been disabled since the state was cached.
   mutable std::atomic<bool> metrics_enabled_{false};
-  bool trace_api_enabled_ = false;
-  HMODULE loader_lib_;
 
   // Serializes RefreshMetricState()/InitializeDevicesWithMetrics(), which mutate devices_,
-  // metric_groups_, string_pool_ and trace_api_enabled_. The constructor runs before the
+  // metric_groups_ and string_pool_. The constructor runs before the
   // instance is reachable, so only the post-construction refresh path needs this.
   std::mutex refresh_mutex_;
 
@@ -3211,9 +2461,12 @@ class PtiMetricsCollectorHandler {
         }
 
         if (metric_groups_.find(device) == metric_groups_.end()) {
-          utils::ze::FindMetricGroups(device, metric_groups_[device]);
+          auto &groups = metric_groups_[device];
+          utils::ze::FindMetricGroups(device, groups);
+          groups.erase(std::remove_if(groups.begin(), groups.end(), IsTraceBasedGroup),
+                       groups.end());
 
-          for (auto group : metric_groups_[device]) {
+          for (auto group : groups) {
             RegisterMetricGroupStrings(group);
           }
         }

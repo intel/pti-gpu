@@ -37,11 +37,6 @@ inline std::string GetGroupType(pti_metrics_group_type type) {
     flag_name += "TIME";
   }
 
-  if (type & PTI_METRIC_GROUP_TYPE_TRACE_BASED) {
-    if (!flag_name.empty()) flag_name += "|";
-    flag_name += "TRACE";
-  }
-
   if (!flag_name.empty()) {
     return flag_name;
   }
@@ -391,11 +386,10 @@ class MetricsProfiler {
       return false;
     }
 
-    pti_metrics_group_collection_params_t config_collection_params;
+    pti_metrics_group_collection_params_t config_collection_params{};
     config_collection_params._struct_size = sizeof(pti_metrics_group_collection_params_t);
     config_collection_params._group_handle = configured_group_handle_;
-    config_collection_params._sampling_interval = 100000;   // ns
-    config_collection_params._time_aggr_window = 10000000;  // ns
+    config_collection_params._sampling_interval = 100000;  // ns
     std::vector<pti_metrics_group_collection_params_t> config_collection_params_buffer = {
         config_collection_params};
     if (ptiMetricsConfigureCollection(configured_device_handle_,
@@ -524,9 +518,6 @@ class MetricsProfiler {
     uint32_t buffer_idx = 0;
     uint64_t ts = 0;
     uint32_t per_sample_values_count = collected_group._metric_count;
-    if (collected_group._type == PTI_METRIC_GROUP_TYPE_TRACE_BASED) {
-      per_sample_values_count += 2;  // We have two added for start and end timestamps
-    }
     uint32_t sample_count = total_values_count / per_sample_values_count;
 
     if (log_data && !filename.empty()) {
@@ -553,29 +544,9 @@ class MetricsProfiler {
         std::string metric_name;
         std::string units;
         pti_metric_value_type type;
-        if (collected_group._type == PTI_METRIC_GROUP_TYPE_TRACE_BASED) {
-          // for traced metric groups, first two values in the buffer are the
-          // start and end timestamps
-          if (j == 0) {
-            metric_name = "StartTimestamp";
-            units = "us";
-            type = PTI_METRIC_VALUE_TYPE_UINT64;
-          } else if (j == 1) {
-            metric_name = "StopTimestamp";
-            units = "us";
-            type = PTI_METRIC_VALUE_TYPE_UINT64;
-          } else {
-            // Metric descriptions in the metrics properties buffer don't include
-            // the start and end timestamps
-            metric_name = collected_group._metric_properties[j - 2]._name;
-            units = collected_group._metric_properties[j - 2]._units;
-            type = collected_group._metric_properties[j - 2]._value_type;
-          }
-        } else {
-          metric_name = collected_group._metric_properties[j]._name;
-          units = collected_group._metric_properties[j]._units;
-          type = collected_group._metric_properties[j]._value_type;
-        }
+        metric_name = collected_group._metric_properties[j]._name;
+        units = collected_group._metric_properties[j]._units;
+        type = collected_group._metric_properties[j]._value_type;
         if (units == "percent") {
           units = "%";
         }

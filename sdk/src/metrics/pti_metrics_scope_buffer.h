@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "pti/pti.h"
@@ -40,60 +41,12 @@ constexpr size_t kMinCollectionBufferSize = 2048;
 }  // namespace
 
 // Kernel metric data structure
-struct kernel_metric_data {
-  uint64_t kernel_id;
-  char* kernel_name;
-  uint64_t start_time;
-  uint64_t end_time;
+struct KernelMetricData {
+  uint64_t kernel_id = 0;
+  std::string kernel_name;
   std::unique_ptr<uint8_t[]> raw_data;
-  size_t data_size;
-  ze_context_handle_t context;
-  ze_command_queue_handle_t queue;
-  pti_backend_command_list_type submit_type;
-
-  kernel_metric_data() = default;
-
-  // Constructor
-  kernel_metric_data(kernel_metric_data&& other) noexcept
-      : kernel_id(other.kernel_id),
-        kernel_name(other.kernel_name),  // Transfer ownership
-        start_time(other.start_time),
-        end_time(other.end_time),
-        raw_data(std::move(other.raw_data)),
-        data_size(other.data_size),
-        context(other.context),
-        queue(other.queue),
-        submit_type(other.submit_type) {
-    other.kernel_name = nullptr;  // Clear source pointer
-  }
-
-  // Assignment Operator Overload
-  kernel_metric_data& operator=(kernel_metric_data&& other) noexcept {
-    if (this != &other) {
-      // Clean up existing kernel_name
-      delete[] kernel_name;
-
-      kernel_id = other.kernel_id;
-      kernel_name = other.kernel_name;  // Transfer ownership
-      start_time = other.start_time;
-      end_time = other.end_time;
-      raw_data = std::move(other.raw_data);
-      data_size = other.data_size;
-      context = other.context;
-      queue = other.queue;
-      submit_type = other.submit_type;
-
-      other.kernel_name = nullptr;  // Clear source pointer
-    }
-    return *this;
-  }
-
-  // Destructor to handle kernel_name cleanup
-  ~kernel_metric_data() { delete[] kernel_name; }
-
-  // Delete copy constructor and assignment to prevent accidental copying
-  kernel_metric_data(const kernel_metric_data&) = delete;
-  kernel_metric_data& operator=(const kernel_metric_data&) = delete;
+  size_t data_size = 0;
+  ze_command_queue_handle_t queue = nullptr;
 };
 
 /**
@@ -119,12 +72,6 @@ class PtiMetricsScopeBuffer {
   // PtiMetricsScopeBuffer state management
   uint8_t* GetRawBuffer() const { return raw_buffer_.get(); }
   size_t GetUsedSize() const { return used_size_; }
-  size_t GetCapacity() const { return capacity_; }
-  size_t GetAvailableSpace() const { return capacity_ - used_size_; }
-
-  // Position tracking
-  uint8_t* GetBeginning() const { return raw_buffer_.get(); }
-  uint8_t* GetCurrentPosition() const { return raw_buffer_.get() + used_size_; }
 
   // PtiMetricsScopeBuffer metadata
   pti_device_handle_t GetDeviceHandle() const { return device_handle_; }
@@ -133,7 +80,7 @@ class PtiMetricsScopeBuffer {
   bool IsFinalized() const { return is_finalized_; }
 
   // Record management
-  bool AddKernelRecord(std::unique_ptr<kernel_metric_data> kernel_data) {
+  bool AddKernelRecord(std::unique_ptr<KernelMetricData> kernel_data) {
     if (!kernel_data) {
       SPDLOG_DEBUG("AddKernelRecord: REJECT null kernel_data");
       return false;
@@ -145,7 +92,7 @@ class PtiMetricsScopeBuffer {
       return false;
     }
 
-    size_t required_space = kernel_data->data_size + sizeof(kernel_metric_data);
+    size_t required_space = kernel_data->data_size + sizeof(KernelMetricData);
     if (!HasSpace(required_space)) {
       SPDLOG_DEBUG(
           "AddKernelRecord: REJECT no space (used={}, cap={}, required={}, data_size={}), "
@@ -160,7 +107,7 @@ class PtiMetricsScopeBuffer {
     return true;
   }
 
-  const kernel_metric_data* GetRecord(size_t index) const {
+  const KernelMetricData* GetRecord(size_t index) const {
     if (index >= records_.size()) {
       return nullptr;
     }
@@ -181,7 +128,7 @@ class PtiMetricsScopeBuffer {
   bool is_finalized_;
 
   // Records management
-  std::vector<std::unique_ptr<kernel_metric_data>> records_;
+  std::vector<std::unique_ptr<KernelMetricData>> records_;
 };
 
 #endif  // SRC_API_PTI_METRICS_SCOPE_BUFFER_H_

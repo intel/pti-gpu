@@ -320,11 +320,10 @@ TEST_F(VecsqaddMetricsFixtureTest, ConfigurNullMetricGroupHandle) {
   pti_device_handle_t device_handle = devices.size() > 0 ? devices[0]._handle : nullptr;
 
   // test null metric group handle
-  pti_metrics_group_collection_params_t config_collection_params;
+  pti_metrics_group_collection_params_t config_collection_params{};
   config_collection_params._struct_size = sizeof(pti_metrics_group_collection_params_t);
   config_collection_params._group_handle = nullptr;
-  config_collection_params._sampling_interval = 100000;   // ns
-  config_collection_params._time_aggr_window = 10000000;  // ns
+  config_collection_params._sampling_interval = 100000;  // ns
   std::vector<pti_metrics_group_collection_params_t> config_collection_params_buffer = {
       config_collection_params};
   EXPECT_EQ(ptiMetricsConfigureCollection(device_handle, config_collection_params_buffer.data(), 1),
@@ -335,11 +334,10 @@ TEST_F(VecsqaddMetricsFixtureTest, ConfigureInvalidMetricGroupHandle) {
   pti_device_handle_t device_handle = devices.size() > 0 ? devices[0]._handle : nullptr;
 
   // test invalid metric group handle
-  pti_metrics_group_collection_params_t config_collection_params;
+  pti_metrics_group_collection_params_t config_collection_params{};
   config_collection_params._struct_size = sizeof(pti_metrics_group_collection_params_t);
   config_collection_params._group_handle = device_handle;  // use the device handle;
   config_collection_params._sampling_interval = 100000;    // ns
-  config_collection_params._time_aggr_window = 10000000;   // ns
   std::vector<pti_metrics_group_collection_params_t> config_collection_params_buffer = {
       config_collection_params};
   EXPECT_EQ(ptiMetricsConfigureCollection(device_handle, config_collection_params_buffer.data(), 1),
@@ -352,11 +350,10 @@ TEST_F(VecsqaddMetricsFixtureTest, Configure0MetricGroups) {
       metric_groups.size() > 0 ? metric_groups[0]._handle : nullptr;
 
   // test 0 metric groups
-  pti_metrics_group_collection_params_t config_collection_params;
+  pti_metrics_group_collection_params_t config_collection_params{};
   config_collection_params._struct_size = sizeof(pti_metrics_group_collection_params_t);
   config_collection_params._group_handle = metric_group_handle;  // valid metric group
   config_collection_params._sampling_interval = 100000;          // ns
-  config_collection_params._time_aggr_window = 10000000;         // ns
   std::vector<pti_metrics_group_collection_params_t> config_collection_params_buffer = {
       config_collection_params};
   EXPECT_EQ(ptiMetricsConfigureCollection(device_handle, config_collection_params_buffer.data(), 0),
@@ -369,11 +366,10 @@ TEST_F(VecsqaddMetricsFixtureTest, Configure2MetricGroups) {
       metric_groups.size() > 0 ? metric_groups[0]._handle : nullptr;
 
   // test more than 1 metric groups
-  pti_metrics_group_collection_params_t config_collection_params;
+  pti_metrics_group_collection_params_t config_collection_params{};
   config_collection_params._struct_size = sizeof(pti_metrics_group_collection_params_t);
   config_collection_params._group_handle = metric_group_handle;  // valid metric group
   config_collection_params._sampling_interval = 100000;          // ns
-  config_collection_params._time_aggr_window = 10000000;         // ns
 
   // Add first one
   std::vector<pti_metrics_group_collection_params_t> config_collection_params_buffer = {

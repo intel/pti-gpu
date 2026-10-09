@@ -353,12 +353,10 @@ TEST_F(MetricsMultiThreadingTest, ConcurrentCollectionDifferentDevices) {
     pti_device_handle_t device_handle = g_devices[i]._handle;
     pti_metrics_group_handle_t group_handle = device_metric_groups[i];
 
-    pti_metrics_group_collection_params_t config_params;
+    pti_metrics_group_collection_params_t config_params{};
     config_params._struct_size = sizeof(pti_metrics_group_collection_params_t);
     config_params._group_handle = group_handle;
     config_params._sampling_interval = 1'000'000;  // 1 ms
-    // time aggregation window is not applicable for time-based metrics groups
-    config_params._time_aggr_window = 0;
 
     pti_result config_result = ptiMetricsConfigureCollection(device_handle, &config_params, 1);
     ASSERT_EQ(config_result, PTI_SUCCESS)
@@ -454,11 +452,10 @@ TEST_F(MetricsMultiThreadingTest, ConcurrentCollectionManagement) {
   std::vector<std::future<pti_result>> config_futures;
   for (int i = 0; i < kNumThreads; ++i) {
     config_futures.push_back(std::async(std::launch::async, [&]() {
-      pti_metrics_group_collection_params_t config_params;
+      pti_metrics_group_collection_params_t config_params{};
       config_params._struct_size = sizeof(pti_metrics_group_collection_params_t);
       config_params._group_handle = group_handle;
       config_params._sampling_interval = 100000;
-      config_params._time_aggr_window = 10000000;
       return ptiMetricsConfigureCollection(device_handle, &config_params, 1);
     }));
   }

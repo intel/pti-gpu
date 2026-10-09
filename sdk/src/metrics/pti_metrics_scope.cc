@@ -96,15 +96,11 @@ void MetricsScopeCallback(pti_callback_domain domain,
  * @param[in] scope_collection_handle    Scope collection handle
  * @param[in] kernel_id                  Unique identifier for the kernel
  * @param[in] kernel_name                Name of the kernel
- * @param[in] context                    Level Zero context handle
  * @param[in] queue                      Level Zero command queue handle
- * @param[in] submit_type                Type of submission operation
  */
 void CollectQueryDataForKernel(pti_scope_collection_handle_t scope_collection_handle,
                                uint64_t kernel_id, const char* kernel_name,
-                               ze_context_handle_t context, ze_command_queue_handle_t queue,
-                               pti_backend_command_list_type submit_type,
-                               pti_device_handle_t device) {
+                               ze_command_queue_handle_t queue, pti_device_handle_t device) {
   SPDLOG_TRACE(
       "CollectQueryDataForKernel: Collecting query data for kernel ID: {} "
       "About to acquire data_mutex_",
@@ -140,8 +136,7 @@ void CollectQueryDataForKernel(pti_scope_collection_handle_t scope_collection_ha
 
   // Create kernel data record
   auto kernel_data =
-      CreateKernelMetricData(kernel_id, kernel_name, utils::GetTime(), utils::GetTime(),
-                             raw_data.data(), raw_data.size(), context, queue, submit_type);
+      CreateKernelMetricData(kernel_id, kernel_name, raw_data.data(), raw_data.size(), queue);
 
   if (!kernel_data) {
     SPDLOG_DEBUG(
@@ -893,7 +888,7 @@ pti_result ptiMetricsScopeQueryMetricsBufferSize(
     // Calculate space needed for each record's data
     // TODO: maybe can be optimized if the size of each record is the same
     for (size_t i = 0; i < *records_count; ++i) {
-      const kernel_metric_data* kernel_data = found_buffer->GetRecord(i);
+      const KernelMetricData* kernel_data = found_buffer->GetRecord(i);
       if (!kernel_data) continue;
 
       // Space for metric values array
