@@ -126,7 +126,7 @@ void CollectQueryDataForKernel(pti_scope_collection_handle_t scope_collection_ha
 
   // Get raw metric data
   std::vector<uint8_t> raw_data;
-  if (!GetRawMetricData(query, raw_data, kernel_name)) {
+  if (!GetRawMetricData(query, raw_data, kernel_name, profiler->MutableCachedRawDataSize())) {
     SPDLOG_DEBUG(
         "CollectQueryDataForKernel: INTERNAL ERROR:"
         " Failed to get raw metric data for kernel ID: {}",

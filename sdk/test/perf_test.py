@@ -9,6 +9,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import time
 import tempfile
 import io
 
@@ -37,6 +38,20 @@ test_baseline = ["dpc_gemm_threaded_baseline", "-t", num_threads_str, "-r", "50"
 test_overhead = ["dpc_gemm_threaded_profiled", "-t", "1", "-r", "200", "-s", "32",
                  "-c", "gpu", "-c",  "overhead"]
 test_baseline_t_1 = ["dpc_gemm_threaded_baseline", "-t", "1", "-r", "200", "-s", "32"]
+
+# Metrics Scope: the baseline is the same binary with GPU tracing only, so the
+# measured overhead is the scope profiler alone. Each run launches more than
+# 1000 kernels, past the per-pool query count, so coverage drops if query
+# slots stop being recycled.
+test_scope_baseline_t_1 = ["dpc_gemm_threaded_profiled", "-t", "1", "-r", "1200", "-s", "32",
+                           "-c", "gpu"]
+test_scope_t_1 = ["dpc_gemm_threaded_profiled", "-t", "1", "-r", "1200", "-s", "32",
+                  "-c", "gpu", "-c", "scope"]
+test_scope_baseline_t_2 = ["dpc_gemm_threaded_profiled", "-t", "2", "-r", "600", "-s", "32",
+                           "-c", "gpu"]
+test_scope_t_2 = ["dpc_gemm_threaded_profiled", "-t", "2", "-r", "600", "-s", "32",
+                  "-c", "gpu", "-c", "scope"]
+min_scope_coverage = 0.99
 
 test_pc_sampling = ["pc_sampling_perf_profiled", "-r", "10", "-s", "2048"]
 test_pc_sampling_baseline = ["pc_sampling_perf_baseline", "-r", "10", "-s", "2048"]
@@ -134,6 +149,8 @@ class TestConfig:
         collect_default_test_specific_values
     )
     requires_throughput: bool = True
+    # Pause after each test process, before the next baseline starts.
+    settle_after_test_sec: float = 0.0
 
 
 @dataclass
@@ -308,6 +325,39 @@ def analyze_pc_sampling(threshold_overhead, results, _diff_med):
     return analyze_default(threshold_overhead, results, diff_med)
 
 
+def collect_scope_values(_stdout_b, stdout_t):
+    records = get_value("Scope records", stdout_t)
+    kernels = get_value("Scope kernels", stdout_t)
+    if records is None or not kernels:
+        print("FAILED (no scope data)")
+        return None
+    return {"Scope coverage": records / kernels}
+
+
+def analyze_scope(threshold_overhead, results, _diff_med):
+    # Collecting fewer records makes a run faster, so check coverage before overhead.
+    coverage = min(results.test_specific_values.get("Scope coverage", [0.0]))
+    print(
+        f"\nLowest scope record coverage: {coverage:.4f} (minimum {min_scope_coverage})"
+    )
+    if coverage < min_scope_coverage:
+        print("\nTest failed - Scope records do not cover all kernels")
+        return 1
+
+    elapsed_baseline = statistics.median(results.elapsed_baseline)
+    elapsed_test = statistics.median(results.elapsed_test)
+    print("\nEnd-to-end latency, median across runs (sec):")
+    print(f"  baseline {elapsed_baseline:.4f}  test {elapsed_test:.4f}")
+    latency_increase = 100.0 * (elapsed_test - elapsed_baseline) / elapsed_baseline
+    print("\n  baseline = PTI GPU tracing only (-c gpu)")
+    print("  test     = PTI GPU tracing + Metrics Scope, XVE_ACTIVE (-c gpu -c scope)")
+    print(
+        "  => the increase is the cost of Metrics Scope on top of tracing, not vs. no PTI"
+    )
+    print(f"\nEnd-to-end latency increase (%): {latency_increase:.2f} (PRIMARY)")
+    return analyze_default(threshold_overhead, results, latency_increase)
+
+
 test_configs = {
     "profiled": TestConfig(test_baseline, test_profiled),
     "prof-gpu": TestConfig(test_baseline, test_prof_gpu),
@@ -319,6 +369,24 @@ test_configs = {
         warm_up_runs=0,
         analyze=analyze_overhead_view,
         collect_test_specific_values=collect_overhead_view_values,
+    ),
+    "scope": TestConfig(
+        test_scope_baseline_t_1,
+        test_scope_t_1,
+        repetitions=9,
+        analyze=analyze_scope,
+        collect_test_specific_values=collect_scope_values,
+        requires_throughput=False,
+        settle_after_test_sec=1.0,
+    ),
+    "scope-mt": TestConfig(
+        test_scope_baseline_t_2,
+        test_scope_t_2,
+        repetitions=9,
+        analyze=analyze_scope,
+        collect_test_specific_values=collect_scope_values,
+        requires_throughput=False,
+        settle_after_test_sec=1.0,
     ),
     "pc-sampling": TestConfig(
         test_pc_sampling_baseline,
@@ -441,6 +509,7 @@ def run_warm_up(config, path, work_dir, timeout_sec, environ):
         test_result = run_process(
             config.test_command, path, work_dir, timeout_sec, environ
         )
+        time.sleep(config.settle_after_test_sec)
         status = check_process_status(baseline_result, test_result)
         if status != CommandStatus.PASS:
             print("Warm-up terminated the test")
@@ -492,6 +561,7 @@ def run_test(path, work_dir, test_type, test_timeout=60):
         test_result = run_process(
             config.test_command, path, work_dir, timeout_sec, environ
         )
+        time.sleep(config.settle_after_test_sec)
         status = check_process_status(baseline_result, test_result)
         if status == CommandStatus.SKIPPED:
             return CommandStatus.SKIPPED, None

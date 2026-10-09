@@ -20,6 +20,7 @@
 #include <thread>
 
 #if !defined(NO_PTI)
+#include "pti/pti_metrics_scope.h"
 #include "pti/pti_view.h"
 #include "samples_utils.h"
 #include "utils.h"
@@ -116,6 +117,7 @@ enum class CollectionType : uint8_t {
   kGpu = 0x01,
   kOverheadL0 = 0x02,
   kSyclMin = 0x04,
+  kScope = 0x08,
 };
 
 inline CollectionType operator|(CollectionType left, CollectionType right) {
@@ -138,6 +140,9 @@ std::ostream& operator<<(std::ostream& os, CollectionType type) {
   }
   if (type & CollectionType::kOverheadL0) {
     collect_string += " Overhead_L0";
+  }
+  if (type & CollectionType::kScope) {
+    collect_string += " Metrics_Scope";
   }
   return os << collect_string;
 }
@@ -214,6 +219,64 @@ void StopTracing() {
   if (collection_type & CollectionType::kOverheadL0) {
     PTI_THROW(ptiViewDisable(PTI_VIEW_COLLECTION_OVERHEAD));
   }
+}
+
+constexpr int kSkipReturnCode = 77;
+
+// Statuses meaning HW metrics are not available on this host; any other failure is a test failure.
+bool IsScopeUnavailable(pti_result status) {
+  switch (status) {
+    case PTI_ERROR_DRIVER:
+    case PTI_ERROR_METRICS_RUNTIME_ENABLE_UNSUPPORTED:
+    case PTI_ERROR_METRICS_SCOPE_METRIC_NOT_FOUND:
+    case PTI_ERROR_METRICS_SCOPE_NOT_A_SINGLE_GROUP:
+    case PTI_ERROR_METRICS_SCOPE_DEVICE_TYPE_NOT_UNIFORM:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Returns nullptr when HW metrics are unavailable, so the caller can skip.
+pti_scope_collection_handle_t StartScope(size_t expected_kernels) {
+  pti_scope_collection_handle_t scope_handle = nullptr;
+  pti_result status = ptiMetricsScopeEnable(&scope_handle);
+  if (IsScopeUnavailable(status)) {
+    return nullptr;
+  }
+  PTI_THROW(status);
+  const char* metric_names[] = {"XVE_ACTIVE"};
+  status = ptiMetricsScopeConfigure(scope_handle, PTI_METRICS_SCOPE_AUTO_KERNEL, nullptr, 0,
+                                    metric_names, 1);
+  if (status != PTI_SUCCESS) {
+    PTI_THROW(ptiMetricsScopeDisable(scope_handle));
+    if (IsScopeUnavailable(status)) {
+      return nullptr;
+    }
+    PTI_THROW(status);
+  }
+  size_t buffer_size = 0;
+  PTI_THROW(ptiMetricsScopeQueryCollectionBufferSize(scope_handle, expected_kernels, &buffer_size));
+  PTI_THROW(ptiMetricsScopeSetCollectionBufferSize(scope_handle, buffer_size));
+  PTI_THROW(ptiMetricsScopeStartCollection(scope_handle));
+  return scope_handle;
+}
+
+size_t CountScopeRecordsAndDisable(pti_scope_collection_handle_t scope_handle) {
+  size_t buffer_count = 0;
+  PTI_THROW(ptiMetricsScopeGetCollectionBuffersCount(scope_handle, &buffer_count));
+  size_t record_count = 0;
+  for (size_t i = 0; i < buffer_count; ++i) {
+    void* buffer = nullptr;
+    size_t buffer_size = 0;
+    PTI_THROW(ptiMetricsScopeGetCollectionBuffer(scope_handle, i, &buffer, &buffer_size));
+    pti_metrics_scope_collection_buffer_properties_t props{};
+    props._struct_size = sizeof(props);
+    PTI_THROW(ptiMetricsScopeGetCollectionBufferProperties(scope_handle, buffer, &props));
+    record_count += props._num_scopes;
+  }
+  PTI_THROW(ptiMetricsScopeDisable(scope_handle));
+  return record_count;
 }
 
 void ProvideBuffer(unsigned char** buf, std::size_t* buf_size) {
@@ -413,6 +476,8 @@ int main(int argc, char* argv[]) {
           collection_type = collection_type | CollectionType::kOverheadL0;
         } else if (temp.find("sycl") != std::string::npos) {
           collection_type = collection_type | CollectionType::kSyclMin;
+        } else if (temp.find("scope") != std::string::npos) {
+          collection_type = collection_type | CollectionType::kScope;
         } else {
           std::cerr << "Unknown collection type (ignoring): " << temp << '\n';
           Usage(argv[0]);
@@ -434,6 +499,17 @@ int main(int argc, char* argv[]) {
     PTI_THROW(ptiViewSetCallbacks(ProvideBuffer, ParseBuffer));
 
     StartTracing();
+
+    // The warm-up iteration of each thread is collected too.
+    const size_t expected_kernels = static_cast<size_t>(thread_count) * (repeat_count + 1);
+    pti_scope_collection_handle_t scope_handle = nullptr;
+    if (collection_type & CollectionType::kScope) {
+      scope_handle = StartScope(expected_kernels);
+      if (scope_handle == nullptr) {
+        std::cerr << "HW metrics scope collection unavailable, skipping" << '\n';
+        return kSkipReturnCode;
+      }
+    }
 #endif
     sycl::device dev;
     dev = sycl::device(sycl::gpu_selector_v);
@@ -516,6 +592,9 @@ int main(int argc, char* argv[]) {
 #if !defined(NO_PTI)
     StopTracing();
     PTI_THROW(ptiFlushAllViews());
+    if (collection_type & CollectionType::kScope) {
+      PTI_THROW(ptiMetricsScopeStopCollection(scope_handle));
+    }
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<float> time = end - start;
     auto gemm_count = thread_count * repeat_count;
@@ -525,6 +604,10 @@ int main(int argc, char* argv[]) {
       std::cout << "-- Summed from Overhead View records Overhead time: "
                 << static_cast<float>(overhead_time_ns) / static_cast<float>(NSEC_IN_SEC) << " sec"
                 << '\n';
+    }
+    if (collection_type & CollectionType::kScope) {
+      std::cout << "-- Scope records: " << CountScopeRecordsAndDisable(scope_handle) << '\n';
+      std::cout << "-- Scope kernels: " << expected_kernels << '\n';
     }
 #endif /* ! NO_PTI */
 

@@ -750,29 +750,35 @@ inline bool ValidateQueryAndEvent(zet_metric_query_handle_t query,
  * @param[in] query         Metric query handle to get data from
  * @param[out] raw_data     Vector to store the retrieved raw data
  * @param[in] kernel_name   Kernel name for logging purposes
+ * @param[in,out] cached_data_size  Raw data size for the metric group; probed once when 0
  *
  * @return true if data was successfully retrieved, false otherwise
  */
 inline bool GetRawMetricData(zet_metric_query_handle_t query, std::vector<uint8_t>& raw_data,
-                             [[maybe_unused]] const char* kernel_name) {
+                             [[maybe_unused]] const char* kernel_name, size_t& cached_data_size) {
   SPDLOG_TRACE("GetRawMetricData: Attempting to retrieve raw metric data for kernel: {}",
                kernel_name);
-  size_t raw_data_size = 0;
-  ze_result_t status = zetMetricQueryGetData(query, &raw_data_size, nullptr);
-  if (status != ZE_RESULT_SUCCESS) {
-    SPDLOG_DEBUG("GetRawMetricData: Failed to get query data size: {}",
-                 static_cast<uint64_t>(status));
-    return false;
+  // The raw size is a property of the metric group, identical for every query,
+  // so it is probed once per profiler and reused from then on.
+  if (cached_data_size == 0) {
+    size_t queried_size = 0;
+    ze_result_t size_status = zetMetricQueryGetData(query, &queried_size, nullptr);
+    if (size_status != ZE_RESULT_SUCCESS) {
+      SPDLOG_DEBUG("GetRawMetricData: Failed to get query data size: {}",
+                   static_cast<uint64_t>(size_status));
+      return false;
+    }
+    SPDLOG_TRACE("GetRawMetricData: Raw data size {} bytes", queried_size);
+    if (queried_size == 0) {
+      SPDLOG_TRACE("GetRawMetricData: No metric data available for kernel: {}", kernel_name);
+      return false;
+    }
+    cached_data_size = queried_size;
   }
-  SPDLOG_TRACE("GetRawMetricData: Raw data size {} bytes", raw_data_size);
 
-  if (raw_data_size == 0) {
-    SPDLOG_TRACE("GetRawMetricData: No metric data available for kernel: {}", kernel_name);
-    return false;
-  }
-
+  size_t raw_data_size = cached_data_size;
   raw_data.resize(raw_data_size);
-  status = zetMetricQueryGetData(query, &raw_data_size, raw_data.data());
+  ze_result_t status = zetMetricQueryGetData(query, &raw_data_size, raw_data.data());
   if (status != ZE_RESULT_SUCCESS) {
     SPDLOG_TRACE("GetRawMetricData: Failed to get query data: {}", static_cast<uint64_t>(status));
     return false;

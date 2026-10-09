@@ -1171,6 +1171,8 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
   std::unordered_map<uint64_t, MetricQuerySlot> kernel_to_slot_map_;
   std::mutex query_injection_mutex_;
   std::atomic<bool> exhaustion_reported_ = false;
+  // Raw query data size, constant for the metric group; filled on first read.
+  size_t cached_raw_data_size_ = 0;
 
  public:
   PtiQueryMetricsProfiler() = delete;
@@ -1258,6 +1260,9 @@ class PtiQueryMetricsProfiler : public PtiMetricsProfiler {
     }
     return PTI_SUCCESS;
   }
+
+  // Guarded by the caller's data_mutex_, same as the rest of the collection path.
+  size_t &MutableCachedRawDataSize() { return cached_raw_data_size_; }
 
   MetricQuerySlot GetSlotForKernel(uint64_t kernel_id) {
     std::lock_guard<std::mutex> lock(query_injection_mutex_);

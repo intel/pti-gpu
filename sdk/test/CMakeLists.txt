@@ -803,6 +803,8 @@ if(HAVE_SYCL)
   set(L0_OVERHEAD_THRESHOLD 17)
   set(LINK_OVERHEAD_THRESHOLD 3)
   set(PC_SAMPLING_OVERHEAD_THRESHOLD 75)
+  set(METRICS_SCOPE_OVERHEAD_THRESHOLD 25)
+  set(METRICS_SCOPE_MT_OVERHEAD_THRESHOLD 25)
   if (WIN32)
     # Timer we use on Windows (as of implementation 02.14.25) has 100 ns resolution,
     # due to that some functions latency measured as zero, so accumulated overhead is less than on Linux
@@ -865,9 +867,31 @@ if(HAVE_SYCL)
       ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
   )
 
+  add_test(
+    NAME perf-metrics-scope-overhead
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TOP_LEVEL_TEST_BIN_DIR}"
+      ${METRICS_SCOPE_OVERHEAD_THRESHOLD} scope
+      ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
+  )
+
+  add_test(
+    NAME perf-metrics-scope-mt-overhead
+    COMMAND
+      ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/perf_test.py "${PTI_TOP_LEVEL_TEST_BIN_DIR}"
+      ${METRICS_SCOPE_MT_OVERHEAD_THRESHOLD} scope-mt
+      ${PTI_PERF_TEST_APROXIMATE_TIMEOUT}
+  )
+
   set_tests_properties(
     ${PTI_PERF_TESTS} PROPERTIES
     LABELS "performance")
+
+  set_tests_properties(
+    perf-metrics-scope-overhead perf-metrics-scope-mt-overhead PROPERTIES
+    ${PTI_METRIC_TEST_PROPS}
+    SKIP_RETURN_CODE 77
+    LABELS "performance;metrics;hw-metrics")
 
   set_tests_properties(
     perf-overhead-view PROPERTIES
