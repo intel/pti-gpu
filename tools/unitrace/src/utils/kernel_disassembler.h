@@ -8,7 +8,7 @@
 //
 // DisassembleKernelInstructions() turns a kernel's Gen ISA into IGA's whole-kernel
 // listing, the same as "iga64 -d" prints. ConstructDefsAndUses() reads the listing's
-// defs back as records. HexOffset() is the one way offsets are printed.
+// defs back as records. HexOffset() prints the stall report's offsets.
 //
 // The padding after a kernel's code decodes as "illegal", so it is cut off first
 // (GenCodeSize(), kernel_extractor.h).
@@ -326,8 +326,7 @@ struct UsedBy {
   // The instruction text, without the prefix or the defs comment, with whitespace runs
   // collapsed to one space.
   std::string text_;
-  // The producers of the values it reads, in listing order. Empty if there are none
-  // or the listing was made without with_defs.
+  // The producers of the values it reads, in listing order. Empty if there are none.
   std::vector<DefinedBy> defs_;
 };
 
@@ -372,8 +371,11 @@ inline int HexDigit(char c) {
 //   \______ PRINT_PC ______/                                  \_ PRINT_DEFS _/
 //
 // Every line with the prefix becomes a record, defs or not; other lines are skipped.
+// The prefix has a "#<id>" only with PRINT_DEFS, so a listing made without with_defs
+// gives no records.
 // The defs are "#<id>{<registers>}" or "IN{<registers>}", separated by ", "; a send's
-// commentary after ";" is dropped, as is anything unrecognised.
+// commentary after ";" is dropped, as is anything unrecognised and a def naming the
+// instruction itself.
 //
 // Returns true and fills out_defs if the listing has at least one instruction;
 // otherwise warns and returns false.
@@ -503,6 +505,10 @@ inline bool ConstructDefsAndUses(const std::string& listing, DefsAndUses& out_de
             producer_id = producer_id * 10 + static_cast<uint32_t>(name[i] - '0');
           }
           if (!all_digits) {
+            continue;
+          }
+          // A loop-carried value names this instruction itself; not a dependency.
+          if (producer_id == id) {
             continue;
           }
           def.id_ = producer_id;

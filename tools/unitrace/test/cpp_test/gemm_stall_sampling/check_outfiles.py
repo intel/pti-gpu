@@ -20,8 +20,8 @@ a comma inside a quoted cell is data - instruction syntax is full of them.
 
 The source-attribution checks deliberately do not fail when the report carries no
 source information at all: source line mapping is an optional capability (it needs
-debug info in the module binary, a working disassembler, and on Linux a runtime
-DWARF reader), and a build without it is expected to report NA rather than to fail
+debug info in the module binary, which unitrace's own line-table reader
+(source_resolver.h) decodes), and a build without it is expected to report NA rather than to fail
 this test. What they do catch is source information that is present but wrong -
 some kernels attributed and others not, or two kernels handed the same lines.
 
@@ -44,7 +44,7 @@ run_test.py invokes this through its -e/--extra_test_prog hook and passes the
 output files it discovered as positional arguments. Those are NOT relied on for
 finding the metrics file: the hook collects file names by grepping unitrace's
 stderr for the literal "is stored in", but stall sampling announces its output
-as "Kernel metrics are stored in ..." ("are", not "is"), so the hook finds
+as "Device metrics are stored in ..." ("are", not "is"), so the hook finds
 nothing and passes an empty list. This script therefore locates the metrics
 files itself and treats "no metrics file found" as a failure - otherwise an
 empty result would silently pass and the test would be worthless.
@@ -60,12 +60,8 @@ import sys
 
 # Unitrace derives the metrics file name from the -o value by inserting
 # ".metrics" before the extension (see LegacyLoggerFactory::GetMetricsFileName),
-# giving e.g. output__stall_sampling_gemm_stall_sampling_scenario1.metrics.12345.txt
+# giving e.g. output_stall_sampling_gemm_stall_sampling_scenario1.metrics.12345.txt
 METRICS_GLOB = "*.metrics.*"
-
-# Only non-emptiness is checked here. Not raised to "header plus a row", because
-# check_header and check_has_data_rows require exactly that, and precisely.
-MIN_USEFUL_BYTES = 1
 
 # The kernel that calls a device function defined in another source file (see
 # gemm_helper.h). Its rows are the only ones expected to name more than one file.
@@ -99,12 +95,6 @@ EXPECTED_COLUMNS = ["Source", "Offset", "Instruction", "Dependency"]
 # code - so this value means "no source line", not only "no debug info".
 NO_SOURCE = "NA"
 
-# A marker a Source cell may end with, meaning the instruction is covered by that line
-# rather than located at it. FormatSourceCell no longer emits one, but the suffix is still
-# stripped, and silently: split_source rejecting a cell would shrink the source sets
-# instead of failing.
-ENTRY_MARKER = " [entry]"
-
 # What a row with no tracked producers carries in the Dependency column.
 NO_DEPENDENCIES = "NA"
 
@@ -112,7 +102,7 @@ NO_DEPENDENCIES = "NA"
 # address in a kernel is a multiple of 8.
 INSTRUCTION_ALIGNMENT = 8
 
-# One Dependency cell holds "<offset>[ (<source>)][: <text>]" per producer, joined by
+# One Dependency cell holds "<offset> (<source>)[: <text>]" per producer, joined by
 # " | " (FormatDependencies). Instruction syntax contains "|" too - the channel
 # offset in "(8|M0)" - so the separator is only recognised when what follows starts
 # like a new entry, i.e. an offset followed by a space, a colon or end of cell.
@@ -139,7 +129,7 @@ def metrics_glob_from_cmd(cmd):
     """Derive the exact metrics file pattern from the unitrace command line.
 
     run_test.py passes the command it ran after --cmd, which contains
-    "-o <dir>/output__stall_sampling_<test>.txt". Unitrace turns that into
+    "-o <dir>/output_stall_sampling_<test>.txt". Unitrace turns that into
     "<same>.metrics.<pid>.txt" (LegacyLoggerFactory::GetMetricsFileName inserts
     ".metrics" before the extension).
 
@@ -179,7 +169,8 @@ def find_metrics_files(candidates, search_dirs, pattern):
         for path in glob.glob(os.path.join(directory, pattern)):
             if os.path.isfile(path):
                 found.append(path)
-        # unitrace may place results in a per-run subdirectory (--result-dir).
+        # Also one level down. This does not cover --result-dir, which names its
+        # metrics files metrics/metrics_<n>.csv rather than <-o name>.metrics.<pid>.
         for path in glob.glob(os.path.join(directory, "*", pattern)):
             if os.path.isfile(path):
                 found.append(path)
@@ -302,35 +293,17 @@ def check_header(path):
                   f"{len(stall_columns)} stall column(s)")
 
 
-def check_non_empty(path):
-    """The metrics file must exist and contain data.
-
-    Returns (passed, message).
-    """
-    size = os.path.getsize(path)
-    if size < MIN_USEFUL_BYTES:
-        return False, f"file is empty ({size} bytes)"
-    return True, f"{size} bytes"
-
-
 def split_source(value):
     """Split a Source cell, "<file>:<line>[:<column>]", into (file, position).
 
     The file name is reduced to its base name on purpose. One report can spell the
-    same file two ways: the DWARF reader resolves the first line-program unit's file
-    through the compilation directory and leaves the others as the compiler wrote
-    them, so "/where/it/was/built/gemm_multi.cl:36" and "gemm_multi.cl:36" can both
+    same file two ways: a line table can name one file with its directory and another
+    as the compiler wrote it, so "/where/it/was/built/gemm_multi.cl:36" and "gemm_multi.cl:36" can both
     appear and mean the same line. Comparing base names sees through that, and
     nothing here needs the directory.
 
-    A trailing ENTRY_MARKER is stripped, so a marked and an unmarked cell naming the same
-    place compare equal here. The checks below ask which file and line a kernel was
-    attributed, and a function-entry row attributes the same line either way.
-
     Returns (None, None) if the cell does not look like a source location.
     """
-    if value.endswith(ENTRY_MARKER):
-        value = value[:-len(ENTRY_MARKER)]
     parts = value.split(":")
     position = []
     # Line, and column if present, taken from the right. At most two, so a
@@ -366,8 +339,8 @@ def check_has_data_rows(path):
     fell in code no .kprops record covers writes no block, and treating that as a pass
     would make this check - and with it every content check, which has nothing to
     constrain - satisfied by a file that says nothing about any kernel. Stall sampling is
-    per device, so that can happen when another process is busy on the same GPU; ctest
-    runs one test at a time, which is what keeps it rare.
+    per device, so that can happen when another process is busy on the same GPU;
+    test_unitrace.py runs one test at a time, which is what keeps it rare.
 
     Returns (passed, message).
     """
@@ -462,7 +435,7 @@ def check_distinct_sources(path):
 
 
 def parse_offset(value):
-    """Parse an Offset cell, "0x" plus at least 8 hex digits (HexOffset).
+    """Parse an Offset cell, "0x" plus hex digits (HexOffset writes at least 8).
 
     Returns None if the cell is not one, which a check reports rather than crashes on.
     """
@@ -619,7 +592,6 @@ def check_multi_file_kernel(path):
 # report is unreadable, so they diagnose it before the rest report "nothing to check".
 CHECKS = [
     ("header", check_header),
-    ("non-empty", check_non_empty),
     ("has-data-rows", check_has_data_rows),
     ("source-attribution", check_source_attribution),
     ("distinct-sources", check_distinct_sources),

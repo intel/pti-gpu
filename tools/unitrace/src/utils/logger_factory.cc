@@ -377,7 +377,7 @@ std::vector<std::string> LegacyLoggerFactory::SearchFilesByType(LoggerType type,
         case LOGGER_TYPE_KPROPS:
             prefix = ".kprops.";
             break;
-        // Nothing searches for .kdisasm files: they are results, written under
+        // Nothing searches for .asm files: they are results, written under
         // GetDisasmDirPath() rather than into the data directory this searches, and
         // the process that writes them is the one that built them, so it has the
         // paths already.
@@ -436,8 +436,8 @@ ResultDirLoggerFactory::~ResultDirLoggerFactory() {
     // Remove the subdirectories first so that their removal may in turn leave the
     // parent result directory empty and eligible for removal. disasm_dir_path_ is
     // empty unless GetDisasmDirPath() was called, and the directory it names can be
-    // empty even then: it is created before the first kernel is disassembled, and
-    // every disassembly may still have failed.
+    // empty even then: it is created before the first .asm file is written, and every
+    // file may still have failed to open.
     RemoveDirectoryIfEmpty(metrics_dir_path_);
     RemoveDirectoryIfEmpty(disasm_dir_path_);
     RemoveDirectoryIfEmpty(dir_path_);
@@ -548,7 +548,7 @@ std::vector<std::string> ResultDirLoggerFactory::SearchFilesByType(LoggerType ty
         case LOGGER_TYPE_KPROPS:
             prefix = "kprops_";
             break;
-        // No .kdisasm search here either: see the note in the Legacy counterpart.
+        // No .asm search here either: see the note in the Legacy counterpart.
         case LOGGER_TYPE_KTIME:
             prefix = "ktime_";
             break;

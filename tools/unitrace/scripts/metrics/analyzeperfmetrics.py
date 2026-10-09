@@ -220,7 +220,7 @@ def ParseArguments(argv):
     argparser = argparse.ArgumentParser(description = "GPU Kernel Performance Hardware Metrics Analyzer")
     argparser.add_argument('-l', '--list', action = 'store_true', help = "list devices, metrics and kernels in the input performance metric data file")
     argparser.add_argument('-d', '--device', type = int, default = 0, help = "GPU device (device 0 by default)")
-    argparser.add_argument('-k', '--kernel', help = "kernel name with shape, all kernels if this option is not specified")
+    argparser.add_argument('-k', '--kernel', help = "kernel name, with shape for query or time-based data, all kernels if this option is not specified")
     argparser.add_argument('-i', '--instance', type = int, default = 1, help = "kernel instance. all instances if < 1 (1 or the first instance by default)")
     argparser.add_argument('-m', '--metrics', action = 'append', help = "list of comma-separated metric names")
     argparser.add_argument('-b', '--throughput', action = 'append', help = "list of comma-separated metric names for throughput")
@@ -252,7 +252,6 @@ def ParseArguments(argv):
 # A stall section's identity, copied onto its rows. Pid and KernelId also name the
 # kernel's <device>.<pid>.<kernel id>.asm file.
 STALL_IDENTITY_COLUMNS = ["Kernel", "Pid", "KernelId"]
-STALL_BLOCK_HEADER_FIELDS = STALL_IDENTITY_COLUMNS
 
 # The first column of every label line, and of no other line.
 BLOCK_LABEL_FIRST_COLUMN = "Kernel"
@@ -270,13 +269,16 @@ def NormalizeFields(fields):
     return [f.strip() for f in fields]
 
 def IsBlockLabel(fields):
-    """Whether the normalized fields open a section: a first column of Kernel, then its identity columns."""
+    """Whether the normalized fields open a section: a first column of Kernel and at least one more.
+
+    Only the first column is checked; the rest name the identity columns, whatever they are.
+    """
     return ((len(fields) >= 2) and (fields[0] == BLOCK_LABEL_FIRST_COLUMN))
 
 def ClassifyHeaderRow(row):
     """The kind of table a label line opens: "stall", "time" or None."""
     fields = NormalizeFields(next(csv.reader([row], skipinitialspace = True), []))
-    if (fields == STALL_BLOCK_HEADER_FIELDS):
+    if (fields == STALL_IDENTITY_COLUMNS):
         return "stall"
     if (IsBlockLabel(fields)):
         return "time"
@@ -350,7 +352,7 @@ def ReadStallFrame(inputfile, header, last):
                 # The blank line between sections, which must not fill a pending slot.
                 continue
             fields = NormalizeFields(fields)
-            if (fields == STALL_BLOCK_HEADER_FIELDS):
+            if (fields == STALL_IDENTITY_COLUMNS):
                 pending = "identity"
                 continue
             if (pending == "identity"):
@@ -447,15 +449,13 @@ def ReadMetricFrame(inputfile, header, last, kind):
 
     return ReadTimedFrame(inputfile, header, last)
 
-def PrepareStallFrame(df):
+def StallColumns(df):
     """The stall count columns: those after Dependency, except Active[Events]."""
     cols = list(df.columns)
     if ("Dependency" not in cols):
-        return df, []
+        return []
 
-    stalls = [c for c in cols[cols.index("Dependency") + 1:] if c != "Active[Events]"]
-
-    return df, stalls
+    return [c for c in cols[cols.index("Dependency") + 1:] if c != "Active[Events]"]
 
 def NonZeroStallRows(df, stalls):
     """Drop the rows in which no stall of any type was sampled."""
@@ -497,10 +497,10 @@ def StallKernelLabel(kernel, pid, kernelid):
     """How a stall report names a kernel; pid and kernel id also name its .asm file."""
     return str(kernel) + " (pid " + str(pid) + ", kernel id " + str(kernelid) + ")"
 
-DEPENDS_ON_SEPARATOR = " | "
+DEPENDENCY_SEPARATOR = " | "
 # One producer, as FormatDependencies() in src/levelzero/ze_metrics.h writes it:
-# "0x<offset> (<source>)[: <text>]", joined by DEPENDS_ON_SEPARATOR.
-DEPENDS_ON_ENTRY = re.compile(r"^(0x[0-9a-fA-F]+)(?:\s+\(([^)]*)\))?(?::\s(.*))?$")
+# "0x<offset> (<source>)[: <text>]", joined by DEPENDENCY_SEPARATOR.
+DEPENDENCY_ENTRY = re.compile(r"^(0x[0-9a-fA-F]+)(?:\s+\(([^)]*)\))?(?::\s(.*))?$")
 
 def ParseDependency(cell):
     """Split a Dependency cell into (offset, source, text) producers.
@@ -511,11 +511,11 @@ def ParseDependency(cell):
     if ((cell is None) or (cell == "") or (cell == NOT_AVAILABLE)):
         return producers
 
-    for entry in cell.split(DEPENDS_ON_SEPARATOR):
+    for entry in cell.split(DEPENDENCY_SEPARATOR):
         entry = entry.strip()
         if (entry == ""):
             continue
-        m = DEPENDS_ON_ENTRY.match(entry)
+        m = DEPENDENCY_ENTRY.match(entry)
         if (m is None):
             producers.append((None, None, entry))
         else:
@@ -707,7 +707,8 @@ def AnalyzeStallMetrics(args, device_data_df, kernel, http = False):
     if ((http == False) and (args.report is not None)):
         stall_analysis_report_out = open(args.report, "w")
 
-    df, stalls = PrepareStallFrame(device_data_df)
+    df = device_data_df
+    stalls = StallColumns(df)
     if (len(stalls) == 0):
         msg = "No stall metrics in the input data. Was it collected with unitrace --stall-sampling?"
         if (http == False):

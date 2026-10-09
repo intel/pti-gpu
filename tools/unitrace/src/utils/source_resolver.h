@@ -446,7 +446,8 @@ inline bool ReadDwarf5FileTable(ByteCursor& cursor, uint8_t offset_size, uint8_t
     if (!cursor.Ok()) {
       return false;
     }
-    // Each entry is at least one byte; a larger count is malformed.
+    // Taken as malformed if larger than the bytes left, which bounds the reserve()
+    // below. Only an entry of zero-size forms alone takes no byte, and none is useful.
     if (entry_count > cursor.Size() - cursor.Offset()) {
       return false;
     }
@@ -911,8 +912,11 @@ class KernelLineTable {
           break;
         }
       }
-      return fail(any_usable ? "cannot tell which line table belongs to this kernel"
-                             : "line number information holds no usable line table");
+      if (!any_usable) {
+        return fail("line number information holds no usable line table");
+      }
+      return fail((relocated && usable == 0) ? "this kernel's line table is unusable"
+                                             : "cannot tell which line table belongs to this kernel");
     }
 
     file_paths_ = std::move(chosen.file_paths_);

@@ -139,7 +139,7 @@ static CollectorOptions ReadArgs() {
   if (!value.empty() && value == "1") {
     options.start_paused = 1;
   }
-
+  
   value = utils::GetEnv("UNITRACE_TraceOutputDirPath");
   if (!value.empty() && value == "1") {
     options.output_dir_path = 1;

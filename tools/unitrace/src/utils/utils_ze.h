@@ -492,6 +492,7 @@ inline bool ReadBackModuleNativeBinary(const std::string& path,
 
   std::streampos size = file.tellg();
   if (size <= 0) {
+    std::cerr << "[WARNING] Module binary file is empty or unreadable: " << path << std::endl;
     return false;
   }
   file.seekg(0, std::ios::beg);

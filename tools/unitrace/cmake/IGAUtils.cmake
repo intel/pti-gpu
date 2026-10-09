@@ -10,8 +10,6 @@
 # it under tools/unitrace/cmake gives Unitrace full control, independent of the
 # shared build_utils macros (which other samples still rely on).
 
-include(CheckIncludeFileCXX)
-
 # Fetch the pinned IGA API headers into the build tree and make TARGET compile
 # against them.
 #

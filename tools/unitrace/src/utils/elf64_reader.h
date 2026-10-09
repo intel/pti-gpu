@@ -293,7 +293,6 @@ struct StringTableView {
 // Field offsets from the gABI, used instead of structs so host alignment and padding
 // do not matter.
 constexpr size_t kElf64MagicSize = 4;         // \x7f E L F
-constexpr size_t kElf64IdentSize = 16;        // e_ident, the whole prefix
 constexpr size_t kElf64ClassOffset = 4;       // e_ident[EI_CLASS]
 constexpr size_t kElf64DataOffset = 5;        // e_ident[EI_DATA]
 constexpr uint8_t kElf64Class64 = 2;          // ELFCLASS64
@@ -364,8 +363,8 @@ enum class Elf64Status {
 // the null section), since relocations and symbols refer to sections by index.
 //
 // A section whose range is outside the buffer is kept with no contents; the read fails
-// only if the header or the section table is bad. A failure is reported on std::cerr
-// as "[WARNING] ..."; the status lets the caller handle kNotElf.
+// only if the header or the section table is bad. Every failure, kNotElf included, is
+// reported on std::cerr as "[WARNING] ..."; the status says which it was.
 inline Elf64Status ReadElf64Sections(const uint8_t* binary, size_t binary_size,
                                      std::vector<Elf64Section>& out_sections) {
   auto fail = [](Elf64Status status, const char* message) {

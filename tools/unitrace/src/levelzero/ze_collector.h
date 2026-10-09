@@ -1061,9 +1061,6 @@ struct ZeKernelCommandProperties {
   bool aot_;    // AOT or JIT
   std::string name_;  // kernel or command name
   bool skip_;  // skip this kernel in the trace
-  // Id (ZeModule::id_) of the module the kernel came from, which also names the module's
-  // dumped binary. 0 if the module was created before tracing started.
-  uint32_t module_ = 0;
 };
 
 // these will not go away when ZeCollector is destructed
@@ -2525,7 +2522,7 @@ class ZeCollector {
           }
 
           // Query metrics are written as a self-contained section per kernel-instance, the
-          // shape stall and time-based sampling also use:
+          // shape time-based sampling also uses, less the SubDeviceId column:
           //   Kernel, GlobalInstanceId              <- section label, naming the identity
           //   "<name>", <instance id>                  the section carries
           //   [SubDeviceId, ]<counter names...>     <- column header: the sub-device, then
@@ -5800,6 +5797,9 @@ class ZeCollector {
             // module's kernels match no sample.
             WriteOutModuleNativeBinary(collector->logger_factory_, collector->data_dir_name_,
                                        m.id_, native_binary.data(), native_binary.size());
+          } else {
+            std::cerr << "[WARNING] Unable to get native binary of module " << m.id_
+                      << ", its kernels will not be disassembled" << std::endl;
           }
         }
       }
@@ -5958,7 +5958,6 @@ typedef struct _zex_kernel_register_file_size_exp_t {
       }
 
       desc.base_addr_ = base_addr;
-      desc.module_ = module;
 
       // First, check include_kernels_ to see if the kernel should be included (if any match, skip=false).
       // Then, check exclude_kernels_ to see if the kernel should be excluded (if any match, skip=true).
@@ -6002,6 +6001,9 @@ typedef struct _zex_kernel_register_file_size_exp_t {
           kprops_logger->Log("\"" + desc.name_ + "\"\n" + std::to_string(base_addr) + "\n" +
                              std::to_string(desc.id_) + "\n" + std::to_string(module) + "\n");
           kprops_logger->Flush();
+        } else {
+          std::cerr << "[ERROR] Failed to create kernel properties data file, samples of kernel "
+                    << desc.name_ << " will not be attributed" << std::endl;
         }
       }
 

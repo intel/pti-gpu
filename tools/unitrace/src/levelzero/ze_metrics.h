@@ -989,7 +989,8 @@ class ZeMetricProfiler {
 
     uint32_t ip_idx = GetMetricId(metric_list, "IP");
     if (ip_idx >= metric_list.size()) {
-      // no IP metric
+      std::cerr << "[WARNING] Metric group has no IP metric, no stall report for device "
+                << device->device_id_ << std::endl;
       return true;
     }
 
@@ -1002,6 +1003,8 @@ class ZeMetricProfiler {
 
     std::ifstream inf = std::ifstream(device->metric_file_name_, std::ios::in | std::ios::binary);
     if (!inf.is_open()) {
+      std::cerr << "[WARNING] Failed to open stall sampling data file "
+                << device->metric_file_name_ << std::endl;
       return true;
     }
 
@@ -1056,8 +1059,6 @@ class ZeMetricProfiler {
 
         const zet_typed_value_t *value = metrics.data();
         for (uint32_t i = 0; i < num_samples; ++i) {
-          std::string str;
-
           uint32_t size = samples[i];
           for (uint32_t j = 0; j < size; j += metric_list.size()) {
             uint64_t ip;
