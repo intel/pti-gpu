@@ -3,3 +3,4 @@ project(sycl_graph_with_v2_adaptor CXX)
 add_executable(sycl_graph_with_v2_adaptor main.cpp)
 add_sycl_to_target(sycl_graph_with_v2_adaptor)
 
+install(TARGETS sycl_graph_with_v2_adaptor RUNTIME DESTINATION bin/sycl_graph_with_v2_adaptor COMPONENT sycl_graph_with_v2_adaptor)

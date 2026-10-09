@@ -33,3 +33,6 @@ endif()
 add_custom_command(TARGET ze_graph_api POST_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/graph_kernels.spv ${CMAKE_CURRENT_BINARY_DIR}/graph_kernels.spv)
 
+install(TARGETS ze_graph_api RUNTIME DESTINATION bin/ze_graph_api COMPONENT ze_graph_api)
+install(FILES ${PROJECT_SOURCE_DIR}/graph_kernels.spv
+        DESTINATION bin/ze_graph_api COMPONENT ze_graph_api)

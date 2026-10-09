@@ -25,3 +25,5 @@ target_include_directories(dpc_gemm PRIVATE "${PROJECT_SOURCE_DIR}/../../../../u
 #   (icpx -fsycl -gline-tables-only -O2) has it for this reason.
 target_compile_options(dpc_gemm PRIVATE -O2 -g -gline-tables-only)
 target_link_options(dpc_gemm PRIVATE -O2 -g -Xs "-gline-tables-only")
+
+install(TARGETS dpc_gemm RUNTIME DESTINATION bin/dpc_gemm COMPONENT dpc_gemm)

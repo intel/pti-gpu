@@ -151,6 +151,16 @@ def metrics_glob_from_cmd(cmd):
     return None
 
 
+def results_dir_from_cmd(cmd):
+    """Directory of the unitrace -o argument, or None if -o is absent."""
+    if not cmd:
+        return None
+    for i, arg in enumerate(cmd):
+        if arg == "-o" and i + 1 < len(cmd):
+            return os.path.dirname(os.path.abspath(cmd[i + 1]))
+    return None
+
+
 def find_metrics_files(candidates, search_dirs, pattern):
     """Collect metrics files from the passed-in list and by searching directories.
 
@@ -623,12 +633,11 @@ def main():
     if args.results_dir:
         search_dirs.append(args.results_dir)
     else:
-        # This script lives in the source tree at
-        #   tools/unitrace/test/cpp_test/gemm_stall_sampling/check_outfiles.py
-        # and run_test.py writes results to cpp_test/build/results.
-        here = os.path.dirname(os.path.abspath(__file__))
-        cpp_test = os.path.dirname(here)
-        search_dirs.append(os.path.join(cpp_test, "build", "results"))
+        # run_test.py writes the results next to the unitrace -o file, so
+        # search the directory of the -o path in the command it ran.
+        results_dir = results_dir_from_cmd(args.cmd)
+        if results_dir:
+            search_dirs.append(results_dir)
     # Also look beside any file that was passed in, in case the layout differs.
     for path in args.output_files:
         parent = os.path.dirname(os.path.abspath(path))

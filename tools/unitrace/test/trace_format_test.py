@@ -30,30 +30,39 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "trace_utils"))
 import trace_compare
 import perfetto_vs_json_e2e
+import test_layout
 
 # Built executables carry a .exe suffix on Windows
 _EXE = ".exe" if platform.system() == "Windows" else ""
 DEFAULT_UNITRACE = os.path.normpath(os.path.join(HERE, "..", "build", "unitrace" + _EXE))
-APP_DIR = os.path.join(HERE, "cpp_test", "build")
+BUILD_DIR = os.path.join(HERE, "cpp_test", "build")
 
 
-# Build the cpp_test apps (cmake + ninja), the same way test_unitrace.py does, so a
-def build_test_apps(targets):
-  os.makedirs(APP_DIR, exist_ok=True)
-  print("[INFO] building cpp_test apps in {}".format(APP_DIR))
-  steps = (["cmake", "..", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release"],
-           ["ninja", "-k", "0"] + sorted(set(targets)))
-  for step in steps:
+# Build the cpp_test apps (cmake + ninja) and install them into
+# <unitrace build>/test/bin, the same way test_unitrace.py does.
+def build_test_apps(targets, unitrace_build_dir):
+  os.makedirs(BUILD_DIR, exist_ok=True)
+  print("[INFO] building cpp_test apps in {}".format(BUILD_DIR))
+  targets = sorted(set(targets))
+  steps = [["cmake", "..", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release"],
+           ["ninja", "-k", "0"] + targets]
+  # One install per target: an app that failed to build must not stop the
+  # others from being installed.
+  steps += [["cmake", "--install", ".", "--prefix", test_layout.test_root(unitrace_build_dir),
+             "--component", t] for t in targets]
+  test_layout.remove_flat_bin_files(unitrace_build_dir)
+  for i, step in enumerate(steps):
     try:
-      rc = subprocess.run(step, cwd=APP_DIR).returncode
+      rc = subprocess.run(step, cwd=BUILD_DIR).returncode
     except FileNotFoundError:
       rc = "{!r} not found".format(step[0])
     if rc != 0:
       print("[WARN] cpp_test build step {} failed ({}); continuing with the apps "
             "that did build. Ensure oneAPI (icx/IntelSYCL) and cmake/ninja are on "
             "PATH to build every SYCL/OpenCL scenario.".format(step[0], rc))
-      # ninja -k 0 still builds the targets it can, so keep going even on rc!=0.
-      if step[0] != "ninja":
+      # ninja -k 0 still builds the targets it can, and each install is
+      # independent, so only a failed configure stops here.
+      if i == 0:
         return
 
 # The scenario matrix. Each entry drives both formats and compares them. Flags
@@ -64,15 +73,15 @@ def build_test_apps(targets):
 #     flows;
 #   - cl_gemm drives the OpenCL collector/emitter; ze_/dpc_ drive Level Zero.
 SCENARIOS = [
-    {"name": "ze_call_kernel",  "app": "ze_gemm/ze_gemm",
+    {"name": "ze_call_kernel",  "app": "ze_gemm",
      "flags": ["--chrome-call-logging", "--chrome-kernel-logging"]},
-    {"name": "ze_device",       "app": "ze_gemm/ze_gemm",
+    {"name": "ze_device",       "app": "ze_gemm",
      "flags": ["--chrome-device-logging"]},
-    {"name": "cl_call_kernel",  "app": "cl_gemm/cl_gemm",
+    {"name": "cl_call_kernel",  "app": "cl_gemm",
      "flags": ["--chrome-call-logging", "--chrome-kernel-logging", "--opencl"]},
-    {"name": "dpc_call_kernel", "app": "dpc_gemm/dpc_gemm",
+    {"name": "dpc_call_kernel", "app": "dpc_gemm",
      "flags": ["--chrome-call-logging", "--chrome-kernel-logging"]},
-    {"name": "cl_device",       "app": "cl_gemm/cl_gemm",
+    {"name": "cl_device",       "app": "cl_gemm",
      "flags": ["--chrome-device-logging", "--opencl"]},
 ]
 
@@ -179,6 +188,9 @@ def compare_scenario(unitrace, name, chrome_flags, app, app_args):
 def main():
   ap = argparse.ArgumentParser(description="Compare unitrace json vs protobuf timeline output (same app, two runs).")
   ap.add_argument("--unitrace", default=DEFAULT_UNITRACE, help="path to built unitrace")
+  ap.add_argument("--unitrace-build-dir", default=None,
+                  help="unitrace build directory; the apps are installed into "
+                       "<dir>/test/bin (default: tools/unitrace/build)")
   ap.add_argument("--app", default=None, help="single test app to trace (overrides the scenario matrix)")
   ap.add_argument("--scenario", default=None, help="run only the matrix scenario with this name")
   ap.add_argument("--app-args", nargs=argparse.REMAINDER, default=[], help="args for the app (after --)")
@@ -197,23 +209,27 @@ def main():
     scenarios = [{"name": "custom", "app": args.app,
                   "flags": ["--chrome-call-logging", "--chrome-kernel-logging"], "abs_app": args.app}]
   else:
+    error = test_layout.default_build_dir_error(args.unitrace_build_dir)
+    if error:
+      print(error)
+      sys.exit(1)
     scenarios = []
     for s in SCENARIOS:
       if args.scenario and s["name"] != args.scenario:
         continue
       s = dict(s)
-      s["abs_app"] = os.path.join(APP_DIR, s["app"].replace("/", os.sep) + _EXE)
+      s["abs_app"] = test_layout.workload_exe(test_layout.bin_dir(args.unitrace_build_dir), s["app"])
       scenarios.append(s)
     if not scenarios:
       print("[ERROR] no scenario matched --scenario {!r}".format(args.scenario))
       sys.exit(1)
 
   # Build the apps the selected scenarios need up front (like test_unitrace.py), so
-  # nothing is skipped just because it was not pre-built. The ninja target is the app
-  # basename (the part after the last '/' in the scenario's "app"). Skip only for
-  # --app (an arbitrary path) or when explicitly disabled.
+  # nothing is skipped just because it was not pre-built. The scenario's "app" is
+  # its ninja target and install component. Skip only for --app (an arbitrary
+  # path) or when explicitly disabled.
   if not args.app and not args.no_build:
-    build_test_apps([s["app"].rsplit("/", 1)[-1] for s in scenarios])
+    build_test_apps([s["app"] for s in scenarios], args.unitrace_build_dir)
 
   RED = "\033[31m"
   RESET = "\033[0m"

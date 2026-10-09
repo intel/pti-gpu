@@ -12,3 +12,5 @@ add_executable(omp_gemm main.cc)
 if(WIN32)
   target_link_libraries(omp_gemm PRIVATE "$ENV{ONEAPI_ROOT}/compiler/latest/lib/libiomp5md.lib")
 endif()
+
+install(TARGETS omp_gemm RUNTIME DESTINATION bin/omp_gemm COMPONENT omp_gemm)

@@ -16,3 +16,6 @@ endif()
 add_custom_command(TARGET ze_gemm PRE_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/gemm.spv ${CMAKE_BINARY_DIR}/ze_gemm/gemm.spv)
 
+install(TARGETS ze_gemm RUNTIME DESTINATION bin/ze_gemm COMPONENT ze_gemm)
+install(FILES ${PROJECT_SOURCE_DIR}/gemm.spv
+        DESTINATION bin/ze_gemm COMPONENT ze_gemm)

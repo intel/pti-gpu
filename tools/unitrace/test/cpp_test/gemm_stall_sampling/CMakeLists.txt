@@ -24,3 +24,9 @@ foreach(spv_module gemm_single gemm_multi gemm_aux)
                              ${CMAKE_CURRENT_SOURCE_DIR}/${spv_module}.spv
                              ${CMAKE_CURRENT_BINARY_DIR}/${spv_module}.spv)
 endforeach()
+
+install(TARGETS gemm_stall_sampling RUNTIME DESTINATION bin/gemm_stall_sampling COMPONENT gemm_stall_sampling)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/gemm_single.spv
+              ${CMAKE_CURRENT_SOURCE_DIR}/gemm_multi.spv
+              ${CMAKE_CURRENT_SOURCE_DIR}/gemm_aux.spv
+        DESTINATION bin/gemm_stall_sampling COMPONENT gemm_stall_sampling)

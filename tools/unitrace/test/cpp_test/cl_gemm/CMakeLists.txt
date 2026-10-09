@@ -7,3 +7,4 @@ target_include_directories(cl_gemm PRIVATE "${PROJECT_SOURCE_DIR}/../../../../..
   
 target_link_libraries(cl_gemm PRIVATE OpenCL)
 
+install(TARGETS cl_gemm RUNTIME DESTINATION bin/cl_gemm COMPONENT cl_gemm)

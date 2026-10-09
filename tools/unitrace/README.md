@@ -113,6 +113,23 @@ cd test
 python test_unitrace.py --run
 ```
 
+The test workloads are built incrementally in **test/cpp_test/build** and then
+installed into the unitrace build directory, so a clean unitrace build does not
+rebuild them. Logs and unitrace output go to the build directory too:
+
+```
+<unitrace build>/test/bin/<workload>/            one directory per workload: binary and .spv kernels
+<unitrace build>/test/output/cpp_test/logs/      one <test>.<scenario>.log per scenario
+<unitrace build>/test/output/cpp_test/results/<test>/  unitrace output files, one directory per test
+<unitrace build>/test/output/python_test/...     the same for --test-group python-test
+```
+
+`<unitrace build>` is `--unitrace-build-dir` when given, otherwise
+**tools/unitrace/build**. `--output-dir <dir>` writes logs and results to
+`<dir>/cpp_test` (or `<dir>/python_test`) instead. On Windows, use it when the
+checkout path is long: unitrace output paths must stay under MAX_PATH (260
+characters).
+
 The test suite is defined in **test/tests.txt**: each test is a block with
 its command line, the platforms it runs on, and the unitrace option scenarios
 it is exercised with (defaulting to the shared `[defaults]` scenario matrix).
@@ -126,9 +143,11 @@ python test_unitrace.py --list
 ```
 
 To add a new test, for example **mytest**: add its workload under
-**test/cpp_test/mytest/** with a `CMakeLists.txt` building it (plus an
-`add_subdirectory(mytest)` line in **test/cpp_test/CMakeLists.txt**), and
-declare it in **test/tests.txt**:
+**test/cpp_test/mytest/** with a `CMakeLists.txt` building and installing it
+(`install(TARGETS mytest RUNTIME DESTINATION bin COMPONENT mytest)`, plus
+`install(FILES ...)` for any file the binary loads from its own directory),
+add an `add_subdirectory(mytest)` line in **test/cpp_test/CMakeLists.txt**,
+and declare it in **test/tests.txt**:
 
 ```
 [mytest]

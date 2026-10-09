@@ -29,6 +29,14 @@
 #       here never runs there, regardless of scenarios. Omitted: inherited
 #       from [defaults].
 #
+#   requires = <FEATURE> [<FEATURE>...]
+#       Unitrace build features the test needs (L0, OPENCL, ITT, XPTI, MPI,
+#       OMP, PERFETTO - the "build" keys of 'unitrace --print-options-schema').
+#       If the unitrace under test was built without any of them, the test is
+#       reported as Skipped instead of run. Omitted: inherited from
+#       [defaults]. 'requires = none' means no requirement (the test always
+#       runs); an empty value or an unknown feature name is an error.
+#
 #   scenario = <unitrace options>
 #       One scenario per line; the test runs once per line.
 #       - If a block has NO scenario lines, it inherits the full [defaults]
@@ -100,6 +108,7 @@
 
 [defaults]
 platform = Windows Linux
+requires = L0
 scenario = -c
 scenario = -h
 scenario = -d
@@ -119,6 +128,7 @@ scenario = -q --result-dir
 
 [cl_gemm]
 command  = run_test.py cl_gemm GPU
+requires = OPENCL
 options  = --opencl
 scenario = -c
 scenario = -d -v
@@ -128,6 +138,7 @@ scenario = -s
 
 [cl_gemm_metric]
 command  = run_test.py cl_gemm GPU 4096
+requires = OPENCL
 options  = --opencl
 scenario = -k
 scenario = --result-dir -k
@@ -135,6 +146,7 @@ scenario = --result-dir -k
 [conditional_trace]
 platform = Linux
 command  = run_test.py conditional_trace GPU
+requires = OPENCL
 options  = --opencl --start-paused
 scenario = -d
 
@@ -144,6 +156,7 @@ command  = run_test.py dpc_gemm GPU
 [mpi_test_4_ranks_filter_0_2]
 platform = Linux
 command  = run_test.py --mpiexec -n 4 -t mpi_test_4_ranks_filter_0_2 device_and_rank_to_sample
+requires = L0 MPI
 options  = --ranks-to-sample 0,2
 scenario = -d
 scenario = -d --result-dir
@@ -151,6 +164,7 @@ scenario = -d --result-dir
 [mpi_test_1_rank_sample_device_0]
 platform = Linux
 command  = run_test.py --mpiexec -n 1 -t mpi_test_1_rank_sample_device_0 device_and_rank_to_sample
+requires = L0 MPI
 options  = --devices-to-sample 0
 scenario = -d
 scenario = -d --result-dir
@@ -158,11 +172,13 @@ scenario = -d --result-dir
 [mpi_test_1_rank_sample_device_256]
 platform = Linux
 command  = run_test.py --mpiexec -n 1 -t mpi_test_1_rank_sample_device_256 device_and_rank_to_sample
+requires = L0 MPI
 options  = --devices-to-sample 256
 scenario = -d
 
 [print_options_schema]
 command           = cpp_test/print_options_schema/check_options_schema.py {unitrace}
+requires          = none
 defaults-scenario = False
 
 [event_reset_immediate_cl]
@@ -220,6 +236,7 @@ skip-scenario = --result-dir
 
 [internal_conditional_trace]
 command           = run_test.py internal_conditional_trace GPU
+requires          = L0 ITT
 options           = --start-paused
 defaults-scenario = True
 scenario          = -k
@@ -227,9 +244,11 @@ skip-scenario     = --result-dir
 
 [omp_gemm]
 command  = run_test.py omp_gemm GPU
+requires = L0 OMP
 
 [omp_cpu_gemm]
 command  = run_test.py omp_cpu_gemm
+requires = L0 OMP
 scenario = --chrome-omp-logging
 
 [sycl_graph_with_v2_adaptor]

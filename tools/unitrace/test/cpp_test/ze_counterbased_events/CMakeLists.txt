@@ -13,3 +13,4 @@ else()
   target_link_libraries(ze_counterbased_events PRIVATE ze_loader)
 endif()
 
+install(TARGETS ze_counterbased_events RUNTIME DESTINATION bin/ze_counterbased_events COMPONENT ze_counterbased_events)

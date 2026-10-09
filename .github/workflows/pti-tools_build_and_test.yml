@@ -189,7 +189,8 @@ jobs:
         run: |
           @echo off
           call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          python ./test_unitrace.py
+          rem The workspace path is long; keep unitrace output under MAX_PATH
+          python ./test_unitrace.py --output-dir "%RUNNER_TEMP%\ut"
 
       - name: Unitrace-trace-format
         working-directory: tools/unitrace/test
@@ -209,37 +210,29 @@ jobs:
           @echo off
           setlocal enabledelayedexpansion
 
-          set "ROOT=tools\unitrace\test\build\Testing"
+          set "ROOT=%RUNNER_TEMP%\ut\cpp_test\logs"
 
           if not exist "%ROOT%" (
-            echo [WARN] Testing folder not found: "%ROOT%"
+            echo [WARN] Logs folder not found: "%ROOT%"
             goto :eof
           )
 
           echo.
-          echo ===== Enumerating LastTest.log under "%ROOT%" =====
+          echo ===== Enumerating test logs under "%ROOT%" =====
 
-          rem Loop over test subdirectories
-          for /d %%D in ("%ROOT%\*") do (
-            set "TESTDIR=%%~fD"
-            set "LOGFILE=%%~fD\LastTest.log"
+          rem One log file per test scenario
+          for %%F in ("%ROOT%\*.log") do (
             echo.
-            echo ---------- [Test: %%~nxD] ----------
-            if exist "!LOGFILE!" (
-              echo [INFO] Found: "!LOGFILE!"
-              type "!LOGFILE!"
-            ) else (
-              echo [WARN] No LastTest.log in "%%~fD"
-              rem Optionally list directory contents to help debug
-              dir /b "%%~fD"
-            )
+            echo ---------- [Test: %%~nF] ----------
+            echo [INFO] Found: "%%~fF"
+            type "%%~fF"
           )
 
           echo.
-          echo ===== Done printing LastTest.log files =====
+          echo ===== Done printing test logs =====
 
           rem Print output files from results directory
-          set "RESULTS=tools\unitrace\test\build\results"
+          set "RESULTS=%RUNNER_TEMP%\ut\cpp_test\results"
 
           if not exist "%RESULTS%" (
             echo [WARN] Results folder not found: "%RESULTS%"
@@ -249,7 +242,8 @@ jobs:
           echo.
           echo ===== Enumerating output files under "%RESULTS%" =====
 
-          for %%F in ("%RESULTS%\*.txt") do (
+          rem One results\<test> folder per test
+          for /R "%RESULTS%" %%F in (*.txt) do (
             echo.
             echo ---------- [Output File: %%~nxF] ----------
             echo [INFO] Found: "%%~fF"

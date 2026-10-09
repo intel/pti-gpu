@@ -42,3 +42,5 @@ endif()
 # unitrace_tool.dll exports its __itt_* collector symbols (see
 # WINDOWS_EXPORT_ALL_SYMBOLS in the main CMakeLists), so the statically-linked
 # ittnotify in the app resolves the collector and the control takes effect.
+
+install(TARGETS internal_conditional_trace RUNTIME DESTINATION bin/internal_conditional_trace COMPONENT internal_conditional_trace)

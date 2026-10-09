@@ -10,3 +10,4 @@ else()
     target_link_libraries(device_and_rank_to_sample PRIVATE -lze_loader)
 endif()
 
+install(TARGETS device_and_rank_to_sample RUNTIME DESTINATION bin/device_and_rank_to_sample COMPONENT device_and_rank_to_sample)

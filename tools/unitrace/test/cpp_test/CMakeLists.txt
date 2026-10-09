@@ -30,6 +30,15 @@ endif()
 # L0 version required
 set (LEVEL_ZERO_COMMIT_ID "v1.32.0")
 
+# Workloads are built here and installed (test_unitrace.py runs
+# cmake --install --prefix <unitrace build>/test) into bin/<workload>/, one
+# directory per workload, together with its data files (.spv kernels are loaded
+# from next to the executable). Install a new workload the same way:
+#   install(TARGETS <name> RUNTIME DESTINATION bin/<name> COMPONENT <name>)
+# Keep the link-time library paths so the installed binaries run like the
+# built ones.
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON)
+
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
 
 

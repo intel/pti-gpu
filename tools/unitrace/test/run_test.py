@@ -15,6 +15,8 @@ import glob
 from pathlib import Path
 from datetime import datetime
 
+import test_layout
+
 def extract_test_case_output(cmake_root_path, test_case_name, scenario):
     # Construct the path to the expected output file within the "gold" folder
     scenario = scenario.lstrip('-')
@@ -68,15 +70,10 @@ def contains_non_whitespace(path):
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         return any(not ch.isspace() for ch in f.read())
 
-def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_prog, use_mpiexec=False, num_ranks=1, specific_test_case=None, unitrace_exe_override=None, skip_golden_compare=False):
+def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_prog, test_bin_dir, test_output_dir, use_mpiexec=False, num_ranks=1, specific_test_case=None, unitrace_exe_override=None, skip_golden_compare=False, results_subdir=None):
     is_python_test = test_case_name.find("python") != -1
-    if platform.system() == "Windows":
-        unitrace_exe = cmake_root_path + "/../../build/unitrace.exe"
-        test_case = os.path.join(cmake_root_path, "build", test_case_name, f"{test_case_name}.exe").replace("\\", "/")
-
-    else:
-        unitrace_exe = cmake_root_path + "/../../build/unitrace"
-        test_case = os.path.join(cmake_root_path, "build", test_case_name, f"{test_case_name}").replace("\\", "/")
+    unitrace_exe = cmake_root_path + "/../../build/" + test_layout.exe("unitrace")
+    test_case = test_layout.workload_exe(test_bin_dir, test_case_name).replace("\\", "/")
 
     if is_python_test:
         test_case = test_case_name
@@ -140,7 +137,7 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
             command.append(scenario)
 
     test_output_name = specific_test_case if specific_test_case else os.path.basename(test_case) #graph
-    output_dir = cmake_root_path + "/build/results"
+    output_dir = test_layout.results_dir(test_output_dir, results_subdir).replace("\\", "/")
     
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok = True)
@@ -158,6 +155,10 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
         output_file = f"output{scenarios}_{test_output_name}.txt".replace("--", "_").replace("-", "_").replace(" ","") #output_k_result_dir_graph.txt
         output_file_path = os.path.join(output_dir, output_file).replace("\\", "/")
         
+    metric_dir = os.path.join(test_layout.metric_scratch_dir(test_output_dir, results_subdir),
+                              specific_test_case if is_python_test and specific_test_case is not None
+                              else test_case_name)
+
     # Dispatch on the scenario's token set, not on any single token's position.
     is_chrome_logging_present = any(token.startswith("--chrome") for token in scenario_set)
     is_metrics_scenario = not scenario_set.isdisjoint({"-k", "-q"})
@@ -168,18 +169,30 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
             command += ["--output-dir-path", output_dir]
         elif is_metrics_scenario:
             # Metric files are written next to the -o base name; anchor it at
-            # the workload build directory (where the collection glob below
+            # a per-test scratch directory (where the collection glob below
             # looks) so the run does not depend on the working directory.
-            if is_python_test and specific_test_case is not None:
-                metric_dir = os.path.join(cmake_root_path, "build", specific_test_case)
-            else:
-                metric_dir = os.path.join(cmake_root_path, "build", test_case_name)
             os.makedirs(metric_dir, exist_ok = True)
             command += ["-o", os.path.join(metric_dir, "metric")]
         else:
             command += ["-o", output_file_path]
 
     command += [test_case] + args
+
+    # unitrace reports an over-long Windows path only as a failure to open the
+    # file, so name the real cause up front. Estimate the longest path it
+    # writes: <result dir>/<app>.<pid>/<longest report name>, or <-o file>
+    # with .<pid> inserted.
+    if is_result_dir:
+        app_name = os.path.splitext(os.path.basename(test_case))[0]
+        longest_path = f"{output_result_dir_path}/{app_name}.000000/ccl_summary_report.txt"
+    elif not is_chrome_logging_present and not is_metrics_scenario:
+        longest_path = output_file_path[:-len(".txt")] + ".000000.txt"
+    else:
+        longest_path = ""
+    if test_layout.windows_path_too_long(longest_path):
+        print(f"[WARNING] unitrace output paths may reach {len(longest_path)} characters, "
+              f"over the Windows MAX_PATH limit ({test_layout.WINDOWS_MAX_PATH}): {longest_path}. "
+              f"Pass a shorter --output-dir to test_unitrace.py.", file = sys.stderr)
 
     print(f"[INFO] Executing command: {' '.join(command)}")
 
@@ -199,12 +212,8 @@ def run_unitrace(cmake_root_path, scenarios, test_case_name, args, extra_test_pr
         if not is_result_dir:
             # Metric logs need to be moved to result folder
             if is_metrics_scenario:
-                if is_python_test and specific_test_case is not None:
-                    test_case_path = os.path.join(cmake_root_path, "build", specific_test_case)
-                else:
-                    test_case_path = os.path.join(cmake_root_path, "build", test_case_name)
-                # Find all files starting with "metric" in source directory
-                pattern = os.path.join(test_case_path, "metric*")
+                # Find all files starting with "metric" in the scratch directory
+                pattern = os.path.join(metric_dir, "metric*")
                 metric_files = glob.glob(pattern)
                 print(f"[INFO] Found metric files: {metric_files}", file = sys.stderr)
                 # Move each file to destination
@@ -490,8 +499,17 @@ def main():
     parser = argparse.ArgumentParser(prog="run_test.py", description="Run unitrace test")
     parser.add_argument('-e', '--extra_test_prog', type=str)
     parser.add_argument('-c', '--cmake_root_path', type=str, default=None,
-                        help='Test root (workloads under <root>/build, results under <root>/build/results). '
+                        help='Test source root holding the gold files. '
                              'Defaults to cpp_test next to this script, or python_test for python tests.')
+    parser.add_argument('--test-bin-dir', type=str, default=None,
+                        help='Directory holding the installed test binaries '
+                             '(default: tools/unitrace/build/test/bin)')
+    parser.add_argument('--output-dir', type=str, default=None,
+                        help='Directory for results and metric scratch files '
+                             '(default: tools/unitrace/build/test/output/<cpp_test|python_test>)')
+    parser.add_argument('--results-subdir', type=str, default=None,
+                        help='Write results under <output-dir>/results/<NAME> (test_unitrace.py '
+                             'passes the tests.txt test name) instead of directly in results/')
     parser.add_argument('--mpiexec', action='store_true', help='Run unitrace with mpiexec')
     parser.add_argument('-n', '--num_ranks', type=int, default=1, help='Number of MPI ranks (default: 1)')
     parser.add_argument('-t','--test_case', type=str, default=None, help='Specific test case name (not the test executable name)')
@@ -513,14 +531,19 @@ def main():
 
     scenario = args.scenario
 
+    is_python = "python" in os.path.basename(args.args[0])
     if args.cmake_root_path is None:
         base = os.path.dirname(os.path.abspath(__file__))
-        is_python = "python" in os.path.basename(args.args[0])
         args.cmake_root_path = os.path.join(base, "python_test" if is_python else "cpp_test")
+    if args.test_bin_dir is None:
+        args.test_bin_dir = test_layout.bin_dir()
+    if args.output_dir is None:
+        args.output_dir = test_layout.output_dir(group="python_test" if is_python else "cpp_test")
 
     return run_unitrace(args.cmake_root_path, scenario, args.args[0], args.args[1:], 
-                       args.extra_test_prog, args.mpiexec, args.num_ranks, args.test_case,
-                       args.unitrace_exe, args.skip_golden_compare)
+                       args.extra_test_prog, args.test_bin_dir, args.output_dir,
+                       args.mpiexec, args.num_ranks, args.test_case,
+                       args.unitrace_exe, args.skip_golden_compare, args.results_subdir)
 
 if __name__ == "__main__":
     sys.exit(main())
