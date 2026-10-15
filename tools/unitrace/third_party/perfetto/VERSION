@@ -12,6 +12,22 @@ perfetto_trace.proto
   syntax:  proto2
   package: perfetto.protos  (generated C++ namespace: perfetto::protos)
 
+source tarball (archive/refs/tags/v56.1.tar.gz)
+  sha256:  e7b94164193323695a81013ee82e1678bf434fc9fbb79f03b50fe1027bc93b5b
+  purpose: compile the trace schema as many small translation units.
+
+Why the source tarball: perfetto_trace.proto is an amalgamation of ~250 source
+protos. Generated as one file it becomes a single 19.6 MB .pb.cc - one
+translation unit that cannot be compiled in parallel and dominated the unitrace
+build (3m38s on its own, vs 46s wall for the split sources on 12 cores; in CI
+the perfetto step went from ~125s to ~27s on Linux and 116s to 45s on Windows).
+The amalgamation records its source list in "Begin of protos/..." markers, so
+cmake/Perfetto.cmake extracts those protos from the pinned source tarball,
+generates one .pb.cc per proto and compiles them in parallel. The generated
+classes and the wire format are the same as from the amalgamated file. If the
+tarball cannot be fetched, its hash does not match, or a listed proto is missing
+from it, the build falls back to the single-file flow (slower, same output).
+
 The proto is NOT vendored in the tree. The build fetches it from upstream,
 verifies it against the sha256 above, and compiles it with protoc built from
 source (see CMakeLists.txt, BUILD_WITH_PERFETTO; protobuf is always built from
@@ -26,6 +42,11 @@ To bump to a new tag <tag>:
        curl -fsSL $BASE/protos/perfetto/trace/perfetto_trace.proto -o /tmp/perfetto_trace.proto
        curl -fsSL $BASE/LICENSE -o LICENSE
        sha256sum /tmp/perfetto_trace.proto ; wc -c /tmp/perfetto_trace.proto
-  2. Update PERFETTO_TAG and PERFETTO_PROTO_SHA256 in tools/unitrace/CMakeLists.txt.
-  3. Update Tag / size / sha256 above.
+       curl -fsSL https://github.com/google/perfetto/archive/refs/tags/<tag>.tar.gz -o /tmp/perfetto-src.tar.gz
+       sha256sum /tmp/perfetto-src.tar.gz
+  2. Update PERFETTO_TAG, PERFETTO_PROTO_SHA256 and PERFETTO_SRC_SHA256 in
+     tools/unitrace/cmake/Perfetto.cmake. A stale PERFETTO_SRC_SHA256 does not
+     break the build, but silently falls back to the slow single-TU flow -
+     the configure log warns about the hash mismatch.
+  3. Update Tag / size / sha256 values above (both files).
   4. Update the SDK-root third-party-programs.txt if the version changed.
